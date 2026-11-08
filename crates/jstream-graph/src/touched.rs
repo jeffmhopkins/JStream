@@ -101,6 +101,8 @@ enum Prop {
     Options,
     /// A scene's camera (ADR-0094), its camera motion or its follow camera (ADR-0113).
     Camera,
+    /// A scene's PTZ shots (ADR-0146).
+    PtzShots,
     /// A label's colour and icon.
     Look,
     /// Whether an item's canvas box is locked (ADR-0096).
@@ -372,6 +374,9 @@ impl Touched {
             | Edit::SceneSetCameraMotion { scene_id, .. }
             | Edit::SceneSetCameraFollow { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Camera);
+            }
+            Edit::SceneSetPtzShots { scene_id, .. } => {
+                self.prop(Object::Scene(scene_id.clone()), Prop::PtzShots);
             }
             Edit::LabelCreate { label_id, .. } | Edit::LabelDelete { label_id } => {
                 self.exists.insert(Object::Label(label_id.clone()));

@@ -76,3 +76,11 @@ max_frame_ms = 1200
 [scene.scene_chain]
 min_fps = 5
 max_frame_ms = 250
+
+# Six scenes nested, in the default browser-style blending: each of its seven composite
+# targets ends with ADR-0126's decode pass, a full-target pass that costs about 3 ms on
+# lavapipe, and every fragment encodes its colour. That halves its frame rate against
+# linear light (24 fps), to 10-15 fps on a hosted runner and under 9 on a slow one.
+[scene.nested_deep]
+min_fps = 4
+max_frame_ms = 250

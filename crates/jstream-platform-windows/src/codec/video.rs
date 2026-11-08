@@ -12,7 +12,7 @@
 //! engine falls back to the CPU path without one (step 6).
 //!
 //! Hardware encoders are tried first and the OS software encoder after them, as
-//! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0061).
+//! [`HardwarePreference`](jstream_platform::HardwarePreference) says (ADR-0140).
 //! Windows ships a software encoder for H.264 only, so HEVC and AV1 need a GPU encoder
 //! (or an installed software MFT) and report `Unsupported` without one.
 //! With `Prefer`, a hardware MFT that refuses the first frame at `ProcessInput` hands the

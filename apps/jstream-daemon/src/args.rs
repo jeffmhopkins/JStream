@@ -27,6 +27,14 @@ Options:
                        if it doesn't exist
                        (default: none, the collection starts empty every run)
   --output <id>        add a stopped placeholder output (repeatable)
+  --ptz-camera <name@address:port[/transport][#n]>
+                       drive this PTZ camera over VISCA (ADR-0146): its name,
+                       which scenes and `ptz.*` actions use, and its LAN
+                       address and port (repeatable). The transport is
+                       visca_ip (Sony-style UDP, the default; port 52381),
+                       udp (raw VISCA) or tcp (raw VISCA, also for a serial
+                       bridge); #n is its VISCA address, 1 to 7 (default 1).
+                       Off without it: no socket is open
   --plugin-dir <dir>   where installed WASM plugins and their grants are saved
                        (plugins.json) and loaded from at startup (default:
                        `plugins` in the platform data directory); created if
@@ -122,6 +130,9 @@ pub struct Options {
     pub effects_dir: Option<String>,
     /// `--lan` and its options: the network listener, off without it.
     pub lan: Option<Lan>,
+    /// `--ptz-camera`: the PTZ cameras to drive, in the order given (ADR-0146). None
+    /// leaves PTZ control off.
+    pub ptz: Vec<jstream_core::PtzCamera>,
     /// `--jtunnel-accept`: the JTunnel senders to receive from, in the order given.
     /// None turns the receiver off.
     pub jtunnel: Vec<jstream_core::AcceptedSender>,
@@ -219,6 +230,14 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 }
             }
             "--output" => options.outputs.push(OutputId::new(value()?.as_str())),
+            "--ptz-camera" => {
+                let camera = value()?
+                    .parse::<jstream_core::PtzCamera>()
+                    .map_err(|err| format!("`--ptz-camera`: {err}"))?;
+                options.ptz.push(camera);
+                jstream_core::PtzSetup::new(options.ptz.clone())
+                    .map_err(|err| format!("`--ptz-camera`: {err}"))?;
+            }
             "--jtunnel-accept" => {
                 let text = value()?;
                 let sender = text
@@ -405,9 +424,34 @@ mod tests {
                 plugin_dir: Some("/tmp/plugins".to_owned()),
                 effects_dir: Some("/tmp/effects".to_owned()),
                 lan: None,
+                ptz: Vec::new(),
                 jtunnel: Vec::new(),
             }
         );
+    }
+
+    /// ADR-0146 §1: PTZ control is off unless `--ptz-camera` lists a camera, and each
+    /// one is checked as the engine checks it.
+    #[test]
+    fn ptz_cameras_are_opt_in_and_checked() {
+        assert!(serve("").ptz.is_empty());
+        let ptz =
+            serve("--ptz-camera wide@192.168.1.40:52381 --ptz-camera close@10.0.0.9:5678/tcp#2")
+                .ptz;
+        let names: Vec<_> = ptz.iter().map(|c| c.to_string()).collect();
+        assert_eq!(
+            names,
+            [
+                "wide@192.168.1.40:52381/visca_ip#1",
+                "close@10.0.0.9:5678/tcp#2"
+            ]
+        );
+        assert!(error("--ptz-camera wide@8.8.8.8:52381").contains("not a LAN address"));
+        assert!(
+            error("--ptz-camera a@192.168.1.40:1 --ptz-camera a@192.168.1.41:1")
+                .contains("two PTZ cameras are called `a`")
+        );
+        assert_eq!(error("--ptz-camera"), "`--ptz-camera` needs a value");
     }
 
     #[test]

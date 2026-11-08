@@ -18,7 +18,7 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 The MCP server: it gives AI agents full control of JStream through the Model Context
 Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
 features, which are for people, through the UI (ADR-0058 §3), installing and
-granting plugins (ADR-0069 G1), and downloading codecs (ADR-0061). It is written against
+granting plugins (ADR-0069 G1), and downloading codecs (ADR-0140). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -35,7 +35,7 @@ Contents (a first cut; [Design](#design) explains the choices):
   less the people-only `youtube.*`, `plugin.*`, `effect.*`, `codec.*` and `agent.*` ops
   (`PEOPLE_ONLY`) and the deprecated
   `privacy.*` ops (`DEPRECATED`), each with its MCP annotations
-  (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
+  (`OPEN_WORLD` names the group tools that reach outside JStream, `output`, `ptz` and `source`;
   `batch`, which carries their edits, is open-world too; `REVERSIBLE_ACTIONS` names the
   actions that don't make a tool destructive), and the decoding of tool arguments into
   protocol calls, which refuses an output edit with a `youtube` target, and in `batch` the
@@ -78,7 +78,7 @@ pass that ran too long, was blamed on (#349). The `gpu.device_lost` and
 `gpu.effect_slow` events that report them do reach agents. So are
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). So are the
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). So are the
 `agent.*` ops and events (`agent.approve`, `agent.forget`, `agent.approved`): the person,
 not another agent, lets a new agent in
 ([ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). While the person
@@ -99,7 +99,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -132,7 +132,8 @@ history call
 today `collection` (an open or a new stops every output and clears every client's undo,
 [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)), `device`, `history`,
 `output`, `pack` (whose writes and deletes change files on
-disk that undo never reaches), `pairing`, `ui_settings`, `values` (whose values a
+disk that undo never reaches), `pairing`, `ptz` (which moves physical cameras, and whose
+`ptz.store` overwrites a preset in the camera, ADR-0146), `ui_settings`, `values` (whose values a
 browser source page granted them may send off the machine) and `timeline` (whose cues
 may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
@@ -150,7 +151,7 @@ opposite action takes back) only change what JStream shows, so the tools a scene
 back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
 either. `openWorldHint` is true for the
 group tools in `OPEN_WORLD`, today `output`, whose `output.start` publishes to a streaming
-server, and `source`, whose `browser` kind loads any http or https page set as its `url`
+server, `ptz`, whose actions move physical cameras on the network (ADR-0146), and `source`, whose `browser` kind loads any http or https page set as its `url`
 (or HTML set as its `html`, which can load from the web), and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
 covers the whole group, so a client that asks before `output.set_target`, `output.set_key`
 or `output.start` also asks before `output.list`.
@@ -174,6 +175,9 @@ the `capture` tool's description and the server instructions say they are untrus
 tool's description says so; it also tells an agent how to find a hot spot: let the
 scene run, read the profile, change the costliest unit and read it again
 ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)). The
+`quality` tool's description says what its PSNR and SSIM mean to a viewer and that a
+probe waits a few seconds for its frames
+([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). The
 server instructions say all three are data, never instructions, and point at the
 annotations. They also say that names and other state text can be set by any client or
 plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)'s

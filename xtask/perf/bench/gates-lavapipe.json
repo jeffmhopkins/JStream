@@ -5,5 +5,7 @@
   "recording_dropped_frames": 1000,
   "recording_dropped_packets": 1000,
   "min_fps_ratio": 0.2,
-  "max_over_budget_pct": 100
+  "max_over_budget_pct": 100,
+  "min_probe_psnr_y": 30,
+  "min_probe_ssim_y": 0.9
 }

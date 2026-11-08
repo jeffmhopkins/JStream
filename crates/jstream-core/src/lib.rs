@@ -29,6 +29,7 @@ mod camera_controls;
 mod chain;
 mod codec_downloads;
 mod collection;
+mod driven;
 mod drops;
 mod effect_packs;
 mod engine;
@@ -42,6 +43,7 @@ mod gesture;
 mod history;
 mod jtunnel;
 mod kinds;
+mod lan;
 mod live;
 mod load;
 mod motion;
@@ -54,6 +56,8 @@ mod preview;
 mod private_file;
 mod profile;
 mod projects;
+mod ptz;
+mod quality;
 mod reactive;
 mod runtime;
 mod session;
@@ -85,12 +89,14 @@ pub use drops::{
     capture_drops, output_packet_drops, render_tick_drops, video_encode_drops,
 };
 pub use engine::Engine;
-pub use jtunnel::{AcceptedSender, JtunnelSetup, JtunnelStats, MAX_SENDERS, is_lan};
+pub use jtunnel::{AcceptedSender, JtunnelSetup, JtunnelStats, MAX_SENDERS};
+pub use lan::is_lan;
 pub use plugins::kinds::{CLAP_KIND_PREFIX, ClapKind, ClapScan};
 pub use plugins::supervisor::{
     HostEvent, HostStatus, HostSupervisor, STOP_GRACE, SupervisorPolicy,
 };
 pub use projects::recent_collections;
+pub use ptz::{PtzCamera, PtzSetup};
 pub use runtime::{
     LinkState, LivePublish, OpenPublish, OutputStats, PublishError, RecordingPublish, RtmpPublish,
     connect_rtmp,

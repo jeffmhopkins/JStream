@@ -214,6 +214,14 @@ the user's desktop session can read it while it is there. Failed tokens are not 
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
+The daemon's `--ptz-camera` (ADR-0123, [ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md))
+is the one way to make it send VISCA to a camera: the protocol can't add, change or
+remove a camera, so a client with the token, an agent or a paired device can move only
+the heads the person listed, by name. An address outside the LAN ranges is refused at
+startup, and a reply from anywhere but the camera's own address and port, or one that
+isn't VISCA, is dropped and counted; a reply can change only the pose and status
+`ptz.list` shows.
+
 **Gaps:** #546's Windows hardware pass reported the token file and the daemon's logs
 user-only with no inheritance. Still to run on hardware: the devices file after a real
 pairing, and the crash reports' DACL (#656), which hasn't run on Windows CI either. So
@@ -689,6 +697,9 @@ somewhere it shouldn't.
   doesn't trigger bindings (ADR-0142 §2).
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
+- PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) pass the same
+  LAN check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server)
+  for what they may send and receive.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it, or notes into what its MIDI sources draw

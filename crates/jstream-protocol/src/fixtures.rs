@@ -497,6 +497,27 @@ pub(crate) fn edits() -> Vec<Edit> {
             scene_id: SceneId::new("scn_1"),
             follow: None,
         },
+        // PTZ shots (ADR-0146): a preset, and a pose.
+        Edit::SceneSetPtzShots {
+            scene_id: SceneId::new("scn_1"),
+            shots: vec![
+                crate::PtzShot {
+                    camera: "wide".into(),
+                    preset: Some(2),
+                    pose: crate::PtzPose::default(),
+                },
+                crate::PtzShot {
+                    camera: "close".into(),
+                    preset: None,
+                    pose: crate::PtzPose {
+                        pan: Some(-1200),
+                        tilt: Some(300),
+                        zoom: Some(0x2000),
+                        focus: Some(0x1000),
+                    },
+                },
+            ],
+        },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
             name: "Sponsor".into(),
@@ -733,6 +754,7 @@ fn keyframe_edits() -> Vec<Edit> {
                     .expect("a string")
             ),
             property,
+            effect: None,
             kind: MotionKind::Oscillate {
                 shape,
                 amplitude: Finite32::new(1.0).expect("finite"),
@@ -752,6 +774,27 @@ fn keyframe_edits() -> Vec<Edit> {
                 motion: motion.to_vec(),
             }),
     );
+    // A border's width pulsing on a sine (ADR-0138).
+    edits.push(Edit::ItemSetMotion {
+        item_id: ItemId::new("itm_3"),
+        scene_id: None,
+        motion: vec![MotionModifier {
+            modifier_id: "pulse-border".into(),
+            property: MotionProperty::Effect,
+            effect: Some(crate::MotionEffect {
+                filter_id: FilterId::new("border"),
+                param: "width".into(),
+            }),
+            kind: MotionKind::Oscillate {
+                shape: MotionShape::Sine,
+                amplitude: Finite32::new(2.0).expect("finite"),
+                period_ms: 500,
+                phase: Finite32::ZERO,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        }],
+    });
     // Every audio measure and curve (ADR-0100), hearing the program mix, a bus and a
     // source.
     edits.push(Edit::ItemSetMotion {
@@ -835,6 +878,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "sway-x".into(),
             property: MotionProperty::X,
+            effect: None,
             kind: MotionKind::Wiggle {
                 amplitude: f(3.0),
                 frequency_hz: f(0.4),
@@ -847,6 +891,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "sway-roll".into(),
             property: MotionProperty::Rotation,
+            effect: None,
             kind: MotionKind::Oscillate {
                 shape: MotionShape::Triangle,
                 amplitude: f(0.1),
@@ -859,6 +904,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "scroll".into(),
             property: MotionProperty::CropLeft,
+            effect: None,
             kind: MotionKind::Drift {
                 rate_per_s: f(12.0),
                 wrap: Some(f(480.0)),
@@ -869,6 +915,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "jolt".into(),
             property: MotionProperty::Y,
+            effect: None,
             kind: MotionKind::Impulse {
                 amplitude: f(18.0),
                 frequency_hz: f(1.5),
@@ -901,6 +948,7 @@ fn reactive() -> Vec<MotionModifier> {
     let modifier = |id: &str, property, kind| MotionModifier {
         modifier_id: id.into(),
         property,
+        effect: None,
         kind,
         clock: MotionClock::Engine,
         enabled: true,
@@ -946,6 +994,7 @@ fn keyframe_motion() -> Vec<MotionModifier> {
     vec![MotionModifier {
         modifier_id: "pulse".into(),
         property: MotionProperty::Opacity,
+        effect: None,
         kind: MotionKind::Oscillate {
             shape: MotionShape::Sine,
             amplitude: Finite32::new(0.2).expect("finite"),
@@ -1443,6 +1492,64 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
         },
+        // PTZ heads (ADR-0146).
+        Action::PtzDrive {
+            camera: "close".into(),
+            pan: -12,
+            tilt: 4,
+            zoom: 0,
+        },
+        Action::PtzAim {
+            camera: "close".into(),
+            pose: crate::PtzPose {
+                pan: Some(-1200),
+                tilt: Some(300),
+                zoom: Some(0x2000),
+                focus: None,
+            },
+            speed: Some(12),
+        },
+        Action::PtzHome {
+            camera: "wide".into(),
+        },
+        Action::PtzRecall {
+            camera: "wide".into(),
+            preset: 2,
+        },
+        Action::PtzStore {
+            camera: "wide".into(),
+            preset: 3,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Auto,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Manual,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::OnePush,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Near,
+            speed: Some(3),
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Far,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Stop,
+            speed: None,
+        },
         Action::SceneSetKeyframe {
             scene_id: SceneId::new("scn_panels"),
             keyframe_id: Some(SceneId::new("scn_panels_wide")),
@@ -1753,6 +1860,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::EncoderList,
         Query::VideoMixList,
         Query::CaptureTargets,
+        Query::PtzList,
         Query::FontList,
         Query::ValuesList { prefix: None },
         Query::ValuesList {
@@ -1774,6 +1882,18 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::ProfileGet {
             seconds: Some(10),
             top: Some(5),
+        },
+        Query::QualityProbe {
+            stream: crate::ProbeStream::Output {
+                output_id: OutputId::new("out_1"),
+            },
+            frames: None,
+        },
+        Query::QualityProbe {
+            stream: crate::ProbeStream::Output {
+                output_id: OutputId::new("out_1"),
+            },
+            frames: Some(5),
         },
         Query::LiveList,
         Query::YoutubeStatus,
@@ -1857,6 +1977,30 @@ pub(crate) fn queries() -> Vec<Query> {
 }
 
 /// A live broadcast's audience, every count reported.
+fn quality_probe() -> crate::QualityProbeInfo {
+    let db = |v: f32| Finite32::new(v).expect("finite");
+    let frame = |pts_us, psnr_y, psnr, ssim_y| crate::FrameQuality {
+        pts_us,
+        psnr_y: db(psnr_y),
+        psnr: db(psnr),
+        ssim_y: db(ssim_y),
+    };
+    crate::QualityProbeInfo {
+        encoder: "OpenH264 (Cisco Systems, software)".into(),
+        hardware: false,
+        decoder: "OpenH264 decoder (Cisco Systems, software)".into(),
+        width: 1280,
+        height: 720,
+        frames: vec![
+            frame(2_000_000, 42.5, 44.0, 0.985),
+            frame(2_033_333, 41.5, 43.0, 0.975),
+        ],
+        psnr_y: db(42.0),
+        psnr: db(43.5),
+        ssim_y: db(0.98),
+    }
+}
+
 fn profile_info() -> ProfileInfo {
     let ms = |value: f32| Finite32::new(value).expect("finite");
     ProfileInfo {
@@ -2502,6 +2646,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: Some(TransitionPresetId::new("tr_move")),
                     transition_out: None,
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: vec![volley(), pulse(TimelineLoop::Loop), pulse(TimelineLoop::Once)],
                     items: item_infos(),
@@ -2523,6 +2668,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: None,
                     transition_out: None,
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: Vec::new(),
                     items: vec![],
@@ -2541,6 +2687,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: None,
                     transition_out: Some(TransitionPresetId::new("cut")),
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: Vec::new(),
                     items: vec![],
@@ -2677,6 +2824,51 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::PtzList {
+            cameras: vec![
+                crate::PtzCameraInfo {
+                    camera: "wide".into(),
+                    address: "192.168.1.40:52381".into(),
+                    transport: crate::PtzTransport::ViscaIp,
+                    visca_address: 1,
+                    reachable: true,
+                    pose: Some(crate::PtzPose {
+                        pan: Some(0),
+                        tilt: Some(0),
+                        zoom: Some(0),
+                        focus: Some(0x1000),
+                    }),
+                    error: None,
+                    sent: 120,
+                    replies: 240,
+                    dropped: 0,
+                },
+                crate::PtzCameraInfo {
+                    camera: "close".into(),
+                    address: "192.168.1.41:1259".into(),
+                    transport: crate::PtzTransport::Udp,
+                    visca_address: 1,
+                    reachable: false,
+                    pose: None,
+                    error: Some("no reply".into()),
+                    sent: 4,
+                    replies: 0,
+                    dropped: 2,
+                },
+                crate::PtzCameraInfo {
+                    camera: "bridge".into(),
+                    address: "10.0.0.9:5678".into(),
+                    transport: crate::PtzTransport::Tcp,
+                    visca_address: 2,
+                    reachable: true,
+                    pose: None,
+                    error: None,
+                    sent: 1,
+                    replies: 2,
+                    dropped: 0,
+                },
+            ],
+        },
         QueryResult::CaptureTargets {
             targets: vec![
                 CaptureTargetInfo {
@@ -2759,6 +2951,9 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         },
         QueryResult::ProfileGet {
             profile: profile_info(),
+        },
+        QueryResult::QualityProbe {
+            probe: quality_probe(),
         },
         QueryResult::FontList {
             fonts: vec![

@@ -385,6 +385,7 @@ impl Collection {
             options: Default::default(),
             camera: None,
             camera_motion: Vec::new(),
+            ptz_shots: Vec::new(),
             camera_follow: None,
             filters: Default::default(),
             variant_of: Some(variant_of.clone()),

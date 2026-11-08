@@ -13,9 +13,15 @@
 //! since 0.86) follows a measure of a bus or a source instead of the clock: the engine
 //! measures what it hears each frame and follows it with the modifier's attack and
 //! release.
+//!
+//! Since 0.109 a modifier can drive a number or colour setting of one of the item's own
+//! effects instead of a placement property ([ADR-0138](../../../docs/adr/0138-motion-drives-effect-settings.md)):
+//! `property` `effect` with an `effect` target, [`MotionEffect`]. Its value is added to
+//! a number, kept within the range the effect's kind gives it, or to a colour's red,
+//! green and blue as a fraction of full.
 
 use crate::finite::Finite32;
-use crate::{BusId, SourceId};
+use crate::{BusId, FilterId, SourceId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -57,6 +63,13 @@ pub enum MotionProperty {
     CropRight,
     /// Source pixels cut from the bottom edge: added, never below 0.
     CropBottom,
+    /// A number or colour setting of one of the item's own effects, which the
+    /// modifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,
+    /// kept within the range the effect's kind gives it and rounded for a whole-number
+    /// one; a colour has it added to each of its red, green and blue as a fraction of
+    /// full. Not in
+    /// [`MotionProperty::ALL`], which lists the placement properties.
+    Effect,
     /// A property this version of the protocol doesn't know, from a newer server, so a
     /// 0.81 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
@@ -326,6 +339,10 @@ pub struct MotionModifier {
     pub modifier_id: String,
     /// What it changes.
     pub property: MotionProperty,
+    /// The effect setting it changes, with `property` `effect` and only then (since
+    /// 0.109, ADR-0138). Omitted otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effect: Option<MotionEffect>,
     /// What it does.
     #[serde(flatten)]
     pub kind: MotionKind,
@@ -335,6 +352,23 @@ pub struct MotionModifier {
     /// Whether it applies. Default `true`; omitted when `true`.
     #[serde(default = "enabled", skip_serializing_if = "is_true")]
     pub enabled: bool,
+}
+
+/// The longest effect parameter name a [`MotionEffect`] takes, in bytes.
+pub const MAX_MOTION_PARAM_LEN: usize = 64;
+
+/// The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number
+/// (`float` or `int` in its kind's descriptor) or colour parameter of one of the item's
+/// own effects, as the item draws them (a keyframe's overridden effects in that
+/// keyframe). One that names no such effect, or a parameter of another type, adds
+/// nothing, as an effect that was removed or changed kind since does.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct MotionEffect {
+    /// The effect, by its `filter_id` in the item's effects.
+    pub filter_id: FilterId,
+    /// The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:
+    /// 1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.
+    pub param: String,
 }
 
 fn enabled() -> bool {
@@ -413,11 +447,42 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
         if m.clock == MotionClock::Unknown {
             return Err(problem(field("clock"), unknown));
         }
+        if let Some(reason) = effect_problem(m.property, m.effect.as_ref()) {
+            return Err(problem(field("effect"), reason));
+        }
         if let Some((param, reason)) = m.kind.problem() {
             return Err(problem(field(param), reason));
         }
     }
     Ok(())
+}
+
+/// What is wrong with a modifier's `effect` for its `property`, if anything: property
+/// `effect` needs one, every other property takes none, and its `filter_id` and `param`
+/// must be well formed.
+fn effect_problem(property: MotionProperty, effect: Option<&MotionEffect>) -> Option<&'static str> {
+    match (property, effect) {
+        (MotionProperty::Effect, None) => {
+            Some("property `effect` needs an `effect` naming the filter and its parameter")
+        }
+        (MotionProperty::Effect, Some(effect)) => {
+            let param = &effect.param;
+            if effect.filter_id.as_str().is_empty() {
+                Some("`filter_id` must name one of the item's effects")
+            } else if param.is_empty()
+                || param.len() > MAX_MOTION_PARAM_LEN
+                || !param
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                Some("`param` must be 1 to 64 bytes of ASCII letters, digits and `_`")
+            } else {
+                None
+            }
+        }
+        (_, Some(_)) => Some("only property `effect` takes an `effect`"),
+        (_, None) => None,
+    }
 }
 
 impl MotionKind {
@@ -574,6 +639,7 @@ mod tests {
         MotionModifier {
             modifier_id: id.into(),
             property: MotionProperty::X,
+            effect: None,
             kind: MotionKind::Wiggle {
                 amplitude: Finite32::new(amplitude).expect("finite"),
                 frequency_hz: Finite32::ONE,
@@ -616,6 +682,63 @@ mod tests {
             field_of(&[wiggle("a", 1.0), wiggle("b", -1.0)]).as_deref(),
             Some("motion.1.amplitude")
         );
+    }
+
+    /// An `effect` modifier (ADR-0138, since 0.109) names the effect setting it drives,
+    /// on the wire as `effect: {filter_id, param}`, and only property `effect` takes one.
+    #[test]
+    fn an_effect_modifier_names_its_setting_and_only_it_takes_one() {
+        let pulse: MotionModifier = serde_json::from_value(serde_json::json!({
+            "modifier_id": "pulse", "property": "effect",
+            "effect": {"filter_id": "border", "param": "width"},
+            "kind": "oscillate", "amplitude": 2.0, "period_ms": 500
+        }))
+        .expect("parses");
+        assert_eq!(
+            pulse.effect,
+            Some(MotionEffect {
+                filter_id: FilterId::new("border"),
+                param: "width".into(),
+            })
+        );
+        assert_eq!(field_of(std::slice::from_ref(&pulse)), None);
+        let json = serde_json::to_value(&pulse).expect("serializes");
+        assert_eq!(json["effect"]["param"], "width");
+        // A placement modifier writes no `effect`.
+        let still = serde_json::to_value(wiggle("a", 1.0)).expect("serializes");
+        assert!(still.get("effect").is_none(), "{still}");
+        let with = |effect: Option<MotionEffect>, property| MotionModifier {
+            property,
+            effect,
+            ..pulse.clone()
+        };
+        let target = |filter: &str, param: &str| {
+            Some(MotionEffect {
+                filter_id: FilterId::new(filter),
+                param: param.into(),
+            })
+        };
+        let effect = Some("motion.0.effect");
+        assert_eq!(
+            field_of(&[with(None, MotionProperty::Effect)]).as_deref(),
+            effect
+        );
+        assert_eq!(
+            field_of(&[with(target("border", "width"), MotionProperty::X)]).as_deref(),
+            effect
+        );
+        assert_eq!(
+            field_of(&[with(target("", "width"), MotionProperty::Effect)]).as_deref(),
+            effect
+        );
+        for bad in ["", "two words", "wïdth", &"w".repeat(65)] {
+            assert_eq!(
+                field_of(&[with(target("border", bad), MotionProperty::Effect)]).as_deref(),
+                effect,
+                "{bad:?}"
+            );
+        }
+        assert!(!MotionProperty::ALL.contains(&MotionProperty::Effect));
     }
 
     /// #1125 review N2: a value from a newer server parses as `Unknown`, so an older

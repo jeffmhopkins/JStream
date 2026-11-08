@@ -65,13 +65,15 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
-  `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
+  `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`,
+  `scene.set_ptz_shots`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
-  `scene.zoom_camera`, `item.show`,
+  `scene.zoom_camera`, `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`, `ptz.store`,
+  `ptz.focus`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.report`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
@@ -148,7 +150,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
 <a id="contents-calls"></a>
 ## Contents: queries, kinds and events
 <!-- @section
-covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/keyframe.rs", "crates/jstream-protocol/src/youtube.rs", "crates/jstream-protocol/src/transition.rs", "crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/settings.rs", "crates/jstream-protocol/src/event.rs", "crates/jstream-protocol/src/plugin.rs", "crates/jstream-protocol/src/preview.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/activity.rs"]
+covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/keyframe.rs", "crates/jstream-protocol/src/youtube.rs", "crates/jstream-protocol/src/transition.rs", "crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/settings.rs", "crates/jstream-protocol/src/event.rs", "crates/jstream-protocol/src/plugin.rs", "crates/jstream-protocol/src/preview.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/quality.rs", "crates/jstream-protocol/src/activity.rs"]
 -->
 
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
@@ -157,10 +159,13 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them), with `QueryResult`
+  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them),
+  `quality.probe` (since 0.110, `quality.rs`: `ProbeStream`, `QualityProbeInfo` with its
+  `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
+  `MAX_PSNR_DB`), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -196,7 +201,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   shares, and `check_motion_id`, the ID check `item.trigger_motion` shares
   ([Motion](#motion)). Since 0.86 `MotionKind::Audio`, with its `MotionMeasure`
   and `MotionCurve`, follows a bus or a source
-  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)).
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
+  `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -329,8 +336,16 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 shared values `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar`, which it sets
 itself with `values.changed` from the client `engine`, and a `browser` source's page may
 be granted those values, `page_api_tempo`, and one MIDI input's state, `page_api_midi`
-(ADR-0147, a number the release queue set; 0.109 to 0.111 are other PRs'); 0.108
-because the person is asked before a new agent connects:
+(ADR-0147, a number the release queue set); 0.111 (a number the release queue set)
+because the engine drives PTZ cameras: the actions `ptz.drive`, `ptz.aim`,
+`ptz.home`, `ptz.recall`, `ptz.store` and `ptz.focus`, the query `ptz.list`, and a
+scene's `ptz_shots`, set with `scene.set_ptz_shots` ([PTZ cameras](#ptz)); 0.110 because the query `quality.probe` (`ProbeStream`,
+`QualityProbeInfo`) measures a running output's encoded picture
+([Queries](#queries), [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
+a number the release queue set); 0.109 because a motion modifier can drive a number or colour
+setting of one of its item's effects (#1404): `MotionProperty::Effect` and `MotionModifier.effect`
+(`MotionEffect`, [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md),
+#1294, a number the release queue set); 0.108 because the person is asked before a new agent connects:
 the events `agent.approval_requested` and `agent.approval_resolved`, the actions
 `agent.approve` and `agent.forget`, the query `agent.approved`, the error `not_allowed`
 and the entity kind `approval`
@@ -438,7 +453,7 @@ codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)); 0.7
 ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.69 because of the
 `codec.downloads` query and the `codec.download` and `codec.delete` actions, which
 download Cisco's OpenH264 on a person's request ([Codec downloads](#codec-downloads),
-[ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)); 0.68 because of the
+[ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)); 0.68 because of the
 `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
 takes a source's settings whose kind marks them `live` (`source.set_settings`,
 [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
@@ -1232,6 +1247,44 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
 
+<a id="ptz"></a>
+## PTZ cameras
+<!-- @section
+covers = ["crates/jstream-protocol/src/ptz.rs"]
+depends_on = ["docs/adr/0146-ptz-cameras-shots-and-actions.md"]
+-->
+
+PTZ cameras (0.111) are physical heads the engine drives over VISCA
+([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)). The camera list,
+with each head's address, belongs to the machine (ADR-0123 §4): the host gives it to
+the engine, and nothing on the wire adds, changes or removes a camera. A call names a
+camera by its name on that list, 1 to 64 bytes with no control characters. Positions
+are the head's own counts and speeds VISCA's steps.
+- **Actions**, runtime and never undone: `ptz.drive {camera, pan, tilt, zoom}` (signed
+  speeds, pan -24 to 24, tilt -23 to 23, zoom -8 to 8, 0 stops), `ptz.aim {camera, pan?,
+  tilt?, zoom?, focus?, speed?}` (pan and tilt together, at least one field, speed 1 to
+  24), `ptz.home {camera}`, `ptz.recall {camera, preset}` and `ptz.store {camera,
+  preset}` (0 to 127; a store writes the head's memory), and `ptz.focus {camera, focus,
+  speed?}` (`auto`, `manual`, `one_push`, `near`, `far`, `stop`; speed 1 to 8).
+  `ptz_action_check` gives the order every implementation checks in: the fields
+  (`invalid_argument`), then whether the machine lists any camera (`action_failed`),
+  then whether it lists this one (`invalid_argument` on `camera`). An action returns
+  once its command is queued. Each but `ptz.drive` can be bound to a trigger (a binding
+  fires only on press, so nothing would stop a bound drive), and none names a collection
+  object. A drive that moves stops when the session that sent it ends. A plugin can't send them, or read `ptz.list`.
+- **`ptz.list`** gives each camera (`PtzCameraInfo`): its name, `address`, `transport`
+  (`visca_ip`, `udp` or `tcp`), `visca_address`, whether it answered in the last three
+  seconds, its last `pose` and `error`, and its `sent`, `replies` and `dropped` counts.
+  Empty when the machine drives none, which is the default.
+- **Shots** (`PtzShot`): a scene's `ptz_shots`, at most 16, one per camera, each a
+  `camera` and either a `preset` or a pose (`pan` and `tilt` together, `zoom`,
+  `focus`), flat in the shot. `scene.set_ptz_shots {scene_id, shots}` replaces the
+  list, a keyframe scene's too; `check_ptz_shots` refuses a list with
+  `invalid_argument` on `shots[i].<field>`; its inverse sets the old list. A keyframe
+  scene's shot for a camera replaces its parent's, and it follows the parent's others.
+  The engine sends a scene's shots when it goes on program, and when it goes on
+  preview for the cameras the program's shots don't name; an edit moves nothing.
+
 <a id="bindings"></a>
 ## Controller bindings
 <!-- @section
@@ -1454,7 +1507,7 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
 <a id="queries"></a>
 ## Queries
 <!-- @section
-covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/activity.rs"]
+covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/quality.rs", "crates/jstream-protocol/src/activity.rs"]
 -->
 
 Queries read and never change `rev`. Those that read the collection state carry the
@@ -1545,6 +1598,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   source can still name a window closed or a device unplugged since. `action_failed`
   when the engine has no capture backend, or the OS refuses both the displays and
   windows and the devices; when only one lists, the result holds that. Added in 0.27.
+- `ptz.list`: the PTZ cameras this machine controls, each with its address, transport,
+  whether it answered lately, its last pose and error, and its counters
+  ([PTZ cameras](#ptz)); empty when the host listed none.
 - `font.list`: the fonts installed on the engine's machine ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)), ordered by
   family, then style, then path, each a `FontInfo`: `remote_family` and
   `remote_style` from the font's name table (the font maker's text, so `remote_`), and
@@ -1589,6 +1645,24 @@ Queries read and never change `rev`. Those that read the collection state carry 
   doesn't have), and `received_fps` and `shown_fps`, in client then label order. A
   view whose session has ended stays while a window reaches back to its last report.
   Runtime state, so no `rev`. Added in 0.73.
+- `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
+  frames its encoder was given
+  ([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
+  refining [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md) §3).
+  `stream` is a `ProbeStream`, so far only `{"type": "output", "output_id"}`, a running
+  output's encoder session. The engine copies the next `frames` (1 to 10, default 3)
+  frames the render thread pushes to the session, from the next keyframe on, decodes
+  the session's packets with the platform's decoder, and answers a `QualityProbeInfo`:
+  the `encoder` (and whether it is `hardware`), the `decoder`, the encoded `width` and
+  `height`, each frame's `FrameQuality` (`pts_us` on the engine's clock, `psnr_y` and
+  `psnr` in dB up to `MAX_PSNR_DB`, 100, for identical pictures, and `ssim_y` from 0 to
+  1), and their means. Both pictures are compared as NV12 in BT.709 limited range.
+  Nothing is copied or decoded unless a probe waits, and one probe of a session runs at
+  a time. Fails with `not_found` for an unknown output, `invalid_argument` on `frames`,
+  and `action_failed` when the output isn't running, the platform has no decoder for
+  its codec, another probe of the stream runs, or the frames don't come back within ten
+  seconds. A plugin with the `read` class may call it. Runtime state, so no `rev`.
+  Added in 0.110.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -2138,11 +2212,12 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   edits, among them a scene's folder, metadata and transitions, a source's metadata, a
   hotkey binding's labels (ADR-0133), an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
-  a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
+  a camera's motion and follow camera, a scene's PTZ shots (ADR-0146), `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
-  never granted: creating, deleting and retargeting outputs, their encoders and stream
+  never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
+  physical camera), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2328,7 +2403,7 @@ covers = ["crates/jstream-protocol/src/encoder.rs"]
 Cisco's patent licence for H.264 covers only Cisco's own OpenH264 binary, downloaded
 straight to the user's machine, so on Linux the engine downloads it from Cisco when a
 person asks, and never ships it
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Since 0.69:
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Since 0.69:
 - **`codec.downloads`** lists what the engine can download, ordered by ID, each a
   `CodecDownloadInfo`: its `download_id` (`openh264`), `name`, the `codec` it encodes,
   the pinned `version`, the `notice` and `license_url` a client shows wherever it offers
@@ -2506,7 +2581,8 @@ evaluates as each frame is drawn. A modifier never writes the item's values: `st
 reports the same geometry, crop and opacity whatever it adds. Each modifier has a
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
 the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
-`opacity` and the four `crop_*` edges), its `kind`, its `clock` and `enabled`.
+`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`), its
+`kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
   `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`), `drift` (a steady
@@ -2535,6 +2611,20 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
+- **Effect settings** (since 0.109,
+  [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): `property`
+  `effect` drives a number setting of one of the item's own effects instead, which
+  `effect: {filter_id, param}` (`MotionEffect`) names: the effect by its ID among the
+  effects the item draws (a keyframe's override in that keyframe) and a `float`, `int`
+  or colour parameter of its kind by its ID, `param` 1 to 64 bytes of ASCII letters,
+  digits and `_`. Only property `effect` takes an `effect`, and it needs one
+  (`motion.<n>.effect`). Its value is added to the setting (during a Move, to the
+  blended one): a number is kept within the parameter's range and rounded for an
+  `int`; a colour has it added to each of its red, green and blue as a fraction of
+  full, each kept within 0 and full, its alpha unchanged. One naming an effect or
+  parameter the item doesn't draw, or one of another type, adds nothing. It never moves the box.
+  `effect` is omitted for every other property, and a client before 0.109 reads the
+  property as `Unknown`.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source

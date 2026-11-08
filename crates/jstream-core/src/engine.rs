@@ -56,7 +56,7 @@ use jstream_protocol::{
     CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
     Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
     IdempotencyKey, KindsCause, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState,
-    OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
+    OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream, ProtocolError, Query, QueryResult,
     RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
     TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
@@ -1185,6 +1185,20 @@ impl Engine {
             .map(|pending| pending.kind.clone())
     }
 
+    /// Drives the PTZ cameras `setup` lists (ADR-0146, ADR-0123 §4): a socket and a
+    /// thread for each, which the `ptz.*` actions, `ptz.list` and the scenes' shots use.
+    /// Replaces the cameras of an earlier call, whose threads stop; an empty setup stops
+    /// them all. Without a call the engine drives no camera and opens no socket.
+    ///
+    /// # Errors
+    /// When a camera's socket can't be opened or its thread can't start; the cameras
+    /// running before are kept then.
+    pub fn start_ptz(&self, setup: &crate::ptz::PtzSetup) -> std::io::Result<()> {
+        let ptz = crate::ptz::Ptz::start(setup)?;
+        lock(&self.shared.state).ptz = ptz;
+        Ok(())
+    }
+
     /// Injects platform backends. `output.start` then runs the media pipeline
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
@@ -1743,13 +1757,15 @@ impl Engine {
     /// Drops `client_id`'s undo and redo history and expires its open gestures: its
     /// session ended (ADR-0032). Each gesture's parameters show their collection values
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
-    /// gets an audit entry. What `plugin.list` showed it is forgotten too.
+    /// gets an audit entry. A PTZ camera its drive left moving stops. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
         self.shared.profile.end_views(client_id);
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
             let mut state = lock(&self.shared.state);
             state.history.forget(client_id);
+            // A camera its drive left moving stops (ADR-0146 §3).
+            state.ptz.forget_client(client_id);
             for gesture_id in state.gestures.of_client(client_id) {
                 state.end_gesture(
                     client_id,
@@ -1852,7 +1868,7 @@ impl Engine {
     /// sessions. Only names, IDs and error codes are logged, never a command's arguments
     /// (R-SEC-001).
     ///
-    /// Every call but `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
+    /// Every call but `video.snapshot`, `video.frames`, `quality.probe`, `scene.switch_and_watch` and
     /// `plugin.clap_rescan` runs to completion here. Those are answered from another
     /// thread and come back [`Executed::Pending`], with their span; their outcome is
     /// logged when they complete.
@@ -1890,11 +1906,18 @@ impl Engine {
             return Executed::Pending(self.clap_rescan(audit, client_id, request_id), span);
         }
         if let Call::Query {
+            query: Query::QualityProbe { stream, frames },
+        } = &call
+        {
+            drop(_entered);
+            return Executed::Pending(self.quality_probe(stream, *frames), span);
+        }
+        if let Call::Query {
             query: Query::VideoFrames { strip, scene_id },
         } = call
         {
             drop(_entered);
-            let reply = self.frame_sheet(strip, scene_id, frames::query_answer);
+            let reply = self.frame_sheet(strip, scene_id, None, frames::query_answer);
             return Executed::Pending(reply, span);
         }
         if let Call::Action {
@@ -1919,10 +1942,17 @@ impl Engine {
             };
             return match self.execute(client_id, request_id, switch, previews) {
                 Executed::Ready(result) => match *result {
-                    Ok(_) => Executed::Pending(
-                        self.frame_sheet(strip, None, frames::action_answer),
-                        span,
-                    ),
+                    Ok(_) => {
+                        #[cfg(test)]
+                        thread::sleep(Duration::from_millis(
+                            SHEET_STALL_MS.load(Ordering::Relaxed),
+                        ));
+                        let switched_at = lock(&self.shared.state).switched_at;
+                        Executed::Pending(
+                            self.frame_sheet(strip, None, switched_at, frames::action_answer),
+                            span,
+                        )
+                    }
                     Err(error) => Executed::Ready(Box::new(Err(error))),
                 },
                 pending @ Executed::Pending(..) => pending,
@@ -2576,6 +2606,58 @@ impl Engine {
         })
     }
 
+    /// `quality.probe` (ADR-0132 §3, ADR-0145): PSNR and SSIM of a running output's
+    /// stream against the frames its encoder was given, measured on a thread of its own
+    /// ([`quality`](crate::quality)). Checks the call and finds the session under the
+    /// locks, which it lets go of before the probe starts.
+    fn quality_probe(&self, stream: &ProbeStream, frames: Option<u32>) -> SnapshotReply {
+        let job = (|| {
+            let frames = jstream_protocol::probe_frames(frames)?;
+            let ProbeStream::Output { output_id } = stream else {
+                return Err(ProtocolError::invalid_argument(
+                    "stream",
+                    "this engine probes only an output's stream",
+                ));
+            };
+            if lock(&self.shared.state)
+                .graph
+                .state()
+                .output(output_id)
+                .is_none()
+            {
+                return Err(ProtocolError::NotFound {
+                    entity: EntityKind::Output,
+                    id: output_id.to_string(),
+                });
+            }
+            let not_running = || ProtocolError::ActionFailed {
+                reason: format!("output `{output_id}` is not running, so it has no stream"),
+            };
+            let codecs = self.codecs().ok_or_else(not_running)?;
+            let host = self.media.as_ref().ok_or_else(not_running)?;
+            let gate = lock(&host.gate);
+            let encoders = gate
+                .running
+                .get(output_id)
+                .ok_or_else(not_running)?
+                .encoders()
+                .ok_or_else(|| ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` sends no video, so there is none to probe"
+                    ),
+                })?;
+            Ok(encoders.probe_job(codecs, frames))
+        })();
+        match job {
+            Ok(job) => crate::quality::start(job),
+            Err(error) => {
+                let (reply, waiting) = snapshot::reply_pair();
+                reply.send(Err(error));
+                waiting
+            }
+        }
+    }
+
     /// The codec backend, when the engine has media backends.
     fn codecs(&self) -> Option<Arc<dyn Codecs>> {
         self.media.as_ref().and_then(|host| {
@@ -3144,12 +3226,14 @@ impl Engine {
 
     /// A frame sheet (#1061): `strip`'s pictures of the program mix, or of `scene_id`'s
     /// scene alone, taken in real time from now by a `jstream-frames` thread and drawn
-    /// by the snapshot thread ([`frames`]). Its answer is `answer`'s wrapping of the
-    /// sheet, or the error that stopped it.
+    /// by the snapshot thread ([`frames`]). Each picture's `at_ms` counts from `since`
+    /// (the switch, for `scene.switch_and_watch`), else from now. Its answer is
+    /// `answer`'s wrapping of the sheet, or the error that stopped it.
     fn frame_sheet(
         &self,
         strip: FrameStrip,
         scene_id: Option<SceneId>,
+        since: Option<jstream_media::MediaTime>,
         answer: fn(FrameSheet) -> CallResult,
     ) -> SnapshotReply {
         let (reply, waiting) = snapshot::reply_pair();
@@ -3159,7 +3243,7 @@ impl Engine {
         }
         let begin = Instant::now();
         let start = match self.shared.sample(scene_id.as_ref(), None) {
-            Ok(sample) => sample.at,
+            Ok(sample) => since.unwrap_or(sample.at),
             Err(error) => {
                 reply.send(Err(error));
                 return waiting;
@@ -3355,6 +3439,12 @@ impl Engine {
 /// A frame sheet's samples, each read when it is due (`begin` plus its offset). Stops
 /// with `internal` if the engine ends, and with the read's error (a scene deleted
 /// meanwhile) if one fails.
+/// A pause between a `scene.switch_and_watch`'s switch and its sheet's start, for tests:
+/// a loaded machine's delay, made on purpose.
+#[cfg(test)]
+pub(crate) static SHEET_STALL_MS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
 fn take_samples(
     shared: &Weak<Shared>,
     strip: &FrameStrip,
@@ -3982,6 +4072,8 @@ struct State {
     audio: AudioSources,
     /// Each `webcam`'s camera controls, set on its device as they change (#1196).
     camera_controls: crate::camera_controls::CameraControls,
+    /// The PTZ cameras this machine drives (ADR-0146): none until the host starts them.
+    ptz: crate::ptz::Ptz,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -4007,6 +4099,10 @@ struct State {
     /// transition, a fire or a `source.restart` it starts takes as its start
     /// (ADR-0099 decision 4).
     cue_at: Option<jstream_media::MediaTime>,
+    /// When the last `scene.switch` started its transition, or `None` when it changed
+    /// nothing: what a `scene.switch_and_watch` sheet's `at_ms` counts from, so a picture
+    /// is judged by the fade's own time however long the sheet took to start.
+    switched_at: Option<jstream_media::MediaTime>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -5035,6 +5131,10 @@ impl State {
         action: Action,
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
+        if let Some(done) = self.ptz.act(client_id, &action) {
+            done?;
+            return Ok(CallResult::action());
+        }
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -5218,6 +5318,9 @@ impl State {
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
                 },
+                Query::PtzList => QueryResult::PtzList {
+                    cameras: self.ptz.list(),
+                },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
@@ -5282,6 +5385,7 @@ impl State {
         named: Option<&TransitionPresetId>,
         wake: &mut Vec<Waker>,
     ) -> Result<(), ProtocolError> {
+        self.switched_at = None;
         studio::exists(self.graph.state(), &scene_id)?;
         let from_scene = self.studio.program().cloned();
         let (preset_id, run) =
@@ -5290,6 +5394,7 @@ impl State {
             return Ok(());
         }
         let now = self.action_now();
+        self.switched_at = Some(now);
         let running = match (run, from_scene) {
             (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
@@ -5532,6 +5637,13 @@ impl State {
         transition: Option<TransitionStarted>,
         wake: &mut Vec<Waker>,
     ) {
+        // The heads follow what the studio shows (ADR-0146 §7).
+        self.ptz.follow(
+            self.graph.state(),
+            self.studio.program(),
+            self.studio.preview(),
+            transition.as_ref().map_or(0, |t| t.duration_ms),
+        );
         self.subscribers.emit(
             &Event::StudioChanged {
                 program_scene: self.studio.program().cloned(),

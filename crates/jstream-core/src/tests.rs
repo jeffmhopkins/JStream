@@ -22,6 +22,7 @@ mod packs;
 mod page_api;
 mod preview;
 mod projects;
+mod ptz;
 mod source_sizes;
 mod sources;
 mod timelines;
@@ -5818,6 +5819,57 @@ mod cpu_pipeline {
 
         block_on(control.call(output_call("yt", false))).expect("yt stop");
         assert_eq!(encoder_status(&control, "yt").2, 0);
+    }
+
+    /// `quality.probe` (ADR-0145) checks its call, refuses an output that isn't running,
+    /// and on a running one meets the frames the render thread copied with the decoded
+    /// pictures by `pts`: the fake decoder's pictures are 16 × 16, so the first pair
+    /// found fails the probe for its size, which only a matched pair can do.
+    #[test]
+    fn a_quality_probe_meets_the_encoders_frames_with_their_pictures() {
+        use jstream_protocol::ProbeStream;
+        let probe = |output: &str, frames: Option<u32>| Query::QualityProbe {
+            stream: ProbeStream::Output {
+                output_id: OutputId::new(output),
+            },
+            frames,
+        };
+        let dir = TempDir::new("probe");
+        let fakes = fakes();
+        let (_engine, control, mut events) =
+            recording_engine(&fakes, cpu_draw(), &dir.join("probe.mp4"));
+        drain(&mut events);
+
+        let err = query(&control, probe("nope", None)).expect_err("unknown output");
+        assert_eq!(code(&err), Some("not_found"), "{err:?}");
+        let err = query(&control, probe("rec", Some(11))).expect_err("too many frames");
+        assert_eq!(code(&err), Some("invalid_argument"), "{err:?}");
+        let err = query(&control, probe("rec", None)).expect_err("not running");
+        assert_eq!(code(&err), Some("action_failed"), "{err:?}");
+
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let answer = std::thread::scope(|scope| {
+            scope.spawn(|| {
+                let _ = tx.send(query(&control, probe("rec", Some(2))));
+            });
+            let mut answer = None;
+            assert!(
+                pump_until(&fakes.clock, &fakes.audio, || {
+                    answer = answer.take().or_else(|| rx.try_recv().ok());
+                    answer.is_some()
+                }),
+                "the probe never answered"
+            );
+            answer.expect("answered")
+        });
+        let err = answer.expect_err("the fake decoder's pictures are 16 x 16");
+        let reason = match err.protocol() {
+            Some(jstream_protocol::ProtocolError::ActionFailed { reason }) => reason.clone(),
+            other => panic!("not action_failed: {other:?}"),
+        };
+        assert!(reason.contains("16x16 picture of a"), "{reason}");
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
     }
 
     /// A recording with an audio chain of its own (ADR-0080) gets an output tap and its

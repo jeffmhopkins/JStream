@@ -567,6 +567,215 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+          "properties": {
+            "camera": {
+              "description": "The camera's name.",
+              "type": "string"
+            },
+            "pan": {
+              "default": 0,
+              "description": "Pan speed: negative left, positive right, 0 stops.",
+              "format": "int8",
+              "maximum": 127,
+              "minimum": -128,
+              "type": "integer"
+            },
+            "tilt": {
+              "default": 0,
+              "description": "Tilt speed: negative down, positive up, 0 stops.",
+              "format": "int8",
+              "maximum": 127,
+              "minimum": -128,
+              "type": "integer"
+            },
+            "type": {
+              "const": "ptz.drive",
+              "type": "string"
+            },
+            "zoom": {
+              "default": 0,
+              "description": "Zoom speed: negative wide, positive tele, 0 stops.",
+              "format": "int8",
+              "maximum": 127,
+              "minimum": -128,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type",
+            "camera"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+          "properties": {
+            "camera": {
+              "description": "The camera's name.",
+              "type": "string"
+            },
+            "focus": {
+              "description": "The focus position. Setting it puts the head's focus in manual.",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "pan": {
+              "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "speed": {
+              "description": "The pan and tilt speed, 1 to 24. Omitted for the fastest.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "tilt": {
+              "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+              "format": "int32",
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "ptz.aim",
+              "type": "string"
+            },
+            "zoom": {
+              "description": "The zoom position, 0 the widest.",
+              "format": "uint16",
+              "maximum": 65535,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "camera"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
+          "properties": {
+            "camera": {
+              "description": "The camera's name.",
+              "type": "string"
+            },
+            "type": {
+              "const": "ptz.home",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "camera"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+          "properties": {
+            "camera": {
+              "description": "The camera's name.",
+              "type": "string"
+            },
+            "preset": {
+              "description": "The preset number.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "ptz.recall",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "camera",
+            "preset"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+          "properties": {
+            "camera": {
+              "description": "The camera's name.",
+              "type": "string"
+            },
+            "preset": {
+              "description": "The preset number.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "ptz.store",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "camera",
+            "preset"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+          "properties": {
+            "camera": {
+              "description": "The camera's name.",
+              "type": "string"
+            },
+            "focus": {
+              "$ref": "#/$defs/PtzFocus",
+              "description": "What to do."
+            },
+            "speed": {
+              "description": "The drive speed for `near` and `far`, 1 to 8.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "ptz.focus",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "camera",
+            "focus"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
           "properties": {
             "scene_id": {
@@ -5120,6 +5329,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "shots": {
+              "default": [],
+              "description": "The new list. Empty removes every shot.",
+              "items": {
+                "$ref": "#/$defs/PtzShot"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "scene.set_ptz_shots",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
           "properties": {
             "motion": {
@@ -7374,6 +7609,33 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "FrameQuality": {
+      "description": "One frame a probe compared with its decoded picture.",
+      "properties": {
+        "psnr": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "PSNR over every luma and chroma sample, in dB, at most [`MAX_PSNR_DB`]."
+        },
+        "psnr_y": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "PSNR of the luma plane, in dB, at most [`MAX_PSNR_DB`]."
+        },
+        "pts_us": {
+          "default": 0,
+          "description": "The frame's presentation time on the stream, in microseconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "ssim_y": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "SSIM of the luma plane, from 0 to 1 (1 is identical), over 8 × 8 windows."
+        }
+      },
+      "type": "object"
+    },
     "GestureId": {
       "description": "A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by\nthe client that opens it, and unique among that client's open gestures.",
       "type": "string"
@@ -8533,6 +8795,24 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "MotionEffect": {
+      "description": "The effect setting an `effect` modifier drives (since 0.109, ADR-0138): a number\n(`float` or `int` in its kind's descriptor) or colour parameter of one of the item's\nown effects, as the item draws them (a keyframe's overridden effects in that\nkeyframe). One that names no such effect, or a parameter of another type, adds\nnothing, as an effect that was removed or changed kind since does.",
+      "properties": {
+        "filter_id": {
+          "$ref": "#/$defs/FilterId",
+          "description": "The effect, by its `filter_id` in the item's effects."
+        },
+        "param": {
+          "description": "The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:\n1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "filter_id",
+        "param"
+      ],
+      "type": "object"
+    },
     "MotionMeasure": {
       "description": "What an `audio` modifier measures of what it hears (since 0.86).",
       "oneOf": [
@@ -8806,6 +9086,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "default": "engine",
           "description": "Where its time starts. Default `engine`."
         },
+        "effect": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionEffect"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The effect setting it changes, with `property` `effect` and only then (since\n0.109, ADR-0138). Omitted otherwise."
+        },
         "enabled": {
           "description": "Whether it applies. Default `true`; omitted when `true`.",
           "type": "boolean"
@@ -8886,6 +9177,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "crop_bottom",
           "description": "Source pixels cut from the bottom edge: added, never below 0.",
+          "type": "string"
+        },
+        {
+          "const": "effect",
+          "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
           "type": "string"
         }
       ]
@@ -10049,6 +10345,29 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "ProbeStream": {
+      "description": "The encoded stream a `quality.probe` measures.",
+      "oneOf": [
+        {
+          "description": "A running output's video: the encoder session it sends from, which it may share\nwith other outputs of the same mix and profile.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "output",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ProfileStream": {
       "description": "An encoded stream, by what it feeds ([`StreamProfile::stream`]).",
       "oneOf": [
@@ -10703,6 +11022,237 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PtzCameraInfo": {
+      "description": "One PTZ camera in a `ptz.list` result.",
+      "properties": {
+        "address": {
+          "description": "The LAN address and port it is reached at, as `ip:port`.",
+          "type": "string"
+        },
+        "camera": {
+          "description": "Its name, which `ptz.*` actions and shots take.",
+          "type": "string"
+        },
+        "dropped": {
+          "description": "Datagrams dropped: from another address or port, or not a VISCA reply\n(ADR-0123 §4).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "error": {
+          "description": "Why its last command failed, as the head answered or the engine saw it. Omitted\nwhile the last one succeeded.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "pose": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PtzPose"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its pose when it last answered the engine's position inquiries: the fields it\nanswered. Omitted until it has answered one."
+        },
+        "reachable": {
+          "description": "Whether it answered in the last three seconds.",
+          "type": "boolean"
+        },
+        "replies": {
+          "description": "Replies read from it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sent": {
+          "description": "Messages sent to it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "transport": {
+          "$ref": "#/$defs/PtzTransport",
+          "description": "How it is reached."
+        },
+        "visca_address": {
+          "description": "Its VISCA address on that link, 1 to 7.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "required": [
+        "camera",
+        "address",
+        "transport",
+        "visca_address",
+        "reachable",
+        "sent",
+        "replies",
+        "dropped"
+      ],
+      "type": "object"
+    },
+    "PtzFocus": {
+      "description": "What `ptz.focus` does.",
+      "oneOf": [
+        {
+          "const": "auto",
+          "description": "Autofocus on.",
+          "type": "string"
+        },
+        {
+          "const": "manual",
+          "description": "Autofocus off: the focus stays where it is.",
+          "type": "string"
+        },
+        {
+          "const": "one_push",
+          "description": "Focus once, automatically, then hold.",
+          "type": "string"
+        },
+        {
+          "const": "near",
+          "description": "Drive the focus nearer at `speed`, until `stop`.",
+          "type": "string"
+        },
+        {
+          "const": "far",
+          "description": "Drive the focus farther at `speed`, until `stop`.",
+          "type": "string"
+        },
+        {
+          "const": "stop",
+          "description": "Stop a focus drive.",
+          "type": "string"
+        }
+      ]
+    },
+    "PtzPose": {
+      "description": "A head's pose, or part of one, in the head's own counts. Pan and tilt go together,\nsince VISCA moves them in one command; zoom and focus are each optional.",
+      "properties": {
+        "focus": {
+          "description": "The focus position. Setting it puts the head's focus in manual.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pan": {
+          "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tilt": {
+          "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "zoom": {
+          "description": "The zoom position, 0 the widest.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "type": "object"
+    },
+    "PtzShot": {
+      "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
+      "properties": {
+        "camera": {
+          "description": "The camera's name on the machine's PTZ camera list.",
+          "type": "string"
+        },
+        "focus": {
+          "description": "The focus position. Setting it puts the head's focus in manual.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "pan": {
+          "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "preset": {
+          "description": "The preset to recall, 0 to 127.",
+          "format": "uint8",
+          "maximum": 255,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "tilt": {
+          "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+          "format": "int32",
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "zoom": {
+          "description": "The zoom position, 0 the widest.",
+          "format": "uint16",
+          "maximum": 65535,
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        }
+      },
+      "required": [
+        "camera"
+      ],
+      "type": "object"
+    },
+    "PtzTransport": {
+      "description": "How a PTZ camera on the machine's list is reached (ADR-0146 §2).",
+      "oneOf": [
+        {
+          "const": "visca_ip",
+          "description": "Sony-style VISCA over IP: UDP with the 8-byte header (port 52381 by default).",
+          "type": "string"
+        },
+        {
+          "const": "udp",
+          "description": "Raw VISCA messages over UDP.",
+          "type": "string"
+        },
+        {
+          "const": "tcp",
+          "description": "Raw VISCA messages over TCP, which also reaches a serial head through an\nIP-to-serial bridge.",
+          "type": "string"
+        }
+      ]
+    },
     "Query": {
       "description": "A read. Queries change nothing, so they need no classification as edit or action.\n\nSerialized with an internal `type` tag holding the query name (`noun.verb`).",
       "oneOf": [
@@ -11099,6 +11649,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Lists the PTZ cameras on this machine's list (ADR-0146 §4), in the order the host\ngave them: each one's address, whether it answered lately, its last pose and its\nlast error. Runtime state, so no `rev`. Empty when the machine controls no PTZ\ncameras, which is the default (ADR-0123 §1).",
+          "properties": {
+            "type": {
+              "const": "ptz.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file\nin the OS's font folders that parses, as a family and style to show and the\nabsolute path an `asset` setting names it by. Runtime state, so no `rev`. The\nengine reads the folders once, on the first `font.list`; a font installed after\nthat shows once it restarts.",
           "properties": {
             "type": {
@@ -11324,6 +11887,33 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Measures how close a stream's decoded pictures are to the frames its encoder was\ngiven (0.110, ADR-0132 §3, ADR-0145): the engine keeps the next `frames` frames\nthe stream's encoder takes, from the next keyframe on, decodes the packets it\nmakes of them with the platform's decoder, and answers PSNR and SSIM for each.\nNothing is copied or decoded unless a probe is waiting. It waits for those frames\n(a still stream still sends them, at its frame rate) and answers within about\nten seconds. Fails with `not_found` for an output that doesn't exist,\n`invalid_argument` on `frames` outside 1 to 10, and `action_failed` when the\noutput isn't running, the platform has no decoder for its codec, or the frames\ndidn't arrive in time. Runtime state: the result carries no `rev`.",
+          "properties": {
+            "frames": {
+              "description": "The frames to compare, from 1 to 10\n([`MAX_PROBE_FRAMES`](crate::MAX_PROBE_FRAMES)). Omitted, 3.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "stream": {
+              "$ref": "#/$defs/ProbeStream",
+              "description": "The stream."
+            },
+            "type": {
+              "const": "quality.probe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "stream"
           ],
           "type": "object"
         }
@@ -12169,6 +12759,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `ptz.list`.",
+          "properties": {
+            "cameras": {
+              "description": "The cameras, in the order the host listed them.",
+              "items": {
+                "$ref": "#/$defs/PtzCameraInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "ptz.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cameras"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `font.list`.",
           "properties": {
             "fonts": {
@@ -12552,6 +13163,71 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "The result of `quality.probe` (0.110). Runtime state, so it carries no `rev`.",
+          "properties": {
+            "decoder": {
+              "default": "",
+              "description": "The decoder the engine decoded it with.",
+              "type": "string"
+            },
+            "encoder": {
+              "default": "",
+              "description": "The encoder that made the stream, as `encoder.list` names it.",
+              "type": "string"
+            },
+            "frames": {
+              "default": [],
+              "description": "The frames compared, in presentation order.",
+              "items": {
+                "$ref": "#/$defs/FrameQuality"
+              },
+              "type": "array"
+            },
+            "hardware": {
+              "default": false,
+              "description": "Whether it is a hardware encoder.",
+              "type": "boolean"
+            },
+            "height": {
+              "default": 0,
+              "description": "The encoded height, in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "psnr": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The mean of the frames' `psnr`."
+            },
+            "psnr_y": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The mean of the frames' `psnr_y`."
+            },
+            "ssim_y": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The mean of the frames' `ssim_y`."
+            },
+            "type": {
+              "const": "quality.probe",
+              "type": "string"
+            },
+            "width": {
+              "default": 0,
+              "description": "The encoded width, in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -12884,6 +13560,13 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "A keyframe scene's overrides of its parent's items, in item ID order. Omitted\nwhen there are none, and for every scene that is not a variant.",
           "items": {
             "$ref": "#/$defs/ItemOverride"
+          },
+          "type": "array"
+        },
+        "ptz_shots": {
+          "description": "Its PTZ shots (ADR-0146 §6): the physical camera framings it sends when it goes\non program or preview. On a keyframe scene, only its own, which replace its\nparent's for the same cameras. Omitted when empty.",
+          "items": {
+            "$ref": "#/$defs/PtzShot"
           },
           "type": "array"
         },

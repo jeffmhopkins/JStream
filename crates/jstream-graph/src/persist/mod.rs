@@ -20,9 +20,9 @@ use jstream_protocol::{
     Chord, Crop, Easing, Edit, EffectsSpace, EncoderProfile, EncoderProfileId, FilterChain,
     FilterId, FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
     ItemTransform, ItemTransition, KeyframeTiming, LabelId, MotionModifier, OutputId, OutputKind,
-    ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
-    SourceAudio, SourceId, SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, Trigger,
-    VideoMix, VideoMixId,
+    ProtocolError, PtzShot, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole,
+    Settings, SourceAudio, SourceId, SourceKind, SourceMeta, TimelineInfo, TransitionPresetId,
+    Trigger, VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 12;
+pub const SCHEMA_VERSION: u32 = 14;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -64,7 +64,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
-    v10_to_v11, v11_to_v12,
+    v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -351,6 +351,51 @@ fn v11_to_v12(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Version 13 adds motion modifiers that drive an effect's setting (ADR-0138): property
+/// `effect` with its `effect` target, on an item's motion or a keyframe override's. A
+/// version 12 file has none, so it upgrades unchanged; one there is refused, as version
+/// 12 refused it.
+fn v12_to_v13(value: &mut Value) -> Result<(), String> {
+    let drives = |motion: Option<&Value>| {
+        motion
+            .and_then(Value::as_array)
+            .into_iter()
+            .flatten()
+            .any(|m| {
+                m.get("effect").is_some()
+                    || m.get("property").and_then(Value::as_str) == Some("effect")
+            })
+    };
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        let items = scene.get("items").and_then(Value::as_array);
+        let overrides = scene.get("overrides").and_then(Value::as_array);
+        if items
+            .into_iter()
+            .flatten()
+            .chain(overrides.into_iter().flatten())
+            .any(|holder| drives(holder.get("motion")))
+        {
+            return Err("a version 12 motion modifier drives no effect setting".into());
+        }
+    }
+    Ok(())
+}
+
+/// Version 14 adds a scene's PTZ shots (`scenes[].ptz_shots`, ADR-0146). A version 13
+/// file has none, so it upgrades unchanged, and shots there are refused.
+fn v13_to_v14(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    if scenes
+        .into_iter()
+        .flatten()
+        .any(|s| s.get("ptz_shots").is_some())
+    {
+        return Err("a version 13 scene has no `ptz_shots`".into());
+    }
+    Ok(())
+}
+
 /// Why a collection file could not be loaded. The message never quotes the file's
 /// values beyond IDs, so it is safe to log.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -550,6 +595,10 @@ struct FileScene {
     /// for a keyframe scene.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     camera_motion: Vec<CameraMotionModifier>,
+    /// Its PTZ shots (ADR-0146, schema_version 13), a keyframe scene's own included;
+    /// omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    ptz_shots: Vec<PtzShot>,
     /// Its timelines (ADR-0115, schema_version 6), ordered by ID; omitted when it has
     /// none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -874,6 +923,7 @@ impl Graph {
                     background: scene.options.background.clone(),
                     camera: scene.camera,
                     camera_motion: scene.camera_motion.clone(),
+                    ptz_shots: scene.ptz_shots.clone(),
                     timelines: scene.timelines.values().cloned().collect(),
                     variant_of: scene.variant_of.clone(),
                     overrides: scene
@@ -1598,6 +1648,15 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
                 Edit::SceneSetCameraMotion {
                     scene_id: scene.id.clone(),
                     motion: scene.camera_motion.clone(),
+                },
+            ));
+        }
+        if !scene.ptz_shots.is_empty() {
+            edits.push((
+                format!("scene `{}`", scene.id),
+                Edit::SceneSetPtzShots {
+                    scene_id: scene.id.clone(),
+                    shots: scene.ptz_shots.clone(),
                 },
             ));
         }

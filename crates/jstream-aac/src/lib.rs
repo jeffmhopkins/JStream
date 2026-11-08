@@ -1,8 +1,8 @@
 //! JStream's AAC-LC encoder: safe Rust, encode only, for Linux's AAC path
-//! (docs/adr/0061-source-types-and-decoding-scope-v2.md), within the limits of
+//! (docs/adr/0140-source-types-and-decoding-scope-v3.md), within the limits of
 //! docs/adr/0062-aac-lc-encoder-patent-check.md.
 //!
-//! Docs: crates/jstream-aac/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0062-aac-lc-encoder-patent-check.md
+//! Docs: crates/jstream-aac/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0062-aac-lc-encoder-patent-check.md
 //!
 //! It produces the MPEG-4 AAC-LC object type (audio object type 2) with only tools of
 //! the MPEG-2 AAC LC profile (ISO/IEC 13818-7, 1997): the MDCT filterbank with sine and

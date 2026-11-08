@@ -566,7 +566,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
-  in a keyframe its override, ADR-0099). A scene shows its object
+  in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
+  (ADR-0138, set over the protocol or MCP) shows "Effect setting" as what it moves, and
+  picking a placement property for it drops its effect target; the section doesn't add
+  one yet). A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
@@ -997,7 +1000,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   disabled, titled with the outputs that use it, while any does, as the engine refuses
   it then. The dialog also offers a codec the engine can download on a person's request
   (`codec.downloads`, `codec_downloads.rs`,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), over the
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), over the
   encoder editor or when nothing is picked: on Linux, Cisco's OpenH264, when it isn't
   installed and the machine has no hardware encoder for H.264 or a profile asks for
   software H.264, and the encoder form offers it under the hardware choice while the
