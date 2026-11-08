@@ -23,6 +23,45 @@
 //! **Shutting down.** The engine's `Shutdown`, its pipe closing, or a write to it failing
 //! closes every page; the loop quits once they have closed, or after [`CLOSE_GRACE`],
 //! and CEF shuts down on the UI thread before the process exits.
+//!
+//! # Pages, permissions and requests
+//!
+//! Every page is a windowless browser, with shared textures on Windows and software
+//! paints on Linux, painting at its spec's frame rate with a transparent background.
+//! Command-line switches let pages play sound without a click and turn off first-run and
+//! error dialogs, and on Linux with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, start
+//! Chromium on its headless platform. On Linux Chromium also keeps its in-memory
+//! profiles' key itself (`--password-store=basic`), never opening the desktop's keyring.
+//! Pop-ups are blocked. Every
+//! permission a page asks for (camera, microphone, screen capture, geolocation,
+//! notifications, clipboard, MIDI and the rest) is refused by the page's permission
+//! handler rather than left to CEF's default: a media request is cancelled and a
+//! permission prompt answered `DENY`. The one exception is Chromium's Local Network
+//! Access prompt (CEF's `LOCAL_NETWORK`, `LOOPBACK_NETWORK` and the deprecated
+//! `LOCAL_NETWORK_ACCESS` bits) asked alone: it is answered `ACCEPT` when the page's
+//! `RequestPolicy` lets the prompt's requesting origin (opaque when CEF names none)
+//! make local requests, and `DENY` otherwise, a third-party frame's included. The
+//! pinned CEF never asks it in windowless pages: its checks refuse a public origin's
+//! local request outright. So for a source that opted in with `local_network`, the
+//! helper gives the page a request context of its own and sets Chromium's
+//! `LOCAL_NETWORK`, `LOOPBACK_NETWORK` and `LOCAL_NETWORK_ACCESS` content settings to
+//! allow for the source's own origin as the top-level origin (`local_network_grant`):
+//! it reaches an app on `127.0.0.1` from that origin, while a third-party frame inside
+//! it, and every other source, is still refused at the network layer, a public name
+//! that resolves to a local address included (#347). The Linux helper's end-to-end
+//! tests check all of this (`tests/linux_page/local_network.rs`). The answers come from
+//! `permission.rs` (`answer_prompt` and `answer_media`), whose tests pin them for every
+//! permission bit, and the helper checks the three bits against CEF's when it compiles.
+//! A page given as HTML is answered by the request handler (`HtmlPage`): its main
+//! frame's `GET` of its URL gets `200`, `text/html` in UTF-8, uncached (#1035). The
+//! custom CSS is applied when the main frame finishes loading and again on each change.
+//! Every request a page makes, navigations included, goes through its `RequestPolicy`
+//! in `OnBeforeResourceLoad`, as the origin `GetResourceRequestHandler` names for it
+//! (each request gets a handler that holds it), and is cancelled when refused; an
+//! allowed main-frame navigation updates where the main frame is. A redirect's target
+//! goes through it too, in `OnResourceRedirect`, which can't cancel: a refused one is pointed at
+//! `about:jstream-refused`, which loads nothing. The engine logs the first refusal per
+//! page at `warn` and later ones at `debug`, with the count only.
 
 #[cfg(windows)]
 mod d3d11;
