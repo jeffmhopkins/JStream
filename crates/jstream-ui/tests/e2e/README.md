@@ -267,7 +267,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
   Dragging the title moves the dialog, which stays inside the window and opens again
   where it was left; a double-click on the title centres it, and the header's × still
-  closes it.
+  closes it. With Sharpen described, a click on its row shows its settings on the
+  right, no Filters window opening, the name and the footer's Defaults hidden; a change
+  there is one edit at once, Enter on Blur's name picks Blur from the keyboard, and
+  Cancel puts the change back in one more.
   The mock describes no kinds, so the settings form and the draft patch are covered
   natively. A video capture device created through Add source, with its descriptor
   from `describeKinds`, opens the dialog with its live picture: a `preview.subscribe`
@@ -331,7 +334,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row's Edit filters… showing that scene's chain from behind the Transform tab while
   the item stays selected, selecting a scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
-  dialog listing the scene's chain, adding to it at once, which Cancel keeps.
+  dialog listing the scene's chain and adding to it at once, the new filter's settings
+  taking the right side (the footer's Defaults hidden) until the Properties entry brings
+  the scene's back; Cancel puts the add back, and OK keeps another.
 - **Custom shader** (`custom-shader.spec.js`): with `kind.list`, `kind.describe`,
   `pack.list`, `pack.read` and `pack.write` answered by the page's socket from the packs
   the test writes (the mock engine loads no packs), Add filter › Custom shader writes
