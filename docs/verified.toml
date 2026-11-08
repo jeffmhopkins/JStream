@@ -813,7 +813,7 @@ stamp = { hash = "b3:ac0ebfc741a0c75a", by = "agent:claude", note = "#1129: tran
 stamp = { hash = "b3:a43f169350ed1c0f", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/listener.rs"]
-stamp = { hash = "b3:a45de83de50e966a", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
+stamp = { hash = "b3:29cdcc1caa993762", by = "agent:claude", note = "listener.rs sets TCP_NODELAY on accepted streams (#1440); the protocol section describes the envelope and transport, not socket options, and still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:9ceadf4a5e81f342", by = "agent:claude", note = "#1129: transport bullet now says the host listener is plain ws:// and the opt-in network listener is TLS-only, fingerprint-trusted, device tokens only; no protocol message or version changed" }
@@ -2226,7 +2226,7 @@ stamp = { hash = "b3:3a9f06961155f6f0", by = "agent:claude", note = "S1 (#1194):
 stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note = "depends_on now names the core sections this design links to (#design for one engine and a session per connection, #snapshots for live sources, #outputs for the placeholder outputs, #wasm-plugins, #logging, #audit-log) instead of the whole old core #design, which is split into topic sections; re-read those passages against them; holds | merge: #1126 changes only core #wasm-plugins' Disabling bullet (save before the event); the daemon's saved-plugin passage still holds; the other core deps are unchanged by the merge" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:8283d20f57184259", by = "agent:claude", note = "#1307 round 1: main.rs's extra fingerprint line doesn't change the Listening or parser text; still holds" }
+stamp = { hash = "b3:50052bfb9888c114", by = "agent:claude", note = "jstream-server's Design gained TCP_NODELAY on accepted connections (#1440); the daemon's design (one engine, per-platform backends) depends on no socket options and still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
 stamp = { hash = "b3:666eba056170ffa1", by = "agent:claude", note = "Merged the #1411 r1 fixes into #1414 and carried them to builtin sources: re-read the design section; the daemon still loads the collection before packs, and its core and persistence dependencies now describe same-version reloads untouched and recorded versions saved; nothing here changes | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Re-read the design section against #1411 r1 fixes: the daemon still loads the collection before watching packs, and the core snapshot section it depends on now says same-version reloads leave settings alone; nothing in this section changes" }
@@ -5061,7 +5061,7 @@ stamp = { hash = "b3:e2b28a2df72d9e17" }
 stamp = { hash = "b3:0deda77496e58de8", by = "agent:claude", note = "New tests/content.rs follows the same tolerance approach (within 1 code of the untrimmed draw on the same adapter); nothing in this section changes." }
 
 ["CRATE-jstream-server#design"."body"]
-stamp = { hash = "b3:8283d20f57184259", by = "agent:claude", note = "#1307 round 1 B2: pairing code text and table now say five wrong attempts from both listeners together void the code (ADR-0044), no 429 row; network listener bullet matches" }
+stamp = { hash = "b3:50052bfb9888c114", by = "agent:claude", note = "listener.rs now sets TCP_NODELAY on each accepted stream (#1440); Purpose's Listener bullet and Design's listener paragraph now say so, and it covers the WebSocket, MCP HTTP and TLS network listeners since all accept through Limited" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:8c9742657710ad9f", by = "agent:claude", note = "the MCP instruction text change reaches here; the server design is unaffected | kept from the merged side: Re-read Design against the protocol and control dependencies. The server still forwards edits. canvas.set_frame_rate is one more edit, and this section does not name a rate." }
@@ -5103,7 +5103,7 @@ stamp = { hash = "b3:ac0ebfc741a0c75a", by = "agent:claude", note = "#1129: new 
 stamp = { hash = "b3:a43f169350ed1c0f", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/listener.rs"]
-stamp = { hash = "b3:a45de83de50e966a", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
+stamp = { hash = "b3:29cdcc1caa993762", by = "agent:claude", note = "listener.rs now sets TCP_NODELAY on each accepted stream (#1440); Purpose's Listener bullet and Design's listener paragraph now say so, and it covers the WebSocket, MCP HTTP and TLS network listeners since all accept through Limited" }
 
 ["CRATE-jstream-server#design"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:9ceadf4a5e81f342", by = "agent:claude", note = "#1129: new 'The network listener' subsection matches network.rs, identity.rs, gate.rs network side and lib.rs accessors; pairing code limits (5 per peer IPv4 or IPv6 /64, 64 network-wide, 429) match devices.rs and pair.rs; pairing page text matches pair.html (ADR-0130)" }
@@ -5142,7 +5142,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: new 
 stamp = { hash = "b3:cc9ecec38c66df9c", by = "agent:ui-layouts", note = "New UI settings subsection (calls, limits, the file, broken-file handling, served with pairing off); Sessions names the ui_settings calls the wrapper answers; dependencies mention the settings file." }
 
 ["CRATE-jstream-server#purpose"."body"]
-stamp = { hash = "b3:ab067933fdde92f3", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
+stamp = { hash = "b3:435726bf3f24982d", by = "agent:claude", note = "listener.rs now sets TCP_NODELAY on each accepted stream (#1440); Purpose's Listener bullet and Design's listener paragraph now say so, and it covers the WebSocket, MCP HTTP and TLS network listeners since all accept through Limited" }
 
 ["CRATE-jstream-server#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-server"]
 stamp = { hash = "b3:91b837e64ac2fb2b" }
@@ -5172,7 +5172,7 @@ stamp = { hash = "b3:ac0ebfc741a0c75a", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:a43f169350ed1c0f", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/listener.rs"]
-stamp = { hash = "b3:a45de83de50e966a", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
+stamp = { hash = "b3:29cdcc1caa993762", by = "agent:claude", note = "listener.rs now sets TCP_NODELAY on each accepted stream (#1440); Purpose's Listener bullet and Design's listener paragraph now say so, and it covers the WebSocket, MCP HTTP and TLS network listeners since all accept through Limited" }
 
 ["CRATE-jstream-server#purpose"."file:crates/jstream-server/src/mcp.rs"]
 stamp = { hash = "b3:9ceadf4a5e81f342", by = "agent:claude", note = "#1129: contents list adds network.rs and identity.rs under the tls feature and the network field of ServerConfig; ServerConfig::tls now described as the host listener's test switch, the network listener always TLS" }
@@ -6705,7 +6705,7 @@ stamp = { hash = "b3:25869ebe0efd3e84", by = "agent:claude", note = "the CLI's c
 stamp = { hash = "b3:1e764b039ee3cb23", by = "agent:claude", note = "#1307 round 1: steps run without --lan and the server design change is only pairing's shared cap; unchanged" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:crates/jstream-server/README.md#design"]
-stamp = { hash = "b3:8283d20f57184259", by = "agent:claude", note = "#1307 round 1: steps run without --lan and the server design change is only pairing's shared cap; unchanged" }
+stamp = { hash = "b3:50052bfb9888c114", by = "agent:claude", note = "jstream-server's Design gained TCP_NODELAY on accepted connections (#1440); the go-live steps and their checks are unchanged by it" }
 
 ["RUNBOOK-LINUX-TESTING#script"."body"]
 stamp = { hash = "b3:8562c2415ceafbaf", by = "agent:linux-install", note = "re-read against scripts/linux/install.sh, scripts/linux/jstream and linux-install.yml step by step: packages per family (Arch adds vulkan-swrast), the toolchain installed by name with the wasm target as the Mac script does, the libcef strip, the sandbox rule and its one root step, now described as catching a mistake only, with the residual risk named (code running as the user can place or swap the file before the chmod, accepted for a tester build), paths, launcher flags and the two-minute clipboard clear, the CI jobs; what it shares with the Mac script is stated exactly; install-tools.txt is in covers" }
@@ -7011,7 +7011,7 @@ stamp = { hash = "b3:ac0ebfc741a0c75a", by = "agent:claude", note = "#1129: netw
 stamp = { hash = "b3:a43f169350ed1c0f", by = "agent:claude", note = "#1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/listener.rs"]
-stamp = { hash = "b3:a45de83de50e966a", by = "agent:claude", note = "#1129: network listener controls (TLS only, self-signed cert trusted by fingerprint, control token refused, own TCP pool, Host/Origin on the network side, every-interface default and --lan-bind, ADR-0130 warning sentence) match network.rs, identity.rs, gate.rs and args.rs; adversary row updated" }
+stamp = { hash = "b3:29cdcc1caa993762", by = "agent:claude", note = "listener.rs sets TCP_NODELAY on accepted streams (#1440): a latency change only; the cap, header-read deadline and gate described here are unchanged" }
 
 ["THREAT-MODEL#server"."file:crates/jstream-server/src/network.rs"]
 stamp = { hash = "b3:868524f86665bfe6", by = "agent:claude", note = "#1307 round 1 B2: network listener's Limits bullet now says its pairing attempts share the code's five; other controls match network.rs, gate.rs and identity.rs" }
