@@ -11,7 +11,7 @@
 //! # Behaviour
 //!
 //! **`MfCodecs`** (`Codecs`), Media Foundation codecs
-//! (ADR-0061): the **AAC encoder** and
+//! (ADR-0140): the **AAC encoder** and
 //! the **video encoders** (H.264, HEVC and AV1), from CPU frames or from encode targets on
 //! the GPU. AAC:
 //! - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
@@ -152,7 +152,7 @@ mod backend {
     use super::video::{Format, MfVideoEncoder};
     use crate::gpu::EncodeGpu;
 
-    /// Codecs through Media Foundation, the OS codecs ADR-0061 chooses.
+    /// Codecs through Media Foundation, the OS codecs ADR-0140 chooses.
     ///
     /// It holds no COM objects, so it is `Send + Sync`. Each session starts Media
     /// Foundation for itself and can be driven from any thread. Open sessions from a

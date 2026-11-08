@@ -420,7 +420,7 @@ codec ([ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)); 0.7
 ([ADR-0094](../../docs/adr/0094-scene-cameras.md)); 0.69 because of the
 `codec.downloads` query and the `codec.download` and `codec.delete` actions, which
 download Cisco's OpenH264 on a person's request ([Codec downloads](#codec-downloads),
-[ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)); 0.68 because of the
+[ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)); 0.68 because of the
 `font.list` query ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)); 0.67 because `live.set`
 takes a source's settings whose kind marks them `live` (`source.set_settings`,
 [ADR-0091](../../docs/adr/0091-source-settings-as-live-values.md)); 0.66 because
@@ -2248,7 +2248,7 @@ covers = ["crates/jstream-protocol/src/encoder.rs"]
 Cisco's patent licence for H.264 covers only Cisco's own OpenH264 binary, downloaded
 straight to the user's machine, so on Linux the engine downloads it from Cisco when a
 person asks, and never ships it
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Since 0.69:
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Since 0.69:
 - **`codec.downloads`** lists what the engine can download, ordered by ID, each a
   `CodecDownloadInfo`: its `download_id` (`openh264`), `name`, the `codec` it encodes,
   the pinned `version`, the `notice` and `license_url` a client shows wherever it offers

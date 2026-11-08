@@ -349,7 +349,7 @@ fn vaapi_codecs_list_download_and_delete_openh264() {
         assert_eq!(download.id, super::OPENH264_DOWNLOAD_ID);
         assert_eq!(download.codec, Codec::H264);
         assert_eq!(download.version, "2.6.0");
-        // ADR-0061 › Notices: Cisco's attribution and licence travel with the offer.
+        // ADR-0140 › Notices: Cisco's attribution and licence travel with the offer.
         assert_eq!(download.notice, super::OPENH264_NOTICE);
         assert_eq!(download.license_url, super::OPENH264_LICENSE_URL);
         // Condition 3's notice and condition 4 itself are in the text the app shows.

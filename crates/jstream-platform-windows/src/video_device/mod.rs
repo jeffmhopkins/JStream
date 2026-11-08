@@ -11,7 +11,7 @@
 //! # Behaviour
 //!
 //! **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
-//! Foundation's source reader (ADR-0061):
+//! Foundation's source reader (ADR-0140):
 //! - **Devices:** the video capture devices Media Foundation enumerates. A device's
 //!   `DeviceId` is its symbolic link (its device interface path), which stays the same
 //!   across reboots and replugging into the same port; its name is the friendly name.

@@ -43,7 +43,7 @@ pub use https::HttpsFetch;
 pub const OPENH264_COMPONENT: &str = "Cisco's OpenH264 (software H.264)";
 
 /// The attribution the app shows wherever it offers the download and in its licence
-/// information, beside a link to [`OPENH264_LICENSE_URL`] (ADR-0061 › Notices).
+/// information, beside a link to [`OPENH264_LICENSE_URL`] (ADR-0140 › Notices).
 pub const OPENH264_NOTICE: &str = "OpenH264 Video Codec provided by Cisco Systems, Inc.";
 
 /// Cisco's licence page for its binary, which the app links to wherever it offers the
@@ -86,7 +86,7 @@ pub struct OpenH264Pin {
 }
 
 /// The pinned release: OpenH264 2.6.0 for 64-bit x86 Linux. A newer release reaches
-/// users through a JStream update that moves this pin (ADR-0061).
+/// users through a JStream update that moves this pin (ADR-0140).
 ///
 /// The two SHA-256 values were recorded by downloading the file from Cisco and hashing
 /// it, which the `openh264-download` test does (feature `openh264-download`; CI's
@@ -194,7 +194,7 @@ impl OpenH264Store {
             return Err(PlatformError::Unsupported {
                 what: format!(
                     "downloading OpenH264 {}: this JStream has no recorded SHA-256 for \
-                     Cisco's file yet (ADR-0061)",
+                     Cisco's file yet (ADR-0140)",
                     version(&self.pin)
                 ),
             });
@@ -457,7 +457,7 @@ fn check_sha256(what: &'static str, data: &[u8], pinned: &[u8; 32]) -> Result<()
 
 /// Whether `config` should go to the software encoder: H.264 with
 /// [`HardwarePreference::Avoid`](jstream_platform::HardwarePreference::Avoid), or with
-/// `Prefer` when there is no hardware encoder (ADR-0061: hardware first, OpenH264 last
+/// `Prefer` when there is no hardware encoder (ADR-0140: hardware first, OpenH264 last
 /// in line).
 pub fn wants_software(hardware_encoders: usize, config: &VideoEncoderConfig) -> bool {
     use jstream_platform::HardwarePreference;

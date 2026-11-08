@@ -1,4 +1,4 @@
-//! The offer to download a codec the engine can't ship (ADR-0061): on Linux, Cisco's
+//! The offer to download a codec the engine can't ship (ADR-0140): on Linux, Cisco's
 //! OpenH264, the software H.264 encoder. Cisco's patent licence covers only Cisco's own
 //! binary, downloaded straight to the machine, so the engine fetches it from Cisco's
 //! server when a person asks, and never otherwise.
@@ -25,7 +25,7 @@
 //!   and terms (`InstalledCodecs`), since About is where JStream presents its licensing
 //!   information (condition 4, #1119).
 //!
-//! Docs: crates/jstream-ui/README.md#design, docs/adr/0061-source-types-and-decoding-scope-v2.md
+//! Docs: crates/jstream-ui/README.md#design, docs/adr/0140-source-types-and-decoding-scope-v3.md
 
 use crate::app::SessionContext;
 use jstream_control::Control;

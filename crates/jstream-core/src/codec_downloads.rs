@@ -1,4 +1,4 @@
-//! `codec.downloads`, `codec.download` and `codec.delete` (protocol 0.69, ADR-0061): the
+//! `codec.downloads`, `codec.download` and `codec.delete` (protocol 0.69, ADR-0140): the
 //! codec libraries the platform downloads on a person's request, which on Linux is
 //! Cisco's OpenH264. The engine answers them from its codec backend
 //! ([`Codecs::downloads`]) with no engine lock held, since a download blocks for as long

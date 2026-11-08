@@ -1,12 +1,12 @@
 //! Codecs on Linux (ADR-0060 §6, §7).
 //!
 //! Video encode goes through VA-API, H.264 or HEVC. Software H.264 is Cisco's OpenH264
-//! binary, once the user has downloaded it (`crate::openh264`, ADR-0061): it serves
+//! binary, once the user has downloaded it (`crate::openh264`, ADR-0140): it serves
 //! [`HardwarePreference::Avoid`], and `Prefer` on a machine with no VA-API H.264
 //! encoder. There is no software HEVC encoder: HEVC is VA-API's alone.
 //! H.264 decode, for the streams the engine encodes itself (the quality probe), is the
 //! same OpenH264 library's decoder (ADR-0140); nothing else decodes here.
-//! Audio encode is JStream's own AAC-LC encoder (`crate::aac`, ADR-0061 and ADR-0062),
+//! Audio encode is JStream's own AAC-LC encoder (`crate::aac`, ADR-0140 and ADR-0062),
 //! unless the `aac-encoder` feature is off.
 //! [`VaapiCodecs`] lists the encoders the probe finds, picks one for a configuration
 //! and opens a VA-API session on it. On the engine's GPU context
@@ -43,7 +43,7 @@ pub fn choose_encoder<'a>(
         return Err(PlatformError::Unsupported {
             what: match config.codec {
                 Codec::H264 => "a software H.264 encoder through VA-API (software H.264 on \
-                                Linux is Cisco's OpenH264, ADR-0061)"
+                                Linux is Cisco's OpenH264, ADR-0140)"
                     .into(),
                 other => {
                     format!("a software {other:?} encoder (Linux encodes it through VA-API only)")
@@ -183,7 +183,7 @@ mod backend {
                 })
         }
 
-        /// The software H.264 encoder (ADR-0061): Cisco's OpenH264, if downloaded.
+        /// The software H.264 encoder (ADR-0140): Cisco's OpenH264, if downloaded.
         fn software_encoder(
             &self,
             config: &VideoEncoderConfig,
@@ -305,7 +305,7 @@ mod backend {
             }
         }
 
-        /// Cisco's OpenH264, when there is a data folder to keep it in (ADR-0061).
+        /// Cisco's OpenH264, when there is a data folder to keep it in (ADR-0140).
         fn downloads(&self) -> Vec<CodecDownload> {
             self.openh264
                 .iter()
@@ -314,7 +314,7 @@ mod backend {
         }
 
         /// Downloads Cisco's OpenH264 from Cisco's server and checks it against the
-        /// pin (`OpenH264Store::install`). Only on a person's request (ADR-0061).
+        /// pin (`OpenH264Store::install`). Only on a person's request (ADR-0140).
         fn download(&self, id: &str) -> Result<(), PlatformError> {
             let store = self.store_for(id)?;
             match &self.fetch.0 {

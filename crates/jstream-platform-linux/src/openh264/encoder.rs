@@ -1,4 +1,4 @@
-//! [`OpenH264Encoder`]: Cisco's OpenH264 binary as a software `VideoEncoder` (ADR-0061).
+//! [`OpenH264Encoder`]: Cisco's OpenH264 binary as a software `VideoEncoder` (ADR-0140).
 //!
 //! OpenH264 encodes synchronously: each frame given to `encode` comes back as one access
 //! unit (or none, for a skipped frame) before the call returns, already Annex B with start

@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -97,7 +97,7 @@ Contents:
   from the target's origin and bounds, scaled to the frame. Like `latest`, it must not
   block.
 - **Video capture devices** (webcams and capture cards,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `VideoDevices`
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
   endpoint when the backend can pair one), each device's `VideoDeviceFormat`s (size, frame
   period, `CaptureEncoding`), and opens a device in one format as a `CaptureStream`, the
@@ -142,7 +142,7 @@ Contents:
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). Packets keep their frame's `pts` on the
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
-  as [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md) says.
+  as [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md) says.
   `VideoEncoder::info` names the implementation encoding: it changes only when an
   encoder falls back before its first packet (a hardware one refusing its first frame,
   #443).
@@ -157,9 +157,9 @@ Contents:
   installed), and `Codecs::download` and `Codecs::delete_download` fetch or delete one.
   Their defaults list none and refuse with `Unsupported`: only Linux downloads a codec,
   Cisco's OpenH264
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)).
 - **Media files** (`media_file.rs`,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `MediaDecoders`
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)): `MediaDecoders`
   (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
   video pixel format, a `HardwarePreference`, and whether to decode audio too) as a
   `MediaDecoder` (`Send`), which owns the whole file: the platform demuxes and decodes

@@ -87,7 +87,7 @@
 //! platform-windows --features hw-tests -- --ignored`. The virtual-camera test also
 //! needs the `jstream-vcam-windows` DLL registered (its Hardware check).
 //!
-//! Docs: crates/jstream-platform-windows/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md, docs/security/threat-model.md#vcam
+//! Docs: crates/jstream-platform-windows/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#gpu-pipeline, docs/adr/0004-wgpu-with-native-interop.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0014-media-clock.md, docs/security/threat-model.md#vcam
 
 mod audio;
 mod capture;

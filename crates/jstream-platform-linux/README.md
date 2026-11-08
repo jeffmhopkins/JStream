@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md"]
 -->
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -53,7 +53,7 @@ platform-independent helpers, which are tested on every platform.
 | `GlobalHotkeys` | | `hotkeys.rs` | X11 only: the collection's bound chords heard while another app has the focus, grabbed on the root window with `xcb_grab_key`, and wheel chords as buttons 4 and 5 with `xcb_grab_button` ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6); Wayland has no grab |
 | `LinuxProcessCpu`, `LinuxThreadCpu` | `ProcessCpu`, `ThreadCpu` | `process.rs` | the process's and each thread's CPU time |
 | `VaapiCodecs` | `Codecs` | `vaapi/`, `codec.rs` | VA-API H.264 and HEVC encoders, on CPU frames or the context's encode targets |
-| `OpenH264Store`, `OpenH264Encoder`, `OpenH264Decoder` | `VideoEncoder`, `VideoDecoder` | `openh264/` | Cisco's OpenH264, the software H.264 encoder and the decoder of the engine's own H.264 streams (the quality probe's), downloaded only on the user's request and checked against its pin ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md), [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)) |
+| `OpenH264Store`, `OpenH264Encoder`, `OpenH264Decoder` | `VideoEncoder`, `VideoDecoder` | `openh264/` | Cisco's OpenH264, the software H.264 encoder and the decoder of the engine's own H.264 streams (the quality probe's), downloaded only on the user's request and checked against its pin ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)) |
 | `RustAacEncoder` | `AudioEncoder` | `aac.rs` | [`jstream-aac`](../jstream-aac/README.md#purpose) behind the `aac-encoder` feature, within [ADR-0062](../../docs/adr/0062-aac-lc-encoder-patent-check.md)'s limits |
 
 JStream never ships or builds OpenH264. The stored file's SHA-256 is checked again before

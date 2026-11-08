@@ -2,14 +2,14 @@
 id = "ADR-0140"
 title = "Source types and decoding scope v3: Linux decodes the engine's own H.264 through Cisco's OpenH264"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0140: Source types and decoding scope v3: Linux decodes the engine's own H.264 through Cisco's OpenH264
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 Supersedes [ADR-0061](0061-source-types-and-decoding-scope-v2.md).
@@ -247,7 +247,7 @@ roadmap item, after a patent check:
   through the same interop path as capture ([ADR-0004](0004-wgpu-with-native-interop.md)),
   in `jstream-platform-windows` under the `unsafe` rules. macOS parity (Syphon) is
   decided with the macOS platform crate.
-- **Edits that follow acceptance** (none are made while this ADR is proposed):
+- **Edits that follow acceptance** (made in the acceptance push):
   - ADR-0061: `status = "superseded"` and
     `superseded_by = "docs/adr/0140-source-types-and-decoding-scope-v3.md"`, then
     `cargo xtask docs generate` for its banner and the ADR index.
