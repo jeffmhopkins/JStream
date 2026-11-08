@@ -3377,12 +3377,7 @@ drop ledger is its own mutex, and so is the audit sink's handle, which is only c
 under it (see *Audit log*). The audio sources' wanted set is a leaf mutex the control
 side takes under the collection lock; the program stage's `jstream-audio-sources`
 thread takes it alone, and otherwise only its own inputs mutex and, under that, the
-drop ledger's, never the collection lock (see *Audio sources*). The collection file's
-lock comes before the collection lock: a save holds it, takes the collection lock only
-to serialize, and writes with it released. An effect-pack update that moved filters
-through their renames (#1353) saves once the collection lock is released, while the
-packs' lock is still held, so the packs' lock comes before the file's; a save never
-takes the packs' lock. The JTunnel receiver's
+drop ledger's, never the collection lock (see *Audio sources*). The JTunnel receiver's
 slot in it is a leaf mutex of its own, held only to set or clone the receiver; the
 receiver's thread takes no lock, getting opens and closes over a channel; its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
@@ -3399,6 +3394,11 @@ the same way as the camera controls (ADR-0146): actions and shots go to each `js
 sent under the collection lock, and a head's status is a leaf mutex its thread takes
 alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
 while it sends or waits for a reply.
+The collection file's lock comes before the collection lock: a save holds it, takes the
+collection lock only to serialize, and writes with it released. An effect-pack update
+that moved filters through their renames (#1353) saves once the collection lock is
+released, while the packs' lock is still held, so the packs' lock comes before the
+file's; a save never takes the packs' lock.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit
