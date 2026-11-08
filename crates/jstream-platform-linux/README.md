@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md", "docs/adr/0141-desktop-app-on-linux.md"]
 -->
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -50,6 +50,7 @@ platform-independent helpers, which are tested on every platform.
 | `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path, and their camera controls (`VIDIOC_QUERYCTRL`, `VIDIOC_S_CTRL`) |
 | `LinuxBackends` | | `backends.rs` | the backend set, with ADR-0060 §4's audio choice made once |
 | `NoMediaDecoders` | `MediaDecoders` | `unbuilt.rs` | refuses every file, naming [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) |
+| `portal_pick_path`, `FileChoice` | | `portal/file_chooser.rs` | the desktop app's Browse dialogs through the FileChooser portal: open, save or folder, answered only by the portal's own bus connection, a local `file://` path or nothing ([ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)) |
 | `GlobalHotkeys` | | `hotkeys.rs` | X11 only: the collection's bound chords heard while another app has the focus, grabbed on the root window with `xcb_grab_key`, and wheel chords as buttons 4 and 5 with `xcb_grab_button` ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6); Wayland has no grab |
 | `LinuxProcessCpu`, `LinuxThreadCpu` | `ProcessCpu`, `ThreadCpu` | `process.rs` | the process's and each thread's CPU time |
 | `VaapiCodecs` | `Codecs` | `vaapi/`, `codec.rs` | VA-API H.264 and HEVC encoders, on CPU frames or the context's encode targets |

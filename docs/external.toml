@@ -787,3 +787,19 @@ relied_on = "VISCA command, inquiry and reply bytes (pan-tilt drive and position
 review_every = "180d"
 status = "unverified"
 checked_note = "The maintainer's reference for #1182 and #1181. The builder sandbox's fetch was refused (HTTP 403), so the crate follows the command bytes those issues list; re-read it against crates/jstream-visca"
+
+[[external]]
+id = "tauri-linux-prerequisites"
+url = "https://v2.tauri.app/start/prerequisites/#linux"
+relied_on = "Tauri 2 on Linux builds against WebKitGTK 4.1 (Debian/Ubuntu: libwebkit2gtk-4.1-dev), which the desktop app's webkitgtk feature and the desktop-linux CI job install (ADR-0141)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: the Debian/Ubuntu list names libwebkit2gtk-4.1-dev"
+
+[[external]]
+id = "portal-file-chooser"
+url = "https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.FileChooser.html"
+relied_on = "OpenFile and SaveFile take (parent_window s, title s, options a{sv}) with handle_token, modal, directory (OpenFile, version 3), filters a(sa(us)), current_folder ay and current_name (SaveFile); the Response's results carry the picked files as uris (ADR-0141)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: OpenFile and SaveFile options include handle_token, directory, filters, current_folder and current_name; results carry uris"

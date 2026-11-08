@@ -32,35 +32,39 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r33","call":{"kind":"action","action":{"type":"scene.set_keyframe","scene_id":"scn_panels"}}}
 {"type":"request","id":"r34","call":{"kind":"action","action":{"type":"pairing.start"}}}
 {"type":"request","id":"r35","call":{"kind":"action","action":{"type":"device.revoke","device_id":"dev_1"}}}
-{"type":"request","id":"r36","call":{"kind":"action","action":{"type":"ui_settings.set","key":"workspace.dock","value":{"current":"Live","version":1}}}}
-{"type":"request","id":"r37","call":{"kind":"action","action":{"type":"plugin.install","plugin_id":"plg_1","path":"/home/me/plugins/chat-scenes","grant":{"classes":["read","edit","live"],"hosts":["https://api.example.com:443"],"folders":["/home/me/clips"]}}}}
-{"type":"request","id":"r38","call":{"kind":"action","action":{"type":"plugin.grant","plugin_id":"plg_1","grant":{"classes":["outputs"]}}}}
-{"type":"request","id":"r39","call":{"kind":"action","action":{"type":"plugin.enable","plugin_id":"plg_1"}}}
-{"type":"request","id":"r40","call":{"kind":"action","action":{"type":"effect.enable","kind_id":"fx/blur"}}}
-{"type":"request","id":"r41","call":{"kind":"action","action":{"type":"plugin.clap_rescan"}}}
-{"type":"request","id":"r42","call":{"kind":"action","action":{"type":"codec.download","download_id":"openh264"}}}
-{"type":"request","id":"r43","call":{"kind":"action","action":{"type":"codec.delete","download_id":"openh264"}}}
-{"type":"request","id":"r44","call":{"kind":"action","action":{"type":"pack.write","pack":"glow","files":[{"path":"effect.toml","text":"[pack]\nid = \"glow\"\nname = \"Glow\"\n"},{"path":"images/noise.png","base64":"iVBORw0KGgo="}]}}}
-{"type":"request","id":"r45","call":{"kind":"action","action":{"type":"pack.delete","pack":"glow"}}}
-{"type":"request","id":"r46","call":{"kind":"action","action":{"type":"values.set","name":"status.text","value":{"count":3,"label":"On air","note":null}}}}
-{"type":"request","id":"r47","call":{"kind":"action","action":{"type":"values.set","name":"counter.a"}}}
-{"type":"request","id":"r48","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
-{"type":"request","id":"r49","call":{"kind":"action","action":{"type":"collection.open","path":"C:/Users/me/Videos/Show/show.json"}}}
-{"type":"request","id":"r50","call":{"kind":"action","action":{"type":"collection.new","path":"/home/me/shows/talk.json"}}}
-{"type":"request","id":"r51","call":{"kind":"action","action":{"type":"collection.save_as","path":"D:/Projects/show copy.json"}}}
-{"type":"request","id":"r52","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
-{"type":"request","id":"r53","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
-{"type":"request","id":"r54","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
-{"type":"request","id":"r55","call":{"kind":"action","action":{"type":"scene.switch_and_watch","scene_id":"scn_1","count":7,"interval_ms":100}}}
-{"type":"request","id":"r56","call":{"kind":"action","action":{"type":"item.show","item_id":"itm_1"}}}
-{"type":"request","id":"r57","call":{"kind":"action","action":{"type":"item.hide","item_id":"itm_1","scene_id":"scn_1"}}}
-{"type":"request","id":"r58","call":{"kind":"action","action":{"type":"item.toggle","item_id":"itm_1"}}}
-{"type":"request","id":"r59","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1","modifier_id":"jolt"}}}
-{"type":"request","id":"r60","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1"}}}
-{"type":"request","id":"r61","call":{"kind":"action","action":{"type":"timeline.play","timeline_id":"tl_volley"}}}
-{"type":"request","id":"r62","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
-{"type":"request","id":"r63","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
-{"type":"request","id":"r64","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
+{"type":"request","id":"r36","call":{"kind":"action","action":{"type":"agent.approve","approval_id":"apr_1","decision":"allow_once"}}}
+{"type":"request","id":"r37","call":{"kind":"action","action":{"type":"agent.approve","approval_id":"apr_2","decision":"always_allow"}}}
+{"type":"request","id":"r38","call":{"kind":"action","action":{"type":"agent.approve","approval_id":"apr_3","decision":"deny"}}}
+{"type":"request","id":"r39","call":{"kind":"action","action":{"type":"agent.forget","client_name":"claude-code","transport":"websocket"}}}
+{"type":"request","id":"r40","call":{"kind":"action","action":{"type":"ui_settings.set","key":"workspace.dock","value":{"current":"Live","version":1}}}}
+{"type":"request","id":"r41","call":{"kind":"action","action":{"type":"plugin.install","plugin_id":"plg_1","path":"/home/me/plugins/chat-scenes","grant":{"classes":["read","edit","live"],"hosts":["https://api.example.com:443"],"folders":["/home/me/clips"]}}}}
+{"type":"request","id":"r42","call":{"kind":"action","action":{"type":"plugin.grant","plugin_id":"plg_1","grant":{"classes":["outputs"]}}}}
+{"type":"request","id":"r43","call":{"kind":"action","action":{"type":"plugin.enable","plugin_id":"plg_1"}}}
+{"type":"request","id":"r44","call":{"kind":"action","action":{"type":"effect.enable","kind_id":"fx/blur"}}}
+{"type":"request","id":"r45","call":{"kind":"action","action":{"type":"plugin.clap_rescan"}}}
+{"type":"request","id":"r46","call":{"kind":"action","action":{"type":"codec.download","download_id":"openh264"}}}
+{"type":"request","id":"r47","call":{"kind":"action","action":{"type":"codec.delete","download_id":"openh264"}}}
+{"type":"request","id":"r48","call":{"kind":"action","action":{"type":"pack.write","pack":"glow","files":[{"path":"effect.toml","text":"[pack]\nid = \"glow\"\nname = \"Glow\"\n"},{"path":"images/noise.png","base64":"iVBORw0KGgo="}]}}}
+{"type":"request","id":"r49","call":{"kind":"action","action":{"type":"pack.delete","pack":"glow"}}}
+{"type":"request","id":"r50","call":{"kind":"action","action":{"type":"values.set","name":"status.text","value":{"count":3,"label":"On air","note":null}}}}
+{"type":"request","id":"r51","call":{"kind":"action","action":{"type":"values.set","name":"counter.a"}}}
+{"type":"request","id":"r52","call":{"kind":"action","action":{"type":"privacy.set","on":true}}}
+{"type":"request","id":"r53","call":{"kind":"action","action":{"type":"collection.open","path":"C:/Users/me/Videos/Show/show.json"}}}
+{"type":"request","id":"r54","call":{"kind":"action","action":{"type":"collection.new","path":"/home/me/shows/talk.json"}}}
+{"type":"request","id":"r55","call":{"kind":"action","action":{"type":"collection.save_as","path":"D:/Projects/show copy.json"}}}
+{"type":"request","id":"r56","call":{"kind":"action","action":{"type":"preview.subscribe","channel":2,"scene_id":"scn_2"}}}
+{"type":"request","id":"r57","call":{"kind":"action","action":{"type":"preview.subscribe","channel":3,"max_width":480,"max_height":270,"source":{"kind":"webcam","settings":{"device":"usb-cam-1"}}}}}
+{"type":"request","id":"r58","call":{"kind":"action","action":{"type":"preview.subscribe","channel":4,"source_id":"src_cam"}}}
+{"type":"request","id":"r59","call":{"kind":"action","action":{"type":"scene.switch_and_watch","scene_id":"scn_1","count":7,"interval_ms":100}}}
+{"type":"request","id":"r60","call":{"kind":"action","action":{"type":"item.show","item_id":"itm_1"}}}
+{"type":"request","id":"r61","call":{"kind":"action","action":{"type":"item.hide","item_id":"itm_1","scene_id":"scn_1"}}}
+{"type":"request","id":"r62","call":{"kind":"action","action":{"type":"item.toggle","item_id":"itm_1"}}}
+{"type":"request","id":"r63","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1","modifier_id":"jolt"}}}
+{"type":"request","id":"r64","call":{"kind":"action","action":{"type":"item.trigger_motion","item_id":"itm_1"}}}
+{"type":"request","id":"r65","call":{"kind":"action","action":{"type":"timeline.play","timeline_id":"tl_volley"}}}
+{"type":"request","id":"r66","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
+{"type":"request","id":"r67","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
+{"type":"request","id":"r68","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}
@@ -100,16 +104,17 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r56","call":{"kind":"query","query":{"type":"delete.plan","target":{"type":"label","label_id":"lbl_sponsor"}}}}
 {"type":"request","id":"r57","call":{"kind":"query","query":{"type":"delete.plan","target":{"type":"bus","bus_id":"bus_vod"}}}}
 {"type":"request","id":"r58","call":{"kind":"query","query":{"type":"device.list"}}}
-{"type":"request","id":"r59","call":{"kind":"query","query":{"type":"activity.list"}}}
-{"type":"request","id":"r60","call":{"kind":"query","query":{"type":"activity.list","after_seq":41,"limit":20}}}
-{"type":"request","id":"r61","call":{"kind":"query","query":{"type":"ui_settings.get","key":"workspace.dock"}}}
-{"type":"request","id":"r62","call":{"kind":"query","query":{"type":"plugin.list"}}}
-{"type":"request","id":"r63","call":{"kind":"query","query":{"type":"plugin.clap_scan"}}}
-{"type":"request","id":"r64","call":{"kind":"query","query":{"type":"codec.downloads"}}}
-{"type":"request","id":"r65","call":{"kind":"query","query":{"type":"collection.info"}}}
-{"type":"request","id":"r66","call":{"kind":"query","query":{"type":"youtube.stats"}}}
-{"type":"request","id":"r67","call":{"kind":"query","query":{"type":"source.sizes"}}}
-{"type":"request","id":"r68","call":{"kind":"query","query":{"type":"video.frames","count":4,"interval_ms":150,"delay_ms":300,"scene_id":"scn_1"}}}
+{"type":"request","id":"r59","call":{"kind":"query","query":{"type":"agent.approved"}}}
+{"type":"request","id":"r60","call":{"kind":"query","query":{"type":"activity.list"}}}
+{"type":"request","id":"r61","call":{"kind":"query","query":{"type":"activity.list","after_seq":41,"limit":20}}}
+{"type":"request","id":"r62","call":{"kind":"query","query":{"type":"ui_settings.get","key":"workspace.dock"}}}
+{"type":"request","id":"r63","call":{"kind":"query","query":{"type":"plugin.list"}}}
+{"type":"request","id":"r64","call":{"kind":"query","query":{"type":"plugin.clap_scan"}}}
+{"type":"request","id":"r65","call":{"kind":"query","query":{"type":"codec.downloads"}}}
+{"type":"request","id":"r66","call":{"kind":"query","query":{"type":"collection.info"}}}
+{"type":"request","id":"r67","call":{"kind":"query","query":{"type":"youtube.stats"}}}
+{"type":"request","id":"r68","call":{"kind":"query","query":{"type":"source.sizes"}}}
+{"type":"request","id":"r69","call":{"kind":"query","query":{"type":"video.frames","count":4,"interval_ms":150,"delay_ms":300,"scene_id":"scn_1"}}}
 {"type":"request","id":"r30","call":{"kind":"history","op":{"type":"history.undo"}}}
 {"type":"request","id":"r31","call":{"kind":"history","op":{"type":"history.redo"},"expected_rev":15,"idempotency_key":"k-2"}}
 # server -> client
@@ -161,6 +166,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"delete.plan","rev":12,"edits":[{"type":"item.remove","item_id":"itm_mask"},{"type":"source.set_settings","source_id":"src_cam","patch":{"mask":null}},{"type":"source.delete","source_id":"src_mask_scene"},{"type":"scene.delete","scene_id":"scn_mask"}],"hotkeys":[{"chord":"F5","action":{"scene_id":"scn_mask","type":"scene.switch"}}],"bindings":[{"trigger":{"kind":"midi_program","program":4,"channel":1},"action":{"scene_id":"scn_mask","type":"scene.switch"}}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"label.members","rev":12,"members":{"label":{"label_id":"lbl_sponsor","name":"Sponsor","color":"#ff8800","icon":"megaphone"},"scenes":[{"scene_id":"scn_1","name":"Main"},{"scene_id":"scn_wide","name":"Wide","variant_of":"scn_1"}],"sources":["src_cam"],"hotkeys":[{"chord":"Ctrl+Digit1","action":{"scene_id":"scn_1","type":"scene.switch"},"labels":["lbl_sponsor"]}],"timelines":[{"timeline_id":"tl_volley","name":"Volley","scene_id":"scn_1"}]}}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"device.list","devices":[{"device_id":"dev_1","name":"Tablet","paired_at":1790000000,"last_used_at":1790003600}]}}}
+{"type":"response","id":"r20","result":{"kind":"query","result":{"type":"agent.approved","asking":true,"approved":[{"client_name":"claude-code","transport":"websocket"}],"pending":[{"approval_id":"apr_4","client_name":"cursor","transport":"mcp_http"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"activity.list","now_ms":1790000120000,"entries":[{"seq":42,"time_ms":1790000000042,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”"},{"seq":41,"time_ms":1790000000041,"client_id":"client_3","client_name":"claude-desktop","call":"scene.switch","summary":"Switched to “Desktop + Cam”","error":"rev_conflict"}]}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"ui_settings.get","key":"workspace.dock","value":{"current":"Live","version":1}}}}
 {"type":"response","id":"r20","result":{"kind":"query","result":{"type":"plugin.list","plugins":[{"plugin_id":"chat_switcher","state":"enabled","remote_name":"Chat switcher","path":"/home/me/plugins/chat-switcher","request":{"classes":["live"],"hosts":["https://api.example.com:443"]},"grant":{"classes":["live"]}},{"plugin_id":"scene_timer","state":"disabled","reason":"needs_grant","path":"/home/me/plugins/scene-timer","request":{"classes":["edit","live"],"folders":true},"grant":{}}]}}}
@@ -183,6 +189,7 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"error","id":"r1","error":{"code":"forbidden","call":"output.start","reason":"the plugin is not granted `outputs`","message":"`output.start` is forbidden: the plugin is not granted `outputs`"}}
 {"type":"error","id":"r1","error":{"code":"hardware_session_limit","outputs":["out_main","out_rec"],"reason":"the hardware encoder refused the session","message":"the hardware encoder session limit is reached: outputs `out_main` and `out_rec` hold hardware encoder sessions, and opening another failed (the hardware encoder refused the session)"}}
 {"type":"error","id":"r1","error":{"code":"too_large","size_bytes":5767168,"limit_bytes":4194304,"message":"the message is 5767168 bytes, over the 4194304-byte request limit"}}
+{"type":"error","id":"r1","error":{"code":"not_allowed","reason":"the person declined this connection","message":"not allowed: the person declined this connection"}}
 {"type":"error","id":"r1","error":{"code":"internal","reason":"render thread stopped","message":"internal error: render thread stopped"}}
 {"type":"error","id":"r1","error":{"code":"not_found","entity":"scene","id":"x","message":"scene `x` does not exist"}}
 {"type":"error","id":"r1","error":{"code":"already_exists","entity":"scene","id":"x","message":"scene `x` already exists"}}
@@ -212,6 +219,8 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"error","id":"r1","error":{"code":"already_exists","entity":"pack","id":"x","message":"pack `x` already exists"}}
 {"type":"error","id":"r1","error":{"code":"not_found","entity":"file","id":"x","message":"file `x` does not exist"}}
 {"type":"error","id":"r1","error":{"code":"already_exists","entity":"file","id":"x","message":"file `x` already exists"}}
+{"type":"error","id":"r1","error":{"code":"not_found","entity":"approval","id":"x","message":"approval `x` does not exist"}}
+{"type":"error","id":"r1","error":{"code":"already_exists","entity":"approval","id":"x","message":"approval `x` already exists"}}
 {"type":"event","event":{"type":"state.changed","rev":13,"client_id":"cli_7","request_id":"r1"}}
 {"type":"event","event":{"type":"state.changed","rev":14,"client_id":"cli_8"}}
 {"type":"event","event":{"type":"state.changed","rev":15,"client_id":"cli_7","request_id":"r30","cause":"undo"}}
@@ -242,6 +251,12 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"event","event":{"type":"collection.file_changed","path":"D:/Projects/show copy.json","cause":"save_as","client_id":"c1","request_id":"r7"}}
 {"type":"event","event":{"type":"kinds.changed","cause":"clap_scan"}}
 {"type":"event","event":{"type":"kinds.changed","cause":"effect_packs"}}
+{"type":"event","event":{"type":"agent.approval_requested","approval":{"approval_id":"apr_4","client_name":"cursor","transport":"mcp_http"}}}
+{"type":"event","event":{"type":"agent.approval_resolved","approval_id":"apr_4","outcome":"allowed_once"}}
+{"type":"event","event":{"type":"agent.approval_resolved","approval_id":"apr_4","outcome":"always_allowed"}}
+{"type":"event","event":{"type":"agent.approval_resolved","approval_id":"apr_4","outcome":"denied"}}
+{"type":"event","event":{"type":"agent.approval_resolved","approval_id":"apr_4","outcome":"timed_out"}}
+{"type":"event","event":{"type":"agent.approval_resolved","approval_id":"apr_4","outcome":"closed"}}
 {"type":"event","event":{"type":"events.dropped","count":1500}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"enabled","remote_name":"Chat scenes"}}
 {"type":"event","event":{"type":"plugin.state_changed","plugin_id":"plg_1","state":"disabled","reason":"cpu_limit"}}

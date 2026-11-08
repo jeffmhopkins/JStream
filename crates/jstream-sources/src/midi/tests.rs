@@ -622,8 +622,8 @@ fn every_input_follows_one_clock_at_a_time() {
 }
 
 /// `midi_beat` lights the bar's beat its input is on: the first in its own colour, a
-/// beat flashing as it starts and dimming as it passes, stopped at 35%, and nothing once
-/// the clock stops.
+/// beat flashing as it starts and dimming as it passes, stopped at 35% (with or without
+/// a clock), and nothing once a playing song's clock goes quiet.
 #[test]
 fn a_beat_source_lights_the_beat_the_clock_is_on() {
     let inputs = Arc::new(MidiInputs::new());
@@ -643,7 +643,7 @@ fn a_beat_source_lights_the_beat_the_clock_is_on() {
     assert_eq!(pixel(&frame, 5, 5), BLACK, "the first beat is past");
     assert_eq!(pixel(&frame, 15, 5), RED, "the second flashes");
     assert_eq!(pixel(&frame, 25, 5), BLACK);
-    // Four beats on: the downbeat, in its own colour.
+    // Three beats on, the ninth: the downbeat, in its own colour.
     let mut at = last;
     let spacing = 500.0 / 24.0;
     for n in 1..=72 {
@@ -657,7 +657,47 @@ fn a_beat_source_lights_the_beat_the_clock_is_on() {
     feed.push((at + 1) * MS, &Message::Stop);
     let frame = draw(&mut beat, ms(at + 40));
     assert_eq!(pixel(&frame, 5, 5), [0, 89, 0, 255]);
-    // The clock gone quiet: nothing lit.
+    // A sender that stops its clock with its transport: still where the song is.
     let frame = draw(&mut beat, ms(at + CLOCK_TIMEOUT_MS + 40));
-    assert_eq!(pixel(&frame, 5, 5), BLACK);
+    assert_eq!(
+        pixel(&frame, 5, 5),
+        [0, 89, 0, 255],
+        "stopped, clock or not"
+    );
+    // Playing again, then the clock goes quiet: nothing lit.
+    let resumed = at + CLOCK_TIMEOUT_MS + 100;
+    feed.push(resumed * MS, &Message::Continue);
+    feed.push(resumed * MS, &Message::TimingClock);
+    // Continue plays the clock after the one stopped on, a 24th into the downbeat.
+    let on = pixel(&draw(&mut beat, ms(resumed)), 5, 5);
+    assert!(on[1] > 240 && on[0] == 0, "playing on: {on:?}");
+    let frame = draw(&mut beat, ms(resumed + CLOCK_TIMEOUT_MS + 40));
+    assert_eq!(
+        pixel(&frame, 5, 5),
+        BLACK,
+        "a playing song's clock went quiet"
+    );
+}
+
+/// Only a timing clock counts as a running clock: a lone stop or song position neither
+/// shows as one nor takes the every-input state from a clock that runs.
+#[test]
+fn transport_alone_is_not_a_running_clock() {
+    let inputs = MidiInputs::new();
+    let (mut clocked, mut transport) = (inputs.feed("A"), inputs.feed("B"));
+    let last = play(&mut clocked, 120.0, 0, 1);
+    transport.push((last + 1) * MS, &Message::Stop);
+    let own = inputs.drawn("B").tempo().expect("B's own");
+    assert_eq!(own.clock_ms, None);
+    assert!(!own.clock(last + 1));
+    assert_eq!(
+        inputs.any().tempo().expect("a tempo").clock_ms,
+        Some(last),
+        "A's running clock keeps it"
+    );
+    // Once A's clock has gone quiet, B's transport may take it.
+    let late = last + CLOCK_TIMEOUT_MS + 1;
+    transport.push(late * MS, &Message::SongPosition { sixteenths: 8 });
+    let any = inputs.any().tempo().expect("a tempo");
+    assert_eq!((any.at_ms, any.clock_ms), (late, None));
 }

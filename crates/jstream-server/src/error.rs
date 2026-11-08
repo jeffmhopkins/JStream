@@ -49,6 +49,15 @@ pub enum ServerError {
         /// What is wrong with it.
         reason: String,
     },
+    /// The approved agents file (`ServerConfig::approvals_file`, ADR-0131) can't be read
+    /// or is broken.
+    #[error("unusable approved agents file `{}`: {reason}", path.display())]
+    ApprovalsFile {
+        /// The file as configured.
+        path: PathBuf,
+        /// What is wrong with it.
+        reason: String,
+    },
     /// The network listener's key and certificate file can't be read, made or written
     /// (ADR-0104 §4).
     #[error("unusable network certificate file `{}`: {reason}", path.display())]

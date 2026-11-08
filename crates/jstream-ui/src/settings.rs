@@ -177,10 +177,17 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                 >
                     <h3 class="settings-page-title">{move || page().title()}</h3>
                     {move || match page() {
-                        SettingsPage::General => view! { <LaunchCheckSetting /> }.into_any(),
+                        SettingsPage::General => view! {
+                            <LaunchCheckSetting />
+                            <crate::agents::AskAgentsSetting />
+                        }.into_any(),
                         SettingsPage::Plugins => view! { <Plugins /> }.into_any(),
                         SettingsPage::AudioPlugins => view! { <ClapPlugins /> }.into_any(),
-                        SettingsPage::Devices => view! { <NetworkAccessSetting /> <Pairing /> }.into_any(),
+                        SettingsPage::Devices => view! {
+                            <NetworkAccessSetting />
+                            <Pairing />
+                            <crate::agents::ApprovedAgents />
+                        }.into_any(),
                     }}
                 </div>
             </div>

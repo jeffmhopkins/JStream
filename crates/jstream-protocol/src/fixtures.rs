@@ -1457,6 +1457,22 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
         },
+        Action::AgentApprove {
+            approval_id: "apr_1".into(),
+            decision: crate::ApprovalDecision::AllowOnce,
+        },
+        Action::AgentApprove {
+            approval_id: "apr_2".into(),
+            decision: crate::ApprovalDecision::AlwaysAllow,
+        },
+        Action::AgentApprove {
+            approval_id: "apr_3".into(),
+            decision: crate::ApprovalDecision::Deny,
+        },
+        Action::AgentForget {
+            client_name: "claude-code".into(),
+            transport: crate::AgentTransport::Websocket,
+        },
         Action::UiSettingsSet {
             key: "workspace.dock".into(),
             value: Some(serde_json::json!({"version": 1, "current": "Live"})),
@@ -1823,6 +1839,7 @@ pub(crate) fn queries() -> Vec<Query> {
             },
         },
         Query::DeviceList,
+        Query::AgentApproved,
         Query::ActivityList {
             after_seq: None,
             limit: None,
@@ -2936,6 +2953,18 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 last_used_at: 1_790_003_600,
             }],
         },
+        QueryResult::AgentApproved {
+            asking: true,
+            approved: vec![crate::ApprovedAgent::new(
+                "claude-code",
+                crate::AgentTransport::Websocket,
+            )],
+            pending: vec![crate::AgentApproval::new(
+                "apr_4",
+                "cursor",
+                crate::AgentTransport::McpHttp,
+            )],
+        },
         QueryResult::ActivityList {
             now_ms: 1_790_000_120_000,
             entries: vec![activity_entry(42, None), activity_entry(41, Some("rev_conflict"))],
@@ -3175,6 +3204,21 @@ pub(crate) fn events() -> Vec<Event> {
     }
     for cause in [crate::KindsCause::ClapScan, crate::KindsCause::EffectPacks] {
         events.push(Event::KindsChanged { cause });
+    }
+    events.push(Event::AgentApprovalRequested {
+        approval: crate::AgentApproval::new("apr_4", "cursor", crate::AgentTransport::McpHttp),
+    });
+    for outcome in [
+        crate::ApprovalOutcome::AllowedOnce,
+        crate::ApprovalOutcome::AlwaysAllowed,
+        crate::ApprovalOutcome::Denied,
+        crate::ApprovalOutcome::TimedOut,
+        crate::ApprovalOutcome::Closed,
+    ] {
+        events.push(Event::AgentApprovalResolved {
+            approval_id: "apr_4".into(),
+            outcome,
+        });
     }
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
@@ -3450,6 +3494,9 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
             size_bytes: 5_767_168,
             limit_bytes: 4_194_304,
         },
+        ProtocolError::NotAllowed {
+            reason: "the person declined this connection".into(),
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },
@@ -3469,6 +3516,7 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Plugin,
         EntityKind::Pack,
         EntityKind::File,
+        EntityKind::Approval,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,

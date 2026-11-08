@@ -158,10 +158,12 @@ pub(crate) const REMOTE_PREFIX: &str = "remote_";
 /// conversation, and re-enabling an effect quarantined after a GPU device loss (ADR-0087
 /// §4), so an agent can't put a shader that hung the GPU back on air, and downloading or
 /// deleting a codec (ADR-0061), since Cisco's OpenH264 downloads only on a person's
-/// request, after they have seen its licence. The protocol keeps them for the UI. `events.rs` hides these nouns' events from agents too, so an
+/// request, after they have seen its licence, and answering another agent's request to
+/// connect (ADR-0131), so the person, not an agent, lets a new agent in. The protocol
+/// keeps them for the UI. `events.rs` hides these nouns' events from agents too, so an
 /// `effect.*` event would never reach one; a loss is reported as `gpu.device_lost`, and
 /// a pass that ran too long as `gpu.effect_slow`, which do (ADR-0087 §5).
-pub(crate) const PEOPLE_ONLY: [&str; 4] = ["youtube", "plugin", "effect", "codec"];
+pub(crate) const PEOPLE_ONLY: [&str; 5] = ["youtube", "plugin", "effect", "codec", "agent"];
 
 /// The nouns whose ops are deprecated, so no tool carries them either: an agent is
 /// never offered a call the engine always refuses. `privacy` (ADR-0080 §4): JStream has
