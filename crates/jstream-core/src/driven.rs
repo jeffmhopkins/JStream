@@ -65,6 +65,8 @@ struct Setting {
     param: String,
     /// What it is.
     target: Target,
+    /// Its kind's default, which it adds to in settings saved before the kind had it.
+    default: Value,
     modifiers: Vec<Modifier>,
 }
 
@@ -77,7 +79,7 @@ impl Driven {
             let Some(filter) = chain.filters.iter().position(|f| f.id == target.filter_id) else {
                 continue;
             };
-            let Some(kind) = chain.drivable(filter, &target.param) else {
+            let Some((kind, default)) = chain.drivable(filter, &target.param) else {
                 continue;
             };
             match settings
@@ -89,6 +91,7 @@ impl Driven {
                     filter,
                     param: target.param,
                     target: kind,
+                    default,
                     modifiers: vec![modifier],
                 }),
             }
@@ -103,10 +106,13 @@ impl Driven {
     /// or a Move's blend) with each driven setting moved by the sum of `value` over its
     /// modifiers: a number kept within its range and rounded when whole, a colour's
     /// channels each within 0 and full. `None` when every setting adds 0 or `base`
-    /// doesn't hold them, so the chain keeps `base`.
-    pub(crate) fn settings(
+    /// doesn't hold them, so the chain keeps `base`. `of` reads each filter's settings
+    /// from `base` in place, so nothing is cloned on a frame where nothing moves. A
+    /// setting `base` lacks (saved before its kind had it) moves from its default.
+    pub(crate) fn settings<T>(
         &self,
-        base: &[Settings],
+        base: &[T],
+        of: impl Fn(&T) -> &Settings,
         value: impl Fn(&Modifier) -> f64,
     ) -> Option<Vec<Settings>> {
         let mut out: Option<Vec<Settings>> = None;
@@ -117,12 +123,12 @@ impl Driven {
             }
             let Some(v) = base
                 .get(setting.filter)
-                .and_then(|s| s.0.get(&setting.param))
+                .map(|s| setting.at(of(s)))
                 .and_then(|at| moved(setting.target, at, add))
             else {
                 continue;
             };
-            let settings = out.get_or_insert_with(|| base.to_vec());
+            let settings = out.get_or_insert_with(|| base.iter().map(|s| of(s).clone()).collect());
             settings[setting.filter].0.insert(setting.param.clone(), v);
         }
         out
@@ -139,10 +145,7 @@ impl Driven {
             let Target::Number { .. } = setting.target else {
                 continue;
             };
-            let Some(at) = base
-                .get(setting.filter)
-                .and_then(|s| s.0.get(&setting.param))
-            else {
+            let Some(at) = base.get(setting.filter).map(|s| setting.at(s)) else {
                 continue;
             };
             let (low, high) = setting
@@ -157,6 +160,13 @@ impl Driven {
             }
         }
         [least, most]
+    }
+}
+
+impl Setting {
+    /// Its value in `settings`, or its default when they lack it.
+    fn at<'a>(&'a self, settings: &'a Settings) -> &'a Value {
+        settings.0.get(&self.param).unwrap_or(&self.default)
     }
 }
 
@@ -244,6 +254,7 @@ mod tests {
                 filter: 0,
                 param: param.into(),
                 target,
+                default: Value::Null,
                 modifiers: kinds.into_iter().map(modifier).collect(),
             }],
         }
@@ -261,23 +272,43 @@ mod tests {
         };
         let width = driven("width", (0.0, 64.0), false, vec![drift(1.0), drift(2.0)]);
         let base = settings(json!({"width": 4.0, "color": "#ffffff"}));
-        let at = |each: f64| width.settings(&base, |_| each).expect("it moves");
+        let at = |each: f64| width.settings(&base, |s| s, |_| each).expect("it moves");
         assert_eq!(at(1.5)[0].0["width"], json!(7.0));
         assert_eq!(at(-10.0)[0].0["width"], json!(0.0));
         assert_eq!(at(100.0)[0].0["width"], json!(64.0));
         assert_eq!(at(1.5)[0].0["color"], json!("#ffffff"), "the rest stays");
         // Nothing added: the chain keeps its settings.
-        assert_eq!(width.settings(&base, |_| 0.0), None);
+        assert_eq!(width.settings(&base, |s| s, |_| 0.0), None);
         let steps = driven("steps", (1.0, 8.0), true, vec![drift(1.0)]);
         let base = settings(json!({"steps": 3}));
-        let moved = steps.settings(&base, |_| 1.6).expect("it moves");
+        let moved = steps.settings(&base, |s| s, |_| 1.6).expect("it moves");
         assert_eq!(moved[0].0["steps"], json!(5));
         // A setting that isn't a number, or a filter the base doesn't have, adds nothing.
         assert_eq!(
-            steps.settings(&settings(json!({"steps": "x"})), |_| 1.0),
+            steps.settings(&settings(json!({"steps": "x"})), |s| s, |_| 1.0),
             None
         );
-        assert_eq!(steps.settings(&[], |_| 1.0), None);
+        assert_eq!(steps.settings::<Settings>(&[], |s| s, |_| 1.0), None);
+    }
+
+    /// #1417 review N4: settings saved before the kind had the parameter move from its
+    /// default.
+    #[test]
+    fn a_setting_the_settings_lack_moves_from_its_default() {
+        let mut width = driven(
+            "width",
+            (0.0, 64.0),
+            false,
+            vec![Kind::Drift {
+                rate_per_s: 1.0,
+                wrap: None,
+            }],
+        );
+        width.settings[0].default = json!(4.0);
+        let moved = width
+            .settings(&settings(json!({})), |s| s, |_| 2.0)
+            .expect("it moves");
+        assert_eq!(moved[0].0["width"], json!(6.0));
     }
 
     #[test]
@@ -288,7 +319,7 @@ mod tests {
         };
         let tint = driven_as("color", Target::Color, vec![drift]);
         let at = |color: &str, add: f64| {
-            tint.settings(&settings(json!({ "color": color })), |_| add)
+            tint.settings(&settings(json!({ "color": color })), |s| s, |_| add)
                 .map(|s| s[0].0["color"].clone())
         };
         assert_eq!(at("#204060", 0.2), Some(json!("#537393")));

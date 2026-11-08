@@ -424,9 +424,14 @@ impl Chain {
 
     /// What filter `index`'s parameter `param` is, when a motion modifier can drive it
     /// (ADR-0138): a number, with its smallest and largest value (unbounded ends
-    /// infinite) and whether it is whole (`int`), or a colour. `None` for another type,
-    /// or a parameter or filter it doesn't have.
-    pub(crate) fn drivable(&self, index: usize, param: &str) -> Option<crate::driven::Target> {
+    /// infinite) and whether it is whole (`int`), or a colour; with its default, which
+    /// a filter saved before its kind gained the parameter draws. `None` for another
+    /// type, or a parameter or filter it doesn't have.
+    pub(crate) fn drivable(
+        &self,
+        index: usize,
+        param: &str,
+    ) -> Option<(crate::driven::Target, serde_json::Value)> {
         use crate::driven::Target;
         static BUILTIN: OnceLock<BTreeMap<String, jstream_protocol::KindDescriptor>> =
             OnceLock::new();
@@ -442,7 +447,7 @@ impl Chain {
             None => builtin.get(&filter.kind)?,
         };
         let described = descriptor.params.iter().find(|p| p.id == param)?;
-        match described.ty {
+        let target = match described.ty {
             jstream_protocol::ParamType::Float { min, max, .. } => Some(Target::Number {
                 range: (
                     min.unwrap_or(f64::NEG_INFINITY),
@@ -459,7 +464,8 @@ impl Chain {
             }),
             jstream_protocol::ParamType::Color { .. } => Some(Target::Color),
             _ => None,
-        }
+        }?;
+        Some((target, described.default.clone()))
     }
 
     /// The enabled filters' kinds and settings, in order: what makes two items' effects

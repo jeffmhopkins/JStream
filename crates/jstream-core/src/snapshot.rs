@@ -648,10 +648,10 @@ pub(crate) struct Shot {
     /// (ADR-0099), as the engine set it ([`Shot::set_shown`]). An item missing here is
     /// at its start.
     shown: BTreeMap<ItemId, MediaTime>,
-    /// Its items' audio modifiers (ADR-0100), with the level the render thread's
-    /// follower stores for each tick ([`crate::reactive`]).
     /// The effect settings each item chain's motion drives (ADR-0138).
     driven: BTreeMap<ChainOwner, crate::driven::Driven>,
+    /// Its items' audio modifiers (ADR-0100), with the level the render thread's
+    /// follower stores for each tick ([`crate::reactive`]).
     audio: crate::reactive::Bindings,
     /// When each item's `triggered` modifiers were last fired (#1107), as the engine set
     /// it ([`Shot::set_fired`]). A modifier never fired here is still.
@@ -766,14 +766,21 @@ fn widen(shot: &mut Shot, owner: &ChainOwner, from: &[Settings]) {
     };
     let boxed = planned.boxed;
     // What motion drives (ADR-0138) keeps its room too.
-    let driven = shot
+    // From the chain's own settings and from the look the Move leaves, since what
+    // motion drives adds to the blend between them.
+    let driven: Vec<Vec<Settings>> = shot
         .driven
         .get(owner)
-        .map(|driven| driven.extremes(&chain.own_settings()));
+        .map(|driven| {
+            let own = chain.own_settings();
+            [driven.extremes(&own), driven.extremes(from)]
+                .into_iter()
+                .flatten()
+                .collect()
+        })
+        .unwrap_or_default();
     let mut also = vec![from];
-    if let Some([least, most]) = &driven {
-        also.extend([least.as_slice(), most.as_slice()]);
-    }
+    also.extend(driven.iter().map(Vec::as_slice));
     let outset = chain.outset_also(&also);
     if boxed.canvas || boxed.model || outset as f32 <= boxed.outset {
         return;
@@ -1135,12 +1142,13 @@ impl Shot {
             };
             match blended.iter_mut().find(|(o, _)| *o == owner) {
                 Some((_, settings)) => {
-                    if let Some(moved) = driven.settings(settings, value) {
+                    if let Some(moved) = driven.settings(settings, |s| s, value) {
                         *settings = moved;
                     }
                 }
+                // Read in place: settings are cloned only on a frame that moves one.
                 None => {
-                    if let Some(moved) = driven.settings(&chain.own_settings(), value) {
+                    if let Some(moved) = driven.settings(&chain.filters, |f| &f.settings, value) {
                         blended.push((owner, moved));
                     }
                 }
@@ -1437,6 +1445,8 @@ impl PartialEq for Shot {
             && self.shown == other.shown
             && self.audio == other.audio
             && self.fired == other.fired
+            // An edit to an effect modifier alone changes only this (ADR-0138).
+            && self.driven == other.driven
     }
 }
 

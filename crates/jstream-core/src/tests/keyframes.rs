@@ -2050,3 +2050,35 @@ fn a_modifier_moves_a_colour_and_one_on_a_missing_setting_adds_nothing() {
     assert_eq!(drawn[0].get("radius"), Some(&json!(4.0)));
     assert_eq!(drawn[0].get("missing"), None);
 }
+
+/// #1417 review B1: an edit that adds, then removes, only an effect modifier reaches the
+/// renderer, though it changes nothing else of the shot.
+#[test]
+fn an_edit_to_an_effect_modifier_alone_is_drawn() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![halo()]);
+    let color = |engine: &Engine| {
+        drawn_effects(engine, secs(0.75))[0]
+            .get("color")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    let white = color(&engine);
+    apply(&control, vec![pulse_halo("color", 0.5)]);
+    let dimmed = color(&engine);
+    assert!(
+        dimmed.as_deref().is_some_and(|c| c.starts_with("#808080")),
+        "{dimmed:?}"
+    );
+    apply(
+        &control,
+        vec![Edit::ItemSetMotion {
+            item_id: ItemId::new("a1"),
+            scene_id: None,
+            motion: Vec::new(),
+        }],
+    );
+    assert_eq!(color(&engine), white, "the pulse stops with its modifier");
+}
