@@ -52,7 +52,7 @@ tested on every platform.
 | `CoreAudioIo` | `AudioIo` | `audio/` | Core Audio devices, input (behind the Microphone permission), output, and desktop and application audio through process taps (macOS 14.2) |
 | `AvFoundationVideoDevices` | `VideoDevices` | `video_device/` | cameras through AVFoundation, behind the Camera permission (ADR-0063 §10); no camera controls yet (the trait's default, #1196) |
 | `NoGpuInterop` | `GpuInterop` | `unbuilt.rs` | a stand-in until the Metal interop exists, so the engine takes the CPU frame paths |
-| `GlobalHotkeys` | | `hotkeys.rs` | the desktop app's hotkeys while another app has the focus ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5): Carbon's `RegisterEventHotKey` for keys, on the main thread, and a Quartz event tap for wheel chords, on its own thread while one is set, behind the Accessibility permission; the key table and the wheel's notch counting are pure |
+| `GlobalHotkeys` | | `hotkeys.rs` | the desktop app's hotkeys while another app has the focus ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5): Carbon's `RegisterEventHotKey` for keys, on the main thread, and a Quartz event tap for wheel chords, on its own thread while one is set, behind the Accessibility permission, which `wheel_needs_accessibility` checks without asking so the app can say when wheel chords are focus-only; the key table and the wheel's notch counting are pure |
 | `pick_path`, `Pick` | | `dialog.rs` | the desktop app's Browse dialogs: AppKit's open and save panels, app-modal on the main thread ([ADR-0144](../../docs/adr/0144-the-desktop-app-on-macos.md)) |
 
 Each permission is asked for once (macOS prompts the first time); after that a missing

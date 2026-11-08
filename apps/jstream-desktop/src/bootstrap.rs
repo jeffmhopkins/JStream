@@ -2,11 +2,13 @@
 //! engine's URL and control token, and what the app knows about its virtual camera.
 //!
 //! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam, collection,
-//! network, networkOpen, browse, allowNetwork }` that can't be reassigned, and only on a page from the
+//! network, networkOpen, wheelFocusOnly, browse, allowNetwork }` that can't be reassigned, and only on a page from the
 //! app's own origin: the webview also refuses to navigate anywhere else (see `shell.rs`),
 //! so no other page ever sees the token. `collection` is the data folder, which
 //! `collection` asset paths are relative to. `browse` asks the app's `pick_path` command
 //! to open a native dialog and resolves to the path the person picked, or null.
+//! `wheelFocusOnly` is whether, at the start, wheel chords were heard only while JStream
+//! had the focus, because the app lacked macOS's Accessibility permission.
 //! `network` is whether "Allow devices on my network" was on when the app started,
 //! `networkOpen` whether the network listener then opened, and `allowNetwork(allow)`
 //! asks the `set_network` command to save it (`network.rs`), resolving to whether it was
@@ -22,24 +24,39 @@ use std::fmt::Write as _;
 /// The global the UI looks for. `jstream-ui`'s `host::DESKTOP_GLOBAL` names it too.
 pub const GLOBAL: &str = "__JSTREAM_DESKTOP__";
 
+/// What the app tells the page beside its engine's URL and token.
+#[derive(Clone, Copy, Debug)]
+pub struct Page<'a> {
+    /// The virtual camera's status ([`crate::host::VcamStatus::as_str`]).
+    pub vcam: &'a str,
+    /// The data folder, which `collection` asset paths are relative to.
+    pub collection: &'a str,
+    /// The "Allow devices on my network" setting.
+    pub network: bool,
+    /// Whether the network listener opened.
+    pub network_open: bool,
+    /// Whether wheel chords are heard only while JStream has the focus, because the app
+    /// lacks a permission the OS asks for (macOS's Accessibility), as of the start.
+    pub wheel_focus_only: bool,
+}
+
 /// The script, for a page from `origin`, connecting to `url` with `token`. `vcam` is
 /// the virtual camera's status ([`crate::host::VcamStatus::as_str`]). `collection` is
 /// the data folder. `network` is the "Allow devices on my network" setting, and
 /// `network_open` whether the network listener opened.
-pub fn script(
-    origin: &str,
-    url: &str,
-    token: &str,
-    vcam: &str,
-    collection: &str,
-    network: bool,
-    network_open: bool,
-) -> String {
+pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
+    let Page {
+        vcam,
+        collection,
+        network,
+        network_open,
+        wheel_focus_only,
+    } = *page;
     format!(
         "if (window.location.origin === {origin}) {{\
          Object.defineProperty(window, {global}, {{\
          value: Object.freeze({{ url: {url}, token: {token}, vcam: {vcam}, collection: {collection},\
-         network: {network}, networkOpen: {network_open},\
+         network: {network}, networkOpen: {network_open}, wheelFocusOnly: {wheel_focus_only},\
          browse: function (request) {{\
          var internals = window.__TAURI_INTERNALS__;\
          if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(null);\
@@ -61,6 +78,7 @@ pub fn script(
         collection = js_string(collection),
         network = if network { "true" } else { "false" },
         network_open = if network_open { "true" } else { "false" },
+        wheel_focus_only = if wheel_focus_only { "true" } else { "false" },
     )
 }
 
@@ -89,7 +107,7 @@ fn js_string(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{js_string, script};
+    use super::{Page, js_string, script};
 
     #[test]
     fn the_script_defines_the_global_only_on_the_app_origin() {
@@ -97,10 +115,13 @@ mod tests {
             "http://jstream.localhost",
             "ws://127.0.0.1:4455/api/v1/ws",
             "0a1b",
-            "registered",
-            r"C:\Users\me\AppData\Roaming\JStream",
-            true,
-            false,
+            &Page {
+                vcam: "registered",
+                collection: r"C:\Users\me\AppData\Roaming\JStream",
+                network: true,
+                network_open: false,
+                wheel_focus_only: true,
+            },
         );
         assert!(script.starts_with("if (window.location.origin === \"http://jstream.localhost\")"));
         assert!(script.contains("\"__JSTREAM_DESKTOP__\""));
@@ -109,7 +130,7 @@ mod tests {
         assert!(script.contains("vcam: \"registered\""));
         assert!(script.contains(r#"collection: "C:\\Users\\me\\AppData\\Roaming\\JStream""#));
         assert!(script.contains("invoke(\"pick_path\", request)"));
-        assert!(script.contains("network: true, networkOpen: false,"));
+        assert!(script.contains("network: true, networkOpen: false, wheelFocusOnly: true,"));
         assert!(script.contains("invoke(\"set_network\", { allow: allow === true })"));
         assert!(
             script.contains("function () { return false; }"),

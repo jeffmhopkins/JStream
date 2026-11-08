@@ -90,7 +90,7 @@ pub use hotkeys::GlobalHotkeys;
 pub use hotkeys::Held as HotkeyHeld;
 pub use hotkeys::{
     HotkeyChord, NEEDS_ACCESSIBILITY, WHEEL_DELTA, WheelChord, WheelChords, key_code, parse_chord,
-    parse_wheel_chord, scroll_delta,
+    parse_wheel_chord, scroll_delta, wheel_needs_accessibility,
 };
 pub use keychain::KeychainItem;
 #[cfg(target_os = "macos")]

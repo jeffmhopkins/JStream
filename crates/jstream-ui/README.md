@@ -291,7 +291,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
-  `network`, `networkOpen`, `browse` and `allowNetwork`) before the page loads,
+  `network`, `networkOpen`, `wheelFocusOnly`, `browse` and `allowNetwork`) before the
+  page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
