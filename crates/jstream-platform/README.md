@@ -197,7 +197,9 @@ Contents:
   contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **CLAP plugin hosts** (`plugin_host.rs`,
   [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): `PluginHosts`
-  (`Send + Sync`) lists the CLAP search directories that exist, `scan`s a plugin file
+  (`Send + Sync`) lists the CLAP search directories that exist, and with `folders`
+  (by default the same) every one it searches whether it exists or not, for telling a
+  person where to install a plugin; it `scan`s a plugin file
   in a short-lived host process (so a plugin that crashes while scanned costs only that
   process), and `start`s a host for a `HostRequest` (file, plugin id, the block's
   `Config` and a saved state): it creates the block initialised with that

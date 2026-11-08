@@ -144,7 +144,10 @@ pub use dialog::{Pick, PickKind, pick_path};
 pub use gpu::WindowsGpu;
 #[cfg(windows)]
 pub use hotkeys::GlobalHotkeys;
-pub use hotkeys::{HotkeyChord, KeyCode, key_code, parse_chord};
+pub use hotkeys::{
+    Held, HotkeyChord, KeyCode, WHEEL_DELTA, WheelChord, WheelChords, key_code, parse_chord,
+    parse_wheel_chord,
+};
 #[cfg(windows)]
 pub use n_edition::check_media_foundation;
 #[cfg(windows)]

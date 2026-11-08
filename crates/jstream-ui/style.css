@@ -1238,6 +1238,21 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .plugin-actions { display: flex; gap: 0.4rem; }
 .modal.plugin-dialog { width: 480px; }
 
+/* The Settings dialog's Audio plugins page (clap_plugins.rs), and Add filter's Plugins note when
+   an audio chain has no CLAP plugin to offer. */
+.clap-plugins { display: grid; gap: 0.6rem; justify-items: start; }
+.clap-plugins .problem, .clap-hint, .clap-summary, .settings-note { margin: 0; }
+.settings-note, .clap-summary { color: var(--muted); font-size: 0.85rem; }
+.clap-head { margin: 0.4rem 0 0; font-size: 12px; font-weight: 600; text-transform: none; letter-spacing: 0; }
+.clap-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; width: 100%; }
+.clap-folder, .clap-plugin, .clap-failed { display: grid; gap: 0.15rem; min-width: 0; }
+.clap-folder { grid-template-columns: minmax(0, 1fr) auto; align-items: baseline; gap: 0.5rem; }
+.clap-folder .mono { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.clap-tag { color: var(--muted); font-size: 0.8rem; }
+.clap-tag.missing { font-style: italic; }
+.add-filter-clap { margin: 2px 12px 6px; color: var(--muted); font-size: 12px; }
+.add-filter-clap button.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; cursor: pointer; }
+
 /* The About dialog (about.rs). */
 .modal.about-dialog { width: 400px; }
 /* Check for updates and Settings (updates.rs). */
