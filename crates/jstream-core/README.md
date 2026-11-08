@@ -3430,8 +3430,11 @@ mix none of them is fed is not read back, and each readback is counted
 (`OutputStats::readbacks`, one per mix read back). The readback never waits for the
 GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw
 records it into the mix's `ReadbackRing` of three map-read buffers, kept with the
-compositor, and collects whichever earlier ones have mapped, polling without a wait. A
-frame read back goes out a tick or two after it was drawn, with the time it was drawn
+compositor, and collects whichever earlier ones have mapped, polling without a wait.
+The copy out of a mapped buffer is the draw's `jstream-readback` thread's (`Copier`),
+whose frame the draw swaps into the mix's, so the render thread copies no pixels; should
+the OS refuse that thread, the render thread copies, as before. A
+frame read back goes out a few ticks after it was drawn, with the time it was drawn
 for, so it stays on the audio's clock; a tick whose frame is still on its way pushes
 nothing, a tick that drew nothing (a failed draw, a fallback opening, a broken stage)
 repeats the last frame at the tick, and no push goes back in time
