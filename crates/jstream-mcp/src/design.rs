@@ -253,6 +253,13 @@ a source, `audio_source`) by `level`, `peak`, `onset` or a `band` (`low_hz`..`hi
 such as 40..120 for a kick), with `attack_ms` and `release_ms`, mapped from `floor_db` \
 to `ceiling_db` onto `from`..`to`. On `opacity`, `from` -0.6 and `to` 0 dims a light to \
 40% between beats. It hears only while an output runs. \
+To make an effect itself pulse (a border's `width`, a glow's `radius` or `strength`, a \
+blur's `radius`), give the item a modifier with `property` `effect` and \
+`effect: {filter_id, param}` naming one of its own effects and a number or colour \
+setting of it: any kind and clock works, its value is added to a number and kept \
+within the setting's range, or added to a colour's red, green and blue as a fraction \
+of full (0.3 lightens it), so an `audio` modifier with `from` 0 and `to` 6 on a border's `width` \
+thickens it by up to 6 px on each beat. \
 For an audio visualiser that the built-in `spectrum` and `waveform` kinds can't draw (a \
 scrolling spectrogram, a custom meter), build an HTML page on `jstream.levels()`: set the \
 `browser` source's `page_api`, `page_api_audio` and `page_api_bus` (the bus it shows, \

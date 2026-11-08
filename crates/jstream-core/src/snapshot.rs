@@ -650,6 +650,8 @@ pub(crate) struct Shot {
     shown: BTreeMap<ItemId, MediaTime>,
     /// Its items' audio modifiers (ADR-0100), with the level the render thread's
     /// follower stores for each tick ([`crate::reactive`]).
+    /// The effect settings each item chain's motion drives (ADR-0138).
+    driven: BTreeMap<ChainOwner, crate::driven::Driven>,
     audio: crate::reactive::Bindings,
     /// When each item's `triggered` modifiers were last fired (#1107), as the engine set
     /// it ([`Shot::set_fired`]). A modifier never fired here is still.
@@ -763,7 +765,16 @@ fn widen(shot: &mut Shot, owner: &ChainOwner, from: &[Settings]) {
         return;
     };
     let boxed = planned.boxed;
-    let outset = chain.outset_also(Some(from));
+    // What motion drives (ADR-0138) keeps its room too.
+    let driven = shot
+        .driven
+        .get(owner)
+        .map(|driven| driven.extremes(&chain.own_settings()));
+    let mut also = vec![from];
+    if let Some([least, most]) = &driven {
+        also.extend([least.as_slice(), most.as_slice()]);
+    }
+    let outset = chain.outset_also(&also);
     if boxed.canvas || boxed.model || outset as f32 <= boxed.outset {
         return;
     }
@@ -771,7 +782,7 @@ fn widen(shot: &mut Shot, owner: &ChainOwner, from: &[Settings]) {
         return;
     };
     planned.boxed = boxed;
-    chain.pad = chain.pad_at_also(boxed.scale, Some(from));
+    chain.pad = chain.pad_at_also(boxed.scale, &also);
 }
 
 /// The cameras a transition's tracks are seen through (ADR-0094 decision 7).
@@ -878,6 +889,7 @@ impl Default for Shot {
             stages: BTreeMap::new(),
             moves: false,
             shown: BTreeMap::new(),
+            driven: BTreeMap::new(),
             audio: crate::reactive::Bindings::default(),
             fired: motion::Fired::default(),
         }
@@ -1100,6 +1112,58 @@ impl Shot {
         motion::offsets(motion, at, self.shown_at(item), self.fired.of(item), |id| {
             self.heard(item, id)
         })
+    }
+
+    /// `blended`, each chain a Move blends with its settings this frame (ADR-0127), with
+    /// the settings motion drives (ADR-0138) moved by their modifiers at `at`: on the
+    /// blend for a chain that has one, else on the plan's. A chain whose driven settings
+    /// all add 0 is left as it was.
+    fn drive<'a>(
+        &'a self,
+        mut blended: Vec<(&'a ChainOwner, Vec<Settings>)>,
+        at: MediaTime,
+    ) -> Vec<(&'a ChainOwner, Vec<Settings>)> {
+        for (owner, driven) in &self.driven {
+            let Some(chain) = self.chains.get(owner) else {
+                continue;
+            };
+            let value = |modifier: &jstream_anim::Modifier| {
+                f64::from(
+                    self.motion_at(&driven.item, std::slice::from_ref(modifier), at)
+                        .x,
+                )
+            };
+            match blended.iter_mut().find(|(o, _)| *o == owner) {
+                Some((_, settings)) => {
+                    if let Some(moved) = driven.settings(settings, value) {
+                        *settings = moved;
+                    }
+                }
+                None => {
+                    if let Some(moved) = driven.settings(&chain.own_settings(), value) {
+                        blended.push((owner, moved));
+                    }
+                }
+            }
+        }
+        blended
+    }
+
+    /// The settings chain `owner` draws with `at`, motion's included (ADR-0138), for
+    /// tests: `None` when the shot has no such chain.
+    #[cfg(test)]
+    pub(crate) fn drawn_settings(
+        &self,
+        owner: &ChainOwner,
+        at: MediaTime,
+    ) -> Option<Vec<Settings>> {
+        let chain = self.chains.get(owner)?;
+        Some(
+            self.drive(Vec::new(), at)
+                .into_iter()
+                .find(|(o, _)| *o == owner)
+                .map_or_else(|| chain.own_settings(), |(_, settings)| settings),
+        )
     }
 
     /// The output stage's chains in this shot, for tests.
@@ -2598,13 +2662,23 @@ impl<'a> Planner<'a, '_> {
             }
             _ => return None,
         };
+        // The settings motion drives (ADR-0138), and the least and the most they reach,
+        // which the layer makes room for.
+        let driven = chain
+            .as_ref()
+            .and_then(|chain| crate::driven::Driven::of(item.id(), item.motion(), chain));
+        let extremes = chain
+            .as_ref()
+            .zip(driven.as_ref())
+            .map(|(chain, driven)| driven.extremes(&chain.own_settings()));
+        let also: Vec<&[Settings]> = extremes.iter().flatten().map(Vec::as_slice).collect();
         let boxed = match (&chain, item.effects_space()) {
             _ if model => Boxed {
                 model: true,
                 ..Boxed::over_canvas(canvas, input)?
             },
             (_, jstream_protocol::EffectsSpace::Canvas) => Boxed::over_canvas(canvas, input)?,
-            (Some(chain), _) => Boxed::new(&geometry, chain.outset(), input)?,
+            (Some(chain), _) => Boxed::new(&geometry, chain.outset_also(&also), input)?,
             (None, _) => return None,
         };
         let camera = match model {
@@ -2615,7 +2689,12 @@ impl<'a> Planner<'a, '_> {
             false => None,
         };
         if let Some(chain) = chain.as_mut() {
-            chain.pad = (!boxed.canvas).then(|| chain.pad_at(boxed.scale)).flatten();
+            chain.pad = (!boxed.canvas)
+                .then(|| chain.pad_at_also(boxed.scale, &also))
+                .flatten();
+        }
+        if let Some(driven) = driven {
+            out.driven.insert(owner.clone(), driven);
         }
         out.boxes.insert(
             owner.clone(),
@@ -5010,13 +5089,16 @@ fn run_chains(
     (live, captures): (&LiveParams, &dyn Captures),
     at: MediaTime,
 ) -> Result<(), RenderError> {
-    // A Move blending an item's effects gives its chain this frame's settings (ADR-0127).
-    let blended = shot
-        .transition
-        .as_ref()
-        .filter(|transition| !transition.blends.is_empty())
-        .map(|transition| transition.blended(at))
-        .unwrap_or_default();
+    // A Move blending an item's effects gives its chain this frame's settings (ADR-0127),
+    // and motion moves the settings it drives from there (ADR-0138).
+    let blended = shot.drive(
+        shot.transition
+            .as_ref()
+            .filter(|transition| !transition.blends.is_empty())
+            .map(|transition| transition.blended(at))
+            .unwrap_or_default(),
+        at,
+    );
     if !chains.begin(compositor, cache, &shot.chains, &shot.stages, &blended) {
         return Ok(());
     }

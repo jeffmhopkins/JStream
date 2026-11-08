@@ -549,7 +549,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
-  in a keyframe its override, ADR-0099). A scene shows its object
+  in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
+  (ADR-0138, set over the protocol or MCP) shows "Effect setting" as what it moves, and
+  picking a placement property for it drops its effect target; the section doesn't add
+  one yet). A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the

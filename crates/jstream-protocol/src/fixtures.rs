@@ -733,6 +733,7 @@ fn keyframe_edits() -> Vec<Edit> {
                     .expect("a string")
             ),
             property,
+            effect: None,
             kind: MotionKind::Oscillate {
                 shape,
                 amplitude: Finite32::new(1.0).expect("finite"),
@@ -752,6 +753,27 @@ fn keyframe_edits() -> Vec<Edit> {
                 motion: motion.to_vec(),
             }),
     );
+    // A border's width pulsing on a sine (ADR-0138).
+    edits.push(Edit::ItemSetMotion {
+        item_id: ItemId::new("itm_3"),
+        scene_id: None,
+        motion: vec![MotionModifier {
+            modifier_id: "pulse-border".into(),
+            property: MotionProperty::Effect,
+            effect: Some(crate::MotionEffect {
+                filter_id: FilterId::new("border"),
+                param: "width".into(),
+            }),
+            kind: MotionKind::Oscillate {
+                shape: MotionShape::Sine,
+                amplitude: Finite32::new(2.0).expect("finite"),
+                period_ms: 500,
+                phase: Finite32::ZERO,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        }],
+    });
     // Every audio measure and curve (ADR-0100), hearing the program mix, a bus and a
     // source.
     edits.push(Edit::ItemSetMotion {
@@ -835,6 +857,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "sway-x".into(),
             property: MotionProperty::X,
+            effect: None,
             kind: MotionKind::Wiggle {
                 amplitude: f(3.0),
                 frequency_hz: f(0.4),
@@ -847,6 +870,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "sway-roll".into(),
             property: MotionProperty::Rotation,
+            effect: None,
             kind: MotionKind::Oscillate {
                 shape: MotionShape::Triangle,
                 amplitude: f(0.1),
@@ -859,6 +883,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "scroll".into(),
             property: MotionProperty::CropLeft,
+            effect: None,
             kind: MotionKind::Drift {
                 rate_per_s: f(12.0),
                 wrap: Some(f(480.0)),
@@ -869,6 +894,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "jolt".into(),
             property: MotionProperty::Y,
+            effect: None,
             kind: MotionKind::Impulse {
                 amplitude: f(18.0),
                 frequency_hz: f(1.5),
@@ -901,6 +927,7 @@ fn reactive() -> Vec<MotionModifier> {
     let modifier = |id: &str, property, kind| MotionModifier {
         modifier_id: id.into(),
         property,
+        effect: None,
         kind,
         clock: MotionClock::Engine,
         enabled: true,
@@ -946,6 +973,7 @@ fn keyframe_motion() -> Vec<MotionModifier> {
     vec![MotionModifier {
         modifier_id: "pulse".into(),
         property: MotionProperty::Opacity,
+        effect: None,
         kind: MotionKind::Oscillate {
             shape: MotionShape::Sine,
             amplitude: Finite32::new(0.2).expect("finite"),
