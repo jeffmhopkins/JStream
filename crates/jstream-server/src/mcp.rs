@@ -124,7 +124,9 @@ impl Mcp {
                 }
                 None => tracing::info!(peer = %peer, "mcp session opened"),
             }
-            Arc::new(McpServer::new(Arc::from(app.open(credential))))
+            Arc::new(McpServer::new(Arc::from(
+                app.open(credential, jstream_protocol::AgentTransport::McpHttp),
+            )))
         });
         (number, server)
     }
