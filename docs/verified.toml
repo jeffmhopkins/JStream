@@ -6465,7 +6465,7 @@ stamp = { hash = "b3:134f387287849ce3", by = "agent:claude", note = "Go Live ste
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:1b2cb49659338da8", by = "agent:claude", note = "UI-FEATURES changes are the shader source in Add source and Properties; going live is unaffected" }
+stamp = { hash = "b3:071aa4c43fb63d73", by = "agent:claude", note = "UI-FEATURES change is one FL-12 sentence on shader source setting IDs; this walkthrough section doesn't touch it" }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recording now adds through + Add output and changes its file in the output's settings (double-click its row) instead of the card's Edit; Browse… is in both." }
@@ -6474,7 +6474,7 @@ stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recor
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:1b2cb49659338da8", by = "agent:claude", note = "UI-FEATURES changes are the shader source in Add source and Properties; recording is unaffected" }
+stamp = { hash = "b3:071aa4c43fb63d73", by = "agent:claude", note = "UI-FEATURES change is one FL-12 sentence on shader source setting IDs; this walkthrough section doesn't touch it" }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6492,7 +6492,7 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:eed5a8099d78c9a9", by = "agent:claude", note = "edited step 2: a webcam's resolution, frame rate and video format, or Auto | merge: #1259 adds Video settings and #1261 3D model items to this body and UI-FEATURES; step 2's webcam resolution, frame rate and format still hold | kept from the merged side: Re-read the first-scene steps: a desktop file field now has Browse, and a browser still types the path. The rest of the scene, canvas and panel steps still match. | merge: merge #1249: Help's Check for updates and File Settings are named, and a file field still has Browse. The rest of the first-scene steps hold. | kept from the merged side: Re-read against the header section: Help now also has Check for updates (compares this build, links a newer release, downloads nothing) and File Settings can check once at launch, off until turned on. The scene, source and panel steps are unchanged. | kept from the merged side: UI-FEATURES DL-06 now lists the 3D model type, so step 2's list of types gains a 3D model (a glTF or GLB file, or a built-in shape such as a cube); the rest of the steps hold. | merge: The merge brought in #1259 (File › Video settings… for the canvas resolution and frame rate: video_settings.rs, a header menu entry, a Purpose bullet, a Design sentence, a GETTING-STARTED paragraph and UI-FEATURES rows); none of it touches the 3D model source. The new canvas-size paragraph sits before step 1; step 2's source list with the 3D model still holds. | kept from the merged side: Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:1b2cb49659338da8", by = "agent:claude", note = "UI-FEATURES changes only add the shader source to DL-06, DL-02 and FL-12; the walkthrough's scene steps don't touch them" }
+stamp = { hash = "b3:071aa4c43fb63d73", by = "agent:claude", note = "UI-FEATURES change is one FL-12 sentence on shader source setting IDs; this walkthrough section doesn't touch it" }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -7119,7 +7119,7 @@ stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "edit
 stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Docking now says the Inspector shows the selected item only; workspace.rs mounts just Inspector for PanelId::Inspector; app.rs provides SettingsDialog and draws Settings in the shell" }
 
 ["UI-FEATURES#filters"."body"]
-stamp = { hash = "b3:b703a2f247048a8e", by = "agent:claude", note = "FL-12 drops 'Not yet: a shader source' and describes the shader source's pack, its four annotations and the limits (no Save as, one pass); stays 🟡 as #1295's browser click-through is still open" }
+stamp = { hash = "b3:c430522074ac8dd4", by = "agent:claude", note = "FL-12 now says only a scene setting can't be named previous (custom_shader.rs refuses previous for scene params only); every setting still refuses the source settings' IDs" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/custom_shader.rs"]
 stamp = { hash = "b3:800bd9ecec02a5c3", by = "agent:claude", note = "FL-12 drops 'Not yet: a shader source' and describes the shader source's pack, its four annotations and the limits (no Save as, one pass); stays 🟡 as #1295's browser click-through is still open" }
@@ -7233,7 +7233,7 @@ stamp = { hash = "b3:23bc657bf1f5d312", by = "agent:claude", note = "no status c
 stamp = { hash = "b3:e562ed3306cd0292", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
-stamp = { hash = "b3:b703a2f247048a8e", by = "agent:claude", note = "no status changed in dialogs or filters rows (FL-12 stays 🟡), so the counts hold" }
+stamp = { hash = "b3:c430522074ac8dd4", by = "agent:claude", note = "FL-12 wording only; no row status changed, so the counts hold" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
 stamp = { hash = "b3:3cd7d7b88f14dd0c", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match | merge: main added HD-11 (Video settings), counted in its header totals; this branch adds no row | kept from the merged side: Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
