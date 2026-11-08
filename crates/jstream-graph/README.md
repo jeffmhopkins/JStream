@@ -597,9 +597,12 @@ the engine's; this crate does no I/O.
   version's are kept, the object recording that version so a save writes it as its
   `kind_version`. `Graph::without_kinds` records each removed kind's version on its
   sources and filters the same way, so the kind coming back newer moves them. An upgrade
-  that changes settings is a revision with no inverse, and returns each changed object
-  as the `source.set_settings` or `filter.set_settings` of the keys that changed (a
-  renamed-away ID as `null`), with their `Touched` for the engine's undo history.
+  that changes settings, or finds a kind described before now at another version, is a
+  revision with no inverse, and returns each changed object as the `source.set_settings`
+  or `filter.set_settings` of the keys that changed (a renamed-away ID as `null`; none
+  when only the version changed), with their `Touched` for the engine's undo history.
+  The version alone counts because an undo step can still re-add a deleted source or
+  filter of the kind with its old IDs (#1418).
 - **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s
   own messages quote the offending value, so a parse error keeps only a missing field's
   name, a fixed reason, and the line and column of a syntax error.

@@ -744,7 +744,7 @@ pub struct Upgraded {
     pub rev: jstream_protocol::Rev,
     /// The sources and filters whose settings changed, each as the
     /// `source.set_settings` or `filter.set_settings` that sets them to what they hold
-    /// now: what clients re-read, and what [`touched`](Self::touched) is made from.
+    /// now: what clients re-read, and what [`touched`](Self::touched) is made from. Empty when only a kind's version changed.
     pub set: Vec<Edit>,
     /// What the upgrade touched, for the engine's undo history (ADR-0032): an earlier
     /// step that set one of these settings no longer undoes over it.
@@ -930,9 +930,13 @@ impl crate::Graph {
     /// version's settings than the pack's) keeps them, recording the version they came
     /// from for the next save.
     ///
-    /// Not an undo step: no client made it. When any settings change, the revision goes
-    /// up by one and the result says what changed; `None` when none did. A change to
-    /// only a recorded version is no revision.
+    /// Not an undo step: no client made it. When any settings change, or a kind this
+    /// graph described before is now at another version, the revision goes up by one
+    /// and the result says what changed; `None` when neither happened. A change to only
+    /// a recorded version is no revision. The new version alone counts because an undo
+    /// step can still hold a source or filter of the kind that the graph no longer has (a
+    /// deleted one, its settings under the old IDs): logging the revision lets that step's undo
+    /// answer `undo_conflict` rather than the kind's refusal (#1418, ADR-0032).
     pub fn upgrade_kinds(
         &mut self,
         kinds: &std::collections::BTreeMap<String, Option<u32>>,
@@ -1018,7 +1022,14 @@ impl crate::Graph {
                 }
             }
         }
-        if set.is_empty() {
+        let versioned = kinds.iter().any(|(kind, previous)| {
+            previous.is_some_and(|previous| {
+                self.kinds
+                    .get(kind)
+                    .is_some_and(|descriptor| descriptor.version != previous)
+            })
+        });
+        if set.is_empty() && !versioned {
             return None;
         }
         let rev = self.rev.next()?;

@@ -226,7 +226,9 @@ depends_on = ["docs/RULES.md#R-RT-002", "docs/adr/0004-wgpu-with-native-interop.
 
 `render` does not wait on the control plane and does no file or network I/O
 ([R-RT-002](../../docs/RULES.md#R-RT-002)). This crate has no render thread: calling
-`render` is the caller's tick, on `jstream-core`'s render thread. `ResourceCache`
+`render` is the caller's tick, on `jstream-core`'s render thread. The one thread it
+starts is a `Copier`'s `jstream-readback`, which only copies mapped readback buffers out
+for the rings the caller makes with it (**Readback**). `ResourceCache`
 returns what it frees as `Reclaimed`, so that thread can hand it to a collector
 ([R-RT-003](../../docs/RULES.md#R-RT-003)). The images this crate drops itself are a
 multi-pass filter's scratch layers that a call replaces at a new size or no longer asks
@@ -408,7 +410,12 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    device without blocking and hands back, oldest first, every frame whose map has
    finished, as tightly packed RGBA8, in the order they were recorded. With every
    buffer still on its way (`is_full`) `record` returns `false` for the caller to
-   count, and a new size waits until none is out. The source buffer of the ingest pass
+   count, and a new size waits until none is out. A ring made `with_copier` leaves the
+   copy out of each mapped buffer to a `Copier`'s `jstream-readback` thread: `collect`
+   hands it the buffers that have mapped and takes back the frames it has copied, each
+   swapped into the caller's buffer, whose old one is reused for a later copy, so the
+   caller's thread copies no pixels and a steady size allocates nothing. A buffer stays
+   busy until its copy is back, a call or two after its map finished. The source buffer of the ingest pass
    is held to one storage binding (`max_storage_buffer_binding_size`) as well as one
    buffer: a larger frame is `TooLarge` before any buffer is made for it.
 

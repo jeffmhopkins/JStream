@@ -1462,7 +1462,9 @@ fn a_downgrade_keeps_the_newer_version_across_a_save() {
     let migrate_v1 = |_: &str, stored: &Settings, from: u32| (from <= 1).then(|| stored.clone());
     let mut g = g.with_kinds([tint_v1()]);
     let changed = [("tint".to_owned(), Some(2))].into_iter().collect();
-    assert_eq!(g.upgrade_kinds(&changed, &migrate_v1), None);
+    // The kind's version changed, so there is a revision, but no settings moved.
+    let downgraded = g.upgrade_kinds(&changed, &migrate_v1).expect("a revision");
+    assert!(downgraded.set.is_empty());
     assert_eq!(saved_version(&g), json!(2), "saved by the newer version");
 
     let without: Vec<KindDescriptor> = kinds()
@@ -1480,7 +1482,13 @@ fn a_downgrade_keeps_the_newer_version_across_a_save() {
 
     let mut g = g.with_kinds([tint_v2()]);
     let upgraded = [("tint".to_owned(), Some(1))].into_iter().collect();
-    assert_eq!(g.upgrade_kinds(&upgraded, &migrate_tint), None);
+    let back = g
+        .upgrade_kinds(&upgraded, &migrate_tint)
+        .expect("a revision");
+    assert!(
+        back.set.is_empty(),
+        "the settings were already the newer version's"
+    );
     assert_eq!(
         cam_filter(&g, 0).settings().get("strength"),
         Some(&json!(0.75))
