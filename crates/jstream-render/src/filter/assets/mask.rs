@@ -143,6 +143,11 @@ impl Pass for Mask {
         self.reference.image = image;
     }
 
+    /// The input times a coverage: transparent stays transparent.
+    fn reach(&self) -> Option<f32> {
+        Some(0.0)
+    }
+
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,

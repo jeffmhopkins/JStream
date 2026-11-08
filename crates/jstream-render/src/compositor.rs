@@ -12,7 +12,7 @@ use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
-use crate::mips::{MipPipelines, Mips, Region};
+use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
@@ -595,10 +595,12 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-filter"),
             });
-        // A filter can draw anywhere in its output.
+        // A filter can draw anywhere in its output, unless what it reads is bounded and
+        // its kind says how far past that it draws (#1070).
         output.set_content(None);
         let padding = filter.pad();
         let (pass, scratch) = filter.parts();
+        let bound = bound_of(input, padding, size, pass.reach());
         scratch.begin();
         let mut ctx = filter::Ctx {
             gpu: &self.gpu,
@@ -614,6 +616,7 @@ impl Compositor {
             clock,
             holds: &mut self.staged,
             scratch,
+            bound,
         };
         ctx.holds.clear();
         let encoded = if padding == 0 {
@@ -645,6 +648,15 @@ impl Compositor {
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        output.set_content(bound.map(|bound| {
+            let [x0, y0, x1, y1] = bound.rect;
+            Region {
+                x: x0,
+                y: y0,
+                width: x1 - x0,
+                height: y1 - y0,
+            }
+        }));
         drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
@@ -937,8 +949,14 @@ impl Compositor {
                     continue;
                 }
             }
-            // A 2D item minified at least twice along both axes never samples level 0.
-            let skip = u32::from(least >= 2.0);
+            // A 2D item minified `2^k` times or more along both axes never samples
+            // the levels finer than `k`.
+            let skip = if least >= 2.0 {
+                // `as` saturates, so even an infinite ratio (a degenerate quad) is in range.
+                (least.log2().floor() as u32).min(MAX_SKIP)
+            } else {
+                0
+            };
             let mips = (most > MINIFIED).then(|| {
                 let image = item.image;
                 // The crop counts in the extent; the chain is built from texels.
@@ -1135,7 +1153,6 @@ impl Compositor {
                 &self.gpu.queue,
                 &self.image_layout,
                 &self.mip_pipelines,
-                image,
                 region,
                 skip,
             )
@@ -1456,6 +1473,43 @@ fn covered(shape: &Shape, width: u32, height: u32) -> Option<Rect> {
         y: y0,
         width: x1 - x0,
         height: y1 - y0,
+    })
+}
+
+/// Where a filter that reaches `reach` input pixels past what it reads can draw, in its
+/// output of `size`: `input`'s content moved in by the `padding` and grown by the reach
+/// and a pixel, clipped (#1070). `None` when the input's content isn't known, the kind
+/// gives no reach, or it doesn't keep its padded input's size. An input with nothing in it
+/// gives an empty bound.
+fn bound_of(
+    input: &Image,
+    padding: u32,
+    size: (u32, u32),
+    reach: Option<f32>,
+) -> Option<filter::Bound> {
+    let content = input.content()?;
+    let reach = reach.filter(|reach| reach.is_finite() && *reach >= 0.0)?;
+    let grow = |side: u32| side.saturating_add(padding.saturating_mul(2));
+    if size != (grow(input.width()), grow(input.height())) {
+        return None;
+    }
+    if content.width == 0 || content.height == 0 {
+        return Some(filter::Bound {
+            rect: [0; 4],
+            frame: size,
+        });
+    }
+    let reach = (reach.ceil() as u32).saturating_add(1);
+    let low = |start: u32| start.saturating_add(padding).saturating_sub(reach);
+    let high = |end: u32, side: u32| end.saturating_add(padding).saturating_add(reach).min(side);
+    Some(filter::Bound {
+        rect: [
+            low(content.x),
+            low(content.y),
+            high(content.x + content.width, size.0),
+            high(content.y + content.height, size.1),
+        ],
+        frame: size,
     })
 }
 
