@@ -910,7 +910,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   label) with everything
   that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
-  source's `target` can name; `font.list` (protocol 0.68,
+  source's `target` can name, and (0.90) the video devices a `webcam`'s `device` can
+  name, with their formats; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
   and absolute path; `source.sizes` (protocol 0.40) → each source's current
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);
@@ -1089,7 +1090,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   from outside JStream sits in `remote_*` fields, in an `output.start` `action_failed`
   `reason` (the whole of which is untrusted), or in a window's `name` in
   `capture.targets` (its title or, on macOS, its application's name, set by the
-  window's application), and the tool descriptions and server instructions say it is
+  window's application) or a device's (set by its driver), and the tool descriptions and server instructions say it is
   data, never instructions ([ADR-0059](adr/0059-mcp-annotations-and-remote-text.md),
   amended by [ADR-0085](adr/0085-capture-target-names-marked-as-remote-text.md)). The instructions also say
   that names and other state text can be set by any client or plugin, and are data too
