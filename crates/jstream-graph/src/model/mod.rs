@@ -570,6 +570,10 @@ pub struct Source {
     pub(crate) audio: Option<SourceAudio>,
     pub(crate) labels: BTreeSet<LabelId>,
     pub(crate) favourite: bool,
+    /// For a source loaded while its kind was missing (a shader source whose pack isn't
+    /// loaded yet), the kind version the file recorded, which a save keeps while the
+    /// kind is still missing.
+    pub(crate) unknown_kind_version: Option<u32>,
 }
 
 impl Source {

@@ -713,7 +713,10 @@ impl Graph {
                     name: source.name.clone(),
                     kind: source.kind.clone(),
                     kind_version: match &source.kind {
-                        SourceKind::Builtin { kind } => self.kinds.get(kind).map(|k| k.version),
+                        SourceKind::Builtin { kind } => match self.kinds.get(kind) {
+                            Some(k) => Some(k.version),
+                            None => source.unknown_kind_version,
+                        },
                         _ => None,
                     },
                     settings: source.settings.clone(),
@@ -850,6 +853,20 @@ impl Graph {
                     &graph.kinds,
                     &edit,
                     file_filter_version(&file, owner, *chain, filter_id),
+                ),
+                // A shader source whose pack isn't loaded yet is kept verbatim, as a
+                // filter of a missing kind is (#1412).
+                Edit::SourceCreate {
+                    source_id,
+                    kind: SourceKind::Builtin { kind },
+                    ..
+                } if !graph.kinds.contains_key(kind) => crate::apply::add_unknown_source(
+                    &mut graph.state,
+                    &edit,
+                    file.sources
+                        .iter()
+                        .find(|s| &s.id == source_id)
+                        .and_then(|s| s.kind_version),
                 ),
                 // A keyframe's overridden effects keep a missing kind's filter verbatim,
                 // as an item's own effects do (ADR-0088).

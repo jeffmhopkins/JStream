@@ -569,8 +569,8 @@ the engine's; this crate does no I/O.
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
-  `LoadError` stay small); nothing is partly loaded. The exception is a filter of an
-  unknown kind: a pack that isn't installed, or a CLAP plugin the engine hasn't
+  `LoadError` stay small); nothing is partly loaded. The exceptions are a source or a
+  filter of an unknown kind (a source's below). A filter's is a pack that isn't installed, or a CLAP plugin the engine hasn't
   scanned yet (the file loads before the scan). It is put on its chain as saved, its
   settings unchecked and its `kind_version` kept for the next save, so a build without
   the kind destroys nothing
@@ -582,14 +582,19 @@ the engine's; this crate does no I/O.
   to the file's, so revisions keep increasing across restarts. A source, filter or preset whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
-  Once the engine describes a missing kind, or a changed version of
-  a kind, `Graph::upgrade_filters` (`filter.rs`, #1353) upgrades every filter of it, on
-  any chain or keyframe override: settings stored by an older version (the one the file
-  recorded, else the one described before) go through the caller's migration (an effect
-  pack's renames), then are fitted to the descriptor (an undeclared value dropped, a
-  missing or invalid one at its default); a newer version's are kept as they are. It is
-  a revision with no inverse, and returns each changed filter as the `filter.set_settings`
-  that sets what it holds now, with their `Touched` for the engine's undo history.
+  A `builtin` source of a missing kind (a shader source whose pack isn't loaded yet, or a
+  kind of a newer build, #1412) is likewise created as saved (`add_unknown_source`): its settings unchecked
+  but their references to existing objects, and its `kind_version` kept for the next
+  save; `source.set_settings` on it is `invalid_argument` until the kind is described.
+  Once the engine describes a missing kind, or a changed version of a kind,
+  `Graph::upgrade_kinds` (`filter.rs`, #1353, #1412) upgrades every source and every
+  filter of it, on any chain or keyframe override: settings stored by an older version
+  (the one the file recorded, else the one described before) go through the caller's
+  migration (an effect's or shader source's renames), then are fitted to the descriptor
+  (an undeclared value dropped, a missing or invalid one at its default); a newer
+  version's are kept as they are. It is a revision with no inverse, and returns each
+  changed object as the `source.set_settings` or `filter.set_settings` that sets what it
+  holds now, with their `Touched` for the engine's undo history.
 - **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s
   own messages quote the offending value, so a parse error keeps only a missing field's
   name, a fixed reason, and the line and column of a syntax error.
@@ -685,10 +690,11 @@ transitions' round trip (with the initial `cut` deleted, or kept but changed), t
 old stock Cut loading at duration 0 while a retimed cut keeps its duration, and a
 preset of another kind version refused; hotkeys' round trip, and a file whose binding
 names a missing scene refused; a clone's
-link surviving a round trip after its original is deleted; the migration runner over stand-in
+link surviving a round trip after its original is deleted; a source of an unknown kind
+loaded as saved; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile or mix, and a mix naming a missing
-scene, among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
+scene, among them), cycles, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that
 no error quotes a credential-like value placed where a number, key or tag belongs.
 

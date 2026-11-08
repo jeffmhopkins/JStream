@@ -1236,9 +1236,7 @@ fn upgrade_moves_loaded_filters_through_renames() {
     };
     let before = loaded.rev();
     let changed = [("tint".to_owned(), None)].into_iter().collect();
-    let upgraded = loaded
-        .upgrade_filters(&changed, &migrate)
-        .expect("a change");
+    let upgraded = loaded.upgrade_kinds(&changed, &migrate).expect("a change");
     assert_eq!(upgraded.rev, before.next().expect("rev"));
     assert_eq!(loaded.rev(), upgraded.rev);
     let fitted = settings(&[("strength", json!(0.75)), ("mask", Value::Null)]);
@@ -1265,5 +1263,91 @@ fn upgrade_moves_loaded_filters_through_renames() {
         saved["sources"][0]["filters"]["video"][0]["kind_version"],
         json!(2)
     );
-    assert_eq!(loaded.upgrade_filters(&changed, &migrate), None);
+    assert_eq!(loaded.upgrade_kinds(&changed, &migrate), None);
+}
+
+/// A `builtin` source whose kind is missing at load (a shader source whose pack isn't
+/// loaded yet) is kept as the file has it, its kind version kept for the next save, and
+/// is upgraded with the filters once the kind is described (#1412).
+#[test]
+fn a_source_of_a_missing_kind_loads_verbatim_and_is_upgraded() {
+    let mut g = graph();
+    apply_ok(&mut g, vec![builtin("bg")]);
+    let mut file: Value = serde_json::from_str(&g.to_collection_json()).expect("valid JSON");
+    let source = file["sources"]
+        .as_array_mut()
+        .and_then(|s| s.iter_mut().find(|s| s["id"] == "bg"))
+        .expect("bg is saved");
+    source["kind"]["kind"] = json!("wave/w");
+    source["kind_version"] = json!(1);
+    source["settings"] = json!({ "level": 0.25 });
+    let mut loaded = Graph::new()
+        .with_kinds(kinds())
+        .with_collection_json(&file.to_string())
+        .expect("loads with the kind missing");
+    let bg = loaded.state().source(&SourceId::new("bg")).expect("bg");
+    assert_eq!(bg.settings(), &settings(&[("level", json!(0.25))]));
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("json");
+    assert_eq!(saved["sources"][0]["kind_version"], json!(1));
+    assert_eq!(saved["sources"][0]["settings"], json!({ "level": 0.25 }));
+
+    // A reference in its settings must still name something that exists.
+    let mut dangling = file.clone();
+    dangling["sources"][0]["settings"] = json!({ "sky": scene_ref("nowhere") });
+    assert!(
+        Graph::new()
+            .with_kinds(kinds())
+            .with_collection_json(&dangling.to_string())
+            .is_err()
+    );
+
+    // Version 2 calls `level` `gain`.
+    let wave = KindDescriptor {
+        kind_id: "wave/w".into(),
+        category: KindCategory::Source,
+        name: "Wave".into(),
+        version: 2,
+        video: true,
+        audio: false,
+        max_outset_px: None,
+        params: vec![super::param(
+            "gain",
+            ParamType::Float {
+                min: None,
+                max: None,
+                step: None,
+                unit: None,
+            },
+            json!(1.0),
+        )],
+    };
+    loaded = loaded.with_kinds([wave]);
+    let migrate = |_: &str, stored: &Settings, _: u32| -> Option<Settings> {
+        Some(
+            stored
+                .iter()
+                .map(|(id, v)| (if id == "level" { "gain" } else { id }, v.clone()))
+                .collect(),
+        )
+    };
+    let changed = [("wave/w".to_owned(), None)].into_iter().collect();
+    let upgraded = loaded.upgrade_kinds(&changed, &migrate).expect("a change");
+    let gain = settings(&[("gain", json!(0.25))]);
+    assert_eq!(
+        upgraded.set,
+        [Edit::SourceSetSettings {
+            source_id: SourceId::new("bg"),
+            patch: gain.clone(),
+        }]
+    );
+    assert_eq!(
+        loaded
+            .state()
+            .source(&SourceId::new("bg"))
+            .expect("bg")
+            .settings(),
+        &gain
+    );
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("json");
+    assert_eq!(saved["sources"][0]["kind_version"], json!(2));
 }
