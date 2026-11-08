@@ -2,14 +2,15 @@
 id = "ADR-0114"
 title = "A paired browser keeps no certificate pin, so a new warning on its host means stop"
 kind = "adr"
-status = "accepted"
+status = "superseded"
 tier = "agent"
+superseded_by = "docs/adr/0130-browsers-keep-no-certificate-pin-v2.md"
 -->
 
 # ADR-0114: A paired browser keeps no certificate pin, so a new warning on its host means stop
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Superseded** by [ADR-0130: A paired browser keeps no certificate pin, so a new warning on its host means checking the fingerprint again](0130-browsers-keep-no-certificate-pin-v2.md). This decision no longer applies.
 <!-- @generated end adr-status -->
 
 <a id="context"></a>

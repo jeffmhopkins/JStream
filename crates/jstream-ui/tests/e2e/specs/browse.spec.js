@@ -1,7 +1,9 @@
 // Browse… beside a path field. The desktop app's native dialog is stubbed on
 // window.__JSTREAM_DESKTOP__.browse, the same function the app's bootstrap script
 // installs. A plain browser page has no global, so it has no button.
-import { test, expect, connect, describeKinds, openAddSource, showPanel } from '../fixtures.js';
+import {
+  test, expect, connect, describeKinds, openAddSource, showPanel, outputRow, openOutputSettings,
+} from '../fixtures.js';
 
 const IMAGE = {
   kind_id: 'image', category: 'source', name: 'Image', version: 1, video: true, audio: false,
@@ -103,26 +105,28 @@ test('picking a file stores a collection path, and an outside file stays absolut
 test('a recording uses a save dialog, and a stream does not', async ({ page, daemon }) => {
   await asDesktop(page, daemon);
   await showPanel(page, 'Outputs');
-  const form = page.locator('form.new-output');
-  await expect(form.getByRole('button', { name: 'Browse…' })).toHaveCount(0);
-  await form.getByRole('combobox').selectOption('record');
-  const browse = form.getByRole('button', { name: 'Browse…' });
+  await page.getByRole('button', { name: '+ Add output' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Output settings' });
+  await expect(dialog.getByRole('button', { name: 'Browse…' })).toHaveCount(0);
+  await dialog.getByLabel('Kind').selectOption('record');
+  const browse = dialog.getByRole('button', { name: 'Browse…' });
   await expect(browse).toBeVisible();
 
   await queuePick(page, 'C:\\videos\\show.mp4');
   await browse.click();
-  await expect(form.getByRole('textbox')).toHaveValue('C:\\videos\\show.mp4');
+  await expect(dialog.getByLabel('File path')).toHaveValue('C:\\videos\\show.mp4');
   const log = await page.evaluate(() => window.__browseLog);
   expect(log[0]).toMatchObject({ kind: 'save', accept: ['mp4'], title: 'Save the recording' });
 
-  await form.getByRole('button', { name: 'Add' }).click();
-  const card = page.locator('li.output').filter({ hasText: 'output-1' });
-  await expect(card).toContainText('Record to C:\\videos\\show.mp4');
-  await card.getByRole('button', { name: 'Edit' }).click();
-  await expect(card.getByRole('button', { name: 'Browse…' })).toBeVisible();
+  await dialog.getByRole('button', { name: 'Add', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  const row = outputRow(page, 'output-1');
+  await expect(row.locator('.output-row-main')).toHaveAttribute('title', 'Record to C:\\videos\\show.mp4');
+  const settings = await openOutputSettings(page, 'output-1');
+  await expect(settings.getByRole('button', { name: 'Browse…' })).toBeVisible();
   await queuePick(page, 'C:\\videos\\show-2.mp4');
-  await card.getByRole('button', { name: 'Browse…' }).click();
-  await expect(card.getByLabel('File path')).toHaveValue('C:\\videos\\show-2.mp4');
+  await settings.getByRole('button', { name: 'Browse…' }).click();
+  await expect(settings.getByLabel('File path')).toHaveValue('C:\\videos\\show-2.mp4');
 });
 
 /** Answers plugin.list and plugin.install from `plugins`, and records each action. */

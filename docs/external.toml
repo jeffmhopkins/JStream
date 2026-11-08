@@ -779,3 +779,11 @@ relied_on = "JTunnel (plugins/jtunnel): wire version 2 in src/protocol.h and pro
 review_every = "90d"
 status = "ok"
 checked_note = "Re-read plugins/jtunnel at ba839e9 (Jclap PR #203): protocol.h/.cpp, discovery.cpp and README; jstream-jtunnel's golden-bytes test was produced by compiling that protocol.cpp"
+
+[[external]]
+id = "sony-visca-command-list"
+url = "https://pro.sony/s3/2022/09/03065933/VISCA_Command_List_v4.pdf"
+relied_on = "VISCA command, inquiry and reply bytes (pan-tilt drive and position, zoom, focus, presets, home, reset, power, IF_Clear; ACK, completion and error codes), and VISCA-over-IP's header and payload types, which jstream-visca encodes and parses"
+review_every = "180d"
+status = "unverified"
+checked_note = "The maintainer's reference for #1182 and #1181. The builder sandbox's fetch was refused (HTTP 403), so the crate follows the command bytes those issues list; re-read it against crates/jstream-visca"

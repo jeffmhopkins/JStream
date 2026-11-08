@@ -610,6 +610,7 @@ fn capture_target_input(
     let body = move || match mode.get() {
         Ok(()) => {
             let choices = choices.clone();
+            let current_now = current.clone();
             // Set again when the options change, which may have reset the selection.
             let selected = {
                 let current = current.clone();
@@ -622,9 +623,15 @@ fn capture_target_input(
                 <select class="capture-target" prop:value=selected.clone()
                     on:focus=move |_| refresh() on:change=on_pick.clone()>
                     {move || {
+                        // Each option says whether it is the current one: `prop:value` can
+                        // run before the options exist, and then selects nothing (#1371).
+                        let now = current_now();
                         choices()
                             .into_iter()
-                            .map(|(v, label)| view! { <option value=v>{label}</option> })
+                            .map(|(v, label)| {
+                                let on = v == now;
+                                view! { <option value=v selected=on>{label}</option> }
+                            })
                             .collect_view()
                     }}
                 </select>

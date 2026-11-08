@@ -23,6 +23,7 @@ use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::panels::add_source::{has_picture, type_label};
 use crate::panels::custom_shader::{self, ShaderEditor};
+use crate::panels::filter_presets::{preset_patch, presets};
 use crate::panels::properties::{Form, draft_patch, value_of};
 use crate::panels::tree::{Reorder, Side, dropped_at};
 use crate::store::{Collection, Studio, apply, query};
@@ -77,7 +78,7 @@ const AUDIO_GROUPS: [&str; 7] = [
 /// The kinds the prototype's catalogue has, by the engine's kind ID, in its order. The
 /// engine's kinds the prototype lacks (pixelate, aspect ratio, image mask) join the
 /// group they fit, and its wishes the engine lacks are left out.
-const KNOWN: [(&str, Known); 23] = {
+const KNOWN: [(&str, Known); 25] = {
     use FilterChain::{Audio, Video};
     const fn k(
         chain: FilterChain,
@@ -148,6 +149,15 @@ const KNOWN: [(&str, Known); 23] = {
             ),
         ),
         (
+            "border",
+            k(
+                Video,
+                "Style",
+                "Border",
+                "Rounded, dashed, gradient or double edges",
+            ),
+        ),
+        (
             "drop_shadow",
             k(Video, "Style", "Drop shadow", "Soft shadow behind"),
         ),
@@ -157,7 +167,16 @@ const KNOWN: [(&str, Known); 23] = {
         ),
         (
             "glow",
-            k(Video, "Style", "Glow", "Soft light around the shape"),
+            k(
+                Video,
+                "Style",
+                "Glow",
+                "Soft light around a shape’s edge, past an item’s box",
+            ),
+        ),
+        (
+            "bloom",
+            k(Video, "Style", "Bloom", "Bright parts give off light"),
         ),
         (
             "vignette",
@@ -1040,6 +1059,46 @@ fn filter_of(studio: Studio, target: &Target) -> Option<(FilterChain, FilterInfo
                     .map(|f| (chain, f.clone()))
             })
     })
+}
+
+/// The edits that move filter `filter`, at `index` of `owner`'s `chain`, to `kind`: it
+/// goes, and a filter `new_id` of that kind takes its place, on or off as it was, with
+/// its settings carried through `renames` (each old ID's value moves to its new ID,
+/// unless that ID has one) and fitted to `kind` ([`fit_settings`]). The engine refuses
+/// a key the new kind doesn't declare, and doesn't apply an effect's renames itself
+/// yet. Save as pack… sends them for a custom shader (#1295).
+pub fn move_to_kind(
+    owner: &FilterOwner,
+    chain: FilterChain,
+    index: usize,
+    filter: &FilterInfo,
+    new_id: FilterId,
+    kind: &KindDescriptor,
+    renames: &[(String, String)],
+) -> Vec<Edit> {
+    let mut carried = filter.settings.clone();
+    for (old, new) in renames {
+        if !carried.0.contains_key(new)
+            && let Some(value) = carried.0.remove(old)
+        {
+            carried.0.insert(new.clone(), value);
+        }
+    }
+    vec![
+        Edit::FilterRemove {
+            owner: owner.clone(),
+            filter_id: filter.filter_id.clone(),
+        },
+        Edit::FilterAdd {
+            owner: owner.clone(),
+            chain,
+            filter_id: new_id,
+            kind: kind.kind_id.clone(),
+            settings: fit_settings(kind, &carried),
+            enabled: (!filter.enabled).then_some(false),
+            index: u32::try_from(index).ok(),
+        },
+    ]
 }
 
 /// Reads the descriptor of each kind in `kinds` not yet read, once each: the mock
@@ -2749,10 +2808,71 @@ fn FilterPane(target: Target) -> impl IntoView {
             </button>
         }
     });
+    // Save as pack… wrote pack `new`: this filter moves to its kind, as a new filter in
+    // its place, which the window then shows with the editor open on it.
+    let save_as = {
+        let target = target.clone();
+        move |new: String, renames: Vec<(String, String)>| {
+            let Some(s) = session.get() else {
+                return;
+            };
+            let found = studio.collection.with_untracked(|c| {
+                let chains = c.as_ref()?.chains(&target.owner)?;
+                let filters = chains.chain(chain);
+                let index = filters
+                    .iter()
+                    .position(|f| f.filter_id == target.filter_id)?;
+                Some((index, filters[index].clone()))
+            });
+            let Some((index, filter)) = found else {
+                return;
+            };
+            let owner = target.owner.clone();
+            spawn_local(async move {
+                let kind = match studio.descriptor(&s, &custom_shader::kind_of(&new)).await {
+                    Ok(kind) => kind,
+                    Err(error) => {
+                        if problem.try_set(Some(error.to_string())).is_some() {
+                            studio.report(&error);
+                        }
+                        return;
+                    }
+                };
+                let new_id = FilterId::new(studio.fresh_id(&s, "filter"));
+                let edits = move_to_kind(
+                    &owner,
+                    chain,
+                    index,
+                    &filter,
+                    new_id.clone(),
+                    &kind,
+                    &renames,
+                );
+                dialogs.sent(&edits);
+                match apply(&s, edits, None).await {
+                    Ok(rev) => {
+                        dialogs.shader.set(Some(new_id.clone()));
+                        dialogs.landed.set(Some((new_id, rev)));
+                    }
+                    Err(error) => {
+                        if problem.try_set(Some(error.to_string())).is_some() {
+                            studio.report(&error);
+                        }
+                    }
+                }
+            });
+        }
+    };
+    let save_as = StoredValue::new(save_as);
+    let save_as = move |new: String, renames: Vec<(String, String)>| {
+        save_as.with_value(|f| f(new, renames));
+    };
     let shader_editor = move || {
         let opened = shader.get()?;
         let pack = shader_pack.get_value()?;
-        Some(view! { <ShaderEditor pack=pack opened=opened close=move || shader.set(None) /> })
+        Some(view! {
+            <ShaderEditor pack=pack opened=opened close=move || shader.set(None) save_as=save_as />
+        })
     };
     let target = StoredValue::new(target);
     let switch = move |_| {
@@ -2809,6 +2929,51 @@ fn FilterPane(target: Target) -> impl IntoView {
             }]);
         }
     };
+    // A preset: its settings, and every other one back to its default.
+    let kind_presets = StoredValue::new(presets(&kind_id));
+    let choose_preset = move |name: String| {
+        let Some(kind) = descriptor.get_untracked() else {
+            return;
+        };
+        let Some(preset) = kind_presets.with_value(|p| p.iter().find(|p| p.name == name).cloned())
+        else {
+            return;
+        };
+        errors.set(HashMap::new());
+        send(vec![Edit::FilterSetSettings {
+            owner: target.with_value(|t| t.owner.clone()),
+            filter_id: target.with_value(|t| t.filter_id.clone()),
+            patch: preset_patch(&kind, &preset),
+        }]);
+    };
+    // Always shows "Choose…": a preset is an action, not a state the filter is in.
+    let unpicked = RwSignal::new(());
+    let preset_picker = kind_presets.with_value(|p| !p.is_empty()).then(|| {
+        view! {
+            <label class="select-field filter-preset">
+                <span class="field-label">"Preset"</span>
+                <select
+                    aria-label="Apply a preset"
+                    prop:value=move || {
+                        unpicked.track();
+                        ""
+                    }
+                    on:change=move |event| {
+                        let name = event_target_value(&event);
+                        if !name.is_empty() {
+                            choose_preset(name);
+                        }
+                        unpicked.set(());
+                    }
+                >
+                    <option value="">"Choose…"</option>
+                    {kind_presets.with_value(|p| p.iter().map(|p| {
+                        view! { <option value=p.name>{p.name}</option> }
+                    }).collect_view())}
+                </select>
+            </label>
+        }
+    });
     let remove = move |_| {
         send(vec![Edit::FilterRemove {
             owner: target.with_value(|t| t.owner.clone()),
@@ -2853,6 +3018,7 @@ fn FilterPane(target: Target) -> impl IntoView {
             </div>
             <div class="filter-dialog-body">
                 {(!hint.is_empty()).then(|| view! { <p class="filter-hint">{hint}</p> })}
+                {preset_picker}
                 {form}
                 {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
             </div>
@@ -3289,6 +3455,68 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
 
 #[cfg(test)]
 mod tests {
+
+    /// Save as pack… moves a filter to the new kind in its place, with its settings
+    /// and off when it was off (#1295).
+    #[test]
+    fn a_filter_moves_to_a_kind_in_its_place() {
+        let owner = FilterOwner::Source {
+            source_id: SourceId::new("cam"),
+        };
+        let mut settings = Settings::new();
+        settings.insert("amount", json!(0.25));
+        settings.insert("tint", json!("#ff0000ff"));
+        settings.insert("gone", json!(3));
+        let filter = FilterInfo {
+            filter_id: FilterId::new("f1"),
+            kind: "custom-1/shader".into(),
+            enabled: false,
+            settings,
+        };
+        // The new kind renamed `amount` and retyped `tint`, and has no `gone`.
+        let mut kind = descriptor(vec![
+            param(
+                "mix_amount",
+                "Amount",
+                float(0.0, 1.0, None, None),
+                json!(0.5),
+            ),
+            param("tint", "Tint", float(0.0, 1.0, None, None), json!(0.5)),
+        ]);
+        kind.kind_id = "warm/shader".into();
+        let renames = [("amount".to_owned(), "mix_amount".to_owned())];
+        let edits = move_to_kind(
+            &owner,
+            FilterChain::Video,
+            2,
+            &filter,
+            FilterId::new("f9"),
+            &kind,
+            &renames,
+        );
+        let mut fitted = Settings::new();
+        fitted.insert("mix_amount", json!(0.25));
+        fitted.insert("tint", Value::Null);
+        assert_eq!(
+            edits,
+            vec![
+                Edit::FilterRemove {
+                    owner: owner.clone(),
+                    filter_id: FilterId::new("f1"),
+                },
+                Edit::FilterAdd {
+                    owner,
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("f9"),
+                    kind: "warm/shader".into(),
+                    settings: fitted,
+                    enabled: Some(false),
+                    index: Some(2),
+                },
+            ]
+        );
+    }
+
     use super::*;
     use jstream_control::protocol::{ParamDescriptor, SceneInfo};
     use serde_json::json;
