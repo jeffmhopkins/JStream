@@ -1593,7 +1593,7 @@ stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, history.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on 0013-command-model.md, RULES.md#R-API-004, README.md#batches, matching what it relies on" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3ec94f8fc4fde98e", by = "agent:claude", note = "Re-read: no call changed; state.changed from the engine's own upgrade is described in Snapshots and Undo, and the calls' result shapes are as written." }
+stamp = { hash = "b3:b5b40b4ce33ec80b", by = "agent:claude", note = "Re-read against the switch_and_watch fix: engine.rs adds State::switched_at (set by switch) and a cfg(test) SHEET_STALL_MS, and frame_sheet takes the switch time as at_ms's start; nothing in this section describes either, so it holds" }
 
 ["CRATE-jstream-core#calls"."file:crates/jstream-core/src/history.rs"]
 stamp = { hash = "b3:8a86a7742cac8d16", by = "agent:claude", note = "Re-read: no call changed; state.changed from the engine's own upgrade is described in Snapshots and Undo, and the calls' result shapes are as written." }
@@ -1617,7 +1617,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:f2ad50c60b607a84", by = "agent:claude", note = "Added record_engine and ENGINE_CLIENT to the History bullet; the Engine bullet's pack hot-reload text still holds, the upgrade is described in Snapshots." }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3ec94f8fc4fde98e", by = "agent:claude", note = "Added record_engine and ENGINE_CLIENT to the History bullet; the Engine bullet's pack hot-reload text still holds, the upgrade is described in Snapshots." }
+stamp = { hash = "b3:b5b40b4ce33ec80b", by = "agent:claude", note = "Re-read against the switch_and_watch fix: engine.rs adds State::switched_at (set by switch) and a cfg(test) SHEET_STALL_MS, and frame_sheet takes the switch time as at_ms's start; nothing in this section describes either, so it holds" }
 
 ["CRATE-jstream-core#contents-engine"."file:crates/jstream-core/src/events.rs"]
 stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -1704,7 +1704,7 @@ stamp = { hash = "b3:7555920d25b26a7d", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:9808a1a27859b69e", by = "agent:readme-scrub", note = "The Motion, Audio-reactive motion and Camera moves bullets (70 lines) moved verbatim into motion.rs, reactive.rs and follow.rs rustdoc under Behaviour; the README keeps a one-line summary of each and a pointer to the rustdoc. Studio, Timelines, Keyframe tracks and Transitions bullets unchanged." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3ec94f8fc4fde98e", by = "agent:claude", note = "Re-read: engine.rs changed only in install_effects and the collection save moving to Shared; nothing about motion, follow or timelines changed." }
+stamp = { hash = "b3:b5b40b4ce33ec80b", by = "agent:claude", note = "Re-read against the switch_and_watch fix: engine.rs adds State::switched_at (set by switch) and a cfg(test) SHEET_STALL_MS, and frame_sheet takes the switch time as at_ms's start; nothing in this section describes either, so it holds" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/follow.rs"]
 stamp = { hash = "b3:9c72689e2dc235a5", by = "agent:readme-scrub", note = "The Motion, Audio-reactive motion and Camera moves bullets (70 lines) moved verbatim into motion.rs, reactive.rs and follow.rs rustdoc under Behaviour; the README keeps a one-line summary of each and a pointer to the rustdoc. Studio, Timelines, Keyframe tracks and Transitions bullets unchanged." }
@@ -1782,7 +1782,7 @@ stamp = { hash = "b3:fbfba7957d9d8e02", by = "agent:claude", note = "live.rs onl
 stamp = { hash = "b3:927a2878262a1c9d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section. | merge: Main's #1261 (model items drawn through the scene camera) and #1302 (Moves blend effect values) changed live.rs, snapshot.rs and transition.rs; the moved bullets still describe them, the details are in Snapshots." }
 
 ["CRATE-jstream-core#contents-tests"."body"]
-stamp = { hash = "b3:4a4043e358800991", by = "agent:claude", note = "Added the two packs.rs tests for #1353 (live reload moving a filter through renames with undo_conflict after, and a loaded filter upgraded once its pack loads) and checked them against the code." }
+stamp = { hash = "b3:75eedc9212d3203b", by = "agent:claude", note = "Added the late-sheet case to the frame-sheet tests list (a_late_sheet_counts_from_the_switch stalls the sheet 150 ms and checks at_ms counts from the switch)" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests.rs"]
 stamp = { hash = "b3:6b0b8efecd9d8dcd", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -1815,7 +1815,7 @@ stamp = { hash = "b3:5630bdea3506e652", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:a7451c0eadbeed08", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/frames.rs"]
-stamp = { hash = "b3:982532548a1f7a2a", by = "agent:perf-thread", note = "merge: #1293 split this out of Purpose. This branch adds no-plan and sheet-pinning tests to tests/sources.rs and tests/frames.rs. They fit the areas the section already lists. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
+stamp = { hash = "b3:0c764f9577f73625", by = "agent:claude", note = "Added the late-sheet case to the frame-sheet tests list (a_late_sheet_counts_from_the_switch stalls the sheet 150 ms and checks at_ms counts from the switch)" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/gpu_capture.rs"]
 stamp = { hash = "b3:59226793fff774e4", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -1899,7 +1899,7 @@ stamp = { hash = "b3:2701ec7906f7a0f7", by = "agent:claude-webcam", note = "edit
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3ec94f8fc4fde98e", by = "agent:claude", note = "Re-read: the engine design (one collection lock, events after changes, saves after each change) still holds; the pack upgrade follows the same pattern." }
+stamp = { hash = "b3:b5b40b4ce33ec80b", by = "agent:claude", note = "Re-read against the switch_and_watch fix: engine.rs adds State::switched_at (set by switch) and a cfg(test) SHEET_STALL_MS, and frame_sheet takes the switch time as at_ms's start; nothing in this section describes either, so it holds" }
 
 ["CRATE-jstream-core#design"."file:crates/jstream-core/src/lib.rs"]
 stamp = { hash = "b3:98560da313aeb972", by = "agent:claude", note = "lib.rs only gains the private still module; engine and session design, the arc-swap dependency note and thread list here are unaffected" }
@@ -1929,7 +1929,7 @@ stamp = { hash = "b3:d47302b0b4d26703", by = "agent:claude-timelines", note = "R
 stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to events.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#events, matching what it relies on | merge: The ledger conflict took main's entry; events.rs is unchanged by the merge, text unchanged" }
 
 ["CRATE-jstream-core#frame-sheets"."body"]
-stamp = { hash = "b3:4ab9fb8cf8145d56", by = "agent:perf-thread", note = "Shared::sample now pins each slot's frame (Shot::pin) and draw_sheet draws through View.pinned, so a painted source's tile shows it as taken; the text says so, and at_ms is again the time each tile shows (new test a_sheet_shows_a_painted_source_as_each_picture_was_taken)." }
+stamp = { hash = "b3:5226cfa0323700e5", by = "agent:claude", note = "Rewrote the switch_and_watch paragraph: at_ms counts from State::switched_at, the transition's start, not the sheet's start, and from the sheet's start when the scene was already on program; matches engine.rs and SheetFrame::at_ms's doc" }
 
 ["CRATE-jstream-core#frame-sheets"."dep:crates/jstream-protocol/README.md#queries"]
 stamp = { hash = "b3:bf7521007991a917", by = "agent:claude", note = "protocol queries section changed for capture.targets only; frame sheets unaffected" }
@@ -1965,7 +1965,7 @@ stamp = { hash = "b3:b7ef33611a15221a", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:bab01bb254e5cd3e", by = "agent:claude", note = "Added the collection file's lock order (before the collection lock) and that the pack upgrade saves with the packs' lock held and the collection lock released; checked save_collection on Shared and install_effects." }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3ec94f8fc4fde98e", by = "agent:claude", note = "Added the collection file's lock order (before the collection lock) and that the pack upgrade saves with the packs' lock held and the collection lock released; checked save_collection on Shared and install_effects." }
+stamp = { hash = "b3:b5b40b4ce33ec80b", by = "agent:claude", note = "Re-read against the switch_and_watch fix: engine.rs adds State::switched_at (set by switch) and a cfg(test) SHEET_STALL_MS, and frame_sheet takes the switch time as at_ms's start; nothing in this section describes either, so it holds" }
 
 ["CRATE-jstream-core#locking"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -1974,7 +1974,7 @@ stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:122185294299b4ac", by = "agent:claude-timelines", note = "Added that cues are not calls and log nothing; timeline.cue_fired reports them. Checked run_cue emits only the event." }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3ec94f8fc4fde98e", by = "agent:claude", note = "Re-read: the new info line for the upgrade follows the section's rules (no values, only rev and a count)." }
+stamp = { hash = "b3:b5b40b4ce33ec80b", by = "agent:claude", note = "Re-read against the switch_and_watch fix: engine.rs adds State::switched_at (set by switch) and a cfg(test) SHEET_STALL_MS, and frame_sheet takes the switch time as at_ms's start; nothing in this section describes either, so it holds" }
 
 ["CRATE-jstream-core#logging"."file:crates/jstream-core/src/session.rs"]
 stamp = { hash = "b3:88dc91dad42bd61e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76, #1122 0.77, #1127 0.78 shared values, #1144 section split) and renumbered frame sheets from 0.78 to 0.82 per the release queue (snapshots regenerated); re-read against the frame-sheet change and what main brought, and it holds | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to engine.rs, session.rs, the modules its text names; #purpose still covers all of src/** and tests/**" }
@@ -2028,7 +2028,7 @@ stamp = { hash = "b3:220494637c990b76", by = "agent:claude", note = "preview/mod
 stamp = { hash = "b3:b130bf5e07b7c463", by = "agent:claude", note = "States audio inputs open while the stage runs, including while an H.264 program preview is open (Jeff chose the OBS behaviour)." }
 
 ["CRATE-jstream-core#privacy"."file:crates/jstream-core/src/engine.rs"]
-stamp = { hash = "b3:3ec94f8fc4fde98e", by = "agent:claude", note = "Re-read: privacy is untouched by the install_effects and save_collection changes in engine.rs." }
+stamp = { hash = "b3:b5b40b4ce33ec80b", by = "agent:claude", note = "Re-read against the switch_and_watch fix: engine.rs adds State::switched_at (set by switch) and a cfg(test) SHEET_STALL_MS, and frame_sheet takes the switch time as at_ms's start; nothing in this section describes either, so it holds" }
 
 ["CRATE-jstream-core#program-scene"."body"]
 stamp = { hash = "b3:fb8e768e141058ba", by = "agent:claude", note = "Added that the engine re-plans at once after a transition's ending plan, so the old scene's sources aren't reached and a switch back restarts restart_on_show sources (#1185), matching publish_render in engine.rs" }
