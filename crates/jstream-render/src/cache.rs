@@ -4,7 +4,7 @@
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 
 use jstream_media::FrameSize;
 use jstream_platform::GpuFrame;
@@ -57,6 +57,8 @@ pub struct ResourceCache<K> {
     /// frame that could have drawn it: a filter can hold textures of its own (a video
     /// delay's ring), so it waits for the fence like an image.
     retired_filters: Vec<(VideoFilter, u64)>,
+    /// What [`Self::keep_while`] replaced, handed back with the next reclaim.
+    released: Vec<Arc<AtomicBool>>,
     /// The frame being built. 0 before the first [`Self::begin_frame`].
     frame: u64,
     /// The newest frame whose submitted work the GPU has finished.
@@ -75,12 +77,17 @@ struct Entry {
     /// For an upload, the fraction of its frame's size it is held at each way, 1 for
     /// the whole frame ([`ResourceCache::upload_drawn`]).
     scale: f32,
+    /// Kept while no frame uses it, for as long as this is true
+    /// ([`ResourceCache::keep_while`]).
+    alive: Option<Arc<AtomicBool>>,
 }
 
 /// An image no frame references any more, waiting for the GPU to finish `after`.
 struct Retired {
     image: Image,
     after: u64,
+    /// What kept it ([`Entry::alive`]), freed with it, never on the cache's thread.
+    alive: Option<Arc<AtomicBool>>,
 }
 
 /// Images whose last frame the GPU has finished, for the caller to drop where dropping
@@ -90,17 +97,21 @@ struct Retired {
 pub struct Reclaimed {
     images: Vec<Image>,
     filters: Vec<VideoFilter>,
+    /// What kept them ([`ResourceCache::keep_while`]): the cache may hold the last
+    /// reference.
+    alive: Vec<Arc<AtomicBool>>,
 }
 
 impl Reclaimed {
-    /// How many images and filters there are.
+    /// How many images and filters there are, and keep-alive flags
+    /// ([`ResourceCache::keep_while`]).
     pub fn len(&self) -> usize {
-        self.images.len() + self.filters.len()
+        self.images.len() + self.filters.len() + self.alive.len()
     }
 
     /// Whether there are none.
     pub fn is_empty(&self) -> bool {
-        self.images.is_empty() && self.filters.is_empty()
+        self.images.is_empty() && self.filters.is_empty() && self.alive.is_empty()
     }
 
     /// How many of them are video filters.
@@ -123,6 +134,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
             drawn_small: false,
             retired: Vec::new(),
             retired_filters: Vec::new(),
+            released: Vec::new(),
             frame: 0,
             done: Arc::new(AtomicU64::new(0)),
         }
@@ -200,6 +212,23 @@ impl<K: Ord + Clone> ResourceCache<K> {
         };
         let image = compositor.upload_rgba8(width, height, rgba.as_ref())?;
         Ok(Some(self.replace(key, image, version)))
+    }
+
+    /// Keeps the entry under `key`, if there is one, while no frame uses it, for as long
+    /// as `alive` is true, so a still whose pixels its caller let go of is drawn at once
+    /// when it is shown again (#1139). The entry keeps `alive` until it is replaced or
+    /// retired, and hands it back in [`Reclaimed`] then, so the cache never drops the
+    /// last reference itself.
+    pub fn keep_while(&mut self, key: &K, alive: &Arc<AtomicBool>) {
+        if let Some(entry) = self.live.get_mut(key)
+            && !entry
+                .alive
+                .as_ref()
+                .is_some_and(|held| Arc::ptr_eq(held, alive))
+        {
+            // The one it replaces goes out with the next reclaim, as a retired one does.
+            self.released.extend(entry.alive.replace(Arc::clone(alive)));
+        }
     }
 
     /// Marks the entry under `key`, if there is one, used this frame.
@@ -445,7 +474,11 @@ impl<K: Ord + Clone> ResourceCache<K> {
                 let (image, _) = &entry.kept[index];
                 if (image.width(), image.height()) != size {
                     let (image, after) = entry.kept.swap_remove(index);
-                    self.retired.push(Retired { image, after });
+                    self.retired.push(Retired {
+                        image,
+                        after,
+                        alive: None,
+                    });
                 } else {
                     index += 1;
                 }
@@ -454,7 +487,11 @@ impl<K: Ord + Clone> ResourceCache<K> {
                 && let Some(oldest) = (0..entry.kept.len()).min_by_key(|&i| entry.kept[i].1)
             {
                 let (image, after) = entry.kept.swap_remove(oldest);
-                self.retired.push(Retired { image, after });
+                self.retired.push(Retired {
+                    image,
+                    after,
+                    alive: None,
+                });
             }
         }
         entry.image.set_frame(frame);
@@ -540,11 +577,13 @@ impl<K: Ord + Clone> ResourceCache<K> {
         self.retired.push(Retired {
             image,
             after: self.frame,
+            alive: None,
         });
     }
 
     /// Ends the frame after its passes were submitted. Drops the frame holds of this
-    /// frame's imports, retires every entry this frame did not use, arms the frame fence, polls the device without blocking, and hands
+    /// frame's imports, retires every entry this frame did not use (but those
+    /// [`Self::keep_while`] keeps), arms the frame fence, polls the device without blocking, and hands
     /// back the retired images whose last frame the GPU has finished. `None` when there
     /// are none, so a steady frame allocates nothing here beyond the fence callback.
     pub fn end_frame(&mut self, compositor: &Compositor) -> Option<Reclaimed> {
@@ -552,11 +591,17 @@ impl<K: Ord + Clone> ResourceCache<K> {
         for entry in self.live.values_mut() {
             entry.image.clear_sync();
         }
-        let stale = self.live.iter().any(|(_, entry)| entry.used < frame);
-        if stale {
+        let stale = |entry: &Entry| {
+            entry.used < frame
+                && !entry
+                    .alive
+                    .as_ref()
+                    .is_some_and(|alive| alive.load(Ordering::Acquire))
+        };
+        if self.live.values().any(stale) {
             let live = std::mem::take(&mut self.live);
             for (key, entry) in live {
-                if entry.used < frame {
+                if stale(&entry) {
                     self.retire(entry);
                 } else {
                     self.live.insert(key, entry);
@@ -577,14 +622,18 @@ impl<K: Ord + Clone> ResourceCache<K> {
         let done = self.done.load(Ordering::Acquire);
         if !self.retired.iter().any(|retired| retired.after <= done)
             && !self.retired_filters.iter().any(|(_, after)| *after <= done)
+            && self.released.is_empty()
         {
             return None;
         }
         let mut images = Vec::new();
+        let mut alive = std::mem::take(&mut self.released);
         let mut index = 0;
         while index < self.retired.len() {
             if self.retired[index].after <= done {
-                images.push(self.retired.swap_remove(index).image);
+                let retired = self.retired.swap_remove(index);
+                images.push(retired.image);
+                alive.extend(retired.alive);
             } else {
                 index += 1;
             }
@@ -598,19 +647,29 @@ impl<K: Ord + Clone> ResourceCache<K> {
                 index += 1;
             }
         }
-        Some(Reclaimed { images, filters })
+        Some(Reclaimed {
+            images,
+            filters,
+            alive,
+        })
     }
 
     /// Everything the cache holds, live or retired, for the caller to drop when the
     /// compositor itself is going away.
     pub fn drain(&mut self) -> Reclaimed {
         let mut all: Vec<Image> = Vec::new();
+        let mut alive = std::mem::take(&mut self.released);
         for entry in std::mem::take(&mut self.live).into_values() {
             all.push(entry.image);
             all.extend(entry.kept.into_iter().map(|(image, _)| image));
+            alive.extend(entry.alive);
         }
-        all.extend(self.retired.drain(..).map(|retired| retired.image));
+        for retired in self.retired.drain(..) {
+            all.push(retired.image);
+            alive.extend(retired.alive);
+        }
         Reclaimed {
+            alive,
             images: all,
             filters: self
                 .retired_filters
@@ -627,6 +686,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
             used: self.frame,
             kept: Vec::new(),
             scale: 1.0,
+            alive: None,
         };
         let slot = match self.live.entry(key.clone()) {
             std::collections::btree_map::Entry::Occupied(mut slot) => {
@@ -671,14 +731,20 @@ fn retire(retired: &mut Vec<Retired>, entry: Entry) {
         mut image,
         used,
         kept,
+        alive,
         ..
     } = entry;
     image.clear_sync();
-    retired.push(Retired { image, after: used });
-    retired.extend(
-        kept.into_iter()
-            .map(|(image, after)| Retired { image, after }),
-    );
+    retired.push(Retired {
+        image,
+        after: used,
+        alive,
+    });
+    retired.extend(kept.into_iter().map(|(image, after)| Retired {
+        image,
+        after,
+        alive: None,
+    }));
 }
 
 fn missing(what: &str) -> RenderError {

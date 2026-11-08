@@ -4551,6 +4551,8 @@ fn upload_still(
             .is_some(),
     };
     if program {
+        // Kept while no mix draws it, so showing it again needs no pixels.
+        cache.keep_while(key, still.alive());
         if uploaded {
             still.uploaded();
         } else if asked {
@@ -7308,8 +7310,9 @@ pub(crate) mod tests {
     }
 
     /// A still image's pixels are let go of once the program stage has uploaded them,
-    /// and a later upload there waits for the stills thread to decode them again, drawing
-    /// what it has meanwhile; any other compositor decodes them itself (#1139).
+    /// and its cache keeps the upload while nothing draws it, so a cut back shows it at
+    /// once. A new upload there waits for the stills thread to decode them again; any
+    /// other compositor decodes them itself (#1139).
     #[test]
     fn a_still_is_drawn_from_its_upload_after_its_pixels_go() {
         use std::sync::Arc;
@@ -7339,8 +7342,7 @@ pub(crate) mod tests {
             },
         ));
         let stills = crate::still::Stills::default();
-        let drawn = Arc::new(std::sync::atomic::AtomicBool::new(true));
-        let shown = stills.show(still, drawn);
+        let shown = stills.show(still);
         let mut planned = shot(vec![(
             "program",
             vec![
@@ -7354,12 +7356,16 @@ pub(crate) mod tests {
         );
         let key = GpuKey::Frame(SourceId::new("still"));
         planned.uploads.push((key.clone(), SourceId::new("still")));
-        let draw = |compositor: &mut Compositor, cache: &mut ResourceCache<GpuKey>, program| {
+        let away = shot(vec![("program", vec![fill("red")])]);
+        let draw_shot = |compositor: &mut Compositor,
+                         cache: &mut ResourceCache<GpuKey>,
+                         shot: &Shot,
+                         program| {
             cache.begin_frame();
             let output = compose(
                 compositor,
                 (cache, &mut Chains::default()),
-                (&planned, zero()),
+                (shot, zero()),
                 View {
                     program,
                     ..View::default()
@@ -7371,6 +7377,9 @@ pub(crate) mod tests {
             .expect("compose");
             drop(cache.end_frame(compositor));
             output.pixels().expect("invariant: read back").pixel(32, 18)
+        };
+        let draw = |compositor: &mut Compositor, cache: &mut ResourceCache<GpuKey>, program| {
+            draw_shot(compositor, cache, &planned, program)
         };
         let wait = |done: &dyn Fn() -> bool| {
             let deadline = Instant::now() + Duration::from_secs(5);
@@ -7390,7 +7399,23 @@ pub(crate) mod tests {
             "from its upload"
         );
 
-        // A cache with no upload of it (as after nothing drew it): nothing to draw yet.
+        // Cut away and back: the program stage's cache kept the upload, so it is drawn
+        // at once, with no decode.
+        for _ in 0..3 {
+            assert_eq!(
+                draw_shot(&mut compositor, &mut program, &away, true),
+                Some(RED)
+            );
+        }
+        assert!(program.get(&key).is_some(), "kept while nothing draws it");
+        assert_eq!(
+            draw(&mut compositor, &mut program, true),
+            Some(GREEN),
+            "at once"
+        );
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 0);
+
+        // A cache with no upload of it (a new program stage): nothing to draw yet.
         let mut fresh = ResourceCache::new();
         assert_eq!(draw(&mut compositor, &mut fresh, true), Some(RED));
         assert!(fresh.get(&key).is_none(), "nothing uploaded");

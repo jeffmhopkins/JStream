@@ -4,12 +4,12 @@
 //! A shot names a [`ShownStill`] in place of a frame
 //! ([`Frame::from_still`](crate::snapshot::Frame::from_still)). Once the program
 //! stage's compositor has uploaded it, it says so, and the `jstream-stills` thread lets
-//! go of the pixels; the texture is drawn from then on. A draw that needs them again (a
-//! larger placement, an upload dropped while nothing drew it) finds none and asks for
-//! them, and the thread decodes the file again for a later draw ([`Still::frame`]),
-//! which keeps drawing the texture it has meanwhile. A still that no mix has drawn for
-//! 2 s gets its pixels back, so showing it again draws it at once; one deleted or left
-//! for good sooner than that costs no decode.
+//! go of the pixels; the texture is drawn from then on. That cache keeps the texture
+//! while no mix draws the still, for as long as the still is shown
+//! ([`ShownStill::alive`], `ResourceCache::keep_while`), so showing it again draws it
+//! at once. A draw that needs the pixels again (a larger placement, a new program
+//! stage) finds none and asks for them, and the thread decodes the file again for a
+//! later draw ([`Still::frame`]), which keeps drawing the texture it has meanwhile.
 //!
 //! The render thread only reads and sets atomics here, and wakes the thread with
 //! [`Thread::unpark`] (R-RT-002, R-RT-003): it never decodes, and never drops the last
@@ -29,10 +29,6 @@ use jstream_sources::Still;
 /// How long the thread waits before it decodes a still again whose file failed to.
 const RETRY: Duration = Duration::from_secs(5);
 
-/// How long a still no mix draws waits before its pixels are decoded again, so a
-/// source deleted, or a scene left for good, right after it was shown costs no decode.
-const UNDRAWN: Duration = Duration::from_secs(2);
-
 /// How often the thread looks again at pixels it let go of that a draw was still
 /// reading, to free them once it is done.
 const RECHECK: Duration = Duration::from_millis(50);
@@ -46,16 +42,23 @@ pub(crate) struct ShownStill {
     wanted: AtomicBool,
     /// The program stage's compositor has what it needs of them.
     uploaded: AtomicBool,
-    /// Whether some mix of the program stage draws it ([`crate::live`]'s `drawn`).
-    drawn: Arc<AtomicBool>,
+    /// True until it is dropped: the program stage's cache keeps its upload while
+    /// this is ([`Self::alive`]).
+    alive: Arc<AtomicBool>,
     keeper: Arc<Shared>,
+}
+
+impl Drop for ShownStill {
+    fn drop(&mut self) {
+        self.alive.store(false, Ordering::Release);
+    }
 }
 
 impl ShownStill {
     /// The pixels of `still`, as a shot shows them: held while anyone holds the still's
     /// frame (as it is when the source was just built), else made again by the thread
     /// before a draw needs them.
-    fn new(still: Arc<Still>, drawn: Arc<AtomicBool>, keeper: Arc<Shared>) -> Self {
+    fn new(still: Arc<Still>, keeper: Arc<Shared>) -> Self {
         Self {
             held: ArcSwapOption::new(
                 still
@@ -65,7 +68,7 @@ impl ShownStill {
             still,
             wanted: AtomicBool::new(false),
             uploaded: AtomicBool::new(false),
-            drawn,
+            alive: Arc::new(AtomicBool::new(true)),
             keeper,
         }
     }
@@ -73,6 +76,12 @@ impl ShownStill {
     /// Its size.
     pub(crate) fn size(&self) -> FrameSize {
         self.still.size()
+    }
+
+    /// True while it is shown: the program stage's cache keeps its upload while no mix
+    /// draws it for as long as this is, since its pixels may be gone.
+    pub(crate) fn alive(&self) -> &Arc<AtomicBool> {
+        &self.alive
     }
 
     /// Its pixels, if they are held now, for the program stage's draw. Lock-free;
@@ -161,20 +170,13 @@ impl Default for Stills {
 }
 
 impl Stills {
-    /// `still` as shots show it, its pixels held by the thread from now on. `drawn`
-    /// says whether a mix of the program stage draws it.
-    pub(crate) fn show(&self, still: Arc<Still>, drawn: Arc<AtomicBool>) -> Arc<ShownStill> {
-        let shown = Arc::new(ShownStill::new(still, drawn, Arc::clone(&self.shared)));
+    /// `still` as shots show it, its pixels held by the thread from now on.
+    pub(crate) fn show(&self, still: Arc<Still>) -> Arc<ShownStill> {
+        let shown = Arc::new(ShownStill::new(still, Arc::clone(&self.shared)));
         self.shared.lock_new().push(Arc::downgrade(&shown));
         self.start();
         self.shared.wake();
         shown
-    }
-
-    /// Tells the thread that whether a still is drawn may have changed: one no mix
-    /// draws any more gets its pixels back.
-    pub(crate) fn drawn_changed(&self) {
-        self.shared.wake();
     }
 
     /// Starts the thread, once: only the plan shows stills, so no two calls race.
@@ -210,24 +212,10 @@ struct Kept {
     retry: Option<Instant>,
     /// Whether that failure was logged, so a file that stays gone warns once.
     warned: bool,
-    /// Since when no mix has drawn it, while its pixels are let go of.
-    undrawn: Option<Instant>,
-}
-
-impl Kept {
-    /// When the thread next has something to do for it unasked.
-    fn due(&self) -> Option<Instant> {
-        let undrawn = self.undrawn.map(|since| since + UNDRAWN);
-        match (self.retry, undrawn) {
-            (Some(a), Some(b)) => Some(a.max(b)),
-            (a, b) => a.or(b),
-        }
-    }
 }
 
 /// The `jstream-stills` thread: lets go of the pixels the program stage has uploaded,
-/// and decodes again those a draw wants or that no mix has drawn for a while, until
-/// the engine goes.
+/// and decodes again those a draw wants, until the engine goes.
 fn run(shared: &Shared) {
     let mut kept: Vec<Kept> = Vec::new();
     // Pixels let go of that a draw may still read, freed here once only this holds them.
@@ -237,7 +225,6 @@ fn run(shared: &Shared) {
             still,
             retry: None,
             warned: false,
-            undrawn: None,
         }));
         kept.retain(|kept| kept.still.strong_count() > 0);
         let now = Instant::now();
@@ -249,8 +236,8 @@ fn run(shared: &Shared) {
             if let Some(frame) = keep(&still, kept, now) {
                 retired.push(frame);
             }
-            if let Some(due) = kept.due() {
-                next = Some(next.map_or(due, |next| next.min(due)));
+            if let Some(retry) = kept.retry {
+                next = Some(next.map_or(retry, |next| next.min(retry)));
             }
         }
         retired.retain(|frame| Arc::strong_count(frame) > 1);
@@ -267,12 +254,10 @@ fn run(shared: &Shared) {
 
 /// Holds or lets go of one still's pixels. Gives back the pixels it let go of.
 fn keep(still: &ShownStill, kept: &mut Kept, now: Instant) -> Option<Arc<VideoFrame>> {
-    let drawn = still.drawn.load(Ordering::Acquire);
     if still.held.load().is_some() {
-        if !drawn {
-            // Kept while no mix draws it, and uploaded again when one does.
-            still.uploaded.store(false, Ordering::Release);
-        } else if still.uploaded.swap(false, Ordering::AcqRel)
+        // Uploaded, and the program stage keeps the upload: let go of. Unless a draw
+        // asked for them again since, which the upload's next frame takes.
+        if still.uploaded.swap(false, Ordering::AcqRel)
             && !still.wanted.swap(false, Ordering::AcqRel)
         {
             return still.held.swap(None);
@@ -280,17 +265,9 @@ fn keep(still: &ShownStill, kept: &mut Kept, now: Instant) -> Option<Arc<VideoFr
         still.wanted.store(false, Ordering::Release);
         return None;
     }
-    let wanted = still.wanted.load(Ordering::Acquire);
-    kept.undrawn = if drawn {
-        None
-    } else {
-        Some(kept.undrawn.unwrap_or(now))
-    };
-    let rested = kept.undrawn.is_some_and(|since| now >= since + UNDRAWN);
-    if !(wanted || rested) || kept.retry.is_some_and(|retry| now < retry) {
+    if !still.wanted.load(Ordering::Acquire) || kept.retry.is_some_and(|retry| now < retry) {
         return None;
     }
-    kept.undrawn = None;
     still.wanted.store(false, Ordering::Release);
     still.uploaded.store(false, Ordering::Release);
     match still.still.frame() {
@@ -318,7 +295,7 @@ mod tests {
     };
     use jstream_sources::Still;
     use std::sync::Arc;
-    use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
+    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::{Duration, Instant};
 
     fn frame(value: u8) -> VideoFrame {
@@ -343,10 +320,10 @@ mod tests {
         done()
     }
 
-    /// A drawn still lets go of its pixels once the program stage has uploaded it,
-    /// decodes them again when a draw wants them, and holds them while no mix draws it.
+    /// A still lets go of its pixels once the program stage has uploaded it, and decodes
+    /// them again when a draw wants them.
     #[test]
-    fn a_shown_still_holds_its_pixels_only_while_a_draw_needs_them() {
+    fn a_shown_still_holds_its_pixels_only_until_the_program_stage_has_them() {
         let loads = Arc::new(AtomicUsize::new(0));
         let counted = Arc::clone(&loads);
         let still = Arc::new(Still::new(Arc::new(frame(1)), "a.png".into(), move || {
@@ -354,8 +331,7 @@ mod tests {
             Ok(frame(2))
         }));
         let stills = Stills::default();
-        let drawn = Arc::new(AtomicBool::new(true));
-        let shown = stills.show(Arc::clone(&still), Arc::clone(&drawn));
+        let shown = stills.show(Arc::clone(&still));
         let held = shown.held().expect("the frame the build made");
         assert_eq!(held.plane(0).map(|p| p.data()[0]), Some(1));
 
@@ -378,23 +354,16 @@ mod tests {
             Some(2)
         );
 
-        // Not drawn: an upload doesn't let go of it.
-        drawn.store(false, Ordering::Relaxed);
-        shown.uploaded();
-        stills.drawn_changed();
-        std::thread::sleep(Duration::from_millis(50));
-        assert!(shown.held().is_some(), "held while no mix draws it");
-
-        // Let go of while drawn, then no longer drawn: decoded again for the next show.
-        drawn.store(true, Ordering::Relaxed);
+        // Uploaded again: let go of again; and dropping the still says so to the cache.
         shown.uploaded();
         assert!(eventually(|| shown.held().is_none()));
-        drawn.store(false, Ordering::Relaxed);
-        stills.drawn_changed();
+        let alive = std::sync::Arc::clone(shown.alive());
+        assert!(alive.load(Ordering::Relaxed));
+        drop(shown);
         assert!(
-            eventually(|| shown.held().is_some()),
-            "held again for a show"
+            !alive.load(Ordering::Relaxed),
+            "the cache may let its upload go"
         );
-        assert_eq!(loads.load(Ordering::Relaxed), 2);
+        assert_eq!(loads.load(Ordering::Relaxed), 1);
     }
 }

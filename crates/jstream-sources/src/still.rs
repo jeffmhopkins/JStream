@@ -21,6 +21,8 @@ pub struct Still {
     /// The file it is read from, for errors.
     path: String,
     held: Mutex<Held>,
+    /// Taken while the file is decoded again.
+    decoding: Mutex<()>,
     load: Load,
 }
 
@@ -47,6 +49,7 @@ impl Still {
                 first: Some(first),
                 shared: Weak::new(),
             }),
+            decoding: Mutex::new(()),
             load: Box::new(load),
         }
     }
@@ -83,15 +86,15 @@ impl Still {
     /// file that decodes at another size fails with [`SourceError::Decode`], since
     /// whatever shows the still is placed at the size it had.
     pub fn frame(&self) -> Result<Arc<VideoFrame>, SourceError> {
-        let mut held = self.lock();
-        if let Some(first) = held.first.take() {
-            held.shared = Arc::downgrade(&first);
-            return Ok(first);
-        }
-        if let Some(frame) = held.shared.upgrade() {
+        if let Some(frame) = self.frame_if_held() {
             return Ok(frame);
         }
-        // Under the lock, so two callers share one decode rather than make two copies.
+        // One decode at a time, so two callers share one rather than make two copies;
+        // under its own lock, so `frame_if_held` and `held` never wait for it.
+        let _decoding = self.decoding.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(frame) = self.frame_if_held() {
+            return Ok(frame);
+        }
         let frame = (self.load)()?;
         if frame.info().size != self.size {
             return Err(SourceError::Decode {
@@ -107,7 +110,7 @@ impl Still {
             });
         }
         let frame = Arc::new(frame);
-        held.shared = Arc::downgrade(&frame);
+        self.lock().shared = Arc::downgrade(&frame);
         Ok(frame)
     }
 

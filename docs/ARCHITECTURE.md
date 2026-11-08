@@ -1225,7 +1225,8 @@ a source's frame that only items draw at the size those items draw it, not the f
 (#1139), so a 1080p still in a small box keeps a small texture, and a still image keeps
 no decoded copy once the program stage has uploaded it: the `jstream-stills` thread lets
 go of it then and decodes the file again when a draw needs it, so a render tick never
-decodes (`jstream-core`'s `still`). On the GPU path the engine's render
+decodes, and the program stage's cache keeps the still's texture while no mix draws it,
+so a cut back to it is drawn at once (`jstream-core`'s `still`). On the GPU path the engine's render
 thread composites on the platform's `GpuContext`, and capture moves onto it through
 `Capture::on_context`: each captured texture is imported once into the cache and
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it

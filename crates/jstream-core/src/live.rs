@@ -1059,7 +1059,7 @@ impl LiveSources {
                 _ => {
                     *versions = versions.saturating_add(1);
                     let size = still.size();
-                    let shown = stills.show(Arc::clone(&still), Arc::clone(&running.drawn));
+                    let shown = stills.show(Arc::clone(&still));
                     let frame = Frame::from_still(shown, *versions);
                     let frame = match running.extent {
                         Some(extent) => frame.placed_at(extent),
@@ -1115,18 +1115,12 @@ impl LiveSources {
     /// ([`Self::look`]).
     pub(crate) fn rest_undrawn(&mut self) {
         let plan = self.plan;
-        let mut rested = false;
         for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
             if running.looked != plan && !running.resting {
                 running.resting = true;
                 running.drawn.store(false, Ordering::Relaxed);
                 running.source.set_drawn(false);
-                rested = true;
             }
-        }
-        if rested {
-            // A still no mix draws gets its pixels back, so it is drawn at once when shown again.
-            self.stills.drawn_changed();
         }
     }
 

@@ -1395,15 +1395,16 @@ plan, so a 1080p still in a small box keeps a small texture (#1139). The snapsho
 `upload_drawn_if_needed`, which read its pixels only when the cache has to upload:
 `still::ShownStill` holds them while a draw may need them, and the `jstream-stills`
 thread lets go of them once the program stage's cache says it has what it needs, so a
-shown still costs its texture and no decoded copy (#1139, ADR-0117 §2). A program-stage
-draw that needs them again (a larger placement, an upload retired while nothing drew
-it) finds none, asks for them, and draws the texture it has (or nothing, with none)
+shown still costs its texture and no decoded copy (#1139, ADR-0117 §2). That cache
+keeps the still's upload while no mix draws it, for as long as the still is shown
+(`ResourceCache::keep_while` on `ShownStill::alive`, which turns false when the source
+is deleted or rebuilt), so a cut back to it draws it at once. A program-stage draw that
+needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none)
 until the thread has decoded the file again (`jstream_sources::Still::frame`); the
 render thread only reads atomics and unparks the thread, never decodes, and never frees
-the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). A still
-that no mix of the program stage has drawn for 2 s gets its pixels back (one deleted
-sooner costs no decode), so showing it again draws it at once; one shown again sooner
-is drawn once the thread has decoded it, a tick or two later. The snapshot thread's and the preview streams' compositors read the pixels
+the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). The
+decode takes the still's own decode lock, never the one `frame_if_held` takes, so a
+plan never waits for it. The snapshot thread's and the preview streams' compositors read the pixels
 themselves, decoding the file again when no one holds them (`ShownStill::read`). A file
 that fails to decode again (or now has another size) is logged once and tried again
 every 5 s; the still keeps drawing what its cache holds. On a render tick, a mix that isn't due claims its layers without
