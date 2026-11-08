@@ -43,14 +43,18 @@ const V6: &str = include_str!("fixtures/v6.json");
 const V7: &str = include_str!("fixtures/v7.json");
 
 /// A collection file at schema version 8: version 7, whose `browser` sources (it has
-/// none) would carry a checkbox per kind of page data (ADR-0124). It must keep loading as
-/// version 1 must.
+/// none) would carry a checkbox per kind of page data (ADR-0124). It must keep loading
+/// as version 1 must.
 const V8: &str = include_str!("fixtures/v8.json");
 
-/// A collection file at schema version 9, the current one: version 8 with keyframe scene
-/// `k`'s timing for item `i3` in transitions into it (ADR-0129). The same rule applies
-/// once version 10 exists.
+/// A collection file at schema version 9: version 8 with two controller bindings
+/// (ADR-0122). It must keep loading as version 1 must.
 const V9: &str = include_str!("fixtures/v9.json");
+
+/// A collection file at schema version 10, the current one: version 9 with keyframe scene
+/// `k`'s timing for item `i3` in transitions into it (ADR-0129). The same rule applies
+/// once version 11 exists.
+const V10: &str = include_str!("fixtures/v10.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -333,34 +337,6 @@ fn v5_graph() -> Graph {
     graph
 }
 
-/// The v8 fixture's collection, plus keyframe scene `k`'s timing for item `i3`: a
-/// 120 ms delay, a cubic-bezier easing and a 900 ms duration (ADR-0129), in one more
-/// batch: rev 8.
-fn v9_graph() -> Graph {
-    use jstream_protocol::{Bezier, Finite32, ItemEasing, KeyframeTiming};
-    let f = |v: f32| Finite32::new(v).expect("finite");
-    let mut graph = v6_graph();
-    let applied = graph.apply(
-        &[Edit::ItemSetTiming {
-            scene_id: SceneId::new("k"),
-            item_id: ItemId::new("i3"),
-            timing: KeyframeTiming {
-                delay_ms: Some(120),
-                easing: Some(ItemEasing::CubicBezier(Bezier {
-                    x1: f(0.2),
-                    y1: f(-0.4),
-                    x2: f(0.3),
-                    y2: f(1.4),
-                })),
-                duration_ms: Some(900),
-            },
-        }],
-        None,
-    );
-    assert!(applied.is_ok(), "{applied:?}");
-    graph
-}
-
 /// The v5 fixture's collection, plus timeline `t_intro` in scene `a`, which switches to
 /// scene `b`, shows an item and plays itself from a range, and hotkey `F6` that plays it
 /// (ADR-0115), in one more batch: rev 7.
@@ -410,6 +386,69 @@ fn v6_graph() -> Graph {
     graph
 }
 
+/// The v6 collection plus two controller bindings (ADR-0122): what version 9 saves.
+fn v9_graph() -> Graph {
+    use jstream_protocol::{Action, Trigger};
+    let mut graph = v6_graph();
+    let applied = graph.apply(
+        &[
+            Edit::BindingSet {
+                trigger: Trigger::MidiNote {
+                    note: 36,
+                    channel: Some(10),
+                    input: Some("Pads".into()),
+                },
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("b"),
+                    preset_id: None,
+                },
+            },
+            Edit::BindingSet {
+                trigger: Trigger::MidiCc {
+                    controller: 64,
+                    channel: None,
+                    input: None,
+                },
+                action: Action::ItemToggle {
+                    item_id: ItemId::new("i_screen"),
+                    scene_id: None,
+                },
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
+/// The v9 collection plus keyframe scene `k`'s timing for item `i3`: a 120 ms delay, a
+/// cubic-bezier easing and a 900 ms duration (ADR-0129), in one more batch: what
+/// version 10 saves.
+fn v10_graph() -> Graph {
+    use jstream_protocol::{Bezier, Finite32, ItemEasing, KeyframeTiming};
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let mut graph = v9_graph();
+    let applied = graph.apply(
+        &[Edit::ItemSetTiming {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("i3"),
+            timing: KeyframeTiming {
+                delay_ms: Some(120),
+                easing: Some(ItemEasing::CubicBezier(Bezier {
+                    x1: f(0.2),
+                    y1: f(-0.4),
+                    x2: f(0.3),
+                    y2: f(1.4),
+                })),
+                duration_ms: Some(900),
+            },
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -425,7 +464,8 @@ fn color(id: &str, follow: Option<&str>) -> Edit {
 
 /// The parity collection, plus `a_tint`, whose settings refer to `z_base`, which sorts
 /// after it, and scene `b` made a group, in one more batch: rev 2. That batch also
-/// deletes the virtual camera `vcam`, clears the hotkeys and moves output `rec` back to
+/// deletes the virtual camera `vcam`, clears the hotkeys and the controller bindings
+/// (ADR-0122) and moves output `rec` back to
 /// the master bus, which the parity collection gained after the fixture was written;
 /// `a_virtual_camera_round_trips`, `hotkeys_round_trip` and
 /// `an_outputs_audio_bus_round_trips` cover them.
@@ -454,7 +494,14 @@ fn fixture_graph() -> Graph {
             Edit::HotkeyClear {
                 chord: Chord::new("Ctrl+Digit1"),
             },
-        ],
+        ]
+        .into_iter()
+        .chain(
+            parity::bindings()
+                .into_iter()
+                .map(|b| Edit::BindingClear { trigger: b.trigger }),
+        )
+        .collect::<Vec<_>>(),
         None,
     );
     assert!(applied.is_ok(), "{applied:?}");
@@ -473,7 +520,7 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v9_graph().to_collection_json(), V9);
+    assert_eq!(v10_graph().to_collection_json(), V10);
 }
 
 #[test]
@@ -484,30 +531,53 @@ fn the_v9_fixture_loads_exactly() {
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
 }
 
-/// A version 8 file has no keyframe timing (ADR-0129): one there is refused, and without
+#[test]
+fn the_v10_fixture_loads_exactly() {
+    let expected = v10_graph();
+    let loaded = load(V10);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(9)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// A version 9 file has no keyframe timing (ADR-0129): one there is refused, and without
 /// it the file loads.
 #[test]
-fn a_version_8_keyframe_timing_is_refused() {
-    let mut value: Value = serde_json::from_str(V9).expect("the v9 fixture");
-    value["schema_version"] = json!(8);
+fn a_version_9_keyframe_timing_is_refused() {
+    let mut value: Value = serde_json::from_str(V10).expect("the v10 fixture");
+    value["schema_version"] = json!(9);
     assert_eq!(
         load(&value.to_string()).map(|g| g.rev()),
         Err(LoadError::Migration {
-            from: 8,
-            reason: "a version 8 keyframe override has no `timing`".into()
+            from: 9,
+            reason: "a version 9 keyframe override has no `timing`".into()
         })
     );
     let k = value["scenes"]
         .as_array()
         .and_then(|scenes| scenes.iter().position(|s| s["id"] == "k"))
-        .expect("the v9 fixture has scene `k`");
+        .expect("the v10 fixture has scene `k`");
     let overrides = value["scenes"][k]["overrides"]
         .as_array_mut()
         .expect("overrides");
     for o in overrides.iter_mut() {
         o.as_object_mut().map(|o| o.remove("timing"));
     }
-    assert_eq!(load(&value.to_string()).map(|g| g.rev()), Ok(Rev(8)));
+    assert_eq!(load(&value.to_string()).map(|g| g.rev()), Ok(Rev(9)));
+}
+
+/// Version 8 upgrades unchanged: it has no controller bindings, and one there is
+/// refused.
+#[test]
+fn the_v8_fixture_loads_with_no_bindings() {
+    let mut file: Value = serde_json::from_str(V8).unwrap_or_default();
+    file["bindings"] = json!([]);
+    assert_eq!(
+        load(&file.to_string()).map(|_| ()),
+        Err(LoadError::Migration {
+            from: 8,
+            reason: "a version 8 file has no `bindings`".into(),
+        })
+    );
 }
 
 #[test]
@@ -536,7 +606,7 @@ fn the_v7_migration_keeps_a_page_api_grant() {
         ],
     });
     assert_eq!(super::migrate(&mut file), Ok(()));
-    assert_eq!(file["schema_version"], json!(SCHEMA_VERSION));
+    assert_eq!(file["schema_version"], json!(super::SCHEMA_VERSION));
     let settings = |n: usize| file["sources"][n]["settings"].clone();
     assert_eq!(settings(0)["page_api_shared_values"], json!(true));
     assert_eq!(settings(0)["page_api_audio"], json!(true));

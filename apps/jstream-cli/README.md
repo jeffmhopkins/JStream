@@ -33,6 +33,8 @@ Contents (a first cut):
   `output set-key` for the stream key, also read the `BufRead` it is given).
 - **Exit codes** (`exit.rs`): one per failure kind, including one per protocol error code.
 - **Blocking** (`block.rs`): a thread-parking `block_on` for `Control`'s futures.
+- **Bench** (`bench.rs`): `jstream-cli bench`, a standard load run judged against pass
+  or fail gates ([Usage › Bench](#usage), #1220).
 - **MCP proxy** (`mcp.rs`): `jstream-cli mcp`, the stdio MCP proxy
   ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): `jstream-mcp`'s server over the
   same session the other commands open.
@@ -46,7 +48,7 @@ CLI runs against `--mock`, which needs a build with the `mock` cargo feature
 <a id="usage"></a>
 ## Usage
 <!-- @section
-covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs"]
+covers = ["apps/jstream-cli/src/args.rs", "apps/jstream-cli/src/exit.rs", "apps/jstream-cli/src/run.rs", "apps/jstream-cli/src/mcp.rs", "apps/jstream-cli/src/bench.rs"]
 -->
 
 ```sh
@@ -100,7 +102,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `collection info` | query `collection.info` (the project file the engine saves to, and the recent ones, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)) |
 | `collection open <path>`, `collection new <path>` | action `collection.open`, `collection.new` (an absolute path on the engine's machine; outputs stop and undo is cleared) |
 | `collection save-as <path>` | action `collection.save_as`; never replaces a file |
-| `pair` | action `pairing.start`: prints a one-time code to enter on the device |
+| `pair` | action `pairing.start`: prints a one-time code to enter on the device, and, when the server listens on the network, its addresses and certificate fingerprint |
 | `device list` | query `device.list` |
 | `device revoke <device-id>` | action `device.revoke` (also closes the device's connections) |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
@@ -160,7 +162,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   A `scene.switch` bound here names no transition preset (MCP and the WebSocket API
   can bind one), and the `hotkeys:` table lists a bound preset after the scene.
   Applying a batch prints `removed hotkey <chord>` for each binding its deletes
-  removed, and `dropped the overrides of item <item-id> in scene <scene-id>` for each
+  removed, `removed binding <trigger>` (`MIDI note 36 on channel 10 from Pads`) for
+  each controller binding (the CLI has no command to bind one yet), and `dropped the overrides of item <item-id> in scene <scene-id>` for each
   keyframe override it dropped. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
@@ -229,7 +232,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Pairing** ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): `pair`
   prints `pairing code: XXXX-XXXX` and how long it stays open; the user enters it on the
   device, which posts it to the server's `/api/v1/pair` for a device token of its own
-  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). The code is
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). When the
+  server also listens on the local network, `pair` then prints the pairing page on each
+  of its addresses (`open on the device: <url>/pair`), the certificate's fingerprint, and that the
+  certificate warning is to be passed only if the fingerprint matches
+  ([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)). The code is
   printed because it is the answer, and is never logged. `device list` prints a table
   of `ID`, `NAME` and when each was paired and last used (Unix seconds), or `no paired
   devices`; `device revoke <id>` prints `device <id> revoked (<request>)`. The server
@@ -240,7 +247,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   `--json` (found among the global options even when parsing fails): an object
   `{"error": {"code": …, "message": …}}`. For an engine error it is the protocol's wire
   error, with its detail fields; otherwise the code is one of the CLI's own, `usage`,
-  `disconnected` or `io`, which appear only in JSON output.
+  `disconnected`, `io`, `gates_failed` or `bench_failed`, which appear only in JSON output.
 - **Events** are printed and flushed one by one until `--count` is reached or the
   stream ends. A stream that ends means the engine went away, so it exits with code 3.
   When the server dropped events because the CLI read too slowly, it prints
@@ -277,6 +284,55 @@ for example:
 - **Exit:** 0 when stdin ends, whatever the engine did meanwhile; 1 if stdin or stdout
   fails (a closed stdout exits silently).
 
+**Bench.** `jstream-cli bench --out <dir>` puts a standard load on the engine it
+connects to and judges the run, so a change to the render, encode or output path can be
+measured the same way on every machine (#1220).
+
+- **Scenarios** use only built-in sources that need no hardware, so every run draws the
+  same thing. `basic` is two scenes, each a solid colour and a running timer. `layered`
+  is two scenes of an animated backdrop, three shapes blended over it with transparency,
+  a nested scene tilted in 3D and a timer. `--scenario all` (the default) runs both, one
+  after the other. Every ID the bench creates starts `bench_<scenario>_<pid>_`.
+- **A run** creates its scenes and sources in one batch, puts the first scene on program
+  with a cut, and starts an MP4 recording of the program to
+  `<dir>/bench-<scenario>.mp4`. The measured window opens on the first `stats.tick` with
+  a recorded frame (within 20 seconds, or the run fails) and lasts `--seconds` (5 to 60,
+  default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
+  switches to the other scene with `scene.switch_and_watch` and the `--preset`
+  transition (default `fade`), saving the frame sheet as `<dir>/switch-<n>.png`. At the
+  end it waits for one more `stats.tick`, reads `profile.get` over the window, then
+  stops and deletes the recording, puts back the scene that was on program, and deletes
+  what it created. It cleans up after a failure too.
+- **Gates.** Every count is over the window, except two that only make the gates
+  stricter: the recording's own dropped frames and packets are its run's totals, so
+  they include its start before the first recorded frame, and `profile.get` covers the
+  last `--seconds` before it is read, up to one more tick after the window closes. By
+  default (the alpha.5 bar) a run fails on any dropped frame or packet at any stage of
+  `stats.tick`'s drop counts or the recording's own, a skipped render tick, a program
+  frame over its budget, a recording under 98% of the program's frame rate, or a
+  switch without a frame sheet. `--gates
+  <file>` reads a JSON object that overrides the limits it names: the counts
+  `capture_frames`, `audio_frames`, `render_ticks`, `encode_frames`, `encode_blocks`,
+  `output_packets`, `recording_dropped_frames`, `recording_dropped_packets` and
+  `failed_switches`, `min_fps_ratio` (the share of the program's rate, 0.98) and
+  `max_over_budget_pct` (0). An unknown field is a usage error.
+- **Output.** It prints and writes `<dir>/summary.md`, a table per scenario of each
+  gate's measured value, limit and verdict, and writes `<dir>/report.json` with
+  everything measured: the drops, the recording's frames, rate, bit rate and drops, the
+  switches and the window's whole `profile.get`. It exits 0 when every gate passed and 4
+  when one failed (the files are written either way). It exits 5 when a run couldn't
+  finish: the recording sent no frame within 20 seconds (on an engine with no H.264
+  encoder, say), or the engine answered with something the bench can't read. An engine
+  that refuses the scenario exits with that error's code. `--json` changes only the
+  error format.
+- **The engine writes the recording**, to the absolute path the CLI made of `--out`
+  (not a Windows `\\?\` one, which the engine refuses). So the engine must be able to
+  write there: it runs on the same machine, or the path is one both share. Otherwise
+  its recording fails to start and the run exits 5.
+- **Not yet:** media, browser, display and webcam scenarios; per-output and preview
+  stream stats in `profile.get`; the clients' received frame rate; an image-quality
+  probe; a CI job (#1220).
+
 **Exit codes.** Provisional until the maintainer confirms the scheme
 ([open question 4](#design)); after that, a released code keeps its meaning.
 
@@ -286,6 +342,8 @@ for example:
 | 1 | The output could not be written, or `mcp` or `output set-key` could not read stdin (a closed pipe exits silently) |
 | 2 | Usage: the command line could not be parsed, or names no engine or no readable token file |
 | 3 | `Disconnected`: no connection to the engine (unreachable, or it refused the token, `Origin` or `Host`), or it was lost (whether the call took effect is unknown) |
+| 4 | `bench` ran, and at least one of its gates failed |
+| 5 | `bench` couldn't finish a run: the recording sent no frame, or the engine answered with something it can't read |
 | 10 | `unsupported_version` |
 | 11 | `handshake_required` |
 | 12 | `malformed` |
@@ -362,6 +420,14 @@ depends_on = ["crates/jstream-control/README.md#design"]
   unknown source or a zero canvas is left for the engine to reject. MCP clients write
   their own edits, so the protocol's `item.add` doc tells them to send the same
   geometry.
+- **The bench is a client like the rest.** It measures only what the protocol reports
+  (`stats.tick`, `profile.get`, `scene.switch_and_watch`), so it runs against any engine
+  the CLI can reach that can write to `--out`, and needs no engine code. It reads events between its calls by
+  polling the stream with a no-op waker, which never blocks, and decodes the frame
+  sheets' base64 PNG by hand rather than adding a crate for it. Its tests run it on the
+  mock with synthetic `stats.tick` events: the mock has no profile and no frame sheets,
+  so they check the run's shape, the report and the cleanup, and unit tests check the
+  gate maths.
 - **Errors are typed, not `anyhow`.** Each failure must map to its own exit code, so
   `CliError` keeps the `ControlError` (and its protocol code) instead of erasing it.
   `jstream-mcp` reports a failed read and a failed write as the same transport error,
@@ -386,8 +452,9 @@ depends_on = ["crates/jstream-control/README.md#design"]
    its state (a file option) until a real engine can be reached?
 3. **The `mock` feature after the WebSocket client.** Keep it as a scripting sandbox,
    or remove it once an engine host serves the WebSocket API.
-4. **Exit codes.** The numbering (2 usage, 3 disconnected, 10 and up for protocol
-   codes) is provisional until the maintainer confirms it. A refused token exits 3
+4. **Exit codes.** The numbering (2 usage, 3 disconnected, 4 a failed bench gate, 5 a bench
+   that couldn't run, 10 and up
+   for protocol codes) is provisional until the maintainer confirms it. A refused token exits 3
    with a reason naming HTTP 401; a code of its own may be clearer for scripts.
 5. **Defaults.** No default `--url` (the daemon's port is not chosen yet; it listens
    on a free port unless given `--port`) and no default token file (it will be in the

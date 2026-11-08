@@ -309,8 +309,9 @@ impl Collection {
     }
 
     /// `scene.set_camera` (ADR-0094), as the engine applies it: checked, a keyframe
-    /// scene's override only while its parent has a camera, and removing a parent's
-    /// camera drops its keyframes' overrides, which the inverse restores after it.
+    /// scene's override allowed whether or not its parent has a camera (ADR-0128), and
+    /// removing a parent's camera drops its keyframes' overrides, which the inverse
+    /// restores after it.
     fn set_scene_camera(
         &mut self,
         scene_id: &SceneId,
@@ -318,40 +319,27 @@ impl Collection {
         at: usize,
     ) -> Result<Vec<Edit>, ProtocolError> {
         let si = self.existing_scene(scene_id)?;
-        if let Some(camera) = camera {
-            if let Err(error) = camera.validate() {
-                let field = match error {
-                    jstream_protocol::GeometryError::FieldOfView => "camera.fov_deg",
-                    jstream_protocol::GeometryError::CameraAtTarget => "camera.target",
-                    jstream_protocol::GeometryError::FocusDistance => "camera.focus_px",
-                    jstream_protocol::GeometryError::Blur => "camera.blur_px",
-                    _ => "camera",
-                };
-                return Err(invalid(at, field, error.to_string()));
-            }
-            if let Some(parent) = self.scenes[si].variant_of.clone() {
-                let parent_has_one = self
-                    .scenes
-                    .iter()
-                    .any(|s| s.id == parent && s.camera.is_some());
-                if !parent_has_one {
-                    return Err(invalid(
-                        at,
-                        "camera",
-                        format!(
-                            "keyframe scene `{scene_id}` shows its parent `{parent}`, which has \
-                             no camera; set one on `{parent}` first"
-                        ),
-                    ));
-                }
-            }
+        // A keyframe of a 2D scene may have a camera of its own (ADR-0128).
+        if let Some(camera) = camera
+            && let Err(error) = camera.validate()
+        {
+            let field = match error {
+                jstream_protocol::GeometryError::FieldOfView => "camera.fov_deg",
+                jstream_protocol::GeometryError::CameraAtTarget => "camera.target",
+                jstream_protocol::GeometryError::FocusDistance => "camera.focus_px",
+                jstream_protocol::GeometryError::Blur => "camera.blur_px",
+                _ => "camera",
+            };
+            return Err(invalid(at, field, error.to_string()));
         }
         let old = std::mem::replace(&mut self.scenes[si].camera, camera.copied());
         let mut inverse = vec![Edit::SceneSetCamera {
             scene_id: scene_id.clone(),
             camera: old,
         }];
-        if camera.is_none() && self.scenes[si].variant_of.is_none() {
+        // A parent that had a camera and loses it takes its keyframes' overrides with it
+        // (ADR-0094 §6); a 2D parent's keyframes keep their own (ADR-0128).
+        if camera.is_none() && old.is_some() && self.scenes[si].variant_of.is_none() {
             for scene in &mut self.scenes {
                 if scene.variant_of.as_ref() == Some(scene_id)
                     && let Some(dropped) = scene.camera.take()

@@ -1,6 +1,9 @@
 //! The listener: accepts TCP connections, bounds how many are open at once
 //! (`ServerConfig::max_tcp_connections`), and bounds how long each may take to send an
-//! upgrade request the server accepts (`ServerConfig::header_read_timeout`).
+//! upgrade request the server accepts (`ServerConfig::header_read_timeout`). The network
+//! listener (`network.rs`) wraps one of its own in TLS, with its own pool of permits.
+//! Each connection's [`Meta`] tells the handlers its peer, the address it arrived on
+//! and which listener took it.
 //!
 //! **Open connections.** Every accepted stream holds a permit from one semaphore until
 //! it is dropped, whatever it carries: a request not yet authenticated, an HTTP
@@ -38,6 +41,8 @@ use tokio::time::{Instant, Sleep};
 /// which must send an accepted upgrade request within `header_read_timeout`.
 pub(crate) struct Limited {
     inner: TcpListener,
+    /// The listener's own address, for a connection whose local address can't be read.
+    local: SocketAddr,
     header_read_timeout: Duration,
     /// One permit per open connection.
     open: Arc<Semaphore>,
@@ -52,8 +57,12 @@ impl Limited {
         max_tcp_connections: usize,
         header_read_timeout: Duration,
     ) -> Limited {
+        let local = inner
+            .local_addr()
+            .unwrap_or(SocketAddr::from(([127, 0, 0, 1], 0)));
         Limited {
             inner,
+            local,
             header_read_timeout,
             open: Arc::new(Semaphore::new(
                 max_tcp_connections.min(Semaphore::MAX_PERMITS),
@@ -84,9 +93,11 @@ impl Listener for Limited {
             };
             self.full = false;
             let at = Instant::now();
+            let local = stream.local_addr().unwrap_or(self.local);
             let guarded = Guarded {
                 io: stream,
                 peer,
+                local,
                 at,
                 deadline: Box::pin(tokio::time::sleep_until(at + self.header_read_timeout)),
                 request_read: Arc::new(AtomicBool::new(false)),
@@ -106,6 +117,8 @@ impl Listener for Limited {
 pub(crate) struct Guarded {
     io: TcpStream,
     peer: SocketAddr,
+    /// The address the connection arrived on.
+    local: SocketAddr,
     /// When the connection was accepted.
     at: Instant,
     deadline: Pin<Box<Sleep>>,
@@ -117,6 +130,24 @@ pub(crate) struct Guarded {
 }
 
 impl Guarded {
+    /// What the handlers learn about this connection, on the network listener when
+    /// `network`.
+    pub(crate) fn meta_on(&self, network: bool) -> Meta {
+        Meta {
+            peer: self.peer,
+            local: self.local,
+            at: self.at,
+            request_read: Arc::clone(&self.request_read),
+            network,
+        }
+    }
+
+    /// [`meta_on`](Guarded::meta_on) the network listener, which wraps it in TLS.
+    #[cfg(feature = "tls")]
+    pub(crate) fn meta(&self) -> Meta {
+        self.meta_on(true)
+    }
+
     /// An error if the deadline has passed and the request hasn't been accepted.
     /// Otherwise the deadline's timer is registered with `cx`, so a read or write that
     /// waits is woken when it passes.
@@ -188,30 +219,59 @@ impl AsyncWrite for Guarded {
     }
 }
 
-/// What the upgrade handler learns about its connection (axum's `ConnectInfo`).
+/// What the handlers learn about a connection: axum's `ConnectInfo`.
+pub(crate) type Accepted = Meta;
+
+/// What the handlers learn about their connection (axum's `ConnectInfo`).
 #[derive(Clone, Debug)]
-pub(crate) struct Accepted {
-    /// The peer's address, for logging only.
+pub(crate) struct Meta {
+    /// The peer's address. The gate decides on the headers; the network listener also
+    /// counts pairing attempts by it.
     pub(crate) peer: SocketAddr,
+    /// The address the connection arrived on: on the network listener, a `Host` naming
+    /// it is accepted.
+    pub(crate) local: SocketAddr,
     /// When the connection was accepted: the handshake timeout counts from here.
     pub(crate) at: Instant,
     request_read: Arc<AtomicBool>,
+    /// Whether it came to the network listener (ADR-0104) rather than the host's own.
+    pub(crate) network: bool,
 }
 
-impl Accepted {
+impl Meta {
     /// Disarms the connection's header-read deadline: its request was accepted.
     pub(crate) fn request_read(&self) {
         self.request_read.store(true, Ordering::Release);
     }
+
+    /// Which side of the gate the connection is on.
+    pub(crate) fn on(&self) -> On {
+        if self.network {
+            On::Network(self.local)
+        } else {
+            On::Host
+        }
+    }
 }
 
-impl Connected<IncomingStream<'_, Limited>> for Accepted {
+/// Which listener a request came to, for the gate.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum On {
+    /// The host's own listener: loopback, or wherever `ServerConfig::bind` says.
+    Host,
+    /// The network listener, on this local address.
+    Network(SocketAddr),
+}
+
+impl Connected<IncomingStream<'_, Limited>> for Meta {
     fn connect_info(stream: IncomingStream<'_, Limited>) -> Self {
-        let io = stream.io();
-        Accepted {
-            peer: io.peer,
-            at: io.at,
-            request_read: Arc::clone(&io.request_read),
-        }
+        stream.io().meta_on(false)
+    }
+}
+
+#[cfg(feature = "tls")]
+impl Connected<IncomingStream<'_, crate::network::TlsLimited>> for Meta {
+    fn connect_info(stream: IncomingStream<'_, crate::network::TlsLimited>) -> Self {
+        stream.io().meta().clone()
     }
 }

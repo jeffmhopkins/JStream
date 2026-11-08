@@ -10,6 +10,7 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::audio::{AudioFollow, BusMonitor};
+use crate::binding::Trigger;
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
@@ -828,9 +829,10 @@ pub enum Edit {
     /// 3D scene: its items are placed in one 3D space by their geometry and seen through
     /// the camera. On a keyframe scene it writes or, with `camera` omitted, removes the
     /// keyframe's override of its parent's camera. `invalid_argument` for a field of view
-    /// outside 1 to 170, a position within 0.001 px of the target, a coordinate past the
-    /// drawable bound, or a camera on a keyframe scene whose parent has none. Removing a
-    /// parent's camera also removes its keyframe scenes' overrides. Inverse:
+    /// outside 1 to 170, a position within 0.001 px of the target, or a coordinate past
+    /// the drawable bound. A keyframe of a 2D scene may have a camera of its own
+    /// (ADR-0128). Removing a parent's camera also removes its keyframe scenes'
+    /// overrides; a removal on a parent that has none removes nothing. Inverse:
     /// `scene.set_camera` with the previous camera, then each removed override.
     #[serde(rename = "scene.set_camera")]
     SceneSetCamera {
@@ -960,6 +962,30 @@ pub enum Edit {
     HotkeyClear {
         /// The chord to unbind.
         chord: Chord,
+    },
+    /// Binds a controller trigger, such as a MIDI note, to an action (since 0.96,
+    /// ADR-0122 decision 1). The engine runs the action itself when an input it reads
+    /// sends the trigger, on the first frame at or after the message's time; running it
+    /// never adds to an undo history. Rejected with `invalid_argument` at
+    /// `trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at
+    /// `action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with
+    /// `already_exists` (entity `binding`) for a trigger that is already bound
+    /// (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`
+    /// for an object the action names that doesn't exist. Deleting that object later
+    /// removes the binding with it, as for hotkeys. Inverse: `binding.clear`.
+    #[serde(rename = "binding.set")]
+    BindingSet {
+        /// What fires it.
+        trigger: Trigger,
+        /// The action request it runs, checked as an `action` call is.
+        action: Action,
+    },
+    /// Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that
+    /// isn't bound. Inverse: `binding.set` with its action.
+    #[serde(rename = "binding.clear")]
+    BindingClear {
+        /// The trigger to unbind.
+        trigger: Trigger,
     },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
@@ -1291,6 +1317,8 @@ impl Edit {
             Edit::SourceSetMeta { .. } => "source.set_meta",
             Edit::HotkeySet { .. } => "hotkey.set",
             Edit::HotkeyClear { .. } => "hotkey.clear",
+            Edit::BindingSet { .. } => "binding.set",
+            Edit::BindingClear { .. } => "binding.clear",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",
