@@ -110,6 +110,7 @@ jstream-render = { path = "crates/jstream-render" }
 jstream-server = { path = "crates/jstream-server" }
 jstream-sources = { path = "crates/jstream-sources" }
 jstream-vcam-proto = { path = "crates/jstream-vcam-proto" }
+jstream-visca = { path = "crates/jstream-visca" }
 jstream-youtube = { path = "crates/jstream-youtube" }
 # `clock_gettime(CLOCK_MONOTONIC)` and `close` for the Linux backends (ADR-0060). Already
 # in the tree under tokio, getrandom and others; no build script compiling C.

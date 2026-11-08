@@ -726,9 +726,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`EffectsSpaceCheck`) sends `item.set_effects_space`
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
   after the item is placed. It isn't shown under a keyframe's effects, since the space
-  belongs to the item in every scene. The Add filter dialog lists the vignette and bloom
+  belongs to the item in every scene. The Add filter dialog lists the vignette, bloom and border
   under Style. A kind with presets (`filter_presets.rs`: the vignette's Subtle, Cinematic
-  and Spotlight) has a Preset select above its form in the Filters window, which sets the
+  and Spotlight, the border's Card, Neon and Broadcast frame) has a Preset select above its form in the Filters window, which sets the
   preset's values and every other setting back to its default in one `filter.set_settings`.
 - **The shell** is the header bar over the workspace. When the desktop app's launch
   check finds a newer release, a dismissable notice sits under the header (`updates.rs`).

@@ -1650,12 +1650,15 @@ crate's geometry goldens do: on a cropped item, against the same vignette on its
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
 item turned 90°, whose ellipse stands with its box. Another draws a glow and a drop shadow
 on an opaque item, which show past its box in the outset (#1226), and a vignette
-before a glow, which still frames the box. Each `stats.tick` reports what
+before a glow, which still frames the box, and a rounded `border` whose outer stroke
+rings an opaque item's box (#1227). Each `stats.tick` reports what
 they cost (ADR-0065 §7) in its `chains`: `Shot::chain_cost` walks the chain phase's
 steps (`schedule_chains`) and counts each scene chain as its canvas-sized composite
 plus one layer and pass per filter, and each item's effects as its box layer and pass
-plus one per effect, with each layer's texture bytes at the sizes `Chains` makes them
-(`Chain::layer_sizes`). It reads the plan the render hub holds, on the control side,
+plus one per effect, and one more where the chain is padded, for the copy into the
+grown layer (`Chain::pad_layer`, ADR-0125, #1285), with each layer's texture bytes at
+the sizes `Chains` makes them (`Chain::layer_sizes`). A filter's own scratch layers (a
+blur's) are not counted. It reads the plan the render hub holds, on the control side,
 so the render thread does no extra work. Not counted: a source's own chain, a scene a
 `scene_mask` or a `scene` source's chain reads, and the canvas-sized layer a nested scene without a chain is drawn
 into for an item's effects (it takes the place of the layer it would be drawn into
