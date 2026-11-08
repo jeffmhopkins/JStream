@@ -18,6 +18,40 @@
 //! shipped DLL by content, not by path, so an update whose DLL changed is reported as
 //! [`VcamRegistration::Outdated`] and re-registering is a new opt-in. The path, content
 //! and DACL decisions are plain data, so they are tested on every platform.
+//!
+//! # Behaviour
+//!
+//! **`register_vcam`**, **`unregister_vcam`** and **`vcam_registration`**, the virtual
+//! camera's optional registration, from an administrators-only copy
+//! (ADR-0066,
+//! ARCH › Packaging). Only a host's explicit
+//! opt-in step calls the first two. Frame Server ignores per-user registration, so both
+//! need an elevated process (`is_elevated`); `run_elevated` relaunches the current
+//! executable with the `runas` verb, hidden, and waits for its exit code, which is the one
+//! UAC prompt (a declined prompt is `InvalidState`).
+//! - **Register:** `register_vcam` creates `vcam_copy_dir`, `%ProgramFiles%\JStream\vcam\`
+//!   (`program_files` is `FOLDERID_ProgramFiles`), and replaces its DACL with `COPY_DACL`,
+//!   protected so nothing is inherited: SYSTEM and Administrators full control, LOCAL
+//!   SERVICE (Frame Server's account) and Users read and execute. It copies the shipped
+//!   DLL in under a staging name, gives the file the same protected DACL, renames a
+//!   previous copy aside (Windows lets a loaded DLL be renamed but not replaced) and moves
+//!   the new one into place, then deletes the leftovers it can. Last it writes
+//!   `HKLM\Software\Classes\CLSID\{clsid}` with `InprocServer32` naming the copy and
+//!   `ThreadingModel = Both`, the path written last. The DLL in the user-writable portable
+//!   folder is never registered (#242).
+//! - **Unregister:** `unregister_vcam` deletes the class keys, then the copy's folder, and
+//!   `%ProgramFiles%\JStream` if that is then empty. A copy Frame Server still has loaded
+//!   makes it fail after the keys are gone; running it again finishes it.
+//! - **Status:** `vcam_registration` needs no elevation. It reads the registered path and
+//!   compares it with the copy's (ignoring case, `\\?\`, quotes and `/`), then the copy's
+//!   content with the DLL the host ships (`VCAM_DLL`, beside the executable). The answer
+//!   is `Missing`, `Current`, or `Outdated` with why: `Elsewhere` (a DLL outside the
+//!   folder, such as one an older JStream registered from its portable folder),
+//!   `Differs` (an update) or `CopyMissing`.
+//!
+//! The path, content and DACL decisions are tested on every platform. CI's Windows job
+//! runs the OS calls that need no elevation (reading the registration, finding Program
+//! Files, creating the DACL's SIDs); the elevated steps are checked on hardware.
 
 use std::io::{self, Read};
 use std::path::{Path, PathBuf};

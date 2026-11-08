@@ -12,11 +12,12 @@ use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::icons::Icon;
+use crate::panels::custom_shader;
 use crate::panels::source_properties::PropertiesDialog;
 use crate::store::{Collection, Sizes, Studio, apply};
 use crate::workspace::DockState;
 use jstream_control::protocol::{
-    Canvas, Edit, ItemGeometry, ItemId, KindCategory, KindSummary, SceneId, Settings, Size,
+    Action, Canvas, Edit, ItemGeometry, ItemId, KindCategory, KindSummary, SceneId, Settings, Size,
     SourceId, SourceKind, Vec2,
 };
 use leptos::prelude::*;
@@ -83,6 +84,16 @@ impl SourceType {
 
 /// The Scene type's key: no built-in kind has this ID, which isn't a valid one.
 const SCENE_KEY: &str = "#scene";
+
+/// The Shader type's kind (ADR-0135): no kind has this ID. Creating one writes a new
+/// `custom-<n>` pack from [`custom_shader::SOURCE_TEMPLATE`] and creates a source of its
+/// kind.
+pub const NEW_SHADER: &str = "#shader";
+
+/// Whether `kind` is a shader source made in the custom shader editor.
+fn custom_source(kind: &str) -> bool {
+    custom_shader::pack_of(kind).is_some()
+}
 
 /// A known kind's name, description, icon, group and native size.
 type Known = (
@@ -272,6 +283,16 @@ pub fn catalogue(kinds: &[KindSummary], placed: &[&str]) -> Vec<SourceType> {
     let mut types: Vec<SourceType> = listed
         .chain(unlisted.into_iter().map(|id| (id, id, false)))
         .map(|(kind_id, engine_name, creatable)| match known(kind_id) {
+            _ if custom_source(kind_id) => SourceType {
+                kind: Some(kind_id.to_owned()),
+                name: engine_name.to_owned(),
+                description: "A shader source written in the shader editor.".into(),
+                icon: "sparkle",
+                category: Category::Generated,
+                native: Some((1920.0, 1080.0)),
+                creatable,
+                rank: ORDER.len() + 1,
+            },
             Some((name, description, icon, category, native)) => SourceType {
                 kind: Some(kind_id.to_owned()),
                 name: name.into(),
@@ -297,6 +318,22 @@ pub fn catalogue(kinds: &[KindSummary], placed: &[&str]) -> Vec<SourceType> {
             },
         })
         .collect();
+    // Write your own (ADR-0135), once the engine lists kinds, as Add filter offers a
+    // custom shader.
+    if !kinds.is_empty() {
+        types.push(SourceType {
+            kind: Some(NEW_SHADER.into()),
+            name: "Shader".into(),
+            description: "Write your own WGSL, compiled live: animated graphics drawn on the \
+                          GPU. It becomes an effect pack any scene can add."
+                .into(),
+            icon: "sparkle",
+            category: Category::Generated,
+            native: Some((1920.0, 1080.0)),
+            creatable: true,
+            rank: ORDER.len(),
+        });
+    }
     types.push(SourceType {
         kind: None,
         name: "Scene".into(),
@@ -312,12 +349,18 @@ pub fn catalogue(kinds: &[KindSummary], placed: &[&str]) -> Vec<SourceType> {
 }
 
 /// The name a new source gets when its field is left empty: the type's name and one
-/// more than the number of sources of that kind.
+/// more than the number of sources of that kind. A new Shader counts every shader
+/// source written in the editor, since each has a kind of its own.
 pub fn default_name(source_type: &SourceType, collection: &Collection) -> String {
+    let shader = source_type.kind.as_deref() == Some(NEW_SHADER);
     let count = collection
         .sources
         .iter()
-        .filter(|s| matches!(&s.kind, SourceKind::Builtin { kind } if Some(kind) == source_type.kind.as_ref()))
+        .filter(|s| match &s.kind {
+            SourceKind::Builtin { kind } if shader => custom_source(kind),
+            SourceKind::Builtin { kind } => Some(kind) == source_type.kind.as_ref(),
+            _ => false,
+        })
         .count();
     format!("{} {}", source_type.name, count + 1)
 }
@@ -686,6 +729,68 @@ fn AddSourceBody(
             };
             let item_id = ids.item.clone();
             let source_id = ids.source.clone();
+            // A new Shader (ADR-0135): its pack first, then a source of its kind, whose
+            // Properties open with the shader editor over them.
+            if t.kind.as_deref() == Some(NEW_SHADER) && choice == Choice::New {
+                let given = name.get_untracked();
+                let scene_id = scene_id.clone();
+                close();
+                spawn_local(async move {
+                    let pack =
+                        match custom_shader::write_new(studio, &s, custom_shader::Mode::Source)
+                            .await
+                        {
+                            Ok(pack) => pack,
+                            Err(error) => {
+                                studio.problem.set(Some(error));
+                                return;
+                            }
+                        };
+                    let named = studio.collection.with_untracked(|c| {
+                        c.as_ref().map(|c| match given.trim() {
+                            "" => default_name(&t, c),
+                            given => given.to_owned(),
+                        })
+                    });
+                    let made = SourceType {
+                        kind: Some(custom_shader::kind_of(&pack)),
+                        ..t
+                    };
+                    let edits = studio.collection.with_untracked(|c| {
+                        c.as_ref().map(|c| {
+                            studio.sizes.with_untracked(|sizes| {
+                                add_edits(
+                                    &made,
+                                    &Choice::New,
+                                    &named.unwrap_or_default(),
+                                    &scene_id,
+                                    ids,
+                                    c,
+                                    sizes,
+                                )
+                            })
+                        })
+                    });
+                    let Some(edits) = edits.filter(|e| !e.is_empty()) else {
+                        // The new shader's pack would be left with no source.
+                        studio.act(&s, Action::PackDelete { pack });
+                        return;
+                    };
+                    studio.select_item(Some(item_id));
+                    match apply(&s, edits, None).await {
+                        Ok(_) => {
+                            if let Some(props) = props {
+                                props.open_shader(source_id);
+                            }
+                        }
+                        Err(error) => {
+                            studio.act(&s, Action::PackDelete { pack });
+                            studio.report(&error);
+                        }
+                    }
+                });
+                return;
+            }
             let edits = studio.collection.with_untracked(|c| {
                 c.as_ref().map(|c| {
                     studio.sizes.with_untracked(|sizes| {
@@ -966,6 +1071,7 @@ mod tests {
             kind("image", "Image"),
             kind("audio_input", "Audio input"),
             kind("display", "Display capture"),
+            kind("custom-2/shader", "Plasma"),
             KindSummary {
                 category: KindCategory::AudioFilter,
                 ..kind("gain", "Gain")
@@ -1102,6 +1208,43 @@ mod tests {
         assert!(found("zebra").is_empty());
     }
 
+    /// Shader writes a new shader source (ADR-0135), offered once the engine lists kinds;
+    /// a shader source written before is listed by its name beside it, and a new one's
+    /// name counts them all.
+    #[test]
+    fn a_shader_is_offered_with_the_shader_sources_written_before() {
+        let types = catalogue(&engine_kinds(), &[]);
+        let shader = types
+            .iter()
+            .find(|t| t.kind.as_deref() == Some(NEW_SHADER))
+            .expect("Shader is offered");
+        assert!(shader.creatable);
+        assert_eq!(shader.native, Some((1920.0, 1080.0)));
+        let plasma = types
+            .iter()
+            .find(|t| t.kind.as_deref() == Some("custom-2/shader"))
+            .expect("listed");
+        assert_eq!(
+            (plasma.icon, plasma.category),
+            ("sparkle", Category::Generated)
+        );
+        assert!(
+            catalogue(&[], &[])
+                .iter()
+                .all(|t| t.kind.as_deref() != Some(NEW_SHADER)),
+            "not before the engine lists its kinds"
+        );
+        let mut c = collection();
+        c.sources.push(source(
+            "plasma",
+            "Plasma 1",
+            SourceKind::Builtin {
+                kind: "custom-2/shader".into(),
+            },
+        ));
+        assert_eq!(default_name(shader, &c), "Shader 2");
+    }
+
     #[test]
     fn the_types_follow_the_prototype_groups_and_order() {
         let types = catalogue(&engine_kinds(), &[]);
@@ -1113,6 +1256,8 @@ mod tests {
                 ("Audio input", Category::Audio),
                 ("Image", Category::MediaAndWeb),
                 ("Text", Category::Generated),
+                ("Shader", Category::Generated),
+                ("Plasma", Category::Generated),
                 ("YouTube chat", Category::Other),
                 ("Scene", Category::Scenes),
             ]

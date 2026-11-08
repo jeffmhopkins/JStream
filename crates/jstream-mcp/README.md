@@ -156,8 +156,9 @@ server sent (each at most 512 characters). Nothing delimits the server's words t
 the description and the server instructions say the whole `reason` is untrusted. A
 window's `name` in a `capture.targets` result is its title (or, on macOS, its
 application's name), set by the application that owns it, in a field that isn't
-`remote_`-prefixed ([ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md));
-the `capture` tool's description and the server instructions say it is untrusted too. A
+`remote_`-prefixed ([ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md)),
+and so is a device's, set by its driver (protocol 0.90);
+the `capture` tool's description and the server instructions say they are untrusted too. A
 `font.list` font's `remote_family` and `remote_style` come from the font file, and the
 `font` tool's description says they are data, never instructions
 ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)). A `profile.get` thread's
@@ -181,12 +182,14 @@ title-safe area, alignment and spacing, a `backdrop` source rather than a flat c
 `text` faces, sizes, letter spacing and shadow to use, restrained colour and contrast,
 recipes for a lower third, a ticker (`scroll` with a negative speed and a `gap_x`) and
 a countdown or clock (`timer`, one size whatever it shows), grouping a multi-part graphic as a nested scene whose item's
-effects clip and shadow it as one, fitting an item to its text's `source.sizes`, a look no built-in filter makes as a custom shader the Filters window's shader editor opens (pack `custom-<word>`, effect `shader` in `shader.wgsl`, a `// @name` line and a `// @param` line per setting matching the manifest, #1232),
+effects clip and shadow it as one, fitting an item to its text's `source.sizes`, a look no built-in filter makes as a custom shader the Filters window's shader editor opens (pack `custom-<word>`, effect `shader` in `shader.wgsl`, a `// @name` line and a `// @param` line per setting matching the manifest, and a `// @renamed <old> <new>` line with a version bump and `renames` for a renamed setting, #1232, #1295), and a generated picture as a shader source the same editor opens from Properties (one `[[source]] shader` with one pass `previous`, and the `@size`, `@feedback`, `@audio` and `scene` lines, ADR-0135),
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
 keyframe variants and blend modes (`item.set_blend`), the light and framing filters
 (`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
-and the `vignette`'s blends, shapes and three looks, #1226), layering by role
+and the `vignette`'s blends, shapes and three looks, #1226), the `border` kind's
+settings, its three looks, its 9-slice image frame (#1294) and the order to stack it with a shadow or glow (#1227),
+layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
 `scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy

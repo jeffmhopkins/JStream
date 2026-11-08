@@ -1,21 +1,24 @@
-//! The properties form: the selected item's source, with a field for each parameter its
-//! kind's descriptor (`kind.describe`) lists, and no code per kind (ADR-0025). Fields
+//! The properties form of a source, with a field for each parameter its kind's
+//! descriptor (`kind.describe`) lists, and no code per kind (ADR-0025). The Properties
+//! dialog (`source_properties.rs`) and a filter's settings (`filters.rs`) draw it. Fields
 //! follow the descriptor's display order, groups, `advanced` and `visible_if` hints.
 //! A changed field is checked with the descriptor's own check, then sent as a
 //! one-parameter `source.set_settings` patch; "Reset" sends `null` for the default.
 //! A capture target parameter (a display or window source's `target`) is a list of the
 //! targets of its kind that `capture.targets` reports, read again each time the field
-//! gets focus, so a window opened since shows up.
+//! gets focus, so a window opened since shows up. A `webcam`'s device is one too, and
+//! its format parameters (`capture_format`) are lists of what that device's listed
+//! formats offer. The fields of one form share one `capture.targets` answer.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
-use crate::store::{Collection, Studio, apply, query};
+use crate::store::{Studio, query};
 use jstream_control::protocol::{
-    AssetRoot, CaptureTargetInfo, CaptureTargetKind, Edit, FontInfo, KindDescriptor, Media,
-    ParamDescriptor, ParamType, Query, QueryResult, Reference, Settings, SourceId, SourceInfo,
-    SourceKind,
+    AssetRoot, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
+    FontInfo, KindDescriptor, Media, ParamDescriptor, ParamType, Query, QueryResult, Reference,
+    Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -128,6 +131,18 @@ pub fn parse(param: &ParamDescriptor, text: &str) -> Result<Value, String> {
                 .ok_or_else(|| "must be a finite number".to_owned())?
         }
         ParamType::Bool => Value::Bool(text == "true"),
+        ParamType::CaptureFormat {
+            part: CaptureFormatPart::Fps,
+            ..
+        } => {
+            let text = text.trim();
+            let n: f64 = if text.is_empty() {
+                0.0
+            } else {
+                text.parse().map_err(|_| "must be a number".to_owned())?
+            };
+            fps_value(n).ok_or_else(|| "must be a finite number".to_owned())?
+        }
         _ => Value::String(text.to_owned()),
     };
     param.check(&value)?;
@@ -181,133 +196,8 @@ fn root_from(name: &str) -> AssetRoot {
     }
 }
 
-/// What the form is showing: the source, and its kind's descriptor once read.
-#[derive(Clone, Debug, PartialEq)]
-enum Target {
-    /// Nothing selected.
-    Nothing,
-    /// A `scene` source: it has no settings.
-    Nested(SourceInfo, String),
-    /// A built-in source, with its kind's ID.
-    Builtin(SourceInfo, String),
-}
-
-fn target(collection: &Collection, item: Option<&jstream_control::protocol::ItemId>) -> Target {
-    let source = item
-        .and_then(|id| collection.item(id))
-        .and_then(|(_, item)| collection.source(&item.source_id));
-    match source {
-        None => Target::Nothing,
-        Some(source) => match &source.kind {
-            SourceKind::Builtin { kind } => Target::Builtin(source.clone(), kind.clone()),
-            SourceKind::Scene { scene_id } => {
-                let name = collection
-                    .scene(scene_id)
-                    .map_or_else(|| scene_id.to_string(), |s| s.name.clone());
-                Target::Nested(source.clone(), name)
-            }
-            _ => Target::Nothing,
-        },
-    }
-}
-
-/// The properties form for the selected item's source.
-#[component]
-pub fn Properties() -> impl IntoView {
-    let studio = expect_context::<Studio>();
-    let session = expect_context::<SessionContext>();
-    // Field errors by parameter ID: a refused check or a refused edit.
-    let errors = RwSignal::new(HashMap::<String, String>::new());
-    let describe_error = RwSignal::new(None::<String>);
-
-    let current = Memo::new(move |_| {
-        let item = studio.selection.with(|s| s.item.clone());
-        studio.collection.with(|c| {
-            c.as_ref()
-                .map_or(Target::Nothing, |c| target(c, item.as_ref()))
-        })
-    });
-    let shown = Memo::new(move |_| match current.get() {
-        Target::Builtin(source, kind) => Some((source.source_id, kind)),
-        _ => None,
-    });
-    // Clears the errors when another source is shown, and reads its kind's descriptor
-    // the first time that kind is shown.
-    Effect::new(move |_| {
-        errors.set(HashMap::new());
-        describe_error.set(None);
-        let (Some((_, kind)), Some(s)) = (shown.get(), session.get()) else {
-            return;
-        };
-        spawn_local(async move {
-            if let Err(error) = studio.descriptor(&s, &kind).await {
-                describe_error.set(Some(error.to_string()));
-            }
-        });
-    });
-
-    let commit = move |source_id: SourceId, param: String, value: Value| {
-        let Some(s) = session.get() else { return };
-        errors.update(|e| _ = e.remove(&param));
-        let mut patch = Settings::new();
-        patch.insert(param.clone(), value);
-        spawn_local(async move {
-            let edit = Edit::SourceSetSettings { source_id, patch };
-            if let Err(error) = apply(&s, vec![edit], None).await {
-                errors.update(|e| _ = e.insert(param, error.to_string()));
-            }
-        });
-    };
-
-    move || match current.get() {
-        Target::Nothing => view! {
-            <p class="placeholder">"Select a source to edit it."</p>
-        }
-        .into_any(),
-        Target::Nested(_, scene) => view! {
-            <p class="muted">"Shows the scene “" {scene} "”. A nested scene has no settings."</p>
-        }
-        .into_any(),
-        Target::Builtin(source, kind) => {
-            let descriptor = move || studio.descriptors.with(|d| d.get(&kind).cloned());
-            let source_id = source.source_id.clone();
-            view! {
-                {move || describe_error.get().map(|e| view! { <p class="problem">{e}</p> })}
-                {move || match descriptor() {
-                    None => view! { <p class="placeholder">"Loading…"</p> }.into_any(),
-                    Some(kind) if kind.params.is_empty() => {
-                        view! { <p class="muted">{kind.name} " has no settings."</p> }.into_any()
-                    }
-                    Some(kind) => {
-                        let source_id = source_id.clone();
-                        let settings = {
-                            let source_id = source_id.clone();
-                            Signal::derive(move || settings_of(studio, &source_id))
-                        };
-                        view! {
-                            <Form kind=kind source_id=source_id settings=settings errors=errors commit=commit />
-                        }
-                        .into_any()
-                    }
-                }}
-            }
-            .into_any()
-        }
-    }
-}
-
-/// The settings now stored for `source_id`, read reactively.
-fn settings_of(studio: Studio, source_id: &SourceId) -> Settings {
-    studio.collection.with(|c| {
-        c.as_ref()
-            .and_then(|c| c.source(source_id))
-            .map(|s| s.settings.clone())
-            .unwrap_or_default()
-    })
-}
-
-/// The fields for one kind's parameters, showing `settings`: the stored ones in the
-/// Inspector, a draft in the Properties dialog. `commit` gets each checked change, with
+/// The fields for one kind's parameters, showing `settings`: a draft in the Properties
+/// dialog, the stored ones in a filter's settings. `commit` gets each checked change, with
 /// `null` for the default.
 #[component]
 pub fn Form(
@@ -323,6 +213,8 @@ pub fn Form(
     /// Takes each checked change.
     commit: impl Fn(SourceId, String, Value) + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
+    // One `capture.targets` answer for every capture field of this form.
+    provide_context(CaptureListing::for_kind(&kind));
     let sections = sections(&kind);
     sections
         .into_iter()
@@ -389,7 +281,14 @@ fn Field(
             Err(reason) => errors.update(|e| _ = e.insert(id.clone(), reason)),
         }
     };
-    let input = input_for(&param, value.clone(), send.clone(), studio, &source_id);
+    let input = input_for(
+        &param,
+        value.clone(),
+        send.clone(),
+        studio,
+        &source_id,
+        settings,
+    );
     let reset = {
         let source_id = source_id.clone();
         let id = id.clone();
@@ -433,6 +332,7 @@ fn input_for(
     send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
     studio: Studio,
     source_id: &SourceId,
+    settings: Signal<Settings>,
 ) -> AnyView {
     let p = param.clone();
     let text = {
@@ -536,6 +436,9 @@ fn input_for(
         }
         ParamType::Asset { accept } => asset_input(param, value, send, accept),
         ParamType::CaptureTarget { kind, .. } => capture_target_input(param, value, send, *kind),
+        ParamType::CaptureFormat { part, target } => {
+            capture_format_input(param, value, send, *part, target.clone(), settings)
+        }
         ParamType::Scene => reference_select(value, send, move || {
             studio.collection.with(|c| {
                 c.iter()
@@ -642,6 +545,7 @@ pub fn target_choices(
 ) -> Vec<(String, String)> {
     let empty = match kind {
         CaptureTargetKind::Display => "Primary display",
+        CaptureTargetKind::Device => "First device listed",
         _ => "None",
     };
     let mut choices = vec![(String::new(), empty.to_owned())];
@@ -660,11 +564,328 @@ pub fn target_choices(
     if !current.is_empty() && !choices.iter().any(|(value, _)| value == current) {
         let gone = match kind {
             CaptureTargetKind::Display => "Display not connected",
+            CaptureTargetKind::Device => "Device not connected",
             _ => "Window not open",
         };
         choices.push((current.to_owned(), format!("{gone} ({current})")));
     }
     choices
+}
+
+/// The `capture.targets` answer the capture fields of one form share: `None` until the
+/// first answer, then the targets, or why they couldn't be listed.
+/// It also knows the kind's `capture_format` parameters, so each one reads the parts the
+/// others chose.
+#[derive(Clone, Copy)]
+struct CaptureListing {
+    listed: RwSignal<Option<Result<Vec<CaptureTargetInfo>, String>>>,
+    asked: RwSignal<bool>,
+    /// Each `capture_format` parameter as (device parameter, part, its own ID).
+    parts: StoredValue<Vec<(String, CaptureFormatPart, String)>>,
+}
+
+impl CaptureListing {
+    fn new() -> Self {
+        Self::for_params(&[])
+    }
+
+    fn for_kind(kind: &KindDescriptor) -> Self {
+        Self::for_params(&kind.params)
+    }
+
+    fn for_params(params: &[ParamDescriptor]) -> Self {
+        let parts = params
+            .iter()
+            .filter_map(|p| match &p.ty {
+                ParamType::CaptureFormat { part, target } => {
+                    Some((target.clone(), *part, p.id.clone()))
+                }
+                _ => None,
+            })
+            .collect();
+        Self {
+            listed: RwSignal::new(None),
+            asked: RwSignal::new(false),
+            parts: StoredValue::new(parts),
+        }
+    }
+
+    /// The ID of the parameter picking `part` of the device that `target` names.
+    fn part_id(self, target: &str, part: CaptureFormatPart) -> Option<String> {
+        self.parts.with_value(|parts| {
+            parts
+                .iter()
+                .find(|(t, p, _)| t == target && *p == part)
+                .map(|(_, _, id)| id.clone())
+        })
+    }
+
+    /// The form's listing, or a new one outside a form.
+    fn shared() -> Self {
+        use_context::<Self>().unwrap_or_else(Self::new)
+    }
+
+    /// Asks for the list unless a field of the form already did.
+    fn first(self) {
+        if !self.asked.get_untracked() {
+            self.asked.set(true);
+            self.refresh();
+        }
+    }
+
+    /// Asks for the list again. A failed refresh keeps the last list, so an open select
+    /// stays one. The form may have closed meanwhile.
+    fn refresh(self) {
+        let Some(session) = expect_context::<SessionContext>().get() else {
+            return;
+        };
+        let listed = self.listed;
+        spawn_local(async move {
+            let got = match query(&session, Query::CaptureTargets).await {
+                Ok(QueryResult::CaptureTargets { targets }) => Ok(targets),
+                Ok(other) => Err(format!("unexpected {} result", other.name())),
+                Err(e) => Err(e.to_string()),
+            };
+            listed.try_update(|l| {
+                if got.is_ok() || !matches!(l, Some(Ok(_))) {
+                    *l = Some(got);
+                }
+            });
+        });
+    }
+}
+
+/// A frame rate as a setting's value: `0` stays a whole number, as the default is.
+fn fps_value(fps: f64) -> Option<Value> {
+    if fps == 0.0 {
+        return Some(Value::from(0));
+    }
+    serde_json::Number::from_f64(fps).map(Value::Number)
+}
+
+/// A frame rate as a list shows it and keys it: at most two decimals, no trailing zeros.
+pub fn fps_text(fps: f64) -> String {
+    let text = format!("{fps:.2}");
+    text.trim_end_matches('0').trim_end_matches('.').to_owned()
+}
+
+/// The formats `capture.targets` lists for the device `device` names: the first device
+/// listed when `device` is empty, as a `webcam` with an empty `device` captures. Empty
+/// when the device isn't listed.
+pub fn device_formats<'t>(
+    targets: &'t [CaptureTargetInfo],
+    device: &str,
+) -> &'t [CaptureFormatInfo] {
+    let mut devices = targets
+        .iter()
+        .filter(|t| t.kind == CaptureTargetKind::Device);
+    let found = if device.is_empty() {
+        devices.next()
+    } else {
+        devices.find(|t| t.target == device)
+    };
+    found.map_or(&[], |t| t.formats.as_slice())
+}
+
+/// The label a `pixel_format` value shows as.
+pub fn pixel_format_label(value: &str) -> String {
+    match value {
+        "mjpeg" => "MJPEG".into(),
+        "yuy2" => "YUY2".into(),
+        "nv12" => "NV12".into(),
+        "bgra" => "BGRA".into(),
+        "rgba" => "RGBA".into(),
+        other => other.to_uppercase(),
+    }
+}
+
+/// The choices of a `capture_format` list for `part`, as (value, label): "Auto" first
+/// (the engine's choice), then each value `formats` offers with the other parts the
+/// settings chose (`resolution`, `fps` and `pixel_format`, empty or 0 for any): sizes
+/// largest first, rates fastest first, pixel formats in the device's order. A `current`
+/// value no format offers stays a choice, marked, so the list still shows what the
+/// source asks.
+pub fn format_choices(
+    part: CaptureFormatPart,
+    formats: &[CaptureFormatInfo],
+    resolution: &str,
+    fps: f64,
+    pixel_format: &str,
+) -> Vec<(String, String)> {
+    let size = |f: &CaptureFormatInfo| format!("{}x{}", f.width, f.height);
+    let fps_matches = |f: &CaptureFormatInfo| fps == 0.0 || (f.fps - fps).abs() < 0.005;
+    let matching = |f: &&CaptureFormatInfo| match part {
+        CaptureFormatPart::Resolution => {
+            fps_matches(f) && (pixel_format.is_empty() || f.pixel_format == pixel_format)
+        }
+        CaptureFormatPart::Fps => {
+            (resolution.is_empty() || size(f) == resolution)
+                && (pixel_format.is_empty() || f.pixel_format == pixel_format)
+        }
+        _ => (resolution.is_empty() || size(f) == resolution) && fps_matches(f),
+    };
+    let offered: Vec<&CaptureFormatInfo> = formats.iter().filter(matching).collect();
+    let mut choices = vec![(String::new(), "Auto".to_owned())];
+    let (current, values): (String, Vec<(String, String)>) = match part {
+        CaptureFormatPart::Resolution => {
+            let mut sizes: Vec<(u32, u32)> = offered.iter().map(|f| (f.width, f.height)).collect();
+            sizes.sort_by_key(|&(w, h)| std::cmp::Reverse(u64::from(w) * u64::from(h)));
+            sizes.dedup();
+            (
+                resolution.to_owned(),
+                sizes
+                    .into_iter()
+                    .map(|(w, h)| (format!("{w}x{h}"), format!("{w}×{h}")))
+                    .collect(),
+            )
+        }
+        CaptureFormatPart::Fps => {
+            let mut rates: Vec<String> = Vec::new();
+            let mut sorted: Vec<f64> = offered.iter().map(|f| f.fps).collect();
+            sorted.sort_by(|a, b| b.total_cmp(a));
+            for rate in sorted {
+                let text = fps_text(rate);
+                if !rates.contains(&text) {
+                    rates.push(text);
+                }
+            }
+            (
+                if fps == 0.0 {
+                    String::new()
+                } else {
+                    fps_text(fps)
+                },
+                rates
+                    .into_iter()
+                    .map(|r| (r.clone(), format!("{r} fps")))
+                    .collect(),
+            )
+        }
+        _ => {
+            let mut kinds: Vec<String> = Vec::new();
+            for f in &offered {
+                if !kinds.contains(&f.pixel_format) {
+                    kinds.push(f.pixel_format.clone());
+                }
+            }
+            (
+                pixel_format.to_owned(),
+                kinds
+                    .into_iter()
+                    .map(|k| {
+                        let label = pixel_format_label(&k);
+                        (k, label)
+                    })
+                    .collect(),
+            )
+        }
+    };
+    choices.extend(values);
+    if !current.is_empty() && !choices.iter().any(|(value, _)| *value == current) {
+        let label = match part {
+            CaptureFormatPart::Resolution => current.replace('x', "×"),
+            CaptureFormatPart::Fps => format!("{current} fps"),
+            _ => pixel_format_label(&current),
+        };
+        choices.push((current.clone(), format!("{label} (not offered)")));
+    }
+    choices
+}
+
+/// One part of a device's format, picked from what `capture.targets` lists for the
+/// device that parameter `target` names, given the other parts chosen. Until the list
+/// arrives, and when the engine can't list it, it is the value as text.
+fn capture_format_input(
+    param: &ParamDescriptor,
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+    part: CaptureFormatPart,
+    target: String,
+    settings: Signal<Settings>,
+) -> AnyView {
+    let listing = CaptureListing::shared();
+    let listed = listing.listed;
+    listing.first();
+    let ids = [
+        CaptureFormatPart::Resolution,
+        CaptureFormatPart::Fps,
+        CaptureFormatPart::PixelFormat,
+    ]
+    .map(|p| listing.part_id(&target, p));
+    let choices = move || {
+        listed.with(|l| match l {
+            Some(Ok(targets)) => settings.with(|s| {
+                let get = |id: &Option<String>| id.as_deref().and_then(|id| s.get(id));
+                let text = |id: &Option<String>| get(id).map(display).unwrap_or_default();
+                let fps = get(&ids[1]).and_then(Value::as_f64).unwrap_or(0.0);
+                Some(format_choices(
+                    part,
+                    device_formats(targets, &s.get(&target).map(display).unwrap_or_default()),
+                    &text(&ids[0]),
+                    fps,
+                    &text(&ids[2]),
+                ))
+            }),
+            _ => None,
+        })
+    };
+    let current = {
+        let value = value.clone();
+        move || match part {
+            CaptureFormatPart::Fps => {
+                let fps = value().as_f64().unwrap_or(0.0);
+                if fps == 0.0 {
+                    String::new()
+                } else {
+                    fps_text(fps)
+                }
+            }
+            _ => display(&value()),
+        }
+    };
+    let p = param.clone();
+    let on_change = move |event: leptos::ev::Event| send(parse(&p, &event_target_value(&event)));
+    let listed_now = Memo::new(move |_| listed.with(|l| matches!(l, Some(Ok(_)))));
+    let body = move || {
+        if listed_now.get() {
+            let choices = choices.clone();
+            let current_now = current.clone();
+            let selected = {
+                let current = current.clone();
+                move || {
+                    listed.track();
+                    settings.track();
+                    current()
+                }
+            };
+            view! {
+                <select class="capture-format" prop:value=selected.clone()
+                    on:focus=move |_| listing.refresh() on:change=on_change.clone()>
+                    {move || {
+                        // Each option says whether it is the current one, as a capture
+                        // target's do: `prop:value` can run before the options exist (#1371).
+                        let now = current_now();
+                        choices()
+                            .unwrap_or_default()
+                            .into_iter()
+                            .map(|(v, label)| {
+                                let on = v == now;
+                                view! { <option value=v selected=on>{label}</option> }
+                            })
+                            .collect_view()
+                    }}
+                </select>
+            }
+            .into_any()
+        } else {
+            view! {
+                <input type="text" prop:value=current.clone()
+                    on:change=on_change.clone() />
+            }
+            .into_any()
+        }
+    };
+    view! { {body} }.into_any()
 }
 
 /// A display or window to capture, picked from what `capture.targets` lists now. Until
@@ -675,29 +896,10 @@ fn capture_target_input(
     send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
     kind: CaptureTargetKind,
 ) -> AnyView {
-    let session = expect_context::<SessionContext>();
-    // `None` until the first answer; then the targets, or why they couldn't be listed.
-    let listed = RwSignal::new(None::<Result<Vec<CaptureTargetInfo>, String>>);
-    let refresh = move || {
-        let Some(session) = session.get() else {
-            return;
-        };
-        spawn_local(async move {
-            let got = match query(&session, Query::CaptureTargets).await {
-                Ok(QueryResult::CaptureTargets { targets }) => Ok(targets),
-                Ok(other) => Err(format!("unexpected {} result", other.name())),
-                Err(e) => Err(e.to_string()),
-            };
-            // A failed refresh keeps the last list, so an open select stays one. The form
-            // may have closed meanwhile.
-            listed.try_update(|l| {
-                if got.is_ok() || !matches!(l, Some(Ok(_))) {
-                    *l = Some(got);
-                }
-            });
-        });
-    };
-    refresh();
+    let listing = CaptureListing::shared();
+    let listed = listing.listed;
+    let refresh = move || listing.refresh();
+    listing.first();
     let current = {
         let value = value.clone();
         move || display(&value())
@@ -734,6 +936,7 @@ fn capture_target_input(
     let body = move || match mode.get() {
         Ok(()) => {
             let choices = choices.clone();
+            let current_now = current.clone();
             // Set again when the options change, which may have reset the selection.
             let selected = {
                 let current = current.clone();
@@ -746,9 +949,15 @@ fn capture_target_input(
                 <select class="capture-target" prop:value=selected.clone()
                     on:focus=move |_| refresh() on:change=on_pick.clone()>
                     {move || {
+                        // Each option says whether it is the current one: `prop:value` can
+                        // run before the options exist, and then selects nothing (#1371).
+                        let now = current_now();
                         choices()
                             .into_iter()
-                            .map(|(v, label)| view! { <option value=v>{label}</option> })
+                            .map(|(v, label)| {
+                                let on = v == now;
+                                view! { <option value=v selected=on>{label}</option> }
+                            })
                             .collect_view()
                     }}
                 </select>
@@ -999,12 +1208,14 @@ fn asset_input(
 #[cfg(test)]
 mod tests {
     use super::{
-        BUNDLED_FONT, OTHER_FONT, asset_value, display, draft_patch, font_choices, is_visible,
-        offers, parse, rgb_part, sections, takes_fonts, target_choices, value_of, with_rgb,
+        BUNDLED_FONT, OTHER_FONT, asset_value, device_formats, display, draft_patch, font_choices,
+        format_choices, fps_text, is_visible, offers, parse, rgb_part, sections, takes_fonts,
+        target_choices, value_of, with_rgb,
     };
     use jstream_control::protocol::{
-        AssetRoot, CaptureTargetInfo, CaptureTargetKind, EnumOption, FontInfo, KindCategory,
-        KindDescriptor, ParamDescriptor, ParamType, PixelSize, Reference, Settings, VisibleIf,
+        AssetRoot, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
+        EnumOption, FontInfo, KindCategory, KindDescriptor, ParamDescriptor, ParamType, PixelSize,
+        Reference, Settings, VisibleIf,
     };
     use serde_json::{Value, json};
 
@@ -1321,6 +1532,7 @@ mod tests {
             name: name.into(),
             size: None,
             primary: false,
+            formats: Vec::new(),
         }
     }
 
@@ -1360,5 +1572,147 @@ mod tests {
             )),
             ["=None", "gone=Window not open (gone)"]
         );
+    }
+
+    fn format(width: u32, height: u32, fps: f64, pixel_format: &str) -> CaptureFormatInfo {
+        CaptureFormatInfo {
+            width,
+            height,
+            fps,
+            pixel_format: pixel_format.into(),
+        }
+    }
+
+    fn webcam() -> Vec<CaptureTargetInfo> {
+        let mut cam = target(CaptureTargetKind::Device, "cam", "Webcam");
+        cam.formats = vec![
+            format(1280, 720, 30.0, "yuy2"),
+            format(1920, 1080, 30.0, "mjpeg"),
+            format(1920, 1080, 60.0, "mjpeg"),
+            format(1280, 720, 29.97, "mjpeg"),
+        ];
+        let mut card = target(CaptureTargetKind::Device, "card", "Capture card");
+        card.formats = vec![format(3840, 2160, 30.0, "nv12")];
+        vec![
+            target(CaptureTargetKind::Display, "d1", "Display 1"),
+            cam,
+            card,
+        ]
+    }
+
+    #[test]
+    fn a_device_lists_with_its_own_labels_and_keeps_an_unplugged_one() {
+        let listed = webcam();
+        let values = |choices: Vec<(String, String)>| {
+            choices
+                .into_iter()
+                .map(|(v, l)| format!("{v}={l}"))
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(
+            values(target_choices(CaptureTargetKind::Device, &listed, "")),
+            ["=First device listed", "cam=Webcam", "card=Capture card"]
+        );
+        assert_eq!(
+            values(target_choices(CaptureTargetKind::Device, &listed[..1], "x"))[1],
+            "x=Device not connected (x)"
+        );
+        // An empty device is the first listed, as the engine captures.
+        assert_eq!(device_formats(&listed, "").len(), 4);
+        assert_eq!(device_formats(&listed, "card").len(), 1);
+        assert!(device_formats(&listed, "gone").is_empty());
+    }
+
+    #[test]
+    fn format_lists_offer_what_the_other_parts_leave() {
+        let listed = webcam();
+        let formats = device_formats(&listed, "cam");
+        let values = |choices: Vec<(String, String)>| {
+            choices.into_iter().map(|(v, _)| v).collect::<Vec<_>>()
+        };
+        // Sizes largest first, with Auto first.
+        assert_eq!(
+            values(format_choices(
+                CaptureFormatPart::Resolution,
+                formats,
+                "",
+                0.0,
+                ""
+            )),
+            ["", "1920x1080", "1280x720"]
+        );
+        // Rates for the chosen size, fastest first.
+        assert_eq!(
+            values(format_choices(
+                CaptureFormatPart::Fps,
+                formats,
+                "1920x1080",
+                0.0,
+                ""
+            )),
+            ["", "60", "30"]
+        );
+        assert_eq!(
+            values(format_choices(
+                CaptureFormatPart::Fps,
+                formats,
+                "1280x720",
+                0.0,
+                ""
+            )),
+            ["", "30", "29.97"]
+        );
+        // Pixel formats for the chosen size and rate, in the device's order.
+        assert_eq!(
+            values(format_choices(
+                CaptureFormatPart::PixelFormat,
+                formats,
+                "1280x720",
+                30.0,
+                ""
+            )),
+            ["", "yuy2"]
+        );
+        assert_eq!(
+            format_choices(CaptureFormatPart::PixelFormat, formats, "", 0.0, "")[1].1,
+            "YUY2"
+        );
+        // A value the device doesn't offer stays, marked.
+        let kept = format_choices(CaptureFormatPart::Resolution, formats, "640x480", 0.0, "");
+        assert_eq!(
+            kept.last().unwrap(),
+            &("640x480".into(), "640×480 (not offered)".into())
+        );
+        let kept = format_choices(CaptureFormatPart::Fps, formats, "1920x1080", 25.0, "");
+        assert_eq!(kept.last().unwrap().0, "25");
+    }
+
+    #[test]
+    fn a_frame_rate_parses_as_a_number_and_auto_as_zero() {
+        let fps = param(
+            "fps",
+            ParamType::CaptureFormat {
+                part: CaptureFormatPart::Fps,
+                target: "device".into(),
+            },
+            json!(0),
+        );
+        assert_eq!(parse(&fps, ""), Ok(json!(0)));
+        assert_eq!(parse(&fps, "29.97"), Ok(json!(29.97)));
+        assert!(parse(&fps, "fast").is_err());
+        assert!(parse(&fps, "5000").is_err());
+        assert_eq!(fps_text(30.0), "30");
+        assert_eq!(fps_text(29.97), "29.97");
+        assert_eq!(fps_text(7.5), "7.5");
+        let resolution = param(
+            "resolution",
+            ParamType::CaptureFormat {
+                part: CaptureFormatPart::Resolution,
+                target: "device".into(),
+            },
+            json!(""),
+        );
+        assert_eq!(parse(&resolution, "1920x1080"), Ok(json!("1920x1080")));
+        assert!(parse(&resolution, "big").is_err());
     }
 }

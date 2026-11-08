@@ -15,12 +15,15 @@ use std::sync::Arc;
 /// Sources are created by their [`SourceKind`] from a complete, already validated
 /// settings map. Creating one may block (an image is read and decoded then), so it never
 /// happens on a real-time thread. Asking for a frame doesn't block on I/O or allocate
-/// for the built-in kinds, and frames are handed out as shared [`Arc`]s, so the render
-/// thread can hold one past the next update. Most make their frames when created or
-/// updated; a `media` file decodes them ahead on a thread of its own and hands each
-/// over under a short lock; a source whose frames follow something live (the
-/// `waveform`, `spectrum` and `chat_message` kinds) draws them in its [`Painter`]
-/// instead, and `frame` hands out the one painted last.
+/// for the built-in kinds (apart from a still image whose frame no one holds any more,
+/// which reads its file again: [`Source::still`]), and frames are handed out as shared
+/// [`Arc`]s, so the render thread can hold one past the next update. Most make their
+/// frames when created or updated; a `media` file decodes them ahead on a thread of its
+/// own and hands each over under a short lock; a source whose frames follow something
+/// live (the `waveform`, `spectrum` and `chat_message` kinds) draws them in its
+/// [`Painter`] instead, and `frame` hands out the one painted last. An animated image, a media file
+/// and a page that paints on the CPU have a painter that draws nothing, so a host can
+/// take their new frames from it without the source.
 pub trait Source: Send {
     /// The frame to show at `at`, the time since the source started on the media clock
     /// (ADR-0014, docs/adr/0014-media-clock.md). A time before the start shows the
@@ -113,6 +116,14 @@ pub trait Source: Send {
         None
     }
 
+    /// The source's one frame as a [`Still`](crate::Still), for a source that shows a single frame
+    /// it can make again (a still image, #1139): a host that holds the still's frame
+    /// only while it needs the pixels lets them be freed, and [`frame`](Self::frame)
+    /// then reads the file again. `None` (the default) for every other source.
+    fn still(&self) -> Option<Arc<crate::Still>> {
+        None
+    }
+
     /// The source's frame as a texture on the engine's GPU device, for kinds whose
     /// frames never reach the CPU (`browser`, ADR-0021): when it is `Some`, it is what
     /// the source shows, and [`frame`](Self::frame) is only a transparent stand-in of
@@ -184,9 +195,20 @@ pub struct ShownModel {
 /// paint it once under its lock, to catch it up before it is shown again. The `waveform` and `spectrum` painters allocate only while their
 /// pool of frames grows, or when every frame in it is still held; `chat_message`'s
 /// allocates when it redraws for a newly featured message.
+///
+/// A host can also take the painted frame from the painter itself ([`frame`](Self::frame)),
+/// and ask it when to paint next ([`next_change`](Self::next_change)), without the
+/// source: so a new frame reaches the compositor without a re-plan (ADR-0117 §3).
 pub trait Painter: Send + Sync {
     /// Draws the frame to show at `at`, on the same clock as [`Source::frame`].
     fn paint(&self, at: MediaTime);
+
+    /// The frame painted last, as [`Source::frame`] hands it out. Never draws.
+    fn frame(&self) -> Arc<VideoFrame>;
+
+    /// When the frame shown at `at` is next replaced, as [`Source::next_change`] says
+    /// for its source.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime>;
 }
 
 /// A source's own audio ([`Source::audio`]): a stream the engine records into a mixer

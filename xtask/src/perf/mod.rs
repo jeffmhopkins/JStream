@@ -125,6 +125,9 @@ fn picked(name: &str, patterns: &[String]) -> bool {
         })
 }
 
+/// The base scene's rows, measured first and last; `[scene.<name>]` may name them too.
+const BASE_ROWS: [&str; 2] = ["baseline", "baseline_after"];
+
 /// Runs `cargo xtask perf`; `Ok(false)` when `--check` found a row over its limits.
 pub fn run(args: &[String], root: &Path) -> Result<bool> {
     let o = parse(args)?;
@@ -208,7 +211,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     };
     run.build_base(o.canvas)?;
     run.record(&run_dir.join("program.mp4"))?;
-    run.measure_base("baseline")?;
+    run.measure_base(BASE_ROWS[0])?;
     for s in scenes.iter().filter(|s| picked(&s.name, &o.scenes)) {
         if s.needs_browser && !o.browser {
             run.rows
@@ -227,7 +230,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
             }
         }
     }
-    run.measure_base("baseline_after")?;
+    run.measure_base(BASE_ROWS[1])?;
     let _ = run
         .mcp
         .output(json!({"type": "output.stop", "output_id": RECORDING}));
@@ -676,7 +679,7 @@ impl Thresholds {
                 (name, &r["process_after_first_cycle"], &r["process"], true)
             })
             .collect();
-        if let (Some(a), Some(b)) = (base("baseline"), base("baseline_after")) {
+        if let (Some(a), Some(b)) = (base(BASE_ROWS[0]), base(BASE_ROWS[1])) {
             pairs.push(("the run".to_owned(), &a["process"], &b["process"], false));
         }
         for (what, before, after, rss) in pairs {
@@ -766,7 +769,7 @@ mod tests {
         let scenes = scene::load_dir(&dir, (1920.0, 1080.0)).expect("loads");
         for (name, _) in &t.scenes {
             assert!(
-                scenes.iter().any(|s| &s.name == name),
+                BASE_ROWS.contains(&name.as_str()) || scenes.iter().any(|s| &s.name == name),
                 "[scene.{name}] names no scene"
             );
         }

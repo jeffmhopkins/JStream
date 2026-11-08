@@ -94,7 +94,9 @@ and calls this crate.
   ([jstream-core › Snapshots](../jstream-core/README.md#design)).
 - `ResourceCache` keeps what a caller draws every frame (uploads, imports of GPU
   frames, and layers), keyed by the caller's IDs, so a frame that shows what the last
-  one showed allocates no texture. An import keeps its frame's `FrameSync` hold only
+  one showed allocates no texture. `upload_drawn`, on a cache that
+  `draw_uploads_small` allows it, holds an upload only items draw at the size they draw
+  it, not its frame's (#1139). An import keeps its frame's `FrameSync` hold only
   for the frame that draws it, so the platform can reuse the texture afterwards. An image no frame references is freed only after the GPU has finished the
   last frame that used it, and the cache hands it back as `Reclaimed` so the caller
   picks the thread that drops it
@@ -259,6 +261,14 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    for NV12 in each matrix and range. The pipeline is built on the first upload. The
    bind group (texture + linear sampler) and the conversion's own bind group are created
    once and stored on `Image`.
+
+   An upload's texture can also be **smaller than its frame** (`upload_rgba8_into`, for
+   `ResourceCache::upload_drawn`, #1139): the dispatch then covers the smaller texture,
+   and each texel is the mean of the frame's texels under it (integer bounds, at least
+   one each way), averaged in premultiplied linear light, as a box filter draws them. A
+   rewrite of such an upload converts the frame into the same smaller texture.
+   `Image::full` keeps the frame's size, and the image is placed at it (its extent), so
+   only how many texels it holds changes.
 
    **Why premultiply first.** The linear filter averages neighbouring texels. Averaging
    straight alpha mixes a transparent texel's RGB into its opaque neighbour, so a
@@ -449,7 +459,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 image it draws, its passes, then `end_frame`. `upload` keyed by an ID reuses the entry when the
 caller's version and the size are unchanged, rewrites the same texture for a new
 version, and makes a new texture (retiring the old one) for a new size; `layer` reuses
-a layer of the same size. `end_frame` retires every entry the frame did not use,
+a layer of the same size. `end_frame` retires every entry the frame did not use (but one `keep_while` keeps),
 registers `Queue::on_submitted_work_done` for the frame (the frame fence: it records
 the newest finished frame in an atomic), polls the device once without blocking, and
 returns the retired images whose last frame has finished. A steady frame allocates
@@ -458,7 +468,38 @@ next frame's fence, which covers it. `frame` names the frame being built, so wor
 several draws of one frame share (a source's video chain) can run once in it.
 `set_extent` places a key's image as if it were another size (ADR-0073); a reused entry
 keeps the extent it had, so a caller that sets one sets it on every frame, and a new
-texture starts at its own size.
+texture starts at its own size (an upload held small, at its frame's).
+
+`upload_if_needed` and `upload_drawn_if_needed` are `upload` and `upload_drawn` of
+pixels the caller reads only if the cache must upload: the closure is called only when
+the entry doesn't hold that version at that size, and when it gives none the entry is
+left as it was (marked used, so what it held is still drawn) and the call returns
+`Ok(None)`. A caller that lets go of a still's pixels once uploaded (`jstream-core`'s
+`still`, #1139) uploads through them, and calls `keep_while(key, alive)`: the entry is
+kept while no frame uses it, for as long as the shared flag is true, so the still is
+drawn at once when it is shown again. The entry keeps the flag's `Arc` until it is
+replaced or retired and hands it back in `Reclaimed`, so the cache never drops the
+last reference on its thread.
+
+`upload_drawn` (#1139, ADR-0117 §2) is `upload` for a frame only items draw, so its
+texels need be no finer than its draws sample them. Each `render` notes on the image how
+much of its frame's resolution each item needed (`Image::record_draw`: the texture's
+share of the frame over the texels per canvas pixel along the item's less minified axis,
+and all of it for a 3D placement). On a cache where `draw_uploads_small` is on (off by
+default, so a deterministic render such as a snapshot draws every upload whole), the
+first frame of a key holds the upload at what the caller's `planned` need says (whole
+when it is 0), and each later frame reads what the draws needed over the frames since
+(once a frame, so every mix of one frame draws the same texels), takes the larger of
+that and `planned` (the caller plans over every mix, so a mix drawn only every other
+tick, which records no draw on the ticks between, never makes the upload shrink and
+grow again, and a cut to a larger placement is drawn sharp at once), and holds it at a
+power-of-two fraction of the frame's size with a quarter of headroom over that, between
+a sixteenth and the whole: the next larger size once a draw needs more than it holds,
+a smaller one only once that size would be half or less of what it holds, and the same
+texture otherwise, so a small change in size uploads nothing. A frame under 256 × 256
+texels is always whole. On lavapipe, ten 1080p stills drawn at about 250 × 140 held
+about 21 MB each whole (the `Rgba16Float` texture and the mip chain a small draw
+samples) and about 3.5 MB each held at a quarter.
 `retire_filter` hands the cache a `VideoFilter` no frame runs any more: it may hold
 textures of its own (a video delay's ring), so it waits for the same fence and comes
 back in `Reclaimed` (`Reclaimed::filters` counts them) to be dropped with the images.
@@ -637,12 +678,16 @@ defaults pass its descriptor, and that they build its pass.
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
 filter of a source's video chain and runs them in order before placement, of a
 scene's over its composite, of an item's effects over its box, in a layer
-grown by their summed `max_outset_px` at the first effect that declares one
-([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), and of the master
+grown by their summed outsets at the first effect that draws past its input
+([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md), ADR-0125), and of the master
 stage's and an output's over the mix an output draws
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
-`kind.list` gets these kinds.
+`kind.list` gets these kinds, and `video_filter_outset(kind, settings)` how far a
+drop shadow, outline, glow, bloom or border draws past its input at its settings, never
+more than its `max_outset_px` (ADR-0136); core sizes an item's layer by it. A border
+draws past it only with an outer stroke: its gap, its width and an antialiased pixel
+(#1376).
 
 **The harness.**
 
@@ -793,6 +838,34 @@ premultiplied linear light on the way out.
   transparent. It frames whatever its chain runs on: a source's whole frame, an item's
   cropped box or a scene's composite (ADR-0065, #529).
 
+- `border` (#1227): the full set of border tools in one kind, in a custom pass (its
+  movement needs the clock). A rounded rectangle, the frame inset by the padding the
+  chain gives the filter (`Pass::set_pad`, so on an item it is the box, ADR-0125):
+  `corners` `same` with `radius`, or `each` with `radius_top_left`, `_top_right`,
+  `_bottom_right` and `_bottom_left` (0 to 2000 px, held to half the shorter side), and
+  `clip` (default on) cuts the picture to it, so a shadow or glow after it follows the
+  rounded shape. An inner stroke, `width` (0 to 64 px, default 4) and `color`, runs
+  inside the edge over the picture; an outer one, `outer_width` (0 to 64, default 0),
+  `outer_color` and `outer_gap` (0 to 64), past it, so the kind declares a
+  `max_outset_px` of 129. `style` is `solid`, `double` (two lines of a third of the
+  width), `dashed` (`dash` 1 to 400 px, `gap`) or `dotted` (round dots the stroke's
+  width across, `gap` apart), measured along the edge: each straight side by its
+  length and each corner by its arc, clockwise from the top-left. `fill` is the
+  `color`, or a `linear` (at `angle`) or `conic` gradient from `color` to `color2`, as
+  a triangle wave so it loops without a seam. `speed` (−2000 to 2000 px/s) moves the
+  dashes along the edge and the gradient round it once per perimeter; the distance is
+  worked out in `f64` on the CPU and wrapped to the dash period and to one turn, so it
+  stays exact. On a source or scene chain the outer stroke past the frame is cut.
+  `frame` (an image asset, `null` by default, #1294) draws the inner stroke from an
+  image as a 9-slice frame instead of in its style and fill: the image's corners,
+  `frame_slice` image px square (1 to 1024, default 16, held to half the image), fill
+  the band's corners, `width` px square, and its middle runs along each side between
+  them, stretched or, with `frame_edges` `tile`, repeated at the corners' scale; each
+  slice samples only its own texels, held half a texel inside it (#1377). The
+  band is `width` px in from the rectangle's sides, cut to the rounded shape. The image
+  is the pass's aux image, handed over as an image mask's is (`Pass::set_reference`,
+  the shared `assets::Reference`); until it is there, the stroke draws in its style.
+
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
 `custom_width` and `custom_height` from 1 to 10000 shown only for `custom`), `mode`
@@ -866,17 +939,21 @@ glow is cut away whole; on a shape with transparent margins (a keyed camera, a l
 they show inside them. A drop shadow and a glow still blur the shape in a scratch
 frame grown by the blur radius, so the blur fades out instead of stopping at the
 frame's edge. An effect that hangs outside a placement is an item effect, whose layer
-grows by the chain's summed `max_outset_px` where the first kind that declares one
-runs ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).
+grows by the chain's summed outsets at its settings (`video_filter_outset`) where the
+first effect that draws past its input runs
+([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).
 `VideoFilter::set_pad(px)` does it: `output_size` grows the input by `px` on every side
 before the pass's own, and `apply_filter_into` first draws the input centred into a
 scratch layer that size, transparent around it, then runs the pass over that. Each of
 these kinds declares the
 most it can draw past its input at any settings: drop shadow 300 (the largest offset
 plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
-and bloom 100 (the largest radius). So on an item the glow and shadow of an opaque
-picture show around its box (#1226). That room costs layer memory and fill: a
-1920×1080 box with a drop shadow is a 2520×1680 layer.
+and bloom 100 (the largest radius), and border 129 (its widest outer stroke after its
+widest gap, and its antialiased pixel). So on an item the glow and shadow of an opaque
+picture show around its box (#1226). That room costs layer memory and fill, so an
+item's layer grows only by what its effects draw at their settings (ADR-0136): a
+1920×1080 box with a drop shadow at its largest is a 2520×1680 layer, and at its
+defaults a 1952×1112 one.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
@@ -1103,7 +1180,17 @@ import is staged once, and once the frame ends nothing but the frame holds its
 coming round again reuses its import and stages again, a frame of a new size retires
 both old imports after the fence, an upload under the key replaces the import, and a
 straight import under a key that held a premultiplied one replaces it
-(the staged submit's `PRESENT` transition runs on the software adapter here). A lost
+(the staged submit's `PRESENT` transition runs on the software adapter here). Uploads
+held at their drawn size (#1139): a conversion into a smaller texture holds the CPU's
+mean of the texels under each, within two half steps, and a rewrite of it does too;
+through `upload_drawn`, a 512² frame is whole on its first frame, a quarter each way
+once drawn at an eighth, the same texture while drawn a little larger and when a new
+version refills it, whole again once drawn large, a quarter again once drawn small, and
+whole once placed in 3D, and a new key starts at its planned need; a still drawn small
+every tick and large every other tick stays whole when planned for both (and changes
+size without the plan), and a key held small given a whole upload of a frame the held
+size is made again, not refilled; without
+`draw_uploads_small`, or under 256 × 256 texels, it stays whole. A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
 `destroyed`, a render fails, an NV12 bind returns `Uncaptured`
 (`convert/tests.rs`), and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
@@ -1182,9 +1269,10 @@ a hardware GPU.
   rotated 2D items should get edge coverage too, which changes their goldens.
 - **Small sources.** A 2D item drawn small samples a chain built from its whole crop
   every frame its source changes, so a 1080p camera in a small box costs a quarter-size
-  chain and its rebuild. Open: a level 0 built at the drawn size, which a first pass of
-  more than one tap would allow, and uploading a still image at the size it is drawn
-  (#1139).
+  chain and its rebuild. An upload only items draw is held at the size they draw it
+  (`ResourceCache::upload_drawn`, #1139), so its chain is small too; an import (a
+  capture, a page) is not. Open: a level 0 built at the drawn size for an import, which
+  a first pass of more than one tap would allow.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and

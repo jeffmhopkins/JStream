@@ -34,7 +34,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
-  allocates, and a frame handed out stays valid after an update. Most make their frames
+  allocates (apart from a still image's once nothing holds its frame, below), and a
+  frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
   the `waveform`, `spectrum`, `chat_message` and `timer` kinds draw theirs in a
   `Painter` instead, and `frame`
@@ -78,10 +79,30 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   asks for frames under a lock paints before taking it, when `next_change` said a
   frame is due (the engine's `jstream-sources` thread does). A host that skipped a
   source nothing showed may paint it once under its lock, to catch it up before it is
-  shown again (the engine does, for a painter a plan reaches again). The `waveform` and
+  shown again (the engine does, for a painter a plan reaches again). The painter also
+  hands out the frame it painted last (`frame`) and says when the next is due
+  (`next_change`), as its source does, so a host can take new frames from it without
+  the source or its lock (the engine stores them in a frame slot, ADR-0117 §3). The `waveform` and
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
   message, and `timer`'s when the value it shows changes, once a second at most.
+  An animated `image`, a `media` file with video and a `browser` page that paints on
+  the CPU have a painter too, which draws nothing: the image's picks the frame due
+  (its frames are decoded when it is built), the media file's takes the decoded frames
+  due from its player's queue, and the page's hands out its latest paint. So their new
+  frames also reach the picture without a plan. A still image, a file with no video and
+  a page on the GPU have none.
+- `Still`: a source's one frame that can be let go of and made again, from
+  `Source::still()` (default `None`; only a still `image` has one, #1139). Every frame
+  its `frame()` hands out shares one copy, freed once all are dropped; the next call
+  reads and decodes the file again, so it blocks and never runs on a real-time thread.
+  `frame_if_held()` gives the copy only if someone holds it (or the one decoded when the
+  source was built, until it is taken), and `held()` says whether anyone does. A file
+  that decodes again at another `size()` fails with `SourceError::Decode`, since what
+  shows the still is placed at the size it had. The image source's `frame` is its
+  still's, so a host that drops every frame it was handed makes the next `frame`
+  decode; the engine keeps a shown still's frame only while a draw needs it
+  (`jstream-core`'s `still`).
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -210,6 +231,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   10 ms or less shows for 100 ms, as in browsers. A GIF plays once plus its
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
+  A still image (one frame, or frames with no delay, which show the last) keeps only
+  that frame, as a `Still` that reads the file again once its pixels are let go of; an
+  animation keeps every frame.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
 - `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
   (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
@@ -510,10 +534,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   another message was featured since, and `frame` hands out the frame drawn last
   without drawing. Every setting but `font` is live.
 - `webcam`: a webcam or capture card, by the `device` setting, the ID the
-  platform's video-device backend lists it by (`VideoDevices::devices`). An empty
-  `device` captures the first device listed. Like `display` and `window`, it only says
-  what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
-  device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
+  platform's video-device backend lists it by (`VideoDevices::devices`), which
+  `capture.targets` lists (a `capture_target` of kind `device`, protocol 0.90). An empty
+  `device` captures the first device listed. `resolution` (`<width>x<height>`), `fps`
+  and `pixel_format` (`capture_format` parameters, in the Format group) ask for a format
+  the device lists; empty or 0 leaves that part to the engine, and a device that offers
+  no format matching them opens in the engine's choice. Like `display` and `window`, it
+  only says what to capture (`CaptureSpec::Device`, with a `DeviceFormatWant`), and the
+  engine opens the device. A new device or format needs a new source. The kind keeps version 1:
   before it had a setting, its sources couldn't start. It has audio too (#716): the
   input the platform pairs with the device, a webcam's microphone or a capture card's
   HDMI audio, which the engine records as an audio input's

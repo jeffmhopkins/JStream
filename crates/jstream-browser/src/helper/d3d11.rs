@@ -4,6 +4,15 @@
 //! before the callback returns, as CEF takes its texture back then, and before the
 //! engine is told, so the engine reads a finished texture. A texture stays the engine's
 //! until it says it has copied it ([`PageTextures::release`]).
+//!
+//! # Behaviour
+//!
+//! A D3D11 device on the engine's adapter. Each
+//! accelerated paint's texture is opened, checked to be single-mip BGRA8, and copied into
+//! the next of three textures the page shares with the engine through NT handles; the
+//! copy is waited for before the callback returns, since CEF takes its texture back then.
+//! A slot the engine hasn't released isn't painted into: with all three held, the paint is
+//! skipped. Popup-widget paints are ignored.
 
 use std::ffi::c_void;
 use std::sync::{Mutex, PoisonError};
