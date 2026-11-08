@@ -417,6 +417,20 @@ impl LiveSources {
         }
     }
 
+    /// Takes the program's base frame rate. A page that follows it (`fps` 0, #1405) is
+    /// built again at a new one, so it paints as often as the program draws.
+    fn sync_frame_rate(&mut self, fps: u32) {
+        if self.ctx.frame_rate == fps {
+            return;
+        }
+        self.ctx.frame_rate = fps;
+        for entry in self.entries.values_mut() {
+            if follows_program_rate(&entry.kind, &entry.settings) {
+                entry.settings = Settings::new();
+            }
+        }
+    }
+
     /// Brings the live sources in line with the collection's: queues a build for every
     /// source that is new or whose settings changed, and drops the ones deleted.
     ///
@@ -429,6 +443,7 @@ impl LiveSources {
             crate::audio::retain_scopes(scopes, state);
         }
         self.sync_heard(state);
+        self.sync_frame_rate(state.base_fps());
         let registry = Arc::clone(&self.registry);
         let before = self.entries.len();
         self.entries.retain(|id, _| {
@@ -1611,6 +1626,12 @@ impl MediaClock for SystemClock {
 /// The settings a source of `kind` is built from, which a change to builds it again: all of
 /// them, but a pack source's stand-in is built from its size alone, as its program takes
 /// the other settings live.
+/// Whether a source of `kind` built from `settings` paints at the program's frame rate:
+/// a `browser` page with an `fps` of 0.
+fn follows_program_rate(kind: &str, settings: &Settings) -> bool {
+    kind == "browser" && settings.get("fps").and_then(serde_json::Value::as_u64) == Some(0)
+}
+
 fn built_from(kind: &str, settings: &Settings) -> Settings {
     if pack_source::is_pack_kind(kind) {
         pack_source::stand_in_settings(settings)

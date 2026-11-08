@@ -447,7 +447,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
   `http://` or `https://`), the page itself as `html` (at most 128 KiB, its CSS and
   scripts inline; it wins over the URL when it isn't blank), or the `file` asset
-  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
+  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 0 to 60; the default 0 follows the program's base rate, `Context.frame_rate`, and the engine opens such a page again when that rate changes, #1405) through
   `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
   background transparent) is the one live setting: `update` replaces the page's custom
