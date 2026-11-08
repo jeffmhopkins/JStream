@@ -328,6 +328,17 @@ impl LiveSources {
         self.ctx.audio = Some(scopes);
     }
 
+    /// The MIDI inputs the `midi_*` sources draw (ADR-0137), which the JTunnel receiver
+    /// feeds.
+    pub(crate) fn set_midi(&mut self, midi: Arc<jstream_sources::MidiInputs>) {
+        self.ctx.midi = Some(midi);
+    }
+
+    /// The MIDI inputs the `midi_*` sources draw.
+    pub(crate) fn midi(&self) -> Option<Arc<jstream_sources::MidiInputs>> {
+        self.ctx.midi.clone()
+    }
+
     /// The platform's media files, which `media` sources play through. Sources built
     /// before have none, so they are built again now, from `state`, the collection's:
     /// one loaded before the host injected backends would otherwise wait for its next

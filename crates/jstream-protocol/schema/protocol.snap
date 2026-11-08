@@ -766,6 +766,52 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it\nin, `always_allow` also adds it to the approved list, and `deny` turns it away\nwith `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted\nclient may answer. Fails with `not_found` for a request that isn't open (answered,\ntimed out, or the client went away). Answered by the server, like `device.revoke`.",
+          "properties": {
+            "approval_id": {
+              "description": "The request, as `agent.approval_requested` or `agent.approved` names it.",
+              "type": "string"
+            },
+            "decision": {
+              "$ref": "#/$defs/ApprovalDecision",
+              "description": "The answer."
+            },
+            "type": {
+              "const": "agent.approve",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "approval_id",
+            "decision"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes a row from the approved list (0.108, ADR-0131): that client's next\nconnection asks again. An open connection stays open. Fails with `not_found` for\na row the list doesn't hold. Answered by the server, like `device.revoke`.",
+          "properties": {
+            "client_name": {
+              "description": "The client name, as `agent.approved` lists it.",
+              "type": "string"
+            },
+            "transport": {
+              "$ref": "#/$defs/AgentTransport",
+              "description": "How it connects, as `agent.approved` lists it."
+            },
+            "type": {
+              "const": "agent.forget",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "client_name",
+            "transport"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value\nthe UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so\nevery client of the engine, the desktop app and each browser, reads the same one\nback with `ui_settings.get`. A `value` of `null`, or none, removes the key. Not\ncollection state: it changes no `rev`, is never undone, emits no event, and is\nkept across restarts in the data folder (ADR-0020), whatever collection is open.\nAnswered by the server that admits clients, not the engine: a `Control` with no\nserver in front fails with `unsupported`. Fails with `invalid_argument` on `key`\nfor a key that isn't 1 to 64 of `a`-`z`, `0`-`9`, `.`, `_` and `-`, on `value`\nfor a value over 64 KiB as compact JSON, and on `key` for a 65th key;\n`action_failed` when the settings file can't be written (the value is then kept\nuntil the server stops).",
           "properties": {
             "key": {
@@ -1306,6 +1352,112 @@ source: crates/jstream-protocol/src/fixtures.rs
         "client_name",
         "call",
         "summary"
+      ],
+      "type": "object"
+    },
+    "AgentApproval": {
+      "description": "A client that asked to connect and waits for the person's answer.",
+      "properties": {
+        "approval_id": {
+          "description": "Names this request, for `agent.approve`. Unique while the server runs.",
+          "type": "string"
+        },
+        "client_name": {
+          "description": "The name the client gave in `hello`: its own text, never an instruction.",
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/AgentTransport",
+          "description": "How it connects."
+        }
+      },
+      "required": [
+        "approval_id",
+        "client_name",
+        "transport"
+      ],
+      "type": "object"
+    },
+    "AgentTransport": {
+      "description": "How a held client reaches the server.",
+      "oneOf": [
+        {
+          "const": "websocket",
+          "description": "The WebSocket API: a script, the CLI, or `jstream-cli mcp`, which carries an MCP\nclient's stdio over it.",
+          "type": "string"
+        },
+        {
+          "const": "mcp_http",
+          "description": "MCP's streamable HTTP transport, at the server's `/mcp`.",
+          "type": "string"
+        }
+      ]
+    },
+    "ApprovalDecision": {
+      "description": "The person's answer to a held client (`agent.approve`).",
+      "oneOf": [
+        {
+          "const": "allow_once",
+          "description": "Let it in this time.",
+          "type": "string"
+        },
+        {
+          "const": "always_allow",
+          "description": "Let it in, and add it to the approved list.",
+          "type": "string"
+        },
+        {
+          "const": "deny",
+          "description": "Turn it away: its `hello` fails with `not_allowed`.",
+          "type": "string"
+        }
+      ]
+    },
+    "ApprovalOutcome": {
+      "description": "How a held client's request ended (`agent.approval_resolved`).",
+      "oneOf": [
+        {
+          "const": "allowed_once",
+          "description": "Allowed this time.",
+          "type": "string"
+        },
+        {
+          "const": "always_allowed",
+          "description": "Allowed, and added to the approved list.",
+          "type": "string"
+        },
+        {
+          "const": "denied",
+          "description": "Denied.",
+          "type": "string"
+        },
+        {
+          "const": "timed_out",
+          "description": "No one answered in time; it was turned away.",
+          "type": "string"
+        },
+        {
+          "const": "closed",
+          "description": "The client went away first.",
+          "type": "string"
+        }
+      ]
+    },
+    "ApprovedAgent": {
+      "description": "A row of the approved list: a client name and how it connects.",
+      "properties": {
+        "client_name": {
+          "description": "The name the client gives in `hello`.",
+          "type": "string"
+        },
+        "transport": {
+          "$ref": "#/$defs/AgentTransport",
+          "description": "How it connects."
+        }
+      },
+      "required": [
+        "client_name",
+        "transport"
       ],
       "type": "object"
     },
@@ -6018,6 +6170,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "file",
           "description": "A file on the engine's machine, named by its path (0.94, ADR-0121). Only an\nerror answering `collection.new` or `collection.save_as` names it, so a client\nthat sends neither never reads it.",
           "type": "string"
+        },
+        {
+          "const": "approval",
+          "description": "An agent's request to connect, or a row of the approved list (0.108, ADR-0131).\nOnly an error answering `agent.approve` or `agent.forget` names it.",
+          "type": "string"
         }
       ]
     },
@@ -6898,6 +7055,47 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "cause"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A client asked to connect and is held until the person answers (0.108,\nADR-0131). A UI shows a prompt and answers with `agent.approve`. Runtime state,\nso no `rev`; `agent.approved` lists the requests still open.",
+          "properties": {
+            "approval": {
+              "$ref": "#/$defs/AgentApproval",
+              "description": "The request."
+            },
+            "type": {
+              "const": "agent.approval_requested",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "approval"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A held client's request ended (0.108, ADR-0131): answered, timed out, or the\nclient went away. A UI closes its prompt.",
+          "properties": {
+            "approval_id": {
+              "description": "The request, as `agent.approval_requested` named it.",
+              "type": "string"
+            },
+            "outcome": {
+              "$ref": "#/$defs/ApprovalOutcome",
+              "description": "How it ended."
+            },
+            "type": {
+              "const": "agent.approval_resolved",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "approval_id",
+            "outcome"
           ],
           "type": "object"
         }
@@ -10480,6 +10678,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The person declined this connection, or didn't answer in time (0.108,\nADR-0131): only a `hello` fails with it, and the server then closes the\nconnection. An agent reports it; connecting again asks again.",
+          "properties": {
+            "code": {
+              "const": "not_allowed",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why: declined, or not answered in time.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The engine hit a bug or an unexpected condition. The request may be retried.",
           "properties": {
             "code": {
@@ -10992,6 +11208,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "properties": {
             "type": {
               "const": "device.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The approved list and the requests still open (0.108, ADR-0131). Runtime state,\nso no `rev`. Answered by the server that admits clients, like `device.list`.",
+          "properties": {
+            "type": {
+              "const": "agent.approved",
               "type": "string"
             }
           },
@@ -12075,6 +12304,40 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "devices"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `agent.approved` (0.108).",
+          "properties": {
+            "approved": {
+              "description": "The approved list, ordered by client name, then transport.",
+              "items": {
+                "$ref": "#/$defs/ApprovedAgent"
+              },
+              "type": "array"
+            },
+            "asking": {
+              "description": "Whether this server asks before a new agent connects: the desktop app with\nMCP on and its setting on. Off, nothing is held, and the list is kept for when\nit is on again.",
+              "type": "boolean"
+            },
+            "pending": {
+              "description": "The requests still open, oldest first.",
+              "items": {
+                "$ref": "#/$defs/AgentApproval"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "agent.approved",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "asking",
+            "approved",
+            "pending"
           ],
           "type": "object"
         },
@@ -14459,6 +14722,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "code",
             "size_bytes",
             "limit_bytes"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The person declined this connection, or didn't answer in time (0.108,\nADR-0131): only a `hello` fails with it, and the server then closes the\nconnection. An agent reports it; connecting again asks again.",
+          "properties": {
+            "code": {
+              "const": "not_allowed",
+              "type": "string"
+            },
+            "reason": {
+              "description": "Why: declined, or not answered in time.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "code",
+            "reason"
           ],
           "type": "object"
         },

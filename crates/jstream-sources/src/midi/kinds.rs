@@ -1,5 +1,5 @@
 //! The MIDI visualization kinds (ADR-0137): `midi_keyboard`, `midi_piano_roll`,
-//! `midi_pads` and `midi_cc`. Each draws one input's state ([`MidiState`]) on the CPU at
+//! `midi_pads`, `midi_cc` and `midi_beat`. Each draws one input's state ([`MidiState`]) on the CPU at
 //! 30 fps, and only while something changes.
 
 use super::{
@@ -384,6 +384,135 @@ impl Draw for Pads {
             }
         }
         moving
+    }
+}
+
+// ---- midi_beat -----------------------------------------------------------------------
+
+/// The most beats a bar a `midi_beat` source counts.
+const MAX_BEATS_PER_BAR: u64 = 16;
+
+/// The `midi_beat` kind: a row of a bar's beats, the one playing lit, from an input's
+/// MIDI clock (ADR-0142 §4).
+pub(crate) struct BeatKind(KindDescriptor);
+
+impl BeatKind {
+    pub(crate) fn new() -> Self {
+        let mut params = common(480, 80, 0);
+        // A clock is for the whole input, not one channel.
+        params.retain(|p| p.id != "channel");
+        params.extend([
+            live(described(
+                param(
+                    "beats_per_bar",
+                    "Beats per bar",
+                    whole(1, MAX_BEATS_PER_BAR as i64),
+                    json!(4),
+                ),
+                "How many beats a bar has: MIDI clock counts beats but carries no meter.",
+            )),
+            live(param("color", "Beat", rgba(), json!("#36c3ffff"))),
+            live(described(
+                param("downbeat", "First beat", rgba(), json!("#ffb000ff")),
+                "The colour of each bar's first beat.",
+            )),
+            live(param("off", "Other beats", rgba(), json!("#2a2a2aff"))),
+            live(param(
+                "background",
+                "Background",
+                rgba(),
+                json!("#00000000"),
+            )),
+        ]);
+        Self(KindDescriptor {
+            params,
+            ..kind("midi_beat", "MIDI beat", true, false)
+        })
+    }
+}
+
+impl SourceKind for BeatKind {
+    fn descriptor(&self) -> &KindDescriptor {
+        &self.0
+    }
+
+    fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
+        create(&self.0, settings, ctx, Beat(BeatStyle::read(settings)?))
+    }
+}
+
+#[derive(Clone, Copy)]
+struct BeatStyle {
+    beats_per_bar: u8,
+    color: [u8; 4],
+    downbeat: [u8; 4],
+    off: [u8; 4],
+    background: [u8; 4],
+}
+
+impl BeatStyle {
+    fn read(settings: &Settings) -> Result<Self, SourceError> {
+        Ok(Self {
+            beats_per_bar: int(settings, "beats_per_bar", 1, MAX_BEATS_PER_BAR)? as u8,
+            color: color(settings, "color")?,
+            downbeat: color(settings, "downbeat")?,
+            off: color(settings, "off")?,
+            background: color(settings, "background")?,
+        })
+    }
+}
+
+struct Beat(BeatStyle);
+
+impl Draw for Beat {
+    type Style = BeatStyle;
+
+    fn style(settings: &Settings) -> Result<BeatStyle, SourceError> {
+        BeatStyle::read(settings)
+    }
+
+    fn restyle(&mut self, style: BeatStyle) {
+        self.0 = style;
+    }
+
+    fn draw(&mut self, state: &MidiState, now_ms: u64, canvas: &mut Canvas<'_>) -> bool {
+        let style = self.0;
+        canvas.clear(style.background);
+        let per_bar = i64::from(style.beats_per_bar);
+        // Playing while the clock runs, or stopped: the beat the song is on, and how far
+        // through it. A sender may stop its clock with its transport, so a stopped song
+        // keeps showing where it is; a playing one whose clock went quiet shows nothing.
+        let at = state
+            .tempo()
+            .filter(|t| !t.playing || t.clock(now_ms))
+            .map(|t| {
+                let beat = t.beat_at(now_ms).max(0.0);
+                let in_bar = beat % f64::from(style.beats_per_bar);
+                (in_bar.floor() as i64, in_bar.fract(), t.playing)
+            });
+        let (w, h) = (i64::from(canvas.width()), i64::from(canvas.height()));
+        let gap = (w.min(h) / 20).max(1);
+        for beat in 0..per_bar {
+            let lit = match at {
+                Some((on, _, _)) if on != beat => None,
+                // Playing, the beat flashes at full and dims to 35% as it passes;
+                // stopped, it shows where the song is at 35%.
+                Some((_, through, true)) => Some(127 - (through * 127.0).round() as u8),
+                Some((_, _, false)) => Some(0),
+                None => None,
+            };
+            let base = if beat == 0 {
+                style.downbeat
+            } else {
+                style.color
+            };
+            let fill = lit.map_or(style.off, |v| by_velocity(base, v));
+            let (x0, x1) = (beat * w / per_bar, (beat + 1) * w / per_bar);
+            canvas.fill(x0 + gap, gap, x1 - gap, h - gap, fill);
+        }
+        // A playing song moves on, or its clock goes quiet; either way the next tick may
+        // differ. A stopped one waits for its next message.
+        at.is_some_and(|(_, _, playing)| playing)
     }
 }
 

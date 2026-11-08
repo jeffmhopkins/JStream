@@ -16,6 +16,7 @@
 #![forbid(unsafe_code)]
 
 pub mod about;
+pub mod agents;
 pub mod app;
 pub mod browse;
 pub mod canvas;

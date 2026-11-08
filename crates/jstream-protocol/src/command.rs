@@ -1822,6 +1822,28 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
+    /// Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it
+    /// in, `always_allow` also adds it to the approved list, and `deny` turns it away
+    /// with `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted
+    /// client may answer. Fails with `not_found` for a request that isn't open (answered,
+    /// timed out, or the client went away). Answered by the server, like `device.revoke`.
+    #[serde(rename = "agent.approve")]
+    AgentApprove {
+        /// The request, as `agent.approval_requested` or `agent.approved` names it.
+        approval_id: String,
+        /// The answer.
+        decision: crate::ApprovalDecision,
+    },
+    /// Removes a row from the approved list (0.108, ADR-0131): that client's next
+    /// connection asks again. An open connection stays open. Fails with `not_found` for
+    /// a row the list doesn't hold. Answered by the server, like `device.revoke`.
+    #[serde(rename = "agent.forget")]
+    AgentForget {
+        /// The client name, as `agent.approved` lists it.
+        client_name: String,
+        /// How it connects, as `agent.approved` lists it.
+        transport: crate::AgentTransport,
+    },
     /// Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value
     /// the UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so
     /// every client of the engine, the desktop app and each browser, reads the same one
@@ -2059,6 +2081,8 @@ impl Action {
             Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
+            Action::AgentApprove { .. } => "agent.approve",
+            Action::AgentForget { .. } => "agent.forget",
             Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
             Action::ItemShow { .. } => "item.show",
@@ -2163,6 +2187,8 @@ impl Action {
             | Action::PreviewReport { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
             | Action::UiSettingsSet { .. }
             | Action::PrivacySet { .. }
             | Action::PluginInstall { .. }
@@ -2214,6 +2240,11 @@ impl Action {
                 "type",
                 "a pairing or device action can't be bound: the server answers it for the \
                  client that asks",
+            )),
+            Action::AgentApprove { .. } | Action::AgentForget { .. } => Some((
+                "type",
+                "an agent approval can't be bound: a person answers who may connect \
+                 through the UI (ADR-0131)",
             )),
             Action::UiSettingsSet { .. } => Some((
                 "type",
@@ -2337,6 +2368,8 @@ impl Action {
             | Action::UiSettingsSet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginClapRescan
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
             | Action::EffectEnable { .. }

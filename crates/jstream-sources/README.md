@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md", "docs/adr/0142-feeding-the-midi-sources-and-their-beat.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -183,8 +183,18 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   without a lock or an allocation. A reader skips a log slot a push is writing. CC 120
   and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
   (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
-  `drawn(name)` is the state a source's `input` setting draws. `Context::midi` carries
-  it; with none, the kinds draw their first frame and never change.
+  `drawn(name)` is the state a source's `input` setting draws. An input thread pushes
+  through a `MidiFeed` (`feed(name)`): its own state and the every-input one, looked up
+  once, and a `jstream-midi` `Tempo` tracker its clock and transport messages run,
+  which publishes a `TempoReading` (time, last timing clock, BPM, beat, playing) to both
+  states (`MidiState::tempo`) through a sequence-numbered cell, without a lock. Only a
+  timing clock (`F8`) counts as a running clock. The every-input state takes one feed's
+  clock at a time, until that clock has been silent for `CLOCK_TIMEOUT_MS` (500); a
+  lone stop or song position doesn't take it from a clock that runs. `set_clock` gives it the
+  host's media clock once (`now_ms`), and the kinds measure a note's age on it, the
+  clock messages are stamped on, rather than on the paint time a source is given, which
+  counts from its own start. `Context::midi` carries it; with none, the kinds draw their
+  first frame and never change.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless
@@ -249,6 +259,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   message and nothing it draws is moving. Tests push synthetic messages and read the
   pixels: velocity, channel and input filtering, the fade, the scroll, the lost note-on,
   settling, live and restarting changes, and every setting refused.
+- `midi_beat` ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §4): a row
+  of `beats_per_bar` cells (1 to 16, default 4) for the bar its `input`'s MIDI clock is
+  in, the beat it is on lit: the bar's first in `downbeat`, the others in `color`,
+  flashing at full as the beat starts and dimming to 35% as it passes. Stopped, the
+  beat the song is on shows at 35%, whether or not the sender's clock still runs;
+  playing with no timing clock for half a second, nothing is lit. It has no `channel`,
+  since clock is for the whole input. Size and `input` restart it; the rest is live.
+  While a clock runs, each of its 24 messages a beat counts as a change, so every MIDI
+  source of that input (and of every input) redraws at its 30 fps. Tests feed clock and
+  transport and read the pixels: the beat lit, the downbeat, stopped with and without a
+  clock, and a playing song's clock going quiet.
 - `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
   (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
   same asset root, or embedded as `data:` URIs) or a built-in `shape` (`plane`, `cube`,

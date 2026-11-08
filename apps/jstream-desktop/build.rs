@@ -1,6 +1,8 @@
-//! On Windows: generates the Tauri context (`tauri.conf.json`, the icon) and, with MSVC,
-//! delay-loads the Media Foundation DLLs, so the app starts on a Windows without Media
-//! Foundation and says so in its window, as the daemon does (its `build.rs`).
+//! Where the app has a window (Windows, and Linux with the `webkitgtk` feature):
+//! generates the Tauri context (`tauri.conf.json`, the icon) and sets the `webview` cfg
+//! the window's code is gated on. On Windows with MSVC it also delay-loads the Media
+//! Foundation DLLs, so the app starts on a Windows without Media Foundation and says so
+//! in its window, as the daemon does (its `build.rs`).
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
@@ -11,7 +13,14 @@ include!("media_foundation.rs");
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=media_foundation.rs");
-    #[cfg(windows)]
+    println!("cargo::rustc-check-cfg=cfg(webview)");
+    // The target's, not the host's: build scripts run on the host.
+    let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
+    let webkitgtk = std::env::var_os("CARGO_FEATURE_WEBKITGTK").is_some();
+    if os == "windows" || (os == "linux" && webkitgtk) {
+        println!("cargo:rustc-cfg=webview");
+    }
+    #[cfg(any(windows, all(target_os = "linux", feature = "webkitgtk")))]
     {
         // Declares `pick_path` and `set_network` so tauri-build writes
         // `allow-pick-path` and `allow-set-network` (the `browse` and `network`
@@ -24,7 +33,9 @@ fn main() {
         if let Err(error) = built {
             panic!("could not build the Tauri context: {error:#}");
         }
-        // The target's, not the host's: build scripts run on the host.
+    }
+    #[cfg(windows)]
+    {
         let toolchain = std::env::var("CARGO_CFG_TARGET_ENV").unwrap_or_default();
         if toolchain == "msvc" {
             for dll in MEDIA_FOUNDATION {

@@ -122,9 +122,11 @@ a stolen token, local denial of service.
   must be that host or a configured extra, so a foreign page's WebSocket upgrade is
   refused; then the token, as a bearer token, a Basic password or a WebSocket
   subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)). The token may also be a paired
-  device's, accepted only on loopback or a TLS listener. `POST /api/v1/pair` is the one
-  request answered without one, only while a pairing code is open (see
-  [Pairing](#pairing)).
+  device's, accepted only on loopback or a TLS listener, or the host UI's own token
+  (`ServerConfig::ui_token`, ADR-0131), which the desktop app makes at launch and keeps
+  only in memory; it grants what the control token does, and the network listener
+  refuses it as it refuses the control token. `POST /api/v1/pair` is the one request
+  answered without one, only while a pairing code is open (see [Pairing](#pairing)).
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon's own listener binds `127.0.0.1`, with no flag to bind it elsewhere.
@@ -151,7 +153,8 @@ a stolen token, local denial of service.
     only if the fingerprint matches the one the host shows
     ([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md), which supersedes
     ADR-0114). The `/pair` page says the same next to its code field.
-  - **Device tokens only.** The control token is refused there, however it is presented.
+  - **Device tokens only.** The control token, and the host UI's own token, are refused
+    there, however they are presented.
     `Host` must be the listener's port with a name the certificate carries or the
     address the connection arrived on, and `Origin`, when present, `https://` and that
     host. Configured extra origins don't apply.
@@ -492,7 +495,7 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0131-ask-before-a-new-agent-connects.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -520,6 +523,15 @@ output, sets or clears its key, goes live or stops, steps through its undo histo
 revokes a device, starts a pairing or replaces the UI's settings (#346). Other edits,
 deletes of scenes, sources and items included, are undoable and unannounced
 ([ADR-0098](../adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)).
+
+**Notice, not a control:** in the desktop app with `--mcp`, the person is asked before
+a new agent's first connection, and can allow it once, always, or deny it
+([ADR-0131](../adr/0131-ask-before-a-new-agent-connects.md)). It is a notice with a
+veto, and nothing may rely on it as a control: approval is keyed by the name a client
+gives itself, so a client can pass by naming itself after an approved one, and any
+process of the user can read the token file and write the approved list. Approved
+clients are trusted no differently from any other token holder. Agents get no tool to
+answer a request.
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through
@@ -666,13 +678,16 @@ somewhere it shouldn't.
   sends audio or MIDI.
 - It drops and counts every datagram from outside those ranges, from an address it
   didn't subscribe to, or that `jstream-jtunnel`'s parser refuses (fuzzed on its own).
-  Parsing and playout allocate nothing; a sender's frames go only to the
-  `network_audio` source that names it.
+  Parsing and playout allocate nothing; a sender's audio goes only to the
+  `network_audio` source that names it, and its MIDI only to the MIDI state of its own
+  name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
+  doesn't trigger bindings (ADR-0142 §2).
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
-inject audio into the source that records it (ADR-0123 §6), as with JTunnel anywhere.
+inject audio into the source that records it, or notes into what its MIDI sources draw
+(ADR-0123 §6), as with JTunnel anywhere.
 Off by default, LAN only and accepted one sender at a time bound it to someone on the
 same network who already targets this machine.
 

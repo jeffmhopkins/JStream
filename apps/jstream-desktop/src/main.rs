@@ -1,7 +1,8 @@
 //! `jstream-desktop`: the JStream desktop app. A Tauri window shows the web UI
 //! (`jstream-ui`), and the engine runs in the same process, served to the window over
-//! the authenticated localhost WebSocket API. Windows first: the window needs WebView2,
-//! so elsewhere the binary only says to use the daemon.
+//! the authenticated localhost WebSocket API. The window runs on Windows (WebView2) and on
+//! Linux built with the `webkitgtk` feature (WebKitGTK); elsewhere the binary only says
+//! to use the daemon.
 //!
 //! Docs: apps/jstream-desktop/README.md#usage
 
@@ -12,7 +13,7 @@
 use std::process::ExitCode;
 
 /// Starts the engine and shows the window until it closes.
-#[cfg(windows)]
+#[cfg(webview)]
 fn main() -> ExitCode {
     use jstream_desktop::app::{self, Startup};
     use std::ffi::OsString;
@@ -74,20 +75,24 @@ fn main() -> ExitCode {
 
 /// Prints the crash hook's redacted line naming the report. Best effort: a release
 /// build has no console, and the report is what matters.
-#[cfg(windows)]
+#[cfg(webview)]
 fn crash_line(line: &str) {
     use std::io::Write;
     let _ = writeln!(std::io::stderr().lock(), "{line}");
 }
 
-/// No window here yet: says so and fails.
-#[cfg(not(windows))]
+/// No window here: says so and fails.
+#[cfg(not(webview))]
 fn main() -> ExitCode {
     use std::io::Write;
-    let _ = writeln!(
-        std::io::stderr().lock(),
-        "error: the desktop app runs on Windows only for now; run `jstream-daemon` and open \
-         the web UI in a browser instead"
-    );
+    let message = if cfg!(target_os = "linux") {
+        "error: this build of the desktop app has no window: build it with `--features \
+         webkitgtk` (which needs WebKitGTK 4.1), or run `jstream-daemon` and open the web UI \
+         in a browser"
+    } else {
+        "error: the desktop app has no window on this platform yet; run `jstream-daemon` and \
+         open the web UI in a browser instead"
+    };
+    let _ = writeln!(std::io::stderr().lock(), "{message}");
     ExitCode::FAILURE
 }
