@@ -26,8 +26,8 @@ first cut defines its own wire types for them.
 Contents (a deliberately small first cut; [Design](#design) describes the whole model):
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`,
-  and `ActionResult`, the data an action may answer with (`pairing.start`'s code,
-  `youtube.sign_in`'s consent URL, a YouTube broadcast).
+  and `ActionResult`, the data an action may answer with (`pairing.start`'s code and
+  network listener, `youtube.sign_in`'s consent URL, a YouTube broadcast).
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **History** (`history.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
@@ -60,10 +60,10 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `encoder.create`, `encoder.update`, `encoder.delete`, `video_mix.create`,
   `video_mix.update`, `video_mix.delete`, `source.set_audio`, `bus.create`,
   `bus.rename`, `bus.set_fader`, `bus.set_monitor`, `bus.delete`, `send.set`,
-  `send.remove`, `hotkey.set`,
-  `hotkey.clear`, `transition.create`, `transition.update`, `transition.delete`,
+  `send.remove`, `hotkey.set`, `hotkey.set_labels`,
+  `hotkey.clear`, `binding.set`, `binding.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
@@ -79,7 +79,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
   `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
-  `source.restart`, `scene.set_keyframe`), with
+  `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
+  `collection.save_as`), with
   `Action::named_objects` and `Action::bind_problem`,
   which every implementation uses to check and follow a hotkey's action, and
   `Action::cue_problem` and `Action::cue_state`, which check a timeline cue's action
@@ -109,7 +110,13 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
   mock compare to remove a key that would otherwise follow its output elsewhere (#343).
 - **Hotkeys** (`hotkey.rs`, [ADR-0024 §5](../../docs/adr/0024-scene-structure.md)):
   `Chord`, a key chord string with one spelling per chord (`Chord::problem`, shared by
-  every implementation), and `HotkeyBinding`, a chord and its action as reads report it.
+  every implementation), and `HotkeyBinding`, a chord, its action and its labels
+  ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) as reads report it.
+- **Controller bindings** (`binding.rs`, since 0.96,
+  [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)):
+  `Trigger`, a MIDI note, control change or program change, on one channel or any, from
+  one input or any (`Trigger::problem`, shared by every implementation), and `Binding`,
+  a trigger and its action as reads report it. See [Controller bindings](#bindings).
 - **Encoder profiles** (`encoder.rs`): `EncoderProfile` (H.264, HEVC or AV1 and AAC, with rate
   control, keyframe interval and hardware preference), its range checks
   (`EncoderProfile::problem`, shared by every implementation), `EncoderProfileInfo`,
@@ -131,7 +138,10 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
 - **Organisation** (`organise.rs`,
   [ADR-0024](../../docs/adr/0024-scene-structure.md) §3 and §4): `FolderInfo`,
   `LabelInfo`, `SceneMeta` and `SourceMeta`, and the colour and icon checks every
-  implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`).
+  implementation shares (`check_color`, `check_icon`, `SceneMeta::problem`); and
+  `LabelMembers`, with `LabelledScene` and `LabelledTimeline`, what `label.members`
+  lists for a label
+  ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)).
 
 <a id="contents-calls"></a>
 ## Contents: queries, kinds and events
@@ -146,16 +156,18 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
-  `pack.read`, `values.list` and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds), with `QueryResult`
+  `pack.read`, `values.list`, `label.members` (since 0.100,
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
+  holds, `StreamProfile`, `ProfileStream` and `MixerProfile` among them), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
-  `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas` and the `Blending` (since 0.98), and
+  `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas` and the `Blending` (since 0.101), and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
-  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent)
+  `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent;
+  since 0.91 `camera_follow` is read from its items' `follow_pointer` filters, ADR-0120)
   and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
@@ -171,7 +183,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
-  reports it (its `effects` since 0.63, its `motion` since 0.81), `OverrideField`, the field `item.clear_override` removes, and
+  reports it (its `effects` since 0.63, its `motion` since 0.81, its `timing` since 0.99), `OverrideField`, the field `item.clear_override` removes, and
   `DroppedOverride`, an override a batch dropped, and `PlacedKeyframe` (since 0.88),
   a placed scene's switched keyframe ([Keyframe tracks](#keyframe-tracks)).
 - **Motion** (`motion.rs`, since 0.81,
@@ -190,9 +202,12 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   which checks a camera's list as `check_motion` checks an item's and refuses an
   `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
-  `yaw_deg`, `pitch_deg`, `lean_deg` and `smooth_ms`, each with its default) with
-  `CameraFollow::check`, and `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25),
-  what `scene.zoom_camera` steps by.
+  `yaw_deg`, `pitch_deg`, `lean_deg`, `smooth_ms` and, since 0.91, `safe_margin_pct`
+  up to `MAX_FOLLOW_MARGIN_PCT`, each with its default) with `CameraFollow::check`, and
+  `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25), what `scene.zoom_camera`
+  steps by. Since 0.91 a follow camera is a filter (ADR-0120): `FOLLOW_POINTER_KIND`
+  (`follow_pointer`), its `follow_pointer_descriptor`, and `CameraFollow::settings` and
+  `CameraFollow::from_settings`, which map a follow to that filter's settings and back.
 - **YouTube** (`youtube.rs`, [ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)):
   `YoutubeAuth`, `BroadcastInfo`, `StreamInfo` and the enums they carry, mirroring the
   Live API with an `other` value for anything newer, and `AudienceStatsInfo`,
@@ -223,7 +238,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
   `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
-  and `timeline.cue_fired` (0.87), and `scene.keyframe_changed` (0.88).
+  and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
+  `collection.file_changed` (with `CollectionCause`, 0.94).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -301,11 +317,44 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.98 (a placeholder number the release queue sets) because a
+`PROTOCOL_VERSION` is 0.101 because a
 collection has one blending space, `canvas.set_blending` and `state.get`'s `blending`,
 and `BlendMode` is back to nine modes, the two `_srgb` names still read as `normal`
-and `additive` ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md));
-0.89 because a collection can set its base frame rate with
+and `additive` ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md),
+a number the release queue set); 0.100 because hotkey bindings and timelines carry labels
+(`hotkey.set_labels`, `HotkeyBinding.labels`, `TimelineInfo.labels`) and `label.members`
+lists everything that carries a label
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md), a number the
+release queue set); 0.99 because a keyframe scene can time an item in switches into it
+(`item.set_timing`, `ItemOverride.timing`, `KeyframeTiming`, `OverrideField::Timing`) and
+the easings gain `ease_in`, `hold` and `cubic_bezier`
+([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md), a number the
+release queue set); 0.98 because `scene.set_camera` accepts a camera on a keyframe
+of a 2D scene, which it refused before, and a Move between a 2D side and a 3D one glides
+([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md), a number the
+release queue set); 0.97 because `pairing.start`'s answer can carry `network`, the
+network listener's addresses and certificate fingerprint
+([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md), a number the
+release queue set); 0.96 because of controller bindings: `binding.set`,
+`binding.clear`, `Trigger`, `Binding`, `state.get`'s `bindings`, `delete.plan`'s
+`bindings`, the batch result's `removed_bindings` and the `binding` entity kind
+([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md), a
+number the release queue set); 0.95 because `preview.subscribe` takes an `fps` up to 60, so a
+live view can show a 60 fps program at its full rate (30 before; a number the release
+queue set); 0.94 because of projects: the actions `collection.open`,
+`collection.new` and `collection.save_as`, the query `collection.info`, the event
+`collection.file_changed` and the `file` entity kind
+([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md), a number the release
+queue set); 0.93 because a parameter's descriptor can carry a `warning`, one
+line a client shows beside the control
+([ADR-0124](../../docs/adr/0124-page-api-read-review.md), a number the release queue
+set); 0.92 because `profile.get` reports past the drawers: each
+encoded stream's frames (`streams`, `StreamProfile`, `ProfileStream`) and the audio
+mixer's blocks (`mixer`, `MixerProfile`) (#1220); 0.91 because a follow camera is a `follow_pointer` filter on a
+capture item, `scene.set_camera_follow` a shortcut for its filter edits, and
+`CameraFollow` gains `safe_margin_pct`
+([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md), a placeholder number the
+release queue sets); 0.89 because a collection can set its base frame rate with
 `canvas.set_frame_rate` (30 by default, or 60; [ADR-0119](../../docs/adr/0119-base-frame-rate-option.md));
 0.88 because of keyframe tracks: the action `scene.set_keyframe`,
 `studio.get`'s `keyframes` (`PlacedKeyframe`) and the event `scene.keyframe_changed`
@@ -486,9 +535,10 @@ covers = ["crates/jstream-protocol/src/schema.rs", "crates/jstream-protocol/src/
 - **Parity fixture** (`parity.rs`, only with the non-default `fixtures` feature): test
   support, not wire types. One batch that builds a small collection (a non-default
   canvas, legacy items, one geometry item (flipped left to right), two RTMP outputs, a virtual camera, a recording output, two
-  encoder profiles, two video mixes and two hotkeys, one of them rebound), the exact answer to every collection read of it (`output.list`
+  encoder profiles, two video mixes, two hotkeys and two controller bindings, one of each rebound), the exact answer to every collection read of it (`output.list`
   included), and the exact error for batches rejected against it (geometry, canvas, RTMP
-  URL, recording path, encoder profile, video mix and hotkey checks, and `item.set_source` and
+  URL, recording path, encoder profile, video mix, hotkey and binding checks, a hotkey
+binding's labels, `label.members` of a missing label, and `item.set_source` and
   `duplicated_from`, opacity, blend and filter checks, included). The collection also
   holds a clone made with `source.duplicate` and `item.set_source`, a
   `duplicated_from` naming a missing source, items at opacity 0.25 and 0.5, a
@@ -719,6 +769,17 @@ keeps the addressing of the edit it undoes.
   effect are edges of the keyframe scene; a blocker names them as
   `overrides.<item_id>.effects.<filter_id>.<param>` of that scene, and `delete.plan`
   clears them with `item.set_effects`.
+- **Timing** (0.99, [ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)):
+  an override's `timing` is a `KeyframeTiming {delay_ms?, easing?, duration_ms?}` for
+  switches into that keyframe: the item takes the keyframe's delay and easing in place
+  of its own `ItemTransition`'s, and its duration in place of the preset's, whether it
+  glides in, appears or leaves; an omitted field follows the item and the preset, and
+  the preset's `stagger_ms` still adds to the delay. A switch into any other scene, the
+  parent and the other keyframes included, doesn't use it. `item.set_timing { scene_id,
+  item_id, timing }` writes it whole; only a keyframe scene takes it (the item's own
+  scene is `invalid_argument` on `edits.N.scene_id`), a delay or duration over 60000 is
+  `invalid_argument` on `edits.N.timing.<field>`, and a timing with no field set removes
+  it. Its inverse is the old timing, or `item.clear_override` of `timing`.
 - A variant depends on its parent: `scene.delete` of a parent is refused while it has
   variants (blockers with field `variant_of`), and `delete.plan` of a parent deletes its
   variants, and the `scene` sources that show them, before it.
@@ -817,7 +878,9 @@ never a type per kind.
   since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
   lists it, so a UI can offer those to pick from), a `default`, a `label`, an
-  optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
+  optional `description`, an optional `warning` (since 0.93: one line a client shows
+  beside the control, not only in a tooltip, saying what the setting gives away), the UI
+  hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
 - Values are plain JSON. Colours are `#rrggbb`, or `#rrggbbaa` when `alpha` is set.
@@ -897,7 +960,7 @@ All of this is added in 0.22. A placement has an `opacity`, from 0 to 1 an alpha
 set them. Out of range is `invalid_argument` on `edits.N.opacity`. Before 0.47 every
 mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compositor
 draws all nine, in linear light except overlay, difference and exclusion, which blend
-sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). From 0.98
+sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). From 0.101
 the collection's blending space picks where every mode mixes: `srgb`, the default, as a
 browser composites, or `linear`, ADR-0082's ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). 0.75 to 0.97 had
 `normal_srgb` and `additive_srgb` (ADR-0105);
@@ -1085,8 +1148,14 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   and hide one item: they change its placement's visibility as `item.set_visible` would,
   moving `rev` on with no undo step, and the engine plays the item's own `appear` or
   `disappear` effect on program over the default preset's duration.
+- **`hotkey.set_labels {chord, labels}`** (0.100,
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) sets the labels of
+  a binding, whole, from the collection's one set of labels: the binding must exist
+  (`not_found`, entity `hotkey`), then each label (`not_found`), each listed once
+  (`invalid_argument` on `labels`). They are kept ordered by ID, and an empty list
+  removes them; its inverse sets the old ones. `hotkey.set` binds with none.
 - **`hotkey.clear {chord}`** removes a binding, or is `not_found` (entity `hotkey`); its
-  inverse is `hotkey.set` with the action.
+  inverse is `hotkey.set` with the action, then `hotkey.set_labels` when it carried any.
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
@@ -1094,15 +1163,53 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   names, the scene, keyframe scene and preset a `scene.set_keyframe` names, and the
   item an `item.*` action names), and any edit that takes an item away
   (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
-  the item (ADR-0101). Their inverses restore the
-  bindings after the target. If another client has bound one of those chords since,
+  the item (ADR-0101). A binding goes with its labels. Their inverses restore the
+  bindings, with their labels, after the target. If another client has bound one of those chords since,
   that `hotkey.set` fails and so does the undo, rather than overwriting the binding.
   A batch's result lists the bindings it removed (`removed_hotkeys`), and `delete.plan`
   lists the ones its batch would (`hotkeys`), so a client can say "this also removes
   the hotkey Ctrl+Digit1".
-- Reads report a binding as a `HotkeyBinding {chord, action}` whose `action` is plain
+- Reads report a binding as a `HotkeyBinding {chord, action, labels}` (`labels` omitted
+  for none) whose `action` is plain
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
+
+<a id="bindings"></a>
+## Controller bindings
+<!-- @section
+covers = ["crates/jstream-protocol/src/binding.rs"]
+depends_on = ["docs/adr/0122-controller-input-midi-and-one-binding-system.md"]
+-->
+
+Controller bindings (0.96) are collection state beside the hotkeys
+([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)
+decision 1): a `Trigger` bound to an `Action`. A key chord stays a hotkey, so
+`state.get`'s `hotkeys` lists chords only, as a client that registers them with the OS
+expects; every other trigger is a binding, in `bindings`. Where a client listens for a
+chord and sends its action, a controller's messages come from an input the engine reads,
+so the engine runs the action itself, on the first frame at or after the message's time.
+No input feeds bindings yet; the MIDI and JTunnel inputs add them.
+- **Triggers** are tagged by `kind`: `midi_note {note}`, `midi_cc {controller}` and
+  `midi_program {program}`, each 0 to 127, with an optional `channel` (1 to 16, as a
+  device's panel shows it; missing for any channel) and an optional `input` (the name of
+  a MIDI port or JTunnel sender, at most 64 bytes and no control characters; missing for any). A note fires on
+  note-on, a control change when its value crosses from 63 or below to 64 or above (so a
+  button sending 127 then 0 fires once), a program change each time. Two triggers are
+  the same exactly when they are equal, so channel 1 and any channel are two bindings,
+  and a message matching both fires both. Anything else is `invalid_argument` on
+  `trigger.<field>`, with `Trigger::problem`'s reason.
+- **`binding.set {trigger, action}`** binds a trigger; its inverse is `binding.clear`.
+  It is refused with `already_exists` (entity `binding`, the trigger as `Display`
+  writes it, such as `MIDI note 36 on channel 10`, as `id`) for a trigger that is
+  bound. The action is checked as `hotkey.set` checks it: the same actions can't be
+  bound, and an object it names must exist.
+- **`binding.clear {trigger}`** removes a binding, or is `not_found` (entity
+  `binding`); its inverse is `binding.set` with the action.
+- **Deletes remove bindings** as they remove hotkeys, in the same edit, and their
+  inverses restore them after the hotkeys. A batch's result lists them in
+  `removed_bindings`, and `delete.plan` in `bindings`, ordered by trigger.
+- Reads report a binding as a `Binding {trigger, action}` whose `action` is plain JSON,
+  as `HotkeyBinding`'s is. `Binding::action` parses it.
 
 <a id="organisation"></a>
 ## Folders, labels and scene options
@@ -1146,17 +1253,25 @@ omitted removes it. The edit refuses a field of view out of range
 (`edits.N.camera.fov_deg`), a coordinate past the drawable limit (`edits.N.camera`), a
 position closer than 0.001 px to the target (`edits.N.camera.target`), a focus distance
 not above 0 or past the drawable limit (`edits.N.camera.focus_px`) and a blur outside 0
-to 64 (`edits.N.camera.blur_px`). On a keyframe scene it sets the variant's override, refused
-while its parent has no camera; removing the parent's camera drops its variants'
-overrides, and its inverse restores them. `SceneInfo.camera` reports the scene's own
+to 64 (`edits.N.camera.blur_px`). On a keyframe scene it sets the variant's override, which a
+keyframe of a 2D scene may have too ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md));
+removing the parent's camera drops its variants' overrides (a removal on a parent with
+none drops nothing), and its inverse restores them. `SceneInfo.camera` reports the scene's own
 camera, on a keyframe scene its override (it shows its parent's where it has none), and
 is omitted when there is none. It is live-adjustable. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
-bytes). A folder that holds a scene or folder, and a label a source or scene carries, can't
-be deleted: the `invalid_argument` lists the `blockers` (`folder`, `parent` or `labels`;
-for a label, its sources first, then its scenes), and `delete.plan` with a `folder` or
-`label` target returns the batch that moves what the folder holds up to its parent, or
-takes the label off its sources and scenes, then deletes it.
+bytes). Since 0.100 hotkey bindings ([Hotkeys](#hotkeys)) and timelines
+([Timelines](#timelines)) carry labels from the same set, checked the same way
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), and
+`label.members {label_id}` lists everything that carries one: its scenes in display
+order, each with its parent when it is a keyframe scene, its sources by ID, its bindings
+by chord with their actions, and its timelines by scene then ID, each with its scene;
+`not_found` for a label that doesn't exist. A folder that holds a scene or folder, and a
+label anything carries, can't be deleted: the `invalid_argument` lists the `blockers`
+(`folder`, `parent` or `labels`; for a label, its sources first, then its scenes, its
+bindings and its timelines), and `delete.plan` with a `folder` or `label` target returns
+the batch that moves what the folder holds up to its parent, or takes the label off
+each, in that order, then deletes it.
 `state.get` reports `folders` and `labels`, each omitted when empty, and `scene.list`,
 `state.get` and `source.list` report each scene's and source's fields, each omitted
 while it has its default, so an older client reads the collection as before.
@@ -1240,8 +1355,15 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   Like a switch it changes no `rev` and is never undone; a switch leaves preview where
   it is.
 
-`Easing::apply` is the one easing function every implementation evaluates, so the UI's
-preview of a transition and the engine's render agree.
+An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
+([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
+`hold` (no progress until the end, then the whole jump) or `{"cubic_bezier": {x1, y1, x2,
+y2}}`, CSS's curve, with `x1` and `x2` in 0 to 1 and `y1` and `y2` in -2 to 3, so it may
+overshoot (`Bezier`; `Bezier::BACK_OUT` is the curve a client offers first). A point out
+of range is `invalid_argument` on `…easing.cubic_bezier.<field>`, on a preset, on an
+item's `transition` or on a keyframe's `timing`. `ItemEasing` is the same list plus
+`inherit`. `Easing::apply` is the one easing function every implementation evaluates, so
+the UI's preview of a transition and the engine's render agree.
 
 <a id="batches"></a>
 ## Batches, revisions and `expected_rev`
@@ -1267,7 +1389,8 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
   original result, even if `rev` has moved on since.
 - Results: a successful batch answers `{"kind":"batch","rev":N}`, the revision it
   produced, with `removed_hotkeys` when its deletes removed hotkey bindings (0.25;
-  omitted when there are none) and `dropped_overrides` when it dropped keyframe
+  omitted when there are none), `removed_bindings` likewise for controller bindings
+  (0.96) and `dropped_overrides` when it dropped keyframe
   overrides (0.39; omitted when there are none). Queries that read collection state report the `rev` they read.
 
 <a id="queries"></a>
@@ -1281,14 +1404,16 @@ Queries read and never change `rev`. Those that read the collection state carry 
 
 - `state.get`: the whole collection at one revision: the `canvas` (missing from a
   pre-0.11 server, it parses as 1920×1080), the `blending` space (always sent from
-  0.98; missing from an older server, it parses as `linear`, ADR-0126), every source, every scene in display order
+  0.101; missing from an older server, it parses as `linear`, ADR-0126), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty), every video mix (`video_mixes`,
   ordered by ID; missing from a pre-0.28 server, it parses as empty), the `buses` and
   `sends` (as `bus.list`; missing from a pre-0.19 server, both parse as empty), every
   hotkey binding (`hotkeys`, ordered by chord; missing from a pre-0.25 server, it
-  parses as empty), the master stage (`master`, with its filter chains; omitted while
+  parses as empty), every controller binding (`bindings`, ordered by trigger; omitted
+  when there are none, so missing, also from a pre-0.96 server, parses as empty), the
+  master stage (`master`, with its filter chains; omitted while
   it has none, so missing, also from a pre-0.29 server, parses as empty), the
   transition presets with the default (`transitions`; missing from a pre-0.30 server,
   it parses as the one initial `cut`), and the `folders` and `labels` in their orders
@@ -1296,6 +1421,14 @@ Queries read and never change `rev`. Those that read the collection state carry 
   it on connecting, and again after a `state.changed` it didn't cause.
 - `scene.list`: the scenes in display order, each with its name, `role` (omitted for a
   `scene`) and item count.
+- `label.members {label_id}` (0.100,
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)): everything that
+  carries one label, as `LabelMembers` at the `rev` it was read: the label, its `scenes`
+  in display order (`scene_id`, `name`, and `variant_of` for a keyframe scene), its
+  `sources` by ID, its `hotkeys` by chord with their actions, and its `timelines` by
+  scene then ID (`timeline_id`, `name`, `scene_id`), each list omitted when empty, so an
+  agent lists a label's action group in one call. `not_found` for a label that doesn't
+  exist.
 - `source.list`: the sources, ordered by ID (sources have no display order), each with
   its name, `SourceKind`, settings, filters and, for an audio source, its `audio`.
 - `bus.list`: the buses, ordered by ID (the master among them), and every send,
@@ -1365,8 +1498,22 @@ Queries read and never change `rev`. Those that read the collection state carry 
   process's CPU; and its threads by name, as a percentage of one core (JStream's own
   `name`, any other `remote_name`, third-party text). `top` (default 20, at most 200)
   cuts each list. Times are the drawing thread's, not the GPU's; `gpu_ms` and
-  `gpu_timing` are reserved for GPU timestamps. Runtime state, so no `rev`. Added in
-  0.73.
+  `gpu_timing` are reserved for GPU timestamps. Since 0.92 it also reports past the
+  drawers. `streams` lists each running output's program feed and each H.264 preview
+  stream (a `ProfileStream`: `output` with its `output_id`, or `preview` with its
+  `channel` and the `scene_id` or `source_id` it shows) as a `StreamProfile`: its
+  encoded `fps`, the video frames handed to its encoder (`frames_in`), taken by it
+  (`encoded`), sent on (`frames_out`, to the muxer or publish target, or to the
+  client) and `dropped` on the way, the frames its encoder took more than a frame
+  period after they were handed over (`late`), the encoder's average time per frame
+  (`encode_ms`), and the bit rate sent against the encoders' (`kbps`, `target_kbps`;
+  video and audio for an output, video for a preview stream). Most frames lost come
+  first; a stream that ran in none of the window, or has ended, is left out. `mixer`
+  (omitted when it mixed no block in the window) counts the mixer's `blocks`, the
+  `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest
+  mix (`block_max_ms`), the frames it skipped to catch up (`skipped_frames`), and the
+  inputs' frames played as silence (`underrun_frames`) and dropped (`dropped_frames`).
+  Runtime state, so no `rev`. Added in 0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
@@ -1401,6 +1548,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
   state, so no `rev`. Added in 0.58 (see *Plugins* below).
+- `collection.info`: the project file the engine saves to (`path`) and up to ten
+  `recent` ones, most recent first. Not collection state, so no `rev`. Added in 0.94
+  (see *Projects* below).
 - `codec.downloads`: the codec libraries the engine can download on a person's request,
   ordered by ID. Not collection state, so no `rev`. Added in 0.69 (see *Codec
   downloads* below).
@@ -1423,7 +1573,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   and by the outputs that carry it, which the plan moves; its `bus.delete` takes its
   sends. A target nothing refers to plans just its own
   delete. `hotkeys` lists the bindings the batch removes with what they name, ordered
-  by chord (0.25; omitted when there are none); they need no edit of their own. The client
+  by chord (0.25; omitted when there are none), and `bindings` the controller bindings,
+  ordered by trigger (0.96; omitted when there are none); they need no edit of their
+  own. The client
   shows the plan, then sends it as an ordinary batch with that `expected_rev`, so it is
   refused if the state moved on, and its undo is the batch's inverse.
 - `video.snapshot`: the current program mix as a PNG, never a video mix (there is no
@@ -1465,7 +1617,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
 
 **Pairing** (0.21, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
 `pairing.start` opens a one-time code and answers it in `result`
-(`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`), `device.list`
+(`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`). Since 0.97 a
+server that also listens on the local network adds `network`, `{"urls":[…],
+"fingerprint":"AB:CD:…"}`: the addresses a device opens and the SHA-256 fingerprint of
+the listener's certificate, which a client shows so the person continues past the
+browser's warning only when it matches
+([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)); an older client
+ignores it. `device.list`
 lists the paired devices, and `device.revoke {device_id}` forgets one (`not_found` with
 entity `device` for an unknown one). They concern whom a listener admits, so the server
 in front of the engine answers them
@@ -1486,6 +1644,27 @@ the engine answers them and keeps them in its settings file, with pairing off to
 `Control` with no server in front answers `unsupported`. `ui_settings.set` fails with
 `action_failed` when the file can't be written, and the value is then kept until the
 server stops.
+
+**Projects** (0.94, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
+A project is one collection file on the engine's machine. `collection.open {path}` loads
+the file at `path` and saves there from then on; `collection.new {path}` creates an empty
+one there; `collection.save_as {path}` writes the current collection there and saves
+there from then on. New and save as never replace a file: anything at `path`, the open
+file included, is `already_exists`, entity `file`. An open or a new is `action_failed`
+while the open project can't be saved. A
+path is absolute and follows the `absolute` asset path rules (`invalid_argument` on
+`path` otherwise). A file that can't be read or loaded, such as one from a newer engine,
+is `action_failed` with its reason, and the open project stays open. An open or a new
+stops every running output, clears every client's undo history and idempotency keys,
+cancels open gestures, stops timelines, puts the first scene on program, and moves `rev`
+past the old collection's; every client gets `state.changed` (so an older client reads
+the state again), `studio.changed` and `collection.file_changed {path, cause}`. A save as
+to another folder rewrites asset references to keep naming the same files (a new `rev`
+that clears undo when it rewrites any). Stream keys belong to one project path on the
+engine's machine, and nothing in the file names where they are, so two projects sharing
+an output ID never share a key. All
+four answer `unsupported` when the host named no collection file, as the mock does. No
+plugin is granted them and no hotkey binds them.
 
 An item is reported with its `source_id`, `placement` form, `transform`, `geometry`,
 `crop`, `visible`, `opacity`, `blend` and `transition`, and a source with its name, kind, settings and
@@ -1867,8 +2046,9 @@ a scoped `Control`, which checks every call against the plugin's grant before it
 the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
 
 - **Classes.** A person grants a plugin classes: `read` (the queries; always granted),
-  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey and studio
-  edits, among them a scene's folder, metadata and transitions, a source's metadata, an
+  `edit` (scene, item, source, filter, transition, bus, send, canvas, hotkey, binding and studio
+  edits, among them a scene's folder, metadata and transitions, a source's metadata, a
+  hotkey binding's labels (ADR-0133), an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
   a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
@@ -1886,7 +2066,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   command can't reach plugins unreviewed.
 - **Checking a call.** `plugin_classes` collects the class of every command a call
   carries: each edit of a batch, each edit a `live.set` carries, and for `hotkey.set`
-  the class of the action it binds, since a person's key press runs it: with `edit`
+  and `binding.set` the class of the action it binds, since a person's key press or
+  pad runs it: with `edit`
   alone a plugin can't bind `output.start`. A call needing a class outside the grant,
   naming a never command, or an empty batch is `forbidden` (`PluginGrant::check`), with
   the call's first command as `call`.
@@ -2124,6 +2305,10 @@ after 1.0:
   break a 0.30 client. 0.31's organisation edits add `folder` and `label` to
   `EntityKind` for theirs, and 0.87 adds `timeline` the same way: only an error
   answering a timeline edit or action, or a `hotkey.set` naming a timeline, names it.
+  0.94 adds `file` the same way: only an error answering `collection.new` or
+  `collection.save_as` names it.
+  0.96 adds `binding` the same way, named only by an error answering a `binding.*`
+  edit.
   0.87's `SceneInfo.timelines` holds each cue's action as plain JSON, as a hotkey
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
@@ -2135,13 +2320,17 @@ after 1.0:
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
   (0.86) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
-  `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.98
+  `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
   sends them, and still reads them, so an older client that sends one keeps working,
   and its look then follows the collection's `blending`. `state.get`'s `blending` is
   always sent; missing, from an older server, it parses as `linear`, the only space
-  that server drew. `BlendMode` still has no `Unknown` fallback; whether it gets one,
-  and whether such a break counts as a minor bump, are part of open question 8.
+  that server drew.
+  `BlendMode` still has no `Unknown` fallback; whether it gets one, and whether such a
+  break counts as a minor bump, are part of open question 8. 0.99 adds the `Easing` and
+  `ItemEasing` values `ease_in`, `hold` and `cubic_bezier` (ADR-0129) on the same
+  terms: a client older than 0.99 can't parse `state.get` or an item listing once a
+  preset, an item or a keyframe's timing uses one.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.
@@ -2243,7 +2432,11 @@ Since 0.87 a scene holds timelines
   action a later cue runs still reads `state.get`; `timeline.set` refuses an action
   it doesn't know at `cues.N.action`. A scene holds at most 32. A cue a loop would
   never reach (at or past where it jumps back, or past a `once` timeline's end) is
-  refused. `TimelineInfo::problem` is the check every implementation shares.
+  refused. `TimelineInfo::problem` is the check every implementation shares. Since 0.100
+  a timeline carries `labels` too, omitted for none
+  ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)): each must exist
+  (`not_found`) and be listed once (`invalid_argument` on `timeline.labels`), and they
+  are kept ordered by ID ([Folders, labels and scene options](#organisation)).
 - **Cue actions** are a closed set (`Action::cue_problem`): `scene.switch`,
   `scene.set_keyframe` (since 0.88, [Keyframe tracks](#keyframe-tracks)), `item.show`, `item.hide`, `item.toggle`, `item.trigger_motion`, `values.set`,
   `source.restart`, and `timeline.play`, `timeline.stop` and `timeline.seek`. None is an
@@ -2393,7 +2586,7 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   to that rate, so 60 doubles every mix. Anything else is `invalid_argument` on
   `edits.N.fps`. `state.get` reports `base_fps`, omitted while it is 30. Inverse:
   `canvas.set_frame_rate` with the previous rate. `canvas.set_blending { blending }`
-  (0.98, [ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) sets the space every blend mode mixes in: `srgb`, browser-style
+  (0.101, [ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) sets the space every blend mode mixes in: `srgb`, browser-style
   and a new collection's, or `linear`. It applies to every scene from the next frame,
   and `state.get` reports it as `blending`. Inverse: `canvas.set_blending` with the
   previous space.
@@ -2467,7 +2660,8 @@ the JSON text messages of the same connection (0.20,
   apart in the frame header). The picture is the canvas scaled down to fit
   `max_width` × `max_height` (default 640 × 360, at most 1920 × 1080) with even sides,
   so it follows `canvas.set_size`. A picture is sent when what the stream shows
-  changes, at most `fps` times a second (default 15, at most 30), and at least every
+  changes, at most `fps` times a second (default 15, at most 60 since 0.95, 30 before; the engine
+  runs it no faster than the collection's base rate), and at least every
   2 s as a keyframe. `codecs` lists what the client can decode, most preferred first
   (default `["h264", "jpeg"]`); the engine uses the first it can encode, and may fall
   back to a later one if an encoder fails to open, so each frame names its codec.

@@ -47,6 +47,11 @@ JStream keeps its settings, scenes and logs in `%APPDATA%\JStream`. To keep them
 JStream folder instead (to run it from a USB stick), create an empty file named
 `portable`, with no extension, next to `jstream.exe`: they then go in its `data` folder.
 
+Your scenes, sources and outputs are one project file. **File › Save project as…** saves
+them to a new file, **File › Open project…** and **Open recent** switch to another, and
+**File › New project…** starts an empty one. JStream opens the last project at start.
+Opening one stops any output that is running, and each project keeps its own stream keys.
+
 <a id="scene"></a>
 ## Your first scene
 <!-- @section
@@ -67,7 +72,8 @@ adds, which makes soft glows and veils brighter.
    then type its name.
 2. In **Sources**, click **+** under the list (or right-click and choose **Add source…**).
    Pick a type, or type in the search box to find one: display or window capture, a
-   webcam, an audio input (your microphone), a media file, an image, a browser page,
+   webcam, an audio input (your microphone), a media file, an image, a 3D model (a glTF
+   or GLB file, or a built-in shape such as a cube), a browser page,
    text (it starts bold with a soft shadow), a colour, a backdrop (a painted studio
    backdrop, generated), a shape (a plate, pill or circle, with an optional gradient),
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press

@@ -119,7 +119,11 @@ and calls this crate.
   (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
   opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
   perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
-  `jstream-core`'s.
+  `jstream-core`'s. A paired item's effects may differ only in their settings
+  ([ADR-0127](../../docs/adr/0127-moves-interpolate-effect-settings.md)):
+  `settings_blend` says whether two settings maps can blend (no reference or `null`
+  differs), and `blend_settings` gives them `k` of the way, numbers and colours
+  linearly (rounded for the kind's `int` parameters, which the caller names), every other differing value switching at one half, `k` clamped to `[0, 1]`.
 
 **Where it sits on the existing APIs.**
 
@@ -278,7 +282,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    by the sampler and its alpha replaced by 1, in the composite shader and in a
    filter's input alike.
 2. **Mips** (ADR-0050 decision 5). Before the composite pass, each source a visible 3D
-   item draws gets its mip chain rebuilt if its image changed: an `Rgba16Float` texture
+   item, or a visible 2D item drawn small, draws gets its mip chain rebuilt if its image
+   changed: an `Rgba16Float` texture
    with every level down to 1×1, premultiplied linear. A chain is of the item's crop,
    not the whole source: level 0 copies the cropped texels one for one (a `Region`, the
    crop's whole texels carried as integers from the item's crop, never recovered from
@@ -302,8 +307,15 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    drawn in 3D by several items or calls (two mixes, a nested scene) is rebuilt once per
    change, and not at all while it is unchanged. A 3D item samples its chain, which is
    always premultiplied linear (mode 0), with trilinear filtering and `anisotropy_clamp`
-   16; wgpu clamps that to 1 on an adapter without anisotropic filtering. A source with
-   no 3D placement gets no chain.
+   16; wgpu clamps that to 1 on an adapter without anisotropic filtering. A 2D item
+   samples one the same way when a canvas pixel spans more than `MINIFIED`, 1.15,
+   texels along either axis of its quad (`Shape::minification`, counted in the image's
+   texels, so a density counts), which one bilinear tap would skip texels at (#1217).
+   When it spans 2 or more along both axes the sampler never reads level 0, so that
+   item's chain starts a level down (`Mips::skip`): the first pass renders the region
+   at half size, its one linear tap averaging 2×2 texels, and the chain holds a quarter
+   of the texels. An image keeps that chain apart from a full one of the same crop. A
+   source drawn only at about its size or larger, and never in 3D, gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
    by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
@@ -427,7 +439,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | Scratch vertex `Vec<u8>` | Cleared and refilled each frame; capacity kept |
 | Staged-hold scratch | Refilled for each submit and cleared after it; capacity kept |
 | Per-image texture and bind group | `Image`, shared by its clones and dropped with the last |
-| Mip chains (one per crop, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
+| Mip chains (one per crop and starting level, at most four), their level views, region uniform and bind groups | Made the first time the `Image` is drawn in 3D or small with that crop; shared by its clones and dropped with the last, or when four newer crops pushed it out. So a crop that changes every frame, or five or more crops of one source, makes and builds a chain per draw |
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
@@ -632,8 +644,8 @@ defaults pass its descriptor, and that they build its pass.
 **Where they run.** `jstream-core`'s chain runtime (roadmap V0,
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
 filter of a source's video chain and runs them in order before placement, of a
-scene's over its composite, of an item's effects over its box, drawn into a layer
-grown by their summed `max_outset_px`
+scene's over its composite, of an item's effects over its box, in a layer
+grown by their summed `max_outset_px` at the first effect that declares one
 ([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), and of the master
 stage's and an output's over the mix an output draws
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
@@ -776,14 +788,18 @@ premultiplied linear light on the way out.
   to the image plus the gap, and the shader reads transparent in the gap. A new speed
   jumps to where that speed puts the picture at the current time.
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
-  (0..1, default 0.5) and `color` (with alpha, default opaque black). The distance from
-  the centre is measured in the frame's own UV, so the shape is an ellipse that follows
-  the frame's aspect: 0 at the centre, 1 at the corners. Inside `radius` the picture is
-  untouched. Over the next `softness` it fades towards `color`, to `strength` times the
-  colour's alpha (a smoothstep; 0 is a hard edge). Coverage is kept, so a transparent
-  pixel stays transparent. It frames whatever its chain runs on: the source's whole
-  frame here, and an item's cropped box or a scene's composite once those owners are
-  built (ADR-0065, #529).
+  (0..1, default 0.5), `color` (with alpha, default opaque black), `shape` (`frame`, the
+  default, an ellipse that follows the frame's aspect, or `round`, a circle), `blend`
+  (`normal`, the default, mixes towards the colour, a tint; `multiply` darkens by it)
+  and `center_x`, `center_y` (0..1 of the frame, default 0.5). The distance from the
+  centre is 0 there and 1 at the half-diagonal: in the frame's own UV for `frame`, in
+  pixels for `round`. Inside `radius` the picture is untouched; over the next
+  `softness` it fades in (a smoothstep; 0 is a hard edge) to `strength` times the
+  colour's alpha, in linear light. The settings #1226 added default to what the kind
+  drew before, so a saved vignette keeps its look and the kind stays at version 1
+  (ADR-0025 › Versioning a kind). Coverage is kept, so a transparent pixel stays
+  transparent. It frames whatever its chain runs on: a source's whole frame, an item's
+  cropped box or a scene's composite (ADR-0065, #529).
 
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
@@ -802,7 +818,7 @@ or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied 
 (an SDR assumption: values above 1 are clipped).
 The kernels are not widened for a downscale, so a large shrink along one axis can alias.
 
-The multi-pass filters (V2), in `src/filter/multipass/`:
+The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
 
 - `blur`: `radius` (0 to 100 px, default 8) and an area: `area` (`whole`, `inside` or
   `outside` a rectangle) with `area_x`, `area_y`, `area_width`, `area_height` (fractions
@@ -827,7 +843,18 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   An inside stroke treats the area past the frame as outside the shape.
 - `glow`: `color`, `radius` (0 to 100 px, default 16) and `strength` (0 to 4, default
   1, which multiplies the blurred alpha before it is clamped). It is a drop shadow with
-  no offset.
+  no offset: light around an alpha shape, under it, so it needs a transparent edge (a
+  logo, text, a keyed camera, or an item's outset, **Bounds** below).
+- `bloom`: `threshold` (0..1, default 0.7), `intensity` (0 to 4, default 1), `radius`
+  (0 to 100 px, default 24) and `tint` (default white). The light that bright parts of
+  any picture give off, an opaque camera included: a bright pass keeps what is above
+  the threshold on the sRGB-encoded luma of the straight colour (a smoothstep over a
+  0.1 knee each side), the shared gaussian blurs it with transparent edges, and the
+  composite adds it, tinted and times intensity, over the input in premultiplied
+  linear light. The added light's coverage is its brightest channel, so past a shape it
+  shows as light. The bright pass is drawn into the output layer, which the blur reads
+  and the composite overwrites, so bloom takes only the blur's scratch layers.
+  Intensity 0 copies the input.
 - `video_delay`: `delay_ms` (0 to 5000, default 0, which passes the input through) and
   `max_memory_mb` (64 to 16384, default 1024). The pass keeps a ring of frame copies
   stamped with the clock and shows the newest one at or before now minus the delay, or
@@ -838,17 +865,26 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   shown are reused. A new input size empties the ring, and so does a clock that goes
   backwards.
 
-**Bounds.** Drop shadow, outline (outside) and glow draw within their input's frame,
-as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for a
-source or scene chain: the output is the input's size, the input is drawn 1:1, and
+**Bounds.** Drop shadow, outline (outside), glow and bloom draw within their input's
+frame, as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for
+a source or scene chain: the output is the input's size, the input is drawn 1:1, and
 the part of the effect past the frame's edge is cut. So they don't change the
 source's reported size, and around an opaque frame a shadow, an outside stroke or a
 glow is cut away whole; on a shape with transparent margins (a keyed camera, a logo)
 they show inside them. A drop shadow and a glow still blur the shape in a scratch
 frame grown by the blur radius, so the blur fades out instead of stopping at the
 frame's edge. An effect that hangs outside a placement is an item effect, whose layer
-ADR-0065 pads by the chain's `max_outset_px`; these kinds don't declare one yet, so
-their layer is the box and the part past it is cut there too.
+grows by the chain's summed `max_outset_px` where the first kind that declares one
+runs ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).
+`VideoFilter::set_pad(px)` does it: `output_size` grows the input by `px` on every side
+before the pass's own, and `apply_filter_into` first draws the input centred into a
+scratch layer that size, transparent around it, then runs the pass over that. Each of
+these kinds declares the
+most it can draw past its input at any settings: drop shadow 300 (the largest offset
+plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
+and bloom 100 (the largest radius). So on an item the glow and shadow of an opaque
+picture show around its box (#1226). That room costs layer memory and fill: a
+1920×1080 box with a drop shadow is a 2520×1680 layer.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
@@ -977,6 +1013,16 @@ p99 error per channel in sRGB 8-bit steps. On lavapipe:
 | D, a small rotated and turned item | edge | 6 | 3.2 | 53 with a hard edge, 13 affinely |
 | D cropped, a smaller D cropped just past a texel ring | edge | 5 | 2.8 | 6.6 with the chain built from the whole source, 8.2 without the UV clamp either |
 | E, two items turned through each other | all | 2 | 0.53 | 15 affinely |
+
+**2D minification goldens** (`tests/minified.rs`, #1217). The same reference and
+pattern (512²) for flat items drawn small, as a camera or test card inset in a box: a
+box at 400, 256, 160, 90 and 40 px wide (half as tall), straight and rotated 20°, has
+a mean of at most 10 and a p99 of at most 50 over its interior (measured 3.6 to 9.9
+and 11 to 45; with one level they were 19 to 62 and 98 to 134), and one at 1 / 1.2 of
+its size at most 4 and 40 (measured 3.1 and 26; with one level 5.5 and 46). A third
+test checks which chain an item gets: none at or near its size, a full one when one
+axis is squeezed, and a half-size one, built once while the upload is unchanged, at a
+quarter of its size.
 
 Three more run the same comparison through a scene camera
 ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), the reference mapping each sample
@@ -1141,8 +1187,12 @@ a hardware GPU.
 -->
 
 - **3D.** The compositor draws ADR-0050 decisions 1, 2, 4, 5 and 6. Open: whether
-  rotated 2D items should get edge coverage too, which changes their goldens; whether
-  strongly minified 2D items should get mips.
+  rotated 2D items should get edge coverage too, which changes their goldens.
+- **Small sources.** A 2D item drawn small samples a chain built from its whole crop
+  every frame its source changes, so a 1080p camera in a small box costs a quarter-size
+  chain and its rebuild. Open: a level 0 built at the drawn size, which a first pass of
+  more than one tap would allow, and uploading a still image at the size it is drawn
+  (#1139).
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and

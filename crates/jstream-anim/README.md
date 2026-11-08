@@ -31,8 +31,10 @@ Contents:
 - `Field`: the fields a variant overrides, with their wire names: the four keyable
   ones, `geometry`, `crop`, `visible` and `opacity`, then `effects`, the item's whole
   effects list ([ADR-0088](../../docs/adr/0088-keyframe-scenes-override-item-effects.md)),
-  and `motion`, its whole list of motion modifiers (ADR-0099), each a type parameter
-  that defaults to `()`. `Props` holds an item's values for the four
+  `motion`, its whole list of motion modifiers (ADR-0099), and `timing`, its timing in
+  switches into the keyframe
+  ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)), each a type
+  parameter that defaults to `()`; nothing animates the last three. `Props` holds an item's values for the four
   keyable ones, which are all a switch animates, and `Value` one field's value. `Value::problem` refuses an opacity that isn't finite or is outside
   `0..=MAX_OPACITY` (4, the protocol's limit, #1101); geometry and crop are the graph's to check.
 - `Override`: the fields a variant overrides for one item, each whole.

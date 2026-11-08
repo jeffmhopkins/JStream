@@ -248,6 +248,10 @@ pub enum EntityKind {
     Device,
     /// A hotkey binding, named by its chord.
     Hotkey,
+    /// A controller binding (0.96), named by its trigger as `Display` writes it, such as
+    /// `MIDI note 36 on channel 10`. Only an error answering a `binding.*` edit names it,
+    /// so a client older than 0.96, which sends none, never reads it.
+    Binding,
     /// An installed plugin (0.35). Only an error answering a `plugin.*` action names it,
     /// so a client older than 0.35, which sends none, never reads it.
     Plugin,
@@ -258,6 +262,10 @@ pub enum EntityKind {
     /// command, or a `hotkey.set` or `timeline.set` naming one, names it, so a client
     /// that sends none never reads it.
     Timeline,
+    /// A file on the engine's machine, named by its path (0.94, ADR-0121). Only an
+    /// error answering `collection.new` or `collection.save_as` names it, so a client
+    /// that sends neither never reads it.
+    File,
 }
 
 impl fmt::Display for EntityKind {
@@ -276,9 +284,11 @@ impl fmt::Display for EntityKind {
             EntityKind::Bus => "bus",
             EntityKind::Device => "device",
             EntityKind::Hotkey => "hotkey",
+            EntityKind::Binding => "binding",
             EntityKind::Plugin => "plugin",
             EntityKind::Pack => "pack",
             EntityKind::Timeline => "timeline",
+            EntityKind::File => "file",
         })
     }
 }

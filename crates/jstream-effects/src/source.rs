@@ -329,6 +329,7 @@ const AUDIO_HELPERS: &str = "fn audio_band(i: i32) -> f32 { return audio_texel(v
 /// The `width` or `height` setting, from 16 to 4096 pixels.
 fn side(id: &str, label: &str, default: u32) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty: ParamType::Int {
             min: Some(i64::from(*SOURCE_SIDE.start())),
@@ -349,6 +350,7 @@ fn side(id: &str, label: &str, default: u32) -> ParamDescriptor {
 /// The `audio` setting, as the `spectrum` kind has it.
 fn audio_param() -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: "audio".into(),
         ty: ParamType::Bus,
         default: Value::Null,
@@ -369,6 +371,7 @@ fn audio_param() -> ParamDescriptor {
 /// The `audio_source` setting, as the `spectrum` kind has it.
 fn audio_source_param() -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: "audio_source".into(),
         ty: ParamType::Source {
             media: Some(Media::Audio),

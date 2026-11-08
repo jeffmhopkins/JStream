@@ -53,8 +53,8 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
-| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. The first cut runs on Windows (WebView2), with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents, and with "Allow devices on my network" the TLS network listener for paired devices ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, with `--lan` also listens for paired devices on the network over TLS ([ADR-0104](adr/0104-network-listener-over-tls.md)), and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, which a host's CEF backend starts and drives over named pipes (Windows) or a socket pair (Linux). On Windows CEF's bootstrap exe renamed plus this crate's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), on Linux this crate's executable ([ADR-0095](adr/0095-browser-helper-on-linux.md)). Hosts that turn on browser sources ship it next to their own exe ([its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 | `jstream-plugin-host` | Not a host of the engine: the out-of-process CLAP plugin host, one process per CLAP filter instance, started by the engine ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). It talks to the engine only through a shared-memory block and framed messages on its stdin and stdout, never the protocol ([its README](../apps/jstream-plugin-host/README.md#purpose)). |
@@ -99,7 +99,7 @@ JStream/
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
 ├── design/                 # UI design references (prototype source); not normative
-├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), browser-linux (the Linux browser helper's folder), e2e-stream, gen-schema, golden
+├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
@@ -132,10 +132,12 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 0 | `jstream-media` | Frame, packet and audio-buffer types, pixel formats, timestamps | no |
 | 0 | `jstream-aac` | JStream's AAC-LC encoder, Linux's AAC path ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), within [ADR-0062](adr/0062-aac-lc-encoder-patent-check.md)'s limits): MPEG-2 AAC LC tools only, encode only; `f32` samples in, raw access units and the `AudioSpecificConfig` out. `jstream-platform-linux` puts it behind `AudioEncoder` | no |
 | 0 | `jstream-anim` | Keyframe-scene and motion model ([ADR-0049](adr/0049-keyframe-scene-model-and-evaluation.md), [ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)): a variant's overrides and their inverses, effective values over the live parent, the switch plan between keyframes, motion modifiers and timelines; generic over geometry, no dependencies | no |
+| 0 | `jstream-midi` | MIDI 1.0 model for controller input ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): messages parsed from bytes, and the tempo, beat and bar a MIDI clock gives on the media clock; no I/O, no allocation, no dependencies | no |
 | 0 | `jstream-plugin-proto` | Shared-memory contract between the mixer and the out-of-process CLAP plugin host ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): `repr(C)` audio rings, parameter-event rings and a status block, all atomics; no OS calls | no |
 | 0 | `jstream-vcam-proto` | Shared-memory layout and versioned contract between the engine and the vcam DLL: `repr(C)` types, constants and pure helpers (frame choice, object names); no OS calls | no |
 | 1 | `jstream-protocol` | **The API.** Commands (edit/action), queries, events, binary streams, errors, JSON Schema | no |
 | 1 | `jstream-platform` | Backend traits: `Capture`, `VideoDevices`, `AudioIo`, `Codecs` (`VideoEncoder`, `AudioEncoder`, `VideoDecoder`), `VcamSink`, `MediaDecoders` (media files), `MediaClock`, `GpuInterop` (uses `wgpu` types), `StreamKeyStore`, `OAuthTokenStore`, `PluginHosts` (CLAP host processes, ADR-0035), and `paths` (the data folder, ADR-0066). The **single owner** of the encoder and decoder traits. | no |
+| 1 | `jstream-jtunnel` | JTunnel's wire format, version 2 ([ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)): audio packets with their MIDI, SysEx and note expressions, subscribe and bye, 24-bit PCM, SysEx reassembly, sequence tracking, the sender-clock and drift estimate, the jitter buffer that plays frames out, and the mDNS records that find senders; on `jstream-midi`, no sockets or threads | no |
 | 2 | `jstream-control` | The `Control` trait plus the WebSocket client. WASM-safe: no engine, no tokio requirement in WASM builds | no |
 | 2 | `jstream-graph` | Scene graph model, edit application and inverse edits (for undo), persistence and migrations. No GPU. | no |
 | 2 | `jstream-render` | Owns the wgpu device; compositor, 3D transform/crop, WGSL effects, color conversion, snapshot readback | no |
@@ -145,7 +147,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), AVFoundation webcams, VideoToolbox/AudioToolbox, AVFoundation media files, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens (M3; [ADR-0063](adr/0063-macos-platform-support.md); Apple frameworks through the objc2 crates) | **yes** |
-| 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
+| 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader, AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback, X11 global hotkeys for the desktop app ([ADR-0112](adr/0112-assignable-camera-zoom-bindings.md)) (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); rate control; fan-out of packet streams | no |
@@ -154,7 +156,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows and Linux, feature `cef`), which drives the sandboxed browser helper over named pipes or a socket pair and copies its shared-texture frames onto the engine's device on Windows, or reads its software paints as CPU frames on Linux ([ADR-0095](adr/0095-browser-helper-on-linux.md)); and the CEF code the helper runs (feature `helper`) | **yes** |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default) or to what that `Control` allows, with refusals as ABI statuses or `forbidden`; fuel, wall-time and memory limits; no WASI | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
-| 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
+| 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); MIDI keyboard, piano roll, drum pads and controller meters ([ADR-0137](adr/0137-midi-visualization-sources.md)); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; draws items' motion modifiers each frame through `jstream-anim` (ADR-0099); CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); WGSL effect-pack video filter kinds from a watched folder, drawn through `jstream-effects` (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
@@ -184,7 +186,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
 ├── labels         Label { id, name, icon?, color }   ordered
-├── hotkeys        [{ chord, action }]   chord → protocol action request
+├── hotkeys        [{ chord, action, labels }]   chord → protocol action request
+├── bindings       [{ trigger, action }]   MIDI note | cc | program trigger → protocol action request (ADR-0122)
 ├── transitions    { presets: [TransitionPreset], default }
 │                  TransitionPreset { id, name, kind, duration_ms, easing, settings }   kind: cut | fade | move | …
 ├── video_mixes    VideoMix { id, input: Scene(id) | Program | Preview, resolution, fps_divisor }
@@ -230,7 +233,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   there (`depth_px` its `z`), the camera sees them all, and its own perspective is
   ignored. Its items draw far to near by the depth of their centre, with stacking
   order breaking ties. A keyframe scene's variant follows its parent's camera unless it
-  overrides it, and only a parent with a camera allows overrides. `motion` is the item's
+  overrides it, and a keyframe of a 2D scene may have a camera of its own, which a Move
+  into it reaches from the framing camera
+  ([ADR-0128](adr/0128-moves-between-2d-and-3d-glide.md)). `motion` is the item's
   ordered list of at most 8 motion modifiers
   ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)), which the engine
   evaluates per frame on top of the stored values and never writes back. `crop` is in source pixels. A source's current size is runtime state,
@@ -258,7 +263,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
     which is not itself a variant. It has no items of its own: it shows the parent's
     items with per-item `overrides` of placement, crop, visibility, opacity, effects
     (the whole list, [ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)) and
-    motion (the whole list, ADR-0099); an absent field follows the parent; everything else, including the background and its
+    motion (the whole list, ADR-0099), and its timing in switches into the keyframe
+    (delay, easing and duration, [ADR-0129](adr/0129-keyframe-timing-and-more-easings.md));
+    an absent field follows the parent; everything else, including the background and its
     scene filters, follows the parent. A variant can be on program, nested and hotkeyed. The cycle check counts the
     variant → parent edge. Deleting a parent is rejected while it has variants.
   - Placement edits take an optional `scene_id`: absent or the item's own scene changes
@@ -277,8 +284,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
     graph ([ADR-0116](adr/0116-keyframe-tracks.md),
     [ADR-0118](adr/0118-placed-keyframes-on-the-graph.md)), never saved with the
     collection: see Keyframe tracks under [Protocol](#protocol).
-- **Folders and organisation are collection state:** folders, labels (which sources and
-  scenes carry, [ADR-0078](adr/0078-scenes-carry-labels.md)), favourites, scene
+- **Folders and organisation are collection state:** folders, labels (which sources,
+  scenes, hotkey bindings and timelines carry, [ADR-0078](adr/0078-scenes-carry-labels.md),
+  [ADR-0133](adr/0133-labels-on-hotkeys-and-timelines.md)), favourites, scene
   icons, colours and `show_in_multiview`, and hotkey bindings are edited by undoable edits
   and saved with the collection, so every client and agent sees the same thing
   ([R-ARCH-001](RULES.md#R-ARCH-001); JStream is single-user, so a favourite is not per
@@ -286,8 +294,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   display order, and a variant sits under its parent, never in a folder. A folder sits in
   at most one other (`parent`, [ADR-0064](adr/0064-nested-scene-folders.md)), never inside itself, and
   the folders in one parent show in folder order. A folder that holds anything, or a
-  label a source or scene carries, can't be deleted; `delete.plan` moves what the folder
-  holds up to its parent, or takes the label off its sources and scenes. Labels and
+  label anything carries, can't be deleted; `delete.plan` moves what the folder
+  holds up to its parent, or takes the label off everything carrying it, and
+  `label.members` lists everything carrying it in one read. Labels and
   favourites on a source belong to the source, so every placement shares them. A hotkey
   binds only an action, never an edit; which client listens for the keys is a client
   decision. `item.show`, `item.hide` and `item.toggle` are the actions that show and hide
@@ -325,7 +334,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scene, so it counts for cycles and blocks deleting its target. A keyframe scene has
   no scene filters of its own, but may override an item's effects, the `keyframe` owner
   of `filter.*` and `item.set_effects` (ADR-0088), whose references are its edges. The engine runs a scene's filters on its composite, and an item's
-  effects over its box in a layer grown by their outset, before its opacity and blend,
+  effects over its box in a layer grown by their outset where the first effect that
+  draws past the box runs ([ADR-0125](adr/0125-item-effects-layer-grows-where-it-is-needed.md)),
+  before its opacity and blend,
   or with its `effects_space` `canvas` over a canvas-sized layer it is placed into
   ([ADR-0106](adr/0106-item-effects-in-canvas-space.md)).
 - **Settings:** a source's `settings`, each filter's, and each transition preset's are a
@@ -479,14 +490,15 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   is retried). Each output's audio bus (protocol 0.59, `output.set_audio_buses`) and
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
-  and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
+  and hotkey bindings (protocol 0.25) and controller bindings (protocol 0.96,
+  schema version 9), as the organisation bullet above describes.
   Not yet: settings migrations between kind versions (a source saved at another
   version is refused on load), the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
-  `hotkeys` and `transitions`. The collection file saves everything built so far,
+  `hotkeys`, `bindings` and `transitions`. The collection file saves everything built so far,
   encoder profiles, video mixes, each output's profile and mix, `duplicated_from`,
-  buses, sends, source audio, folders, labels, organisation metadata, hotkeys and
+  buses, sends, source audio, folders, labels, organisation metadata, hotkeys, controller bindings and
   transitions included
   ([Persistence](#persistence)).
   The program and preview scenes and the running transition are built in `jstream-core`
@@ -675,7 +687,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `filter.*` edits take the `keyframe` owner to change them one filter at a time
   ([ADR-0088](adr/0088-keyframe-scenes-override-item-effects.md)). Since 0.81,
   `item.set_motion` writes an item's motion modifiers, or a keyframe's override of them,
-  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)). Since 0.84 a
+  whole ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)). Since 0.99,
+  `item.set_timing` writes a keyframe's timing for an item in switches into it, and the
+  easings gain `ease_in`, `hold` and `cubic_bezier`
+  ([ADR-0129](adr/0129-keyframe-timing-and-more-easings.md)). Since 0.84 a
   modifier can be a one-shot `impulse` on the `triggered` clock, which the action
   `item.trigger_motion` fires, from a hotkey say (#1107); a fire is runtime state, like
   the program scene.
@@ -686,7 +701,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box, and
   `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89),
-  and `canvas.set_blending` the space blend modes mix in (ADR-0126, protocol 0.98)
+  and `canvas.set_blending` the space blend modes mix in (ADR-0126, protocol 0.101)
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
   0.32). `encoder.create`, `encoder.update` and `encoder.delete`
@@ -719,6 +734,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   output or transition preset an action names removes its bindings in the same edit, the batch result lists
   them as `removed_hotkeys`, and undo restores them
   ([ADR-0040](adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
+  `hotkey.set_labels` sets a binding's labels (protocol 0.100,
+  [ADR-0133](adr/0133-labels-on-hotkeys-and-timelines.md)), which go and come back with it.
+  `binding.set` and `binding.clear` (protocol 0.96,
+  [ADR-0122](adr/0122-controller-input-midi-and-one-binding-system.md)) do the same
+  for a controller `Trigger` (a MIDI note, controller or program change), with the
+  hotkeys' checks and removal rules; the batch result lists those as `removed_bindings`.
+  No input fires them yet.
   `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete` and `scene.set_folder` organise the scene list, and `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `scene.set_meta` and
@@ -734,9 +756,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   ([ADR-0108](adr/0108-camera-depth-of-field.md), protocol 0.77).
   `scene.set_camera_motion` gives the camera motion modifiers (any kind but `audio`,
   which a camera can't hear), and
-  `scene.set_camera_follow` a camera that glides after the pointer over a display or
-  window capture, each set on the family's scene; the action `scene.zoom_camera` steps
-  a follow camera's live zoom, with no `rev` change
+  a `follow_pointer` filter on a display or window capture item a camera that glides
+  after the pointer over it, keeping it inside a safe margin, and supplying the framing
+  camera to a 2D scene ([ADR-0120](adr/0120-follow-pointer-is-a-filter.md), protocol
+  0.91; `scene.set_camera_follow` is a shortcut for its filter edits), each belonging
+  to the family's scene; the action `scene.zoom_camera` steps a follow camera's live
+  zoom, with no `rev` change
   ([ADR-0113](adr/0113-camera-motion-and-follow-pointer.md), protocol 0.85).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
@@ -785,11 +810,21 @@ The wire format, versioning, error codes and compatibility policy are designed i
   pairs every other item with itself.
 - **Pairing** (protocol 0.21, [ADR-0044](adr/0044-pairing-remote-browsers.md)): the
   action `pairing.start` answers a one-time code (an action result, the one place it is
-  sent), which a device trades at `POST /api/v1/pair` for a device token of its own;
+  sent), which a device trades at `POST /api/v1/pair` for a device token of its own, and
+  from 0.97 the network listener's addresses and certificate fingerprint when there is
+  one ([ADR-0130](adr/0130-browsers-keep-no-certificate-pin-v2.md));
   `device.list` and the action `device.revoke` manage the paired devices. They concern
   whom a listener admits, so `jstream-server` answers them, and a session with no server
   in front, or one whose server pairs nothing (the desktop app's), answers `unsupported`
   ([ADR-0057](adr/0057-server-answers-credential-calls.md)).
+- **Projects** (protocol 0.94, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)):
+  the actions `collection.open`, `collection.new` and `collection.save_as` switch the
+  collection file the engine saves to, the query `collection.info` reports it and the
+  recent ones, and the event `collection.file_changed` tells every client. An open or a
+  new stops every output, clears every client's undo and moves `rev` past the old
+  collection's, with `state.changed` so an older client reads the state again. A path is
+  absolute and follows the `absolute` asset path rules. They answer `unsupported` when
+  the host named no collection file; no plugin is granted them and no hotkey binds them.
 - **UI settings** (protocol 0.52, [ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)):
   the action `ui_settings.set` keeps an opaque JSON value under a key and the query
   `ui_settings.get` reads it back, so the web UI's dock follows the person from the
@@ -904,7 +939,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   schema ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)); `delete.plan` (protocol 0.15) → the
   batch that deletes a scene or source (or, from protocol 0.24, a bus, or a folder or
   label) with everything
-  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25); `bus.list` (protocol 0.19) → the buses and sends;
+  that refers to it, and the `rev` it was planned at, plus the hotkey bindings it removes (protocol 0.25) and the controller bindings (protocol 0.96); `label.members`
+  (protocol 0.100, ADR-0133) → the scenes, keyframe scenes among them, sources, hotkey
+  bindings and timelines that carry one label; `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
@@ -963,8 +1000,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0025](adr/0025-typed-settings-kind-descriptors.md)), and so does a `bus.delete`
   refused because a setting draws the bus (protocol 0.24: a `bus` reference, as the
   `waveform` and `spectrum` kinds' `audio` setting holds), and a `folder.delete` or
-  `label.delete` refused because a scene or folder is in the folder or a source carries
-  the label.
+  `label.delete` refused because a scene or folder is in the folder or a source, scene,
+  hotkey binding or timeline carries the label.
 - **Binary streams** (WebSocket binary frames, protocol 0.20): preview video.
   `preview.subscribe` opens a stream of the program mix, of any one scene (0.46,
   `scene_id`: the UI's projector windows and multiview), or of one source alone (0.56,
@@ -996,8 +1033,11 @@ The wire format, versioning, error codes and compatibility policy are designed i
   serves the WebSocket API at `/api/v1/ws` in front of any `dyn Control`, on `127.0.0.1` by
   default, with the token (the control token, or a paired device's on loopback or a TLS
   listener) required and `Origin`/`Host` validated
-  ([jstream-server › Design](../crates/jstream-server/README.md#design)). Plain `ws://`
-  for now; TLS is an open question there. An upgrade with no `Origin` header is allowed,
+  ([jstream-server › Design](../crates/jstream-server/README.md#design)). The host's own
+  listener is plain `ws://`. A host can also open the network listener
+  ([ADR-0104](adr/0104-network-listener-over-tls.md), the daemon's `--lan`): TLS only,
+  with a self-signed certificate the person trusts by its fingerprint, admitting paired
+  devices only and never the control token. An upgrade with no `Origin` header is allowed,
   because the token is the gate, while an `Origin` that is present must be on the allow
   list. The same server
   serves MCP's streamable-HTTP transport at `/mcp` on the control port, behind the same
@@ -1025,7 +1065,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1052,10 +1092,11 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   and `plugin.*` events are not returned to agents (ADR-0058 §3, ADR-0069 G1).
 - **Schema size:** the goal is progressive discovery. Tools list only their op names, and
   `describe_api` returns detailed schemas on demand, so the agent's context stays small.
-  The first cut does not do this yet: each tool carries its ops' full schemas (about 799 KB
-  of `tools/list` today, as `tools.snap` stores it; `live` and `hotkey` each carry most
-  of the edit schemas `item` and `batch` do, because `live.set` takes edits and
-  `hotkey.set` takes any action), and `describe_api` returns the whole protocol schema. Shrinking
+  The first cut does not do this yet: each tool carries its ops' full schemas (about 1.08 MB
+  of compact `tools/list` today, as `tools.snap` stores it; `live` carries most
+  of the edit schemas `item` and `batch` do, because `live.set` takes edits, and
+  `hotkey` and `binding` each carry every action's, because `hotkey.set` and
+  `binding.set` take any action), and `describe_api` returns the whole protocol schema. Shrinking
   the tools is an open question in
   [jstream-mcp › Open questions](../crates/jstream-mcp/README.md#open-questions), and the
   MCP revisions and transports are in
@@ -1069,7 +1110,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   `video.snapshot`.
 - **Annotations and third-party text:** every tool carries MCP tool annotations derived
   from its ops (`readOnlyHint` for queries only; `destructiveHint` for a tool with an
-  action undo can't take back or a history call, today `device`, `history`, `output`,
+  action undo can't take back or a history call, today `collection` (an open stops
+  every output and clears undo, [ADR-0121](adr/0121-projects-open-new-and-save-as.md)),
+  `device`, `history`, `output`,
   `pack` (writes and deletes files undo never reaches), `pairing`, `timeline` (its cues
   may set a shared value a page may send off the machine,
   [ADR-0115](adr/0115-timelines-on-the-wire.md)), `ui_settings` and `values` (`values.set`
@@ -1115,10 +1158,12 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   panel. Undo is per client, so an agent can never undo the user's work.
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
-  countdown and grouping recipes, fitting boxes to text, animating with keyframe
+  countdown and grouping recipes, fitting boxes to text, a custom shader the UI's
+  shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
-  `item.trigger_motion` fires, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, a camera
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette),
+  layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
@@ -1168,7 +1213,9 @@ non-neutral 3D draws [ADR-0050](adr/0050-3d-transforms-rendering.md)'s drawn pol
 clipped by the near plane, with a per-vertex `w` for perspective-correct texturing and
 analytic edge coverage, sampled from a mip chain of its cropped source (rebuilt on the
 GPU once per change to the source, so at most once per source and frame) with 16×
-anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34.
+anisotropic filtering. The engine accepts any 3D it can draw from protocol 0.34. A 2D
+item drawn small (a canvas pixel spanning more than 1.15 texels) samples such a chain
+too, so an inset source keeps its detail at its drawn size (#1217).
 An item in a 3D scene ([ADR-0094](adr/0094-scene-cameras.md)) carries its scene's
 camera and always takes that path: the same polygon, built through the camera's view
 (`w = D / f`), so a set shares one vanishing point. The compositor sorts each run of
@@ -1431,13 +1478,33 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   bump: a `cut` already showed the new scene on the next frame. Scene filters and item effects (version 2) and a
   keyframe override's `effects` (version 3, ADR-0088) and an item's or override's
   `motion` (version 4, ADR-0099) and a scene's `camera_motion` and `camera_follow`
-  (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) bumped it
+  (version 5, ADR-0113) and a scene's `timelines` (version 6, ADR-0115) and a
+  collection's controller `bindings` (version 9, ADR-0122) bumped it
   instead, each with a
-  migration that refuses the new field in an older file. The collection's `blending`
-  (version 7, ADR-0126) also migrates what an older file means: its `normal_srgb` and
-  `additive_srgb` items become `normal` and `additive`, and it is `srgb` only when no
-  item used another mode, else `linear`, so its scenes keep their look. `jstream-core`
-  loads the file the host names and replaces it atomically after every change.
+  migration that refuses the new field in an older file. Version 7 (ADR-0120) moves a
+  scene's `camera_follow` onto its item as a `follow_pointer` effect. Version 8
+  (ADR-0124) turns on a `browser` source's new page API checkboxes where its older
+  settings already grant names or a bus, since loading rebuilds sources with their
+  kind's defaults. Version 10 (ADR-0129)
+  adds a keyframe override's `timing`, with a migration that refuses it in an older
+  file. Version 11 (ADR-0133) adds a hotkey binding's and a timeline's `labels`; its
+  migration refuses a binding's in an older file and drops a timeline's, as that version
+  ignored them. Version 12's `blending` (ADR-0126) also migrates what an older
+  file means: its `normal_srgb` and `additive_srgb` items become `normal` and
+  `additive`, and it is `srgb` only when no item used another mode, else `linear`, so
+  its scenes keep their look. `jstream-core`
+  loads the file the host names and replaces it atomically after every change. A
+  project is one such file: `collection.open`, `collection.new` and
+  `collection.save_as` switch the file it saves to
+  ([ADR-0121](adr/0121-projects-open-new-and-save-as.md)), and a save as rewrites
+  asset references so they keep naming the same files. New and save as only ever make
+  a new file. Nothing in the file says where its outputs' stream keys are stored: the
+  engine scopes them by the file's path on this machine, so two projects that share an
+  output ID never share a key, and a shared file reaches no one's keys.
+- **Recent projects:** `recent-collections.json` (version 1) in the data directory, up
+  to ten project files, most recent first, which `jstream-core` updates on every open,
+  new and save as. The desktop app opens the first at startup if it still loads, and
+  `collection.json` otherwise.
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source, filter and transition preset records its kind's descriptor

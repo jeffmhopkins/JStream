@@ -88,10 +88,14 @@ fn a_bad_camera_is_refused_with_its_field() {
 fn a_keyframe_follows_or_overrides_its_parent_camera() {
     let mut graph = fixture();
     apply_ok(&mut graph, vec![variant("k", "a")]);
-    // A keyframe of a 2D scene can't be 3D.
-    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![set("k", Some(framing()))]));
-    assert!(field.ends_with("camera"), "{field}");
-    assert!(reason.contains("parent"), "{reason}");
+    // A keyframe of a 2D scene may have a camera of its own (ADR-0128), which removing
+    // the 2D parent's (none) camera leaves alone.
+    apply_ok(&mut graph, vec![set("k", Some(moved(200.0)))]);
+    assert_eq!(effective(&graph, "k"), Some(moved(200.0)));
+    assert_eq!(effective(&graph, "a"), None);
+    apply_ok(&mut graph, vec![set("a", None)]);
+    assert_eq!(own(&graph, "k"), Some(moved(200.0)));
+    apply_ok(&mut graph, vec![set("k", None)]);
     apply_ok(&mut graph, vec![set("a", Some(framing()))]);
     assert_eq!(own(&graph, "k"), None);
     assert_eq!(effective(&graph, "k"), Some(framing()));
@@ -242,13 +246,127 @@ fn camera_motion_and_a_follow_camera_are_set_reported_and_undone() {
         &mut graph,
         vec![set_motion("a", sway()), set_follow("a", Some("s1"))],
     );
+    // The follow is a `follow_pointer` filter on the item (ADR-0120).
+    let filter = Edit::FilterRemove {
+        owner: jstream_protocol::FilterOwner::Item {
+            item_id: ItemId::new("s1"),
+        },
+        filter_id: jstream_protocol::FilterId::new("follow-pointer"),
+    };
     assert_eq!(
         applied.inverse.edits,
-        vec![set_follow("a", None), set_motion("a", Vec::new())]
+        vec![filter, set_motion("a", Vec::new())]
     );
     let a = info(&graph, "a");
     assert_eq!(a.camera_motion, sway());
     assert_eq!(a.camera_follow, Some(CameraFollow::of(ItemId::new("s1"))));
+    let s1 = a
+        .items
+        .iter()
+        .find(|i| i.item_id.as_str() == "s1")
+        .expect("s1");
+    assert_eq!(s1.effects.len(), 1);
+    assert_eq!(s1.effects[0].kind, jstream_protocol::FOLLOW_POINTER_KIND);
+}
+
+/// ADR-0120: setting the follow again changes the item's filter in place, setting it on
+/// another capture moves it there, and removing it removes the filter; a disabled
+/// filter follows nothing, and each step undoes.
+#[test]
+fn the_follow_shortcut_edits_the_items_filter() {
+    let mut graph = with_screen();
+    apply_ok(
+        &mut graph,
+        vec![
+            Edit::SourceCreate {
+                source_id: jstream_protocol::SourceId::new("win"),
+                name: "Second screen".into(),
+                kind: jstream_protocol::SourceKind::Builtin {
+                    kind: "display".into(),
+                },
+                settings: jstream_protocol::Settings::new(),
+                duplicated_from: None,
+            },
+            add("a", "w1", "win"),
+        ],
+    );
+    apply_ok(&mut graph, vec![set_follow("a", Some("s1"))]);
+    let mut nearer = CameraFollow::of(ItemId::new("s1"));
+    nearer.zoom = Finite32::new(2.0).expect("finite");
+    nearer.safe_margin_pct = 20;
+    apply_ok(
+        &mut graph,
+        vec![Edit::SceneSetCameraFollow {
+            scene_id: SceneId::new("a"),
+            follow: Some(nearer.clone()),
+        }],
+    );
+    assert_eq!(info(&graph, "a").camera_follow, Some(nearer));
+    let owner = |item: &str| jstream_protocol::FilterOwner::Item {
+        item_id: ItemId::new(item),
+    };
+    apply_ok(
+        &mut graph,
+        vec![Edit::FilterSetEnabled {
+            owner: owner("s1"),
+            filter_id: jstream_protocol::FilterId::new("follow-pointer"),
+            enabled: false,
+        }],
+    );
+    assert_eq!(info(&graph, "a").camera_follow, None);
+    apply_ok(&mut graph, vec![set_follow("a", Some("w1"))]);
+    let a = info(&graph, "a");
+    assert_eq!(a.camera_follow, Some(CameraFollow::of(ItemId::new("w1"))));
+    let count = |a: &jstream_protocol::SceneInfo, item: &str| {
+        a.items
+            .iter()
+            .find(|i| i.item_id.as_str() == item)
+            .map_or(0, |i| i.effects.len())
+    };
+    assert_eq!((count(&a, "s1"), count(&a, "w1")), (0, 1));
+    apply_ok(&mut graph, vec![set_follow("a", None)]);
+    let a = info(&graph, "a");
+    assert_eq!(a.camera_follow, None);
+    assert_eq!((count(&a, "s1"), count(&a, "w1")), (0, 0));
+}
+
+/// ADR-0120: the filter goes only on a display or window capture item's own effects.
+#[test]
+fn a_follow_filter_goes_only_on_a_capture_item() {
+    let mut graph = with_screen();
+    let add_filter = |owner: jstream_protocol::FilterOwner| Edit::FilterAdd {
+        owner,
+        chain: jstream_protocol::FilterChain::Video,
+        filter_id: jstream_protocol::FilterId::new("f"),
+        kind: jstream_protocol::FOLLOW_POINTER_KIND.into(),
+        settings: jstream_protocol::Settings::new(),
+        enabled: None,
+        index: None,
+    };
+    for owner in [
+        jstream_protocol::FilterOwner::Item {
+            item_id: ItemId::new("c1"),
+        },
+        jstream_protocol::FilterOwner::Scene {
+            scene_id: SceneId::new("a"),
+        },
+        jstream_protocol::FilterOwner::Source {
+            source_id: jstream_protocol::SourceId::new("screen"),
+        },
+    ] {
+        let (field, _) = invalid_reason(apply_err(&mut graph, vec![add_filter(owner)]));
+        assert!(field.ends_with("owner"), "{field}");
+    }
+    apply_ok(
+        &mut graph,
+        vec![add_filter(jstream_protocol::FilterOwner::Item {
+            item_id: ItemId::new("s1"),
+        })],
+    );
+    assert_eq!(
+        info(&graph, "a").camera_follow,
+        Some(CameraFollow::of(ItemId::new("s1")))
+    );
 }
 
 #[test]
@@ -302,8 +420,9 @@ fn deleting_a_scene_restores_its_camera_motion_and_follow_on_undo() {
     assert_eq!(info(&undone, "a"), before);
 }
 
+/// ADR-0120: the follow goes with its item, and comes back with it on undo.
 #[test]
-fn removing_the_followed_item_leaves_the_follow_inert() {
+fn removing_the_followed_item_removes_the_follow() {
     let mut graph = with_screen();
     apply_ok(&mut graph, vec![set_follow("a", Some("s1"))]);
     apply_ok(
@@ -312,8 +431,5 @@ fn removing_the_followed_item_leaves_the_follow_inert() {
             item_id: ItemId::new("s1"),
         }],
     );
-    assert_eq!(
-        info(&graph, "a").camera_follow,
-        Some(CameraFollow::of(ItemId::new("s1")))
-    );
+    assert_eq!(info(&graph, "a").camera_follow, None);
 }

@@ -11,14 +11,14 @@
 
 use crate::ItemTransition;
 use crate::{
-    Action, AudioCodec, AudioEncoding, Batch, BlendMode, Canvas, Chord, Crop, Edit, EncoderProfile,
-    EncoderProfileId, EncoderProfileInfo, EntityKind, FilterChain, FilterChains, FilterId,
-    FilterInfo, FilterOwner, Finite32, FitMode, HardwarePreference, HotkeyBinding, ItemGeometry,
-    ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, MasterInfo, OutputId,
-    OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError, Query,
-    QueryResult, RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo, SceneRole,
-    SceneSummary, Size, SourceId, SourceInfo, SourceKind, TransitionsInfo, Vec2, VideoCodec,
-    VideoEncoding,
+    Action, AudioCodec, AudioEncoding, Batch, Binding, BlendMode, Canvas, Chord, Crop, Edit,
+    EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, FilterChain, FilterChains,
+    FilterId, FilterInfo, FilterOwner, Finite32, FitMode, HardwarePreference, HotkeyBinding,
+    ItemGeometry, ItemId, ItemInfo, ItemTransform, KindCategory, KindDescriptor, MasterInfo,
+    OutputId, OutputInfo, OutputKind, ParamDescriptor, ParamType, PlacementForm, ProtocolError,
+    Query, QueryResult, RateControl, RecordContainer, Rev, RtmpTarget, SceneId, SceneInfo,
+    SceneRole, SceneSummary, Size, SourceId, SourceInfo, SourceKind, TransitionsInfo, Trigger,
+    Vec2, VideoCodec, VideoEncoding,
 };
 use crate::{
     AudioFollow, BusId, BusInfo, BusMonitor, MAX_BUSES, MAX_MONITOR_DEVICE_LEN, MonitorTap,
@@ -46,6 +46,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             audio: true,
             max_outset_px: None,
             params: vec![ParamDescriptor {
+                warning: None,
                 id: "device".into(),
                 ty: ParamType::String {
                     multiline: false,
@@ -74,6 +75,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             max_outset_px: None,
             params: vec![
                 ParamDescriptor {
+                    warning: None,
                     id: "target".into(),
                     ty: ParamType::CaptureTarget {
                         kind: crate::CaptureTargetKind::Display,
@@ -92,6 +94,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
                     live: false,
                 },
                 ParamDescriptor {
+                    warning: None,
                     id: "show_cursor".into(),
                     ty: ParamType::Bool,
                     default: serde_json::Value::from(true),
@@ -133,6 +136,7 @@ pub fn kinds() -> Vec<KindDescriptor> {
             audio: true,
             max_outset_px: None,
             params: vec![ParamDescriptor {
+                warning: None,
                 id: "gain_db".into(),
                 ty: ParamType::Float {
                     min: Some(-96.0),
@@ -169,7 +173,9 @@ pub fn kinds() -> Vec<KindDescriptor> {
 /// video mixes: `side` shows scene `b` and is shown by `yt`, and `prog` (updated after
 /// it was created) shows the program and is shown by `rec`; `tw` shows none. Last, the
 /// hotkeys of ADR-0024 §5: `F1` switches to scene `a`, and `Ctrl+Digit1`, bound first to
-/// `output.stop` and rebound by a clear and a set, starts output `yt`.
+/// `output.stop` and rebound by a clear and a set, starts output `yt`. Then the
+/// controller bindings of ADR-0122: note 36 on channel 10 switches to scene `a`, and CC
+/// 64 from any input, bound first to `output.stop` and rebound, starts output `yt`.
 ///
 /// Sources, outputs, encoder profiles and video mixes are created in the opposite order
 /// of their IDs, so reads that order them by ID can't pass by echoing creation order.
@@ -509,6 +515,21 @@ pub fn collection() -> Batch {
                 chord: Chord::new("Ctrl+Digit1"),
                 action: start_yt(),
             },
+            Edit::BindingSet {
+                trigger: pad(),
+                action: switch_to_a(),
+            },
+            Edit::BindingSet {
+                trigger: sustain(),
+                action: Action::OutputStop {
+                    output_id: OutputId::new("yt"),
+                },
+            },
+            Edit::BindingClear { trigger: sustain() },
+            Edit::BindingSet {
+                trigger: sustain(),
+                action: start_yt(),
+            },
         ],
         expected_rev: Some(Rev(0)),
         idempotency_key: None,
@@ -544,6 +565,16 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                         meta: Default::default(),
                     },
                 ],
+            }),
+        ),
+        // A label the collection doesn't have (ADR-0133).
+        (
+            Query::LabelMembers {
+                label_id: crate::LabelId::new("ghost"),
+            },
+            Err(ProtocolError::NotFound {
+                entity: EntityKind::Label,
+                id: "ghost".into(),
             }),
         ),
         // Sources by ID, whatever order they were created in.
@@ -646,6 +677,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 buses: buses(),
                 sends: sends(),
                 hotkeys: hotkeys(),
+                bindings: bindings(),
             }),
         ),
         // Outputs by ID, whatever order they were created in.
@@ -1777,6 +1809,27 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                  collection (R-SEC-001)",
             ),
         ),
+        // A binding's labels (ADR-0133): the binding must exist, then each label.
+        (
+            Batch::single(Edit::HotkeySetLabels {
+                chord: Chord::new("F2"),
+                labels: Vec::new(),
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Hotkey,
+                id: "F2".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::HotkeySetLabels {
+                chord: Chord::new("F1"),
+                labels: vec![crate::LabelId::new("ghost")],
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Label,
+                id: "ghost".into(),
+            },
+        ),
         (
             Batch::single(Edit::HotkeyClear {
                 chord: Chord::new("F2"),
@@ -1784,6 +1837,80 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
             ProtocolError::NotFound {
                 entity: EntityKind::Hotkey,
                 id: "F2".into(),
+            },
+        ),
+        // Controller bindings (ADR-0122): valid triggers, one binding per trigger, and
+        // the hotkeys' rules for the action.
+        (
+            Batch::single(Edit::BindingSet {
+                trigger: Trigger::MidiNote {
+                    note: 36,
+                    channel: Some(17),
+                    input: None,
+                },
+                action: start_yt(),
+            }),
+            invalid(
+                "edits.0.trigger.channel",
+                "must be 1 to 16, or missing for any channel",
+            ),
+        ),
+        (
+            Batch::single(Edit::BindingSet {
+                trigger: pad(),
+                action: start_yt(),
+            }),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Binding,
+                id: "MIDI note 36 on channel 10".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::BindingSet {
+                trigger: Trigger::MidiProgram {
+                    program: 1,
+                    channel: None,
+                    input: None,
+                },
+                action: Action::SceneSwitch {
+                    scene_id: SceneId::new("ghost"),
+                    preset_id: None,
+                },
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: "ghost".into(),
+            },
+        ),
+        (
+            Batch::single(Edit::BindingSet {
+                trigger: Trigger::MidiProgram {
+                    program: 1,
+                    channel: None,
+                    input: None,
+                },
+                action: Action::OutputSetKey {
+                    output_id: OutputId::new("yt"),
+                    key: crate::SecretString::new("live_secret"),
+                },
+            }),
+            invalid(
+                "edits.0.action.type",
+                "`output.set_key` can't be bound: a stream key is never stored in the \
+                 collection (R-SEC-001)",
+            ),
+        ),
+        (
+            Batch::single(Edit::BindingClear {
+                trigger: Trigger::MidiNote {
+                    note: 36,
+                    channel: None,
+                    input: None,
+                },
+            }),
+            ProtocolError::NotFound {
+                entity: EntityKind::Binding,
+                id: "MIDI note 36 on any channel".into(),
             },
         ),
         (
@@ -2031,6 +2158,32 @@ fn start_yt() -> Action {
     Action::OutputStart {
         output_id: OutputId::new("yt"),
     }
+}
+
+/// Note 36 on channel 10, from any input.
+fn pad() -> Trigger {
+    Trigger::MidiNote {
+        note: 36,
+        channel: Some(10),
+        input: None,
+    }
+}
+
+/// CC 64 (sustain) on any channel, from any input.
+fn sustain() -> Trigger {
+    Trigger::MidiCc {
+        controller: 64,
+        channel: None,
+        input: None,
+    }
+}
+
+/// The collection's controller bindings, ordered by trigger.
+pub fn bindings() -> Vec<Binding> {
+    vec![
+        Binding::new(pad(), &switch_to_a()),
+        Binding::new(sustain(), &start_yt()),
+    ]
 }
 
 /// The collection's hotkey bindings, ordered by chord.

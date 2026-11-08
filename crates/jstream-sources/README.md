@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -36,7 +36,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
   allocates, and a frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
-  the `waveform`, `spectrum`, `chat_message` and `timer` kinds draw theirs in a
+  the `waveform`, `spectrum`, `chat_message`, `timer` and `midi_*` kinds draw theirs in a
   `Painter` instead, and `frame`
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
@@ -166,6 +166,16 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   half-scale sine read at its amplitude by a band around it and not by one away from
   it, an inverted or NaN band reading 0, with its raw level, peak and onset, and a levels-only
   measure hearing the level with no spectrum.
+- `MidiState` and `MidiInputs` (`midi/`, [ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)):
+  what the `midi_*` kinds draw. A `MidiState` holds one input's held velocity per
+  channel and key, its controllers, pitch bend and channel pressure, and a log of the
+  last 1024 note events (`recent(out, most)`, oldest first), all in atomics, so any
+  thread pushes a `jstream_midi::Message` with `push(at_ms, message)` and any reads it
+  without a lock or an allocation. A reader skips a log slot a push is writing. CC 120
+  and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
+  (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
+  `drawn(name)` is the state a source's `input` setting draws. `Context::midi` carries
+  it; with none, the kinds draw their first frame and never change.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless
@@ -211,6 +221,25 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
+- `midi_keyboard`, `midi_piano_roll`, `midi_pads` and `midi_cc`
+  ([ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)): a MIDI input's state,
+  drawn on the CPU `width` by `height`. `input` names the input (empty: every input) and
+  `channel` the channel (1 to 16, 0 for every one). A change of size or `input` restarts
+  the source; `channel`, the colours and every kind-specific setting are live. A colour scales with velocity from 35% to full. The
+  keyboard lights the held keys from `low_key` to `high_key`, black keys over the line
+  between two white ones. The piano roll draws each note as a bar in its key's lane,
+  from its note-on to its note-off, scrolling left from the right edge over `seconds`
+  (0.5 to 30); it rebuilds the bars each frame from the log, and draws a key still held
+  after its note-on left the log from the left edge. The pads are a `rows` by `columns`
+  grid from `first_key` (the bottom-left pad, 36 by default, on channel 10), each lit by
+  its key while held and fading over `decay_ms` after its last note-on, so a short drum
+  hit shows. The meters draw a bar for each controller in `controllers` (a
+  comma-separated list, at most 16) and, with `pitch_bend`, one more from the middle.
+  Each paints at 30 fps through a `Painter` from a pool of four frames, as the scope
+  sources do, and settles on one frame, polled every 250 ms, while its input has no new
+  message and nothing it draws is moving. Tests push synthetic messages and read the
+  pixels: velocity, channel and input filtering, the fade, the scroll, the lost note-on,
+  settling, live and restarting changes, and every setting refused.
 - `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
   (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
   same asset root, or embedded as `data:` URIs) or a built-in `shape` (`plane`, `cube`,
@@ -235,8 +264,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
   `double_sided` (the last three for a shape only) and `lighting` (`studio` or
   `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
-  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes. The kind is
-  exported but not yet in `Registry::builtin()`: the engine doesn't draw models yet.
+  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
+  `Source::model` hands the engine the model, which an item draws in the stand-in's
+  place (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -438,17 +468,38 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
-  `html` too. `youtube_chat` never sets
-  it. The **Page API** group (ADR-0102, none of it live, all off by default):
+  `html` too. On, it covers the page's own origin only, and only an `https` page (a page
+  given as `html` is one): Chromium refuses a plain `http` page's local requests.
+  `youtube_chat` never sets
+  it. The **Page API** group (ADR-0102 and ADR-0124, none of it live, all off by
+  default, each kind of data its own checkbox shown under `page_api`, and each with a
+  `warning` the Properties dialog shows beside it):
   `page_api` gives the page `window.jstream` with the engine's clock and whether the
   source is shown on program and preview; `page_api_scenes` adds the two scenes;
-  `page_api_values` (at most 1 KiB) names the shared values it may read, as names or
+  `page_api_shared_values` adds the shared values that `page_api_values` (at most 1 KiB,
+  read only while the checkbox is on) names, as names or
   prefixes ending in `.*`, separated by commas, each name checked as `values.set`
-  checks one; `page_api_bus` (a bus, default none) gives it `jstream.levels()`, that
+  checks one; `page_api_audio` adds `jstream.levels()` for the bus `page_api_bus` names
+  (read only while the checkbox is on), that
   bus's post-fader peak and RMS per channel, as `meters.tick` meters them, and 64
   log-spaced bands from 20 Hz to 20 kHz, lowest first, each 0 to 1 on the dB scale from
   -90 to 0 dBFS, from the bus's scope (`AudioMeter`); or `null` while no mixer runs or
-  the bus is gone.
+  the bus is gone. A spectrogram page, for example, draws each reading as a column:
+
+  ```js
+  const g = document.querySelector("canvas").getContext("2d");
+  jstream.addEventListener("levels", (r) => {
+    const { width: w, height: h } = g.canvas;
+    g.drawImage(g.canvas, -1, 0);      // scroll left a column
+    g.clearRect(w - 1, 0, 1, h);
+    if (r === null) return;            // no output runs, or the bus is gone
+    r.bands.forEach((b, i) => {        // 64 bands, lowest first, 0 to 1
+      g.fillStyle = `hsl(${240 - 240 * b} 90% ${50 * b}%)`;
+      g.fillRect(w - 1, h - (i + 1) * h / 64, 1, h / 64);
+    });
+  });
+  ```
+
   The source sends its page only what changed (`page_api.rs`, `Feed`):
   the visibility with the clock time each part last became true, the scenes, the
   levels, and the

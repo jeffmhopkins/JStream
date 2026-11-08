@@ -93,7 +93,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -123,7 +123,9 @@ of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool
 `destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS` or a
 history call
 ([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
-today `device`, `history`, `output`, `pack` (whose writes and deletes change files on
+today `collection` (an open or a new stops every output and clears every client's undo,
+[ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)), `device`, `history`,
+`output`, `pack` (whose writes and deletes change files on
 disk that undo never reaches), `pairing`, `ui_settings`, `values` (whose values a
 browser source page granted them may send off the machine) and `timeline` (whose cues
 may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)). `history` stays
@@ -181,10 +183,12 @@ title-safe area, alignment and spacing, a `backdrop` source rather than a flat c
 `text` faces, sizes, letter spacing and shadow to use, restrained colour and contrast,
 recipes for a lower third, a ticker (`scroll` with a negative speed and a `gap_x`) and
 a countdown or clock (`timer`, one size whatever it shows), grouping a multi-part graphic as a nested scene whose item's
-effects clip and shadow it as one, fitting an item to its text's `source.sizes`,
+effects clip and shadow it as one, fitting an item to its text's `source.sizes`, a look no built-in filter makes as a custom shader the Filters window's shader editor opens (pack `custom-<word>`, effect `shader` in `shader.wgsl`, a `// @name` line and a `// @param` line per setting matching the manifest, #1232),
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
-keyframe variants and blend modes (`item.set_blend`), layering by role
+keyframe variants and blend modes (`item.set_blend`), the light and framing filters
+(`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
+and the `vignette`'s blends, shapes and three looks, #1226), layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
 `scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy
@@ -198,9 +202,11 @@ above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
 [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a camera that moves on its
 own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera) or follows the
-pointer over a screen capture (`scene.set_camera_follow`, its zoom stepped live by
-`scene.zoom_camera`, both set on the family's scene,
-[ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)), choosing between
+pointer over a screen capture (a `follow_pointer` filter on the capture item, which
+keeps the pointer inside a safe margin and gives a 2D scene a camera, with
+`scene.set_camera_follow` as a shortcut, its zoom stepped live by `scene.zoom_camera`,
+[ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md),
+[ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
 source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in
@@ -215,7 +221,10 @@ modifier for something that follows a bus or a beat, which hears only while an o
 runs, [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone
-([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), and checking
+([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), one label on an
+effect's keyframe scenes, hotkeys and timelines, read back with `label.members` and
+changed together in one batch
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.

@@ -23,6 +23,9 @@ use tokio_tungstenite::tungstenite::client::IntoClientRequest;
 use tokio_tungstenite::tungstenite::http::{HeaderValue, StatusCode, header};
 use tokio_tungstenite::tungstenite::{self, Message};
 
+#[cfg(feature = "tls")]
+mod network;
+
 const TOKEN: &str = "test-token-0123";
 
 /// A server serving `engine`, and the runtime it runs on.
@@ -48,6 +51,9 @@ struct Harness {
     tls: bool,
     /// The serving task: done once `serve_with_shutdown` has returned.
     serving: Option<tokio::task::JoinHandle<Result<(), crate::ServerError>>>,
+    /// The network listener's address, when it is on (ADR-0104).
+    #[cfg(feature = "tls")]
+    network: Option<std::net::SocketAddr>,
 }
 
 fn start(engine: &MockEngine) -> Harness {
@@ -159,6 +165,8 @@ fn serve_on(
     // The test server speaks plain HTTP even with `tls` on, whose `wss://` it names.
     let url = server.ws_url().replacen("wss://", "ws://", 1);
     let authority = server.local_addr().to_string();
+    #[cfg(feature = "tls")]
+    let network = server.network_addr();
     let (stop, stopped) = oneshot::channel::<()>();
     let serving = runtime.spawn(server.serve_with_shutdown(async move {
         // A dropped sender also stops the server.
@@ -175,6 +183,8 @@ fn serve_on(
         stop: Some(stop),
         tls,
         serving: Some(serving),
+        #[cfg(feature = "tls")]
+        network,
     }
 }
 
@@ -1952,7 +1962,7 @@ async fn http_on(
 
 /// [`http_on`] for any path. A `HEAD` answer's `Content-Length` announces no body.
 async fn http_to(
-    stream: &mut tokio::net::TcpStream,
+    stream: &mut (impl tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin),
     method: &str,
     path: &str,
     headers: &[(&str, &str)],
@@ -2910,6 +2920,15 @@ impl Harness {
 
     /// Starts pairing over `control` and returns the code.
     fn start_pairing(&self, control: &WsControl) -> String {
+        self.start_pairing_with_network(control).0
+    }
+
+    /// Starts pairing over `control` and returns the code and where the network
+    /// listener is, as `pairing.start` answers (0.97).
+    fn start_pairing_with_network(
+        &self,
+        control: &WsControl,
+    ) -> (String, Option<jstream_protocol::NetworkAccess>) {
         let response = ok(self.run(control.call(Call::Action {
             action: Action::PairingStart,
         })));
@@ -2919,10 +2938,11 @@ impl Harness {
                     Some(ActionResult::PairingStart {
                         code,
                         expires_in_secs,
+                        network,
                     }),
             } => {
                 assert_eq!(expires_in_secs, 120);
-                code.expose().to_owned()
+                (code.expose().to_owned(), network)
             }
             other => panic!("expected a pairing code, got {other:?}"),
         }

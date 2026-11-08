@@ -232,7 +232,7 @@ pub(crate) fn millis(ms: f64) -> u32 {
 
 /// When pass `pass` of a timeline that started at `started_ns` ends: where a `Once`
 /// timeline ends, or where a loop jumps back.
-fn boundary(timeline: &Timeline<CueAct>, started_ns: i64, pass: u64) -> i64 {
+pub(crate) fn boundary(timeline: &Timeline<CueAct>, started_ns: i64, pass: u64) -> i64 {
     let ms = |ms: u32| i64::from(ms) * NS_PER_MS;
     let pass = i64::try_from(pass).unwrap_or(i64::MAX);
     let at = match timeline.looping {
@@ -252,6 +252,7 @@ mod tests {
 
     fn info(duration_ms: u32, looping: TimelineLoop, at: &[u32]) -> TimelineInfo {
         TimelineInfo {
+            labels: Vec::new(),
             timeline_id: TimelineId::new("t"),
             name: String::new(),
             duration_ms,

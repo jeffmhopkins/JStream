@@ -23,6 +23,15 @@ use jstream_protocol::{BlendMode, Blending};
 /// field with the shape's largest blur), tightly packed. wgpu only needs the stride and attribute offsets to be
 /// multiples of 4.
 pub(crate) const VERTEX_STRIDE: u64 = 116;
+/// How many texels a 2D item's canvas pixel spans, along its more minified axis, past
+/// which it samples a mip chain (#1217, ADR-0050 decision 5's note on 2D items). One
+/// bilinear tap reads a 2×2 texel footprint, so drawn smaller it skips texels and fine
+/// detail aliases. Against a box-filtered reference on lavapipe a chain is better from
+/// about 1.1 (mean error 3.2 against 4.7 with one level), at 1.2 (3.1 against 5.5) and
+/// much better at 2 (6 against 10). Up to this an item drawn nearly at its size stays
+/// on the one level, which costs no chain.
+const MINIFIED: f32 = 1.15;
+
 /// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
 const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 
@@ -550,6 +559,7 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-filter"),
             });
+        let padding = filter.pad();
         let (pass, scratch) = filter.parts();
         scratch.begin();
         let mut ctx = filter::Ctx {
@@ -568,7 +578,16 @@ impl Compositor {
             scratch,
         };
         ctx.holds.clear();
-        let encoded = pass.encode(&mut ctx, input, output);
+        let encoded = if padding == 0 {
+            pass.encode(&mut ctx, input, output)
+        } else {
+            let grow = |side: u32| side.saturating_add(padding.saturating_mul(2));
+            ctx.scratch(grow(input.width()), grow(input.height()))
+                .and_then(|padded| {
+                    filter::pad(&mut ctx, input, padding, &padded)?;
+                    pass.encode(&mut ctx, &padded, output)
+                })
+        };
         ctx.hold(input);
         ctx.scratch.end();
         if let Err(err) = encoded {
@@ -866,17 +885,24 @@ impl Compositor {
                 .ok()
                 .filter(|first| first.checked_add(MAX_VERTICES_PER_ITEM).is_some())
                 .ok_or_else(too_many)?;
-            // A 3D item samples a chain of its crop, so its texture coordinates are
-            // mapped from the source's into the chain's.
-            let mips = shape.is_3d().then(|| {
+            // A 3D item, and a 2D one drawn small (#1217), samples a chain of its crop,
+            // so its texture coordinates are mapped from the source's into the chain's.
+            let texels = (item.image.width(), item.image.height());
+            let (least, most) = if shape.is_3d() {
+                (0.0, f32::INFINITY)
+            } else {
+                shape.minification(texels)
+            };
+            // A 2D item minified at least twice along both axes never samples level 0.
+            let skip = u32::from(least >= 2.0);
+            let mips = (most > MINIFIED).then(|| {
                 let image = item.image;
-                let texels = (image.width(), image.height());
                 // The crop counts in the extent; the chain is built from texels.
                 let region = shape.crop.map_or_else(
                     || Region::whole(texels.0, texels.1),
                     |crop| crop.in_texels(image.extent(), texels),
                 );
-                let chain = self.chain_of(image, region);
+                let chain = self.chain_of(image, region, skip);
                 let (w, h) = (image.width() as f32, image.height() as f32);
                 shape.remap_uv([
                     region.x as f32 / w,
@@ -1053,9 +1079,10 @@ impl Compositor {
         Ok(())
     }
 
-    /// `image`'s mip chain of `region`, made the first time it is placed in 3D with it.
-    fn chain_of(&self, image: &Image, region: Region) -> Arc<Mips> {
-        image.chain(region, || {
+    /// `image`'s mip chain of `region` starting `skip` levels down, made the first time
+    /// it is placed in 3D or drawn small with it.
+    fn chain_of(&self, image: &Image, region: Region, skip: u32) -> Arc<Mips> {
+        image.chain(region, skip, || {
             Mips::new(
                 &self.gpu.device,
                 &self.gpu.queue,
@@ -1063,6 +1090,7 @@ impl Compositor {
                 &self.mip_pipelines,
                 image,
                 region,
+                skip,
             )
         })
     }

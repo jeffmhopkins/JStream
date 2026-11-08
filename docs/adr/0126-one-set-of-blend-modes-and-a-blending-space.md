@@ -72,7 +72,7 @@ a project-wide setting for the space they mix in, defaulting to the browser's.
    The cost is that one copy and one pass per composite target, not per item.
 4. **Linear light** is ADR-0082 §2 unchanged: one pass, linear mixing, overlay,
    difference and exclusion mixed encoded.
-5. **Migration (collection `schema_version` 10).** The old file has no `blending`, and
+5. **Migration (collection `schema_version` 12).** The old file has no `blending`, and
    its placements may name `normal_srgb` or `additive_srgb`:
    - Those names load as `normal` and `additive`, in placements and in any keyframe
      track that holds a blend.

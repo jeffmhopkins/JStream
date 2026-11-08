@@ -735,9 +735,14 @@ fn the_sources_thread_advances_an_animation_by_itself() {
     )
     .expect("created");
     assert_eq!(colour(&engine), (0, 0xff), "red first");
-    // The thread re-plans when each frame is due; no call touches the engine meanwhile.
-    clock.advance(100);
-    assert!(shows_by_itself(&engine, (1, 0xff)), "green at 100 ms");
+    // The thread re-plans when each frame is due, on the frame grid: green is due at
+    // 100 ms, a tick falls at 132 ms (33 ms frames), and its plan a quarter frame
+    // before (#1138). No call touches the engine meanwhile.
+    clock.advance(124);
+    assert!(
+        shows_by_itself(&engine, (1, 0xff)),
+        "green before the 132 ms tick"
+    );
     // Past both plays (2 x 600 ms), the last frame stays.
     clock.advance(2_000);
     assert!(shows_by_itself(&engine, (2, 128)), "blue at alpha 128");
@@ -962,6 +967,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("t"),
                     name: String::new(),
                     duration_ms: 2_000,
@@ -977,6 +983,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("kicker"),
                     name: String::new(),
                     duration_ms: 2_000,

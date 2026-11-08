@@ -40,8 +40,9 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::KindDescriptor;
+use jstream_protocol::LabelId;
 use jstream_protocol::{
-    Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
+    Action, Batch, Binding, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
     CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
     EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo, GeometryError, GestureId,
     GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
@@ -51,7 +52,7 @@ use jstream_protocol::{
     RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo,
     SceneRole, SceneSummary, SecretString, Settings, SharedValue, SourceAudio, SourceId,
     SourceInfo, SourceKind, SourceSize, TransitionPresetId, TransitionStarted, TransitionsInfo,
-    VideoMix, VideoMixId, VideoMixInfo, Welcome, check_value_name, check_value_size,
+    Trigger, VideoMix, VideoMixId, VideoMixInfo, Welcome, check_value_name, check_value_size,
     is_live_adjustable, prefix_covers,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -283,6 +284,13 @@ impl Drop for MockControl {
 }
 
 /// Everything the mock engine knows.
+/// The hotkey and controller bindings a batch's deletes removed (ADR-0040 §3).
+#[derive(Default)]
+struct Removed {
+    hotkeys: Vec<HotkeyBinding>,
+    bindings: Vec<Binding>,
+}
+
 #[derive(Default)]
 struct State {
     collection: Collection,
@@ -572,6 +580,10 @@ struct Collection {
     video_mixes: BTreeMap<VideoMixId, (String, VideoMix)>,
     /// The hotkey bindings, ordered by chord.
     hotkeys: BTreeMap<Chord, Action>,
+    /// The labels each binding carries, ordered by ID (ADR-0133); no entry for none.
+    hotkey_labels: BTreeMap<Chord, Vec<LabelId>>,
+    /// The controller bindings (ADR-0122), ordered by trigger.
+    bindings: BTreeMap<Trigger, Action>,
     /// The scene list's folders, in folder order (ADR-0024 §3).
     folders: Vec<jstream_protocol::FolderInfo>,
     /// The labels, in label order (ADR-0024 §4).
@@ -607,6 +619,8 @@ impl Default for Collection {
             output_filters: BTreeMap::new(),
             master: jstream_protocol::FilterChains::default(),
             hotkeys: BTreeMap::new(),
+            hotkey_labels: BTreeMap::new(),
+            bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
         }
@@ -727,12 +741,13 @@ impl State {
         if batch.edits.is_empty() {
             return Err(ProtocolError::EmptyBatch);
         }
-        let (rev, inverse, removed_hotkeys) = self.apply(batch.edits)?;
+        let (rev, inverse, removed) = self.apply(batch.edits)?;
         self.history.record_batch(client_id, rev, inverse);
         let result = CallResult::Batch {
             dropped_overrides: Vec::new(),
             rev,
-            removed_hotkeys,
+            removed_hotkeys: removed.hotkeys,
+            removed_bindings: removed.bindings,
         };
         if let Some(key) = batch.idempotency_key {
             self.applied
@@ -811,15 +826,13 @@ impl State {
     }
 
     /// Applies `edits` atomically as one `rev` bump, and returns that `rev`, the edits
-    /// that undo them, and the hotkey bindings their deletes removed (ADR-0040 §3).
-    fn apply(
-        &mut self,
-        edits: Vec<Edit>,
-    ) -> Result<(Rev, Vec<Edit>, Vec<HotkeyBinding>), ProtocolError> {
+    /// that undo them, and the hotkey and controller bindings their deletes removed
+    /// (ADR-0040 §3).
+    fn apply(&mut self, edits: Vec<Edit>) -> Result<(Rev, Vec<Edit>, Removed), ProtocolError> {
         let running = self.running();
         let mut next = self.collection.clone();
         let mut undo = Vec::with_capacity(edits.len());
-        let mut removed = Vec::new();
+        let mut removed = Removed::default();
         for (at, edit) in edits.into_iter().enumerate() {
             let deleted = match &edit {
                 Edit::SceneDelete { scene_id } => Some((EntityKind::Scene, scene_id.to_string())),
@@ -1182,8 +1195,13 @@ impl State {
             }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
-            // The mock watches no packs folder (ADR-0097), as an engine without one.
-            action @ (Action::PackWrite { .. } | Action::PackDelete { .. }) => {
+            // The mock watches no packs folder (ADR-0097), as an engine without one, and
+            // keeps no collection file (ADR-0121), as an engine whose host named none.
+            action @ (Action::PackWrite { .. }
+            | Action::PackDelete { .. }
+            | Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: action.name().into(),
                 });
@@ -1301,6 +1319,10 @@ impl State {
                     scene_id,
                 }
             }
+            Query::LabelMembers { label_id } => QueryResult::LabelMembers {
+                rev: self.collection.rev,
+                members: self.collection.label_members(&label_id)?,
+            },
             Query::StateGet => QueryResult::StateGet {
                 rev: self.collection.rev,
                 canvas: self.collection.canvas,
@@ -1338,11 +1360,12 @@ impl State {
                 master: Box::new(jstream_protocol::MasterInfo {
                     filters: self.collection.master.clone(),
                 }),
-                hotkeys: self
+                hotkeys: self.collection.hotkey_bindings(|_| true),
+                bindings: self
                     .collection
-                    .hotkeys
+                    .bindings
                     .iter()
-                    .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                    .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                     .collect(),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: self.collection.folders.clone(),
@@ -1433,7 +1456,7 @@ impl State {
                     call: query.name().into(),
                 });
             }
-            Query::DeviceList | Query::UiSettingsGet { .. } => {
+            Query::DeviceList | Query::UiSettingsGet { .. } | Query::CollectionInfo => {
                 return Err(ProtocolError::Unsupported {
                     call: query.name().into(),
                 });
@@ -2464,36 +2487,77 @@ impl Collection {
                 if self.hotkeys.contains_key(&chord) {
                     return Err(already_exists(EntityKind::Hotkey, chord.as_str()));
                 }
-                if let Some((field, reason)) = action.bind_problem() {
-                    return Err(invalid(at, &format!("action.{field}"), reason));
-                }
-                for (entity, id) in action.named_objects() {
-                    let exists = match entity {
-                        EntityKind::Scene => self.scenes.iter().any(|s| s.id.as_str() == id),
-                        EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
-                        EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
-                        EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
-                        // The mock has only the `cut` preset every collection starts with.
-                        EntityKind::Transition => id == INITIAL_PRESET,
-                        EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
-                        _ => false,
-                    };
-                    if !exists {
-                        return Err(not_found(entity, id));
-                    }
-                }
+                self.check_bindable(&action, at)?;
                 self.hotkeys.insert(chord.clone(), action);
                 vec![Edit::HotkeyClear { chord }]
             }
+            // The graph's checks: the binding, then the labels (ADR-0133).
+            Edit::HotkeySetLabels { chord, labels } => {
+                if !self.hotkeys.contains_key(&chord) {
+                    return Err(not_found(EntityKind::Hotkey, chord.as_str()));
+                }
+                let labels = self.checked_labels(&labels, at)?;
+                let old = if labels.is_empty() {
+                    self.hotkey_labels.remove(&chord)
+                } else {
+                    self.hotkey_labels.insert(chord.clone(), labels)
+                };
+                vec![Edit::HotkeySetLabels {
+                    chord,
+                    labels: old.unwrap_or_default(),
+                }]
+            }
             Edit::HotkeyClear { chord } => {
-                let Some(action) = self.hotkeys.remove(&chord) else {
+                let Some(binding) = self.take_hotkey(&chord) else {
                     return Err(not_found(EntityKind::Hotkey, chord.as_str()));
                 };
-                vec![Edit::HotkeySet { chord, action }]
+                restore_hotkey(binding)
+            }
+            // The graph's checks, in its order, as for hotkeys.
+            Edit::BindingSet { trigger, action } => {
+                if let Some((field, reason)) = trigger.problem() {
+                    return Err(invalid(at, &format!("trigger.{field}"), reason));
+                }
+                if self.bindings.contains_key(&trigger) {
+                    return Err(already_exists(EntityKind::Binding, &trigger.to_string()));
+                }
+                self.check_bindable(&action, at)?;
+                self.bindings.insert(trigger.clone(), action);
+                vec![Edit::BindingClear { trigger }]
+            }
+            Edit::BindingClear { trigger } => {
+                let Some(action) = self.bindings.remove(&trigger) else {
+                    return Err(not_found(EntityKind::Binding, &trigger.to_string()));
+                };
+                vec![Edit::BindingSet { trigger, action }]
             }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
+    }
+
+    /// Checks that `action` can be bound, as the graph does: the action's own rule,
+    /// then the objects it names.
+    fn check_bindable(&self, action: &Action, at: usize) -> Result<(), ProtocolError> {
+        if let Some((field, reason)) = action.bind_problem() {
+            return Err(invalid(at, &format!("action.{field}"), reason));
+        }
+        for (entity, id) in action.named_objects() {
+            let exists = match entity {
+                EntityKind::Scene => self.scenes.iter().any(|s| s.id.as_str() == id),
+                EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
+                EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
+                EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
+                // The mock has only the `cut` preset every collection starts with.
+                EntityKind::Transition => id == INITIAL_PRESET,
+                EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
+                _ => false,
+            };
+            if !exists {
+                return Err(not_found(entity, id));
+            }
+        }
+        Ok(())
     }
 
     /// Checks a video mix as the engine does: its own ranges, then that the scene it
@@ -2510,37 +2574,58 @@ impl Collection {
         Ok(())
     }
 
-    /// Removes the hotkey bindings whose action names an item the collection no longer
-    /// has (ADR-0101), as [`Self::remove_hotkeys_naming`] does for a deleted object.
-    fn remove_hotkeys_of_missing_items(&mut self, removed: &mut Vec<HotkeyBinding>) -> Vec<Edit> {
-        let chords: Vec<Chord> = self
-            .hotkeys
+    /// Every binding `keep` keeps, ordered by chord, with its labels.
+    fn hotkey_bindings(&self, keep: impl Fn(&[LabelId]) -> bool) -> Vec<HotkeyBinding> {
+        self.hotkeys
             .iter()
-            .filter(|(_, action)| {
-                action.named_objects().iter().any(|&(entity, id)| {
-                    entity == EntityKind::Item && !self.items.contains_key(&ItemId::new(id))
-                })
-            })
-            .map(|(chord, _)| chord.clone())
-            .collect();
-        chords
-            .into_iter()
-            .filter_map(|chord| {
-                let action = self.hotkeys.remove(&chord)?;
-                removed.push(HotkeyBinding::new(chord.clone(), &action));
-                Some(Edit::HotkeySet { chord, action })
+            .filter_map(|(chord, action)| {
+                let labels = self.hotkey_labels.get(chord).cloned().unwrap_or_default();
+                keep(&labels).then(|| HotkeyBinding::new(chord.clone(), action).with_labels(labels))
             })
             .collect()
     }
 
-    /// Removes the hotkey bindings whose action names `entity` `id`, which a delete has
-    /// just removed, records them in `removed`, and returns the `hotkey.set` edits that
-    /// restore them, ordered by chord.
+    /// Removes the binding of `chord` and its labels, and returns it.
+    fn take_hotkey(&mut self, chord: &Chord) -> Option<HotkeyBinding> {
+        let action = self.hotkeys.remove(chord)?;
+        let labels = self.hotkey_labels.remove(chord).unwrap_or_default();
+        Some(HotkeyBinding::new(chord.clone(), &action).with_labels(labels))
+    }
+
+    /// Removes the hotkey and controller bindings whose action names an item the
+    /// collection no longer has (ADR-0101), as [`Self::remove_hotkeys_naming`] does for a
+    /// deleted object.
+    fn remove_hotkeys_of_missing_items(&mut self, removed: &mut Removed) -> Vec<Edit> {
+        let items = &self.items;
+        let gone = |action: &Action| {
+            action.named_objects().iter().any(|&(entity, id)| {
+                entity == EntityKind::Item && !items.contains_key(&ItemId::new(id))
+            })
+        };
+        let chords: Vec<Chord> = self
+            .hotkeys
+            .iter()
+            .filter(|(_, action)| gone(action))
+            .map(|(chord, _)| chord.clone())
+            .collect();
+        let triggers: Vec<Trigger> = self
+            .bindings
+            .iter()
+            .filter(|(_, action)| gone(action))
+            .map(|(trigger, _)| trigger.clone())
+            .collect();
+        self.remove_bound(chords, triggers, removed)
+    }
+
+    /// Removes the hotkey and controller bindings whose action names `entity` `id`,
+    /// which a delete has just removed, records them in `removed`, and returns the
+    /// `hotkey.set` edits (ordered by chord) then `binding.set` edits (ordered by
+    /// trigger) that restore them.
     fn remove_hotkeys_naming(
         &mut self,
         entity: EntityKind,
         id: &str,
-        removed: &mut Vec<HotkeyBinding>,
+        removed: &mut Removed,
     ) -> Vec<Edit> {
         let chords: Vec<Chord> = self
             .hotkeys
@@ -2548,14 +2633,39 @@ impl Collection {
             .filter(|(_, action)| action.named_objects().contains(&(entity, id)))
             .map(|(chord, _)| chord.clone())
             .collect();
-        chords
-            .into_iter()
-            .filter_map(|chord| {
-                let action = self.hotkeys.remove(&chord)?;
-                removed.push(HotkeyBinding::new(chord.clone(), &action));
-                Some(Edit::HotkeySet { chord, action })
-            })
-            .collect()
+        let triggers: Vec<Trigger> = self
+            .bindings
+            .iter()
+            .filter(|(_, action)| action.named_objects().contains(&(entity, id)))
+            .map(|(trigger, _)| trigger.clone())
+            .collect();
+        self.remove_bound(chords, triggers, removed)
+    }
+
+    /// Removes the bindings of `chords` and `triggers`, records them, and returns the
+    /// edits that restore them.
+    fn remove_bound(
+        &mut self,
+        chords: Vec<Chord>,
+        triggers: Vec<Trigger>,
+        removed: &mut Removed,
+    ) -> Vec<Edit> {
+        let mut restore = Vec::new();
+        for chord in chords {
+            if let Some(binding) = self.take_hotkey(&chord) {
+                removed.hotkeys.push(binding.clone());
+                restore.extend(restore_hotkey(binding));
+            }
+        }
+        for trigger in triggers {
+            if let Some(action) = self.bindings.remove(&trigger) {
+                removed
+                    .bindings
+                    .push(Binding::new(trigger.clone(), &action));
+                restore.push(Edit::BindingSet { trigger, action });
+            }
+        }
+        restore
     }
 
     /// Applies `item.move` with `jstream-graph`'s checks in its order: the item, the
@@ -3291,6 +3401,25 @@ fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
     }
 }
 
+/// The edits that put back a removed binding: its `hotkey.set`, then its
+/// `hotkey.set_labels` when it carried any (ADR-0133).
+fn restore_hotkey(binding: HotkeyBinding) -> Vec<Edit> {
+    let Some(action) = binding.action() else {
+        return Vec::new();
+    };
+    let mut edits = vec![Edit::HotkeySet {
+        chord: binding.chord.clone(),
+        action,
+    }];
+    if !binding.labels.is_empty() {
+        edits.push(Edit::HotkeySetLabels {
+            chord: binding.chord,
+            labels: binding.labels,
+        });
+    }
+    edits
+}
+
 /// A protocol variant added after this mock was written.
 fn unimplemented_by_mock(what: &str) -> ProtocolError {
     ProtocolError::Internal {
@@ -3912,6 +4041,7 @@ mod tests {
             audio: false,
             max_outset_px: None,
             params: vec![ParamDescriptor {
+                warning: None,
                 id: "lut".into(),
                 ty: ParamType::Asset {
                     accept: vec!["cube".into()],
@@ -4038,6 +4168,7 @@ mod tests {
                 buses,
                 sends,
                 hotkeys,
+                bindings,
                 transitions,
                 folders,
                 labels,
@@ -4056,6 +4187,7 @@ mod tests {
                 buses,
                 sends,
                 hotkeys,
+                bindings,
                 transitions,
                 folders,
                 labels,
@@ -4279,6 +4411,7 @@ mod tests {
                 sends: vec![],
                 master: Default::default(),
                 hotkeys: vec![],
+                bindings: vec![],
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: Vec::new(),
                 labels: Vec::new(),

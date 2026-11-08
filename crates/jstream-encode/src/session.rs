@@ -97,6 +97,15 @@ pub struct SessionStats {
     pub subscriber_drops: u64,
     /// Audio only: sample frames of silence inserted for gaps left by dropped blocks.
     pub silence_frames: u64,
+    /// Video only: inputs the encoder had finished taking more than one frame period
+    /// after they were pushed (waiting in the queue, then the `encode` call), dropped
+    /// ones not counted.
+    pub late: u64,
+    /// The time the encode thread spent in the encoder's `encode` call, over every
+    /// input it handed over, in nanoseconds.
+    pub encode_nanos: u64,
+    /// The bytes of every packet the encoder produced.
+    pub bytes: u64,
 }
 
 #[derive(Debug, Default)]
@@ -111,6 +120,9 @@ pub(crate) struct Counters {
     subscribers: AtomicU64,
     pub(crate) subscriber_drops: AtomicU64,
     pub(crate) silence_frames: AtomicU64,
+    late: AtomicU64,
+    encode_nanos: AtomicU64,
+    pub(crate) bytes: AtomicU64,
 }
 
 impl Counters {
@@ -142,7 +154,23 @@ impl Counters {
             subscribers: get(&self.subscribers),
             subscriber_drops: get(&self.subscriber_drops),
             silence_frames: get(&self.silence_frames),
+            late: get(&self.late),
+            encode_nanos: get(&self.encode_nanos),
+            bytes: get(&self.bytes),
         }
+    }
+}
+
+/// Reads a session's counters ([`VideoSession::stats_handle`](crate::VideoSession::stats_handle))
+/// without keeping it alive. Cheap to clone.
+#[derive(Clone, Debug)]
+pub struct StatsHandle(std::sync::Weak<Shared>);
+
+impl StatsHandle {
+    /// The counters now, or `None` once the session and every handle on its stream are
+    /// gone.
+    pub fn stats(&self) -> Option<SessionStats> {
+        self.0.upgrade().map(|shared| shared.counters.snapshot())
     }
 }
 
@@ -155,6 +183,9 @@ pub(crate) struct Shared {
     /// once, by the encode thread, so reading it never waits on that thread.
     pub(crate) fallback: OnceLock<CodecInfo>,
     pub(crate) counters: Counters,
+    /// A video encoder's frame period: an input it takes later than this after its push
+    /// is late. `None` for audio.
+    period: Option<Duration>,
     /// `finish` was called: drain, then end.
     finishing: AtomicBool,
     /// The session was dropped: end without draining.
@@ -174,8 +205,18 @@ impl Shared {
     }
 
     fn new(info: StreamInfo) -> Arc<Self> {
+        let period = match &info.settings {
+            EncoderSettings::Video(config) => {
+                let period = config.frame_period;
+                (period.den() > 0).then(|| {
+                    Duration::from_secs_f64(f64::from(period.num()) / f64::from(period.den()))
+                })
+            }
+            EncoderSettings::Audio(_) => None,
+        };
         Arc::new(Self {
             info,
+            period,
             fallback: OnceLock::new(),
             counters: Counters::default(),
             finishing: AtomicBool::new(false),
@@ -205,7 +246,12 @@ impl Shared {
 /// A message to the encode thread.
 pub(crate) enum Msg<I> {
     /// One input. `after_drop` says an input was dropped just before it.
-    Item { input: I, after_drop: bool },
+    Item {
+        input: I,
+        after_drop: bool,
+        /// When it was pushed.
+        queued: Instant,
+    },
     /// Re-check the session's flags now.
     Wake,
 }
@@ -271,7 +317,12 @@ impl<I> InputHandle<I> {
         // it before this thread runs again, and a snapshot must never show an input
         // encoded that it doesn't show received. Taken back if the send fails.
         s.counters.received.fetch_add(1, Ordering::Relaxed);
-        match self.tx.try_send(Msg::Item { input, after_drop }) {
+        let queued = Instant::now();
+        match self.tx.try_send(Msg::Item {
+            input,
+            after_drop,
+            queued,
+        }) {
             Ok(()) => Ok(()),
             Err(TrySendError::Full(_)) => {
                 s.counters.received.fetch_sub(1, Ordering::Relaxed);
@@ -355,6 +406,10 @@ impl<D: Driver> Core<D> {
 
     pub(crate) fn stats(&self) -> SessionStats {
         self.shared.counters.snapshot()
+    }
+
+    pub(crate) fn stats_handle(&self) -> StatsHandle {
+        StatsHandle(Arc::downgrade(&self.shared))
     }
 
     pub(crate) fn subscribe(&self, capacity: Option<usize>) -> Subscription {
@@ -483,8 +538,12 @@ fn run<D: Driver>(
                 // Inputs are taken only when the encoder can take them, so a slow
                 // encoder fills the input queue and `push` drops at the source.
                 match rx.recv_timeout(timing.poll_interval) {
-                    Ok(Msg::Item { input, after_drop }) => {
-                        encode_one(driver, input, after_drop, shared)?;
+                    Ok(Msg::Item {
+                        input,
+                        after_drop,
+                        queued,
+                    }) => {
+                        encode_one(driver, input, after_drop, queued, shared)?;
                     }
                     Ok(Msg::Wake) | Err(RecvTimeoutError::Timeout) => {}
                     // The session holds a sender until it has set `aborting`.
@@ -502,7 +561,12 @@ fn run<D: Driver>(
         // `None`: a timeout too long to represent, so no limit.
         let deadline = Instant::now().checked_add(timing.finish_timeout);
         while let Ok(msg) = rx.try_recv() {
-            let Msg::Item { input, after_drop } = msg else {
+            let Msg::Item {
+                input,
+                after_drop,
+                queued,
+            } = msg
+            else {
                 continue;
             };
             while !driver.can_accept() && deadline.is_none_or(|d| Instant::now() < d) {
@@ -511,7 +575,7 @@ fn run<D: Driver>(
                 step(driver, &mut out, joined, fan, shared)?;
             }
             if driver.can_accept() {
-                encode_one(driver, input, after_drop, shared)?;
+                encode_one(driver, input, after_drop, queued, shared)?;
             } else {
                 shared
                     .counters
@@ -532,9 +596,11 @@ fn encode_one<D: Driver>(
     driver: &mut D,
     input: D::Input,
     after_drop: bool,
+    queued: Instant,
     shared: &Shared,
 ) -> Result<(), EncodeError> {
     let c = &shared.counters;
+    let began = Instant::now();
     // A load first, so the common case (no request) is a plain read, not a swap.
     if shared.keyframe_wanted.load(Ordering::Relaxed)
         && shared.keyframe_wanted.swap(false, Ordering::Acquire)
@@ -543,6 +609,11 @@ fn encode_one<D: Driver>(
         c.keyframes_requested.fetch_add(1, Ordering::Relaxed);
     }
     let result = driver.encode(input, after_drop, c);
+    let took = began.elapsed();
+    c.encode_nanos.fetch_add(
+        u64::try_from(took.as_nanos()).unwrap_or(u64::MAX),
+        Ordering::Relaxed,
+    );
     // Only the first change is kept: a platform encoder falls back at most once.
     if let Some(codec) = driver.codec_changed() {
         let _ = shared.fallback.set(codec);
@@ -551,6 +622,12 @@ fn encode_one<D: Driver>(
     // received (`Counters::snapshot`).
     match result {
         Ok(()) => {
+            if shared
+                .period
+                .is_some_and(|period| began.saturating_duration_since(queued) + took > period)
+            {
+                c.late.fetch_add(1, Ordering::Relaxed);
+            }
             c.encoded.fetch_add(1, Ordering::Release);
             Ok(())
         }
