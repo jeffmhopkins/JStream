@@ -172,7 +172,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Progress | Done | In progress | Planned | Undecided |
 |---|---|---|---|---|
-| `█░░░░░░░░░` 10% | 2 | 0 | 19 | 0 |
+| `█░░░░░░░░░` 10% | 2 | 1 | 18 | 0 |
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
@@ -190,7 +190,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings | ⏳ planned | #1209, #1189 | #1240, #1245, #1255, #1257 |
 |  | Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter | ⏳ planned: #1281 brings Glow past the box, Bloom and the Vignette (#1226); #1296 adds the full set of borders (#1227) and #1352 its 9-slice image frame (#1294); #1289 is the first part of the Custom shader (#1232), #1331 colours its editor and #1351 adds Save as pack and setting renames (#1295) | #1226, #1227, #1232, #1295 | #1281, #1289, #1296, #1331, #1351, #1352 |
 |  | Page API: audio levels and spectrum bands for HTML visualisers, and a checkbox for each kind of data a page may read | ⏳ planned | #1228, #1060 |  |
-|  | Webcam Properties: a device picker, resolution, frame rate and format, and camera controls | ⏳ planned | #1195, #1196 |  |
+|  | Webcam Properties: a device picker, resolution, frame rate and format, and camera controls | 🔍 in review | #1195, #1196 | #1262, #1348, #1393, #1396 |
 |  | Ask before a new agent connects, with always-allowed agents listed in Settings | ⏳ planned | #1229 |  |
 |  | Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects | ⏳ planned: finishes roadmap item 3D3 | #1231 |  |
 |  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned | #1222, #1223, #1224 |  |
