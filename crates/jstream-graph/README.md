@@ -529,7 +529,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 12), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 13), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -572,7 +572,8 @@ by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writ
 (ADR-0124) gives a `browser` source's page API a checkbox per kind of data, and a collection's
 `bindings` (ADR-0122) are `schema_version` 9. An override's `timing` (ADR-0129), omitted
 while absent, is `schema_version` 10. Version 11 (ADR-0133) adds a hotkey binding's and a
-timeline's `labels`. Loading creates the folders top level first, then
+timeline's `labels`. Version 13 (ADR-0138) adds motion modifiers with `property`
+`effect` and their `effect` target, which drive an effect's setting. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -597,7 +598,7 @@ the engine's; this crate does no I/O.
   `blending` in a version 11 file, turns its items' `normal_srgb` and `additive_srgb`
   into `normal` and `additive`, and sets `linear` when any item used another mode, the
   default `normal` included, so only a file of `_srgb` items, or of none, loads as
-  `srgb`),
+  `srgb`, and 12 to 13 refuses a version 12 modifier that drives an effect setting),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.

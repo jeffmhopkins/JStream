@@ -150,6 +150,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0134](0134-html-pages-load-from-an-origin-of-their-own.md) | A page given as HTML loads from an origin of its own | accepted | agent |  |
 | [ADR-0136](0136-an-effects-outset-follows-its-settings.md) | An effect's outset follows its settings | accepted | agent |  |
 | [ADR-0137](0137-midi-visualization-sources.md) | MIDI visualization sources draw a lock-free per-input state on the CPU | accepted | agent |  |
+| [ADR-0138](0138-motion-drives-effect-settings.md) | Motion modifiers drive an effect's number and colour settings | accepted | agent |  |
 | [ADR-0141](0141-desktop-app-on-linux.md) | The desktop app on Linux: Tauri on WebKitGTK, behind a feature | accepted | maintainer |  |
 | [ADR-0142](0142-feeding-the-midi-sources-and-their-beat.md) | The engine feeds the MIDI sources on the media clock, with each input's tempo | accepted | agent |  |
 <!-- @generated end adr-index -->

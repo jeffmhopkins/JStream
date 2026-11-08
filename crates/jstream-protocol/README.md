@@ -196,7 +196,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   shares, and `check_motion_id`, the ID check `item.trigger_motion` shares
   ([Motion](#motion)). Since 0.86 `MotionKind::Audio`, with its `MotionMeasure`
   and `MotionCurve`, follows a bus or a source
-  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)).
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
+  `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -325,7 +327,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.108 because the person is asked before a new agent connects:
+`PROTOCOL_VERSION` is 0.109 because a motion modifier can drive a number or colour
+setting of one of its item's effects (#1404): `MotionProperty::Effect` and `MotionModifier.effect`
+(`MotionEffect`, [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md),
+#1294, a number the release queue set); 0.108 because the person is asked before a new agent connects:
 the events `agent.approval_requested` and `agent.approval_resolved`, the actions
 `agent.approve` and `agent.forget`, the query `agent.approved`, the error `not_allowed`
 and the entity kind `approval`
@@ -2493,7 +2498,8 @@ evaluates as each frame is drawn. A modifier never writes the item's values: `st
 reports the same geometry, crop and opacity whatever it adds. Each modifier has a
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
 the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
-`opacity` and the four `crop_*` edges), its `kind`, its `clock` and `enabled`.
+`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`), its
+`kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
   `amplitude`, `period_ms` 1 to 3 600 000, `phase` in `[0, 1)`), `drift` (a steady
@@ -2522,6 +2528,20 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
+- **Effect settings** (since 0.109,
+  [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): `property`
+  `effect` drives a number setting of one of the item's own effects instead, which
+  `effect: {filter_id, param}` (`MotionEffect`) names: the effect by its ID among the
+  effects the item draws (a keyframe's override in that keyframe) and a `float`, `int`
+  or colour parameter of its kind by its ID, `param` 1 to 64 bytes of ASCII letters,
+  digits and `_`. Only property `effect` takes an `effect`, and it needs one
+  (`motion.<n>.effect`). Its value is added to the setting (during a Move, to the
+  blended one): a number is kept within the parameter's range and rounded for an
+  `int`; a colour has it added to each of its red, green and blue as a fraction of
+  full, each kept within 0 and full, its alpha unchanged. One naming an effect or
+  parameter the item doesn't draw, or one of another type, adds nothing. It never moves the box.
+  `effect` is omitted for every other property, and a client before 0.109 reads the
+  property as `Unknown`.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source
