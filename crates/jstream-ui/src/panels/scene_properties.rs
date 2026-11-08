@@ -10,8 +10,10 @@
 //! both switches again, keeping the name and the camera. A keyframe scene's camera is
 //! its override of its parent's, offered only while the parent has one. A keyframe
 //! scene shows its parent's background, which its dialog shows and doesn't edit. The
-//! scene's filters show on the right, each change sent at once, as the source
-//! Properties dialog's are.
+//! scene's video chain (FL-06; a keyframe's is its parent's, ADR-0065 §3) is listed
+//! under the Properties entry on the left, as in the source Properties dialog
+//! ([`PropertiesAndFilters`]): a picked filter's settings show on the right, each change
+//! sent at once, and Cancel puts back every filter edit the dialog sent.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -20,12 +22,12 @@ use crate::dialog::Modal;
 use crate::hotkeys;
 use crate::icons::Icon;
 use crate::panels::camera_moves::CameraMoves;
-use crate::panels::filters::{Chains, FilterDialogs, scene_owner};
+use crate::panels::filters::{FilterUndo, PropertiesAndFilters, scene_owner};
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
-    Action, CameraFollow, CameraMotionModifier, Chord, Edit, FilterOwner, Finite32, SceneCamera,
-    SceneId, TransitionPresetId, check_camera_motion, parse_rgba,
+    Action, CameraFollow, CameraMotionModifier, Chord, Edit, FilterId, FilterOwner, Finite32,
+    SceneCamera, SceneId, TransitionPresetId, check_camera_motion, parse_rgba,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -309,6 +311,13 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             },
         )
     });
+    // Filter edits apply at once; Cancel puts back each one the dialog sent.
+    let undo = FilterUndo::begin(std::slice::from_ref(&owner));
+    let selected = RwSignal::new(None::<FilterId>);
+    let note = match parent {
+        Some(parent) => format!("those of “{parent}”, which this keyframe follows"),
+        None => "the whole scene".to_owned(),
+    };
     let before = StoredValue::new(opened.clone());
     let draft = RwSignal::new(opened);
     // A keyframe scene shows its parent's background (ADR-0089 §4).
@@ -638,8 +647,17 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         });
     };
 
+    // Cancel: the draft goes, and every filter edit is put back.
+    let cancel = move || {
+        let edits = undo.restore();
+        if let (false, Some(s)) = (edits.is_empty(), session.get()) {
+            studio.apply(&s, edits);
+        }
+        close();
+    };
+
     view! {
-        <Modal label="Scene properties" class="props-dialog scene-props-dialog" cancel=close>
+        <Modal label="Scene properties" class="props-dialog scene-props-dialog" cancel=cancel>
             <div class="modal-header">
                 <div class="props-head">
                     <Icon name="layers" size=20 />
@@ -648,12 +666,11 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                         <span class="modal-sub">{subtitle}</span>
                     </div>
                 </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| cancel()>
                     "×"
                 </button>
             </div>
-            <div class="props-body">
-            <div class="props-settings">
+            <PropertiesAndFilters owner=owner video=true audio=false selected=selected note=note>
                 <label class="field props-name">
                     <span class="label">"Name"</span>
                     <input
@@ -756,12 +773,17 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     })}
                 </div>
                 {move || problem.get().map(|e| view! { <p class="problem" role="alert">{e}</p> })}
-            </div>
-            <SceneFilterSide owner=owner parent=parent />
-            </div>
+            </PropertiesAndFilters>
             <div class="modal-footer">
-                <button type="button" class="secondary props-defaults" on:click=defaults>"Defaults"</button>
-                <button type="button" class="secondary" on:click=move |_| close()>"Cancel"</button>
+                <button
+                    type="button"
+                    class="secondary props-defaults"
+                    hidden=move || selected.with(Option::is_some)
+                    on:click=defaults
+                >
+                    "Defaults"
+                </button>
+                <button type="button" class="secondary" on:click=move |_| cancel()>"Cancel"</button>
                 <button type="button" class="primary" data-primary on:click=ok>"OK"</button>
             </div>
         </Modal>
@@ -888,32 +910,6 @@ fn with_swatch(background: Option<&str>, picked: &str) -> String {
     match background.map(str::trim).and_then(parse_rgba) {
         Some([.., a]) if a != 0xff => format!("{picked}{a:02x}"),
         _ => picked.to_owned(),
-    }
-}
-
-/// The scene's video chain (FL-06), each change sent at once, and the Add filter button.
-/// A keyframe scene shows its parent's chain, which it has no other of (ADR-0065 §3).
-#[component]
-fn SceneFilterSide(owner: FilterOwner, parent: Option<String>) -> impl IntoView {
-    let dialogs = expect_context::<FilterDialogs>();
-    let add = {
-        let owner = owner.clone();
-        move |_| dialogs.add(owner.clone())
-    };
-    let note = match parent {
-        Some(parent) => format!("those of “{parent}”, which this keyframe follows"),
-        None => "the whole scene".to_owned(),
-    };
-    view! {
-        <div class="props-side">
-            <div class="props-side-head">
-                <span class="props-side-title">"Filters"</span>
-                <span class="props-side-note">{note}</span>
-            </div>
-            <Chains owner=owner video=true audio=false />
-            <p class="props-side-foot">"Changes apply right away. Fine-tune settings in the Filters panel."</p>
-            <button type="button" class="primary props-add-filter" on:click=add>"+ Add filter…"</button>
-        </div>
     }
 }
 

@@ -104,6 +104,11 @@ fn read(settings: &Settings) -> Look {
     }
 }
 
+/// The radius: as far as the light spreads past the bright parts.
+pub(super) fn outset(settings: &Settings) -> f32 {
+    read(settings).radius
+}
+
 impl Pass for Bloom {
     fn update(&mut self, settings: &Settings) {
         self.0 = read(settings);
