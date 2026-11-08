@@ -56,8 +56,10 @@ async function fakeCodecs(page, { hardware }) {
   return { sent, queries };
 }
 
+/** The Encoders & mixes dialog, whose editor shows the downloads over an encoder's form
+ * or when nothing is picked. */
 function encoders(page) {
-  return page.getByRole('dialog', { name: 'Encoders & mixes' }).getByRole('region', { name: 'Encoders' });
+  return page.getByRole('dialog', { name: 'Encoders & mixes' });
 }
 
 /** Closes the Encoders & mixes dialog with its Close button. */
@@ -129,7 +131,7 @@ test('with hardware H.264 the offer waits for a software H.264 profile', async (
   await openEncoders(page);
   await expect(encoders(page).locator('.codec-offer')).toHaveCount(0);
 
-  await encoders(page).getByRole('button', { name: 'New encoder…' }).click();
+  await encoders(page).getByRole('button', { name: '+ New encoder' }).click();
   const form = encoders(page).getByRole('form', { name: 'New encoder' });
   await expect(form.locator('.codec-offer')).toHaveCount(0);
   await form.getByLabel('Hardware encoder').selectOption('avoid');
@@ -144,7 +146,8 @@ test('with hardware H.264 the offer waits for a software H.264 profile', async (
   await form.getByLabel('Encoder name').fill('Software');
   await form.getByRole('button', { name: 'Save' }).click();
   await expect(form).toHaveCount(0);
-  // The saved profile asks for software H.264, so the section offers it now.
-  await expect(encoders(page).locator('.codec-offer')).toContainText('Software asks for software H.264');
+  // The saved profile asks for software H.264, so the dialog offers it now, over the
+  // saved profile's editor.
+  await expect(encoders(page).locator('.codec-downloads .codec-offer')).toContainText('Software asks for software H.264');
   expect(sent).toEqual([]);
 });

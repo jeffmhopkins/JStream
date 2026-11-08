@@ -33,42 +33,44 @@ max_rss_growth_mb = 64
 max_thread_growth = 4
 max_handle_growth = 16
 
-# Scenes slow on software rendering: they must still draw.
+# Scenes slow on software rendering: they must still draw. Their floors sit at about
+# half of what a hosted runner draws on a slow run (vf_drop_shadow has drawn 2.9 to
+# 3.7 fps, effects_many 1.8 to 3.4), so the runners' spread doesn't fail them.
 [scene.models_12]
-min_fps = 3
-max_frame_ms = 400
+min_fps = 1.5
+max_frame_ms = 800
 
 [scene.vf_blur]
-min_fps = 3
-max_frame_ms = 400
+min_fps = 1.5
+max_frame_ms = 800
 
 [scene.vf_chroma_key]
-min_fps = 3
-max_frame_ms = 400
+min_fps = 1.5
+max_frame_ms = 800
 
 [scene.vf_drop_shadow]
-min_fps = 3
-max_frame_ms = 400
+min_fps = 1
+max_frame_ms = 1200
 
 [scene.vf_glow]
-min_fps = 3
-max_frame_ms = 400
+min_fps = 1.5
+max_frame_ms = 800
 
 [scene.vf_outline]
-min_fps = 3
-max_frame_ms = 400
+min_fps = 1.5
+max_frame_ms = 800
 
 [scene.vf_scroll]
-min_fps = 3
-max_frame_ms = 400
+min_fps = 1.5
+max_frame_ms = 800
 
 [scene.vf_sharpen]
-min_fps = 3
-max_frame_ms = 400
+min_fps = 1.5
+max_frame_ms = 800
 
 [scene.effects_many]
-min_fps = 2
-max_frame_ms = 600
+min_fps = 1
+max_frame_ms = 1200
 
 # A chain of nested scenes: 37-106 ms a frame on hosted runners.
 [scene.scene_chain]

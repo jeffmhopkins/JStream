@@ -71,7 +71,8 @@ you type) and its frame rate, 30 or 60 fps. Each output scales from that picture
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
-   display or window from the list of those open now, the device or the file. In the
+   display or window from the list of those open now, the device (and, for a webcam,
+   its resolution, frame rate and video format, or Auto) or the file. In the
    desktop app a file field has a **Browse…** button; a browser page keeps the path as
    text. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,
@@ -131,8 +132,11 @@ others) with the server address and stream key the service gives you.
 An output sends H.264 at the engine's default rate unless you pick otherwise. To change
 the codec or bit rate, or to send a vertical picture (1080 × 1920 for Shorts or TikTok),
 make an encoder or a video mix in **Encoders & mixes…**, under the output rows, and pick
-it in the output's settings, under **Encoder** or **Video**. A running output takes the
-new choice when it next starts.
+it in the output's settings, under **Encoder** or **Video**. From there, **Edit encoder…**,
+**New…** and **Edit mix…** open the same dialog on the one you need. A running output
+takes the new choice when it next starts. **Start all**, above the rows, starts every
+output that can start, recordings and the virtual camera too; **Stop all** beside it
+stops everything that runs.
 
 On Linux, a machine with no hardware H.264 encoder (or an encoder set to **Software
 only**) encodes with Cisco's OpenH264, which JStream doesn't ship: **Encoders & mixes…** offers

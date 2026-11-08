@@ -1,9 +1,11 @@
-//! The outputs panel (#1206): a header with the pipeline's health from `stats.tick`,
-//! then one compact row for the program output and for each output, with its state,
-//! Start or Stop, its FX button, which shows that chain in the Filters panel
-//! (spec-panels.md 9, ADR-0080), and a ⋯ menu. An output's settings (its server URL or
-//! path, stream key, video mix, encoder profile and audio bus) are in its own dialog,
-//! which applies nothing until OK or Apply; adding an output opens the same dialog. The
+//! The outputs panel (#1206): a header with the pipeline's health from `stats.tick` and
+//! Start all (or Stop all), then one compact row for the program output and for each
+//! output, with its state, Start or Stop, its FX button, which shows that chain in the
+//! Filters panel (spec-panels.md 9, ADR-0080), and a ⋯ menu (Settings…, Duplicate,
+//! Delete…). A running output's row has a second line with its bitrate, drops and
+//! uptime from `stats.tick`'s `outputs`. An output's settings (its server URL or path,
+//! stream key, video mix, encoder profile and audio bus) are in its own dialog, which
+//! applies nothing until OK or Apply; adding an output opens the same dialog. The
 //! encoder profiles and video mixes are edited in the Encoders & mixes dialog
 //! ([`encoders`](super::encoders)). It also holds the logic behind the header's Go Live
 //! (`go_live_targets`, `live_outputs`, `start_or_stop_all`).
@@ -21,16 +23,17 @@ use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::icons::Icon;
 use crate::menu::{Entry, Menus};
-use crate::panels::encoders::Profiles;
+use crate::panels::encoders::{LibraryPick, Profiles};
 use crate::panels::filters::FilterDialogs;
+use crate::panels::stats::{mbps, uptime};
 use crate::session::Session;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
     Action, Batch, BusId, BusInfo, Call, CallResult, DropCounts, Edit, EncoderProfileId,
-    EncoderProfileInfo, Event, FilterChains, FilterOwner, OutputId, OutputInfo, OutputKind,
-    OutputState, Query, QueryResult, RecordContainer, Rev, RtmpTarget, SceneId, SceneRole,
-    SecretString, VideoMixId, VideoMixInfo,
+    EncoderProfileInfo, Event, FilterChain, FilterChains, FilterOwner, OutputId, OutputInfo,
+    OutputKind, OutputState, OutputStatsInfo, Query, QueryResult, RecordContainer, Rev, RtmpTarget,
+    SceneId, SceneRole, SecretString, VideoMixId, VideoMixInfo,
 };
 use jstream_control::{Control, ControlError};
 use leptos::html;
@@ -428,6 +431,99 @@ pub fn live_outputs<'a>(rows: impl IntoIterator<Item = &'a OutputRow>) -> Vec<Ou
         .collect()
 }
 
+/// What the panel header's Start all and Stop all buttons act on.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct AllOutputs {
+    /// What Start all starts: every output that is stopped or failed and can start.
+    pub start: Vec<OutputId>,
+    /// What Stop all stops: every output that runs.
+    pub stop: Vec<OutputId>,
+}
+
+/// What Start all and Stop all act on over `rows`: Start all starts each output that
+/// can start (any kind, unlike the header's Go Live, which starts streams), and Stop all,
+/// shown while any output runs, stops each that runs. They are separate buttons, so an
+/// output whose start keeps failing never hides Stop all.
+pub fn all_outputs<'a>(rows: impl IntoIterator<Item = &'a OutputRow>, vcam: Vcam) -> AllOutputs {
+    let mut all = AllOutputs::default();
+    for row in rows {
+        if is_running(row.state) {
+            all.stop.push(row.info.output_id.clone());
+        } else if start_blocker(row, vcam).is_none() {
+            all.start.push(row.info.output_id.clone());
+        }
+    }
+    all
+}
+
+/// The path a copy of a recording at `path` writes to: the first of "show (2).mp4",
+/// "show (3).mp4" and so on that no output in `taken` records to, so the copy and the
+/// original can run together.
+pub fn copy_path<'a>(path: &str, taken: impl IntoIterator<Item = &'a str> + Clone) -> String {
+    let cut = path.rfind(['/', '\\']).map_or(0, |at| at + 1);
+    let (folder, name) = path.split_at(cut);
+    let (stem, extension) = match name.rfind('.') {
+        Some(dot) if dot > 0 => name.split_at(dot),
+        _ => (name, ""),
+    };
+    (2_u32..)
+        .map(|n| format!("{folder}{stem} ({n}){extension}"))
+        .find(|candidate| !taken.clone().into_iter().any(|t| t == candidate))
+        .unwrap_or_else(|| path.to_owned())
+}
+
+/// A running output's second line: its bitrate, what it lost this run (frames and
+/// packets) and its uptime, as "2.45 Mbps · 0 dropped · 00:12:34".
+pub fn live_line(stats: &OutputStatsInfo) -> String {
+    let dropped = stats.dropped_frames.saturating_add(stats.dropped_packets);
+    format!(
+        "{} · {dropped} dropped · {}",
+        mbps(stats.kbps),
+        uptime(Some(stats.uptime_ms))
+    )
+}
+
+/// The batch that makes `output_id` a copy of `info`: the same kind and target, encoder,
+/// mix and bus, then each of its filters with its settings, in order. A recording's copy
+/// writes to a free path ([`copy_path`]) beside the original's, none of `outputs` uses.
+/// The stream key isn't copied, as the page never has it (R-SEC-001). `None` for an
+/// output this page can't edit, such as a stream to a target it doesn't know.
+pub fn duplicate_edits(
+    output_id: &OutputId,
+    info: &OutputInfo,
+    outputs: &[OutputInfo],
+) -> Option<Vec<Edit>> {
+    let mut draft = OutputDraft::of(info)?;
+    if draft.kind == NewKind::Record {
+        let taken = outputs.iter().filter_map(|o| match &o.kind {
+            OutputKind::Record { path, .. } => Some(path.as_str()),
+            _ => None,
+        });
+        draft.target = copy_path(&draft.target, taken);
+    }
+    let mut edits = draft_edits(output_id, None, &draft);
+    let owner = FilterOwner::Output {
+        output_id: output_id.clone(),
+    };
+    for (chain, filters) in [
+        (FilterChain::Video, &info.filters.video),
+        (FilterChain::Audio, &info.filters.audio),
+    ] {
+        for filter in filters {
+            edits.push(Edit::FilterAdd {
+                owner: owner.clone(),
+                chain,
+                filter_id: filter.filter_id.clone(),
+                kind: filter.kind.clone(),
+                settings: filter.settings.clone(),
+                enabled: (!filter.enabled).then_some(false),
+                index: None,
+            });
+        }
+    }
+    Some(edits)
+}
+
 /// What an output is and where it sends, in a line.
 pub fn describe_kind(kind: &OutputKind) -> String {
     match kind {
@@ -725,6 +821,27 @@ impl OutputDraft {
     pub fn ready(&self) -> bool {
         !self.kind.needs_target() || !self.target.trim().is_empty()
     }
+
+    /// This draft after the output changed from `before` to `now` while its dialog was
+    /// open (another client's edit): each field still as the dialog had it from `before`
+    /// takes the new value, and a field the person changed keeps theirs.
+    #[must_use]
+    pub fn reseed(&self, before: &OutputDraft, now: &OutputDraft) -> OutputDraft {
+        fn pick<T: Clone + PartialEq>(mine: &T, before: &T, now: &T) -> T {
+            if mine == before {
+                now.clone()
+            } else {
+                mine.clone()
+            }
+        }
+        OutputDraft {
+            kind: pick(&self.kind, &before.kind, &now.kind),
+            target: pick(&self.target, &before.target, &now.target),
+            encoder: pick(&self.encoder, &before.encoder, &now.encoder),
+            mix: pick(&self.mix, &before.mix, &now.mix),
+            bus: pick(&self.bus, &before.bus, &now.bus),
+        }
+    }
 }
 
 /// The edits that make `before` (or, with `None`, a new output) what `draft` says, in
@@ -885,6 +1002,9 @@ struct Panel {
     problem: RwSignal<Option<String>>,
     /// Bumped by each reload, so an older reload that finishes late is dropped.
     loads: StoredValue<u64>,
+    /// Bumped by each `output.state_changed`, so a reload that read the outputs before
+    /// one arrived knows its states may be older than the rows'.
+    state_events: StoredValue<u64>,
     /// What the host says about the virtual camera.
     vcam: Vcam,
     /// Bumped after a stream key changed, for the header ([`Studio::keys_changed`]).
@@ -904,7 +1024,15 @@ struct Panel {
     deleting: RwSignal<Option<OutputId>>,
     /// Whether the Encoders & mixes dialog is open.
     libraries: RwSignal<bool>,
+    /// What the Encoders & mixes dialog's editor has open.
+    pick: RwSignal<Option<LibraryPick>>,
+    /// Each running output's latest stats, from the last `stats.tick`.
+    stats: RwSignal<BTreeMap<OutputId, OutputStatsInfo>>,
 }
+
+/// How many reads [`Panel::refresh`] makes while state changes keep arriving, before it
+/// applies the last one anyway.
+const REREADS: u32 = 4;
 
 impl Panel {
     /// Shows `owner`'s chains in the Filters panel, from an FX button.
@@ -938,33 +1066,97 @@ impl Panel {
         let Some(session) = self.session.get() else {
             return;
         };
+        spawn_local(async move { self.refresh(&session).await });
+    }
+
+    /// Re-reads every output, encoder profile and video mix, and returns once the panel
+    /// has them, or a later reload has taken over.
+    async fn refresh(self, session: &Session) {
         let Some(mine) = self.loads.try_update_value(|n| {
             *n += 1;
             *n
         }) else {
             return;
         };
-        spawn_local(async move {
+        // A state change heard while a read was out may be newer than what it read (an
+        // output started just after its status was read), so that read is dropped and
+        // another one, sent after the change, is made in its place. Applying the older
+        // read first would flicker the row back to its old state. After a few tries the
+        // last read is applied anyway and a fresh reload settles it, so a steady stream
+        // of changes can't stall the panel.
+        let mut tries = 0;
+        let loaded = loop {
+            tries += 1;
+            let heard = self.state_events.try_get_value();
             let loaded = load(&*session.control).await;
             if self.loads.try_get_value() != Some(mine) {
                 return;
             }
-            match loaded {
-                Ok(snapshot) => {
-                    self.rows.try_set(
-                        snapshot
-                            .outputs
-                            .into_iter()
-                            .map(|row| (row.info.output_id.clone(), row))
-                            .collect(),
-                    );
-                    self.encoders.try_set(snapshot.encoders);
-                    self.buses.try_set(snapshot.buses);
-                    self.mixes.try_set(snapshot.mixes);
-                    self.scenes.try_set(snapshot.scenes);
+            if self.state_events.try_get_value() == heard {
+                break loaded;
+            }
+            if tries >= REREADS {
+                self.reload();
+                break loaded;
+            }
+        };
+        match loaded {
+            Ok(snapshot) => {
+                self.rows.try_set(
+                    snapshot
+                        .outputs
+                        .into_iter()
+                        .map(|row| (row.info.output_id.clone(), row))
+                        .collect(),
+                );
+                self.encoders.try_set(snapshot.encoders);
+                self.buses.try_set(snapshot.buses);
+                self.mixes.try_set(snapshot.mixes);
+                self.scenes.try_set(snapshot.scenes);
+            }
+            Err(problem) => {
+                self.problem.try_set(Some(problem));
+            }
+        }
+    }
+
+    /// Opens the Encoders & mixes dialog, its editor on `pick` (or on nothing).
+    fn open_library(self, pick: Option<LibraryPick>) {
+        self.pick.set(pick);
+        self.libraries.set(true);
+    }
+
+    /// Adds a copy of `output_id` under the first ID free now, read from the engine, in
+    /// one batch ([`duplicate_edits`]), then opens the copy's settings, where its stream
+    /// key or path can be set.
+    fn duplicate(self, output_id: OutputId) {
+        let Some(session) = self.session.get() else {
+            return;
+        };
+        spawn_local(async move {
+            let made = async {
+                let taken = load(&*session.control).await?.outputs;
+                let info = taken
+                    .iter()
+                    .find(|row| row.info.output_id == output_id)
+                    .map(|row| row.info.clone())
+                    .ok_or_else(|| format!("{output_id} isn't there any more."))?;
+                let copy = next_output_id(taken.iter().map(|row| &row.info.output_id));
+                let infos: Vec<OutputInfo> = taken.iter().map(|row| row.info.clone()).collect();
+                let edits = duplicate_edits(&copy, &info, &infos)
+                    .ok_or("This page can't copy this output yet.")?;
+                send_edits(&*session.control, edits).await?;
+                Ok::<_, String>(copy)
+            }
+            .await;
+            match made {
+                Ok(copy) => {
+                    self.problem.try_set(None);
+                    self.refresh(&session).await;
+                    self.settings.try_set(Some(Editing::Output(copy)));
                 }
-                Err(problem) => {
-                    self.problem.try_set(Some(problem));
+                Err(why) => {
+                    self.problem.try_set(Some(why));
                 }
             }
         });
@@ -1013,9 +1205,9 @@ impl Panel {
         });
     }
 
-    /// Opens the pop-up menu of `output_id`'s row at the pointer: Settings…, then
-    /// Delete…, which asks first and is off while the output runs. Without the page's
-    /// menu, its settings open instead.
+    /// Opens the pop-up menu of `output_id`'s row at the pointer: Settings…, Duplicate,
+    /// then Delete…, which asks first and is off while the output runs. Without the
+    /// page's menu, its settings open instead.
     fn open_menu(self, event: &leptos::ev::MouseEvent, output_id: OutputId) {
         let Some(menus) = self.menus else {
             self.settings.set(Some(Editing::Output(output_id)));
@@ -1026,12 +1218,14 @@ impl Panel {
                 .is_some_and(|row| is_running(row.state))
         });
         let open = output_id.clone();
+        let copy = output_id.clone();
         menus.open(
             event,
             vec![
                 Entry::item("Settings…", move || {
                     self.settings.set(Some(Editing::Output(open.clone())));
                 }),
+                Entry::item("Duplicate", move || self.duplicate(copy.clone())),
                 Entry::Sep,
                 Entry::item("Delete…", move || {
                     self.deleting.set(Some(output_id.clone()))
@@ -1060,6 +1254,7 @@ pub fn Outputs() -> impl IntoView {
         scenes: RwSignal::new(Vec::new()),
         problem: RwSignal::new(None),
         loads: StoredValue::new(0),
+        state_events: StoredValue::new(0),
         vcam: Vcam::from_host(crate::host::desktop_vcam().as_deref()),
         keys_changed: use_context::<crate::store::Studio>().map(|studio| studio.keys_changed),
         studio: use_context(),
@@ -1068,6 +1263,8 @@ pub fn Outputs() -> impl IntoView {
         settings: RwSignal::new(None),
         deleting: RwSignal::new(None),
         libraries: RwSignal::new(false),
+        pick: RwSignal::new(None),
+        stats: RwSignal::new(BTreeMap::new()),
     };
     let health = RwSignal::new(Health::default());
 
@@ -1083,6 +1280,7 @@ pub fn Outputs() -> impl IntoView {
                 match event {
                     Event::StateChanged { .. } | Event::EventsDropped { .. } => panel.reload(),
                     Event::OutputStateChanged { output_id, state } => {
+                        panel.state_events.try_update_value(|n| *n += 1);
                         let known = panel
                             .rows
                             .try_update(|rows| match rows.get_mut(&output_id) {
@@ -1096,8 +1294,19 @@ pub fn Outputs() -> impl IntoView {
                             panel.reload();
                         }
                     }
-                    Event::StatsTick { seq, drops, .. } => {
+                    Event::StatsTick {
+                        seq,
+                        drops,
+                        outputs,
+                        ..
+                    } => {
                         health.try_update(|health| health.observe(seq, drops));
+                        panel.stats.try_set(
+                            outputs
+                                .into_iter()
+                                .map(|stats| (stats.output_id.clone(), stats))
+                                .collect(),
+                        );
                     }
                     _ => {}
                 }
@@ -1118,10 +1327,41 @@ pub fn Outputs() -> impl IntoView {
                 .collect::<Vec<_>>()
         })
     });
-    let send = Callback::new(move |change: Edit| {
-        panel.run(move |session| async move { edit(&*session.control, change).await });
-    });
+    // The Encoders & mixes editors send through this and show the engine's answer
+    // themselves (#1373 r1 N4).
+    let send = Callback::new(
+        move |(change, answered): (Edit, Callback<Result<(), String>>)| {
+            let Some(session) = panel.session.get() else {
+                answered.run(Err("Not connected.".into()));
+                return;
+            };
+            spawn_local(async move {
+                let answer = edit(&*session.control, change).await;
+                answered.try_run(answer);
+            });
+        },
+    );
     let close_libraries = move || panel.libraries.set(false);
+    let all = Memo::new(move |_| {
+        panel
+            .rows
+            .with(|rows| all_outputs(rows.values(), panel.vcam))
+    });
+    let start_or_stop_all_now = move |start: bool| {
+        let outputs = all.with_untracked(|all| {
+            if start {
+                all.start.clone()
+            } else {
+                all.stop.clone()
+            }
+        });
+        if outputs.is_empty() {
+            return;
+        }
+        panel.run(move |session| async move {
+            start_or_stop_all(&*session.control, outputs, start).await
+        });
+    };
 
     view! {
         <section class="outputs">
@@ -1137,6 +1377,31 @@ pub fn Outputs() -> impl IntoView {
                     <span class="health-dot" aria-hidden="true"></span>
                     {move || reading().short()}
                 </span>
+                <button
+                    type="button"
+                    class="all-outputs"
+                    disabled=move || all.with(|all| all.start.is_empty())
+                    title=move || {
+                        if all.with(|all| all.start.is_empty()) {
+                            "No stopped output can start now"
+                        } else {
+                            "Start every stopped output that can start"
+                        }
+                    }
+                    on:click=move |_| start_or_stop_all_now(true)
+                >
+                    "▶ Start all"
+                </button>
+                <Show when=move || all.with(|all| !all.stop.is_empty())>
+                    <button
+                        type="button"
+                        class="all-outputs stop"
+                        title="Stop every running output"
+                        on:click=move |_| start_or_stop_all_now(false)
+                    >
+                        "■ Stop all"
+                    </button>
+                </Show>
             </div>
             {move || {
                 panel
@@ -1164,7 +1429,7 @@ pub fn Outputs() -> impl IntoView {
                 <button type="button" on:click=move |_| panel.settings.set(Some(Editing::New))>
                     "+ Add output"
                 </button>
-                <button type="button" class="secondary" on:click=move |_| panel.libraries.set(true)>
+                <button type="button" class="secondary" on:click=move |_| panel.open_library(None)>
                     "Encoders & mixes…"
                 </button>
             </div>
@@ -1203,7 +1468,11 @@ pub fn Outputs() -> impl IntoView {
                             outputs=infos
                             scenes=panel.scenes.into()
                             send=send
+                            pick=panel.pick
                         />
+                        {move || {
+                            panel.problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })
+                        }}
                     </div>
                     <div class="modal-footer">
                         <button
@@ -1294,6 +1563,17 @@ fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
     let warning = move || row.with(|row| row.as_ref().and_then(cleartext_warning));
     let label = move || row.with(|r| r.as_ref().map(|r| fx_label(&r.info.filters)));
     let filtered = move || row.with(|r| r.as_ref().is_some_and(|r| !r.info.filters.is_empty()));
+    let live = {
+        let output_id = output_id.clone();
+        move || {
+            if !running() {
+                return None;
+            }
+            panel
+                .stats
+                .with(|stats| stats.get(&output_id).map(live_line))
+        }
+    };
     let name = output_id.to_string();
     let owner = FilterOwner::Output {
         output_id: output_id.clone(),
@@ -1344,6 +1624,7 @@ fn OutputLine(panel: Panel, output_id: OutputId) -> impl IntoView {
                         .filter(|_| !running())
                         .map(|why| view! { <span class="output-row-note">{why}</span> })
                 }}
+                {move || live().map(|line| view! { <span class="output-row-stats">{line}</span> })}
             </span>
             <span
                 class="badge"
@@ -1444,7 +1725,21 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
     let start = row
         .with_untracked(|row| row.as_ref().and_then(|row| OutputDraft::of(&row.info)))
         .unwrap_or_else(|| OutputDraft::new(NewKind::Rtmp));
+    // What the fields started from: when another client changes the output while the
+    // dialog is open, the fields still as they started follow it (#1206).
+    let seeded = StoredValue::new(start.clone());
     let draft = RwSignal::new(start);
+    Effect::new(move |_| {
+        let Some(now) = row.with(|row| row.as_ref().and_then(|row| OutputDraft::of(&row.info)))
+        else {
+            return;
+        };
+        let before = seeded.get_value();
+        if now != before {
+            draft.update(|d| *d = d.reseed(&before, &now));
+            seeded.set_value(now);
+        }
+    });
     let key = RwSignal::new(KeyChange::Keep);
     let key_field = NodeRef::<html::Input>::new();
     let problem = RwSignal::new(None::<String>);
@@ -1750,6 +2045,7 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
                         <legend>"Video"</legend>
                         <label class="output-field" title="An output shows the program at the canvas size unless it picks a mix.">
                             <span class="label">"Shows"</span>
+                            <span class="encoder-row">
                             <select
                                 aria-label="Video"
                                 on:change=move |event| {
@@ -1778,6 +2074,25 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
                                     }
                                 </For>
                             </select>
+                            <button
+                                type="button"
+                                class="secondary"
+                                disabled=move || draft.with(|d| d.mix.is_none())
+                                title=move || {
+                                    if draft.with(|d| d.mix.is_none()) {
+                                        "The program at the canvas size has nothing to edit"
+                                    } else {
+                                        "Edit this mix in Encoders & mixes"
+                                    }
+                                }
+                                on:click=move |_| {
+                                    let mix = draft.with_untracked(|d| d.mix.clone());
+                                    panel.open_library(Some(LibraryPick::Mix(mix)));
+                                }
+                            >
+                                "Edit mix…"
+                            </button>
+                            </span>
                         </label>
                         <Show when=running>
                             <p class="output-note">"A new mix or encoder applies when the output starts again."</p>
@@ -1816,8 +2131,31 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
                                     }
                                 </For>
                             </select>
-                            <button type="button" class="secondary" on:click=move |_| panel.libraries.set(true)>
-                                "Encoders & mixes…"
+                            <button
+                                type="button"
+                                class="secondary"
+                                disabled=move || draft.with(|d| d.encoder.is_none())
+                                title=move || {
+                                    if draft.with(|d| d.encoder.is_none()) {
+                                        "The engine's default can't be edited: New… makes a profile"
+                                    } else {
+                                        "Edit this encoder in Encoders & mixes"
+                                    }
+                                }
+                                on:click=move |_| {
+                                    let encoder = draft.with_untracked(|d| d.encoder.clone());
+                                    panel.open_library(Some(LibraryPick::Encoder(encoder)));
+                                }
+                            >
+                                "Edit encoder…"
+                            </button>
+                            <button
+                                type="button"
+                                class="secondary"
+                                title="Make an encoder profile in Encoders & mixes"
+                                on:click=move |_| panel.open_library(Some(LibraryPick::Encoder(None)))
+                            >
+                                "New…"
                             </button>
                         </span>
                     </fieldset>
@@ -2638,5 +2976,185 @@ mod tests {
             draft_edits(&cam_id, None, &cam),
             vec![create_edit(cam_id.clone(), NewKind::VirtualCam, "")]
         );
+    }
+
+    /// Duplicate copies the kind, target, encoder, mix, bus and filters in one batch,
+    /// and never a stream key; the mock engine takes the batch.
+    #[test]
+    fn a_duplicate_copies_settings_and_filters_but_not_the_key() {
+        use super::{OutputDraft, duplicate_edits};
+        use jstream_control::protocol::{
+            FilterChain, FilterId, FilterOwner, Hello, PROTOCOL_VERSION,
+        };
+        let engine = MockEngine::new();
+        let control = engine.connect();
+        let hello = Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        };
+        now(control.hello(hello)).expect("hello");
+        let hq = with_encoder(&control);
+        let original = OutputId::new("output-1");
+        now(super::send_edits(
+            &control,
+            vec![
+                create_edit(
+                    original.clone(),
+                    NewKind::Rtmp,
+                    "rtmps://live.example.com/app",
+                ),
+                Edit::OutputSetEncoder {
+                    output_id: original.clone(),
+                    profile_id: Some(hq.clone()),
+                },
+                Edit::FilterAdd {
+                    owner: FilterOwner::Output {
+                        output_id: original.clone(),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("vignette-1"),
+                    kind: "vignette".into(),
+                    settings: Default::default(),
+                    enabled: Some(false),
+                    index: None,
+                },
+            ],
+        ))
+        .expect("the original");
+        now(control.call(jstream_control::protocol::Call::Action {
+            action: Action::OutputSetKey {
+                output_id: original.clone(),
+                key: take_key("abcd-1234".into()).expect("a key"),
+            },
+        }))
+        .expect("its key");
+        let info = now(load(&control)).expect("load").outputs[0].info.clone();
+
+        let copy = OutputId::new("output-2");
+        let edits = duplicate_edits(&copy, &info, std::slice::from_ref(&info))
+            .expect("a kind this page edits");
+        assert_eq!(
+            edits.first(),
+            Some(&create_edit(
+                copy.clone(),
+                NewKind::Rtmp,
+                "rtmps://live.example.com/app"
+            ))
+        );
+        assert!(
+            edits.iter().all(
+                |e| !matches!(e, Edit::OutputCreate { output_id, .. } if output_id == &original)
+            )
+        );
+        now(super::send_edits(&control, edits)).expect("one batch");
+
+        let loaded = now(load(&control)).expect("load");
+        let made = loaded
+            .outputs
+            .iter()
+            .find(|row| row.info.output_id == copy)
+            .expect("the copy");
+        assert_eq!(OutputDraft::of(&made.info), OutputDraft::of(&info));
+        assert_eq!(made.info.filters.video.len(), 1);
+        assert_eq!(made.info.filters.video[0].kind, "vignette");
+        assert!(
+            !made.info.filters.video[0].enabled,
+            "a disabled filter stays off"
+        );
+        assert!(!made.key_set, "the stream key isn't copied");
+    }
+
+    /// Start all starts what can start, of any kind; once nothing can, it stops what
+    /// runs.
+    #[test]
+    fn start_all_starts_what_can_start_and_stop_all_what_runs() {
+        use super::{AllOutputs, all_outputs};
+        let mut record = rtmp("output-3", OutputState::Stopped, false);
+        record.info.kind = OutputKind::Record {
+            path: "/tmp/a.mp4".into(),
+            container: jstream_control::protocol::RecordContainer::Mp4,
+        };
+        let rows = [
+            rtmp("output-1", OutputState::Failed, true),
+            rtmp("output-2", OutputState::Stopped, false),
+            record,
+            rtmp("output-4", OutputState::Active, true),
+        ];
+        // A failed stream that can start again doesn't hide Stop all (#1373 r1 N1).
+        assert_eq!(
+            all_outputs(&rows, Vcam::Unknown),
+            AllOutputs {
+                start: vec![OutputId::new("output-1"), OutputId::new("output-3")],
+                stop: vec![OutputId::new("output-4")],
+            }
+        );
+        let idle = [rtmp("output-2", OutputState::Stopped, false)];
+        assert_eq!(all_outputs(&idle, Vcam::Unknown), AllOutputs::default());
+        assert_eq!(all_outputs(&[], Vcam::Unknown), AllOutputs::default());
+    }
+
+    /// A recording's copy writes beside it, under a name no recording uses.
+    #[test]
+    fn a_copy_records_to_a_free_path() {
+        use super::copy_path;
+        assert_eq!(
+            copy_path("/tmp/show.mp4", ["/tmp/show.mp4"]),
+            "/tmp/show (2).mp4"
+        );
+        assert_eq!(
+            copy_path("/tmp/show.mp4", ["/tmp/show.mp4", "/tmp/show (2).mp4"]),
+            "/tmp/show (3).mp4"
+        );
+        assert_eq!(
+            copy_path(r"C:\v\take.mp4", [r"C:\v\take.mp4"]),
+            r"C:\v\take (2).mp4"
+        );
+        assert_eq!(
+            copy_path("/tmp/.hidden", ["/tmp/.hidden"]),
+            "/tmp/.hidden (2)"
+        );
+        assert_eq!(copy_path("show", ["show"]), "show (2)");
+    }
+
+    #[test]
+    fn a_live_row_shows_its_bitrate_drops_and_uptime() {
+        let stats: jstream_control::protocol::OutputStatsInfo =
+            serde_json::from_value(serde_json::json!({
+                "output_id": "output-1",
+                "uptime_ms": 754_000,
+                "kbps": 2450,
+                "dropped_frames": 2,
+                "dropped_packets": 1,
+            }))
+            .expect("stats");
+        assert_eq!(super::live_line(&stats), "2.45 Mbps · 3 dropped · 00:12:34");
+    }
+
+    /// Another client's change reaches the fields the person hasn't touched, and leaves
+    /// the ones they changed.
+    #[test]
+    fn a_reseed_keeps_what_was_changed_and_follows_the_rest() {
+        use super::OutputDraft;
+        use jstream_control::protocol::{BusId, EncoderProfileId, VideoMixId};
+        let before = OutputDraft {
+            kind: NewKind::Rtmp,
+            target: "rtmps://a.example.com/app".into(),
+            encoder: None,
+            mix: None,
+            bus: BusId::master(),
+        };
+        let mut mine = before.clone();
+        mine.target = "rtmps://mine.example.com/app".into();
+        let now = OutputDraft {
+            target: "rtmps://theirs.example.com/app".into(),
+            encoder: Some(EncoderProfileId::new("hq")),
+            mix: Some(VideoMixId::new("mix_1")),
+            ..before.clone()
+        };
+        let reseeded = mine.reseed(&before, &now);
+        assert_eq!(reseeded.target, "rtmps://mine.example.com/app");
+        assert_eq!(reseeded.encoder, now.encoder);
+        assert_eq!(reseeded.mix, now.mix);
+        assert_eq!(before.reseed(&before, &now), now, "untouched, it follows");
     }
 }

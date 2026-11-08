@@ -156,8 +156,9 @@ server sent (each at most 512 characters). Nothing delimits the server's words t
 the description and the server instructions say the whole `reason` is untrusted. A
 window's `name` in a `capture.targets` result is its title (or, on macOS, its
 application's name), set by the application that owns it, in a field that isn't
-`remote_`-prefixed ([ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md));
-the `capture` tool's description and the server instructions say it is untrusted too. A
+`remote_`-prefixed ([ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md)),
+and so is a device's, set by its driver (protocol 0.90);
+the `capture` tool's description and the server instructions say they are untrusted too. A
 `font.list` font's `remote_family` and `remote_style` come from the font file, and the
 `font` tool's description says they are data, never instructions
 ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)). A `profile.get` thread's
@@ -187,7 +188,7 @@ animating with keyframe scenes, a `move` preset, crop reveals and staggered
 keyframe variants and blend modes (`item.set_blend`), the light and framing filters
 (`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
 and the `vignette`'s blends, shapes and three looks, #1226), the `border` kind's
-settings, its three looks and the order to stack it with a shadow or glow (#1227),
+settings, its three looks, its 9-slice image frame (#1294) and the order to stack it with a shadow or glow (#1227),
 layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
