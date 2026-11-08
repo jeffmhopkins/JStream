@@ -469,13 +469,22 @@ fn round_trip(store: &OpenH264Store, format: PixelFormat) {
         .expect("opens a decoder on Cisco's library");
     let tb = Timebase::new(1, 30).expect("valid time base");
     let luma = |i: usize, x: usize, y: usize| ((x * 2 + y + i * 3) % 220 + 16) as u8;
+    // U runs across and V down, so a swapped or misplaced chroma plane shows.
+    let cb = |i: usize, x: usize, _y: usize| (64 + x + i) as u8;
+    let cr = |i: usize, _x: usize, y: usize| (64 + y * 2 + i) as u8;
+    let (cw, ch) = (w / 2, h / 2);
+    let chroma = |i: usize, f: &dyn Fn(usize, usize, usize) -> u8| -> Vec<u8> {
+        (0..ch)
+            .flat_map(|y| (0..cw).map(move |x| (x, y)))
+            .map(|(x, y)| f(i, x, y))
+            .collect()
+    };
     let mut packets = Vec::new();
     for i in 0..10 {
         let y: Vec<u8> = (0..h)
             .flat_map(|y| (0..w).map(move |x| (x, y)))
             .map(|(x, y)| luma(i, x, y))
             .collect();
-        let chroma = vec![128u8; (w / 2) * (h / 2)];
         let frame = VideoFrame::new(
             VideoFrameInfo {
                 size,
@@ -485,8 +494,8 @@ fn round_trip(store: &OpenH264Store, format: PixelFormat) {
             },
             vec![
                 Plane::new(y, w),
-                Plane::new(chroma.clone(), w / 2),
-                Plane::new(chroma, w / 2),
+                Plane::new(chroma(i, &cb), cw),
+                Plane::new(chroma(i, &cr), cw),
             ],
         )
         .expect("frame");
@@ -519,6 +528,27 @@ fn round_trip(store: &OpenH264Store, format: PixelFormat) {
         }
         let mean = error as f64 / (w * h) as f64;
         assert!(mean < 4.0, "picture {i}: mean luma error {mean}");
+        let (mut u_error, mut v_error) = (0u64, 0u64);
+        for y in 0..ch {
+            let (us, vs): (Vec<u8>, Vec<u8>) = match format {
+                PixelFormat::Nv12 => {
+                    let row = picture.row(1, y as u32).expect("chroma row");
+                    row.chunks_exact(2).take(cw).map(|p| (p[0], p[1])).unzip()
+                }
+                _ => (
+                    picture.row(1, y as u32).expect("U row")[..cw].to_vec(),
+                    picture.row(2, y as u32).expect("V row")[..cw].to_vec(),
+                ),
+            };
+            for x in 0..cw {
+                u_error += u64::from(us[x].abs_diff(cb(i, x, y)));
+                v_error += u64::from(vs[x].abs_diff(cr(i, x, y)));
+            }
+        }
+        for (plane, error) in [("U", u_error), ("V", v_error)] {
+            let mean = error as f64 / (cw * ch) as f64;
+            assert!(mean < 4.0, "picture {i}: mean {plane} error {mean}");
+        }
     }
     assert_eq!(
         decoder
