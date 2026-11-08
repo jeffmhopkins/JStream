@@ -130,6 +130,11 @@ pub struct Image {
     /// read it, as `f32` bits: 1 is every texel of [`Self::full`], 0.25 a quarter each
     /// way, infinity a 3D placement. 0 when nothing drew it.
     need: Arc<AtomicU32>,
+    /// The texels a layer's last [`crate::Compositor::render_into`] can have drawn
+    /// anything into, everything else transparent, with the [`Self::generation`] it was
+    /// drawn at (#1070). Only that generation's: any other write moves the generation on
+    /// ([`Self::mark_changed`]), and the bounds go with it. `None` when unknown.
+    content: Arc<Mutex<Option<(u64, Region)>>>,
 }
 
 impl Image {
@@ -177,6 +182,25 @@ impl Image {
     /// image never placed in 3D ignores it.
     pub fn mark_changed(&self) {
         self.generation.fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Records the texels the write that just marked a change ([`Self::mark_changed`])
+    /// drew into, all others transparent: `None` when they may be anywhere.
+    pub(crate) fn set_content(&self, content: Option<Region>) {
+        let generation = self.generation();
+        *self.content.lock().unwrap_or_else(PoisonError::into_inner) =
+            content.map(|region| (generation, region));
+    }
+
+    /// The texels outside of which the image is transparent, when its last write said
+    /// so ([`Self::set_content`]) and nothing has changed it since.
+    pub(crate) fn content(&self) -> Option<Region> {
+        let generation = self.generation();
+        self.content
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .filter(|(drawn_at, _)| *drawn_at == generation)
+            .map(|(_, region)| region)
     }
 
     /// How many times the texels have changed, as [`Self::mark_changed`] counts them.
@@ -655,6 +679,7 @@ fn finish(
         ingest: None,
         full: (width, height),
         need: Arc::new(AtomicU32::new(0)),
+        content: Arc::new(Mutex::new(None)),
     }
 }
 
