@@ -7,8 +7,8 @@ use jstream_midi::{Message, TICKS_PER_BEAT, Tempo};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, AtomicU64, AtomicUsize, Ordering, fence};
 
-/// How long after its last clock message an input's clock still counts as running, as
-/// `jstream-midi` counts it.
+/// How long after its last timing clock (`F8`) an input's clock still counts as
+/// running, as `jstream-midi` counts it.
 pub const CLOCK_TIMEOUT_MS: u64 = 500;
 
 /// The beats per bar the feed's tracker counts with. A `midi_beat` source counts bars
@@ -18,8 +18,12 @@ const TRACKER_METER: u32 = 4;
 /// The tempo and transport an input's clock gave at one moment.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TempoReading {
-    /// When it was read, in milliseconds on the media clock: the clock message's time.
+    /// When it was read, in milliseconds on the media clock: the clock or transport
+    /// message's time.
     pub at_ms: u64,
+    /// When the input's last timing clock (`F8`) came, in milliseconds on the media
+    /// clock; `None` before any. Start, stop, continue and song position aren't clocks.
+    pub clock_ms: Option<u64>,
     /// Beats (quarter notes) per minute, once the clock is steady.
     pub bpm: Option<f64>,
     /// Whether the transport is playing.
@@ -29,11 +33,12 @@ pub struct TempoReading {
 }
 
 impl TempoReading {
-    /// Whether the input's clock still runs at `now_ms`: a clock message came in the
+    /// Whether the input's clock still runs at `now_ms`: a timing clock came in the
     /// last [`CLOCK_TIMEOUT_MS`].
     #[must_use]
     pub fn clock(&self, now_ms: u64) -> bool {
-        now_ms.saturating_sub(self.at_ms) <= CLOCK_TIMEOUT_MS
+        self.clock_ms
+            .is_some_and(|t| now_ms.saturating_sub(t) <= CLOCK_TIMEOUT_MS)
     }
 
     /// The beat at `now_ms`: while playing at a known tempo, carried on from `beat`, but
@@ -57,6 +62,8 @@ pub(super) struct TempoCell {
     seq: AtomicU64,
     /// `at_ms` plus one; 0 before any reading.
     at: AtomicU64,
+    /// `clock_ms` plus one; 0 for none.
+    clock: AtomicU64,
     /// `bpm`'s bits; NaN's for none.
     bpm: AtomicU64,
     beat: AtomicU64,
@@ -71,6 +78,7 @@ impl TempoCell {
         Self {
             seq: AtomicU64::new(0),
             at: AtomicU64::new(0),
+            clock: AtomicU64::new(0),
             bpm: AtomicU64::new(f64::NAN.to_bits()),
             beat: AtomicU64::new(0),
             playing: AtomicU8::new(0),
@@ -78,13 +86,14 @@ impl TempoCell {
         }
     }
 
-    /// Publishes `reading` from feed `from`, unless another feed's clock holds it, or
-    /// another publish is writing it. Returns whether it was published.
+    /// Publishes `reading` from feed `from`, unless another feed's running clock holds
+    /// it, or another publish is writing it. Returns whether it was published.
     pub(super) fn publish(&self, from: usize, reading: &TempoReading) -> bool {
         let owner = self.owner.load(Ordering::Relaxed);
         if owner != 0 && owner != from {
-            let last = self.at.load(Ordering::Relaxed).saturating_sub(1);
-            if reading.at_ms.saturating_sub(last) <= CLOCK_TIMEOUT_MS {
+            // Only a timing clock holds it: a lone stop or song position doesn't.
+            let clock = self.clock.load(Ordering::Relaxed);
+            if clock > 0 && reading.at_ms.saturating_sub(clock - 1) <= CLOCK_TIMEOUT_MS {
                 return false;
             }
         }
@@ -102,6 +111,10 @@ impl TempoCell {
         self.owner.store(from, Ordering::Relaxed);
         self.at
             .store(reading.at_ms.saturating_add(1), Ordering::Relaxed);
+        self.clock.store(
+            reading.clock_ms.map_or(0, |t| t.saturating_add(1)),
+            Ordering::Relaxed,
+        );
         self.bpm
             .store(reading.bpm.unwrap_or(f64::NAN).to_bits(), Ordering::Relaxed);
         self.beat.store(reading.beat.to_bits(), Ordering::Relaxed);
@@ -121,6 +134,7 @@ impl TempoCell {
                 continue;
             }
             let at = self.at.load(Ordering::Relaxed);
+            let clock = self.clock.load(Ordering::Relaxed);
             let bpm = f64::from_bits(self.bpm.load(Ordering::Relaxed));
             let beat = f64::from_bits(self.beat.load(Ordering::Relaxed));
             let playing = self.playing.load(Ordering::Relaxed) != 0;
@@ -131,6 +145,7 @@ impl TempoCell {
             }
             return (at > 0).then(|| TempoReading {
                 at_ms: at - 1,
+                clock_ms: clock.checked_sub(1),
                 bpm: (!bpm.is_nan()).then_some(bpm),
                 playing,
                 beat,
@@ -147,6 +162,8 @@ pub struct MidiFeed {
     own: Option<Arc<MidiState>>,
     any: Arc<MidiState>,
     tempo: Tempo,
+    /// When the input's last timing clock came, in milliseconds.
+    clock_ms: Option<u64>,
     id: usize,
 }
 
@@ -174,9 +191,13 @@ impl MidiFeed {
                 | Message::SongPosition { .. }
         ) {
             self.tempo.apply(message, at_ns);
+            if matches!(message, Message::TimingClock) {
+                self.clock_ms = Some(at_ms);
+            }
             let now = self.tempo.at(at_ns);
             let reading = TempoReading {
                 at_ms,
+                clock_ms: self.clock_ms,
                 bpm: now.bpm,
                 playing: now.playing,
                 beat: now.beat,
@@ -203,6 +224,7 @@ impl MidiInputs {
             own: self.input(name),
             any: self.any(),
             tempo: Tempo::new(TRACKER_METER),
+            clock_ms: None,
             id: FEEDS.fetch_add(1, Ordering::Relaxed),
         }
     }
