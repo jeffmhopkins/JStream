@@ -106,6 +106,9 @@ struct Shared {
     snapshots: SnapshotWorker,
     /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
     sheets: AtomicUsize,
+    /// Whether the `jstream-tempo` thread has started: once per engine, however often
+    /// JTunnel starts again (ADR-0147 §1).
+    tempo: AtomicBool,
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
@@ -208,6 +211,7 @@ impl Default for Engine {
                     state: Mutex::new(state),
                     snapshots: SnapshotWorker::default(),
                     sheets: AtomicUsize::new(0),
+                    tempo: AtomicBool::new(false),
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
@@ -1181,6 +1185,20 @@ impl Engine {
             .map(|pending| pending.kind.clone())
     }
 
+    /// Drives the PTZ cameras `setup` lists (ADR-0146, ADR-0123 §4): a socket and a
+    /// thread for each, which the `ptz.*` actions, `ptz.list` and the scenes' shots use.
+    /// Replaces the cameras of an earlier call, whose threads stop; an empty setup stops
+    /// them all. Without a call the engine drives no camera and opens no socket.
+    ///
+    /// # Errors
+    /// When a camera's socket can't be opened or its thread can't start; the cameras
+    /// running before are kept then.
+    pub fn start_ptz(&self, setup: &crate::ptz::PtzSetup) -> std::io::Result<()> {
+        let ptz = crate::ptz::Ptz::start(setup)?;
+        lock(&self.shared.state).ptz = ptz;
+        Ok(())
+    }
+
     /// Injects platform backends. `output.start` then runs the media pipeline
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
@@ -1275,9 +1293,16 @@ impl Engine {
             let state = lock(&self.shared.state);
             (state.audio.wanted(), state.live.midi())
         };
-        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock, midi)?);
+        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock, midi.clone())?);
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
+        if let Some(midi) = midi
+            && !self.shared.tempo.swap(true, Ordering::Relaxed)
+            && !spawn_tempo(Arc::downgrade(&self.shared), midi)
+        {
+            // The next start tries again.
+            self.shared.tempo.store(false, Ordering::Relaxed);
+        }
         Ok(local)
     }
 
@@ -1732,13 +1757,15 @@ impl Engine {
     /// Drops `client_id`'s undo and redo history and expires its open gestures: its
     /// session ended (ADR-0032). Each gesture's parameters show their collection values
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
-    /// gets an audit entry. What `plugin.list` showed it is forgotten too.
+    /// gets an audit entry. A PTZ camera its drive left moving stops. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
         self.shared.profile.end_views(client_id);
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
             let mut state = lock(&self.shared.state);
             state.history.forget(client_id);
+            // A camera its drive left moving stops (ADR-0146 §3).
+            state.ptz.forget_client(client_id);
             for gesture_id in state.gestures.of_client(client_id) {
                 state.end_gesture(
                     client_id,
@@ -4045,6 +4072,8 @@ struct State {
     audio: AudioSources,
     /// Each `webcam`'s camera controls, set on its device as they change (#1196).
     camera_controls: crate::camera_controls::CameraControls,
+    /// The PTZ cameras this machine drives (ADR-0146): none until the host starts them.
+    ptz: crate::ptz::Ptz,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -5102,6 +5131,10 @@ impl State {
         action: Action,
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
+        if let Some(done) = self.ptz.act(client_id, &action) {
+            done?;
+            return Ok(CallResult::action());
+        }
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -5284,6 +5317,9 @@ impl State {
                 },
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
+                },
+                Query::PtzList => QueryResult::PtzList {
+                    cameras: self.ptz.list(),
                 },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
@@ -5601,6 +5637,13 @@ impl State {
         transition: Option<TransitionStarted>,
         wake: &mut Vec<Waker>,
     ) {
+        // The heads follow what the studio shows (ADR-0146 §7).
+        self.ptz.follow(
+            self.graph.state(),
+            self.studio.program(),
+            self.studio.preview(),
+            transition.as_ref().map_or(0, |t| t.duration_ms),
+        );
         self.subscribers.emit(
             &Event::StudioChanged {
                 program_scene: self.studio.program().cloned(),
@@ -5975,6 +6018,44 @@ impl State {
         self.route_audio();
         self.publish_render();
         self.feed_pages();
+    }
+
+    /// Sets the `tempo.*` shared values the MIDI clock gave (ADR-0147), credited to the
+    /// client `engine`, and tells the pages and clients that read them. Returns whether
+    /// every change was set: a refused one is tried again at the next look.
+    fn publish_tempo(
+        &mut self,
+        changes: &[(&str, Option<serde_json::Value>)],
+        wake: &mut Vec<Waker>,
+    ) -> bool {
+        let mut any = false;
+        let mut all = true;
+        for (name, value) in changes {
+            match self.values.set(name, value.clone()) {
+                Ok(true) => {
+                    any = true;
+                    self.subscribers.emit(
+                        &Event::ValuesChanged {
+                            name: (*name).to_owned(),
+                            value: value.clone(),
+                            client_id: ClientId::new("engine"),
+                            request_id: None,
+                        },
+                        wake,
+                    );
+                }
+                Ok(false) => {}
+                // Only a full store refuses one; the next look tries again.
+                Err(error) => {
+                    all = false;
+                    tracing::debug!(name, %error, "a tempo value wasn't set");
+                }
+            }
+        }
+        if any {
+            self.feed_pages();
+        }
+        all
     }
 
     /// Tells each page granted the page API what it may read now (ADR-0102): its
@@ -6352,6 +6433,43 @@ impl Drop for State {
 /// How often the live ticker checks whether the render thread has caught up with a
 /// committed gesture's snapshot.
 const RELEASE_POLL: Duration = Duration::from_millis(4);
+
+/// Starts the `jstream-tempo` thread: it publishes the every-input MIDI tempo as the
+/// `tempo.*` shared values (ADR-0147) until the engine is gone. Returns whether it
+/// started.
+fn spawn_tempo(shared: Weak<Shared>, midi: Arc<jstream_sources::MidiInputs>) -> bool {
+    let started = thread::Builder::new()
+        .name("jstream-tempo".into())
+        .spawn(move || {
+            let mut published = crate::tempo::Published::default();
+            loop {
+                thread::sleep(crate::tempo::EVERY);
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let Some((reading, now_ms)) = crate::tempo::read(&midi) else {
+                    continue;
+                };
+                let next = published.next(reading.as_ref(), now_ms);
+                if next == published {
+                    continue;
+                }
+                let mut wake = Vec::new();
+                let all = lock(&engine.state).publish_tempo(&next.changes(&published), &mut wake);
+                drop(engine);
+                wake_all(wake);
+                // A refused value stays unpublished, so the next look tries it again; the
+                // ones set this time are then unchanged and send nothing.
+                if all {
+                    published = next;
+                }
+            }
+        });
+    if let Err(error) = &started {
+        tracing::warn!(%error, "the tempo values could not start");
+    }
+    started.is_ok()
+}
 
 /// Starts `jstream-live`, which runs [`State::live_tick`] when it is next due, until
 /// nothing is left to send or release or the engine is gone. Returns whether it

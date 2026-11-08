@@ -30,6 +30,7 @@ use std::sync::{Arc, Mutex, PoisonError};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
+use crate::lan::is_lan;
 use jstream_jtunnel::Playout;
 use jstream_jtunnel::wire::{self, Codec, Packet};
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, Rounding, SampleFormat, Timebase};
@@ -48,21 +49,6 @@ const MIN_WAIT: Duration = Duration::from_micros(500);
 pub const MAX_SENDERS: usize = 32;
 /// Opens and closes waiting for the thread.
 const COMMANDS: usize = 64;
-
-/// Whether `ip` is an address JTunnel may be received from or sent to (ADR-0123 §2):
-/// loopback, the private IPv4 ranges (10/8, 172.16/12, 192.168/16) and link-local
-/// (169.254/16). An IPv4 address mapped into IPv6 counts as itself.
-#[must_use]
-pub fn is_lan(ip: IpAddr) -> bool {
-    let v4 = match ip {
-        IpAddr::V4(v4) => v4,
-        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
-            Some(v4) => v4,
-            None => return v6.is_loopback(),
-        },
-    };
-    v4.is_loopback() || v4.is_private() || v4.is_link_local()
-}
 
 /// A sender the person accepted on this machine: its tunnel name, and the address and
 /// port it sends from.

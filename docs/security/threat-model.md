@@ -214,6 +214,14 @@ the user's desktop session can read it while it is there. Failed tokens are not 
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
+The daemon's `--ptz-camera` (ADR-0123, [ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md))
+is the one way to make it send VISCA to a camera: the protocol can't add, change or
+remove a camera, so a client with the token, an agent or a paired device can move only
+the heads the person listed, by name. An address outside the LAN ranges is refused at
+startup, and a reply from anywhere but the camera's own address and port, or one that
+isn't VISCA, is dropped and counted; a reply can change only the pose and status
+`ptz.list` shows.
+
 **Gaps:** #546's Windows hardware pass reported the token file and the daemon's logs
 user-only with no inheritance. Still to run on hardware: the devices file after a real
 pairing, and the crash reports' DACL (#656), which hasn't run on Windows CI either. So
@@ -369,7 +377,11 @@ location removes it.
 **Built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source may opt
 its page in to a read-only `window.jstream` with the engine animation clock and the
 page's own visibility, and, per further checkbox, the program and preview scenes, named
-shared values, and one bus's levels and bands (never its samples). Each checkbox shows
+shared values, one bus's levels and bands (never its samples), the engine's tempo, and
+one MIDI input's held notes, controllers and recent note-ons (never raw bytes or SysEx,
+[ADR-0147](../adr/0147-midi-tempo-and-state-for-pages.md)). The tempo has a checkbox
+of its own, as ADR-0124 decision 7 asks: the `tempo.*` values never reach a page through
+the shared values grant, and a MIDI reading carries a tempo only with it. Each checkbox shows
 its warning beside it, and the Sources panel badges a source whose page is granted
 anything ([ADR-0124](../adr/0124-page-api-read-review.md), which also lists what no
 setting ever grants). The renderer
@@ -383,7 +395,8 @@ page has no path to the engine. A compromised renderer holds only what the sourc
 sharing its renderer were granted; each granted page gets a request context of its own,
 which should keep it alone in its renderer, not yet checked on a run. Whatever a page is
 granted, a web page can send off the machine: preview scene names matter most, and a
-microphone bus's bands, which follow the shape of speech. The engine has no studio mode to leave, so a page
+microphone bus's bands, which follow the shape of speech, and a MIDI input's notes,
+which are the performance itself. The engine has no studio mode to leave, so a page
 granted the scenes always gets the preview scene's name.
 
 <a id="files"></a>
@@ -684,6 +697,9 @@ somewhere it shouldn't.
   doesn't trigger bindings (ADR-0142 §2).
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
+- PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) pass the same
+  LAN check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server)
+  for what they may send and receive.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it, or notes into what its MIDI sources draw

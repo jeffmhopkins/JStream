@@ -850,6 +850,22 @@ pub enum Edit {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         camera: Option<SceneCamera>,
     },
+    /// Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera
+    /// framings the scene sends when it goes on program or preview. At most 16, one per
+    /// camera; each names a camera of the machine's PTZ list and either a preset or a
+    /// pose. A keyframe scene's shot for a camera replaces its parent's for that camera,
+    /// and it follows its parent's other shots. A camera the machine doesn't list is
+    /// kept, and skipped when the shot fires. Setting the shots moves no head.
+    /// `invalid_argument` for a list `check_ptz_shots` refuses. Inverse:
+    /// `scene.set_ptz_shots` with the previous list.
+    #[serde(rename = "scene.set_ptz_shots")]
+    SceneSetPtzShots {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new list. Empty removes every shot.
+        #[serde(default)]
+        shots: Vec<crate::ptz::PtzShot>,
+    },
     /// Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change
     /// its camera as it is drawn. It belongs to the scene family: `invalid_argument` on a
     /// keyframe scene, which draws its parent's, and for a list `check_camera_motion`
@@ -1332,6 +1348,7 @@ impl Edit {
             Edit::SceneSetOptions { .. } => "scene.set_options",
             Edit::SceneSetCamera { .. } => "scene.set_camera",
             Edit::SceneSetCameraMotion { .. } => "scene.set_camera_motion",
+            Edit::SceneSetPtzShots { .. } => "scene.set_ptz_shots",
             Edit::SceneSetCameraFollow { .. } => "scene.set_camera_follow",
             Edit::LabelCreate { .. } => "label.create",
             Edit::LabelUpdate { .. } => "label.update",
@@ -1691,6 +1708,82 @@ pub enum Action {
         /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
+    },
+    /// Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in
+    /// VISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24
+    /// (negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative
+    /// wide). Not an edit: nothing is stored or undone. A drive queued behind another
+    /// replaces it. The action returns once the command is queued; `ptz.list` reports a
+    /// head that didn't answer. Fails with `invalid_argument` on `camera` for a camera
+    /// the machine's PTZ list doesn't name, and on a speed out of range, and with
+    /// `action_failed` when the machine has no PTZ camera.
+    #[serde(rename = "ptz.drive")]
+    PtzDrive {
+        /// The camera's name.
+        camera: String,
+        /// Pan speed: negative left, positive right, 0 stops.
+        #[serde(default)]
+        pan: i8,
+        /// Tilt speed: negative down, positive up, 0 stops.
+        #[serde(default)]
+        tilt: i8,
+        /// Zoom speed: negative wide, positive tele, 0 stops.
+        #[serde(default)]
+        zoom: i8,
+    },
+    /// Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan
+    /// and tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,
+    /// the fastest by default) paces pan and tilt; the tilt step is held to 23. Fails
+    /// as `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`
+    /// refuses or an empty one.
+    #[serde(rename = "ptz.aim")]
+    PtzAim {
+        /// The camera's name.
+        camera: String,
+        /// Where to move.
+        #[serde(flatten)]
+        pose: crate::ptz::PtzPose,
+        /// The pan and tilt speed, 1 to 24. Omitted for the fastest.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speed: Option<u8>,
+    },
+    /// Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.
+    #[serde(rename = "ptz.home")]
+    PtzHome {
+        /// The camera's name.
+        camera: String,
+    },
+    /// Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as
+    /// `ptz.drive` does, and with `invalid_argument` on `preset` past 127.
+    #[serde(rename = "ptz.recall")]
+    PtzRecall {
+        /// The camera's name.
+        camera: String,
+        /// The preset number.
+        preset: u8,
+    },
+    /// Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to
+    /// 127, in the head's own memory: nothing is stored in the collection or undone, and
+    /// it replaces what the head held there. Fails as `ptz.recall` does.
+    #[serde(rename = "ptz.store")]
+    PtzStore {
+        /// The camera's name.
+        camera: String,
+        /// The preset number.
+        preset: u8,
+    },
+    /// Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).
+    /// `speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.
+    /// Fails as `ptz.drive` does.
+    #[serde(rename = "ptz.focus")]
+    PtzFocus {
+        /// The camera's name.
+        camera: String,
+        /// What to do.
+        focus: crate::ptz::PtzFocus,
+        /// The drive speed for `near` and `far`, 1 to 8.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speed: Option<u8>,
     },
     /// Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per
     /// step, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an
@@ -2089,6 +2182,12 @@ impl Action {
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
             Action::SceneZoomCamera { .. } => "scene.zoom_camera",
+            Action::PtzDrive { .. } => "ptz.drive",
+            Action::PtzAim { .. } => "ptz.aim",
+            Action::PtzHome { .. } => "ptz.home",
+            Action::PtzRecall { .. } => "ptz.recall",
+            Action::PtzStore { .. } => "ptz.store",
+            Action::PtzFocus { .. } => "ptz.focus",
             Action::SceneSetKeyframe { .. } => "scene.set_keyframe",
             Action::ItemTriggerMotion { .. } => "item.trigger_motion",
             Action::TimelinePlay { .. } => "timeline.play",
@@ -2174,7 +2273,14 @@ impl Action {
             Action::SourceRestart { source_id } => vec![(EntityKind::Source, source_id.as_str())],
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
-            Action::AudioResetLoudness {}
+            // A PTZ camera belongs to the machine, not the collection (ADR-0146 §1).
+            Action::PtzDrive { .. }
+            | Action::PtzAim { .. }
+            | Action::PtzHome { .. }
+            | Action::PtzRecall { .. }
+            | Action::PtzStore { .. }
+            | Action::PtzFocus { .. }
+            | Action::AudioResetLoudness {}
             | Action::LiveSet { .. }
             | Action::LiveCancel { .. }
             | Action::YoutubeSignIn
@@ -2258,6 +2364,11 @@ impl Action {
                 "a plugin action can't be bound: a person installs, grants and re-enables \
                  plugins through the UI (ADR-0069)",
             )),
+            Action::PtzDrive { .. } => Some((
+                "type",
+                "`ptz.drive` can't be bound: a binding fires only on press, so nothing would \
+                 stop the move; bind `ptz.aim`, `ptz.recall` or `ptz.home` (ADR-0146 §3)",
+            )),
             Action::PluginClapRescan => Some((
                 "type",
                 "`plugin.clap_rescan` can't be bound: a person rescans the CLAP plugins \
@@ -2303,6 +2414,11 @@ impl Action {
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
             | Action::SceneZoomCamera { .. }
+            | Action::PtzAim { .. }
+            | Action::PtzHome { .. }
+            | Action::PtzRecall { .. }
+            | Action::PtzStore { .. }
+            | Action::PtzFocus { .. }
             | Action::SceneSetKeyframe { .. }
             | Action::ItemTriggerMotion { .. }
             | Action::TimelinePlay { .. }
@@ -2336,7 +2452,13 @@ impl Action {
     pub fn takes_steps(&self) -> bool {
         match self {
             Action::SceneZoomCamera { .. } => true,
-            Action::OutputStart { .. }
+            Action::PtzDrive { .. }
+            | Action::PtzAim { .. }
+            | Action::PtzHome { .. }
+            | Action::PtzRecall { .. }
+            | Action::PtzStore { .. }
+            | Action::PtzFocus { .. }
+            | Action::OutputStart { .. }
             | Action::PreviewReport { .. }
             | Action::OutputStop { .. }
             | Action::OutputSetKey { .. }

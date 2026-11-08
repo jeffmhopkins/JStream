@@ -202,7 +202,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   Audio-only kinds make no frames and have no live source. The `waveform` and
   `spectrum` sources draw the program mix's audio, a bus's, or another source's, from
   the engine's `AudioScopes`. A `browser` source granted the page API is told what it
-  shows its page: its visibility, the scenes, the shared values and a bus's levels (see *Page API* in
+  shows its page: its visibility, the scenes, the shared values, a bus's levels and a
+  MIDI input's state (see *Page API* in
   [Design](#design)).
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
@@ -243,6 +244,14 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §2), stamped on the
   media clock at their sample offset, whether or not a source records the sender; its
   clock and transport messages also run the sender's tempo there (§3).
+  A `jstream-tempo` thread (`tempo.rs`, [ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md)
+  §1) starts with the receiver and, every 20 ms, reads the every-input state's tempo
+  and publishes it as the shared values `tempo.bpm` (to a tenth, moved only by a tenth
+  or more, removed while no clock runs), `tempo.playing`, `tempo.beat` and `tempo.bar`
+  (whole beats and four-beat bars), each change a `values.changed` from the client
+  `engine` with no request ID, and the pages fed with it. It starts once per engine,
+  however often the receiver starts again, holds the engine weakly and stops when the
+  engine goes.
   `Engine::jtunnel_stats` reads its counters (`JtunnelStats`, `midi` among them). Tests run a fake sender on loopback: the subscribe and its
   keepalive, the frames in order with their positions and times, the bye, an
   unaccepted sender, a datagram that isn't JTunnel and a receiver's packet dropped and
@@ -250,7 +259,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
   reaching its MIDI input with no source recording it, and its clock giving that input
-  a tempo.
+  a tempo and publishing the `tempo.*` values.
 - **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
@@ -338,7 +347,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/quality.rs", "crates/jstream-core/src/runtime/**"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/lan.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/ptz/mod.rs", "crates/jstream-core/src/quality.rs", "crates/jstream-core/src/runtime/**"]
 -->
 
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
@@ -382,6 +391,31 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   differently, the one listed later wins when both name the device the same way (an
   empty `device` and the first device's ID are told apart: then the last changed wins). `capture.targets` lists each device's
   `controls` from `VideoDevices::controls`.
+- **PTZ cameras** (`ptz/`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)):
+  the physical heads this machine drives over VISCA, off until the host calls
+  `Engine::start_ptz` with its camera list (ADR-0123 §1). Each camera, checked against
+  ADR-0123's LAN ranges (`lan.rs`'s `is_lan`, the one predicate JTunnel's senders pass
+  too) and with its address, port and VISCA address unique, gets
+  a `jstream-ptz` thread and its own socket: Sony-style VISCA over IP on UDP (with a
+  sequence reset at start), raw VISCA over UDP, or raw VISCA over TCP, reconnecting
+  after a second. The thread sends what the control side queues, waits up to 300 ms
+  for each command's ACK, completion or error (on "buffer full" it waits up to two
+  seconds for a completion and sends once more), and while idle asks the head's
+  pan-tilt, zoom and focus positions every 500 ms. Its queue holds at most 16 unsent
+  commands: a drive replaces an unsent drive and an aim an unsent aim, and a stop drops
+  the unsent drives and goes first. On raw VISCA, which has no sequence numbers, it
+  drops any waiting replies before each message, and a TCP reconnect starts with an
+  empty buffer; on VISCA over IP a sequence error resets the head's numbering too. When
+  it stops (the host replaced or emptied the list, or the engine shut down) it sends a
+  pan-tilt, zoom and focus stop. It reads only replies from the camera's address and
+  port and VISCA address, and drops and counts the rest. `ptz.list` reports each head's last pose, last error,
+  counters, and whether it answered in the last three seconds. The control side (`Ptz`)
+  sits under the engine lock and only sends on channels: the `ptz.*` actions (it keeps
+  the client whose drive set each camera moving, and `forget_client` stops the camera
+  when that session ends), and the
+  shots of the scenes the studio shows, fired from `emit_studio` when the program or
+  preview scene changes (the program's paced to the switch's duration by
+  `matched_speed`; the preview's only for cameras the program's shots don't name).
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
@@ -481,13 +515,13 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
 <a id="contents-tests"></a>
 ## Contents: tests
 <!-- @section
-covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**", "crates/jstream-core/tests/**"]
+covers = ["crates/jstream-core/src/ptz/tests.rs", "crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**", "crates/jstream-core/tests/**"]
 -->
 
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
-  `src/tests/timelines.rs`, `tests/mcp.rs`,
+  `src/tests/timelines.rs`, `src/tests/ptz.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -730,6 +764,16 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   starts again at its duration when its `restart` counter changes
   (`a_timer_restarts_when_its_restart_counter_changes`, #1040). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
+- **PTZ** (`src/ptz/tests.rs`, `src/tests/ptz.rs`): a VISCA head emulator on loopback
+  (`FakeHead`, VISCA over IP, raw UDP or raw TCP) that takes each command as a head
+  does and answers inquiries with its pose; each transport aiming the head and its
+  pose reaching `ptz.list`; actions becoming the VISCA commands ADR-0146 names; a
+  queued drive replacing the one before it; the checks and refusals; a reply from
+  another address dropped and counted, and a silent head reported; the daemon's camera
+  syntax; the speed curve; and through the engine, the actions and the list, program
+  switches firing shots (a keyframe scene's over its parent's, a camera not listed
+  skipped, a longer transition pacing a pose), and a preview moving only the cameras
+  the program doesn't frame.
 
 <a id="design"></a>
 ## Design
@@ -799,7 +843,8 @@ counters), `jstream-encode` (the H.264 and AAC sessions and their drop counters)
 publisher and the recording file sink), `jstream-sources` (the built-in kinds: their
 descriptors and the sources that draw them), `jstream-jtunnel` (JTunnel's packets and
 the playout the JTunnel receiver drives, ADR-0122), `jstream-plugin-proto` (the CLAP host
-supervisor's block and control messages), `jstream-plugin-wasm` (the wasmtime host the
+supervisor's block and control messages), `jstream-visca` (the VISCA commands, inquiries
+and replies the PTZ heads exchange, ADR-0146), `jstream-plugin-wasm` (the wasmtime host the
 WASM automation plugins run on; optional, behind the `wasm-plugins` feature, which is on
 by default, ADR-0075), `serde` (the derives of the installed plugins' file,
 ADR-0076), `jstream-youtube` (Google sign-in and the
@@ -1537,7 +1582,11 @@ overrides applied as for audio), the two scenes' IDs and names, the shared value
 each bus's post-fader levels (`AudioRouting::page_levels`, read without restarting the
 held peak that `meters.tick` takes; empty while no mixer runs, and read only while a
 page is granted). Attaching and detaching the mixer feed the pages too, so a page given
-a bus reads `null` and then its levels.
+a bus reads `null` and then its levels. A source granted a MIDI input finds it in the
+engine's `MidiInputs` as it opens, and reads it itself on each look
+([ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md) §5); the engine's
+`tempo.*` values reach pages as other shared values do, but only a page granted
+`page_api_tempo` (ADR-0147 §2).
 The source sends its page only what changed, so this costs nothing when no page is
 granted and little when nothing changed, and at most one update per page frame (ADR-0102
 decision 3): what changes within a frame is merged and held, and `page_view` returns
@@ -2204,7 +2253,8 @@ step. `values.set` checks the name and size with the protocol's
 shared checks and the 256-name limit, changes nothing on a refusal, and emits
 `values.changed` only when the value really changed. It is not in the activity or audit
 log, as `live.set` isn't: it carries data and may come many times a second.
-`values.list` reads them by name, and the page feed reads them all (`SharedValues::map`,
+The engine sets the `tempo.*` values itself from the MIDI clock (see *JTunnel receiver* in
+[Contents](#contents-sources)). `values.list` reads them by name, and the page feed reads them all (`SharedValues::map`,
 *Page API* under [Snapshots](#snapshots)).
 
 <a id="preview-streams"></a>
@@ -3240,14 +3290,19 @@ drop ledger's, never the collection lock (see *Audio sources*). The JTunnel rece
 slot in it is a leaf mutex of its own, held only to set or clone the receiver; the
 receiver's thread takes no lock, getting opens and closes over a channel; its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
-lock held. The camera controls'
+lock held. The `jstream-tempo` thread reads the MIDI state without a lock and takes
+the collection lock only to publish a tempo value that changed. The camera controls'
 changes go to the `jstream-camera-controls` thread over a channel, sent under the
 collection lock; that thread takes no engine lock while it sets them on the device. The CLAP scan's locks
 (`ClapScans`: one held for a whole scan, so scans run one at a time, and leaf locks on
 its hosts, reason and last scan) are taken with no engine lock held; a scan takes the
 collection lock under its scan lock only to add the kinds it found. A quality probe's
 tap lock (`ProbeTap`) is a leaf: the probe takes it with no engine lock held, and the
-render thread only tries it.
+render thread only tries it. The PTZ heads work
+the same way as the camera controls (ADR-0146): actions and shots go to each `jstream-ptz` thread over a channel,
+sent under the collection lock, and a head's status is a leaf mutex its thread takes
+alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
+while it sends or waits for a reply.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit
@@ -3336,7 +3391,9 @@ revisions and error codes are logged, never a call's arguments
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). A timeline's cues are not calls, so they
 log nothing: `timeline.cue_fired` reports each, with its error. A CLAP scan, at start
 or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its path and
-the host's error) and an `info` with how many effects it found.
+the host's error) and an `info` with how many effects it found. A `tempo.*` value the
+shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
+`warn`.
 
 <a id="audit-log"></a>
 ## Audit log

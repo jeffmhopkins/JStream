@@ -214,6 +214,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--lan-bind <addr>` | With `--lan`: listen on this one address (not a loopback one) instead of every interface. Default: every interface. |
 | `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes) and the LAN address and port it sends from, loopback, private IPv4 or link-local. Repeatable, one name once. A `network_audio` source naming the sender records its audio. Default: off, no JTunnel socket open. |
 | `--lan-renew` | With `--lan`: make a new key and certificate before serving, for when the machine's names or addresses changed. Every paired device then checks the new fingerprint, and a native client that pinned the old one pairs again. |
+| `--ptz-camera <spec>` | Lets this machine control a PTZ camera over VISCA ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)), repeatable: `name@address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the camera's VISCA address (1 to 7, default 1), as in `wide@192.168.1.40:52381`. The address must be on the LAN ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and names and addresses must not repeat. Default: none, so no PTZ socket is open. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
@@ -268,6 +269,16 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   link-local, and the receiver drops everything not from an accepted sender
   ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
   A sender is accepted per machine, on the command line, never from the collection.
+- **PTZ cameras** (`--ptz-camera`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)).
+  Off unless a camera is listed. With one or more, the daemon starts the engine's PTZ
+  control after the backends, one thread and socket per camera, and logs how many at
+  `info`. A camera's address can't be outside the LAN ranges, two cameras can't share a
+  name or an address and VISCA address, and replies from anywhere else are dropped
+  ([jstream-core › PTZ cameras](../../crates/jstream-core/README.md#contents-media)).
+  The cameras are listed per machine, on the command line, never from the collection,
+  which names them only by name. A camera a drive left moving is sent a stop when its
+  client disconnects and, best effort, when the engine shuts down; a daemon that is
+  killed outright sends none.
 - **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
   in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
   browser and the desktop app show the same workspace
@@ -778,7 +789,7 @@ folder another process is using, so the daemon couldn't start pages while the ap
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
-  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--log-dir`,
+  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--jtunnel-accept`, `--log-dir`,
   `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` with its `tls` feature (what a host links; `tls` for `--lan`),

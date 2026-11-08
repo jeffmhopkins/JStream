@@ -497,6 +497,27 @@ pub(crate) fn edits() -> Vec<Edit> {
             scene_id: SceneId::new("scn_1"),
             follow: None,
         },
+        // PTZ shots (ADR-0146): a preset, and a pose.
+        Edit::SceneSetPtzShots {
+            scene_id: SceneId::new("scn_1"),
+            shots: vec![
+                crate::PtzShot {
+                    camera: "wide".into(),
+                    preset: Some(2),
+                    pose: crate::PtzPose::default(),
+                },
+                crate::PtzShot {
+                    camera: "close".into(),
+                    preset: None,
+                    pose: crate::PtzPose {
+                        pan: Some(-1200),
+                        tilt: Some(300),
+                        zoom: Some(0x2000),
+                        focus: Some(0x1000),
+                    },
+                },
+            ],
+        },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
             name: "Sponsor".into(),
@@ -1471,6 +1492,64 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
         },
+        // PTZ heads (ADR-0146).
+        Action::PtzDrive {
+            camera: "close".into(),
+            pan: -12,
+            tilt: 4,
+            zoom: 0,
+        },
+        Action::PtzAim {
+            camera: "close".into(),
+            pose: crate::PtzPose {
+                pan: Some(-1200),
+                tilt: Some(300),
+                zoom: Some(0x2000),
+                focus: None,
+            },
+            speed: Some(12),
+        },
+        Action::PtzHome {
+            camera: "wide".into(),
+        },
+        Action::PtzRecall {
+            camera: "wide".into(),
+            preset: 2,
+        },
+        Action::PtzStore {
+            camera: "wide".into(),
+            preset: 3,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Auto,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Manual,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::OnePush,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Near,
+            speed: Some(3),
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Far,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Stop,
+            speed: None,
+        },
         Action::SceneSetKeyframe {
             scene_id: SceneId::new("scn_panels"),
             keyframe_id: Some(SceneId::new("scn_panels_wide")),
@@ -1781,6 +1860,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::EncoderList,
         Query::VideoMixList,
         Query::CaptureTargets,
+        Query::PtzList,
         Query::FontList,
         Query::ValuesList { prefix: None },
         Query::ValuesList {
@@ -2566,6 +2646,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: Some(TransitionPresetId::new("tr_move")),
                     transition_out: None,
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: vec![volley(), pulse(TimelineLoop::Loop), pulse(TimelineLoop::Once)],
                     items: item_infos(),
@@ -2587,6 +2668,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: None,
                     transition_out: None,
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: Vec::new(),
                     items: vec![],
@@ -2605,6 +2687,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: None,
                     transition_out: Some(TransitionPresetId::new("cut")),
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: Vec::new(),
                     items: vec![],
@@ -2738,6 +2821,51 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 SourceSize {
                     source_id: SourceId::new("mic"),
                     size: None,
+                },
+            ],
+        },
+        QueryResult::PtzList {
+            cameras: vec![
+                crate::PtzCameraInfo {
+                    camera: "wide".into(),
+                    address: "192.168.1.40:52381".into(),
+                    transport: crate::PtzTransport::ViscaIp,
+                    visca_address: 1,
+                    reachable: true,
+                    pose: Some(crate::PtzPose {
+                        pan: Some(0),
+                        tilt: Some(0),
+                        zoom: Some(0),
+                        focus: Some(0x1000),
+                    }),
+                    error: None,
+                    sent: 120,
+                    replies: 240,
+                    dropped: 0,
+                },
+                crate::PtzCameraInfo {
+                    camera: "close".into(),
+                    address: "192.168.1.41:1259".into(),
+                    transport: crate::PtzTransport::Udp,
+                    visca_address: 1,
+                    reachable: false,
+                    pose: None,
+                    error: Some("no reply".into()),
+                    sent: 4,
+                    replies: 0,
+                    dropped: 2,
+                },
+                crate::PtzCameraInfo {
+                    camera: "bridge".into(),
+                    address: "10.0.0.9:5678".into(),
+                    transport: crate::PtzTransport::Tcp,
+                    visca_address: 2,
+                    reachable: true,
+                    pose: None,
+                    error: None,
+                    sent: 1,
+                    replies: 2,
+                    dropped: 0,
                 },
             ],
         },
