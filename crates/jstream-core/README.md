@@ -90,7 +90,9 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   stacks, built from the inverse batches `Graph::apply` returns, and the log of what
   each recent change touched, which `undo_conflict` is checked against. A batch with an
   empty inverse changed nothing (only `item.clear_override`s of absent fields), so it
-  is logged but is no step, and the redo stack is kept.
+  is logged but is no step, and the redo stack is kept. A change the engine makes
+  itself (an effect pack's renames moving filters' settings, #1353) is logged under
+  the client `engine` (`record_engine`, `ENGINE_CLIENT`), never a step.
 - **Gestures** (`gesture.rs`): live values
   ([ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)): every client's open
   gestures, which one holds each parameter, the `live.changed` events each owes, and
@@ -181,7 +183,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
-  dropped when it is deleted, on the engine's `jstream-sources` thread. The program
+  dropped when it is deleted, on the engine's `jstream-sources` thread. Sources are
+  built with the program's base rate (`Context.frame_rate`), and a `browser` page with
+  an `fps` of 0, which follows it, is built again when `canvas.set_frame_rate` changes
+  it (#1405). The program
   mix shows their frames and advances animations and videos on the media clock, and
   tells a source when it shows it again. `media` sources play through the injected
   backends' media files. A frame stored
@@ -627,7 +632,17 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   count from the first plan after each, and starts again when its mode changes
   (`a_timer_keeps_counting_through_a_style_change_and_a_density`), and a countdown that
   starts again at its duration when its `restart` counter changes
-  (`a_timer_restarts_when_its_restart_counter_changes`, #1040). The parity
+  (`a_timer_restarts_when_its_restart_counter_changes`, #1040). Effect packs over the
+  protocol (`src/tests/packs.rs`): a pack written, read, rewritten and deleted, with its
+  activity entries, and a setting renamed by a pack's new version (#1353): a live
+  filter's value moves to the new ID in one revision, is saved at the new version, and
+  the client's earlier batch then fails to undo with `undo_conflict`
+  (`a_reload_moves_live_filters_through_the_renames`); a filter loaded from the file
+  before its changed pack follows the renames from the version the file recorded once
+  the pack loads (`a_loaded_filter_follows_the_renames_once_its_pack_loads`); and a
+  collection holding a shader source opens before its pack loads, keeps the source as
+  saved, then moves its settings through the renames once the pack loads and again on a
+  reload (`a_shader_source_loads_before_its_pack_and_follows_its_renames`, #1412). The parity
   tests add the fixture's `mic` kind, which no built-in kind matches.
 
 <a id="design"></a>
@@ -922,6 +937,11 @@ collection lock:
   graph.
 - **Not steps:** actions (outputs, stream keys, live values), queries and history
   calls. A gesture's step is its committing batch.
+- **The engine's own changes.** When an effect pack's new version moves filters'
+  settings through its renames (#1353, [Snapshots](#snapshots)), that revision is
+  logged under the client `engine` with the filters' settings as touched, and is no
+  step. A client's earlier step that set those settings then conflicts with it, so its
+  undo fails with `undo_conflict` instead of writing an old ID back.
 
 <a id="live-values"></a>
 ## Live values
@@ -1383,8 +1403,20 @@ change keeps its filter. A pack that fails to load is logged and adds nothing; o
 fails a reload keeps its last good version. A filter of a kind no loaded pack has stays
 in the collection and is bypassed, as before its pack loaded. The daemon watches
 `--effects-dir` (default `effects` in the data folder, `paths::EFFECTS_DIR`) and the
-desktop app the data folder's `effects`. A filter's stored settings are not migrated
-through the effect's renames yet.
+desktop app the data folder's `effects`. When a load or reload describes a kind, every
+filter of it, on any chain or keyframe override, and every shader source of it, is
+upgraded to it (#1353, #1412, `Graph::upgrade_kinds`, ADR-0025 › Versioning a kind):
+settings stored by an older version (the one the filter or source records, loaded
+before its pack or kept while its pack was gone, else the one the engine described
+before a reload) move through the effect's or shader source's renames (`Migration`,
+`Effect::migrate`, `ShaderSource::migrate`), and a setting they lack takes its default.
+Every other value stays, one the kind doesn't declare included, and settings of the
+kind's own version aren't touched at all, so a `pack.write` that drops a setting and
+puts it back loses nothing. Settings from a newer version than the pack's stay as they
+are, and keep that version through a save. The upgrade is a revision of its own, sent as `state.changed` from the
+client `engine` and saved, but no undo step: it is logged in the undo history, so a
+client's earlier step on those settings fails with `undo_conflict` instead of writing
+the old IDs back. A changed shader source's live source is synced, as after a batch.
 A GPU device loss on the program stage (#349, [Runtime](#runtime),
 [ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)) is blamed on the pack
 kinds the frames before it drew (`Packs::blame`): each is quarantined, and a pack one
@@ -1475,6 +1507,9 @@ each layer is handed in once it is remade, the old one retired into the cache
 mix shows the source again, or `source.restart` names it, its stand-in makes a new frame,
 and a new frame restarts the program (`time` and frame count from 0, feedback cleared). While its pack isn't loaded,
 or the kind is quarantined, no program runs and the source draws nothing at its size.
+The collection file loads before the packs, so a shader source loads with its kind
+missing: it is kept as the file has it, with its recorded kind version, and follows the
+kind's renames once the pack loads (#1412, above).
 A shader source that hears audio (`audio = true`) hears the scope its `audio` and
 `audio_source` settings name, as a `spectrum` does: the live sources find it on each
 sync (`FilterAssets::heard`), the source it names is fed like a scope source's
@@ -3147,7 +3182,12 @@ drop ledger is its own mutex, and so is the audit sink's handle, which is only c
 under it (see *Audit log*). The audio sources' wanted set is a leaf mutex the control
 side takes under the collection lock; the program stage's `jstream-audio-sources`
 thread takes it alone, and otherwise only its own inputs mutex and, under that, the
-drop ledger's, never the collection lock (see *Audio sources*).
+drop ledger's, never the collection lock (see *Audio sources*). The collection file's
+lock comes before the collection lock: a save holds it, takes the collection lock only
+to serialize, and writes with it released. An effect-pack update that moved filters
+through their renames (#1353) saves once the collection lock is released, while the
+packs' lock is still held, so the packs' lock comes before the file's; a save never
+takes the packs' lock.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit
@@ -3362,8 +3402,7 @@ history, idempotency keys and the program and preview scenes are not saved (see 
 - Reporting a source that failed to build to clients (it is only logged), and
   updating a source in place for a change to a `live` setting instead of rebuilding
   it.
-- Migrating a pack filter's stored settings through its effect's declared renames
-  (`Effect::migrate`), and an event when the kinds change (clients re-read `kind.list`).
+- An event when the kinds change (clients re-read `kind.list`).
 - Activity gains that fade with a transition (audio follows a switch at once, so
   every weight is 0 or 1), and meters for every bus's true peak and loudness.
 - The audio and outputs snapshots, the mixer's parameter channel and its part in the
