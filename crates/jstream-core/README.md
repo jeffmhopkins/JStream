@@ -238,9 +238,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   source's mixer input as a device packet: the stream position as the device position,
   the frame's media-clock time, a concealed frame flagged silent, a restart flagged as a
   discontinuity. Opens and closes reach the thread over a bounded channel; a stream that
-  changes rate fails its input, which reopens at the new rate. So does an input another
-  source's open replaces, and every input when the receiver stops or is replaced, so
-  no source keeps recording silence without saying why. 24-bit PCM and MIDI-only
+  changes rate fails its input, which reopens at the new rate. One source records a
+  sender at a time: a second one's open is refused, so it shows as unavailable, until
+  the first closes. Every input fails when the receiver stops or is replaced, so no
+  source keeps recording silence without saying why. 24-bit PCM and MIDI-only
   streams are taken (a MIDI-only stream feeds no input); Opus packets are counted as
   unsupported until a decoder is picked. A frame's MIDI events, due with it, are pushed
   through the sender's `MidiFeed` to the engine's `MidiInputs` under the sender's name
@@ -263,8 +264,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   fake sender on loopback: the subscribe and its
   keepalive, the frames in order with their positions and times, the bye, an
   unaccepted sender, a datagram that isn't JTunnel, one too long and a receiver's packet
-  dropped and counted, a rate change failing the input, a replaced input and a stopped
-  receiver's input told why, Opus refused, the profile's playout readings, the
+  dropped and counted, a rate change failing the input, a second source for a sender
+  refused until the first closes, a stopped receiver's input told why, Opus refused, the profile's playout readings, the
   accepted-sender and setup checks, and through the engine a
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers

@@ -336,29 +336,41 @@ fn a_rate_change_fails_the_input_so_it_reopens() {
     );
 }
 
-/// Review N3: a source that loses its sender's audio, to a second source or to the
-/// receiver stopping, is told so and doesn't keep recording silence.
+/// Review N3: one source records a sender at a time, so a second is refused rather than
+/// take it over (and be taken over back on its own reopen); and a source whose receiver
+/// stops is told so, rather than keep recording silence.
 #[test]
-fn a_replaced_or_stopped_input_is_told_why() {
+fn a_second_input_is_refused_and_a_stopped_one_told_why() {
     let sender = FakeSender::new();
     let receiver = start(&setup("Studio", &sender));
     let (_, to) = sender.next();
     sender.send(to, 48_000, 0, 0);
     assert!(eventually(|| receiver.input_format("Studio").is_ok()));
     let (first_tx, first) = channel();
-    let _first = receiver
+    let opened = receiver
         .open("Studio", 10, Box::new(Collect(first_tx)))
         .expect("an input");
-    let (second_tx, second) = channel();
-    let _second = receiver
-        .open("Studio", 10, Box::new(Collect(second_tx)))
-        .expect("an input");
+    let (second_tx, _second) = channel();
+    let refused = receiver.open("Studio", 10, Box::new(Collect(second_tx)));
+    assert!(
+        refused.is_err_and(|err| err.contains("another source")),
+        "a second source for the sender is unavailable"
+    );
+    // Once the first closes, the sender is free.
+    drop(opened);
+    let (third_tx, third) = channel();
+    let _third = receiver
+        .open("Studio", 10, Box::new(Collect(third_tx)))
+        .expect("the sender is free again");
     let failed = |rx: &Rx<Got>| {
         (0..50).any(|_| matches!(rx.recv_timeout(Duration::from_millis(100)), Ok(Got::Error)))
     };
-    assert!(failed(&first), "the replaced input reports it");
+    assert!(
+        !matches!(first.try_recv(), Ok(Got::Error)),
+        "a closed input isn't failed"
+    );
     drop(receiver);
-    assert!(failed(&second), "the stopped receiver's input reports it");
+    assert!(failed(&third), "the stopped receiver's input reports it");
 }
 
 #[test]

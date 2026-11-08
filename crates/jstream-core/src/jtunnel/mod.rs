@@ -210,6 +210,8 @@ struct Sender {
     accepted: AcceptedSender,
     /// Its stream's sample rate, from its latest audio packet; 0 before one.
     rate: AtomicU32,
+    /// The open stream that records it; 0 for none. One source at a time.
+    recorder: AtomicU64,
     /// Its playout as the thread last read it, for `profile.get` (#1223).
     seen: Seen,
 }
@@ -307,6 +309,7 @@ impl Receiver {
             .map(|accepted| Sender {
                 accepted: accepted.clone(),
                 rate: AtomicU32::new(0),
+                recorder: AtomicU64::new(0),
                 seen: Seen::default(),
             })
             .collect();
@@ -426,12 +429,14 @@ impl Receiver {
     }
 
     /// Starts handing the sender `name`'s frames to `handler`, each held `latency_ms`
-    /// past its jitter-free arrival, until the returned stream is dropped. Opening the
-    /// same sender again replaces the earlier handler, which is told so by
-    /// `on_error`, so its source shows why it no longer records.
+    /// past its jitter-free arrival, until the returned stream is dropped. One source
+    /// records a sender at a time: a second one is refused until the first stream is
+    /// dropped, so it shows as unavailable rather than take the sender over (and be
+    /// taken over back on its own reopen).
     ///
     /// # Errors
-    /// As for [`input_format`](Self::input_format), or the thread has stopped.
+    /// As for [`input_format`](Self::input_format), a sender another stream records, or
+    /// the thread has stopped.
     pub(crate) fn open(
         &self,
         name: &str,
@@ -441,17 +446,29 @@ impl Receiver {
         let format = self.input_format(name)?;
         let sender = self.sender(name)?;
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.commands
-            .try_send(Command::Open {
-                sender,
-                id,
-                rate: format.sample_rate(),
-                lead_ns: u64::from(latency_ms) * 1_000_000,
-                handler,
-            })
-            .map_err(|_| "the JTunnel receiver is not taking inputs".to_owned())?;
+        let recorder = &self.senders[sender].recorder;
+        if recorder
+            .compare_exchange(0, id, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err(format!(
+                "another source already records the JTunnel sender `{name}`"
+            ));
+        }
+        let opened = self.commands.try_send(Command::Open {
+            sender,
+            id,
+            rate: format.sample_rate(),
+            lead_ns: u64::from(latency_ms) * 1_000_000,
+            handler,
+        });
+        if opened.is_err() {
+            recorder.store(0, Ordering::Release);
+            return Err("the JTunnel receiver is not taking inputs".to_owned());
+        }
         Ok(Box::new(NetworkStream {
             format,
+            senders: Arc::clone(&self.senders),
             sender,
             id,
             commands: self.commands.clone(),
@@ -476,6 +493,7 @@ impl Drop for Receiver {
 /// A sender's audio, flowing into one handler until dropped.
 struct NetworkStream {
     format: AudioFormat,
+    senders: Arc<[Sender]>,
     sender: usize,
     id: u64,
     commands: SyncSender<Command>,
@@ -489,6 +507,13 @@ impl AudioStream for NetworkStream {
 
 impl Drop for NetworkStream {
     fn drop(&mut self) {
+        // The sender is free for another source.
+        let _ = self.senders[self.sender].recorder.compare_exchange(
+            self.id,
+            0,
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        );
         // A full queue or a stopped thread: the handler goes when the thread does, or
         // when the next open for this sender replaces it.
         let _ = self.commands.try_send(Command::Close {
@@ -563,7 +588,9 @@ impl Run {
         }
         self.send_all(|out, _| wire::write_bye(out));
         // A receiver stopped or replaced (the host started JTunnel again) leaves no
-        // source recording silently: each reopens on the receiver now running.
+        // source recording silently: each reopens on the receiver now running. Opens
+        // still queued count too.
+        self.commands();
         for (index, stream) in self.streams.iter_mut().enumerate() {
             if let Some(mut gone) = stream.handler.take() {
                 gone.handler.on_error(&PlatformError::DeviceLost {
@@ -610,16 +637,9 @@ impl Run {
                 }) => {
                     if let Some(stream) = self.streams.get_mut(sender) {
                         stream.playout.set_lead_ns(lead_ns);
-                        let replaced = stream.handler.replace(Handler { id, rate, handler });
-                        if let Some(mut replaced) = replaced {
-                            replaced.handler.on_error(&PlatformError::DeviceLost {
-                                what: format!(
-                                    "the JTunnel sender `{}`",
-                                    self.senders[sender].accepted.name
-                                ),
-                                reason: "another source now records this JTunnel sender".into(),
-                            });
-                        }
+                        // `open` lets one stream record a sender at a time, so this
+                        // replaces only a closed one whose close is still queued.
+                        stream.handler = Some(Handler { id, rate, handler });
                     }
                 }
                 Ok(Command::Close { sender, id }) => {
