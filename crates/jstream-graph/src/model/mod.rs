@@ -73,8 +73,8 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
     Easing, EncoderProfile, EncoderProfileId, FilterChain, FilterId, Finite32, FolderId,
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
-    OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
-    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
+    OutputId, OutputKind, PlacementForm, PtzShot, Rev, SceneCamera, SceneId, SceneMeta,
+    SceneOptions, SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
     TransitionPresetId, TransitionPresetInfo, TransitionsInfo, Trigger, VideoMix as MixSpec,
     VideoMixId, builtin_transition_kinds, initial_preset,
 };
@@ -861,6 +861,9 @@ pub struct Scene {
     /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
     /// parent's.
     pub(crate) camera_motion: Vec<CameraMotionModifier>,
+    /// Its PTZ shots (ADR-0146 §6). On a keyframe scene, only its own, which replace
+    /// its parent's for the same cameras; [`State::effective_ptz_shots`] merges them.
+    pub(crate) ptz_shots: Vec<PtzShot>,
     /// Its timelines (ADR-0115), by ID.
     pub(crate) timelines: BTreeMap<TimelineId, TimelineInfo>,
     pub(crate) items: Vec<Item>,
@@ -925,6 +928,13 @@ impl Scene {
     /// parent's.
     pub fn camera_motion(&self) -> &[CameraMotionModifier] {
         &self.camera_motion
+    }
+
+    /// Its own PTZ shots (ADR-0146 §6), which `scene.set_ptz_shots` sets. On a keyframe
+    /// scene they replace its parent's for the same cameras;
+    /// [`State::effective_ptz_shots`] gives what the scene sends.
+    pub fn ptz_shots(&self) -> &[PtzShot] {
+        &self.ptz_shots
     }
 
     /// Its follow camera (ADR-0113, ADR-0120): the first enabled

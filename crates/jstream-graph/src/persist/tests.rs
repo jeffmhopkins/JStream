@@ -65,10 +65,14 @@ const V11: &str = include_str!("fixtures/v11.json");
 /// loading as version 1 must.
 const V12: &str = include_str!("fixtures/v12.json");
 
-/// A collection file at schema version 13, the current one: version 12 with a motion
-/// modifier on `i4` that drives its `edge` effect's `width` (ADR-0138). The same rule
-/// applies once version 14 exists.
+/// A collection file at schema version 13, version 12 with a motion
+/// modifier on `i4` that drives its `edge` effect's `width` (ADR-0138). It must keep loading as version 1 must.
 const V13: &str = include_str!("fixtures/v13.json");
+
+/// A collection file at schema version 14, the current one: version 13 with PTZ shots
+/// on scene `a` and its keyframe scene `k` (ADR-0146). The same rule applies once
+/// version 15 exists.
+const V14: &str = include_str!("fixtures/v14.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -619,9 +623,59 @@ fn v12_graph() -> Graph {
     graph
 }
 
+/// [`v12_graph`] (the version 13 collection) with PTZ shots on scene `a` (a preset and a pose) and on its keyframe
+/// scene `k`, which replaces `a`'s shot of `close` (ADR-0146 §6).
+fn v14_graph() -> Graph {
+    use jstream_protocol::{PtzPose, PtzShot};
+    let mut graph = v12_graph();
+    let applied = graph.apply(
+        &[
+            Edit::SceneSetPtzShots {
+                scene_id: SceneId::new("a"),
+                shots: vec![
+                    PtzShot {
+                        camera: "wide".into(),
+                        preset: Some(1),
+                        pose: PtzPose::default(),
+                    },
+                    PtzShot {
+                        camera: "close".into(),
+                        preset: None,
+                        pose: PtzPose {
+                            pan: Some(-1200),
+                            tilt: Some(300),
+                            zoom: Some(0x2000),
+                            focus: None,
+                        },
+                    },
+                ],
+            },
+            Edit::SceneSetPtzShots {
+                scene_id: SceneId::new("k"),
+                shots: vec![PtzShot {
+                    camera: "close".into(),
+                    preset: Some(4),
+                    pose: PtzPose::default(),
+                }],
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v12_graph().to_collection_json(), V13);
+    assert_eq!(v14_graph().to_collection_json(), V14);
+}
+
+#[test]
+fn the_v14_fixture_loads_exactly() {
+    let expected = v14_graph();
+    let loaded = load(V14);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(12)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
 }
 
 #[test]
@@ -651,6 +705,32 @@ fn the_v12_fixture_loads_exactly() {
     let loaded = load(V12);
     assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(10)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// A keyframe scene sends its own shot for a camera and its parent's for the others
+/// (ADR-0146 §6).
+#[test]
+fn a_keyframe_scene_overrides_its_parents_shots_per_camera() {
+    let graph = v14_graph();
+    let state = graph.state();
+    let k = state.scene(&SceneId::new("k")).expect("k");
+    let shots = state.effective_ptz_shots(k);
+    let named: Vec<_> = shots
+        .iter()
+        .map(|s| (s.camera.as_str(), s.preset))
+        .collect();
+    assert_eq!(named, [("close", Some(4)), ("wide", Some(1))]);
+}
+
+/// Versions before 14 have no PTZ shots, so a scene's shots there are refused.
+#[test]
+fn an_older_file_refuses_ptz_shots() {
+    let mut value: Value = serde_json::from_str(V12).unwrap_or_default();
+    value["scenes"][0]["ptz_shots"] = json!([{"camera": "wide", "preset": 1}]);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 13, .. })
+    ));
 }
 
 /// Version 11 upgrades to the `linear` space, since its items use the linear modes, and a

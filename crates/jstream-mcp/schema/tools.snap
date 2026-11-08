@@ -667,6 +667,215 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "pan": {
+                    "default": 0,
+                    "description": "Pan speed: negative left, positive right, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "tilt": {
+                    "default": 0,
+                    "description": "Tilt speed: negative down, positive up, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.drive",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "default": 0,
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "description": "The focus position. Setting it puts the head's focus in manual.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "pan": {
+                    "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "speed": {
+                    "description": "The pan and tilt speed, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt": {
+                    "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.aim",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "The zoom position, 0 the widest.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz.home",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.recall",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.store",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "$ref": "#/$defs/PtzFocus",
+                    "description": "What to do."
+                  },
+                  "speed": {
+                    "description": "The drive speed for `near` and `far`, 1 to 8.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.focus",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "focus"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
@@ -3491,6 +3700,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "shots": {
+                    "default": [],
+                    "description": "The new list. Empty removes every shot.",
+                    "items": {
+                      "$ref": "#/$defs/PtzShot"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "scene.set_ptz_shots",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
@@ -5579,6 +5814,100 @@ source: crates/jstream-mcp/src/tests.rs
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          "PtzFocus": {
+            "description": "What `ptz.focus` does.",
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "Autofocus on.",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "description": "Autofocus off: the focus stays where it is.",
+                "type": "string"
+              },
+              {
+                "const": "one_push",
+                "description": "Focus once, automatically, then hold.",
+                "type": "string"
+              },
+              {
+                "const": "near",
+                "description": "Drive the focus nearer at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "far",
+                "description": "Drive the focus farther at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "stop",
+                "description": "Stop a focus drive.",
+                "type": "string"
+              }
+            ]
+          },
+          "PtzShot": {
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
+            "properties": {
+              "camera": {
+                "description": "The camera's name on the machine's PTZ camera list.",
+                "type": "string"
+              },
+              "focus": {
+                "description": "The focus position. Setting it puts the head's focus in manual.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "pan": {
+                "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "preset": {
+                "description": "The preset to recall, 0 to 127.",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tilt": {
+                "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "zoom": {
+                "description": "The zoom position, 0 the widest.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "camera"
             ],
             "type": "object"
           },
@@ -6897,6 +7226,215 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "pan": {
+                    "default": 0,
+                    "description": "Pan speed: negative left, positive right, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "tilt": {
+                    "default": 0,
+                    "description": "Tilt speed: negative down, positive up, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.drive",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "default": 0,
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "description": "The focus position. Setting it puts the head's focus in manual.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "pan": {
+                    "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "speed": {
+                    "description": "The pan and tilt speed, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt": {
+                    "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.aim",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "The zoom position, 0 the widest.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz.home",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.recall",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.store",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "$ref": "#/$defs/PtzFocus",
+                    "description": "What to do."
+                  },
+                  "speed": {
+                    "description": "The drive speed for `near` and `far`, 1 to 8.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.focus",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "focus"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
@@ -9721,6 +10259,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "shots": {
+                    "default": [],
+                    "description": "The new list. Empty removes every shot.",
+                    "items": {
+                      "$ref": "#/$defs/PtzShot"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "scene.set_ptz_shots",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
@@ -11809,6 +12373,100 @@ source: crates/jstream-mcp/src/tests.rs
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          "PtzFocus": {
+            "description": "What `ptz.focus` does.",
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "Autofocus on.",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "description": "Autofocus off: the focus stays where it is.",
+                "type": "string"
+              },
+              {
+                "const": "one_push",
+                "description": "Focus once, automatically, then hold.",
+                "type": "string"
+              },
+              {
+                "const": "near",
+                "description": "Drive the focus nearer at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "far",
+                "description": "Drive the focus farther at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "stop",
+                "description": "Stop a focus drive.",
+                "type": "string"
+              }
+            ]
+          },
+          "PtzShot": {
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
+            "properties": {
+              "camera": {
+                "description": "The camera's name on the machine's PTZ camera list.",
+                "type": "string"
+              },
+              "focus": {
+                "description": "The focus position. Setting it puts the head's focus in manual.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "pan": {
+                "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "preset": {
+                "description": "The preset to recall, 0 to 127.",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tilt": {
+                "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "zoom": {
+                "description": "The zoom position, 0 the widest.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "camera"
             ],
             "type": "object"
           },
@@ -14909,6 +15567,215 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "pan": {
+                    "default": 0,
+                    "description": "Pan speed: negative left, positive right, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "tilt": {
+                    "default": 0,
+                    "description": "Tilt speed: negative down, positive up, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.drive",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "default": 0,
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "description": "The focus position. Setting it puts the head's focus in manual.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "pan": {
+                    "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "speed": {
+                    "description": "The pan and tilt speed, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt": {
+                    "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.aim",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "The zoom position, 0 the widest.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz.home",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.recall",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.store",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "$ref": "#/$defs/PtzFocus",
+                    "description": "What to do."
+                  },
+                  "speed": {
+                    "description": "The drive speed for `near` and `far`, 1 to 8.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.focus",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "focus"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
@@ -17733,6 +18600,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "shots": {
+                    "default": [],
+                    "description": "The new list. Empty removes every shot.",
+                    "items": {
+                      "$ref": "#/$defs/PtzShot"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "scene.set_ptz_shots",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
@@ -19821,6 +20714,100 @@ source: crates/jstream-mcp/src/tests.rs
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          "PtzFocus": {
+            "description": "What `ptz.focus` does.",
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "Autofocus on.",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "description": "Autofocus off: the focus stays where it is.",
+                "type": "string"
+              },
+              {
+                "const": "one_push",
+                "description": "Focus once, automatically, then hold.",
+                "type": "string"
+              },
+              {
+                "const": "near",
+                "description": "Drive the focus nearer at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "far",
+                "description": "Drive the focus farther at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "stop",
+                "description": "Stop a focus drive.",
+                "type": "string"
+              }
+            ]
+          },
+          "PtzShot": {
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
+            "properties": {
+              "camera": {
+                "description": "The camera's name on the machine's PTZ camera list.",
+                "type": "string"
+              },
+              "focus": {
+                "description": "The focus position. Setting it puts the head's focus in manual.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "pan": {
+                "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "preset": {
+                "description": "The preset to recall, 0 to 127.",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tilt": {
+                "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "zoom": {
+                "description": "The zoom position, 0 the widest.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "camera"
             ],
             "type": "object"
           },
@@ -23174,6 +24161,215 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "pan": {
+                    "default": 0,
+                    "description": "Pan speed: negative left, positive right, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "tilt": {
+                    "default": 0,
+                    "description": "Tilt speed: negative down, positive up, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.drive",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "default": 0,
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "description": "The focus position. Setting it puts the head's focus in manual.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "pan": {
+                    "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "speed": {
+                    "description": "The pan and tilt speed, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt": {
+                    "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.aim",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "The zoom position, 0 the widest.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz.home",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.recall",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.store",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "$ref": "#/$defs/PtzFocus",
+                    "description": "What to do."
+                  },
+                  "speed": {
+                    "description": "The drive speed for `near` and `far`, 1 to 8.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.focus",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "focus"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per\nstep, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an\nedit: nothing is stored or undone, and the zoom starts again at the follow camera's\nown `zoom` when it changes or the engine restarts. One step by default, so a hotkey\ncan run it (ADR-0112). `not_found` for a scene that doesn't exist,\n`action_failed` for one without a camera that follows, and\n`invalid_argument` for `steps` outside -16..=16.",
                 "properties": {
                   "scene_id": {
@@ -25998,6 +27194,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "shots": {
+                    "default": [],
+                    "description": "The new list. Empty removes every shot.",
+                    "items": {
+                      "$ref": "#/$defs/PtzShot"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "scene.set_ptz_shots",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
@@ -28082,6 +29304,100 @@ source: crates/jstream-mcp/src/tests.rs
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          "PtzFocus": {
+            "description": "What `ptz.focus` does.",
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "Autofocus on.",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "description": "Autofocus off: the focus stays where it is.",
+                "type": "string"
+              },
+              {
+                "const": "one_push",
+                "description": "Focus once, automatically, then hold.",
+                "type": "string"
+              },
+              {
+                "const": "near",
+                "description": "Drive the focus nearer at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "far",
+                "description": "Drive the focus farther at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "stop",
+                "description": "Stop a focus drive.",
+                "type": "string"
+              }
+            ]
+          },
+          "PtzShot": {
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
+            "properties": {
+              "camera": {
+                "description": "The camera's name on the machine's PTZ camera list.",
+                "type": "string"
+              },
+              "focus": {
+                "description": "The focus position. Setting it puts the head's focus in manual.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "pan": {
+                "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "preset": {
+                "description": "The preset to recall, 0 to 127.",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tilt": {
+                "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "zoom": {
+                "description": "The zoom position, 0 the widest.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "camera"
             ],
             "type": "object"
           },
@@ -29811,6 +31127,289 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
+        "destructiveHint": true,
+        "idempotentHint": false,
+        "openWorldHint": true,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `ptz` operation: set `op.type` to one of `ptz.drive` (action), `ptz.aim` (action), `ptz.home` (action), `ptz.recall` (action), `ptz.store` (action), `ptz.focus` (action), `ptz.list` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "PtzFocus": {
+            "description": "What `ptz.focus` does.",
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "Autofocus on.",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "description": "Autofocus off: the focus stays where it is.",
+                "type": "string"
+              },
+              {
+                "const": "one_push",
+                "description": "Focus once, automatically, then hold.",
+                "type": "string"
+              },
+              {
+                "const": "near",
+                "description": "Drive the focus nearer at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "far",
+                "description": "Drive the focus farther at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "stop",
+                "description": "Stop a focus drive.",
+                "type": "string"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `ptz` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "pan": {
+                    "default": 0,
+                    "description": "Pan speed: negative left, positive right, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "tilt": {
+                    "default": 0,
+                    "description": "Tilt speed: negative down, positive up, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.drive",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "default": 0,
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "description": "The focus position. Setting it puts the head's focus in manual.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "pan": {
+                    "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "speed": {
+                    "description": "The pan and tilt speed, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt": {
+                    "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.aim",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "The zoom position, 0 the widest.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz.home",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.recall",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.store",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "$ref": "#/$defs/PtzFocus",
+                    "description": "What to do."
+                  },
+                  "speed": {
+                    "description": "The drive speed for `near` and `far`, 1 to 8.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.focus",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "focus"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lists the PTZ cameras on this machine's list (ADR-0146 §4), in the order the host\ngave them: each one's address, whether it answered lately, its last pose and its\nlast error. Runtime state, so no `rev`. Empty when the machine controls no PTZ\ncameras, which is the default (ADR-0123 §1).",
+                "properties": {
+                  "type": {
+                    "const": "ptz.list",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "ptz"
+    },
+    {
+      "annotations": {
         "openWorldHint": false,
         "readOnlyHint": true
       },
@@ -29894,7 +31493,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_camera_motion` (edit), `scene.set_camera_follow` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.zoom_camera` (action), `scene.set_keyframe` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_ptz_shots` (edit), `scene.set_camera_motion` (edit), `scene.set_camera_follow` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.zoom_camera` (action), `scene.set_keyframe` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BusId": {
@@ -30386,6 +31985,65 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "PtzShot": {
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
+            "properties": {
+              "camera": {
+                "description": "The camera's name on the machine's PTZ camera list.",
+                "type": "string"
+              },
+              "focus": {
+                "description": "The focus position. Setting it puts the head's focus in manual.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "pan": {
+                "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "preset": {
+                "description": "The preset to recall, 0 to 127.",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tilt": {
+                "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "zoom": {
+                "description": "The zoom position, 0 the widest.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "camera"
+            ],
+            "type": "object"
+          },
           "Rev": {
             "description": "The collection state revision.\n\nEvery applied batch increments it by exactly one. Queries report the revision they\nread, and a batch may name the revision it was computed against (`expected_rev`).",
             "format": "uint64",
@@ -30793,6 +32451,32 @@ source: crates/jstream-mcp/src/tests.rs
                   },
                   "type": {
                     "const": "scene.set_camera",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "shots": {
+                    "default": [],
+                    "description": "The new list. Empty removes every shot.",
+                    "items": {
+                      "$ref": "#/$defs/PtzShot"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "scene.set_ptz_shots",
                     "type": "string"
                   }
                 },
@@ -32248,6 +33932,215 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "item_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in\nVISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24\n(negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative\nwide). Not an edit: nothing is stored or undone. A drive queued behind another\nreplaces it. The action returns once the command is queued; `ptz.list` reports a\nhead that didn't answer. Fails with `invalid_argument` on `camera` for a camera\nthe machine's PTZ list doesn't name, and on a speed out of range, and with\n`action_failed` when the machine has no PTZ camera.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "pan": {
+                    "default": 0,
+                    "description": "Pan speed: negative left, positive right, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "tilt": {
+                    "default": 0,
+                    "description": "Tilt speed: negative down, positive up, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.drive",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "default": 0,
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan\nand tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,\nthe fastest by default) paces pan and tilt; the tilt step is held to 23. Fails\nas `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`\nrefuses or an empty one.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "description": "The focus position. Setting it puts the head's focus in manual.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "pan": {
+                    "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "speed": {
+                    "description": "The pan and tilt speed, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt": {
+                    "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                    "format": "int32",
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.aim",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "The zoom position, 0 the widest.",
+                    "format": "uint16",
+                    "maximum": 65535,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "type": {
+                    "const": "ptz.home",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as\n`ptz.drive` does, and with `invalid_argument` on `preset` past 127.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.recall",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to\n127, in the head's own memory: nothing is stored in the collection or undone, and\nit replaces what the head held there. Fails as `ptz.recall` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "preset": {
+                    "description": "The preset number.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "ptz.store",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "preset"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).\n`speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.\nFails as `ptz.drive` does.",
+                "properties": {
+                  "camera": {
+                    "description": "The camera's name.",
+                    "type": "string"
+                  },
+                  "focus": {
+                    "$ref": "#/$defs/PtzFocus",
+                    "description": "What to do."
+                  },
+                  "speed": {
+                    "description": "The drive speed for `near` and `far`, 1 to 8.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "ptz.focus",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "camera",
+                  "focus"
                 ],
                 "type": "object"
               },
@@ -35076,6 +36969,32 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera\nframings the scene sends when it goes on program or preview. At most 16, one per\ncamera; each names a camera of the machine's PTZ list and either a preset or a\npose. A keyframe scene's shot for a camera replaces its parent's for that camera,\nand it follows its parent's other shots. A camera the machine doesn't list is\nkept, and skipped when the shot fires. Setting the shots moves no head.\n`invalid_argument` for a list `check_ptz_shots` refuses. Inverse:\n`scene.set_ptz_shots` with the previous list.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene to change."
+                  },
+                  "shots": {
+                    "default": [],
+                    "description": "The new list. Empty removes every shot.",
+                    "items": {
+                      "$ref": "#/$defs/PtzShot"
+                    },
+                    "type": "array"
+                  },
+                  "type": {
+                    "const": "scene.set_ptz_shots",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change\nits camera as it is drawn. It belongs to the scene family: `invalid_argument` on a\nkeyframe scene, which draws its parent's, and for a list `check_camera_motion`\nrefuses. A scene without a camera keeps the list, which draws nothing until it has\none. Inverse: `scene.set_camera_motion` with the previous list.",
                 "properties": {
                   "motion": {
@@ -37164,6 +39083,100 @@ source: crates/jstream-mcp/src/tests.rs
             },
             "required": [
               "kind"
+            ],
+            "type": "object"
+          },
+          "PtzFocus": {
+            "description": "What `ptz.focus` does.",
+            "oneOf": [
+              {
+                "const": "auto",
+                "description": "Autofocus on.",
+                "type": "string"
+              },
+              {
+                "const": "manual",
+                "description": "Autofocus off: the focus stays where it is.",
+                "type": "string"
+              },
+              {
+                "const": "one_push",
+                "description": "Focus once, automatically, then hold.",
+                "type": "string"
+              },
+              {
+                "const": "near",
+                "description": "Drive the focus nearer at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "far",
+                "description": "Drive the focus farther at `speed`, until `stop`.",
+                "type": "string"
+              },
+              {
+                "const": "stop",
+                "description": "Stop a focus drive.",
+                "type": "string"
+              }
+            ]
+          },
+          "PtzShot": {
+            "description": "One shot of a scene: a camera, and the preset it recalls or the pose it moves to\n(ADR-0146 §6). Exactly one of `preset` and a pose is set.",
+            "properties": {
+              "camera": {
+                "description": "The camera's name on the machine's PTZ camera list.",
+                "type": "string"
+              },
+              "focus": {
+                "description": "The focus position. Setting it puts the head's focus in manual.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "pan": {
+                "description": "The pan position, signed, -524287 to 524287. Set together with `tilt`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "preset": {
+                "description": "The preset to recall, 0 to 127.",
+                "format": "uint8",
+                "maximum": 255,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "tilt": {
+                "description": "The tilt position, signed, -32767 to 32767. Set together with `pan`.",
+                "format": "int32",
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "zoom": {
+                "description": "The zoom position, 0 the widest.",
+                "format": "uint16",
+                "maximum": 65535,
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              }
+            },
+            "required": [
+              "camera"
             ],
             "type": "object"
           },

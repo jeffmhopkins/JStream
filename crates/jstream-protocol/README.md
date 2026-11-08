@@ -65,13 +65,15 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
-  `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
+  `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`,
+  `scene.set_ptz_shots`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
-  `scene.zoom_camera`, `item.show`,
+  `scene.zoom_camera`, `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`, `ptz.store`,
+  `ptz.focus`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.report`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
@@ -157,7 +159,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them),
@@ -330,7 +332,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.110 because the query `quality.probe` (`ProbeStream`,
+`PROTOCOL_VERSION` is 0.111 (a number the release queue set)
+because the engine drives PTZ cameras: the actions `ptz.drive`, `ptz.aim`,
+`ptz.home`, `ptz.recall`, `ptz.store` and `ptz.focus`, the query `ptz.list`, and a
+scene's `ptz_shots`, set with `scene.set_ptz_shots` ([PTZ cameras](#ptz)); 0.110 because the query `quality.probe` (`ProbeStream`,
 `QualityProbeInfo`) measures a running output's encoded picture
 ([Queries](#queries), [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
 a number the release queue set); 0.109 because a motion modifier can drive a number or colour
@@ -1238,6 +1243,44 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
   JSON, so a client older than an action type still reads the collection; it keeps the
   binding and can't run it. `HotkeyBinding::action` parses it.
 
+<a id="ptz"></a>
+## PTZ cameras
+<!-- @section
+covers = ["crates/jstream-protocol/src/ptz.rs"]
+depends_on = ["docs/adr/0146-ptz-cameras-shots-and-actions.md"]
+-->
+
+PTZ cameras (0.111) are physical heads the engine drives over VISCA
+([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)). The camera list,
+with each head's address, belongs to the machine (ADR-0123 §4): the host gives it to
+the engine, and nothing on the wire adds, changes or removes a camera. A call names a
+camera by its name on that list, 1 to 64 bytes with no control characters. Positions
+are the head's own counts and speeds VISCA's steps.
+- **Actions**, runtime and never undone: `ptz.drive {camera, pan, tilt, zoom}` (signed
+  speeds, pan -24 to 24, tilt -23 to 23, zoom -8 to 8, 0 stops), `ptz.aim {camera, pan?,
+  tilt?, zoom?, focus?, speed?}` (pan and tilt together, at least one field, speed 1 to
+  24), `ptz.home {camera}`, `ptz.recall {camera, preset}` and `ptz.store {camera,
+  preset}` (0 to 127; a store writes the head's memory), and `ptz.focus {camera, focus,
+  speed?}` (`auto`, `manual`, `one_push`, `near`, `far`, `stop`; speed 1 to 8).
+  `ptz_action_check` gives the order every implementation checks in: the fields
+  (`invalid_argument`), then whether the machine lists any camera (`action_failed`),
+  then whether it lists this one (`invalid_argument` on `camera`). An action returns
+  once its command is queued. Each but `ptz.drive` can be bound to a trigger (a binding
+  fires only on press, so nothing would stop a bound drive), and none names a collection
+  object. A drive that moves stops when the session that sent it ends. A plugin can't send them, or read `ptz.list`.
+- **`ptz.list`** gives each camera (`PtzCameraInfo`): its name, `address`, `transport`
+  (`visca_ip`, `udp` or `tcp`), `visca_address`, whether it answered in the last three
+  seconds, its last `pose` and `error`, and its `sent`, `replies` and `dropped` counts.
+  Empty when the machine drives none, which is the default.
+- **Shots** (`PtzShot`): a scene's `ptz_shots`, at most 16, one per camera, each a
+  `camera` and either a `preset` or a pose (`pan` and `tilt` together, `zoom`,
+  `focus`), flat in the shot. `scene.set_ptz_shots {scene_id, shots}` replaces the
+  list, a keyframe scene's too; `check_ptz_shots` refuses a list with
+  `invalid_argument` on `shots[i].<field>`; its inverse sets the old list. A keyframe
+  scene's shot for a camera replaces its parent's, and it follows the parent's others.
+  The engine sends a scene's shots when it goes on program, and when it goes on
+  preview for the cameras the program's shots don't name; an edit moves nothing.
+
 <a id="bindings"></a>
 ## Controller bindings
 <!-- @section
@@ -1551,6 +1594,9 @@ Queries read and never change `rev`. Those that read the collection state carry 
   source can still name a window closed or a device unplugged since. `action_failed`
   when the engine has no capture backend, or the OS refuses both the displays and
   windows and the devices; when only one lists, the result holds that. Added in 0.27.
+- `ptz.list`: the PTZ cameras this machine controls, each with its address, transport,
+  whether it answered lately, its last pose and error, and its counters
+  ([PTZ cameras](#ptz)); empty when the host listed none.
 - `font.list`: the fonts installed on the engine's machine ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)), ordered by
   family, then style, then path, each a `FontInfo`: `remote_family` and
   `remote_style` from the font's name table (the font maker's text, so `remote_`), and
@@ -2162,11 +2208,12 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   edits, among them a scene's folder, metadata and transitions, a source's metadata, a
   hotkey binding's labels (ADR-0133), an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
-  a camera's motion and follow camera, `live.set` and `live.cancel`, and `undo`/`redo` on
+  a camera's motion and follow camera, a scene's PTZ shots (ADR-0146), `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
-  never granted: creating, deleting and retargeting outputs, their encoders and stream
+  never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
+  physical camera), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated

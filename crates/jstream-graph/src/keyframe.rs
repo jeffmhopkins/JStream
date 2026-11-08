@@ -312,6 +312,7 @@ fn create(
         options: SceneOptions::default(),
         camera: None,
         camera_motion: Vec::new(),
+        ptz_shots: Vec::new(),
         timelines: BTreeMap::new(),
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),

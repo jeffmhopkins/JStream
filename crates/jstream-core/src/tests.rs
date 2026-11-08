@@ -22,6 +22,7 @@ mod packs;
 mod page_api;
 mod preview;
 mod projects;
+mod ptz;
 mod source_sizes;
 mod sources;
 mod timelines;
