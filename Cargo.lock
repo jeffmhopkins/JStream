@@ -3221,6 +3221,7 @@ dependencies = [
  "jiff",
  "jstream-browser",
  "jstream-media",
+ "jstream-midi",
  "jstream-platform",
  "jstream-protocol",
  "png",

@@ -252,6 +252,9 @@ pub struct Context {
     pub browser: Option<Arc<dyn BrowserBackend>>,
     /// The featured chat message `chat_message` sources draw. Clones share it.
     pub chat: crate::ChatFeature,
+    /// The MIDI the `midi_*` kinds draw (ADR-0137): every input's state, by name.
+    /// `None` draws no notes.
+    pub midi: Option<Arc<crate::MidiInputs>>,
 }
 
 impl std::fmt::Debug for Context {
@@ -263,6 +266,7 @@ impl std::fmt::Debug for Context {
             .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
             .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
             .field("chat", &self.chat)
+            .field("midi", &self.midi)
             .finish()
     }
 }
