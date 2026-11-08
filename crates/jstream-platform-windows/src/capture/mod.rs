@@ -72,8 +72,7 @@
 //! - **GPU path** (`on_gpu`, for a context `WindowsGpu` opened; another backend's is
 //!   `InvalidState`). The engine reaches it through `Capture::on_context`, which
 //!   `WgcCapture` answers with `on_gpu` on either path, so a host builds the CPU backend
-//!   and the engine moves capture onto its context (see
-//!   Open questions).
+//!   and the engine moves capture onto its context (see the crate README's Open questions).
 //!   - **Device:** every capture uses the context's D3D11 device, so frames are on the
 //!     context's adapter. A display driven by another adapter is still captured; WGC
 //!     copies across adapters itself.
