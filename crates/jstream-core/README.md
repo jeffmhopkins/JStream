@@ -169,7 +169,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   keeps each filter's host process running, and `ClapFilter`, the filter on its host.
   The engine keeps the hosts and the last scan (`plugins/scan.rs`, `ClapScans`) for
   `plugin.clap_scan` and `plugin.clap_rescan` (protocol 0.106), which scans again on a
-  `jstream-clap-scan` thread, one scan at a time.
+  `jstream-clap-scan` thread, one scan at a time. A scan that finds a new effect, or one
+  described differently, sends every client `kinds.changed` (`clap_scan`, 0.107).
 - **WASM automation plugins** (`plugins/automation.rs`, the `wasm-plugins` feature, on
   by default; [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
@@ -1461,7 +1462,9 @@ for the ones gone, `with_kinds` for the added and changed ones), hands the effec
 the live sources' `FilterAssets`, which every plan reads, and re-plans. Every pack
 update, a poll's, a blame's or an `effect.enable`'s, is installed with the packs' lock
 still held (then the collection's; nothing takes them the other way round), so an
-older update can't land after a newer one and undo it. A chain's filter
+older update can't land after a newer one and undo it. An update that adds, changes or
+removes a kind, or changes the quarantine, sends every client `kinds.changed`
+(`effect_packs`, 0.107). A chain's filter
 of a pack kind carries its `PackEffect`, so each compositor draws it through
 `Effect::video_filter` like a built-in kind. A reload is a new `PackEffect`, so the
 running filter is made again with the new WGSL and uniform layout; an effect that didn't
