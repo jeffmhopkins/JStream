@@ -12,8 +12,8 @@ use crate::model::{
 };
 use jstream_protocol::{
     Binding, BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo,
-    HotkeyBinding, ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError,
-    Query, QueryResult, SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
+    ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError, Query, QueryResult,
+    SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
 };
 
 impl Graph {
