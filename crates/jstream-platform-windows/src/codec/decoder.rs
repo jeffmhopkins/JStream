@@ -104,8 +104,9 @@ impl Aperture {
 /// `format` (I420 or NV12).
 ///
 /// # Errors
-/// [`PlatformError::Os`] when the buffer is too small for its size and stride, or the
-/// aperture's offset is odd (4:2:0 chroma can't be split there).
+/// [`PlatformError::Os`] when the buffer is too small for its size and stride, the
+/// aperture's offset is odd (4:2:0 chroma can't be split there), or its last chroma
+/// pair would pass the end of a row.
 pub(crate) fn picture(
     data: &[u8],
     stride: usize,
@@ -130,6 +131,12 @@ pub(crate) fn picture(
     let (cw, ch) = (w.div_ceil(2), h.div_ceil(2));
     if x % 2 != 0 || y % 2 != 0 {
         return Err(bad(format!("an aperture at an odd offset ({x}, {y})")));
+    }
+    // An odd width's last chroma pair reaches one byte past it, so it must fit the row.
+    if x + cw * 2 > stride {
+        return Err(bad(format!(
+            "an aperture {w} wide at x {x}, whose chroma passes the stride {stride}"
+        )));
     }
     let needed = stride
         .checked_mul(rows + chroma_rows)
@@ -716,7 +723,7 @@ mod tests {
     }
 
     #[test]
-    fn refuses_a_short_buffer_or_an_odd_aperture() {
+    fn refuses_a_short_buffer_or_an_aperture_that_does_not_fit() {
         let coded = size(32, 24);
         let data = buffer(coded, 32);
         let whole = Aperture {
@@ -748,5 +755,24 @@ mod tests {
             size: size(8, 8),
         };
         assert!(run(&data, 32, odd).is_err());
+        let narrow = size(33, 24);
+        let whole = Aperture {
+            x: 0,
+            y: 0,
+            size: narrow,
+        };
+        assert!(
+            picture(
+                &buffer(narrow, 33),
+                33,
+                narrow,
+                whole,
+                PixelFormat::I420,
+                ColorInfo::default(),
+                pts,
+            )
+            .is_err(),
+            "an odd width whose last chroma pair passes the stride"
+        );
     }
 }

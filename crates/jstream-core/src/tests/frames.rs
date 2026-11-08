@@ -137,24 +137,57 @@ fn centres(sheet: &FrameSheet) -> Vec<[u8; 4]> {
 /// was taken, so a slow machine that takes a picture late still passes.
 #[test]
 fn a_switch_and_watch_shows_the_fade_as_it_plays() {
+    watch_the_fade(0);
+}
+
+/// A sheet that starts late, as on a loaded machine, still counts each picture's
+/// `at_ms` from the switch, so the fade it shows matches the time it says: counted from
+/// the sheet's own start, the fade was further on than `at_ms` said (#1421's CI).
+#[test]
+fn a_late_sheet_counts_from_the_switch() {
+    struct Stall;
+    impl Drop for Stall {
+        fn drop(&mut self) {
+            crate::engine::SHEET_STALL_MS.store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
     let _gpu = super::one_gpu_test_at_a_time();
+    crate::engine::SHEET_STALL_MS.store(150, std::sync::atomic::Ordering::Relaxed);
+    let _stall = Stall;
+    if let Some(first) = watch_the_fade_held(150) {
+        assert!(
+            first >= 150,
+            "the first picture counts from the switch: {first} ms"
+        );
+    }
+}
+
+/// [`a_switch_and_watch_shows_the_fade_as_it_plays`] with the sheet started `stall_ms`
+/// after the switch.
+fn watch_the_fade(stall_ms: u32) {
+    let _gpu = super::one_gpu_test_at_a_time();
+    watch_the_fade_held(stall_ms);
+}
+
+/// The fade checks, with the GPU test lock held; the first picture's `at_ms`, or `None`
+/// with no adapter.
+fn watch_the_fade_held(stall_ms: u32) -> Option<u32> {
     let engine = Engine::new();
     let control = connected(&engine);
     two_scenes(&engine, &control);
-    let Some(sheet) = sheet_or_skip(switch_and_watch(
+    let sheet = sheet_or_skip(switch_and_watch(
         &control,
         "b",
         Some("fade"),
         FrameStrip::new(4, 250),
-    )) else {
-        return;
-    };
+    ))?;
     assert_eq!((sheet.columns, sheet.rows), (2, 2));
     assert_eq!((sheet.tile_width, sheet.tile_height), (480, 270));
     assert_eq!(sheet.frames.len(), 4);
     let times: Vec<u32> = sheet.frames.iter().map(|frame| frame.at_ms).collect();
     assert!(times.windows(2).all(|pair| pair[0] < pair[1]), "{times:?}");
     for (at, wanted) in times.iter().zip([0, 250, 500, 750]) {
+        let wanted = wanted + stall_ms;
         assert!(*at >= wanted, "a picture before its time: {times:?}");
     }
     let tiles = centres(&sheet);
@@ -167,13 +200,17 @@ fn a_switch_and_watch_shows_the_fade_as_it_plays() {
                 "at {at} ms the fade has barely begun: {red} {green}"
             );
         } else if at < 450 {
+            // Both show, whichever space the project blends in: a linear-light mix
+            // keeps more red late in the fade than a browser-style (sRGB) one, which
+            // is down to about 10% by 400 ms (#1298).
             assert!(
-                (32..224).contains(red) && (32..224).contains(green),
+                (1..255).contains(red) && (1..255).contains(green),
                 "at {at} ms red and green are mixed: {red} {green}"
             );
         } else if at < 590 {
+            // An sRGB mix has no red left by about 570 ms, but green is still rising.
             assert!(
-                *red > 0 && *green < 255,
+                *green < 255,
                 "at {at} ms the fade isn't over: {red} {green}"
             );
         } else if at >= 600 {
@@ -192,6 +229,7 @@ fn a_switch_and_watch_shows_the_fade_as_it_plays() {
         }
         other => panic!("not studio.get: {other:?}"),
     }
+    times.first().copied()
 }
 
 /// `video.frames` of a scene off program draws that scene alone, and of the program
