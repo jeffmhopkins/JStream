@@ -1,0 +1,16 @@
+[package]
+name = "jstream-visca"
+version = "0.0.0"
+description = "JStream's VISCA format (ADR-0122): PTZ camera commands, inquiries and replies, and VISCA-over-IP framing, for both directions."
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[package.metadata.jstream]
+layer = 0
+summary = "VISCA format for PTZ control (ADR-0122): pan-tilt, zoom, focus, preset, home, reset and power commands, position and power inquiries, ACK, completion, error and inquiry replies, encoded and parsed for both directions, and Sony-style VISCA-over-IP framing with sequence numbers; no sockets, no dependencies"
+unsafe_allowed = false
+
+[lints]
+workspace = true
