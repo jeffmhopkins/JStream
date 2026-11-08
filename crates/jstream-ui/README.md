@@ -855,12 +855,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   bundle's `icon.png` (see [Build](#build)).
 - **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
-  `events.dropped`; `output.state_changed` updates one output's state in place. Since
+  `events.dropped`; `output.state_changed` updates one output's state in place, and a
+  read that one arrived during is made again rather than applied, so a row never steps
+  back to an older state. Since
   #1206 the dock is a compact list: the header has the health (a dot and a word, the
   detail on hover; it sums `stats.tick`'s drop totals over the last five ticks, and a
   `seq` that doesn't increase or a total that shrinks, an engine restart, starts it
-  over) and Start all (`all_outputs`: every output that can start, of any kind, or once
-  none can, Stop all of the running ones). The program output's row ("master") comes
+  over), Start all and, while any output runs, Stop all (`all_outputs`: every stopped
+  output that can start, of any kind, and every running one). The program output's row ("master") comes
   first, then a row per output with its kind icon, ID, a summary (host, file name or
   "Webcam", then the encoder's name), a ⚠ for a cleartext key, its state badge, Start or
   Stop, an "FX N" button counting that chain's filters, which shows the chain in the
@@ -868,8 +870,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   A running row's second line is its bitrate, drops and uptime from `stats.tick`'s
   `outputs` (`live_line`). Duplicate reads the outputs again, picks the first free
   `output-N` and sends one batch (`duplicate_edits`: the create, the encoder, mix and
-  bus, and each filter's `filter.add` with its settings; never the stream key), then
-  opens the copy's settings. Delete… asks first and is off while the output runs.
+  bus, and each filter's `filter.add` with its settings; a recording's copy gets a free
+  path beside the original's, `copy_path`; never the stream key), then opens the copy's
+  settings. Delete… asks first and is off while the output runs.
   An output's settings dialog (Settings…, a double-click, or "+ Add output" with a kind
   picker) edits a draft (`OutputDraft`) and applies nothing until OK or Apply, which
   send what changed as one batch (`draft_edits`: `output.create` first for a new one,
@@ -887,8 +890,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   lists the profiles and mixes on the left, each with a short summary
   (`encoder_short`, `mix_short`), and edits the one picked on the right with the whole
   of it (`encoder_summary`, `mix_summary`). Save makes one (`encoder.create`,
-  `video_mix.create`, with the first free `enc_N` or `mix_N`, then picks it) or edits it
-  (`encoder.update`, `video_mix.update`); the form checks the draft with the protocol's
+  `video_mix.create`, with the first free `enc_N` or `mix_N`) or edits it
+  (`encoder.update`, `video_mix.update`), and waits for the engine's answer (`SendEdit`):
+  "Saving…", then "Saved." and, for a new one, picks it, or the refusal under the form
+  with the draft kept; Delete closes the editor only once the engine takes it; the form checks the draft with the protocol's
   own `problem` before sending, so a refused value is named by its field and the form
   stays open. A profile has the codec (H.264, HEVC, AV1), CBR or VBR with its peak, the
   keyframe interval, the hardware preference and the AAC rate; a mix has its input

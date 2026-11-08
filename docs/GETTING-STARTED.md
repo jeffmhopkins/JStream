@@ -134,7 +134,8 @@ make an encoder or a video mix in **Encoders & mixes…**, under the output rows
 it in the output's settings, under **Encoder** or **Video**. From there, **Edit encoder…**,
 **New…** and **Edit mix…** open the same dialog on the one you need. A running output
 takes the new choice when it next starts. **Start all**, above the rows, starts every
-output that can start, recordings and the virtual camera too.
+output that can start, recordings and the virtual camera too; **Stop all** beside it
+stops everything that runs.
 
 On Linux, a machine with no hardware H.264 encoder (or an encoder set to **Software
 only**) encodes with Cisco's OpenH264, which JStream doesn't ship: **Encoders & mixes…** offers

@@ -141,7 +141,7 @@ title = "A UI scrub of every panel, dialog and window, with a decluttered Inspec
 priority = 5
 status = "planned"
 issues = [1219, 1198, 1202, 1204, 1206]
-prs = [1279, 1373]
+prs = [1279, 1373, 1389]
 note = "#1279 and #1373 redesign the Outputs panel (#1206); #1219, #1198, #1202 and #1204 remain"
 
 [[target]]
