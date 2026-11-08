@@ -19,9 +19,10 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
     Easing, Edit, EffectsSpace, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
     FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
-    ItemTransform, ItemTransition, LabelId, MotionModifier, OutputId, OutputKind, ProtocolError,
-    Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings, SourceAudio, SourceId,
-    SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, VideoMix, VideoMixId,
+    ItemTransform, ItemTransition, KeyframeTiming, LabelId, MotionModifier, OutputId, OutputKind,
+    ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
+    SourceAudio, SourceId, SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, Trigger,
+    VideoMix, VideoMixId,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -33,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 9;
+pub const SCHEMA_VERSION: u32 = 11;
 
 fn default_base_fps() -> u32 {
     jstream_protocol::DEFAULT_BASE_FPS
@@ -58,7 +59,8 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[n]` upgrades version `n + 1` to `n + 2`, so a file at version `v` runs
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
-    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9,
+    v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
+    v10_to_v11,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -252,18 +254,45 @@ fn v7_to_v8(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
-/// Version 9 adds the labels a hotkey binding and a timeline carry (`hotkeys[].labels`
-/// and `scenes[].timelines[].labels`, ADR-0133). A version 8 file has none, so it
-/// upgrades unchanged. A binding's labels there are refused, as version 8 refused them;
-/// a timeline's are dropped, as version 8 ignored them, so nothing loads that didn't.
+/// Version 9 adds controller bindings (`bindings`, ADR-0122). A version 8 file has none,
+/// so it upgrades unchanged; one there is refused, as version 8 refused it.
 fn v8_to_v9(value: &mut Value) -> Result<(), String> {
+    if value.get("bindings").is_some() {
+        return Err("a version 8 file has no `bindings`".into());
+    }
+    Ok(())
+}
+
+/// Version 10 adds a keyframe scene's timing for an item in transitions into it
+/// (`scenes[].overrides[].timing`, ADR-0129). A version 9 file has none, so it upgrades
+/// unchanged; one there is refused, as version 9 refused it.
+fn v9_to_v10(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        let overrides = scene.get("overrides").and_then(Value::as_array);
+        if overrides
+            .into_iter()
+            .flatten()
+            .any(|o| o.get("timing").is_some())
+        {
+            return Err("a version 9 keyframe override has no `timing`".into());
+        }
+    }
+    Ok(())
+}
+
+/// Version 11 adds the labels a hotkey binding and a timeline carry (`hotkeys[].labels`
+/// and `scenes[].timelines[].labels`, ADR-0133). A version 10 file has none, so it
+/// upgrades unchanged. A binding's labels there are refused, as version 10 refused them;
+/// a timeline's are dropped, as version 10 ignored them, so nothing loads that didn't.
+fn v10_to_v11(value: &mut Value) -> Result<(), String> {
     let hotkeys = value.get("hotkeys").and_then(Value::as_array);
     if hotkeys
         .into_iter()
         .flatten()
         .any(|h| h.get("labels").is_some())
     {
-        return Err("a version 8 hotkey has no `labels`".into());
+        return Err("a version 10 hotkey has no `labels`".into());
     }
     let scenes = value.get_mut("scenes").and_then(Value::as_array_mut);
     for scene in scenes.into_iter().flatten() {
@@ -383,6 +412,10 @@ struct File {
     /// a collection without hotkeys saves as it did before they existed.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     hotkeys: Vec<FileHotkey>,
+    /// Controller bindings (ADR-0122), ordered by trigger; omitted when there are none,
+    /// like `hotkeys`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    bindings: Vec<FileBinding>,
     /// Transition presets and the default (ADR-0029); omitted while they are the one
     /// `cut` preset a new collection starts with, so such a collection saves as it did
     /// before presets existed.
@@ -511,6 +544,10 @@ struct FileOverride {
     /// when the keyframe follows the item's own. An empty list is an override.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     motion: Option<Vec<MotionModifier>>,
+    /// The item's timing in transitions into the keyframe (ADR-0129, schema_version 9);
+    /// omitted when the keyframe follows the item's own and the preset's. Never empty.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    timing: Option<KeyframeTiming>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -700,10 +737,19 @@ struct FileHotkey {
     /// The action request, as `hotkey.set` takes it. A stream key is never bound, so
     /// none is saved.
     action: Action,
-    /// The labels it carries, ordered by ID (ADR-0133, schema_version 9); omitted for
+    /// The labels it carries, ordered by ID (ADR-0133, schema_version 11); omitted for
     /// none.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     labels: Vec<LabelId>,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FileBinding {
+    trigger: Trigger,
+    /// The action request, as `binding.set` takes it. A stream key is never bound, so
+    /// none is saved.
+    action: Action,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -794,6 +840,7 @@ impl Graph {
                                 opacity: info.opacity,
                                 effects: o.effects.as_ref().map(|e| self.file_filters(&e.video)),
                                 motion: info.motion,
+                                timing: info.timing,
                             }
                         })
                         .collect(),
@@ -930,6 +977,14 @@ impl Graph {
                     chord: chord.clone(),
                     action: action.clone(),
                     labels: state.hotkey_labels(chord),
+                })
+                .collect(),
+            bindings: state
+                .bindings
+                .iter()
+                .map(|(trigger, action)| FileBinding {
+                    trigger: trigger.clone(),
+                    action: action.clone(),
                 })
                 .collect(),
         };
@@ -1112,8 +1167,8 @@ fn file_sends(state: &crate::State) -> Option<Vec<FileSend>> {
 /// transition overrides, video mixes, and outputs, each with its profile, mix and
 /// filters; then the master's filters; then the sends (the sources made their default
 /// master sends, so when the file lists sends a source without one has it removed), and
-/// each source's audio settings; and last the hotkey bindings, whose actions name
-/// scenes, outputs and presets, each with its labels.
+/// each source's audio settings; and last the hotkey and controller bindings, whose
+/// actions name scenes, outputs and presets, each hotkey with its labels.
 fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError> {
     let mut edits = Vec::new();
     if file.canvas != graph.state.canvas {
@@ -1519,11 +1574,20 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             ));
         }
     }
+    for binding in &file.bindings {
+        edits.push((
+            format!("binding `{}`", binding.trigger),
+            Edit::BindingSet {
+                trigger: binding.trigger.clone(),
+                action: binding.action.clone(),
+            },
+        ));
+    }
     Ok(edits)
 }
 
 /// The edits addressed to the keyframe scene `scene_id` that write `o`: the placement
-/// edits, then `item.set_motion`, then `item.set_effects`.
+/// edits, then `item.set_motion`, `item.set_timing` and `item.set_effects`.
 fn override_edits(scene_id: &SceneId, o: &FileOverride) -> Vec<Edit> {
     let (item_id, scene_id) = (&o.item_id, Some(scene_id.clone()));
     let mut edits = Vec::new();
@@ -1567,6 +1631,13 @@ fn override_edits(scene_id: &SceneId, o: &FileOverride) -> Vec<Edit> {
             item_id: item_id.clone(),
             scene_id: scene_id.clone(),
             motion: motion.clone(),
+        });
+    }
+    if let (Some(timing), Some(scene_id)) = (o.timing, &scene_id) {
+        edits.push(Edit::ItemSetTiming {
+            scene_id: scene_id.clone(),
+            item_id: item_id.clone(),
+            timing,
         });
     }
     if let (Some(effects), Some(scene_id)) = (&o.effects, scene_id) {

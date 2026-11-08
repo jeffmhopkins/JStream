@@ -1059,6 +1059,17 @@ source: crates/jstream-protocol/src/fixtures.rs
               "minimum": 0,
               "type": "integer"
             },
+            "network": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NetworkAccess"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Where a device on the network reaches the host, while the host's network\nlistener is on ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md),\n0.97). Absent otherwise: then only a device on this machine can pair."
+            },
             "type": {
               "const": "pairing.start",
               "type": "string"
@@ -1399,6 +1410,52 @@ source: crates/jstream-protocol/src/fixtures.rs
       },
       "required": [
         "edits"
+      ],
+      "type": "object"
+    },
+    "Bezier": {
+      "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+      "properties": {
+        "x1": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The first control point's time."
+        },
+        "x2": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The second control point's time."
+        },
+        "y1": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The first control point's progress."
+        },
+        "y2": {
+          "$ref": "#/$defs/Finite32",
+          "description": "The second control point's progress."
+        }
+      },
+      "required": [
+        "x1",
+        "y1",
+        "x2",
+        "y2"
+      ],
+      "type": "object"
+    },
+    "Binding": {
+      "description": "One binding, as `state.get`, `delete.plan` and a batch result report it.",
+      "properties": {
+        "action": {
+          "$ref": "#/$defs/Action",
+          "description": "The action request it runs, as `binding.set` bound it. Read as plain JSON, so a\nclient older than an action type still reads the collection: it keeps the\nbinding and can't run it. [`Binding::action`] parses it."
+        },
+        "trigger": {
+          "$ref": "#/$defs/Trigger",
+          "description": "What fires it."
+        }
+      },
+      "required": [
+        "trigger",
+        "action"
       ],
       "type": "object"
     },
@@ -1871,6 +1928,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "kind": {
               "const": "batch",
               "type": "string"
+            },
+            "removed_bindings": {
+              "description": "The controller bindings the batch removed the same way (0.96), in the order\nit removed them. Omitted when there are none, and missing (from a server\nolder than 0.96) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
             },
             "removed_hotkeys": {
               "description": "The hotkey bindings the batch removed because their action named an object it\ndeleted (ADR-0040 §3), in the order it removed them. Undoing the batch restores\nthem. Omitted when there are none, and missing (from a server older than 0.25)\nparses as empty.",
@@ -2959,6 +3023,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/SceneId",
           "description": "The keyframe scene that held the override."
         },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyframeTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The item's timing in transitions into this keyframe: its delay, easing and\nduration there (since 0.99, ADR-0129). Never an empty timing: clearing every\nfield removes the override."
+        },
         "transform": {
           "anyOf": [
             {
@@ -2985,7 +3060,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "Easing": {
-      "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+      "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and\n`cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).\nThe named curves are strings (`\"ease_out\"`); a `cubic_bezier` is an object\n(`{\"cubic_bezier\": {\"x1\": 0.2, \"y1\": 0, \"x2\": 0, \"y2\": 1}}`).",
       "oneOf": [
         {
           "const": "ease_in_out",
@@ -2998,6 +3073,11 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         {
+          "const": "ease_in",
+          "description": "Cubic ease-in: slow at the start, fast at the end.",
+          "type": "string"
+        },
+        {
           "const": "linear",
           "description": "Constant speed.",
           "type": "string"
@@ -3006,6 +3086,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "spring",
           "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
           "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "A step: the value holds its start until the end, then takes its end at once.",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.",
+          "properties": {
+            "cubic_bezier": {
+              "$ref": "#/$defs/Bezier"
+            }
+          },
+          "required": [
+            "cubic_bezier"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -3167,6 +3265,34 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "item_id",
             "motion"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Writes a keyframe scene's timing for an item in transitions into that keyframe\n(ADR-0129, since 0.99): its delay, easing and duration there, each in place of the\nitem's own or the preset's. `scene_id` must name a keyframe scene whose tree holds\nthe item, with the errors of the placement edits addressed to a keyframe; any other\nscene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000\nis `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or\n`x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3\n(`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the\noverride. Inverse: `item.set_timing` with the old timing, or `item.clear_override`\nof `timing` when the keyframe didn't override it.",
+          "properties": {
+            "item_id": {
+              "$ref": "#/$defs/ItemId",
+              "description": "The item in the parent's tree."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The keyframe scene."
+            },
+            "timing": {
+              "$ref": "#/$defs/KeyframeTiming",
+              "description": "Its timing in transitions into the keyframe."
+            },
+            "type": {
+              "const": "item.set_timing",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id",
+            "item_id",
+            "timing"
           ],
           "type": "object"
         },
@@ -4519,7 +4645,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a\n3D scene: its items are placed in one 3D space by their geometry and seen through\nthe camera. On a keyframe scene it writes or, with `camera` omitted, removes the\nkeyframe's override of its parent's camera. `invalid_argument` for a field of view\noutside 1 to 170, a position within 0.001 px of the target, a coordinate past the\ndrawable bound, or a camera on a keyframe scene whose parent has none. Removing a\nparent's camera also removes its keyframe scenes' overrides. Inverse:\n`scene.set_camera` with the previous camera, then each removed override.",
+          "description": "Sets or removes a scene's camera (ADR-0094, since 0.70). A scene with a camera is a\n3D scene: its items are placed in one 3D space by their geometry and seen through\nthe camera. On a keyframe scene it writes or, with `camera` omitted, removes the\nkeyframe's override of its parent's camera. `invalid_argument` for a field of view\noutside 1 to 170, a position within 0.001 px of the target, or a coordinate past\nthe drawable bound. A keyframe of a 2D scene may have a camera of its own\n(ADR-0128). Removing a parent's camera also removes its keyframe scenes'\noverrides; a removal on a parent that has none removes nothing. Inverse:\n`scene.set_camera` with the previous camera, then each removed override.",
           "properties": {
             "camera": {
               "anyOf": [
@@ -4808,6 +4934,47 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "chord",
             "labels"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Binds a controller trigger, such as a MIDI note, to an action (since 0.96,\nADR-0122 decision 1). The engine runs the action itself when an input it reads\nsends the trigger, on the first frame at or after the message's time; running it\nnever adds to an undo history. Rejected with `invalid_argument` at\n`trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at\n`action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with\n`already_exists` (entity `binding`) for a trigger that is already bound\n(rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`\nfor an object the action names that doesn't exist. Deleting that object later\nremoves the binding with it, as for hotkeys. Inverse: `binding.clear`.",
+          "properties": {
+            "action": {
+              "$ref": "#/$defs/Action",
+              "description": "The action request it runs, checked as an `action` call is."
+            },
+            "trigger": {
+              "$ref": "#/$defs/Trigger",
+              "description": "What fires it."
+            },
+            "type": {
+              "const": "binding.set",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "trigger",
+            "action"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that\nisn't bound. Inverse: `binding.set` with its action.",
+          "properties": {
+            "trigger": {
+              "$ref": "#/$defs/Trigger",
+              "description": "The trigger to unbind."
+            },
+            "type": {
+              "const": "binding.clear",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "trigger"
           ],
           "type": "object"
         },
@@ -5531,6 +5698,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "hotkey",
           "description": "A hotkey binding, named by its chord.",
+          "type": "string"
+        },
+        {
+          "const": "binding",
+          "description": "A controller binding (0.96), named by its trigger as `Display` writes it, such as\n`MIDI note 36 on channel 10`. Only an error answering a `binding.*` edit names it,\nso a client older than 0.96, which sends none, never reads it.",
           "type": "string"
         },
         {
@@ -6925,6 +7097,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "spring",
           "description": "[`Easing::Spring`].",
           "type": "string"
+        },
+        {
+          "const": "ease_in",
+          "description": "[`Easing::EaseIn`] (since 0.99).",
+          "type": "string"
+        },
+        {
+          "const": "hold",
+          "description": "[`Easing::Hold`] (since 0.99).",
+          "type": "string"
+        },
+        {
+          "additionalProperties": false,
+          "description": "[`Easing::CubicBezier`] (since 0.99).",
+          "properties": {
+            "cubic_bezier": {
+              "$ref": "#/$defs/Bezier"
+            }
+          },
+          "required": [
+            "cubic_bezier"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -7139,6 +7334,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           ],
           "description": "The overridden opacity, from 0 to [`MAX_OPACITY`](crate::MAX_OPACITY)."
         },
+        "timing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/KeyframeTiming"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The item's timing in transitions into this keyframe: its delay, easing and\nduration there (since 0.99, ADR-0129). Never an empty timing: clearing every\nfield removes the override."
+        },
         "transform": {
           "anyOf": [
             {
@@ -7215,6 +7421,41 @@ source: crates/jstream-protocol/src/fixtures.rs
           "$ref": "#/$defs/Glide",
           "default": "auto",
           "description": "Whether it may pair in a `move` transition."
+        }
+      },
+      "type": "object"
+    },
+    "KeyframeTiming": {
+      "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
+      "properties": {
+        "delay_ms": {
+          "description": "Milliseconds before the item starts moving, in place of its own `delay_ms`; the\npreset's `stagger_ms` × its index still adds to it. At most 60000.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "duration_ms": {
+          "description": "How long the item takes, in place of the preset's `duration_ms`. At most 60000.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": [
+            "integer",
+            "null"
+          ]
+        },
+        "easing": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemEasing"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "Its easing in place of its own."
         }
       },
       "type": "object"
@@ -8109,6 +8350,27 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "NetworkAccess": {
+      "description": "How a device on the network reaches the host's network listener (ADR-0104, 0.97):\nwhat the host shows beside a pairing code.",
+      "properties": {
+        "fingerprint": {
+          "description": "The SHA-256 fingerprint of the listener's certificate, as `AB:CD:…` (32 bytes in\nupper-case hex, colon-separated), the way a browser's certificate viewer writes\nit. The person compares it with the one the device's browser shows before they\npair, and again whenever a paired device warns about the certificate\n([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)).",
+          "type": "string"
+        },
+        "urls": {
+          "description": "The listener's addresses, one per name and address its certificate carries, as\n`https://<name>:<port>/`. The device opens one of them.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "urls",
+        "fingerprint"
+      ],
+      "type": "object"
+    },
     "OutputHealth": {
       "description": "How a running output is doing, from its own drops and link over the last ten\nseconds: the share of its video frames lost there, and whether its live link is up.\nSerialized as a snake_case string.",
       "oneOf": [
@@ -8379,6 +8641,11 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "const": "motion",
           "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
+          "type": "string"
+        },
+        {
+          "const": "timing",
+          "description": "Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,\nADR-0129).",
           "type": "string"
         }
       ]
@@ -10565,6 +10832,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               "minimum": 0,
               "type": "integer"
             },
+            "bindings": {
+              "description": "Every controller binding (ADR-0122), ordered by trigger. Kept apart from\n`hotkeys`, which lists key chords only. Omitted when there are none, and\nmissing (from a server older than 0.96) parses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
+            },
             "buses": {
               "default": [],
               "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.19) parses as empty.",
@@ -11137,6 +11411,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         {
           "description": "The result of `delete.plan`.",
           "properties": {
+            "bindings": {
+              "description": "The controller bindings the batch removes the same way, ordered by trigger.\nOmitted when there are none, and missing (from a server older than 0.96)\nparses as empty.",
+              "items": {
+                "$ref": "#/$defs/Binding"
+              },
+              "type": "array"
+            },
             "edits": {
               "description": "The edits, in order: `item.remove` for the items that place a deleted source,\n`source.set_settings` and `filter.set_settings` setting each reference to a\ndeleted object to `null`, `source.delete` for the `scene` sources that show a deleted scene, and last the\ndelete of the target itself.",
               "items": {
@@ -11809,7 +12090,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "null"
             }
           ],
-          "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera; the keyframe shows the parent's camera where\nit has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
+          "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera, which a keyframe of a 2D scene may have too\n(ADR-0128); the keyframe shows the parent's camera where it has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
         },
         "camera_follow": {
           "anyOf": [
@@ -12909,6 +13190,125 @@ source: crates/jstream-protocol/src/fixtures.rs
         "default"
       ],
       "type": "object"
+    },
+    "Trigger": {
+      "description": "What fires a binding: one MIDI message, from one input or any, on one channel or any.\n\n- A note fires on note-on (a note-on with velocity 0 is a note-off, and never fires).\n- A control change fires when its value crosses the middle upward, from 63 or below\n  to 64 or above, so a button that sends 127 then 0 fires once per press.\n- A program change fires each time it arrives.\n\n`channel` is 1 to 16, as a MIDI device's panel shows it, or missing for any channel.\n`input` is the name of the input (a MIDI port, or a JTunnel sender), or missing for\nany. Two triggers are the same exactly when they are equal, so `channel: 1` and any\nchannel are two triggers: a message that matches both fires both.",
+      "oneOf": [
+        {
+          "description": "A note-on.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_note",
+              "type": "string"
+            },
+            "note": {
+              "description": "The note number, 0 to 127 (60 is middle C).",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "note"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A control change crossing the middle upward.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "controller": {
+              "description": "The controller number, 0 to 127.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_cc",
+              "type": "string"
+            }
+          },
+          "required": [
+            "kind",
+            "controller"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A program change.",
+          "properties": {
+            "channel": {
+              "description": "The channel, 1 to 16, or missing for any.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "input": {
+              "description": "The input, or missing for any.",
+              "type": [
+                "string",
+                "null"
+              ]
+            },
+            "kind": {
+              "const": "midi_program",
+              "type": "string"
+            },
+            "program": {
+              "description": "The program number, 0 to 127, as sent (a device that shows programs from 1\nsends its program 1 as 0).",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": "integer"
+            }
+          },
+          "required": [
+            "kind",
+            "program"
+          ],
+          "type": "object"
+        }
+      ]
     },
     "UnitProfile": {
       "description": "One unit of drawing work and what it cost ([`ProfileInfo::units`]).",

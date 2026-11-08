@@ -762,11 +762,14 @@ impl Staged {
         stage: &Arc<Program>,
         rev: &Arc<AtomicU64>,
     ) -> Result<Self, String> {
+        // The stage draws every `divisor`th base tick, so the encoder is told the rate
+        // it gets: never above the base rate, which a 60 fps ask of a 30 fps stage is.
+        let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
+        let fps = (stage.base_fps / divisor).max(1);
         let H264 {
             session, packets, ..
-        } = H264::open(codecs, size.width(), size.height(), stream.settings.fps)?;
+        } = H264::open(codecs, size.width(), size.height(), fps)?;
         let profiled = meter_h264(stream, &session);
-        let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
         stage.attach_preview(size, divisor, session.input());
         let closing = Arc::new(AtomicBool::new(false));
         let sender = {
@@ -943,6 +946,18 @@ impl PreviewHub {
 
     fn next_id(&self) -> u64 {
         self.inner.next_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// The rate of each live stream, for tests of the engine's cap.
+    #[cfg(test)]
+    pub(crate) fn rates(&self) -> Vec<u32> {
+        lock(&self.inner.state)
+            .streams
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|stream| stream.live())
+            .map(|stream| stream.settings.fps)
+            .collect()
     }
 
     /// The scenes the live streams show, which the engine plans for them.

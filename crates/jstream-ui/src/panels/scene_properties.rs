@@ -8,10 +8,10 @@
 //! `scene.set_camera_motion`, `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop
 //! drop it, and Defaults clears the overrides, the hotkey and the background and checks
 //! both switches again, keeping the name and the camera. A keyframe scene's camera is
-//! its override of its parent's, offered only while the parent has one. A keyframe
-//! scene shows its parent's background, which its dialog shows and doesn't edit. The
-//! scene's filters show on the right, each change sent at once, as the source
-//! Properties dialog's are.
+//! its override of its parent's, starting from the framing camera when the parent is
+//! 2D (ADR-0128). A keyframe scene shows its parent's background, which its dialog
+//! shows and doesn't edit. The scene's filters show on the right, each change sent at
+//! once, as the source Properties dialog's are.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -95,13 +95,13 @@ impl SceneDraft {
 }
 
 /// The camera the dialog's switch starts `scene_id` from when it is turned on (ADR-0094
-/// §6): a keyframe scene's parent's, which its own then overrides, or `None` while that
-/// parent has none, as `scene.set_camera` refuses; any other scene's starts from one that
-/// shows it as it is now.
+/// §6): a keyframe scene's parent's, which its own then overrides; otherwise, and for a
+/// keyframe of a 2D scene (ADR-0128), one that shows it as it is now.
 pub fn camera_start(collection: &Collection, scene_id: &SceneId) -> Option<SceneCamera> {
+    let framing = SceneCamera::framing(collection.canvas);
     match collection.scene(scene_id)?.variant_of {
-        Some(_) => collection.parent_of(scene_id)?.camera,
-        None => Some(SceneCamera::framing(collection.canvas)),
+        Some(_) => Some(collection.parent_of(scene_id)?.camera.unwrap_or(framing)),
+        None => Some(framing),
     }
 }
 
@@ -340,8 +340,8 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     let camera_note = move || {
         let on = draft.with(|d| d.camera.is_some());
         match (&parent_name, parent_camera, on) {
-            (Some(parent), None, _) => {
-                format!("Give “{parent}” a camera first; a keyframe scene follows its parent.")
+            (Some(parent), None, false) => {
+                format!("Off, it is 2D like “{parent}”. On, a Move into it glides into 3D.")
             }
             (Some(parent), Some(_), false) => {
                 format!("Off, it follows the camera of “{parent}”. On, it moves the camera when you switch to it.")
@@ -1270,10 +1270,10 @@ mod tests {
         assert_eq!((camera.focus_px, camera.blur_px.get()), (None, 0.0));
     }
 
-    /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, and is
-    /// offered only while the parent has one; any other scene starts from the framing.
+    /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, or from the
+    /// framing when the parent is 2D (ADR-0128); any other scene starts from the framing.
     #[test]
-    fn a_keyframe_gets_own_camera_only_while_its_parent_has_one() {
+    fn a_keyframe_starts_its_own_camera_from_its_parents_or_the_framing() {
         let scenes: Vec<SceneInfo> = serde_json::from_value(serde_json::json!([
             { "scene_id": "p", "name": "P", "items": [] },
             { "scene_id": "k", "name": "K", "items": [], "variant_of": "p" },
@@ -1287,7 +1287,11 @@ mod tests {
         let k = SceneId::new("k");
         let framing = SceneCamera::framing(c.canvas);
         assert_eq!(camera_start(&c, &p), Some(framing));
-        assert_eq!(camera_start(&c, &k), None, "the parent has no camera");
+        assert_eq!(
+            camera_start(&c, &k),
+            Some(framing),
+            "a 2D parent's keyframe may have one (ADR-0128)"
+        );
         let mut parents = framing;
         CameraField::Position(0).set(&mut parents, 300.0);
         c.scenes[0].camera = Some(parents);

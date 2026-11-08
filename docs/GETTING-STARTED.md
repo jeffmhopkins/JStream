@@ -69,7 +69,8 @@ you type) and its frame rate, 30 or 60 fps. Each output scales from that picture
    then type its name.
 2. In **Sources**, click **+** under the list (or right-click and choose **Add source…**).
    Pick a type, or type in the search box to find one: display or window capture, a
-   webcam, an audio input (your microphone), a media file, an image, a browser page,
+   webcam, an audio input (your microphone), a media file, an image, a 3D model (a glTF
+   or GLB file, or a built-in shape such as a cube), a browser page,
    text (it starts bold with a soft shadow), a colour, a backdrop (a painted studio
    backdrop, generated), a shape (a plate, pill or circle, with an optional gradient),
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press

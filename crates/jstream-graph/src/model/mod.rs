@@ -52,7 +52,8 @@
 //! - Every send's source is an audio source that is not a `scene` source, and its bus
 //!   exists. Sends only run from sources into buses, so the audio graph has no cycle.
 //! - Every hotkey binding's chord is valid, its action can be bound, and every object
-//!   its action names exists (ADR-0024 §5, ADR-0040 §3).
+//!   its action names exists (ADR-0024 §5, ADR-0040 §3). So does every controller
+//!   binding's, with a valid trigger in place of the chord (ADR-0122).
 //! - Folder and label IDs are non-empty and unique within their kind. Every scene's
 //!   folder and every folder's parent exists, and no folder sits inside itself. Every
 //!   label a source carries exists (ADR-0024 §3 and §4).
@@ -74,12 +75,13 @@ use jstream_protocol::{
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
     OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
     SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
-    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
-    builtin_transition_kinds, initial_preset,
+    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, Trigger, VideoMix as MixSpec,
+    VideoMixId, builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
+use jstream_protocol::KeyframeTiming;
 pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
 /// A keyframe scene's overrides of its parent's items (ADR-0049 §1): per item, the
@@ -87,8 +89,9 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 /// [`Placement::Geometry`]. Overridden effects are [`Chains`] whose audio chain is
 /// always empty, which the keyframe draws in place of the item's own (ADR-0088).
 /// Overridden motion is a whole [`MotionList`], moved with in place of the item's own
-/// (ADR-0099).
-pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList>;
+/// (ADR-0099). An overridden timing applies to transitions into the keyframe (ADR-0129).
+pub type Overrides =
+    jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList, KeyframeTiming>;
 
 /// An item's motion modifiers (ADR-0099), in order, checked by `item.set_motion`.
 pub type MotionList = Vec<jstream_protocol::MotionModifier>;
@@ -206,6 +209,8 @@ pub struct State {
     /// The labels each binding carries (ADR-0133), ordered by ID. A chord with none has
     /// no entry, and a cleared binding takes its entry with it.
     pub(crate) hotkey_labels: BTreeMap<Chord, BTreeSet<LabelId>>,
+    /// The controller bindings (ADR-0122), ordered by trigger.
+    pub(crate) bindings: BTreeMap<Trigger, Action>,
     /// In folder order.
     pub(crate) folders: Vec<Folder>,
     /// In label order.
@@ -236,6 +241,7 @@ impl Default for State {
             master: Chains::default(),
             hotkeys: BTreeMap::new(),
             hotkey_labels: BTreeMap::new(),
+            bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),
@@ -409,11 +415,17 @@ impl State {
     }
 
     /// Every binding as the wire reports it, ordered by chord, with its labels.
-    pub fn bindings(&self) -> Vec<jstream_protocol::HotkeyBinding> {
+    pub fn hotkey_bindings(&self) -> Vec<jstream_protocol::HotkeyBinding> {
         self.hotkeys
             .iter()
             .map(|(chord, action)| self.binding(chord, action))
             .collect()
+    }
+
+    /// Every controller binding (ADR-0122), ordered by trigger: the trigger and the
+    /// action it runs.
+    pub fn bindings(&self) -> impl ExactSizeIterator<Item = (&Trigger, &Action)> {
+        self.bindings.iter()
     }
 
     /// Every folder of the scene list, in folder order.

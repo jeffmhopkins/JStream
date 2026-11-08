@@ -10,6 +10,7 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::audio::{AudioFollow, BusMonitor};
+use crate::binding::Trigger;
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
@@ -33,7 +34,7 @@ use crate::preview::{PreviewCodec, PreviewDraft};
 use crate::query::SceneOptions;
 use crate::settings::Settings;
 use crate::timeline::TimelineInfo;
-use crate::transition::{Easing, ItemTransition};
+use crate::transition::{Easing, ItemTransition, KeyframeTiming};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -135,6 +136,25 @@ pub enum Edit {
         scene_id: Option<SceneId>,
         /// The modifiers, first first.
         motion: Vec<MotionModifier>,
+    },
+    /// Writes a keyframe scene's timing for an item in transitions into that keyframe
+    /// (ADR-0129, since 0.99): its delay, easing and duration there, each in place of the
+    /// item's own or the preset's. `scene_id` must name a keyframe scene whose tree holds
+    /// the item, with the errors of the placement edits addressed to a keyframe; any other
+    /// scene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000
+    /// is `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or
+    /// `x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3
+    /// (`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the
+    /// override. Inverse: `item.set_timing` with the old timing, or `item.clear_override`
+    /// of `timing` when the keyframe didn't override it.
+    #[serde(rename = "item.set_timing")]
+    ItemSetTiming {
+        /// The keyframe scene.
+        scene_id: SceneId,
+        /// The item in the parent's tree.
+        item_id: ItemId,
+        /// Its timing in transitions into the keyframe.
+        timing: KeyframeTiming,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -809,9 +829,10 @@ pub enum Edit {
     /// 3D scene: its items are placed in one 3D space by their geometry and seen through
     /// the camera. On a keyframe scene it writes or, with `camera` omitted, removes the
     /// keyframe's override of its parent's camera. `invalid_argument` for a field of view
-    /// outside 1 to 170, a position within 0.001 px of the target, a coordinate past the
-    /// drawable bound, or a camera on a keyframe scene whose parent has none. Removing a
-    /// parent's camera also removes its keyframe scenes' overrides. Inverse:
+    /// outside 1 to 170, a position within 0.001 px of the target, or a coordinate past
+    /// the drawable bound. A keyframe of a 2D scene may have a camera of its own
+    /// (ADR-0128). Removing a parent's camera also removes its keyframe scenes'
+    /// overrides; a removal on a parent that has none removes nothing. Inverse:
     /// `scene.set_camera` with the previous camera, then each removed override.
     #[serde(rename = "scene.set_camera")]
     SceneSetCamera {
@@ -955,6 +976,30 @@ pub enum Edit {
         chord: Chord,
         /// Its labels; empty for none.
         labels: Vec<LabelId>,
+    },
+    /// Binds a controller trigger, such as a MIDI note, to an action (since 0.96,
+    /// ADR-0122 decision 1). The engine runs the action itself when an input it reads
+    /// sends the trigger, on the first frame at or after the message's time; running it
+    /// never adds to an undo history. Rejected with `invalid_argument` at
+    /// `trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at
+    /// `action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with
+    /// `already_exists` (entity `binding`) for a trigger that is already bound
+    /// (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`
+    /// for an object the action names that doesn't exist. Deleting that object later
+    /// removes the binding with it, as for hotkeys. Inverse: `binding.clear`.
+    #[serde(rename = "binding.set")]
+    BindingSet {
+        /// What fires it.
+        trigger: Trigger,
+        /// The action request it runs, checked as an `action` call is.
+        action: Action,
+    },
+    /// Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that
+    /// isn't bound. Inverse: `binding.set` with its action.
+    #[serde(rename = "binding.clear")]
+    BindingClear {
+        /// The trigger to unbind.
+        trigger: Trigger,
     },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
@@ -1219,6 +1264,7 @@ impl Edit {
             Edit::ItemClearOverride { .. } => "item.clear_override",
             Edit::ItemSetEffects { .. } => "item.set_effects",
             Edit::ItemSetMotion { .. } => "item.set_motion",
+            Edit::ItemSetTiming { .. } => "item.set_timing",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
@@ -1286,6 +1332,8 @@ impl Edit {
             Edit::HotkeySet { .. } => "hotkey.set",
             Edit::HotkeySetLabels { .. } => "hotkey.set_labels",
             Edit::HotkeyClear { .. } => "hotkey.clear",
+            Edit::BindingSet { .. } => "binding.set",
+            Edit::BindingClear { .. } => "binding.clear",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",

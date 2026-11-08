@@ -87,6 +87,7 @@ title = "jstream bench: standard scenes on real hardware that pass or fail on fr
 priority = 1
 status = "planned"
 issues = [1220, 1140]
+prs = [1260, 1315]
 note = "each Windows run opens with it, and a fail blocks the release"
 
 [[target]]
@@ -148,9 +149,9 @@ issues = [1184, 1194, 1215]
 release = "alpha.5"
 title = "Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus"
 status = "planned"
-issues = [1225, 1216, 1214, 1188]
-prs = [1251, 1270, 1278]
-note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer a filter with a safe margin (#1225, #1216); #1278 hears bound hotkeys while another app has the focus (#1188)"
+issues = [1225, 1216, 1214, 1188, 1325]
+prs = [1251, 1270, 1278, 1329]
+note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer a filter with a safe margin (#1225, #1216); #1278 hears bound hotkeys while another app has the focus (#1188), and #1329 does on Linux under X11 (#1325)"
 
 [[target]]
 release = "alpha.5"
@@ -169,7 +170,9 @@ prs = [1240, 1245, 1255, 1257]
 release = "alpha.5"
 title = "Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter"
 status = "planned"
-issues = [1226, 1227, 1232]
+issues = [1226, 1227, 1232, 1295]
+prs = [1281, 1289, 1331]
+note = "#1281 brings Glow past the box, Bloom and the Vignette (#1226); #1289 is the first part of the Custom shader (#1232), and #1331 colours its editor (#1295); #1227 remains"
 
 [[target]]
 release = "alpha.5"
@@ -793,7 +796,7 @@ milestone = "M1b"
 title = "Scene filter chains and item effects"
 status = "done"
 release = "alpha.4"
-prs = [802, 813, 815, 823, 824, 897, 921, 944, 968]
+prs = [802, 815, 823, 824, 897, 921, 944, 968]
 note = "ADR-0065 designs a video chain owned by a scene or by one placement, and ADR-0068 puts item effects in v1 (#529). Landed with wave/m1-5 (#877): a vignette kind (#802), the protocol part, the scene and item owners at 0.43 (#813's change, landed through #815), the graph and mock holding them at collection schema 2 (#815), the engine running scene filters over the scene's composite (#823), and item effects over each item's box (#824). The UI's scene filters (FL-06) merged (#897), then vignette goldens at every level (#921), stats.tick's counts of scene-chain and item-effect layers (#944), and the UI's item effects with the vignette in the filter picker (FL-09, #968)"
 
 [[item]]
@@ -1263,7 +1266,7 @@ id = "3D3"
 milestone = "M3"
 title = "3D models with materials and live textures"
 status = "planned"
-prs = [1112, 1113, 1118]
+prs = [1112, 1113, 1118, 1261]
 note = "ADR-0107 (#1112): a `model` source kind (glTF files and built-in shapes), lit with a studio rig or unlit, drawn through the scene camera with its own depth, filters and effects over its layer, other sources as its texture and reflection, and picking by its 3D bounds"
 needs = ["build"]
 

@@ -40,10 +40,13 @@ pub(crate) async fn handle(
     method: Method,
     headers: HeaderMap,
 ) -> Response {
-    if !app.tls || !app.pairing {
+    if !app.tls(&accepted) || !app.pairing {
         return (StatusCode::NOT_FOUND, "not found\n").into_response();
     }
-    if let Err(refusal) = app.gate.admit_unauthenticated(&headers, accepted.peer) {
+    if let Err(refusal) = app
+        .gate
+        .admit_unauthenticated(&headers, accepted.peer, accepted.on())
+    {
         return refusal.into_response();
     }
     if method != Method::GET && method != Method::HEAD {

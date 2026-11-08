@@ -1197,7 +1197,10 @@ mod tests {
         );
         let bound =
             HotkeyBinding::new(Chord::new("F1"), &switch_b).with_labels(ids(&["blue", "red"]));
-        assert_eq!(graph.state().bindings(), std::slice::from_ref(&bound));
+        assert_eq!(
+            graph.state().hotkey_bindings(),
+            std::slice::from_ref(&bound)
+        );
 
         // Checked as a source's labels are.
         assert_eq!(

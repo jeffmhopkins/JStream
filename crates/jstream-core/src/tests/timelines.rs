@@ -798,3 +798,90 @@ fn a_label_gathers_keyframes_hotkeys_and_a_timeline_and_one_undo_restores_their_
     block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).expect("undo");
     assert_eq!(presets(&control), [None, None]);
 }
+
+/// The `timeline.changed` changes `events` carry for timeline `id`, in order.
+fn changes_of(events: &[Event], id: &str) -> Vec<TimelineChange> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            Event::TimelineChanged {
+                timeline_id,
+                change,
+                ..
+            } if timeline_id.as_str() == id => Some(*change),
+            _ => None,
+        })
+        .collect()
+}
+
+/// #1253: a late round that stops `b` at 500 must not then send `looped` for `b`'s
+/// boundary at 600, which would report a stopped timeline as playing.
+#[test]
+fn a_late_tick_sends_no_loop_for_a_timeline_stopped_before_it() {
+    let (_engine, clock, control) = clocked();
+    let mut events = control.events();
+    apply(
+        &control,
+        vec![
+            timeline("a", 2_000, TimelineLoop::Once, vec![cue(500, stop("b"))]),
+            timeline("b", 600, TimelineLoop::Loop, vec![]),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    drain(&mut events);
+    tick_late(&control, &clock, &["a", "b"], 700);
+    assert_eq!(
+        changes_of(&drain(&mut events), "b"),
+        [TimelineChange::Started, TimelineChange::Stopped]
+    );
+}
+
+/// #1253: `b` ends at 600, after a cue at 500 started it again, so that old run never
+/// reached its end: no `ended` after the new run's `started`.
+#[test]
+fn a_late_tick_sends_no_end_for_a_run_restarted_before_it() {
+    let (_engine, clock, control) = clocked();
+    let mut events = control.events();
+    apply(
+        &control,
+        vec![
+            timeline("a", 2_000, TimelineLoop::Once, vec![cue(500, play("b"))]),
+            timeline("b", 600, TimelineLoop::Once, vec![]),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    drain(&mut events);
+    tick_late(&control, &clock, &["a", "b"], 700);
+    assert_eq!(
+        changes_of(&drain(&mut events), "b"),
+        [TimelineChange::Started, TimelineChange::Started]
+    );
+    assert!(playing_ids(&control).iter().any(|id| id == "b"));
+}
+
+/// #1253: `b` ends at 600 and a cue at 650 starts it again, so the round sends the old
+/// run's `ended` before the new run's `started`, and loops in step with the cues.
+#[test]
+fn a_late_tick_sends_an_end_before_a_later_restart() {
+    let (_engine, clock, control) = clocked();
+    let mut events = control.events();
+    apply(
+        &control,
+        vec![
+            timeline("a", 2_000, TimelineLoop::Once, vec![cue(650, play("b"))]),
+            timeline("b", 600, TimelineLoop::Once, vec![]),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    drain(&mut events);
+    tick_late(&control, &clock, &["a", "b"], 700);
+    assert_eq!(
+        changes_of(&drain(&mut events), "b"),
+        [
+            TimelineChange::Started,
+            TimelineChange::Ended,
+            TimelineChange::Started
+        ]
+    );
+    assert!(playing_ids(&control).iter().any(|id| id == "b"));
+}
