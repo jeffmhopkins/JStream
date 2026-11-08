@@ -2444,6 +2444,52 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "network_audio",
+    "category": "source",
+    "name": "Network audio",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "transport",
+        "type": "enum",
+        "options": [
+          {
+            "value": "jtunnel",
+            "label": "JTunnel"
+          }
+        ],
+        "default": "jtunnel",
+        "label": "Transport",
+        "description": "How the audio arrives. JTunnel is a DAW plugin that sends a track over the local network.",
+        "live": false
+      },
+      {
+        "id": "sender",
+        "type": "string",
+        "multiline": false,
+        "max_len": 31,
+        "default": "",
+        "label": "Sender",
+        "description": "The sender's name, as its plugin shows it. JStream receives only from senders accepted on this machine.",
+        "live": false
+      },
+      {
+        "id": "latency_ms",
+        "type": "int",
+        "min": 5,
+        "max": 500,
+        "step": 1,
+        "unit": "ms",
+        "default": 40,
+        "label": "Latency",
+        "description": "How long frames wait before they play, so one delayed on the network still arrives in time. Higher survives a busier network; lower is closer to live.",
+        "live": false
+      }
+    ]
+  },
+  {
     "kind_id": "noise_gate",
     "category": "audio_filter",
     "name": "Noise gate",
