@@ -3,14 +3,14 @@
 //!
 //! # Behaviour
 //!
-//! `PageAudio` (`audio.rs`): a page's audio, 48 kHz stereo `f32`, handed to whichever
+//! A page's audio, 48 kHz stereo `f32`, handed to whichever
 //! `AudioInputHandler` the engine attached (`open`; dropping the returned stream detaches
 //! it). Packets come interleaved from the helper (`push_interleaved`) or planar
 //! (`push_planar`: mono doubled, channels past two dropped), and are split into chunks of
 //! at most `MAX_CHUNK_FRAMES`. Each chunk is stamped on the media clock: its packet's
 //! arrival time less the packet's length, plus the chunk's offset, since CEF's own `pts`
 //! isn't on a documented clock yet
-//! (ARCH › Browser source). Pushing never
+//! (docs/ARCHITECTURE.md#browser-source). Pushing never
 //! waits: a packet that meets the handler's lock while the engine attaches or detaches
 //! is dropped and counted (`dropped`), and the device position still counts it, so the
 //! mixer sees the gap.

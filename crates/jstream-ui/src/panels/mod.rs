@@ -41,7 +41,6 @@ pub use filters::Filters;
 pub use inspector::Inspector;
 pub use mixer::Mixer;
 pub use outputs::Outputs;
-pub use properties::Properties;
 pub use scenes::Scenes;
 pub use sources::Sources;
 pub use stats::StreamStats;
