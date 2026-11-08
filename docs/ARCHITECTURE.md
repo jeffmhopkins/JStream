@@ -1196,7 +1196,10 @@ edge softened to match, with no extra pass or target. A 3D model's layer isn't b
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
-under a studio rig fixed to the camera, or unlit; the layer is then placed flat
+under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
+lights ([ADR-0137](adr/0137-scene-lights-and-depth-aware-scene-filters.md): point,
+spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in
+`f64`); the layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane.

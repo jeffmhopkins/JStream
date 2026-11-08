@@ -44,8 +44,9 @@ and calls this crate.
 - A **3D model** ([ADR-0107](../../docs/adr/0107-3d-models.md)) is not an item of its
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
-  item's geometry, the scene's camera, the lighting) into a canvas-sized layer with its
-  own depth test. The engine runs filters over that layer and places it with
+  item's geometry, the scene's camera, the lighting, and in a 3D scene optionally the
+  scene's lights, [ADR-0137](../../docs/adr/0137-scene-lights-and-depth-aware-scene-filters.md))
+  into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
 - Each item places one image with one of
@@ -596,6 +597,19 @@ adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
+**Scene lights** (ADR-0137 decision 3). With `ModelDraw::lights` set and a camera, the
+rig is replaced by the scene's lights. `SceneLight` holds a light in the scene's space
+(position and aim, `f64`), and the draw takes each into the viewing frame through
+`CameraView::in_view` and `direction_in_view`, so only light positions relative to the
+camera reach the GPU as `f32`. Ambient lights sum into one linear colour that scales the
+environment terms; the first `MAX_SCENE_LIGHTS` (8) other lights with intensity above 0
+are packed into the frame uniform, four `vec4` each, and any after them are dropped, as
+is a spot or directional light with no aim. `scene_light` in `model.wgsl` fades a point
+or spot light by `(1 − (d / range)²)²` (none at range 0) and a spot light by a
+`smoothstep` across the outer `softness` of its cone (a hard edge at softness 0), and
+shades each with the studio key light's `light`. Without a camera, or unlit, the lights
+are ignored and the frame is the one ADR-0107 draws.
+
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
 function:
@@ -1060,7 +1074,15 @@ the placement mirrors the model, and seen from behind (a double-sided plane turn
 lights as the front of the opposite tilt, while an unmapped plane's back lights as its
 front; a model draws into layers of three sizes in a row (the
 depth target follows the layer); and a primitive past the adapter's buffer limit is
-refused with `RenderError::Invalid`.
+refused with `RenderError::Invalid`. Scene lights (ADR-0137), each through the framing
+camera: a point light to the right lights a sphere's right side and leaves its left
+black, and no light at all leaves it black; a red light tints it red; a point light past
+its range lights nothing and inside it is dimmer than one that never fades; a spot
+light with a 20° cone lights the middle of a plane and not a point 60 px off it, a
+directional light lights the whole plane, and one aimed away lights none of it; two
+ambient lights of 1 light a sphere as one of 2 does; a ninth light is ignored behind
+eight that light, and lights at intensity 0 don't count toward the eight; and without a
+camera, or unlit, lights change nothing.
 
 **3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a
 240×136 canvas from a 64² checkerboard with a texel grid (512² for C), against a CPU
