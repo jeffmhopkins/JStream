@@ -175,8 +175,10 @@ At distance `D`, the fog amount `a` is `(D − start) / (end − start)` for `li
 `end_px` is at or before `start_px`, a step: no fog nearer than `start_px` and the most
 fog from it on), or
 `1 − exp(−density · (D − start) / 1000)` for `exponential`, clamped to 0 to 1 and then
-to `max`, and 0 where `D < start`. The pixel becomes `mix(pixel, fog, a)`, both
-premultiplied, in linear light: fog is a layer of opacity `a` over what is there. Where
+to `max`, and 0 where `D < start`. The fog is laid over the pixel, source-over,
+in premultiplied linear light, as a layer of the fog colour at `a` times its own alpha:
+`fog · a + pixel · (1 − fog.alpha · a)`, with `fog` premultiplied. An opaque fog colour
+mixes the pixel toward it, and a translucent one never makes the picture see-through. Where
 nothing was drawn, `a` is `max` if `background` is set and 0 if not. Its settings
 animate as any filter's do ([ADR-0127](0127-moves-interpolate-effect-settings.md)).
 
