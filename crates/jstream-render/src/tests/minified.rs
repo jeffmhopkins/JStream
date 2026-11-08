@@ -77,9 +77,9 @@ fn golden_2d_a_source_drawn_slightly_small_is_box_filtered() {
 }
 
 /// Which chain a 2D item gets: none at or near its size, a full one when one axis is
-/// minified, and one starting at half size when both are minified twice or more.
+/// minified, and one starting `k` levels down when both are minified `2^k` times or more.
 #[test]
-fn a_2d_item_drawn_small_gets_a_chain_and_a_much_smaller_one_skips_level_0() {
+fn a_2d_item_drawn_small_gets_a_chain_and_a_much_smaller_one_skips_levels() {
     let Some(mut opened) = open() else {
         return;
     };
@@ -100,10 +100,52 @@ fn a_2d_item_drawn_small_gets_a_chain_and_a_much_smaller_one_skips_level_0() {
     draw(compositor, &at(size, size / 3.0), &image, Crop::NONE);
     assert_eq!(image.chain_skips(), [0]);
 
-    // A quarter of its size each way: a chain from half size, built once while the
-    // upload is unchanged.
+    // A quarter of its size each way: a chain from a quarter size, built once while
+    // the upload is unchanged.
     draw(compositor, &at(size / 4.0, size / 4.0), &image, Crop::NONE);
     draw(compositor, &at(size / 4.0, size / 4.0), &image, Crop::NONE);
-    assert_eq!(image.chain_skips(), [1, 0]);
+    assert_eq!(image.chain_skips(), [2, 0]);
     assert_eq!(image.chain_builds(), (2, 2));
+
+    // Far smaller: never more than MAX_SKIP levels down.
+    draw(
+        compositor,
+        &at(size / 40.0, size / 40.0),
+        &image,
+        Crop::NONE,
+    );
+    assert_eq!(image.chain_skips(), [crate::mips::MAX_SKIP, 2, 0]);
+}
+
+/// Sources whose mip levels have odd sizes (1080 halves to 135, then 67), drawn at 1 / 14
+/// and 1 / 20 of their size, slightly rotated, are as close to the reference as a
+/// power-of-two one. Each level is the exact box average of what it covers: with one
+/// linear tap per texel, a level of odd size only half covered the texels at its edge,
+/// and these measured a mean of 13 to 17 and a p99 of 50 to 72 against 3.5 and 2.7 for
+/// a 512² source.
+#[test]
+fn golden_2d_a_source_with_odd_mip_levels_is_box_filtered() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    for size in [600u32, 1080] {
+        let rgba = pattern(size);
+        let texels = Texels::new(&rgba, size);
+        for ratio in [14.0f32, 20.0] {
+            let side = size as f32 / ratio;
+            let items = [geometry(
+                (120.0, 68.0),
+                (side, side),
+                7.0,
+                0.0,
+                0.0,
+                0.0,
+                None,
+            )];
+            let got = gpu(&mut opened.compositor, &items, &rgba, size, Crop::NONE);
+            let want = reference(&items, &texels, 16, Crop::NONE);
+            let name = format!("2D {size}² at 1 / {ratio}");
+            check(&name, error(&got, &want, interior), 5.0, 20.0);
+        }
+    }
 }
