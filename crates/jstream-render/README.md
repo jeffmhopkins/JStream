@@ -839,6 +839,15 @@ premultiplied linear light on the way out.
   dashes along the edge and the gradient round it once per perimeter; the distance is
   worked out in `f64` on the CPU and wrapped to the dash period and to one turn, so it
   stays exact. On a source or scene chain the outer stroke past the frame is cut.
+  `frame` (an image asset, `null` by default, #1294) draws the inner stroke from an
+  image as a 9-slice frame instead of in its style and fill: the image's corners,
+  `frame_slice` image px square (1 to 1024, default 16, held to half the image), fill
+  the band's corners, `width` px square, and its middle runs along each side between
+  them, stretched or, with `frame_edges` `tile`, repeated at the corners' scale; each
+  slice samples only its own texels, held half a texel inside it (#1377). The
+  band is `width` px in from the rectangle's sides, cut to the rounded shape. The image
+  is the pass's aux image, handed over as an image mask's is (`Pass::set_reference`,
+  the shared `assets::Reference`); until it is there, the stroke draws in its style.
 
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with

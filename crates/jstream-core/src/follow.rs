@@ -16,6 +16,24 @@
 //! 4. the look point glides there through two chained critically damped springs;
 //! 5. the camera leans a little with the look point's speed;
 //! 6. its distance glides in log space toward the zoom's, never past what fills the frame.
+//!
+//! # Behaviour
+//!
+//! **Camera moves** (`follow.rs`,
+//! ADR-0113): a 3D scene's
+//! camera motion and follow camera, planned with the shot as its pass camera's
+//! `CameraMoves` from its family (`CameraMotion`, and a `FollowPlan`: the followed item's
+//! box at its committed geometry, its crop, fit and flips, and the capture it shows). As a
+//! pass draws, the follow camera glides after the pointer the capture reports
+//! (`Captures::pointer`, mapped through the crop and the fit onto the box) through the
+//! springs of the follow-cursor mock, keeping the box filling the frame, and focuses where
+//! it looks when the camera has a blur; camera motion is then added, clamped to the
+//! camera's ranges. The springs live in the render context's `Chains` (`Cameras`, one per
+//! family), step once per frame time, and are dropped after 10 s undrawn. A transition
+//! moves each end's camera the same way, so a Move into or out of a follow scene follows
+//! it. `scene.zoom_camera` adds its steps to the family's count in the engine, which the
+//! live-value channel carries (`LiveParams::with_zooms`); a follow camera takes the steps
+//! asked for since it started. A shot whose camera moves changes with time.
 
 use std::collections::BTreeMap;
 use std::sync::Arc;

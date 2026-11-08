@@ -188,7 +188,7 @@ animating with keyframe scenes, a `move` preset, crop reveals and staggered
 keyframe variants and blend modes (`item.set_blend`), the light and framing filters
 (`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
 and the `vignette`'s blends, shapes and three looks, #1226), the `border` kind's
-settings, its three looks and the order to stack it with a shadow or glow (#1227),
+settings, its three looks, its 9-slice image frame (#1294) and the order to stack it with a shadow or glow (#1227),
 layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
 layers, additive for light and normal for matter, masks drawn as `image_mask` or

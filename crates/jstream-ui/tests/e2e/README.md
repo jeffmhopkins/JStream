@@ -132,22 +132,32 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   stops a recording; a settings edit dropped on Cancel; the server URL and an encoder
   profile sent on Apply, both read back by a fresh page; a recording's Audio select
   moving it to another bus on OK, read back by a fresh page; in the Encoders & mixes
-  dialog, a new profile named "Default H.264", making an AV1 VBR encoder profile (a peak
-  under the average is named in the form, which stays open) and a vertical video mix, a
-  recording using both (neither can then be deleted), both read back by a fresh page,
-  the mix resized from its Edit form opened over the settings dialog and deleted once
-  the recording is back on the program; a second client sees outputs created, started
-  and deleted.
+  dialog's list and editor, a new profile named "Default H.264", making an AV1 VBR
+  encoder profile (a peak under the average is named in the form, which stays open; once
+  saved the editor stays on it, with its short summary in the list and the whole in the
+  editor) and a vertical video mix, a recording using both (neither can then be
+  deleted, the title naming the recording), both read back by a fresh page, the mix
+  resized from Edit mix… over the settings dialog ("Saved."), Edit encoder… opening on
+  the recording's profile, off for the engine's default, and New… on a new one, and the
+  mix deleted once the recording is back on the program; Start all starting both
+  recordings but not a stream without its key (then off), Stop all beside it while they
+  run, with a running row's stats
+  line from a `stats.tick` (`statsTicks`) and none once stopped; Duplicate adding a copy
+  without the stream key and opening its settings, and a recording's copy writing to
+  "a (2).mp4"; an open dialog following another
+  client's path change until the person types their own; a second client sees outputs
+  created, started and deleted.
 - **Codec downloads** (`codec-downloads.spec.js`, in the Outputs panel's Encoders & mixes
   dialog): the mock
   engine has no codec backend, so the spec routes the page's WebSocket and answers
   `codec.downloads`, `codec.download` and `codec.delete` for one OpenH264 download. With
-  no hardware H.264 encoder, Encoders offers it with Cisco's notice, the licence link and
+  no hardware H.264 encoder, the dialog offers it with Cisco's notice, the licence link and
   the licence's full text, sends nothing until Download is pressed, then shows it
   installed with the notice, link and Delete. The About dialog then lists it with the
   notice, link and terms; Delete sends `codec.delete`, brings the offer back, and takes
   it out of About. With hardware, nothing is offered until the encoder form asks for software
-  H.264 (and not for HEVC), and a saved software profile brings the section's offer.
+  H.264 (and not for HEVC), and a saved software profile brings the dialog's offer, over
+  its editor.
 - **Plugins** (`plugins.spec.js`, the Settings dialog's Plugins page, opened by File ›
   Plugins…): the mock engine runs no plugins,
   so the spec routes the page's WebSocket itself and answers `plugin.list`,
