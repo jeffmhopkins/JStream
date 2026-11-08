@@ -3,14 +3,17 @@
 //! a tab strip, both pinned while the rest scrolls, over three tabs of foldable sections
 //! ([`Tab`]): Transform holds its box (X, Y, W, H, the size as a % of its source's and
 //! rotation, with a W/H link), 3D, crop and blending (mode and opacity); Motion its
-//! motion modifiers; Behaviour its scene switches and hotkeys. Its source's settings and
-//! filters are in the Properties dialog the header's button opens. With no item selected, the
+//! motion modifiers; Behaviour its scene switches (with a custom curve's points) and
+//! hotkeys, and in a keyframe scene the keyframe's timing of the item (ADR-0129). Its
+//! source's settings and filters are in the Properties dialog the header's button opens. With no item selected, the
 //! selected scene's header over its object count, the scenes that use it as a source,
 //! and its transition overrides. Every field sends its edit when it changes, so the
 //! canvas and the Inspector show the same committed numbers.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#inspector
 
+use super::curve::CurveEditor;
+use super::keyframe_timing::{self, KeyframeTimingFields};
 use super::motion::MotionSection;
 use super::number::NumberField;
 use super::scene_properties::SceneDialog;
@@ -1306,6 +1309,32 @@ fn Placement(
             </label>
         }
     };
+    // A custom curve's points, edited in place (ADR-0129).
+    let item_curve = Signal::derive(move || match transition.get().map(|t| t.easing) {
+        Some(ItemEasing::CubicBezier(curve)) => Some(curve),
+        _ => None,
+    });
+    let send_item_curve = move |curve: Bezier| {
+        transition.get_untracked().is_some_and(|t| {
+            send_transition(ItemTransition {
+                easing: ItemEasing::CubicBezier(curve),
+                ..t
+            })
+        })
+    };
+    // The keyframe scene's timing of the item, while the scene is a keyframe (ADR-0129).
+    let keyframe_timing = Signal::derive(move || {
+        let (item_id, scene) = ids.get_value();
+        studio.collection.with(|c| {
+            c.as_ref()?
+                .scene(&scene)
+                .and_then(|s| keyframe_timing::timing_of(s, &item_id))
+        })
+    });
+    let timing_scene = Signal::derive(move || ids.get_value().1);
+    let timing_item = Signal::derive(move || ids.get_value().0);
+    let timing_hint_text =
+        Signal::derive(move || keyframe_timing::timing_hint(keyframe_timing.get()));
     let switch_hint = Signal::derive(move || {
         if transition.get().is_some_and(|t| !t.is_default()) {
             "customised".to_owned()
@@ -1390,9 +1419,9 @@ fn Placement(
         </div>
         <div class="tab-panel" role="tabpanel" aria-label="Behaviour"
             hidden=move || tab.get() != Tab::Behaviour>
-        // A keyframe changes only placement, visibility, opacity and motion (ADR-0049,
-        // ADR-0099), so its
-        // items' switches are the parent's and aren't shown here.
+        // A keyframe changes only placement, visibility, opacity, motion and the timing
+        // of moves into it (ADR-0049, ADR-0099, ADR-0129), so its items' own switch
+        // settings are the parent's and aren't shown here; its timing is, below.
         <Show when=move || keyframe_of.with(Option::is_none)>
             <Fold title="Scene switches" open=true hint=switch_hint>
                 <div class="field-grid">
@@ -1403,6 +1432,23 @@ fn Placement(
                     {switch_select(SwitchField::Appear, "Appear", option_pairs(&EFFECTS))}
                     {switch_select(SwitchField::Disappear, "Disappear", option_pairs(&EFFECTS))}
                 </div>
+                // A custom curve's points (ADR-0129).
+                <Show when=move || item_curve.with(Option::is_some)>
+                    <CurveEditor curve=item_curve send=send_item_curve />
+                </Show>
+            </Fold>
+        </Show>
+        // A keyframe's own timing of the item in moves into it (ADR-0129): in place of
+        // the item's delay and easing, and the preset's duration.
+        <Show when=move || keyframe_of.with(Option::is_some)>
+            <Fold title="Timing into this keyframe" open=true hint=timing_hint_text>
+                <p class="note">
+                    "How the item moves when a switch, a placed keyframe or a hotkey moves \
+                     program into this keyframe. A field left at the item's or the preset's \
+                     follows them."
+                </p>
+                <KeyframeTimingFields timing=keyframe_timing scene_id=timing_scene
+                    item_id=timing_item send=send />
             </Fold>
         </Show>
         // Keys that show and hide the item with its own effects (ADR-0101). In a keyframe
