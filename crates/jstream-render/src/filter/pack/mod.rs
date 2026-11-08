@@ -1,4 +1,4 @@
-//! The single-pass pack (roadmap V1): colour correction, the chroma, colour and luma keys, sharpen, rounded corners with a border, scroll, and vignette.
+//! The single-pass pack (roadmap V1): colour correction, the chroma, colour and luma keys, sharpen, rounded corners with a border, scroll, vignette, and the full border.
 //!
 //! Every kind here is one fullscreen draw of the input's size. The colour kinds
 //! (colour correction and the keys) work on straight sRGB-encoded colour, as OBS does,
@@ -11,6 +11,7 @@ use crate::error::RenderError;
 use crate::filter::{Ctx, Draw, Pass, Shader};
 use crate::image::Image;
 
+mod border;
 mod color_correction;
 mod keys;
 mod rounded_corners;
@@ -29,6 +30,7 @@ pub(crate) fn descriptors() -> Vec<KindDescriptor> {
         rounded_corners::descriptor(),
         scroll::descriptor(),
         vignette::descriptor(),
+        border::descriptor(),
     ]
 }
 
@@ -50,6 +52,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
         rounded_corners::KIND => single(rounded_corners::SHADER, rounded_corners::uniforms),
         scroll::KIND => Box::new(scroll::Scroll::new(settings)),
         vignette::KIND => single(vignette::SHADER, vignette::uniforms),
+        border::KIND => Box::new(border::Border::new(settings)),
         _ => return None,
     })
 }

@@ -63,6 +63,13 @@ pub(crate) trait Pass: Send {
         let _ = audio;
     }
 
+    /// Tells the filter its input is padded by `pad` transparent pixels on every side
+    /// (`VideoFilter::set_pad`), for a kind that frames the input's own rectangle.
+    /// Other kinds ignore it.
+    fn set_pad(&mut self, pad: u32) {
+        let _ = pad;
+    }
+
     /// Starts a shader source over: its time and frame count from 0 and its feedback
     /// transparent, as when it is shown again. Other kinds ignore it.
     fn restart(&mut self) {}

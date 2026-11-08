@@ -738,9 +738,11 @@ fn the_sources_thread_advances_an_animation_by_itself() {
     )
     .expect("created");
     assert_eq!(colour(&engine), (0, 0xff), "red first");
-    // The thread re-plans when each frame is due, on the frame grid: green is due at
-    // 100 ms, a tick falls at 132 ms (33 ms frames), and its plan a quarter frame
-    // before (#1138). No call touches the engine meanwhile.
+    let plans = engine.plans();
+    // The thread steps it when each frame is due, on the frame grid: green is due at
+    // 100 ms, a tick falls at 132 ms (33 ms frames), and the thread wakes a quarter
+    // frame before (#1138). It hands each frame over through the frame slot, with no
+    // plan (ADR-0117 §3). No call touches the engine meanwhile.
     clock.advance(124);
     assert!(
         shows_by_itself(&engine, (1, 0xff)),
@@ -749,6 +751,7 @@ fn the_sources_thread_advances_an_animation_by_itself() {
     // Past both plays (2 x 600 ms), the last frame stays.
     clock.advance(2_000);
     assert!(shows_by_itself(&engine, (2, 128)), "blue at alpha 128");
+    assert_eq!(engine.plans(), plans, "and never re-planned for it");
     let _ = fs::remove_dir_all(dir);
 }
 
@@ -788,6 +791,51 @@ fn a_waveform_source_is_painted_by_the_sources_thread() {
         Some([0xff, 0, 0, 0xff]),
         "full scale"
     );
+}
+
+/// A painted source's new frames reach the picture through its frame slot, with no
+/// re-plan (ADR-0117 §3, #1138): the waveform keeps changing while the plans stand.
+#[test]
+fn a_painted_frame_of_the_same_size_needs_no_plan() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "wave",
+                "waveform",
+                settings(&[
+                    ("width", json!(1)),
+                    ("height", json!(3)),
+                    ("color", json!("#ff0000")),
+                    ("background", json!("#0000ff")),
+                ]),
+            ),
+            add("a", "i1", "wave"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(shown(&engine, "wave"), Some([0, 0, 0xff, 0xff]), "silence");
+    let plans = engine.plans();
+    let painted = engine.paints("wave");
+    let scope = engine.audio_scope();
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline
+        && (shown(&engine, "wave") != Some([0xff, 0, 0, 0xff])
+            || engine.paints("wave") < painted + 5)
+    {
+        scope.push(48_000, &[1.0; 960]);
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert_eq!(
+        shown(&engine, "wave"),
+        Some([0xff, 0, 0, 0xff]),
+        "full scale"
+    );
+    assert!(engine.paints("wave") >= painted + 5, "painted on its own");
+    assert_eq!(engine.plans(), plans, "and never re-planned for it");
 }
 
 /// A scope no mix draws is not painted while the program re-plans for another source,
@@ -914,8 +962,22 @@ fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
     )
     .expect("created");
     assert!(plays(&engine, 0), "the first frame");
+    // The sources thread takes each frame as it comes due and hands it over through
+    // the frame slot, with no plan (ADR-0117 §3).
+    let plans = engine.plans();
     clock.advance(250);
-    assert!(plays(&engine, 2), "frame 2 at 250 ms");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while shown(&engine, "video") != Some(FakeClip::pixel(2))
+        && std::time::Instant::now() < deadline
+    {
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert_eq!(
+        shown(&engine, "video"),
+        Some(FakeClip::pixel(2)),
+        "frame 2 at 250 ms"
+    );
+    assert_eq!(engine.plans(), plans, "by itself, with no plan");
 
     visible(&control, false);
     assert_eq!(shown(&engine, "video"), None, "hidden");
@@ -1073,8 +1135,22 @@ fn a_media_file_shown_again_by_item_show_restarts() {
     )
     .expect("created");
     assert!(plays(&engine, 0), "the first frame");
+    // The sources thread takes each frame as it comes due and hands it over through
+    // the frame slot, with no plan (ADR-0117 §3).
+    let plans = engine.plans();
     clock.advance(250);
-    assert!(plays(&engine, 2), "frame 2 at 250 ms");
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    while shown(&engine, "video") != Some(FakeClip::pixel(2))
+        && std::time::Instant::now() < deadline
+    {
+        std::thread::sleep(std::time::Duration::from_millis(2));
+    }
+    assert_eq!(
+        shown(&engine, "video"),
+        Some(FakeClip::pixel(2)),
+        "frame 2 at 250 ms"
+    );
+    assert_eq!(engine.plans(), plans, "by itself, with no plan");
     let item = |action| {
         block_on(control.call(Call::Action { action })).expect("accepted");
     };
@@ -1892,4 +1968,63 @@ fn a_restart_on_show_page_reloads_each_time_the_program_shows_it_again() {
         scene_id: None,
     });
     assert_eq!(page.reloads(), before + 1, "item shown again");
+}
+
+/// A page that paints on the CPU (CEF on Linux) hands each paint to the picture through
+/// its frame slot, with no re-plan (ADR-0117 §3).
+#[test]
+fn a_page_painted_on_the_cpu_needs_no_plan() {
+    use jstream_browser::fake::FakeBrowser;
+    use jstream_media::{ColorInfo, MediaTime, PixelFormat, Plane, VideoFrame, VideoFrameInfo};
+
+    let browser = FakeBrowser::new();
+    browser.paint_on_cpu(true);
+    let engine = Engine::new().with_browser(browser.clone());
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "page",
+                "browser",
+                settings(&[
+                    ("url", json!("https://example.com/")),
+                    ("width", json!(2)),
+                    ("height", json!(1)),
+                    ("fps", json!(30)),
+                ]),
+            ),
+            add("a", "i1", "page"),
+        ]),
+    )
+    .expect("created");
+    assert_eq!(
+        shown(&engine, "page"),
+        Some([0, 0, 0, 0]),
+        "transparent first"
+    );
+    let plans = engine.plans();
+    let paint = |rgba: [u8; 4]| {
+        let frame = VideoFrame::new(
+            VideoFrameInfo {
+                size: FrameSize::new(2, 1).expect("a size"),
+                format: PixelFormat::Rgba8,
+                color: ColorInfo::default(),
+                pts: MediaTime::zero(Timebase::MILLIS),
+            },
+            vec![Plane::new([rgba, rgba].concat(), 8)],
+        )
+        .expect("a frame");
+        browser.pages()[0].paint(Arc::new(frame));
+    };
+    for rgba in [[255, 0, 0, 255], [0, 255, 0, 255]] {
+        paint(rgba);
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while shown(&engine, "page") != Some(rgba) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(shown(&engine, "page"), Some(rgba), "the new paint");
+    }
+    assert_eq!(engine.plans(), plans, "and never re-planned for it");
 }

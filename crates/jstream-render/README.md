@@ -94,7 +94,9 @@ and calls this crate.
   ([jstream-core › Snapshots](../jstream-core/README.md#design)).
 - `ResourceCache` keeps what a caller draws every frame (uploads, imports of GPU
   frames, and layers), keyed by the caller's IDs, so a frame that shows what the last
-  one showed allocates no texture. An import keeps its frame's `FrameSync` hold only
+  one showed allocates no texture. `upload_drawn`, on a cache that
+  `draw_uploads_small` allows it, holds an upload only items draw at the size they draw
+  it, not its frame's (#1139). An import keeps its frame's `FrameSync` hold only
   for the frame that draws it, so the platform can reuse the texture afterwards. An image no frame references is freed only after the GPU has finished the
   last frame that used it, and the cache hands it back as `Reclaimed` so the caller
   picks the thread that drops it
@@ -254,6 +256,14 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    for NV12 in each matrix and range. The pipeline is built on the first upload. The
    bind group (texture + linear sampler) and the conversion's own bind group are created
    once and stored on `Image`.
+
+   An upload's texture can also be **smaller than its frame** (`upload_rgba8_into`, for
+   `ResourceCache::upload_drawn`, #1139): the dispatch then covers the smaller texture,
+   and each texel is the mean of the frame's texels under it (integer bounds, at least
+   one each way), averaged in premultiplied linear light, as a box filter draws them. A
+   rewrite of such an upload converts the frame into the same smaller texture.
+   `Image::full` keeps the frame's size, and the image is placed at it (its extent), so
+   only how many texels it holds changes.
 
    **Why premultiply first.** The linear filter averages neighbouring texels. Averaging
    straight alpha mixes a transparent texel's RGB into its opaque neighbour, so a
@@ -453,7 +463,27 @@ next frame's fence, which covers it. `frame` names the frame being built, so wor
 several draws of one frame share (a source's video chain) can run once in it.
 `set_extent` places a key's image as if it were another size (ADR-0073); a reused entry
 keeps the extent it had, so a caller that sets one sets it on every frame, and a new
-texture starts at its own size.
+texture starts at its own size (an upload held small, at its frame's).
+
+`upload_drawn` (#1139, ADR-0117 §2) is `upload` for a frame only items draw, so its
+texels need be no finer than its draws sample them. Each `render` notes on the image how
+much of its frame's resolution each item needed (`Image::record_draw`: the texture's
+share of the frame over the texels per canvas pixel along the item's less minified axis,
+and all of it for a 3D placement). On a cache where `draw_uploads_small` is on (off by
+default, so a deterministic render such as a snapshot draws every upload whole), the
+first frame of a key holds the upload at what the caller's `planned` need says (whole
+when it is 0), and each later frame reads what the draws needed over the frames since
+(once a frame, so every mix of one frame draws the same texels), takes the larger of
+that and `planned` (the caller plans over every mix, so a mix drawn only every other
+tick, which records no draw on the ticks between, never makes the upload shrink and
+grow again, and a cut to a larger placement is drawn sharp at once), and holds it at a
+power-of-two fraction of the frame's size with a quarter of headroom over that, between
+a sixteenth and the whole: the next larger size once a draw needs more than it holds,
+a smaller one only once that size would be half or less of what it holds, and the same
+texture otherwise, so a small change in size uploads nothing. A frame under 256 × 256
+texels is always whole. On lavapipe, ten 1080p stills drawn at about 250 × 140 held
+about 21 MB each whole (the `Rgba16Float` texture and the mip chain a small draw
+samples) and about 3.5 MB each held at a quarter.
 `retire_filter` hands the cache a `VideoFilter` no frame runs any more: it may hold
 textures of its own (a video delay's ring), so it waits for the same fence and comes
 back in `Reclaimed` (`Reclaimed::filters` counts them) to be dropped with the images.
@@ -631,13 +661,16 @@ defaults pass its descriptor, and that they build its pass.
 **Where they run.** `jstream-core`'s chain runtime (roadmap V0,
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
 filter of a source's video chain and runs them in order before placement, of a
-scene's over its composite, of an item's effects over its box, drawn into a layer
-grown by their summed `max_outset_px`
-([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), and of the master
+scene's over its composite, of an item's effects over its box, in a layer
+grown by their summed outsets at the first effect that draws past its input
+([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md), ADR-0125), and of the master
 stage's and an output's over the mix an output draws
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
-`kind.list` gets these kinds.
+`kind.list` gets these kinds, and `video_filter_outset(kind, settings)` how far a
+drop shadow, outline, glow or bloom draws past its input at its settings, never more
+than its `max_outset_px` (ADR-0136); core sizes an item's layer by it. It doesn't
+measure a `border` yet, which takes its declared 129 px.
 
 **The harness.**
 
@@ -775,14 +808,46 @@ premultiplied linear light on the way out.
   to the image plus the gap, and the shader reads transparent in the gap. A new speed
   jumps to where that speed puts the picture at the current time.
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
-  (0..1, default 0.5) and `color` (with alpha, default opaque black). The distance from
-  the centre is measured in the frame's own UV, so the shape is an ellipse that follows
-  the frame's aspect: 0 at the centre, 1 at the corners. Inside `radius` the picture is
-  untouched. Over the next `softness` it fades towards `color`, to `strength` times the
-  colour's alpha (a smoothstep; 0 is a hard edge). Coverage is kept, so a transparent
-  pixel stays transparent. It frames whatever its chain runs on: the source's whole
-  frame here, and an item's cropped box or a scene's composite once those owners are
-  built (ADR-0065, #529).
+  (0..1, default 0.5), `color` (with alpha, default opaque black), `shape` (`frame`, the
+  default, an ellipse that follows the frame's aspect, or `round`, a circle), `blend`
+  (`normal`, the default, mixes towards the colour, a tint; `multiply` darkens by it)
+  and `center_x`, `center_y` (0..1 of the frame, default 0.5). The distance from the
+  centre is 0 there and 1 at the half-diagonal: in the frame's own UV for `frame`, in
+  pixels for `round`. Inside `radius` the picture is untouched; over the next
+  `softness` it fades in (a smoothstep; 0 is a hard edge) to `strength` times the
+  colour's alpha, in linear light. The settings #1226 added default to what the kind
+  drew before, so a saved vignette keeps its look and the kind stays at version 1
+  (ADR-0025 › Versioning a kind). Coverage is kept, so a transparent pixel stays
+  transparent. It frames whatever its chain runs on: a source's whole frame, an item's
+  cropped box or a scene's composite (ADR-0065, #529).
+
+- `border` (#1227): the full set of border tools in one kind, in a custom pass (its
+  movement needs the clock). A rounded rectangle, the frame inset by the padding the
+  chain gives the filter (`Pass::set_pad`, so on an item it is the box, ADR-0125):
+  `corners` `same` with `radius`, or `each` with `radius_top_left`, `_top_right`,
+  `_bottom_right` and `_bottom_left` (0 to 2000 px, held to half the shorter side), and
+  `clip` (default on) cuts the picture to it, so a shadow or glow after it follows the
+  rounded shape. An inner stroke, `width` (0 to 64 px, default 4) and `color`, runs
+  inside the edge over the picture; an outer one, `outer_width` (0 to 64, default 0),
+  `outer_color` and `outer_gap` (0 to 64), past it, so the kind declares a
+  `max_outset_px` of 129. `style` is `solid`, `double` (two lines of a third of the
+  width), `dashed` (`dash` 1 to 400 px, `gap`) or `dotted` (round dots the stroke's
+  width across, `gap` apart), measured along the edge: each straight side by its
+  length and each corner by its arc, clockwise from the top-left. `fill` is the
+  `color`, or a `linear` (at `angle`) or `conic` gradient from `color` to `color2`, as
+  a triangle wave so it loops without a seam. `speed` (−2000 to 2000 px/s) moves the
+  dashes along the edge and the gradient round it once per perimeter; the distance is
+  worked out in `f64` on the CPU and wrapped to the dash period and to one turn, so it
+  stays exact. On a source or scene chain the outer stroke past the frame is cut.
+  `frame` (an image asset, `null` by default, #1294) draws the inner stroke from an
+  image as a 9-slice frame instead of in its style and fill: the image's corners,
+  `frame_slice` image px square (1 to 1024, default 16, held to half the image), fill
+  the band's corners, `width` px square, and its middle runs along each side between
+  them, stretched or, with `frame_edges` `tile`, repeated at the corners' scale; each
+  slice samples only its own texels, held half a texel inside it (#1377). The
+  band is `width` px in from the rectangle's sides, cut to the rounded shape. The image
+  is the pass's aux image, handed over as an image mask's is (`Pass::set_reference`,
+  the shared `assets::Reference`); until it is there, the stroke draws in its style.
 
 Aspect ratio (V1a): `aspect_ratio` gives the frame a target shape before it is placed.
 Settings: `ratio` (`16:9`, `9:16`, `4:3`, `1:1`, `21:9` or `custom`, with
@@ -801,7 +866,7 @@ or Lanczos-3 (6x6 texel loads), normalised and clamped to a valid premultiplied 
 (an SDR assumption: values above 1 are clipped).
 The kernels are not widened for a downscale, so a large shrink along one axis can alias.
 
-The multi-pass filters (V2), in `src/filter/multipass/`:
+The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
 
 - `blur`: `radius` (0 to 100 px, default 8) and an area: `area` (`whole`, `inside` or
   `outside` a rectangle) with `area_x`, `area_y`, `area_width`, `area_height` (fractions
@@ -826,7 +891,18 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   An inside stroke treats the area past the frame as outside the shape.
 - `glow`: `color`, `radius` (0 to 100 px, default 16) and `strength` (0 to 4, default
   1, which multiplies the blurred alpha before it is clamped). It is a drop shadow with
-  no offset.
+  no offset: light around an alpha shape, under it, so it needs a transparent edge (a
+  logo, text, a keyed camera, or an item's outset, **Bounds** below).
+- `bloom`: `threshold` (0..1, default 0.7), `intensity` (0 to 4, default 1), `radius`
+  (0 to 100 px, default 24) and `tint` (default white). The light that bright parts of
+  any picture give off, an opaque camera included: a bright pass keeps what is above
+  the threshold on the sRGB-encoded luma of the straight colour (a smoothstep over a
+  0.1 knee each side), the shared gaussian blurs it with transparent edges, and the
+  composite adds it, tinted and times intensity, over the input in premultiplied
+  linear light. The added light's coverage is its brightest channel, so past a shape it
+  shows as light. The bright pass is drawn into the output layer, which the blur reads
+  and the composite overwrites, so bloom takes only the blur's scratch layers.
+  Intensity 0 copies the input.
 - `video_delay`: `delay_ms` (0 to 5000, default 0, which passes the input through) and
   `max_memory_mb` (64 to 16384, default 1024). The pass keeps a ring of frame copies
   stamped with the clock and shows the newest one at or before now minus the delay, or
@@ -837,17 +913,28 @@ The multi-pass filters (V2), in `src/filter/multipass/`:
   shown are reused. A new input size empties the ring, and so does a clock that goes
   backwards.
 
-**Bounds.** Drop shadow, outline (outside) and glow draw within their input's frame,
-as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for a
-source or scene chain: the output is the input's size, the input is drawn 1:1, and
+**Bounds.** Drop shadow, outline (outside), glow and bloom draw within their input's
+frame, as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for
+a source or scene chain: the output is the input's size, the input is drawn 1:1, and
 the part of the effect past the frame's edge is cut. So they don't change the
 source's reported size, and around an opaque frame a shadow, an outside stroke or a
 glow is cut away whole; on a shape with transparent margins (a keyed camera, a logo)
 they show inside them. A drop shadow and a glow still blur the shape in a scratch
 frame grown by the blur radius, so the blur fades out instead of stopping at the
 frame's edge. An effect that hangs outside a placement is an item effect, whose layer
-ADR-0065 pads by the chain's `max_outset_px`; these kinds don't declare one yet, so
-their layer is the box and the part past it is cut there too.
+grows by the chain's summed outsets at its settings (`video_filter_outset`) where the
+first effect that draws past its input runs
+([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).
+`VideoFilter::set_pad(px)` does it: `output_size` grows the input by `px` on every side
+before the pass's own, and `apply_filter_into` first draws the input centred into a
+scratch layer that size, transparent around it, then runs the pass over that. Each of
+these kinds declares the
+most it can draw past its input at any settings: drop shadow 300 (the largest offset
+plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
+and bloom 100 (the largest radius), and border 129 (its widest outer stroke after its
+widest gap, and its antialiased pixel). So on an item the glow and shadow of an opaque
+picture show around its box (#1226). That room costs layer memory and fill: a
+1920×1080 box with a drop shadow is a 2520×1680 layer.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
@@ -1074,7 +1161,17 @@ import is staged once, and once the frame ends nothing but the frame holds its
 coming round again reuses its import and stages again, a frame of a new size retires
 both old imports after the fence, an upload under the key replaces the import, and a
 straight import under a key that held a premultiplied one replaces it
-(the staged submit's `PRESENT` transition runs on the software adapter here). A lost
+(the staged submit's `PRESENT` transition runs on the software adapter here). Uploads
+held at their drawn size (#1139): a conversion into a smaller texture holds the CPU's
+mean of the texels under each, within two half steps, and a rewrite of it does too;
+through `upload_drawn`, a 512² frame is whole on its first frame, a quarter each way
+once drawn at an eighth, the same texture while drawn a little larger and when a new
+version refills it, whole again once drawn large, a quarter again once drawn small, and
+whole once placed in 3D, and a new key starts at its planned need; a still drawn small
+every tick and large every other tick stays whole when planned for both (and changes
+size without the plan), and a key held small given a whole upload of a frame the held
+size is made again, not refilled; without
+`draw_uploads_small`, or under 256 × 256 texels, it stays whole. A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
 `destroyed`, a render fails, an NV12 bind returns `Uncaptured`
 (`convert/tests.rs`), and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
@@ -1153,9 +1250,10 @@ a hardware GPU.
   rotated 2D items should get edge coverage too, which changes their goldens.
 - **Small sources.** A 2D item drawn small samples a chain built from its whole crop
   every frame its source changes, so a 1080p camera in a small box costs a quarter-size
-  chain and its rebuild. Open: a level 0 built at the drawn size, which a first pass of
-  more than one tap would allow, and uploading a still image at the size it is drawn
-  (#1139).
+  chain and its rebuild. An upload only items draw is held at the size they draw it
+  (`ResourceCache::upload_drawn`, #1139), so its chain is small too; an import (a
+  capture, a page) is not. Open: a level 0 built at the drawn size for an import, which
+  a first pass of more than one tap would allow.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and

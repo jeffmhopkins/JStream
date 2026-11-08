@@ -18,6 +18,20 @@ use crate::image::{Alpha, Image};
 /// ring of textures gets one bind group per texture, not one per frame.
 const KEPT_IMPORTS: usize = 8;
 
+/// How much more resolution than its draws needed an upload drawn small is held at
+/// ([`ResourceCache::upload_drawn`]), before rounding up to a power of two: an item
+/// enlarged a little since needs no new upload.
+const DRAWN_HEADROOM: f32 = 1.25;
+
+/// The smallest fraction of its frame's size, each way, an upload drawn small is held
+/// at. A texel of the upload averages the frame's texels under it, so this bounds that
+/// work to 16 × 16 of them; an item drawn smaller still samples the upload's mip chain.
+const DRAWN_MIN_SCALE: f32 = 1.0 / 16.0;
+
+/// A frame with fewer texels than this is always uploaded whole: holding it smaller
+/// saves less than half a megabyte.
+const DRAWN_MIN_TEXELS: u64 = 256 * 256;
+
 /// The images one compositor draws every frame: uploads of source frames, imports of
 /// GPU frames, and the layers nested scenes are composited into. Each is keyed by an ID
 /// of the caller's (a source, a scene at a depth), so a frame that shows the same thing
@@ -35,6 +49,9 @@ const KEPT_IMPORTS: usize = 8;
 /// back.
 pub struct ResourceCache<K> {
     live: BTreeMap<K, Entry>,
+    /// Whether [`Self::upload_drawn`] holds an upload at the size it is drawn
+    /// ([`Self::draw_uploads_small`]).
+    drawn_small: bool,
     retired: Vec<Retired>,
     /// Video filters the caller let go of ([`Self::retire_filter`]), each with the last
     /// frame that could have drawn it: a filter can hold textures of its own (a video
@@ -55,6 +72,9 @@ struct Entry {
     /// For an import: the imports of the key's other textures, each with the last frame
     /// it was the entry's image. None of them holds a [`jstream_platform::FrameSync`].
     kept: Vec<(Image, u64)>,
+    /// For an upload, the fraction of its frame's size it is held at each way, 1 for
+    /// the whole frame ([`ResourceCache::upload_drawn`]).
+    scale: f32,
 }
 
 /// An image no frame references any more, waiting for the GPU to finish `after`.
@@ -100,6 +120,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
     pub fn new() -> Self {
         Self {
             live: BTreeMap::new(),
+            drawn_small: false,
             retired: Vec::new(),
             retired_filters: Vec::new(),
             frame: 0,
@@ -133,10 +154,12 @@ impl<K: Ord + Clone> ResourceCache<K> {
         rgba: &[u8],
     ) -> Result<&Image, RenderError> {
         let frame = self.frame;
+        // By the frame it holds and the texture's own size: one held small by
+        // `upload_drawn` is made again whole.
         let reuse = self.live.get(key).is_some_and(|entry| {
             entry.image.is_upload()
-                && entry.image.width() == width
-                && entry.image.height() == height
+                && entry.image.full() == (width, height)
+                && (entry.image.width(), entry.image.height()) == (width, height)
         });
         if reuse {
             let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
@@ -149,6 +172,91 @@ impl<K: Ord + Clone> ResourceCache<K> {
         }
         let image = compositor.upload_rgba8(width, height, rgba)?;
         Ok(self.replace(key, image, version))
+    }
+
+    /// Lets [`Self::upload_drawn`] hold an upload at the size it is drawn (#1139). Off
+    /// by default, so a cache that renders a deterministic frame (a snapshot, a frame
+    /// sheet) draws every upload from its whole frame.
+    pub fn draw_uploads_small(&mut self, on: bool) {
+        self.drawn_small = on;
+    }
+
+    /// [`Self::upload`] of a `width` × `height` frame that only items draw (not a video chain, which reads
+    /// its texels as they are), held at the size the compositor drew it at over the
+    /// frames before, once [`Self::draw_uploads_small`] allows it (#1139, ADR-0117 §2).
+    ///
+    /// `planned` is what the caller's placements say its items need: the fraction of the
+    /// frame's resolution they draw, over every mix whether or not it draws this frame
+    /// (0 or less when unknown). A new entry is held at it (whole when unknown). After
+    /// that, each frame reads how much of
+    /// the frame's resolution its draws needed last time (the most any item sampled; a
+    /// 3D placement needs it all), takes the larger of that and `planned` (so a mix
+    /// drawn only every other tick, or a cut to a larger placement, is never drawn from
+    /// too few texels), and holds the upload at a power-of-two fraction of
+    /// the frame's size with a quarter of headroom over that, no smaller than a
+    /// sixteenth: each texel is the mean of the frame's texels under it. An item drawn
+    /// larger than that live (a gesture, a camera) gets a larger upload the next frame,
+    /// and one drawn at less than
+    /// half of it a smaller one, so a small change in size uploads nothing. The image is
+    /// placed at the frame's size whatever its texels, as [`Image::set_extent`] places an
+    /// image drawn finer.
+    ///
+    /// # Errors
+    /// As for [`Self::upload`].
+    pub fn upload_drawn(
+        &mut self,
+        compositor: &Compositor,
+        key: &K,
+        version: u64,
+        (width, height): (u32, u32),
+        rgba: &[u8],
+        planned: f32,
+    ) -> Result<&Image, RenderError> {
+        let small = u64::from(width) * u64::from(height) < DRAWN_MIN_TEXELS;
+        if !self.drawn_small || small {
+            return self.upload(compositor, key, version, width, height, rgba);
+        }
+        let frame = self.frame;
+        let held = self.live.get(key).and_then(|entry| {
+            (entry.image.is_upload() && entry.image.full() == (width, height))
+                .then_some(entry.scale)
+        });
+        let scale = match held {
+            None if planned > 0.0 => drawn_scale(planned),
+            None => 1.0,
+            Some(held) => {
+                let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+                // Read once a frame, so every mix of the frame draws the same texels,
+                // and never under what the placements plan: a mix that isn't due on
+                // a tick draws nothing then, and must not shrink what it shows.
+                let need = if entry.used == frame {
+                    0.0
+                } else {
+                    entry.image.take_need().max(planned.max(0.0))
+                };
+                let wanted = drawn_scale(need);
+                if need == 0.0 || (need <= held && wanted > held / 2.0) {
+                    held
+                } else {
+                    wanted
+                }
+            }
+        };
+        if held == Some(scale) {
+            let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+            if entry.version != version {
+                compositor.rewrite_rgba8(&entry.image, rgba)?;
+                entry.version = version;
+            }
+            entry.used = frame;
+            return Ok(&entry.image);
+        }
+        let to = (scaled(width, scale), scaled(height, scale));
+        let image = compositor.upload_rgba8_into(width, height, rgba, to)?;
+        self.replace(key, image, version);
+        let entry = self.live.get_mut(key).ok_or_else(|| missing("an upload"))?;
+        entry.scale = scale;
+        Ok(&entry.image)
     }
 
     /// [`Self::upload`] of a CPU video frame read as opaque, converted on the GPU as
@@ -167,6 +275,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
         let at = self.frame;
         let reuse = self.live.get(key).is_some_and(|entry| {
             entry.image.is_upload()
+                && entry.image.full() == (size.width(), size.height())
                 && entry.image.width() == size.width()
                 && entry.image.height() == size.height()
         });
@@ -455,6 +564,7 @@ impl<K: Ord + Clone> ResourceCache<K> {
             version,
             used: self.frame,
             kept: Vec::new(),
+            scale: 1.0,
         };
         let slot = match self.live.entry(key.clone()) {
             std::collections::btree_map::Entry::Occupied(mut slot) => {
@@ -466,6 +576,24 @@ impl<K: Ord + Clone> ResourceCache<K> {
         };
         &slot.image
     }
+}
+
+/// The fraction of its frame's size, each way, an upload is held at when its draws
+/// needed `need` of it ([`ResourceCache::upload_drawn`]).
+fn drawn_scale(need: f32) -> f32 {
+    if need.is_nan() || need * DRAWN_HEADROOM >= 1.0 {
+        return 1.0;
+    }
+    let steps = (need * DRAWN_HEADROOM).log2().ceil();
+    2f32.powf(steps).clamp(DRAWN_MIN_SCALE, 1.0)
+}
+
+/// `side` texels at `scale` of them, at least one.
+fn scaled(side: u32, scale: f32) -> u32 {
+    if scale >= 1.0 {
+        return side;
+    }
+    ((side as f32 * scale).ceil() as u32).clamp(1, side)
 }
 
 impl<K> ResourceCache<K> {

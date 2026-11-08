@@ -98,7 +98,7 @@ impl std::fmt::Display for ChainOwner {
 
 /// The most `kind` draws beyond each edge of its input at any settings
 /// (`max_outset_px`, ADR-0065 §5): 0 for a kind that declares none.
-fn outset_of(kind: &str) -> u32 {
+fn max_outset_of(kind: &str) -> u32 {
     static OUTSETS: OnceLock<BTreeMap<String, u32>> = OnceLock::new();
     OUTSETS
         .get_or_init(|| {
@@ -110,6 +110,24 @@ fn outset_of(kind: &str) -> u32 {
         .get(kind)
         .copied()
         .unwrap_or(0)
+}
+
+/// The step an outset is rounded up to, px: a Move that blends a shadow's blur or a
+/// glow's radius (ADR-0127) resizes the padded layer only when it crosses a step.
+const OUTSET_STEP: u32 = 16;
+
+/// How far a filter of `kind` draws beyond each edge of its input at `settings`
+/// (ADR-0136), rounded up to [`OUTSET_STEP`] and never more than the kind's
+/// `max_outset_px`: a kind render doesn't measure takes that whole.
+fn outset_of(kind: &str, settings: &Settings) -> u32 {
+    let most = max_outset_of(kind);
+    if most == 0 {
+        return 0;
+    }
+    match jstream_render::video_filter_outset(kind, settings) {
+        Some(px) => ((px.max(0.0).ceil() as u32).div_ceil(OUTSET_STEP) * OUTSET_STEP).min(most),
+        None => most,
+    }
 }
 
 /// The `int` parameters of `descriptor`, which a Move's blend keeps whole (ADR-0127).
@@ -205,6 +223,9 @@ fn make(kind: &str, settings: &Settings, effect: Option<&PackEffect>) -> Option<
 pub(crate) struct Chain {
     pub(crate) input: GpuKey,
     pub(crate) filters: Vec<ChainFilter>,
+    /// For an item's effects: the filter whose input is padded, and by how many layer
+    /// pixels on every side (ADR-0065 §5, [`Self::pad_at`]). `None` for any other chain.
+    pub(crate) pad: Option<(usize, u32)>,
 }
 
 impl Chain {
@@ -266,6 +287,7 @@ impl Chain {
         let mut chain = chain.unwrap_or(Self {
             input,
             filters: Vec::new(),
+            pad: None,
         });
         chain.filters.insert(0, first);
         Some(chain)
@@ -308,17 +330,70 @@ impl Chain {
                 })
             })
             .collect();
-        (!filters.is_empty()).then_some(Self { input, filters })
+        (!filters.is_empty()).then_some(Self {
+            input,
+            filters,
+            pad: None,
+        })
     }
 
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
-    /// sum of their kinds' `max_outset_px`. Only an item's effects layer is padded by it;
-    /// a source's or a scene's chain draws at its input's size (ADR-0065 §5).
+    /// sum of what each draws past its input at its settings (ADR-0136).
+    /// Only an item's effects layer is padded by it; a source's or a scene's chain draws
+    /// at its input's size (ADR-0065 §5).
     pub(crate) fn outset(&self) -> u32 {
+        self.outset_also(None)
+    }
+
+    /// [`Self::outset`], each filter taking the larger of its own settings' outset and
+    /// that of `also`'s settings at its place: the look a Move blends from (ADR-0127),
+    /// so the layer holds what the filters draw at any point of the blend.
+    pub(crate) fn outset_also(&self, also: Option<&[Settings]>) -> u32 {
+        self.outsets(also).into_iter().fold(0, u32::saturating_add)
+    }
+
+    /// Each filter's outset, as [`Self::outset_also`] takes it.
+    fn outsets(&self, also: Option<&[Settings]>) -> Vec<u32> {
         self.filters
             .iter()
-            .map(|filter| outset_of(&filter.kind))
-            .fold(0, u32::saturating_add)
+            .enumerate()
+            .map(|(at, filter)| {
+                let own = outset_of(&filter.kind, &filter.settings);
+                also.and_then(|also| also.get(at))
+                    .map_or(own, |other| own.max(outset_of(&filter.kind, other)))
+            })
+            .collect()
+    }
+
+    /// Where an item's effects layer grows, for a layer of `scale` pixels per canvas
+    /// pixel (ADR-0065 §5): at the first filter that draws past its input, by the
+    /// outset of it and every filter after it. The filters before it see the item's
+    /// box itself, so rounded corners or a vignette frame the box, not the room a
+    /// later drop shadow needs. `None` when no filter draws past its input.
+    pub(crate) fn pad_at(&self, scale: f32) -> Option<(usize, u32)> {
+        self.pad_at_also(scale, None)
+    }
+
+    /// [`Self::pad_at`] with the outsets of [`Self::outset_also`].
+    pub(crate) fn pad_at_also(
+        &self,
+        scale: f32,
+        also: Option<&[Settings]>,
+    ) -> Option<(usize, u32)> {
+        let outsets = self.outsets(also);
+        let first = outsets.iter().position(|px| *px > 0)?;
+        let outset = outsets[first..]
+            .iter()
+            .fold(0u32, |sum, px| sum.saturating_add(*px));
+        Some((first, (outset as f32 * scale).ceil() as u32))
+    }
+
+    /// The padding filter `index` draws with: [`Self::pad`]'s when it names it, else 0.
+    fn pad_of(&self, index: usize) -> u32 {
+        match self.pad {
+            Some((at, px)) if at == index => px,
+            _ => 0,
+        }
     }
 
     /// The kinds of its filters an effect pack draws: its effects, and the shader
@@ -407,13 +482,28 @@ impl Chain {
         let mut size = (width, height);
         self.filters
             .iter()
-            .map(|filter| {
-                if let Some(drawn) = filter.video_filter() {
+            .enumerate()
+            .map(|(index, filter)| {
+                if let Some(mut drawn) = filter.video_filter() {
+                    drawn.set_pad(self.pad_of(index));
                     size = drawn.output_size(size.0, size.1);
                 }
                 size
             })
             .collect()
+    }
+
+    /// The scratch layer the padded filter copies its input into (ADR-0125), for an
+    /// input of `width` by `height`: that filter's input grown by the padding on every
+    /// side. `None` for a chain with no padding.
+    pub(crate) fn pad_layer(&self, width: u32, height: u32) -> Option<(u32, u32)> {
+        let (at, pad) = self.pad.filter(|(_, pad)| *pad > 0)?;
+        let input = match at.checked_sub(1) {
+            Some(before) => *self.layer_sizes(width, height).get(before)?,
+            None => (width, height),
+        };
+        let grow = pad.saturating_mul(2);
+        Some((input.0.saturating_add(grow), input.1.saturating_add(grow)))
     }
 
     /// The size the chain draws for an input of `width` by `height`: the source's
@@ -584,7 +674,8 @@ impl Chains {
         // carried through the filters' sizes (ADR-0073), as the input's own size is.
         let mut size = (input.width(), input.height());
         let mut placed = input.extent();
-        for filter in running.iter_mut() {
+        for (index, filter) in running.iter_mut().enumerate() {
+            filter.filter.set_pad(chain.pad_of(index));
             size = filter.filter.output_size(size.0, size.1);
             placed = filter.filter.output_size(placed.0, placed.1);
             let made = cache
@@ -2780,6 +2871,207 @@ mod tests {
             ......BWWB......
             ",
             "the ellipse turns with the box",
+        );
+    }
+
+    /// `effect` of `kind` with `settings` on item `id`'s effects.
+    fn effect(id: &str, kind: &str, settings: serde_json::Value) -> Edit {
+        Edit::FilterAdd {
+            owner: FilterOwner::Item {
+                item_id: ItemId::new(id),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(kind),
+            kind: kind.into(),
+            settings: serde_json::from_value(settings).expect("an object"),
+            enabled: Some(true),
+            index: None,
+        }
+    }
+
+    /// `cam`, opaque white, in a 24x12 box in the middle of the canvas, with a strong
+    /// blue glow or a hard blue drop shadow on the item. The glow's samples 2 px past
+    /// the box are a partly lit blue over black, so they read `?`; cut at the box, as
+    /// before, they read `.`. The effects layer has room past
+    /// the box (the kinds' `max_outset_px`, ADR-0065 §5), so the light and the shadow of
+    /// an opaque picture show around it instead of being cut at its edge (#1226).
+    #[test]
+    fn golden_a_glow_and_a_shadow_show_past_an_opaque_items_box() {
+        let graph = placed(&[("cam", (32.0, 18.0), (24.0, 12.0), 0.0)]);
+        let mut glow = graph.clone();
+        apply(
+            &mut glow,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "glow",
+                    serde_json::json!({"color": "#0000ff", "radius": 4.0, "strength": 4.0}),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&glow),
+            "
+            ................
+            ................
+            ....????????....
+            ....?WWWWWW?....
+            ....?WWWWWW?....
+            ....?WWWWWW?....
+            ....????????....
+            ................
+            ................
+            ",
+            "the glow rings the box",
+        );
+        let mut shadow = graph;
+        apply(
+            &mut shadow,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "drop_shadow",
+                    serde_json::json!({
+                        "color": "#0000ff", "offset_x": 8.0, "offset_y": 8.0, "blur": 0.0
+                    }),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&shadow),
+            "
+            ................
+            ................
+            ................
+            .....WWWWWW.....
+            .....WWWWWW.....
+            .....WWWWWWBB...
+            .......BBBBBB...
+            .......BBBBBB...
+            ................
+            ",
+            "the shadow falls past the box, below and to the right",
+        );
+    }
+
+    /// An item's layer grows by what its effects draw at their settings, not the most
+    /// their kinds could (ADR-0136): a drop shadow and an outline at their
+    /// defaults (8 px offset and blur, a 4 px stroke) pad it by 16 px each, not 300 and
+    /// 65.
+    #[test]
+    fn effects_at_their_defaults_pad_by_what_they_draw() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                effect("cam", "drop_shadow", serde_json::json!({})),
+                effect("cam", "outline", serde_json::json!({})),
+            ],
+        );
+        let shot = shot(&graph);
+        let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
+        assert_eq!(chain.map(super::Chain::outset), Some(32));
+        assert_eq!(chain.and_then(|c| c.pad), Some((0, 32)));
+    }
+
+    /// A `border` with rounded corners and an outer stroke on an opaque item (#1227): the
+    /// stroke rings the box past its edge, in the room the border's own outset gives it,
+    /// and the corners of the picture are cut round. The `?` samples fall on the
+    /// antialiased curve of a corner; the grid's samples sit right of and below each
+    /// cell's centre, so the right and bottom corners show more of them.
+    #[test]
+    fn golden_a_border_rings_an_opaque_items_box() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (24.0, 12.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "border",
+                    serde_json::json!({
+                        "width": 0.0, "radius": 6.0, "outer_width": 3.0,
+                        "outer_color": "#0000ff"
+                    }),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            ................
+            ................
+            .....BBBBB?.....
+            ....BWWWWW??....
+            ....BWWWWWWB....
+            ....??WWWW?.....
+            .....?BBBB......
+            ................
+            ................
+            ",
+            "the outer stroke rings the box",
+        );
+    }
+
+    /// A vignette before an effect that draws past the box (a glow, here an invisible
+    /// one) frames the box itself, as it does alone: the layer grows only where the glow
+    /// runs (`Chain::pad_at`), so rounded corners or a vignette followed by a shadow keep
+    /// their shape (#1226).
+    #[test]
+    fn golden_effects_before_a_glow_frame_the_box_itself() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                vignette(FilterOwner::Item {
+                    item_id: ItemId::new("cam"),
+                }),
+                effect(
+                    "cam",
+                    "glow",
+                    serde_json::json!({"color": "#0000ff00", "radius": 50.0}),
+                ),
+            ],
+        );
+        let shot = shot(&graph);
+        let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
+        let chain = chain.expect("cam's effects");
+        // The glow's radius, 50, rounded up to the 16 px step (ADR-0136).
+        assert_eq!(chain.pad, Some((1, 64)));
+        // The pad copy is one more layer and pass, the glow's input grown by the pad
+        // on every side (#1285).
+        let box_size = (64, 36);
+        let sizes = chain.layer_sizes(box_size.0, box_size.1);
+        assert_eq!(chain.pad_layer(box_size.0, box_size.1), Some((192, 164)));
+        let bytes = |(w, h): (u32, u32)| u64::from(w) * u64::from(h) * 8;
+        let cost = shot.chain_cost([]);
+        assert_eq!(
+            (cost.item_layers, cost.item_passes),
+            (4, 4),
+            "the box, the vignette, the pad copy and the glow"
+        );
+        assert_eq!(
+            cost.layer_bytes,
+            bytes(box_size) + sizes.iter().copied().map(bytes).sum::<u64>() + bytes((192, 164))
+        );
+        assert_golden(
+            &shot,
+            "
+            BBWWWWWWWWWWWWBB
+            WWWWWWWWWWWWWWWB
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            BWWWWWWWWWWWWWWB
+            BBBWWWWWWWWWWBBB
+            ",
+            "the vignette frames the box, not the glow's room",
         );
     }
 

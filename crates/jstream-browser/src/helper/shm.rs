@@ -1,6 +1,15 @@
 //! A page's slot files (Linux, ADR-0095): CEF's software paints, as straight-alpha
 //! RGBA8, written into the next of [`SLOTS`] files the engine reads them from
 //! ([`crate::cpu_frames`]), in the private folder it made for this helper.
+//!
+//! # Behaviour
+//!
+//! Each software paint is converted to straight
+//! RGBA8 and written into the next free of the page's three slot files (mode 0600) in the
+//! engine's folder, with the same release and skip rules; the page's files are removed
+//! when its browser closes. CEF failing to start reports that it needs `libcef.so` beside
+//! the helper and a sandbox that can start (not root; user namespaces or a setuid
+//! `chrome-sandbox`).
 
 use std::fs::{File, OpenOptions};
 use std::os::unix::fs::{FileExt, OpenOptionsExt};

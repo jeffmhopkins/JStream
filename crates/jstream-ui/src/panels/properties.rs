@@ -1,5 +1,6 @@
-//! The properties form: the selected item's source, with a field for each parameter its
-//! kind's descriptor (`kind.describe`) lists, and no code per kind (ADR-0025). Fields
+//! The properties form of a source, with a field for each parameter its kind's
+//! descriptor (`kind.describe`) lists, and no code per kind (ADR-0025). The Properties
+//! dialog (`source_properties.rs`) and a filter's settings (`filters.rs`) draw it. Fields
 //! follow the descriptor's display order, groups, `advanced` and `visible_if` hints.
 //! A changed field is checked with the descriptor's own check, then sent as a
 //! one-parameter `source.set_settings` patch; "Reset" sends `null` for the default.
@@ -13,9 +14,9 @@
 
 use crate::app::SessionContext;
 use crate::icons::Icon;
-use crate::store::{Collection, Studio, apply, query};
+use crate::store::{Studio, query};
 use jstream_control::protocol::{
-    AssetRoot, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind, Edit,
+    AssetRoot, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
     FontInfo, KindDescriptor, Media, ParamDescriptor, ParamType, Query, QueryResult, Reference,
     Settings, SourceId, SourceInfo, SourceKind,
 };
@@ -195,133 +196,8 @@ fn root_from(name: &str) -> AssetRoot {
     }
 }
 
-/// What the form is showing: the source, and its kind's descriptor once read.
-#[derive(Clone, Debug, PartialEq)]
-enum Target {
-    /// Nothing selected.
-    Nothing,
-    /// A `scene` source: it has no settings.
-    Nested(SourceInfo, String),
-    /// A built-in source, with its kind's ID.
-    Builtin(SourceInfo, String),
-}
-
-fn target(collection: &Collection, item: Option<&jstream_control::protocol::ItemId>) -> Target {
-    let source = item
-        .and_then(|id| collection.item(id))
-        .and_then(|(_, item)| collection.source(&item.source_id));
-    match source {
-        None => Target::Nothing,
-        Some(source) => match &source.kind {
-            SourceKind::Builtin { kind } => Target::Builtin(source.clone(), kind.clone()),
-            SourceKind::Scene { scene_id } => {
-                let name = collection
-                    .scene(scene_id)
-                    .map_or_else(|| scene_id.to_string(), |s| s.name.clone());
-                Target::Nested(source.clone(), name)
-            }
-            _ => Target::Nothing,
-        },
-    }
-}
-
-/// The properties form for the selected item's source.
-#[component]
-pub fn Properties() -> impl IntoView {
-    let studio = expect_context::<Studio>();
-    let session = expect_context::<SessionContext>();
-    // Field errors by parameter ID: a refused check or a refused edit.
-    let errors = RwSignal::new(HashMap::<String, String>::new());
-    let describe_error = RwSignal::new(None::<String>);
-
-    let current = Memo::new(move |_| {
-        let item = studio.selection.with(|s| s.item.clone());
-        studio.collection.with(|c| {
-            c.as_ref()
-                .map_or(Target::Nothing, |c| target(c, item.as_ref()))
-        })
-    });
-    let shown = Memo::new(move |_| match current.get() {
-        Target::Builtin(source, kind) => Some((source.source_id, kind)),
-        _ => None,
-    });
-    // Clears the errors when another source is shown, and reads its kind's descriptor
-    // the first time that kind is shown.
-    Effect::new(move |_| {
-        errors.set(HashMap::new());
-        describe_error.set(None);
-        let (Some((_, kind)), Some(s)) = (shown.get(), session.get()) else {
-            return;
-        };
-        spawn_local(async move {
-            if let Err(error) = studio.descriptor(&s, &kind).await {
-                describe_error.set(Some(error.to_string()));
-            }
-        });
-    });
-
-    let commit = move |source_id: SourceId, param: String, value: Value| {
-        let Some(s) = session.get() else { return };
-        errors.update(|e| _ = e.remove(&param));
-        let mut patch = Settings::new();
-        patch.insert(param.clone(), value);
-        spawn_local(async move {
-            let edit = Edit::SourceSetSettings { source_id, patch };
-            if let Err(error) = apply(&s, vec![edit], None).await {
-                errors.update(|e| _ = e.insert(param, error.to_string()));
-            }
-        });
-    };
-
-    move || match current.get() {
-        Target::Nothing => view! {
-            <p class="placeholder">"Select a source to edit it."</p>
-        }
-        .into_any(),
-        Target::Nested(_, scene) => view! {
-            <p class="muted">"Shows the scene “" {scene} "”. A nested scene has no settings."</p>
-        }
-        .into_any(),
-        Target::Builtin(source, kind) => {
-            let descriptor = move || studio.descriptors.with(|d| d.get(&kind).cloned());
-            let source_id = source.source_id.clone();
-            view! {
-                {move || describe_error.get().map(|e| view! { <p class="problem">{e}</p> })}
-                {move || match descriptor() {
-                    None => view! { <p class="placeholder">"Loading…"</p> }.into_any(),
-                    Some(kind) if kind.params.is_empty() => {
-                        view! { <p class="muted">{kind.name} " has no settings."</p> }.into_any()
-                    }
-                    Some(kind) => {
-                        let source_id = source_id.clone();
-                        let settings = {
-                            let source_id = source_id.clone();
-                            Signal::derive(move || settings_of(studio, &source_id))
-                        };
-                        view! {
-                            <Form kind=kind source_id=source_id settings=settings errors=errors commit=commit />
-                        }
-                        .into_any()
-                    }
-                }}
-            }
-            .into_any()
-        }
-    }
-}
-
-/// The settings now stored for `source_id`, read reactively.
-fn settings_of(studio: Studio, source_id: &SourceId) -> Settings {
-    studio.collection.with(|c| {
-        c.as_ref()
-            .and_then(|c| c.source(source_id))
-            .map(|s| s.settings.clone())
-            .unwrap_or_default()
-    })
-}
-
-/// The fields for one kind's parameters, showing `settings`: the stored ones in the
-/// Inspector, a draft in the Properties dialog. `commit` gets each checked change, with
+/// The fields for one kind's parameters, showing `settings`: a draft in the Properties
+/// dialog, the stored ones in a filter's settings. `commit` gets each checked change, with
 /// `null` for the default.
 #[component]
 pub fn Form(
@@ -973,6 +849,7 @@ fn capture_format_input(
     let body = move || {
         if listed_now.get() {
             let choices = choices.clone();
+            let current_now = current.clone();
             let selected = {
                 let current = current.clone();
                 move || {
@@ -985,10 +862,16 @@ fn capture_format_input(
                 <select class="capture-format" prop:value=selected.clone()
                     on:focus=move |_| listing.refresh() on:change=on_change.clone()>
                     {move || {
+                        // Each option says whether it is the current one, as a capture
+                        // target's do: `prop:value` can run before the options exist (#1371).
+                        let now = current_now();
                         choices()
                             .unwrap_or_default()
                             .into_iter()
-                            .map(|(v, label)| view! { <option value=v>{label}</option> })
+                            .map(|(v, label)| {
+                                let on = v == now;
+                                view! { <option value=v selected=on>{label}</option> }
+                            })
                             .collect_view()
                     }}
                 </select>
@@ -1053,6 +936,7 @@ fn capture_target_input(
     let body = move || match mode.get() {
         Ok(()) => {
             let choices = choices.clone();
+            let current_now = current.clone();
             // Set again when the options change, which may have reset the selection.
             let selected = {
                 let current = current.clone();
@@ -1065,9 +949,15 @@ fn capture_target_input(
                 <select class="capture-target" prop:value=selected.clone()
                     on:focus=move |_| refresh() on:change=on_pick.clone()>
                     {move || {
+                        // Each option says whether it is the current one: `prop:value` can
+                        // run before the options exist, and then selects nothing (#1371).
+                        let now = current_now();
                         choices()
                             .into_iter()
-                            .map(|(v, label)| view! { <option value=v>{label}</option> })
+                            .map(|(v, label)| {
+                                let on = v == now;
+                                view! { <option value=v selected=on>{label}</option> }
+                            })
                             .collect_view()
                     }}
                 </select>
