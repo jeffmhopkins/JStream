@@ -6798,10 +6798,10 @@ stamp = { hash = "b3:01d2b4b8c34ac642", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:000c2782796ed5c5", by = "agent:claude-perf-suite", note = "gates-lavapipe.json sits in xtask/perf/bench/, which load_dir doesn't read as a scene (it reads *.json in xtask/perf only); the scene format text is unchanged" }
 
 ["PERF-SUITE#thresholds"."body"]
-stamp = { hash = "b3:378bd1207f89d385", by = "agent:claude-perf-suite", note = "Recalibrated to hosted-runner runs of #1340, #1264 and #1359: default min_fps 10, max_frame_ms 100, over-budget share 100 (it flipped for vf_color_key, vf_luma_key, vf_video_delay and vf_image_mask between runs); baseline rows max_frame_ms 40 (measured ~9 ms); scene_chain 5 fps / 250 ms (measured 37 and 106 ms). The text says the bars are for perf-linux and why over-budget share judges nothing" }
+stamp = { hash = "b3:1d6b2a485ec1f3db", by = "agent:claude", note = "nested_deep gets its own looser floor (4 fps, 250 ms) for ADR-0126's per-target decode pass on lavapipe; the slow-scenes list names it" }
 
 ["PERF-SUITE#thresholds"."file:xtask/perf/thresholds.toml"]
-stamp = { hash = "b3:37fd3cfd6b26aa13", by = "agent:claude-perf-suite", note = "Only the software-slow scenes' limits move (1.5 fps / 800 ms; effects_many and vf_drop_shadow 1 fps / 1200 ms), after hosted runs drew vf_drop_shadow at 2.9-3.7 fps and effects_many at 1.8-3.4; the section's text (slow scenes have their own looser limits, spread between hosted runs) still holds" }
+stamp = { hash = "b3:0c13bb7844ad136a", by = "agent:claude", note = "nested_deep gets its own looser floor (4 fps, 250 ms) for ADR-0126's per-target decode pass on lavapipe; the slow-scenes list names it" }
 
 ["README#platforms"."body"]
 stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:claude-mac1", note = "Re-read the platform table on ADR-0063's acceptance: the macOS row now says per ADR-0063, macOS 14 and later, Apple Silicon with Intel best effort, matching its decision 2 and answers 2 and 3; the section now depends on ADR-0063; Windows and Linux rows unchanged" }
