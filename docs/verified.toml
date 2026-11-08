@@ -6813,7 +6813,7 @@ stamp = { hash = "b3:01d2b4b8c34ac642", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:a50568941b3345ef", by = "agent:claude", note = "the lavapipe gates file gained min_probe_psnr_y and min_probe_ssim_y; a local lavapipe run with Cisco's OpenH264 passed at 47 to 60 dB and SSIM 0.98 to 1.0; the scenes are unchanged" }
 
 ["PERF-SUITE#thresholds"."body"]
-stamp = { hash = "b3:4d325db6dde9a5ce", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:71234f8ec794e39c", by = "agent:claude", note = "nested_deep gets its own looser floor (4 fps, 250 ms) for ADR-0126's per-target decode pass on lavapipe; the slow-scenes list names it | merge: #1424 added quality-probe PSNR/SSIM floors to the gates paragraph; the scene thresholds and nested_deep's floor are unchanged | kept from the merged side: quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["PERF-SUITE#thresholds"."file:xtask/perf/thresholds.toml"]
 stamp = { hash = "b3:0c13bb7844ad136a", by = "agent:claude", note = "nested_deep gets its own looser floor (4 fps, 250 ms) for ADR-0126's per-target decode pass on lavapipe; the slow-scenes list names it" }
