@@ -1237,9 +1237,7 @@ fn upgrade_moves_loaded_filters_through_renames() {
     };
     let before = loaded.rev();
     let changed = [("tint".to_owned(), None)].into_iter().collect();
-    let upgraded = loaded
-        .upgrade_filters(&changed, &migrate)
-        .expect("a change");
+    let upgraded = loaded.upgrade_kinds(&changed, &migrate).expect("a change");
     assert_eq!(upgraded.rev, before.next().expect("rev"));
     assert_eq!(loaded.rev(), upgraded.rev);
     let fitted = settings(&[
@@ -1274,7 +1272,109 @@ fn upgrade_moves_loaded_filters_through_renames() {
         saved["sources"][0]["filters"]["video"][0]["kind_version"],
         json!(2)
     );
-    assert_eq!(loaded.upgrade_filters(&changed, &migrate), None);
+    assert_eq!(loaded.upgrade_kinds(&changed, &migrate), None);
+}
+
+/// A `builtin` source whose kind is missing at load (a shader source whose pack isn't
+/// loaded yet) is kept as the file has it, its kind version kept for the next save, and
+/// is upgraded with the filters once the kind is described (#1412).
+#[test]
+fn a_source_of_a_missing_kind_loads_verbatim_and_is_upgraded() {
+    let mut g = graph();
+    apply_ok(&mut g, vec![builtin("bg")]);
+    let mut file: Value = serde_json::from_str(&g.to_collection_json()).expect("valid JSON");
+    let source = file["sources"]
+        .as_array_mut()
+        .and_then(|s| s.iter_mut().find(|s| s["id"] == "bg"))
+        .expect("bg is saved");
+    source["kind"]["kind"] = json!("wave/w");
+    source["kind_version"] = json!(1);
+    source["settings"] = json!({ "level": 0.25 });
+    let mut loaded = Graph::new()
+        .with_kinds(kinds())
+        .with_collection_json(&file.to_string())
+        .expect("loads with the kind missing");
+    let bg = loaded.state().source(&SourceId::new("bg")).expect("bg");
+    assert_eq!(bg.settings(), &settings(&[("level", json!(0.25))]));
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("json");
+    assert_eq!(saved["sources"][0]["kind_version"], json!(1));
+    assert_eq!(saved["sources"][0]["settings"], json!({ "level": 0.25 }));
+
+    // A reference in its settings must still name something that exists.
+    let mut dangling = file.clone();
+    dangling["sources"][0]["settings"] = json!({ "sky": scene_ref("nowhere") });
+    assert!(
+        Graph::new()
+            .with_kinds(kinds())
+            .with_collection_json(&dangling.to_string())
+            .is_err()
+    );
+
+    // Version 2 calls `level` `gain`.
+    let wave = KindDescriptor {
+        kind_id: "wave/w".into(),
+        category: KindCategory::Source,
+        name: "Wave".into(),
+        version: 2,
+        video: true,
+        audio: false,
+        max_outset_px: None,
+        params: vec![super::param(
+            "gain",
+            ParamType::Float {
+                min: None,
+                max: None,
+                step: None,
+                unit: None,
+            },
+            json!(1.0),
+        )],
+    };
+    loaded = loaded.with_kinds([wave.clone()]);
+    let migrate = |_: &str, stored: &Settings, _: u32| -> Option<Settings> {
+        Some(
+            stored
+                .iter()
+                .map(|(id, v)| (if id == "level" { "gain" } else { id }, v.clone()))
+                .collect(),
+        )
+    };
+    let changed = [("wave/w".to_owned(), None)].into_iter().collect();
+    let upgraded = loaded.upgrade_kinds(&changed, &migrate).expect("a change");
+    let gain = settings(&[("gain", json!(0.25))]);
+    assert_eq!(
+        upgraded.set,
+        [Edit::SourceSetSettings {
+            source_id: SourceId::new("bg"),
+            patch: settings(&[("gain", json!(0.25)), ("level", Value::Null)]),
+        }]
+    );
+    assert_eq!(
+        loaded
+            .state()
+            .source(&SourceId::new("bg"))
+            .expect("bg")
+            .settings(),
+        &gain
+    );
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("json");
+    assert_eq!(saved["sources"][0]["kind_version"], json!(2));
+
+    // Removed, it keeps the version its settings were stored by; a version 1 that can't
+    // read them leaves them, and the save still says 2.
+    let loaded = loaded.without_kinds(["wave/w"]);
+    let mut wave_v1 = wave.clone();
+    wave_v1.version = 1;
+    wave_v1.params[0].id = "level".into();
+    let mut loaded = loaded.with_kinds([wave_v1]);
+    let newer = |_: &str, _: &Settings, from: u32| -> Option<Settings> {
+        assert_eq!(from, 2);
+        None
+    };
+    assert_eq!(loaded.upgrade_kinds(&changed, &newer), None);
+    let saved: Value = serde_json::from_str(&loaded.to_collection_json()).expect("json");
+    assert_eq!(saved["sources"][0]["kind_version"], json!(2));
+    assert_eq!(saved["sources"][0]["settings"], json!({ "gain": 0.25 }));
 }
 
 /// Version 2 of `tint`, which calls `amount` `strength`, and its migration.
@@ -1333,13 +1433,13 @@ fn a_same_version_reload_keeps_every_setting() {
     without_amount.params.retain(|p| p.id != "amount");
     let mut g = g.with_kinds([without_amount]);
     let changed = [("tint".to_owned(), Some(1))].into_iter().collect();
-    assert_eq!(g.upgrade_filters(&changed, &migrate_tint), None);
+    assert_eq!(g.upgrade_kinds(&changed, &migrate_tint), None);
     assert_eq!(
         cam_filter(&g, 0).settings().get("amount"),
         Some(&json!(0.5))
     );
     let mut g = g.with_kinds([tint_v1()]);
-    assert_eq!(g.upgrade_filters(&changed, &migrate_tint), None);
+    assert_eq!(g.upgrade_kinds(&changed, &migrate_tint), None);
     assert_eq!(
         cam_filter(&g, 0).settings().get("amount"),
         Some(&json!(0.5))
@@ -1363,9 +1463,7 @@ fn a_downgrade_keeps_the_newer_version_across_a_save() {
     let mut g = g.with_kinds([tint_v1()]);
     let changed = [("tint".to_owned(), Some(2))].into_iter().collect();
     // The kind's version changed, so there is a revision, but no settings moved.
-    let downgraded = g
-        .upgrade_filters(&changed, &migrate_v1)
-        .expect("a revision");
+    let downgraded = g.upgrade_kinds(&changed, &migrate_v1).expect("a revision");
     assert!(downgraded.set.is_empty());
     assert_eq!(saved_version(&g), json!(2), "saved by the newer version");
 
@@ -1379,13 +1477,13 @@ fn a_downgrade_keeps_the_newer_version_across_a_save() {
         .expect("loads with the kind missing")
         .with_kinds([tint_v1()]);
     let loaded = [("tint".to_owned(), None)].into_iter().collect();
-    assert_eq!(g.upgrade_filters(&loaded, &migrate_v1), None);
+    assert_eq!(g.upgrade_kinds(&loaded, &migrate_v1), None);
     assert_eq!(saved_version(&g), json!(2));
 
     let mut g = g.with_kinds([tint_v2()]);
     let upgraded = [("tint".to_owned(), Some(1))].into_iter().collect();
     let back = g
-        .upgrade_filters(&upgraded, &migrate_tint)
+        .upgrade_kinds(&upgraded, &migrate_tint)
         .expect("a revision");
     assert!(
         back.set.is_empty(),
@@ -1416,7 +1514,7 @@ fn a_removed_kind_coming_back_newer_moves_its_filters() {
     assert_eq!(saved_version(&g), json!(1));
     let mut g = g.with_kinds([tint_v2()]);
     let added = [("tint".to_owned(), None)].into_iter().collect();
-    assert!(g.upgrade_filters(&added, &migrate_tint).is_some());
+    assert!(g.upgrade_kinds(&added, &migrate_tint).is_some());
     assert_eq!(
         cam_filter(&g, 0).settings().get("strength"),
         Some(&json!(0.5))

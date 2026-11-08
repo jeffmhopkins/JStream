@@ -5406,21 +5406,33 @@ impl Shared {
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
-            // Filters of a changed kind follow its renames (#1353, ADR-0025): a filter
-            // loaded before its pack, or one a reload raised the version of. A new version
-            // is logged even when no filter moved, so an undo step still holding a
-            // deleted filter's old settings conflicts with it (#1418).
+            // Sources and filters of a changed kind follow its renames (#1353, #1412,
+            // ADR-0025): one loaded before its pack, or one a reload raised the version of. A new
+            // version is logged even when nothing moved, so an undo step still holding a
+            // deleted filter's or source's old settings conflicts with it (#1418).
             let migrations = &update.migrations;
-            let upgraded = state.graph.upgrade_filters(&before, &|kind, stored, from| {
+            let upgraded = state.graph.upgrade_kinds(&before, &|kind, stored, from| {
                 migrations.get(kind)?.migrate(stored, from)
             });
             if let Some(upgraded) = upgraded {
                 if !upgraded.set.is_empty() {
                     tracing::info!(
                         rev = %upgraded.rev,
-                        filters = upgraded.set.len(),
-                        "filters' stored settings moved to their effect's current version"
+                        changed = upgraded.set.len(),
+                        "stored settings moved to their pack kind's current version"
                     );
+                }
+                // A shader source's new settings (its size among them) reach its live
+                // source as after any batch.
+                if upgraded
+                    .set
+                    .iter()
+                    .any(|edit| matches!(edit, Edit::SourceSetSettings { .. }))
+                {
+                    let state = &mut *state;
+                    state.refresh_shown();
+                    let drawn = state.shown.as_ref().unwrap_or(&state.graph);
+                    state.live.sync(drawn.state());
                 }
                 state.history.record_engine(upgraded.rev, upgraded.touched);
                 state.subscribers.emit(
