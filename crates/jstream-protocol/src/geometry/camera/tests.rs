@@ -494,7 +494,7 @@ fn the_blur_follows_the_thin_lens() {
     assert_eq!(view(c).focus(), None, "no blur");
 }
 
-/// ADR-0137 decision 3: a scene point taken into the viewing frame lands where a model
+/// ADR-0143 decision 3: a scene point taken into the viewing frame lands where a model
 /// placed there does, and a direction is the difference of two points.
 #[test]
 fn in_view_matches_a_model_placed_at_the_point() {

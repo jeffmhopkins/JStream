@@ -76,7 +76,7 @@ fn draw(
     draw_lit(compositor, model, geometry, camera, lighting, None)
 }
 
-/// [`draw`], lit by `lights` (ADR-0137 decision 3).
+/// [`draw`], lit by `lights` (ADR-0143 decision 3).
 fn draw_lit(
     compositor: &mut Compositor,
     model: &Model,
@@ -645,7 +645,7 @@ fn lit_sphere(compositor: &mut Compositor, lights: &[SceneLight]) -> Snapshot {
     )
 }
 
-/// ADR-0137 decision 3: scene lights replace the studio rig. A point light to the right
+/// ADR-0143 decision 3: scene lights replace the studio rig. A point light to the right
 /// and in front lights the sphere's right side and leaves its left side dark; with no
 /// light at all, a sphere that emits nothing is black.
 #[test]
@@ -664,7 +664,7 @@ fn golden_model_a_point_light_lights_the_side_that_faces_it() {
     assert_near(rgb(&dark, 110, 50), [0, 0, 0], (110, 50));
 }
 
-/// ADR-0137 decision 3: a light's colour tints what it lights.
+/// ADR-0143 decision 3: a light's colour tints what it lights.
 #[test]
 fn golden_model_a_light_colour_tints_the_model() {
     let Some(mut opened) = open() else {
@@ -676,7 +676,7 @@ fn golden_model_a_light_colour_tints_the_model() {
     assert!(r > 120 && g < 8 && b < 8, "{:?}", [r, g, b]);
 }
 
-/// ADR-0137 decision 3: past its range a point light lights nothing, and inside it the
+/// ADR-0143 decision 3: past its range a point light lights nothing, and inside it the
 /// light fades with distance.
 #[test]
 fn golden_model_a_point_light_fades_to_nothing_at_its_range() {
@@ -707,7 +707,7 @@ fn golden_model_a_point_light_fades_to_nothing_at_its_range() {
     assert!(near > 30 && near + 30 < unfaded, "{near} against {unfaded}");
 }
 
-/// ADR-0137 decision 3: a spot light lights what is inside its cone and not what is
+/// ADR-0143 decision 3: a spot light lights what is inside its cone and not what is
 /// outside it, and a directional light lights from its aim.
 #[test]
 fn golden_model_a_spot_light_lights_only_inside_its_cone() {
@@ -773,7 +773,7 @@ fn golden_model_a_spot_light_lights_only_inside_its_cone() {
     assert_near(rgb(&shot, 140, 50), [0, 0, 0], (140, 50));
 }
 
-/// ADR-0137 decision 3: ambient lights add up and scale the environment light, with no
+/// ADR-0143 decision 3: ambient lights add up and scale the environment light, with no
 /// direction of their own.
 #[test]
 fn golden_model_ambient_lights_add_up() {
@@ -788,7 +788,7 @@ fn golden_model_ambient_lights_add_up() {
     assert_near(rgb(&two, 80, 50), rgb(&doubled, 80, 50), (80, 50));
 }
 
-/// ADR-0137 decision 3: only the first [`MAX_SCENE_LIGHTS`] lights shade a model, and a
+/// ADR-0143 decision 3: only the first [`MAX_SCENE_LIGHTS`] lights shade a model, and a
 /// light at zero intensity (an item faded out) still takes its slot, so the ninth stays
 /// off while one of the first eight fades. Ambient lights take no slot, and a light with
 /// a non-finite value lights nothing.
@@ -830,7 +830,7 @@ fn golden_model_lights_past_the_limit_are_ignored() {
     }
 }
 
-/// ADR-0137 decision 3: lights belong to a 3D scene. Without a camera, and for an unlit
+/// ADR-0143 decision 3: lights belong to a 3D scene. Without a camera, and for an unlit
 /// model, they are ignored.
 #[test]
 fn golden_model_lights_are_ignored_without_a_camera_or_unlit() {

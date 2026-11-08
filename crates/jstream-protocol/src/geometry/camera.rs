@@ -316,7 +316,7 @@ impl CameraView {
     /// this camera uses: x right and y down on the canvas, z toward the viewer, with the
     /// viewer at `z =` [`Self::focal_px`]. Composed in `f64` relative to the camera, so a
     /// far camera loses no precision near itself; what scene lights are placed by
-    /// (ADR-0137 decision 3).
+    /// (ADR-0143 decision 3).
     pub fn in_view(&self, point: [f64; 3]) -> [f64; 3] {
         let rel = sub(point, self.position);
         [

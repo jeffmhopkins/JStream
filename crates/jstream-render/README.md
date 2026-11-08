@@ -45,7 +45,7 @@ and calls this crate.
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
-  scene's lights, [ADR-0137](../../docs/adr/0137-scene-lights-and-depth-aware-scene-filters.md))
+  scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md))
   into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
@@ -597,7 +597,7 @@ adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
-**Scene lights** (ADR-0137 decision 3). With `ModelDraw::lights` set and a camera, the
+**Scene lights** (ADR-0143 decision 3). With `ModelDraw::lights` set and a camera, the
 rig is replaced by the scene's lights. `SceneLight` holds a light in the scene's space
 (position and aim, `f64`), and the draw takes each into the viewing frame through
 `CameraView::in_view` and `direction_in_view`, so only light positions relative to the
@@ -1077,7 +1077,7 @@ the placement mirrors the model, and seen from behind (a double-sided plane turn
 lights as the front of the opposite tilt, while an unmapped plane's back lights as its
 front; a model draws into layers of three sizes in a row (the
 depth target follows the layer); and a primitive past the adapter's buffer limit is
-refused with `RenderError::Invalid`. Scene lights (ADR-0137), each through the framing
+refused with `RenderError::Invalid`. Scene lights (ADR-0143), each through the framing
 camera: a point light to the right lights a sphere's right side and leaves its left
 black, and no light at all leaves it black; a red light tints it red; a point light past
 its range lights nothing and inside it is dimmer than one that never fades; a spot

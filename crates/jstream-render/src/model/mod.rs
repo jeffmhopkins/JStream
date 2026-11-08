@@ -22,7 +22,7 @@ const DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
 /// Bytes of one vertex: position, normal, tangent, texture coordinate and colour.
 const VERTEX_STRIDE: u64 = jstream_media::model::VERTEX_BYTES;
 /// The most point, spot and directional lights a `scene`-lit model is shaded with
-/// (ADR-0137 decision 3); any after them are ignored.
+/// (ADR-0143 decision 3); any after them are ignored.
 pub const MAX_SCENE_LIGHTS: usize = 8;
 /// Bytes of one light in the frame uniform: four `vec4`.
 const LIGHT_BYTES: u64 = 64;
@@ -97,7 +97,7 @@ pub struct ModelDraw<'a> {
     /// How it is lit.
     pub lighting: Lighting,
     /// The lights of the scene the item is in, which light the model in place of the
-    /// studio rig (ADR-0137 decision 3), or `None` for `lighting`'s own. A caller passes
+    /// studio rig (ADR-0143 decision 3), or `None` for `lighting`'s own. A caller passes
     /// `Some` only for a model whose source asks to be lit by its scene, in the scene's
     /// stacking order before any depth sort; the first [`MAX_SCENE_LIGHTS`] that aren't
     /// ambient shade it, lit or not, and the caller logs any it drops. Only a 3D scene
@@ -106,7 +106,7 @@ pub struct ModelDraw<'a> {
     pub lights: Option<&'a [SceneLight]>,
 }
 
-/// What kind of light a [`SceneLight`] is (ADR-0137 decision 1).
+/// What kind of light a [`SceneLight`] is (ADR-0143 decision 1).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum LightKind {
     /// From its position in every direction, fading out to its range.
@@ -120,7 +120,7 @@ pub enum LightKind {
     Ambient,
 }
 
-/// One light of a scene, as its item places it (ADR-0137 decisions 1 and 2), in the
+/// One light of a scene, as its item places it (ADR-0143 decisions 1 and 2), in the
 /// scene's space.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SceneLight {
@@ -685,7 +685,7 @@ impl SceneLighting {
             let positive = |v: f32| v.is_finite() && v > 0.0;
             if light.kind != LightKind::Ambient {
                 // Every shading light takes one of the 8 in order, lit or not, so fading
-                // one of them out never switches a ninth on (ADR-0137 decision 3).
+                // one of them out never switches a ninth on (ADR-0143 decision 3).
                 slots += 1;
                 if slots > MAX_SCENE_LIGHTS {
                     continue;
