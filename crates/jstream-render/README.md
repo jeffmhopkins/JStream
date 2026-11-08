@@ -81,12 +81,17 @@ and calls this crate.
 - `Item.blend` is its `BlendMode` (re-exported), drawn per
   [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md) (`blend.rs`): `normal`,
   `additive`, `screen` and `multiply` (two draws) with fixed-function blend states;
-  `darken`, `lighten`, `overlay`, `difference`, `exclusion`, `normal_srgb` and
-  `additive_srgb` by reading a backdrop, a copy of the target's texels under the item.
-  Overlay, difference and exclusion mix sRGB-encoded values, and so do the two `_srgb`
-  modes, which composite as a browser does
-  ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)); the rest blend
-  in linear light. A layer blends with its own texels only.
+  `darken`, `lighten`, `overlay`, `difference` and `exclusion` by reading a backdrop, a
+  copy of the target's texels under the item. A layer blends with its own texels only.
+- `Compositor::set_blending` picks the space every mode mixes in
+  ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). In
+  `linear`, a new compositor's, the target holds premultiplied linear light, and
+  overlay, difference and exclusion mix sRGB-encoded values. In `srgb` the target holds
+  premultiplied sRGB-encoded colour while the items draw: each item encodes its colour
+  (the shader's `ENCODED` override), the same blend states then give a browser's
+  composite, and the backdrop modes mix the encoded values as they are. One decode pass
+  after the last item (`resolve.wgsl`'s `fs_decode`, from a backdrop copy of the whole
+  target) leaves premultiplied linear light, so a canvas or a layer is linear either way.
 - Nested scenes are not walked here. The caller composites the inner scene into a
   layer, an `Image` on this compositor, and places that image in the outer scene:
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
@@ -352,6 +357,14 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    box centre along the viewing axis (`CameraView::depth_of`), stacking order breaking
    ties (ADR-0094 decision 4). No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
+   With `Blending::Srgb` (ADR-0126) the same pass runs on encoded values: the clear is
+   the background premultiplied without the transfer, each fragment's premultiplied
+   linear colour is encoded straight and premultiplied again (pipelines built with the
+   `ENCODED` override), and the backdrop modes mix the encoded colours directly. After
+   the last item the whole target is copied into the backdrop and one fullscreen draw
+   (`resolve.wgsl`'s `fs_decode`) writes it back as premultiplied linear, so steps 4 and
+   on, and a layer's reader, see linear light. The curves are written so that 1 encodes
+   and decodes to exactly 1, so white survives nested scenes' round trips.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
    alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
@@ -633,7 +646,9 @@ the platform's capture, interop and encoders are D3D11/D3D12 and wgpu's own pick
 Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped, and WARP,
 which D3D12 offers when it has no GPU, is skipped too); then, everywhere, the
 high-performance adapter without `force_fallback_adapter`, then the software adapter,
-then `RenderError::NoAdapter`. A hardware adapter whose device refuses to open (limits
+then `RenderError::NoAdapter`. The device asks for `TIMESTAMP_QUERY` when the adapter
+has it (the pack passes' GPU time, [Filters](#filters)), and no other optional feature.
+A hardware adapter whose device refuses to open (limits
 below the defaults, a removed or hung GPU) falls back to the software adapter too, and
 the error names both when that fails as well. When the pick already was the software
 adapter (no GPU), its device error is returned without a second try. A machine with no
@@ -772,6 +787,21 @@ bytes and the bind group's entries live in kept or fixed-size storage, bounded b
 feedback on the pass itself and on a later pass with a restart, images and slots, the
 audio image, and
 `sys`, and a program over the cap, on the test adapter.
+
+**GPU time of pack passes** (#349, `src/timer.rs`). A pack's WGSL is validated, not
+bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GPU
+before the OS resets the device. `Compositor::time_passes` turns the timing on (it
+reports `false` on a device without `TIMESTAMP_QUERY`, which times nothing; a
+compositor nobody asked times nothing either). Then each external filter or shader
+source application (`Pass::timed`, which returns the kind ID; the built-in kinds
+return `None`) is bracketed by two empty compute passes that write a timestamp each,
+resolved and copied to a small mappable buffer in the same submit, one of 32 slots.
+`Compositor::gpu_times` polls without waiting and hands back each time whose map has
+finished, with its kind, a frame or two after its draw; an application with every slot
+on its way isn't timed. It allocates nothing: a slot's label string is reused. A
+device opened by this crate, or by the platform crates' contexts, asks for
+`TIMESTAMP_QUERY` when the adapter has it. A test times a pack filter on the test
+adapter (lavapipe has the feature) and checks a built-in one isn't timed.
 
 **The kinds.** Each group documents its kinds here as it lands.
 

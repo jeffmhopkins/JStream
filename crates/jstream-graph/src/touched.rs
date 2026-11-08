@@ -125,6 +125,8 @@ pub struct Touched {
     canvas: bool,
     /// Whether the base frame rate was set (ADR-0119).
     frame_rate: bool,
+    /// Whether the blending space was set (ADR-0126).
+    blending: bool,
     /// Whether the default transition preset was set.
     default_preset: bool,
     /// Whether the folders' order was set.
@@ -192,6 +194,7 @@ impl Touched {
             Edit::SceneReorder { .. } => self.scene_order = true,
             Edit::CanvasSetSize { .. } => self.canvas = true,
             Edit::CanvasSetFrameRate { .. } => self.frame_rate = true,
+            Edit::CanvasSetBlending { .. } => self.blending = true,
             Edit::ItemAdd {
                 scene_id,
                 item_id,
@@ -575,6 +578,7 @@ impl Touched {
         self.scene_order |= other.scene_order;
         self.canvas |= other.canvas;
         self.frame_rate |= other.frame_rate;
+        self.blending |= other.blending;
         self.default_preset |= other.default_preset;
         self.folder_order |= other.folder_order;
         self.label_order |= other.label_order;
@@ -622,6 +626,7 @@ impl Touched {
             || (self.scene_order && other.scene_order)
             || (self.canvas && other.canvas)
             || (self.frame_rate && other.frame_rate)
+            || (self.blending && other.blending)
             || (self.default_preset && other.default_preset)
             || (self.folder_order && other.folder_order)
             || (self.label_order && other.label_order)

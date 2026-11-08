@@ -16,9 +16,9 @@
 use crate::model::MASTER_NAME;
 use crate::{Graph, Placement, audio};
 use jstream_protocol::{
-    Action, BlendMode, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
-    Easing, Edit, EffectsSpace, EncoderProfile, EncoderProfileId, FilterChain, FilterId,
-    FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
+    Action, BlendMode, Blending, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas,
+    Chord, Crop, Easing, Edit, EffectsSpace, EncoderProfile, EncoderProfileId, FilterChain,
+    FilterId, FilterInfo, FilterOwner, Finite32, FolderId, INITIAL_PRESET, ItemGeometry, ItemId,
     ItemTransform, ItemTransition, KeyframeTiming, LabelId, MotionModifier, OutputId, OutputKind,
     ProtocolError, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions, SceneRole, Settings,
     SourceAudio, SourceId, SourceKind, SourceMeta, TimelineInfo, TransitionPresetId, Trigger,
@@ -34,7 +34,11 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 11;
+pub const SCHEMA_VERSION: u32 = 12;
+
+fn is_srgb(blending: &Blending) -> bool {
+    *blending == Blending::Srgb
+}
 
 fn default_base_fps() -> u32 {
     jstream_protocol::DEFAULT_BASE_FPS
@@ -60,7 +64,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
-    v10_to_v11,
+    v10_to_v11, v11_to_v12,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -306,6 +310,47 @@ fn v10_to_v11(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// The blend modes ADR-0105 added and ADR-0126 folded into the project's space, and the
+/// mode each one now is.
+const SRGB_MODES: [(&str, &str); 2] = [("normal_srgb", "normal"), ("additive_srgb", "additive")];
+
+/// Version 12 adds the project's blending space (`blending`, ADR-0126) and drops the
+/// `_srgb` blend modes. A version 11 file has no `blending`, and drew every mode but
+/// those two in linear light. Its `normal_srgb` and `additive_srgb` items become
+/// `normal` and `additive`. The project is `srgb` when no item used any other mode,
+/// including an item that left the default `normal`, and `linear` otherwise, so its
+/// scenes keep their look; a file that mixed both keeps its linear items' look. A
+/// `blending` there is refused, as version 11 refused it.
+fn v11_to_v12(value: &mut Value) -> Result<(), String> {
+    if value.get("blending").is_some() {
+        return Err("a version 11 file has no `blending`".into());
+    }
+    let mut linear = false;
+    let scenes = value.get_mut("scenes").and_then(Value::as_array_mut);
+    for scene in scenes.into_iter().flatten() {
+        let items = scene.get_mut("items").and_then(Value::as_array_mut);
+        for item in items.into_iter().flatten() {
+            let Some(object) = item.as_object_mut() else {
+                continue;
+            };
+            let old = object.get("blend").and_then(Value::as_str);
+            match SRGB_MODES.iter().find(|(srgb, _)| Some(*srgb) == old) {
+                Some((_, plain)) if *plain == "normal" => {
+                    object.remove("blend");
+                }
+                Some((_, plain)) => {
+                    object.insert("blend".into(), Value::from(*plain));
+                }
+                None => linear = true,
+            }
+        }
+    }
+    if linear && let Some(object) = value.as_object_mut() {
+        object.insert("blending".into(), Value::from("linear"));
+    }
+    Ok(())
+}
+
 /// Why a collection file could not be loaded. The message never quotes the file's
 /// values beyond IDs, so it is safe to log.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -374,6 +419,10 @@ struct File {
         skip_serializing_if = "is_default_base_fps"
     )]
     base_fps: u32,
+    /// The space every blend mode mixes in (ADR-0126). Omitted at `srgb`, a new
+    /// collection's.
+    #[serde(default, skip_serializing_if = "is_srgb")]
+    blending: Blending,
     /// In display order.
     scenes: Vec<FileScene>,
     /// Ordered by ID.
@@ -805,6 +854,7 @@ impl Graph {
             rev: self.rev,
             canvas: state.canvas,
             base_fps: state.base_fps,
+            blending: state.blending,
             scenes: state
                 .scenes
                 .iter()
@@ -1184,6 +1234,14 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         edits.push((
             "the base frame rate".to_owned(),
             Edit::CanvasSetFrameRate { fps: file.base_fps },
+        ));
+    }
+    if file.blending != graph.state.blending {
+        edits.push((
+            "the blending space".to_owned(),
+            Edit::CanvasSetBlending {
+                blending: file.blending,
+            },
         ));
     }
     // Folders are created top level in folder order, then nested, so a parent may come

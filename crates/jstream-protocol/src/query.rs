@@ -4,7 +4,9 @@ use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
 use crate::binding::Binding;
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
-use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
+use crate::command::{
+    BlendMode, Blending, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind,
+};
 use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
@@ -35,6 +37,10 @@ use crate::youtube::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+fn legacy_blending() -> Blending {
+    Blending::Linear
+}
 
 fn default_base_fps() -> u32 {
     DEFAULT_BASE_FPS
@@ -493,6 +499,10 @@ pub enum QueryResult {
             skip_serializing_if = "is_default_base_fps"
         )]
         base_fps: u32,
+        /// The space every blend mode mixes in (ADR-0126, since 0.101). Missing, from an
+        /// older server, parses as `linear`, the only space it drew.
+        #[serde(default = "legacy_blending")]
+        blending: Blending,
         /// Every source, ordered by ID.
         sources: Vec<SourceInfo>,
         /// Every scene with its items, in display order.
@@ -906,14 +916,14 @@ pub struct CaptureTargetInfo {
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub formats: Vec<CaptureFormatInfo>,
     /// For a device, the camera controls it offers, with their ranges and values now
-    /// (since 0.107). Omitted when empty: always for a display or a window, and for a
+    /// (since 0.105). Omitted when empty: always for a display or a window, and for a
     /// device with none or whose controls couldn't be read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub controls: Vec<CameraControlInfo>,
 }
 
 /// One camera control a video capture device offers, in a `capture.targets` result:
-/// what a `webcam` source's `camera_controls` setting takes for it (since 0.107).
+/// what a `webcam` source's `camera_controls` setting takes for it (since 0.105).
 /// Values are in the platform's own units, from `min` to `max` in steps of `step`.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct CameraControlInfo {

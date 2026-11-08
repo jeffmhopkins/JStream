@@ -157,6 +157,9 @@ pub(crate) fn edits() -> Vec<Edit> {
             height: 2160,
         },
         Edit::CanvasSetFrameRate { fps: 60 },
+        Edit::CanvasSetBlending {
+            blending: crate::Blending::Linear,
+        },
         Edit::ItemSetVisible {
             item_id: ItemId::new("itm_2"),
             scene_id: None,
@@ -1415,6 +1418,16 @@ pub(crate) fn actions() -> Vec<Action> {
             source_id: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
+        Action::PreviewReport {
+            view: "projector:program".into(),
+            counts: crate::ViewCounts {
+                received: 300,
+                shown: 299,
+                skipped: 1,
+                placeholders: 1,
+                ..crate::ViewCounts::default()
+            },
+        },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
             preset_id: None,
@@ -1979,6 +1992,21 @@ fn profile_info() -> ProfileInfo {
             underrun_frames: 480,
             dropped_frames: 0,
         }),
+        views: vec![crate::ViewProfile {
+            client: "jstream-ui".into(),
+            view: "canvas".into(),
+            counts: crate::ViewCounts {
+                received: 150,
+                shown: 148,
+                skipped: 2,
+                decode_errors: 0,
+                placeholders: 1,
+                blanks: 0,
+                reopens: 1,
+            },
+            received_fps: ms(30.0),
+            shown_fps: ms(29.6),
+        }],
     }
 }
 
@@ -2434,6 +2462,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             rev: Rev(12),
             canvas: Canvas::DEFAULT,
             base_fps: 30,
+            blending: crate::Blending::Srgb,
             sources: source_infos(),
             scenes: vec![
                 SceneInfo {
@@ -3104,6 +3133,12 @@ pub(crate) fn events() -> Vec<Event> {
         blamed: vec!["fx/blur".into()],
         quarantined: vec!["fx/blur".into()],
         recovering: true,
+    });
+    events.push(Event::GpuEffectSlow {
+        kind_id: "fx/blur".into(),
+        took_us: 21_400,
+        limit_us: 16_666,
+        quarantined: vec!["fx/blur".into()],
     });
     events.push(Event::StatsTick {
         seq: 4,

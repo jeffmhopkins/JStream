@@ -57,8 +57,8 @@ pub use camera_motion::{
     FOLLOW_ZOOM_STEP, MAX_FOLLOW_MARGIN_PCT, check_camera_motion, follow_pointer_descriptor,
 };
 pub use command::{
-    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
-    MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
+    Action, Batch, BlendMode, Blending, Command, CommandClass, Crop, Edit, EffectsSpace,
+    ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, CodecDownloadInfo, EncoderProfile, EncoderProfileInfo,
@@ -128,12 +128,13 @@ pub use plugin::{
 };
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
-    PreviewCodec, PreviewDraft, PreviewSettings, StreamKind,
+    MAX_SESSION_VIEWS, MAX_VIEW_LABEL_CHARS, PreviewCodec, PreviewDraft, PreviewSettings,
+    StreamKind, ViewCounts, check_view_label,
 };
 pub use profile::{
     DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
     MAX_PROFILE_TOP, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
-    ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
+    ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile, ViewProfile,
 };
 pub use query::{
     CameraControlInfo, CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget,

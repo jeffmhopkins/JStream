@@ -620,6 +620,7 @@ pub fn reads() -> Vec<(Query, Result<QueryResult, ProtocolError>)> {
                 rev: COLLECTION_REV,
                 canvas: CANVAS,
                 base_fps: 30,
+                blending: crate::Blending::Srgb,
                 sources: sources(),
                 scenes: vec![
                     SceneInfo {

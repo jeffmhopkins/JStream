@@ -73,8 +73,9 @@ through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-cl
 So are the `plugin.*` ops (install, grant, re-enable) and `plugin.state_changed`: only a
 person installs or grants a plugin (ADR-0069 G1), so an agent can't hand its access to
 code that keeps running after the conversation. So is `effect.enable` (`effect` is
-in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss was blamed
-on (#349). The `gpu.device_lost` event that reports the loss does reach agents. So are
+in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss, or a
+pass that ran too long, was blamed on (#349). The `gpu.device_lost` and
+`gpu.effect_slow` events that report them do reach agents. So are
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
@@ -196,8 +197,9 @@ layering by role
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
 `scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy
 surfaces as a flipped, squashed, blurred `scene` item of the composite, masked in
-canvas space by an unflipped group around it and added at a low opacity because
-blending is linear, 3D sets through
+canvas space by an unflipped group around it and added at a low opacity, the blending
+space (`canvas.set_blending`: `srgb` to match a browser or design tool, `linear` for
+light that adds evenly, chosen before tuning opacities, ADR-0126), 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field

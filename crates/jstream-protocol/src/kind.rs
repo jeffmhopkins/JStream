@@ -46,8 +46,9 @@ pub struct KindSummary {
     /// with.
     pub version: u32,
     /// An effect-pack kind the engine quarantined after a GPU device loss was blamed on
-    /// it (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables
-    /// it (`effect.enable`). Omitted when `false`.
+    /// it (0.61, `gpu.device_lost`), or after it ran too long on the GPU (0.102,
+    /// `gpu.effect_slow`): its filters are bypassed until a person re-enables it
+    /// (`effect.enable`). Omitted when `false`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub quarantined: bool,
 }
@@ -265,7 +266,7 @@ pub enum ParamType {
     /// The camera controls set on a video capture device (exposure, focus, white
     /// balance and the like), each picked from the controls `capture.targets` lists
     /// for the device that parameter `target` names, so a UI can offer those with their
-    /// ranges. Since 0.107. Its value is an object from a control's `name` to an
+    /// ranges. Since 0.105. Its value is an object from a control's `name` to an
     /// integer, which sets it by hand, or `"auto"`, which hands it to the device; a
     /// control not in the object is left as the device has it. Its default is `{}`.
     CameraControls {

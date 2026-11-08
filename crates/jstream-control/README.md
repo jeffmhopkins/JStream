@@ -327,7 +327,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   back with its encoder profile, video mix and filters and the hotkeys its delete
   removed, hotkey and controller binding edits undo to the binding as it was, encoder profile and video mix
   edits undo to the profile or mix as it was,
-  and `canvas.set_size` undoes to the previous size, and `canvas.set_frame_rate` to the previous rate. The checks run in the engine's order (the key, then `expected_rev`, then
+  and `canvas.set_size` undoes to the previous size, `canvas.set_frame_rate` to the previous rate, and `canvas.set_blending` to the previous
+  space. The checks run in the engine's order (the key, then `expected_rev`, then
   `history_empty`). The result carries `step_rev` and both depths, a new batch clears
   the client's redo stack, undoing the `output.create` of a running output fails with
   the graph's `invalid_argument` and keeps the step, the history is bounded

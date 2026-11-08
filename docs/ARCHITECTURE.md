@@ -176,7 +176,7 @@ depends_on = ["docs/adr/0022-item-transform-and-canvas.md", "docs/adr/0023-place
 -->
 
 ```
-Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, base_fps: 30 | 60)
+Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, base_fps: 30 | 60, blending: srgb | linear)
 ├── sources        Source { id, kind, settings, filters { video[], audio[] }, duplicated_from?, labels, favourite, audio? }   video and/or audio
 │                  Filter { filter_id, kind, enabled, settings }   unique within its source; at most 8 per chain
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
@@ -327,8 +327,8 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   source or bus reference yet; from 0.79 they may name a file (an asset), so a LUT
   grades the program or one output. A placement owns its geometry, `crop`, `visible`, `opacity` (an alpha
   multiplier in [0, 1], and above 1, up to 4, a gain on its light, #1101) and `blend` (default `normal`; every mode is drawn,
-  [ADR-0082](adr/0082-blend-modes-drawn.md), and `normal_srgb` and `additive_srgb` mix as a
-  browser does, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). A scene's `filters` and a placement's `effects[]` are video filter
+  [ADR-0082](adr/0082-blend-modes-drawn.md), in the collection's `blending` space, `srgb` as a
+  browser mixes or `linear`, [ADR-0126](adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). A scene's `filters` and a placement's `effects[]` are video filter
   chains, the owners `scene` and `item` of `filter.*`
   ([ADR-0065](adr/0065-scene-chains-and-item-effects.md); item effects are in v1 under
   [ADR-0068](adr/0068-item-effects-in-v1.md)). A reference in them is an edge of the
@@ -701,7 +701,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
   `canvas.set_size` and `item.set_geometry` set the canvas and an item's box, and
-  `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89)
+  `canvas.set_frame_rate` sets the base frame rate to 30 or 60 (ADR-0119, protocol 0.89),
+  and `canvas.set_blending` the space blend modes mix in (ADR-0126, protocol 0.101)
   ([ADR-0022](adr/0022-item-transform-and-canvas.md), protocol 0.11), which deprecates
   `item.set_transform`; a geometry's `flip_h` and `flip_v` mirror its content (protocol
   0.32). `encoder.create`, `encoder.update` and `encoder.delete`
@@ -840,8 +841,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   them. The event `plugin.state_changed` reports
   a plugin enabled or disabled, with why the engine disabled it. Likewise
   `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
-  engine quarantined because a GPU device loss was blamed on it, which the event
-  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). The effect packs
+  engine quarantined because a GPU device loss was blamed on it, or because it ran
+  too long on the GPU, which the events `gpu.device_lost` and `gpu.effect_slow` (0.102)
+  report and `kind.list` marks (`quarantined`). The effect packs
   themselves are not for a person only: the actions `pack.write` and `pack.delete` and
   the queries `pack.list` and `pack.read` (0.72,
   [ADR-0097](adr/0097-agents-write-effect-packs.md)) write, remove, list and read a pack
@@ -944,7 +946,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   bindings and timelines that carry one label; `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name, and (0.90) the video devices a `webcam`'s `device` can
-  name, with their formats and (0.107) the camera controls a `webcam`'s
+  name, with their formats and (0.105) the camera controls a `webcam`'s
   `camera_controls` setting sets on them; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
   and absolute path; `source.sizes` (protocol 0.40) → each source's current
@@ -955,7 +957,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   where the frame time went over the last few seconds: each drawing thread's frame time
   against the budget, the costliest units (a source's upload, a capture, a chain, a
   scene pass, the composite), each source's paints, looks and builds, the planner, and
-  each named thread's CPU;
+  each named thread's CPU, past them each encoded stream and the mixer (0.92), and what
+  the clients' views did with their preview pictures, as they report it with
+  `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md));
   audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
@@ -1074,9 +1078,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). The same
   holds for the `plugin.*` ops and events: only a person installs or grants a plugin
   (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
-  quarantined after a GPU device loss
+  quarantined after a GPU device loss or a pass that ran too long
   ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
-  `gpu.device_lost` event that reports it reaches agents. And for the `codec.*` ops:
+  `gpu.device_lost` and `gpu.effect_slow` events that report it reach agents. And for the `codec.*` ops:
   Cisco's OpenH264 downloads only when a person asks, after seeing Cisco's licence
   ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). The `pack.*` ops are not
   held back: an agent may write, read and delete an effect pack's WGSL
@@ -1165,7 +1169,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette), borders
-  and how to stack them, layering light, masks and reflections, 3D sets through a scene camera, a camera
+  and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
   builds is only as good as its choices
@@ -1240,10 +1244,13 @@ jitter, and the GPU's own near clip is ADR-0050's near plane.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
 light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
-src-over), `additive`, `screen` and `multiply`; the other seven read a copy of the
-target under the item, and overlay, difference, exclusion, `normal_srgb` and
-`additive_srgb` mix sRGB-encoded values, the last two to match a browser
-([ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). The composite pass writes premultiplied linear light into `Rgba16Float`; a
+src-over), `additive`, `screen` and `multiply`; the other five read a copy of the
+target under the item. The collection's blending space picks where they mix
+([ADR-0126](adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). In `linear` the target holds premultiplied linear light, and
+overlay, difference and exclusion mix sRGB-encoded values. In `srgb`, a new
+collection's, the target holds premultiplied sRGB-encoded colour while the items draw,
+so every mode mixes as a browser does with the same blend states, and one decode pass
+after the last item turns it back into linear light. The composite pass leaves premultiplied linear light in `Rgba16Float`; a
 resolve pass un-premultiplies into
 `Rgba8UnormSrgb`, which a snapshot can read back. The device is the platform `GpuContext`
 when interop is present, and otherwise a device the crate opens with a hardware adapter
@@ -1325,10 +1332,17 @@ filters bypassed, and the whole pack after a second loss blamed on one of its ef
 in a run) until a person re-enables them with `effect.enable`, and reported in the
 engine event `gpu.device_lost` (protocol 0.61). The quarantine is kept in the packs
 folder, across restarts and pack edits
-([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
-GPU-time guard (timestamp queries that quarantine an effect whose pass runs over half
-the frame budget for 30 frames running, before Windows' TDR fires), and a forced TDR on
-Windows hardware, which only a hardware run can check.
+([jstream-core › Design](../crates/jstream-core/README.md#design)). The GPU-time guard
+turns an effect off before Windows' TDR fires: where the GPU has timestamp queries,
+`jstream-render` brackets each pack kind's filter or shader source with two timestamps
+(`timer.rs`, read back a frame or two later without waiting), and the program stage's
+render thread quarantines a kind whose pass runs over half the frame budget for 30
+frames running, as a blamed kind is, reported in `gpu.effect_slow` (protocol 0.102)
+([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The preview's
+drawing isn't guarded; a shader that hangs the GPU there is caught by the program
+stage's guard or a device loss once it goes to program. A GPU without timestamp
+queries has only the device-loss guard. Not checked yet: a forced TDR on Windows
+hardware, which only a hardware run can do.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:
@@ -1490,7 +1504,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   adds a keyframe override's `timing`, with a migration that refuses it in an older
   file. Version 11 (ADR-0133) adds a hotkey binding's and a timeline's `labels`; its
   migration refuses a binding's in an older file and drops a timeline's, as that version
-  ignored them. `jstream-core`
+  ignored them. Version 12's `blending` (ADR-0126) also migrates what an older
+  file means: its `normal_srgb` and `additive_srgb` items become `normal` and
+  `additive`, and it is `srgb` only when no item used another mode, else `linear`, so
+  its scenes keep their look. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

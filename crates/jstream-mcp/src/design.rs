@@ -167,10 +167,16 @@ group of its own, place the group full-frame and unflipped, and put the `image_m
 and the opacity there. Mask the specific surfaces that would shine, each with a \
 fresnel ramp (stronger toward the edge seen at a grazing angle), never one broad sheen \
 over the whole picture. A glossy edge or rim is the same composite again, unflipped, \
-with a wider blur, an edge mask and `additive`. Blending is in linear light, so a \
-reflection on glass needs a low opacity (often 5-15%), less than the same look needs \
-in a browser: tune it in JStream, and check it over the brightest and the darkest \
-background it will sit on. \
+with a wider blur, an edge mask and `additive`. Keep a reflection on glass at a low \
+opacity (often 5-15%): tune it in JStream, and check it over the brightest and the \
+darkest background it will sit on. \
+Blending space: `canvas.set_blending` picks the space every mode mixes in, for the \
+whole project. `srgb`, the default, mixes as a browser and design tools do, so a design \
+made in HTML or a design tool keeps its look when rebuilt natively, and soft veils, \
+shadows and glows keep the strength they had there. `linear` mixes light as it adds, \
+which suits glows, light leaks and fades over camera footage, but makes a faint white \
+veil about twice as bright as in a browser. Choose it once, before tuning opacities, \
+since switching changes every blended item's look; `state.get` reports it as `blending`. \
 3D sets: `scene.set_camera` gives a scene a camera (`position`, `target`, `fov_deg`, \
 `roll_deg`), and then every item sits in one 3D space: `geometry.center` is its x and \
 y, `depth_px` its z (toward the viewer), and its rotation, `tilt_deg` and `turn_deg` \

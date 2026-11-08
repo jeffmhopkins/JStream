@@ -361,6 +361,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+          "properties": {
+            "counts": {
+              "$ref": "#/$defs/ViewCounts",
+              "description": "Its running totals."
+            },
+            "type": {
+              "const": "preview.report",
+              "type": "string"
+            },
+            "view": {
+              "description": "The view's label, the client's own.",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "view",
+            "counts"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
           "properties": {
             "preset_id": {
@@ -833,7 +856,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
           "properties": {
             "kind_id": {
               "description": "The kind, `<pack>/<effect>`.",
@@ -1460,7 +1483,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "type": "object"
     },
     "BlendMode": {
-      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+      "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
       "oneOf": [
         {
           "const": "normal",
@@ -1506,15 +1529,20 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "exclusion",
           "description": "Like difference, with lower contrast.",
           "type": "string"
-        },
+        }
+      ]
+    },
+    "Blending": {
+      "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+      "oneOf": [
         {
-          "const": "normal_srgb",
-          "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+          "const": "srgb",
+          "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
           "type": "string"
         },
         {
-          "const": "additive_srgb",
-          "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+          "const": "linear",
+          "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
           "type": "string"
         }
       ]
@@ -2036,7 +2064,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "CameraControlInfo": {
-      "description": "One camera control a video capture device offers, in a `capture.targets` result:\nwhat a `webcam` source's `camera_controls` setting takes for it (since 0.107).\nValues are in the platform's own units, from `min` to `max` in steps of `step`.",
+      "description": "One camera control a video capture device offers, in a `capture.targets` result:\nwhat a `webcam` source's `camera_controls` setting takes for it (since 0.105).\nValues are in the platform's own units, from `min` to `max` in steps of `step`.",
       "properties": {
         "auto": {
           "description": "Whether the device can set it itself, and is now: omitted when it can't, else\n`true` while it does.",
@@ -2533,7 +2561,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "One display, window or video capture device in a `capture.targets` result.",
       "properties": {
         "controls": {
-          "description": "For a device, the camera controls it offers, with their ranges and values now\n(since 0.107). Omitted when empty: always for a display or a window, and for a\ndevice with none or whose controls couldn't be read.",
+          "description": "For a device, the camera controls it offers, with their ranges and values now\n(since 0.105). Omitted when empty: always for a display or a window, and for a\ndevice with none or whose controls couldn't be read.",
           "items": {
             "$ref": "#/$defs/CameraControlInfo"
           },
@@ -4278,6 +4306,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "fps"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+          "properties": {
+            "blending": {
+              "$ref": "#/$defs/Blending",
+              "description": "The space."
+            },
+            "type": {
+              "const": "canvas.set_blending",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "blending"
           ],
           "type": "object"
         },
@@ -6536,6 +6582,46 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "An effect-pack kind ran too long on the program stage's GPU (0.102, #349): its\npass took more than half the frame budget in 30 frames running, as timestamp\nqueries measure it where the GPU has them. The engine quarantines it before the\nOS resets a device it hangs, as after a device loss (`gpu.device_lost`): its\nfilters are bypassed until a person re-enables it (`effect.enable`), and a kind\nblamed a second time in a run quarantines its whole pack. Runtime state: a client\nthat misses it sees the quarantine in `kind.list`.",
+          "properties": {
+            "kind_id": {
+              "description": "The kind that ran too long.",
+              "type": "string"
+            },
+            "limit_us": {
+              "description": "The limit it ran over, half the frame budget, in microseconds.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "quarantined": {
+              "default": [],
+              "description": "The kinds this quarantined, ordered by ID: the slow one, or every kind of its\npack when the pack was blamed before in this run. Empty when its pack was\nunloaded meanwhile.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "took_us": {
+              "description": "Its pass's GPU time in the last of those frames, in microseconds.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "gpu.effect_slow",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind_id",
+            "took_us",
+            "limit_us"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A timeline started, was sought, looped, ended, stopped or was removed (ADR-0115,\nsince 0.87): never once a frame. Playing is studio state, so it carries no `rev`.",
           "properties": {
             "change": {
@@ -7680,7 +7766,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         "quarantined": {
-          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables\nit (`effect.enable`). Omitted when `false`.",
+          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`), or after it ran too long on the GPU (0.102,\n`gpu.effect_slow`): its filters are bypassed until a person re-enables it\n(`effect.enable`). Omitted when `false`.",
           "type": "boolean"
         },
         "version": {
@@ -9176,7 +9262,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The camera controls set on a video capture device (exposure, focus, white\nbalance and the like), each picked from the controls `capture.targets` lists\nfor the device that parameter `target` names, so a UI can offer those with their\nranges. Since 0.107. Its value is an object from a control's `name` to an\ninteger, which sets it by hand, or `\"auto\"`, which hands it to the device; a\ncontrol not in the object is left as the device has it. Its default is `{}`.",
+          "description": "The camera controls set on a video capture device (exposure, focus, white\nbalance and the like), each picked from the controls `capture.targets` lists\nfor the device that parameter `target` names, so a UI can offer those with their\nranges. Since 0.105. Its value is an object from a control's `name` to an\ninteger, which sets it by hand, or `\"auto\"`, which hands it to the device; a\ncontrol not in the object is left as the device has it. Its default is `{}`.",
           "properties": {
             "target": {
               "description": "The ID of the parameter naming the device, a\n[`ParamType::CaptureTarget`] of kind `device`.",
@@ -11002,6 +11088,11 @@ source: crates/jstream-protocol/src/fixtures.rs
               },
               "type": "array"
             },
+            "blending": {
+              "$ref": "#/$defs/Blending",
+              "default": "linear",
+              "description": "The space every blend mode mixes in (ADR-0126, since 0.101). Missing, from an\nolder server, parses as `linear`, the only space it drew."
+            },
             "buses": {
               "default": [],
               "description": "Every audio bus, ordered by ID, the master among them. Missing (from a\nserver older than 0.19) parses as empty.",
@@ -11992,6 +12083,14 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The units of drawing work the drawers did, costliest first.",
               "items": {
                 "$ref": "#/$defs/UnitProfile"
+              },
+              "type": "array"
+            },
+            "views": {
+              "default": [],
+              "description": "What the clients' views did with their preview streams in the window, as they\nreported it with `preview.report` (since 0.103, ADR-0132): one per view a session\nreported in the window, the session's that has ended included while the window\nreaches back to its last report.",
+              "items": {
+                "$ref": "#/$defs/ViewProfile"
               },
               "type": "array"
             }
@@ -13667,6 +13766,102 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "ViewCounts": {
+      "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+      "properties": {
+        "blanks": {
+          "default": 0,
+          "description": "Times its stream ended or failed and it showed why instead of a picture.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "decode_errors": {
+          "default": 0,
+          "description": "Frames or decoders the client refused.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "placeholders": {
+          "default": 0,
+          "description": "Times it showed its waiting text where a picture belongs, the first included.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "received": {
+          "default": 0,
+          "description": "Preview frames that arrived for it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reopens": {
+          "default": 0,
+          "description": "Streams it opened after its first.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "shown": {
+          "default": 0,
+          "description": "Pictures it drew.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "skipped": {
+          "default": 0,
+          "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "ViewProfile": {
+      "description": "One client view's preview pictures in the window ([`ProfileInfo::views`]), as its\nclient reported them.",
+      "properties": {
+        "client": {
+          "description": "The name the session's client gave in `hello`: third-party text (ADR-0059).",
+          "type": "string"
+        },
+        "counts": {
+          "$ref": "#/$defs/ViewCounts",
+          "default": {
+            "blanks": 0,
+            "decode_errors": 0,
+            "placeholders": 0,
+            "received": 0,
+            "reopens": 0,
+            "shown": 0,
+            "skipped": 0
+          },
+          "description": "Each count's growth over the window."
+        },
+        "received_fps": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Frames that arrived, a second."
+        },
+        "shown_fps": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "Pictures drawn, a second."
+        },
+        "view": {
+          "description": "The view's label, as the client reported it: third-party text.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "client",
+        "view"
+      ],
+      "type": "object"
+    },
     "VisibleIf": {
       "description": "A UI hint: show a parameter only while parameter `param` equals `equals`. Hints never\naffect validation.",
       "properties": {
@@ -14114,5 +14309,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.107"
+  "title": "JStream protocol 0.105"
 }

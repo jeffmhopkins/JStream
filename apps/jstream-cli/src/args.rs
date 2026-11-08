@@ -8,8 +8,8 @@
 use crate::bench::{self, BenchOptions, Scenario};
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32, FitMode,
-    IdempotencyKey, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, Query, Rev,
+    Action, Batch, BlendMode, Blending, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32,
+    FitMode, IdempotencyKey, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, Query, Rev,
     RtmpTarget, SceneId, SceneRole, Size, SourceId, SourceKind, TransitionPresetId, Vec2,
 };
 
@@ -772,6 +772,13 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         },
         ("canvas.set_frame_rate", [fps]) => Edit::CanvasSetFrameRate {
             fps: number(fps, "fps")?,
+        },
+        ("canvas.set_blending", [blending]) => Edit::CanvasSetBlending {
+            blending: Blending::from_name(blending).ok_or_else(|| {
+                usage(format!(
+                    "`canvas.set_blending` takes srgb or linear, not `{blending}`"
+                ))
+            })?,
         },
         ("output.create", [id, url]) => Edit::OutputCreate {
             output_id: OutputId::new(*id),
@@ -1751,8 +1758,7 @@ mod tests {
         assert_eq!(
             err(&["edit", "item.set_blend", "i", "dissolve"]),
             "`item.set_blend` takes one of normal, additive, multiply, screen, overlay, \
-             darken, lighten, difference, exclusion, normal_srgb, additive_srgb, not \
-             `dissolve`"
+             darken, lighten, difference, exclusion, not `dissolve`"
         );
         assert_eq!(
             err(&["edit", "scene.set_role", "s", "folder"]),

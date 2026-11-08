@@ -618,6 +618,14 @@ pub enum Edit {
         /// Frames per second: 30 or 60.
         fps: u32,
     },
+    /// Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):
+    /// `srgb`, browser-style and the default, or `linear`. It applies to every scene from
+    /// the next frame. Inverse: `canvas.set_blending` with the previous space.
+    #[serde(rename = "canvas.set_blending")]
+    CanvasSetBlending {
+        /// The space.
+        blending: Blending,
+    },
     /// Deletes an output. Rejected with `invalid_argument` while it runs: stop it first.
     /// Its stream key is removed from the credential store, so an output created later
     /// with the same ID doesn't inherit it. Hotkey bindings whose action names the output
@@ -1308,6 +1316,7 @@ impl Edit {
             Edit::SendRemove { .. } => "send.remove",
             Edit::CanvasSetSize { .. } => "canvas.set_size",
             Edit::CanvasSetFrameRate { .. } => "canvas.set_frame_rate",
+            Edit::CanvasSetBlending { .. } => "canvas.set_blending",
             Edit::VideoMixCreate { .. } => "video_mix.create",
             Edit::VideoMixUpdate { .. } => "video_mix.update",
             Edit::VideoMixDelete { .. } => "video_mix.delete",
@@ -1572,6 +1581,22 @@ pub enum Action {
     PreviewUnsubscribe {
         /// The channel the stream was opened on.
         channel: u32,
+    },
+    /// Reports what one of this session's views of preview streams has done since it
+    /// opened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a
+    /// projector) sends it about once a second while its counts change, so
+    /// `profile.get`'s `views` shows what a person saw. `view` is the client's own label
+    /// for it, 1 to 64 characters; `counts` are running totals over every stream the view
+    /// has shown, and a report whose counts fall below the view's last one starts it
+    /// again. Serves only the session that sends it, like `preview.subscribe`, and can't
+    /// be bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or
+    /// for a 17th view of one session.
+    #[serde(rename = "preview.report")]
+    PreviewReport {
+        /// The view's label, the client's own.
+        view: String,
+        /// Its running totals.
+        counts: crate::preview::ViewCounts,
     },
     /// Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`
     /// names, else the scene's `transition_in`, else the current program scene's
@@ -1862,7 +1887,8 @@ pub enum Action {
         plugin_id: PluginId,
     },
     /// Re-enables an effect-pack kind the engine quarantined after a GPU device loss was
-    /// blamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack
+    /// blamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU
+    /// (0.102, `gpu.effect_slow`), and the whole pack when the pack
     /// was quarantined. Its filters draw again from the next frame. The engine never
     /// lifts a quarantine by itself, nor when the pack's files change. Succeeds for a
     /// kind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as
@@ -2018,6 +2044,7 @@ impl Action {
             Action::AudioResetLoudness {} => "audio.reset_loudness",
             Action::PreviewSubscribe { .. } => "preview.subscribe",
             Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
+            Action::PreviewReport { .. } => "preview.report",
             Action::SceneSwitch { .. } => "scene.switch",
             Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
             Action::PairingStart => "pairing.start",
@@ -2122,6 +2149,7 @@ impl Action {
             | Action::YoutubeTransitionBroadcast { .. }
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewReport { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }
@@ -2154,7 +2182,9 @@ impl Action {
                 "`output.set_key` can't be bound: a stream key is never stored in the \
                  collection (R-SEC-001)",
             )),
-            Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. } => Some((
+            Action::PreviewSubscribe { .. }
+            | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewReport { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
             )),
@@ -2585,17 +2615,20 @@ impl EffectsSpace {
 /// How an item composites onto what is below it (ADR-0023 §1, register D13).
 ///
 /// The list is the modes the UI offers, and the compositor draws every one (ADR-0082, since
-/// 0.47; before it the engine refused all but `normal`). They blend in linear light,
-/// except overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),
-/// which blend sRGB-encoded values.
+/// 0.47; before it the engine refused all but `normal`). The project's [`Blending`]
+/// picks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`
+/// (0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never
+/// sends them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
 #[non_exhaustive]
 pub enum BlendMode {
     /// Source-over: the item covers what is below it, by its alpha.
     #[default]
+    #[serde(alias = "normal_srgb")]
     Normal,
     /// Adds the item's colour to what is below it.
+    #[serde(alias = "additive_srgb")]
     Additive,
     /// Multiplies the colours, which darkens.
     Multiply,
@@ -2611,19 +2644,11 @@ pub enum BlendMode {
     Difference,
     /// Like difference, with lower contrast.
     Exclusion,
-    /// Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,
-    /// #1096): a soft overlay designed in a browser keeps its strength, where `normal`
-    /// mixes linear light and a faint veil over a dark backdrop comes out brighter.
-    NormalSrgb,
-    /// Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in
-    /// a browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha
-    /// is source-over, so the two differ inside a translucent layer.
-    AdditiveSrgb,
 }
 
 impl BlendMode {
     /// Every mode, in the order the UI lists them.
-    pub const ALL: [BlendMode; 11] = [
+    pub const ALL: [BlendMode; 9] = [
         BlendMode::Normal,
         BlendMode::Additive,
         BlendMode::Multiply,
@@ -2633,15 +2658,17 @@ impl BlendMode {
         BlendMode::Lighten,
         BlendMode::Difference,
         BlendMode::Exclusion,
-        BlendMode::NormalSrgb,
-        BlendMode::AdditiveSrgb,
     ];
 
-    /// The mode with this wire name.
+    /// The mode with this wire name, or the mode an ADR-0105 name now reads as.
     pub fn from_name(name: &str) -> Option<BlendMode> {
-        BlendMode::ALL
-            .into_iter()
-            .find(|mode| mode.as_str() == name)
+        match name {
+            "normal_srgb" => Some(BlendMode::Normal),
+            "additive_srgb" => Some(BlendMode::Additive),
+            _ => BlendMode::ALL
+                .into_iter()
+                .find(|mode| mode.as_str() == name),
+        }
     }
 
     /// Whether this is the default mode, `normal`.
@@ -2661,9 +2688,44 @@ impl BlendMode {
             BlendMode::Lighten => "lighten",
             BlendMode::Difference => "difference",
             BlendMode::Exclusion => "exclusion",
-            BlendMode::NormalSrgb => "normal_srgb",
-            BlendMode::AdditiveSrgb => "additive_srgb",
         }
+    }
+}
+
+/// The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).
+///
+/// A new collection is [`Blending::Srgb`]. A collection saved before it gets one when it
+/// loads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`
+/// otherwise, so its scenes keep their look.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum Blending {
+    /// Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most
+    /// design tools mix them, so a design made there keeps its look.
+    #[default]
+    Srgb,
+    /// Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of
+    /// camera footage stays physically even. Overlay, difference and exclusion still mix
+    /// encoded values.
+    Linear,
+}
+
+impl Blending {
+    /// Both spaces, in the order the UI lists them.
+    pub const ALL: [Blending; 2] = [Blending::Srgb, Blending::Linear];
+
+    /// The space's wire name (`srgb`).
+    pub fn as_str(&self) -> &'static str {
+        match self {
+            Blending::Srgb => "srgb",
+            Blending::Linear => "linear",
+        }
+    }
+
+    /// The space with this wire name.
+    pub fn from_name(name: &str) -> Option<Blending> {
+        Blending::ALL.into_iter().find(|b| b.as_str() == name)
     }
 }
 
@@ -2822,6 +2884,31 @@ mod tests {
             assert_eq!(BlendMode::from_name(mode.as_str()), Some(mode));
         }
         assert_eq!(BlendMode::from_name("dissolve"), None);
+        for blending in super::Blending::ALL {
+            assert_eq!(
+                serde_json::to_value(blending).ok(),
+                Some(json!(blending.as_str()))
+            );
+            assert_eq!(
+                super::Blending::from_name(blending.as_str()),
+                Some(blending)
+            );
+        }
+    }
+
+    /// ADR-0105's two modes still parse, as the modes they are now (ADR-0126 §1).
+    #[test]
+    fn the_old_srgb_mode_names_read_as_their_plain_modes() {
+        for (old, now) in [
+            ("normal_srgb", BlendMode::Normal),
+            ("additive_srgb", BlendMode::Additive),
+        ] {
+            assert_eq!(
+                serde_json::from_value::<BlendMode>(json!(old)).ok(),
+                Some(now)
+            );
+            assert_eq!(BlendMode::from_name(old), Some(now));
+        }
     }
 
     #[test]

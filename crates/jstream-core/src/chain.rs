@@ -2435,10 +2435,18 @@ mod tests {
     /// rotation_deg)` in `boxes`.
     fn placed(boxes: &[Placed]) -> Graph {
         let mut graph = graph(&[]);
-        let mut edits = vec![Edit::CanvasSetSize {
-            width: CANVAS.0,
-            height: CANVAS.1,
-        }];
+        // The grids were drawn in linear light, where a glow's faint edge still clears the
+        // black class; browser-style blending (ADR-0126) mixes it dimmer, so these pin
+        // the space they test the effects' reach in.
+        let mut edits = vec![
+            Edit::CanvasSetSize {
+                width: CANVAS.0,
+                height: CANVAS.1,
+            },
+            Edit::CanvasSetBlending {
+                blending: jstream_protocol::Blending::Linear,
+            },
+        ];
         for &(id, (x, y), (w, h), rotation_deg) in boxes {
             let mut geometry = jstream_protocol::ItemGeometry::try_new(
                 jstream_protocol::Vec2::new(x, y).expect("finite"),

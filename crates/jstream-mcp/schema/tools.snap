@@ -461,6 +461,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -933,7 +956,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
                 "properties": {
                   "kind_id": {
                     "description": "The kind, `<pack>/<effect>`.",
@@ -1199,7 +1222,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -1245,15 +1268,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -2833,6 +2861,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -6041,6 +6087,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -6462,6 +6563,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -6934,7 +7058,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
                 "properties": {
                   "kind_id": {
                     "description": "The kind, `<pack>/<effect>`.",
@@ -7200,7 +7324,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -7246,15 +7370,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -8834,6 +8963,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -12042,6 +12189,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -12369,9 +12571,24 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `canvas` operation: set `op.type` to one of `canvas.set_size` (edit), `canvas.set_frame_rate` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `canvas` operation: set `op.type` to one of `canvas.set_size` (edit), `canvas.set_frame_rate` (edit), `canvas.set_blending` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
+              {
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
+                "type": "string"
+              },
+              {
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
+                "type": "string"
+              }
+            ]
+          },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
@@ -12454,6 +12671,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               }
@@ -14212,6 +14447,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -14684,7 +14942,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
                 "properties": {
                   "kind_id": {
                     "description": "The kind, `<pack>/<effect>`.",
@@ -14950,7 +15208,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -14996,15 +15254,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -16584,6 +16847,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -19792,6 +20073,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -19937,7 +20273,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -19982,16 +20318,6 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
-                "type": "string"
-              },
-              {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
-                "type": "string"
-              },
-              {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -22224,6 +22550,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -22696,7 +23045,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
                 "properties": {
                   "kind_id": {
                     "description": "The kind, `<pack>/<effect>`.",
@@ -22962,7 +23311,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -23008,15 +23357,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -24596,6 +24950,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -27794,6 +28166,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -28529,7 +28956,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `preview` operation: set `op.type` to one of `preview.subscribe` (action), `preview.unsubscribe` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `preview` operation: set `op.type` to one of `preview.subscribe` (action), `preview.unsubscribe` (action), `preview.report` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "PreviewCodec": {
@@ -28581,6 +29008,61 @@ source: crates/jstream-mcp/src/tests.rs
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,
@@ -28692,6 +29174,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "channel"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
                 ],
                 "type": "object"
               }
@@ -30917,6 +31422,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Reports what one of this session's views of preview streams has done since it\nopened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a\nprojector) sends it about once a second while its counts change, so\n`profile.get`'s `views` shows what a person saw. `view` is the client's own label\nfor it, 1 to 64 characters; `counts` are running totals over every stream the view\nhas shown, and a report whose counts fall below the view's last one starts it\nagain. Serves only the session that sends it, like `preview.subscribe`, and can't\nbe bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or\nfor a 17th view of one session.",
+                "properties": {
+                  "counts": {
+                    "$ref": "#/$defs/ViewCounts",
+                    "description": "Its running totals."
+                  },
+                  "type": {
+                    "const": "preview.report",
+                    "type": "string"
+                  },
+                  "view": {
+                    "description": "The view's label, the client's own.",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "view",
+                  "counts"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
                 "properties": {
                   "preset_id": {
@@ -31389,7 +31917,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+                "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
                 "properties": {
                   "kind_id": {
                     "description": "The kind, `<pack>/<effect>`.",
@@ -31655,7 +32183,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -31701,15 +32229,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -33289,6 +33822,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -36497,6 +37048,61 @@ source: crates/jstream-mcp/src/tests.rs
           "VideoMixId": {
             "description": "A video mix in the collection: what an output's video shows.",
             "type": "string"
+          },
+          "ViewCounts": {
+            "description": "What a client's view of preview streams has done since it opened, over every stream\nit has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is\nwhat a person looks at, such as the canvas or a projector, which may show several\nstreams in turn as it switches scenes or falls back to JPEG.",
+            "properties": {
+              "blanks": {
+                "default": 0,
+                "description": "Times its stream ended or failed and it showed why instead of a picture.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "decode_errors": {
+                "default": 0,
+                "description": "Frames or decoders the client refused.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "placeholders": {
+                "default": 0,
+                "description": "Times it showed its waiting text where a picture belongs, the first included.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "received": {
+                "default": 0,
+                "description": "Preview frames that arrived for it.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "reopens": {
+                "default": 0,
+                "description": "Streams it opened after its first.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "shown": {
+                "default": 0,
+                "description": "Pictures it drew.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              },
+              "skipped": {
+                "default": 0,
+                "description": "Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.",
+                "format": "uint64",
+                "minimum": 0,
+                "type": "integer"
+              }
+            },
+            "type": "object"
           }
         },
         "additionalProperties": false,

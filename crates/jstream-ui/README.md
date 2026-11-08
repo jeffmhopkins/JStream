@@ -54,8 +54,10 @@ Contents ([Design](#design) explains the choices):
   workspace's `repository`. Tested natively.
 - **Video settings** (`video_settings.rs`): File › Video settings… sets the
   collection's base resolution (the canvas, from presets or typed) and its base frame
-  rate, 30 or 60 fps, as OBS's Video settings do. Apply sends only what changed, as one
-  batch of `canvas.set_size` and `canvas.set_frame_rate`, so it is one undo step. Each
+  rate, 30 or 60 fps, as OBS's Video settings do, and its blending space, Browser-style
+  (sRGB) or Linear light (ADR-0126). Apply sends only what changed, as one batch of
+  `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
+  undo step. Each
   output's video mix scales from that picture. Tested natively.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
@@ -76,6 +78,9 @@ Contents ([Design](#design) explains the choices):
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
   the dock the browser kept.
+- **Views** (`views.rs`): `ViewTally`, a view's running counts, `label`, and
+  `report_every_second`, which sends them as `preview.report`
+  ([Views report back](#views)). Tested natively.
 - **Projectors** (`projector.rs`): `Projector`, the page a projector window shows (the
   program, one scene, one source alone or a multiview, filling the window), `Request`
   (what a projector page's query asks for, and its window name), `open`, `pop_out` (a
@@ -111,7 +116,8 @@ Contents ([Design](#design) explains the choices):
   and the kind descriptors read so far, the last failed call, the toast's confirmation
   (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
-  kind and reads `kind.list` again, as a `gpu.device_lost` that quarantined kinds does,
+  kind and reads `kind.list` again, as a `gpu.device_lost` or `gpu.effect_slow` that
+  quarantined kinds does,
   since no event reports a quarantine's change. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
@@ -471,7 +477,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   with `scene_id` for a scene and `source_id` for a source alone, 0.56) on the session's one binary channel, which `Channels`
   reads and hands out by channel number, each picture taking a number never used
   before on the page; a picture falls back to JPEG as the canvas does, says why when its
-  stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
+  stream ends (a deleted scene), and unsubscribes when it goes. Each picture reports what
+  it did with its pictures as its own view ([Views report back](#views)). One picture asks for the
   screen's size in device pixels, at most 1920×1080, at the collection's base rate
   (`canvas::preview::live_fps`, 30 until the collection is read), and opens again when
   that rate changes. The multiview shows
@@ -504,9 +511,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shows the prototype's 1200 px while the item has none, and the first change that puts
   the item in 3D sets it, since without one the engine draws 3D orthographically, where
   Depth has no effect), Crop
-  (`item.set_crop`, in source pixels), Blending (the eleven modes, `item.set_blend`, each drawn by
-  the engine since 0.47, with `normal_srgb` and `additive_srgb` since 0.75 shown as
-  "Normal (browser)" and "Additive (browser)", and Opacity, `item.set_opacity`).
+  (`item.set_crop`, in source pixels), Blending (the nine modes, `item.set_blend`, each drawn by
+  the engine since 0.47 in the project's blending space, which File › Video settings…
+  sets, and Opacity, `item.set_opacity`).
   Behaviour holds Scene switches (the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
   while they differ from the defaults, and for a custom curve its drawing and four
@@ -574,7 +581,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `resolution`, `fps` and `pixel_format`) lists "Auto" and what the formats listed for
   the chosen device offer with the other two parts chosen (sizes largest first, rates
   fastest first), and keeps a value the device doesn't offer as "<value> (not
-  offered)". A `camera_controls` (a `webcam`'s, protocol 0.107) is a row per control the
+  offered)". A `camera_controls` (a `webcam`'s, protocol 0.105) is a row per control the
   chosen device lists: its name ("White balance" for `white_balance`), a slider and a
   number over the control's range, and an Auto box for a control the device can set
   itself, which disables the slider while ticked. Each change sends the whole object
@@ -1237,7 +1244,9 @@ browser, and `mod.rs` is the component.
   program, so for that moment the canvas wants the new scene on its own; settling keeps
   the program stream, with its transition, through the switch (#1205). Until a new
   stream's first frame, the last picture stays on the canvas; only a canvas that has
-  shown no picture yet, or whose stream had ended, says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  shown no picture yet, or whose stream had ended, says the preview is starting. The
+  canvas reports what it did with its pictures as the view `canvas`
+  ([Views report back](#views)). WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
@@ -1343,6 +1352,37 @@ browser, and `mod.rs` is the component.
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos
   `style:` binding, which sets it through the CSSOM. A test fails on any `style`
   attribute in the crate's sources outside test modules, or in `index.html`.
+
+<a id="views"></a>
+## Views report back
+<!-- @section
+covers = ["crates/jstream-ui/src/views.rs", "crates/jstream-ui/src/canvas/screen.rs"]
+depends_on = ["docs/adr/0132-bench-gates-views-and-quality-probe.md"]
+-->
+
+The canvas and each projector picture are *views* of preview streams, and each tells the
+engine what it did with its pictures, so `profile.get`'s `views` and `jstream bench` see
+what a person saw ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)).
+`views.rs` holds a view's `ViewTally`, its running `ViewCounts`, and sends them as
+`preview.report` every second (`REPORT_EVERY`) while they change; a refused report only
+leaves the view unreported. The canvas reports as `canvas`; a projector picture as
+`projector#<channel>:<scene>`, `projector#<channel>:program` or
+`projector#<channel>:source:<source>`, cut to 64 characters: the channel keeps two
+pictures of one scene apart. The Properties dialog's device picture keeps a tally it never reports: it
+is not a view of the show.
+
+- `received` and `shown`: `Screen::show` counts every frame of the view's channel, and
+  its painter every picture it draws.
+- `skipped`: an H.264 frame the feed drops (before the first keyframe, or past the
+  decoder's backlog), and a JPEG that a newer one replaced while it waited.
+- `decode_errors`: the decoder's error callback, a `configure` the browser refused, and
+  a JPEG `createImageBitmap` rejected.
+- `placeholders` and `blanks`: an effect on the view's state counts each change to
+  "Starting…" (the view's first included) and each change to why it has no picture.
+  A scene switch that keeps the last picture until the new stream draws (#1205) counts
+  no placeholder.
+- `reopens`: every `preview.subscribe` for the view after its first, on a scene switch or
+  the JPEG fallback.
 
 <a id="build"></a>
 ## Build

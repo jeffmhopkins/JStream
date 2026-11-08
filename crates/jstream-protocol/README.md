@@ -52,7 +52,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.reorder`, `scene.set_role`, `item.clear_override`, `item.set_effects`, `item.add`, `item.remove`, `item.reorder`,
   `item.move`, `item.set_geometry`, `item.set_transform` (deprecated), `item.set_crop`,
   `item.set_visible`, `item.set_source`, `item.set_opacity`, `item.set_blend`,
-  `canvas.set_size`, `canvas.set_frame_rate`, `source.create`, `source.rename`, `source.set_settings`,
+  `canvas.set_size`, `canvas.set_frame_rate`, `canvas.set_blending`, `source.create`, `source.rename`, `source.set_settings`,
   `source.duplicate`, `source.delete`, `filter.add`, `filter.remove`,
   `filter.set_enabled`, `filter.set_settings`, `filter.reorder`, `output.create`,
   `output.set_target`, `output.set_path`, `output.set_encoder`, `output.set_video_mix`,
@@ -68,12 +68,12 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
-  `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole` and `BlendMode`;
+  `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
   `scene.zoom_camera`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
-  `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`,
+  `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.report`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
@@ -158,11 +158,11 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds, `StreamProfile`, `ProfileStream` and `MixerProfile` among them), with `QueryResult`
+  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
-  `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas`, and
+  `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas` and the `Blending` (since 0.101), and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
@@ -237,7 +237,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
-  `gpu.device_lost`, `values.changed`, and `timeline.changed` (with `TimelineChange`)
+  `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
@@ -255,7 +255,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `source`, a draft source the collection doesn't hold), and the binary
   frame: `BinaryFrame`, its fixed `BinaryHeader` with `StreamKind`, the byte layout's
   `to_bytes`/`parse` and `BinaryError`, and `KeyframeGate`, the drop rule every hop that
-  queues frames applies ([Binary streams](#binary-streams)).
+  queues frames applies ([Binary streams](#binary-streams)); and `ViewCounts`, what a
+  client's view did with its pictures, with `check_view_label`, `MAX_VIEW_LABEL_CHARS`
+  and `MAX_SESSION_VIEWS` (`preview.report`, 0.103).
 
 <a id="contents-errors"></a>
 ## Contents: errors, IDs and numbers
@@ -317,10 +319,19 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.107 because a webcam's camera controls are settable:
+`PROTOCOL_VERSION` is 0.105 because a webcam's camera controls are settable:
 `capture.targets` lists each device's `controls` (`CameraControlInfo`), and the
 `camera_controls` parameter type sets them on the device that its `target` parameter
-names (#1196, a number the release queue set); 0.100 because hotkey bindings and timelines carry labels
+names (#1196, a number the release queue set); 0.103 because a client's views report back: the action
+`preview.report` (`ViewCounts`) and `profile.get`'s `views` (`ViewProfile`)
+([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md), a number the
+release queue set); 0.102 because the engine quarantines an effect-pack kind that runs
+too long on the GPU, before the OS resets the device, and says so in `gpu.effect_slow`
+(#349, [Effect quarantine](#quarantine), a number the release queue set); 0.101 because a
+collection has one blending space, `canvas.set_blending` and `state.get`'s `blending`,
+and `BlendMode` is back to nine modes, the two `_srgb` names still read as `normal`
+and `additive` ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md),
+a number the release queue set); 0.100 because hotkey bindings and timelines carry labels
 (`hotkey.set_labels`, `HotkeyBinding.labels`, `TimelineInfo.labels`) and `label.members`
 lists everything that carries a label
 ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md), a number the
@@ -887,7 +898,7 @@ never a type per kind.
   `capture.targets` lists for that device. A `resolution` is `<width>x<height>`, each
   side 1 to `MAX_CAPTURE_SIDE`; an `fps` a number from 0 to `MAX_CAPTURE_FPS`; a
   `pixel_format` one of `PIXEL_FORMATS`; `""` or `0` leaves the part to the engine);
-  `camera_controls` with the `target` parameter naming the device, since 0.107: an
+  `camera_controls` with the `target` parameter naming the device, since 0.105: an
   object of at most `MAX_CAMERA_CONTROLS` entries, each a control name (lowercase
   letters, digits and `_`, at most `MAX_CAMERA_CONTROL_NAME` bytes) set to a 32-bit
   integer or `CAMERA_CONTROL_AUTO` (`"auto"`), a UI offering the controls
@@ -971,15 +982,16 @@ All of this is added in 0.22. A placement has an `opacity`, from 0 to 1 an alpha
 0.83 up to `MAX_OPACITY` (4) a gain on its light above 1: its colour is multiplied and its alpha by at most 1, so an
 `additive` item adds more light than its source draws (#1101); and a
 `BlendMode` (`normal`, `additive`, `multiply`, `screen`, `overlay`, `darken`, `lighten`,
-`difference`, `exclusion`, and from 0.75 `normal_srgb` and `additive_srgb`; default `normal`). `item.add` takes both, optional;
+`difference`, `exclusion`; default `normal`). `item.add` takes both, optional;
 `item.set_opacity { item_id, scene_id?, opacity }` and `item.set_blend { item_id, blend }`
 set them. Out of range is `invalid_argument` on `edits.N.opacity`. Before 0.47 every
 mode but `normal` was `invalid_argument` on `edits.N.blend`; from 0.47 the compositor
 draws all nine, in linear light except overlay, difference and exclusion, which blend
-sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)).
-`normal_srgb` and `additive_srgb` (0.75) are `normal` and `additive` mixed in
-sRGB-encoded values, as a browser composites, so an overlay designed in HTML looks the
-same ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)).
+sRGB-encoded values ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). From 0.101
+the collection's blending space picks where every mode mixes: `srgb`, the default, as a
+browser composites, or `linear`, ADR-0082's ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). 0.75 to 0.100 had
+`normal_srgb` and `additive_srgb` (ADR-0105);
+they still parse, as `normal` and `additive`, and are never sent.
 `ItemInfo` reports both.
 
 A source has a video and an audio filter chain
@@ -1418,7 +1430,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
 `rev` they read, so a client can send its next batch with that `expected_rev`:
 
 - `state.get`: the whole collection at one revision: the `canvas` (missing from a
-  pre-0.11 server, it parses as 1920×1080), every source, every scene in display order
+  pre-0.11 server, it parses as 1920×1080), the `blending` space (always sent from
+  0.101; missing from an older server, it parses as `linear`, ADR-0126), every source, every scene in display order
   with its items, every output (`outputs`, ordered by ID; missing from a pre-0.7
   server, it parses as empty), every encoder profile (`encoders`, ordered by ID;
   missing from a pre-0.13 server, it parses as empty), every video mix (`video_mixes`,
@@ -1494,7 +1507,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   for the display an empty `display` target captures. A device comes with `formats`
   (omitted when empty): each format it captures in that the engine reads, as
   `CaptureFormatInfo` (`width`, `height`, `fps` to two decimals, and `pixel_format`), in
-  the device's order, and `controls` (omitted when empty, since 0.107): each control
+  the device's order, and `controls` (omitted when empty, since 0.105): each control
   the engine can set on it, as `CameraControlInfo` (`name`, `min`, `max`, `step`,
   `default`, the `value` now, and `auto`, omitted when the device can't set it itself,
   else whether it does now). Runtime state, so no `rev`; a
@@ -1536,6 +1549,14 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `late_blocks` whose mix took longer than the audio they hold (`block_ms`), the longest
   mix (`block_max_ms`), the frames it skipped to catch up (`skipped_frames`), and the
   inputs' frames played as silence (`underrun_frames`) and dropped (`dropped_frames`).
+  Since 0.103, `views` lists what the clients' views did with their preview pictures, as
+  they reported it with `preview.report`
+  ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)): one
+  `ViewProfile` per view a session reported in the window, with the session's `client`
+  name and the `view` label (both third-party text), each `ViewCounts` count's growth
+  over the window (from zero for a view, or a restarted view, the window's start
+  doesn't have), and `received_fps` and `shown_fps`, in client then label order. A
+  view whose session has ended stays while a window reaches back to its last report.
   Runtime state, so no `rev`. Added in 0.73.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
@@ -1994,7 +2015,8 @@ After `welcome`, the server pushes every event to every client.
   [YouTube](#youtube).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) is described
   under [Plugins](#plugins).
-- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) is described under
+- `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) and
+  `gpu.effect_slow {kind_id, took_us, limit_us, quarantined}` (0.102) are described under
   [Effect quarantine](#quarantine).
 - `timeline.changed {timeline_id, scene_id, change, playing, position_ms, pass}` and
   `timeline.cue_fired {timeline_id, cue, pass, at_ms, error?}` (0.87) are described
@@ -2165,6 +2187,13 @@ GPU, and the OS resets the device (#349,
   kinds the loss turned off: the blamed ones, or every kind of a pack blamed for a
   second loss in one run. `recovering` is `false` when the engine stopped opening new
   devices and the outputs fail. Runtime state, with no `rev`; agents see it.
+- **`gpu.effect_slow {kind_id, took_us, limit_us, quarantined}`** (0.102) turns a kind
+  off before it hangs the GPU: where the program stage's GPU has timestamp queries,
+  each pack kind's pass is timed, and one that takes more than half the frame budget
+  (`limit_us`) in 30 frames running is quarantined as a blamed kind is. `took_us` is
+  its last such time; `quarantined` is the kind, or its whole pack when the pack was
+  blamed before in the run (by either event). Runtime state, with no `rev`; agents
+  see it.
 - **`KindSummary.quarantined`**, in `kind.list`, marks a quarantined kind (omitted
   when `false`, so an older server's list reads as none). A quarantined kind's filters
   are bypassed, as a filter whose pack isn't loaded is, until a person re-enables it.
@@ -2342,10 +2371,13 @@ after 1.0:
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
   (0.86) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
-  same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 adds the `BlendMode` values `normal_srgb` and
-  `additive_srgb` (ADR-0105), which `ItemInfo.blend` reports, so a client older than
-  0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
-  whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
+  same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
+  `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
+  ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
+  sends them, and still reads them, so an older client that sends one keeps working,
+  and its look then follows the collection's `blending`. `state.get`'s `blending` is
+  always sent; missing, from an older server, it parses as `linear`, the only space
+  that server drew.
   `BlendMode` still has no `Unknown` fallback; whether it gets one, and whether such a
   break counts as a minor bump, are part of open question 8. 0.99 adds the `Easing` and
   `ItemEasing` values `ease_in`, `hold` and `cubic_bezier` (ADR-0129) on the same
@@ -2605,7 +2637,11 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   with, and a change applies the next time it opens. A mix's `fps_divisor` is relative
   to that rate, so 60 doubles every mix. Anything else is `invalid_argument` on
   `edits.N.fps`. `state.get` reports `base_fps`, omitted while it is 30. Inverse:
-  `canvas.set_frame_rate` with the previous rate.
+  `canvas.set_frame_rate` with the previous rate. `canvas.set_blending { blending }`
+  (0.101, [ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) sets the space every blend mode mixes in: `srgb`, browser-style
+  and a new collection's, or `linear`. It applies to every scene from the next frame,
+  and `state.get` reports it as `blending`. Inverse: `canvas.set_blending` with the
+  previous space.
 - **Two placement forms.** An item stores either a geometry or a legacy 0.3 transform,
   and only an edit changes which. `item.add` takes an optional `geometry` beside the
   deprecated `transform`; sending both is `invalid_argument` on `edits.N.geometry`, and
@@ -2718,6 +2754,20 @@ the JSON text messages of the same connection (0.20,
   `source` too (or both) fails with `invalid_argument` naming `source_id`, and a source deleted
   while its stream is open ends the stream with the end frame "the source was
   deleted".
+- **Views report back.** A client that shows preview streams reports what each of its
+  *views* (the canvas, a projector picture) did with them: `preview.report {view,
+  counts}` (0.103, [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md))
+  carries the view's own label (1 to 64 characters, no control characters) and its
+  running `ViewCounts` since it opened, over every stream it has shown: frames
+  `received`, pictures `shown`, frames `skipped` to catch up, `decode_errors`, the
+  `placeholders` it showed where a picture belongs (its first included), the `blanks` it
+  showed when a stream ended or failed, and the streams it `reopens` after its first. A
+  client sends it about once a second while the counts change. Counts only grow; a
+  report whose counts fall below the view's last starts the view again (a reloaded
+  page). It serves only its session: nothing reaches the collection, no `rev` changes,
+  it is not in the activity log, and neither a hotkey nor a plugin may carry it. A
+  session reports at most 16 views; a bad label or a 17th view fails with
+  `invalid_argument` on `view`. `profile.get`'s `views` reads them back.
 - **The frame.** A fixed 32-byte little-endian header, then the payload:
 
   | Offset | Size | Field |

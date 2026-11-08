@@ -23,6 +23,7 @@ mod model;
 mod place;
 mod readback;
 mod scene;
+mod timer;
 pub mod transition;
 
 pub use cache::{Reclaimed, ResourceCache};

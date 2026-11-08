@@ -324,7 +324,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   output's own thread muxes FLV and publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
-  (`runtime/vcam.rs`).
+  (`runtime/vcam.rs`). The render thread's GPU-time guard quarantines an effect-pack
+  kind whose pass runs too long (`runtime/pass_guard.rs`, #349; see *Runtime*).
 - **Camera controls** (`camera_controls.rs`, #1196): each `webcam` source's
   `camera_controls` setting set on its device. After each change the control side
   compares what the drawn collection asks, live values included, with what it last
@@ -407,6 +408,15 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   atomics, and the program stage registers it with its master bus's skips; the audio
   inputs' underruns and drops are the drop ledger's `AudioInputDrops`, summed with the
   ones removed.
+  The clients' views (protocol 0.103, `profile/views.rs`,
+  [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)):
+  `preview.report` is answered outside the collection lock, which it takes only to read
+  the session's client name, and keeps each (session, view)'s latest counts in
+  `ViewMeters`, behind a lock of its own, at most 16 open views a session; counts that
+  fall below the last start the view's next run, which a window counts from zero. A
+  session's end marks its views ended, and they are forgotten once no window reaches
+  their last report. Each sample copies them, and a window lists the views reported
+  since its base, with their growth.
 
 <a id="contents-tests"></a>
 ## Contents: tests
@@ -485,7 +495,9 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   readback, riding out 20 composite errors in a row with no fallback, and failing at
   once when the context's device is lost, on a software device that stands in for the
   platform's (`src/tests/gpu_capture.rs`; the last three skip without
-  `TEXTURE_FORMAT_NV12`), a page's
+  `TEXTURE_FORMAT_NV12`), an effect-pack filter that runs too long on the GPU being
+  quarantined with no device loss (the same file; it skips on a GPU without timestamp
+  queries), a page's
   GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -846,7 +858,7 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   windows, then the video-device backend's devices, each with the formats the engine
   reads of it (uncompressed RGBA, BGRA, NV12 or YUY2, and MJPEG), with no engine lock
   held, since listing windows and devices calls the OS, and the camera controls it can
-  set (`VideoDevices::controls`, since 0.107). A device whose formats or controls can't
+  set (`VideoDevices::controls`, since 0.105). A device whose formats or controls can't
   be read is listed without them. With no backends it answers `action_failed`, and so it
   does when the OS refuses both lists; when one fails, it answers with the other and
   logs a warning.
@@ -1268,8 +1280,9 @@ Hidden items are skipped. A source with no stored frame is skipped, not drawn as
 placeholder. Each item is drawn at its `opacity`, multiplied into its premultiplied
 colour in linear light, so a nested scene's layer fades as one image; during a
 transition each track's sampled opacity runs between its items' own. Each item is
-drawn with its blend mode ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md),
-[ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)); a
+drawn with its blend mode ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)), in
+the collection's blending space, which each shot carries and sets on the compositor
+before it draws ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)); a
 transition's track takes its endpoint's, and a pair whose ends differ switches halfway.
 A nested scene's items blend with its own layer, so a transition flattens a nested
 scene into its items only when it and they are all `normal`.
@@ -1431,7 +1444,12 @@ so a copy of that pack under another ID draws them (only the blamed one stays of
 for the kind and its pack and for every entry whose digests the kind draws, run before
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
-it is recovering. The GPU-time guard of #349 is not built.
+it is recovering. A kind whose pass runs too long on the GPU (the guard in
+[Runtime](#runtime)) is blamed and quarantined the same way, alone (`blame_slow`), and
+the engine sends `gpu.effect_slow` with the kind, its time, the limit and the kinds
+quarantined. A report of a kind already quarantined, drawn again before the quarantine
+reached the render thread, is dropped: it is no second blame, so it can't take the
+pack.
 
 **Page API** (`LiveSources::feed_pages`, ADR-0102 decisions 4 to 7). After every plan
 (where the engine also syncs source sizes), after `studio.set_preview`, after a
@@ -3157,7 +3175,9 @@ no draw takes it, and the render thread reads the slot with no lock at all. The 
 thread, which takes no engine lock; the queue to it is taken only after the
 collection lock is released. The preview thread takes its own state lock, and the
 collection lock alone and only to load the render snapshot, `rev` and the live values, never while
-drawing or encoding; a session's preview streams and binary channel are leaf locks. The render snapshot is published under the collection
+drawing or encoding; a session's preview streams and binary channel are leaf locks, and so is the profiler's
+`ViewMeters` lock, which `preview.report` takes after releasing the collection lock it
+read the client's name under. The render snapshot is published under the collection
 lock (which makes the control side its one writer) and loaded by the render thread
 with no lock at all, as are the live values on the parameter channel. `video.snapshot`
 reads both under the collection lock and the snapshot thread only receives them. The
@@ -3276,7 +3296,9 @@ and after are the same.
 
 `values.set` gets no entry either, nor an `activity.list` line: a shared value is data
 for pages, not a change to the studio, and may be set many times a second (ADR-0102
-decision 7, [Shared values](#shared-values)).
+decision 7, [Shared values](#shared-values)). Nor does `preview.report`: it carries
+a client view's counts once a second, and only `profile.get` reads them
+([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)).
 
 `AuditSink` is a trait because the host chooses the sink (a file in the data
 directory, memory in tests, its own view in a UI), the same kind of host-injection
@@ -3510,7 +3532,10 @@ render loop ends.
 one event, not a run of errors. `gpu_draw` turns a draw that failed on a lost device
 (`Compositor::lost`) into `DrawError::Lost`, as it does a tick that skips a mix's
 composite on a full readback ring while the device is lost, since a lost device's maps
-may never finish (DX12) and no draw would fail. Then the render thread starts the same
+may never finish (DX12) and no draw would fail. It also starts each draw with
+`Compositor::lost_already`, which reads what wgpu's callback reported without polling: on
+lavapipe a destroyed device's submits can go quietly and its maps fail at once, so no
+draw fails and the frames stop with no loss counted (#1370). Then the render thread starts the same
 switch at once, without counting to 10. On the context, it is the fallback above, so
 the captures move to the CPU path. On the render thread's own device, it is a new
 device (`open(None)` again, hardware adapter first), and the captures stay where they
@@ -3532,6 +3557,19 @@ render thread does none of it. It doesn't adopt the new device until the engine 
 handled the loss (`LossHandled`, set once the snapshot is published, or when the loss
 is dropped unhandled), and adopts that snapshot first, so a shader that hangs at once
 isn't drawn again.
+
+The GPU-time guard (#349, `runtime/pass_guard.rs`) turns a pack kind off before it
+hangs the device. The program stage's meter carries a `PassGuard`
+(`DrawMeter::guard_passes`; a preview's doesn't), and while it does, the draw asks its
+compositor to time each pack kind's pass with timestamp queries
+(`Compositor::time_passes`, where the GPU has them). At the start of each tick it hands
+the guard the times that came back, a tick or two late and without waiting
+(`Compositor::gpu_times`). A kind whose longest pass in a tick ran over half the frame
+budget in 30 ticks running (a tick within the limit starts the count again, one with
+no time back for it leaves it) goes to `jstream-device-losses` as `GpuEvent::Slow`,
+beside the losses (`GpuEvent::Lost`). The engine quarantines it there, as above, and
+sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. A GPU
+without timestamp queries times nothing, and only a device loss guards it.
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
