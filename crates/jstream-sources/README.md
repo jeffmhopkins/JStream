@@ -85,6 +85,12 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
   message, and `timer`'s when the value it shows changes, once a second at most.
+  An animated `image`, a `media` file with video and a `browser` page that paints on
+  the CPU have a painter too, which draws nothing: the image's picks the frame due
+  (its frames are decoded when it is built), the media file's takes the decoded frames
+  due from its player's queue, and the page's hands out its latest paint. So their new
+  frames also reach the picture without a plan. A still image, a file with no video and
+  a page on the GPU have none.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,

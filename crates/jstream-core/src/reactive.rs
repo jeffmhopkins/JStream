@@ -15,6 +15,30 @@
 //! modifier ID, so it carries across a new shot, and across a keyframe Move whose two
 //! sides share the ID.
 //!
+//! # Behaviour
+//!
+//! **Audio-reactive motion** (`reactive.rs`,
+//! ADR-0100): an `audio`
+//! modifier hears the program mix, a bus or a source (`Hearing`), as a `spectrum` source
+//! with the same settings would. The live sources find what items' and keyframe
+//! overrides' motion hears on each sync (`audio::heard_by_motion`, so those buses and
+//! sources are fed as a scope source's are) and keep its scopes in `FilterAssets`
+//! (`HeardScopes`). Planning a shot records each audio modifier it draws with its scope
+//! (`Bindings`, part of the shot). Once a tick, before the mixes are drawn, the render
+//! loop's `Follower` measures each scope once with its own `AudioMeter` (made when a
+//! scope is first heard, never while it is steady), running the FFT only for a scope a
+//! `band` binding hears (`measure_levels` otherwise), and advances each modifier's
+//! envelope by the tick's media time, per item and modifier ID, so every pass and mix of
+//! the tick reads the same level. The follower names a meter by its scope's address and
+//! measures through the shot's binding, never holding a scope itself, so no scope's last
+//! reference drops on the render thread (R-RT-003). An item drawn through two lists that
+//! share a modifier ID (a keyframe and its parent) shares one envelope, and the first
+//! list planned decides what it hears and measures. Each binding holds that level as an atomic, which the
+//! draw paths read by item and ID without allocating. A modifier with nothing heard, a
+//! preview shot (no follower) and the program mix while no output runs read silence,
+//! the modifier's `from`. A scene frame sheet follows those scopes itself, across its
+//! pictures, so an audio modifier there hears the mix (#1189).
+//!
 //! Docs: docs/adr/0100-audio-reactive-motion-modifiers.md
 
 use std::collections::BTreeMap;

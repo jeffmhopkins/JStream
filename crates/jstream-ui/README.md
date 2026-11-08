@@ -164,15 +164,19 @@ Contents ([Design](#design) explains the choices):
   natively, and its Follow pointer note and Camera motion in `camera_moves.rs`:
   `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
   modifier tested natively), the Filters
-  panel and its dialogs (`filters.rs`: `Filters`, `Chains`, which the Properties dialog
-  shows too, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
+  panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
+  Properties dialogs' list and pane, and `FilterUndo`, what the Filters window and the
+  Properties dialogs opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
   `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
-  field the panels share (`number.rs`), the custom curve editor the Inspector and the
+  field the panels share (`number.rs`: `NumberField`, which can sit inline with a short
+  caption and without steppers, and `AxisRow`, a row of such fields under one label, as
+  the Inspector's Position, Size and Scale and the scene camera's rows are, #1219,
+  #1214), the custom curve editor the Inspector and the
   preset form share (`curve.rs`, a point's range, the drawing's path and its frame, which grows to take in
   an overshoot, tested natively),
   the keyframe timing fields (`keyframe_timing.rs`, the edit each change sends tested
@@ -180,12 +184,14 @@ Contents ([Design](#design) explains the choices):
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
-  (the pipeline's health in its header, then a compact row for the program output and
-  for each output with its state, Start or Stop, FX button and ⋯ menu; each output's
-  settings dialog, which creates or edits a stream, recording or virtual camera and its
-  stream key and applies nothing until OK or Apply, whose drafts and edits are tested
-  natively; and the delete confirmation); `encoders.rs`: `Profiles`, its encoder profile and
-  video mix lists and forms, in the panel's Encoders & mixes dialog, whose drafts, edits and summaries are tested natively;
+  (the pipeline's health and Start all in its header, then a compact row for the program
+  output and for each output with its state, Start or Stop, FX button and ⋯ menu, and a
+  running one's stats line; Duplicate; each output's settings dialog, which creates or
+  edits a stream, recording or virtual camera and its stream key, applies nothing until
+  OK or Apply and follows another client's changes to untouched fields, whose drafts,
+  edits, copies and Start all are tested natively; and the delete confirmation);
+  `encoders.rs`: `Profiles`, its encoder profile and video mix list and editor, in the
+  panel's Encoders & mixes dialog, whose drafts, edits and summaries are tested natively;
   `codec_downloads.rs`: the offer to download Cisco's OpenH264 there and in the encoder
   form, whose wording and when it shows are tested natively, and `InstalledCodecs`, the
   About dialog's list of the installed ones; and the calls and
@@ -583,9 +589,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
   `scene` source has no settings.
-- **The Properties dialog** (`source_properties.rs`) is the prototype's: the name and the
-  same form on the left, on a draft instead of the stored settings, and the source's
-  filter chains on the right. OK sends only what the user changed since the dialog
+- **The Properties dialog** (`source_properties.rs`) is one dialog for the source and
+  its filters (#1219, `filters::PropertiesAndFilters`): on the left a Properties entry,
+  the source's filter chains (the Filters panel's rows, whose click picks a filter) and
+  Add filter; on the right the name and the same form, on a draft instead of the stored
+  settings, while Properties is picked, or the picked filter's pane, as the Filters
+  window draws it. The draft's pane stays mounted while a filter shows, so nothing typed
+  is lost. Filter edits apply at once and the dialog keeps a `FilterUndo`, the Filters
+  window's log, so Cancel puts back each one it sent and OK keeps them. OK sends only what the user changed since the dialog
   opened, so another client's edit meanwhile stays: a rename (unless the name is blank
   or as it opened) and one `source.set_settings` with each changed value and `null` for
   each one the draft dropped (`draft_patch`), as one batch, and closes once the engine
@@ -599,7 +610,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   but a committing OK), so the output shows the stored values again and nothing
   is saved; Defaults empties it, and shows that live too. Enter in a
   field blurs it before pressing OK, so the field's `change` reaches the draft first.
-  The filter chains are the Filters panel's rows (below), which apply at once. A double click on
+  A double click on
   an item and Properties… in the item menus open it for the item's source; a nested
   scene's item opens the scene's Properties dialog instead. A display, window or webcam
   source shows a live picture above the name (`device_preview.rs`, DL-02): a
@@ -651,9 +662,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
   A keyframe scene shows neither, since it draws its parent's.
   Duplicate scene copies the scene's options and camera with it, and its camera motion;
-  the follow camera, a filter on the item it follows, goes with the copy of that item. On the right, in the source Properties dialog's shell, are the
-  scene's filters: the Filters panel's rows on its video chain, which apply at once (a
-  keyframe shows its parent's).
+  the follow camera, a filter on the item it follows, goes with the copy of that item. As in the source Properties dialog
+  (`PropertiesAndFilters`), the left side lists a Properties entry, then the scene's
+  video chain (a keyframe shows its parent's), whose rows pick a filter whose settings
+  then take the right side; filter edits apply at once and Cancel puts them back.
 - **Filters** ([UI features › filters](../../docs/UI-FEATURES.md#filters)). The
   Filters panel shows the primary selected item's source's chains (ADR-0026): video
   unless the source is audio-only, audio when it has a mixer channel and isn't a
@@ -881,56 +893,71 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   bundle's `icon.png` (see [Build](#build)).
 - **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
-  `events.dropped`; `output.state_changed` updates one output's state in place. It
-  creates RTMP(S), recording and virtual camera outputs (IDs `output-N`, the first free one), changes
-  an RTMP server URL (`output.set_target`) or a recording's file path (`output.set_path`,
-  #1072) with the card's Edit, and the encoder profile, deletes a stopped
-  output, and starts and stops each. In the desktop app a recording's path, on the add
-  form and on Edit, has the same Browse… button, opening a save dialog for an `.mp4`;
-  a stream's URL has none. A card's Audio select picks the bus the output
-  carries (`output.set_audio_buses`, one bus); while the output runs it is disabled and
-  titled "Stop the output to change its bus", as the engine refuses the move. A virtual
-  camera's card has none. A card's Video select picks the mix it shows
-  (`output.set_video_mix`), or "Program, canvas size" for none; a running output takes
-  it when it next starts. A virtual camera's card has no Video select either, as the
-  camera always shows the program at the canvas size. Under the cards (`encoders.rs`), Encoders and Video mixes list
-  each profile and mix with a line on what it encodes or shows, and a form makes one
-  (`encoder.create`, `video_mix.create`, with the first free `enc_N` or `mix_N`) or edits
-  it (`encoder.update`, `video_mix.update`). The form checks the draft with the
-  protocol's own `problem` before sending, so a refused value is named by its field and
-  the form stays open. A profile has the codec (H.264, HEVC, AV1), CBR or VBR with its
-  peak, the keyframe interval, the hardware preference and the AAC rate; a mix has its
-  input (program, preview or a scene, groups left out), a size preset (vertical
-  1080 × 1920 and 720 × 1280 among them) or custom even sides, and a frame-rate divisor.
-  Delete is disabled, titled with the outputs that use it, while any does, as the
-  engine refuses it then. Encoders also offers a codec the engine can download on a
-  person's request (`codec.downloads`, `codec_downloads.rs`,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): on Linux,
-  Cisco's OpenH264, when it isn't installed and the machine has no hardware encoder for
-  H.264 or a profile asks for software H.264, and the encoder form offers it under the
-  hardware choice while the draft would need it. Each offer says why, that JStream
-  downloads Cisco's own copy from Cisco only when asked, and shows Cisco's notice
-  ("OpenH264 Video Codec provided by Cisco Systems, Inc.") with a link to Cisco's
-  licence and a folded "Licence terms" holding the licence's full text
-  (`license_text`, which Cisco's condition 4 asks the app to reproduce); its
-  "Download Cisco's OpenH264 2.6.0" button sends `codec.download` and reads
-  "Downloading…" until the engine answers. Once installed, the section keeps the notice
-  licence link and terms beside a Delete button (`codec.delete`). A failure, such as a file
-  that didn't match JStream's pin, shows under it. An engine older than 0.69, or one
-  that downloads nothing, shows no offer. Above the cards, the program output's row
-  ("master") and a row per output with its state each have an "FX N" button counting
-  that chain's filters, which shows the chain in the Filters panel (below the rows,
-  the prototype's footnote). The header's "Go Live" starts every stopped or
-  failed RTMP output whose stream key is set, and "End stream", which replaces it while
-  any runs, stops the running ones; recordings start from their own buttons or the
-  header's Record. Both try every output, even after one fails, and report
-  each failure. An RTMP output without a key can't be started from the
-  panel.
+  `events.dropped`; `output.state_changed` updates one output's state in place. Since
+  #1206 the dock is a compact list: the header has the health (a dot and a word, the
+  detail on hover; it sums `stats.tick`'s drop totals over the last five ticks, and a
+  `seq` that doesn't increase or a total that shrinks, an engine restart, starts it
+  over) and Start all (`all_outputs`: every output that can start, of any kind, or once
+  none can, Stop all of the running ones). The program output's row ("master") comes
+  first, then a row per output with its kind icon, ID, a summary (host, file name or
+  "Webcam", then the encoder's name), a ⚠ for a cleartext key, its state badge, Start or
+  Stop, an "FX N" button counting that chain's filters, which shows the chain in the
+  Filters panel, and a ⋯ menu (Settings…, Duplicate, Delete…, also on a right-click).
+  A running row's second line is its bitrate, drops and uptime from `stats.tick`'s
+  `outputs` (`live_line`). Duplicate reads the outputs again, picks the first free
+  `output-N` and sends one batch (`duplicate_edits`: the create, the encoder, mix and
+  bus, and each filter's `filter.add` with its settings; never the stream key), then
+  opens the copy's settings. Delete… asks first and is off while the output runs.
+  An output's settings dialog (Settings…, a double-click, or "+ Add output" with a kind
+  picker) edits a draft (`OutputDraft`) and applies nothing until OK or Apply, which
+  send what changed as one batch (`draft_edits`: `output.create` first for a new one,
+  then `output.set_target` or `output.set_path` (#1072), `output.set_encoder`,
+  `output.set_video_mix`, `output.set_audio_buses`), then the key action
+  (`send_settings`). A new output's ID is read from the engine at send time; if its key
+  is refused after the create, Add again sets only the key on it. While the dialog is
+  open, another client's change reaches the fields still as the dialog started them
+  (`OutputDraft::reseed`). A running output's target and bus are off, as the engine
+  refuses those moves; a new mix or encoder applies when it starts again. In the
+  desktop app a recording's path has a Browse… button, opening a save dialog for an
+  `.mp4`. The Video section has Edit mix… and the Encoder section Edit encoder… (off for
+  the engine's default) and New…, which open the Encoders & mixes dialog
+  (`encoders.rs`) on that mix or profile or on a new one (`LibraryPick`). That dialog
+  lists the profiles and mixes on the left, each with a short summary
+  (`encoder_short`, `mix_short`), and edits the one picked on the right with the whole
+  of it (`encoder_summary`, `mix_summary`). Save makes one (`encoder.create`,
+  `video_mix.create`, with the first free `enc_N` or `mix_N`, then picks it) or edits it
+  (`encoder.update`, `video_mix.update`); the form checks the draft with the protocol's
+  own `problem` before sending, so a refused value is named by its field and the form
+  stays open. A profile has the codec (H.264, HEVC, AV1), CBR or VBR with its peak, the
+  keyframe interval, the hardware preference and the AAC rate; a mix has its input
+  (program, preview or a scene, groups left out), a size preset (vertical 1080 × 1920
+  and 720 × 1280 among them) or custom even sides, and a frame-rate divisor. Delete is
+  disabled, titled with the outputs that use it, while any does, as the engine refuses
+  it then. The dialog also offers a codec the engine can download on a person's request
+  (`codec.downloads`, `codec_downloads.rs`,
+  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), over the
+  encoder editor or when nothing is picked: on Linux, Cisco's OpenH264, when it isn't
+  installed and the machine has no hardware encoder for H.264 or a profile asks for
+  software H.264, and the encoder form offers it under the hardware choice while the
+  draft would need it. Each offer says why, that JStream downloads Cisco's own copy from
+  Cisco only when asked, and shows Cisco's notice ("OpenH264 Video Codec provided by
+  Cisco Systems, Inc.") with a link to Cisco's licence and a folded "Licence terms"
+  holding the licence's full text (`license_text`, which Cisco's condition 4 asks the
+  app to reproduce); its "Download Cisco's OpenH264 2.6.0" button sends
+  `codec.download` and reads "Downloading…" until the engine answers. Once installed,
+  the dialog keeps the notice, licence link and terms beside a Delete button
+  (`codec.delete`). A failure, such as a file that didn't match JStream's pin, shows
+  under it. An engine older than 0.69, or one that downloads nothing, shows no offer.
+  The header's "Go Live" starts every stopped or failed RTMP output whose stream key is
+  set, and "End stream", which replaces it while any runs, stops the running ones;
+  recordings start from their own rows, Start all or the header's Record. All of them
+  try every output, even after one fails, and report each failure. An RTMP output
+  without a key can't be started from the panel.
   A virtual camera output (`virtual_cam`) has no target, key or encoder profile, so its
-  card shows none of them; neither "Go live" nor "End stream" touches it. The card says
-  what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
+  dialog shows none of them; neither "Go live" nor "End stream" touches it. The dialog
+  says what the page knows of the camera's registration. Only the desktop app knows (its global's `vcam`,
   read in `host.rs`): there an unregistered camera, or one turned off with `--no-vcam`,
-  can't be started, and the card gives the `jstream-daemon --register-vcam` hint, which
+  can't be started, and the dialog gives the `jstream-daemon --register-vcam` hint, which
   names the step as optional; an `outdated` one (registered, but not for a current copy
   of this version's DLL) can still be started, and its hint offers registering again,
   also optional. In a
@@ -938,9 +965,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   an unregistered camera ("is not registered") gets the full registration command, and
   an engine with no camera at all ("no virtual camera": not running on Windows, or the
   desktop app's `--no-vcam`) gets that, with no registration advice; on Windows 10 the
-  sink's own reason ("it needs Windows 11") is shown as it is. The health line sums `stats.tick`'s drop totals over the last five ticks; a
-  `seq` that doesn't increase or a total that shrinks (an engine restart) starts it
-  over.
+  sink's own reason ("it needs Windows 11") is shown as it is.
 - **Pairing.** In the desktop app the Devices page starts with "Allow devices on my
   network" ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md) decision 1),
   shown only when the global has `network` and `allowNetwork`. It saves through
