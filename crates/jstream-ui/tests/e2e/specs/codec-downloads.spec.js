@@ -1,11 +1,11 @@
-// The offer to download Cisco's OpenH264 in the Outputs panel's Encoders section and in
+// The offer to download Cisco's OpenH264 in the Outputs panel's Encoders & mixes dialog and in
 // the encoder form (LNX2, ADR-0061), and the installed codec in the About dialog (#1119):
 // it names Cisco, shows Cisco's notice with a link to its licence, and sends
 // `codec.download` only when the person presses Download. The mock engine has no codec
 // backend, so the page's WebSocket is routed: `codec.downloads`,
 // `codec.download` and `codec.delete` are answered here from a download the test keeps,
 // and every other message goes on to the mock daemon.
-import { test, expect, connect, showPanel } from '../fixtures.js';
+import { test, expect, connect, showPanel, openEncoders } from '../fixtures.js';
 
 const NOTICE = 'OpenH264 Video Codec provided by Cisco Systems, Inc.';
 const LICENCE = 'https://www.openh264.org/BINARY_LICENSE.txt';
@@ -56,14 +56,24 @@ async function fakeCodecs(page, { hardware }) {
   return { sent, queries };
 }
 
+/** The Encoders & mixes dialog, whose editor shows the downloads over an encoder's form
+ * or when nothing is picked. */
 function encoders(page) {
-  return page.getByRole('region', { name: 'Encoders' });
+  return page.getByRole('dialog', { name: 'Encoders & mixes' });
+}
+
+/** Closes the Encoders & mixes dialog with its Close button. */
+async function closeEncoders(page) {
+  const dialog = page.getByRole('dialog', { name: 'Encoders & mixes' });
+  await dialog.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
+  await expect(dialog).toHaveCount(0);
 }
 
 test('a machine without hardware H.264 is offered Cisco\'s OpenH264, and nothing downloads until asked', async ({ page, daemon }) => {
   const { sent, queries } = await fakeCodecs(page, { hardware: false });
   await connect(page, daemon);
   await showPanel(page, 'Outputs');
+  await openEncoders(page);
 
   const offer = encoders(page).getByRole('group', { name: "Download Cisco's OpenH264 (software H.264)" });
   await expect(offer).toContainText('no hardware H.264 encoder');
@@ -85,6 +95,7 @@ test('a machine without hardware H.264 is offered Cisco\'s OpenH264, and nothing
   expect(sent).toEqual([{ type: 'codec.download', download_id: 'openh264' }]);
 
   // About lists the installed codec with Cisco's notice and licence too (#1119).
+  await closeEncoders(page);
   const header = page.locator('header.app-header');
   await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
   await page.getByRole('menuitem', { name: 'About JStream' }).click();
@@ -98,11 +109,13 @@ test('a machine without hardware H.264 is offered Cisco\'s OpenH264, and nothing
   await page.keyboard.press('Escape');
   await expect(about).toHaveCount(0);
 
+  await openEncoders(page);
   await installed.getByRole('button', { name: "Delete Cisco's OpenH264 (software H.264)" }).click();
   await expect(offer).toBeVisible();
   expect(sent[1]).toEqual({ type: 'codec.delete', download_id: 'openh264' });
 
   // Deleted, it leaves About: once About has asked again, the list has none installed.
+  await closeEncoders(page);
   const asked = queries.count;
   await header.locator('.top-menu[data-menu="help"] > .menu-button').click();
   await page.getByRole('menuitem', { name: 'About JStream' }).click();
@@ -115,9 +128,10 @@ test('with hardware H.264 the offer waits for a software H.264 profile', async (
   const { sent } = await fakeCodecs(page, { hardware: true });
   await connect(page, daemon);
   await showPanel(page, 'Outputs');
+  await openEncoders(page);
   await expect(encoders(page).locator('.codec-offer')).toHaveCount(0);
 
-  await encoders(page).getByRole('button', { name: 'New encoder…' }).click();
+  await encoders(page).getByRole('button', { name: '+ New encoder' }).click();
   const form = encoders(page).getByRole('form', { name: 'New encoder' });
   await expect(form.locator('.codec-offer')).toHaveCount(0);
   await form.getByLabel('Hardware encoder').selectOption('avoid');
@@ -132,7 +146,8 @@ test('with hardware H.264 the offer waits for a software H.264 profile', async (
   await form.getByLabel('Encoder name').fill('Software');
   await form.getByRole('button', { name: 'Save' }).click();
   await expect(form).toHaveCount(0);
-  // The saved profile asks for software H.264, so the section offers it now.
-  await expect(encoders(page).locator('.codec-offer')).toContainText('Software asks for software H.264');
+  // The saved profile asks for software H.264, so the dialog offers it now, over the
+  // saved profile's editor.
+  await expect(encoders(page).locator('.codec-downloads .codec-offer')).toContainText('Software asks for software H.264');
   expect(sent).toEqual([]);
 });

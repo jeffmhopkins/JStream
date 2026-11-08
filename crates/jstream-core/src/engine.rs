@@ -48,16 +48,16 @@ use jstream_graph::Graph;
 use jstream_media::{FrameSize, MediaTime, Rounding, Timebase};
 use jstream_platform::{
     Backends, CaptureTarget, CaptureTargetInfo, Codecs, GpuContext, PluginHosts, ProcessCpu,
-    Secret, StreamKeyStore, ThreadCpu, ThreadPriority,
+    Secret, StreamKeyStore, ThreadCpu, ThreadPriority, VideoDeviceInfo, VideoDevices,
 };
 use jstream_protocol::{
-    Action, ActionResult, Batch, Call, CallResult, CaptureTargetKind, ClientId, CollectionCause,
-    DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event,
-    FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo,
-    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
-    VideoMixId, YoutubeAuth,
+    Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
+    CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
+    Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
+    IdempotencyKey, KindsCause, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState,
+    OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
+    RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
+    TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -149,6 +149,10 @@ struct Shared {
     /// The effect packs and their quarantine, once `watch_effect_packs` runs. On its own
     /// lock, never taken with the collection lock held: a poll reads files under it.
     effect_packs: Mutex<Option<crate::effect_packs::Packs>>,
+    /// The CLAP plugin hosts and the last scan, for `plugin.clap_scan` and
+    /// `plugin.clap_rescan` (0.106). Its locks are its own, never taken with the
+    /// collection lock held: a scan runs plugin host processes.
+    clap: crate::plugins::scan::ClapScans,
     /// The installed fonts `font.list` reports (ADR-0092), read from the OS's font
     /// folders on the first `font.list` and kept for the engine's life. Never read under
     /// the collection lock: reading them reads every font file.
@@ -215,6 +219,7 @@ impl Default for Engine {
                     #[cfg(feature = "wasm-plugins")]
                     automation: crate::plugins::automation::Registry::default(),
                     effect_packs: Mutex::new(None),
+                    clap: crate::plugins::scan::ClapScans::default(),
                     fonts: OnceLock::new(),
                     #[cfg(test)]
                     font_dirs: Mutex::new(None),
@@ -366,25 +371,114 @@ impl Engine {
     /// this can take seconds: call it from a worker thread. The engine's locks are held
     /// only to add the kinds, after the scan.
     ///
+    /// The engine keeps `hosts`, so `plugin.clap_rescan` (0.106) can scan again, and the
+    /// scan, which `plugin.clap_scan` reports. A scan that starts while another runs
+    /// waits for it.
+    ///
     /// From then on a source's audio chain runs its CLAP filters, each in a host process
     /// `hosts` starts. A collection may hold CLAP filters before the scan that
     /// describes their kinds (it loads before the scan runs): they are bypassed until
     /// then.
     pub fn scan_clap_plugins(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        self.shared.clap.set_hosts(Arc::clone(&hosts));
+        self.rescan_clap(hosts)
+    }
+
+    /// Records why this engine hosts no CLAP plugins, for `plugin.clap_scan` to report,
+    /// when the host couldn't set up its plugin hosts. Ignored once it has given some.
+    pub fn set_clap_unavailable(&self, reason: impl Into<String>) {
+        self.shared.clap.set_unavailable(reason.into());
+    }
+
+    /// One scan with `hosts`, after any scan running now.
+    fn rescan_clap(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        let _running = self.shared.clap.begin();
+        let _one_at_a_time = lock(&self.shared.clap.scan_lock);
         let scan = clap_kinds::scan(hosts.as_ref());
-        let mut state = lock(&self.shared.state);
-        state.graph = std::mem::take(&mut state.graph)
-            .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
-        state.audio.add_clap_plugins(
-            hosts,
-            scan.kinds.iter().map(|k| {
-                (
-                    k.descriptor.kind_id.clone(),
-                    (k.file.clone(), k.plugin_id.clone()),
-                )
-            }),
-        );
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.shared.state);
+            // Only a kind that is new, or described differently, changes `kind.list`.
+            let changed = scan
+                .kinds
+                .iter()
+                .any(|k| state.graph.kind(&k.descriptor.kind_id) != Some(&k.descriptor));
+            state.graph = std::mem::take(&mut state.graph)
+                .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+            state.audio.add_clap_plugins(
+                hosts,
+                scan.kinds.iter().map(|k| {
+                    (
+                        k.descriptor.kind_id.clone(),
+                        (k.file.clone(), k.plugin_id.clone()),
+                    )
+                }),
+            );
+            if changed {
+                state.subscribers.emit(
+                    &Event::KindsChanged {
+                        cause: KindsCause::ClapScan,
+                    },
+                    &mut wake,
+                );
+            }
+        }
+        wake_all(wake);
+        self.shared.clap.finished(&scan);
+        for (file, error) in &scan.failed {
+            tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
+        }
+        tracing::info!(found = scan.kinds.len(), "scanned the CLAP plugins");
         scan
+    }
+
+    /// `plugin.clap_scan` and `plugin.clap_rescan` (0.106), or `None` for another call.
+    fn clap_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        match call {
+            Call::Query {
+                query: Query::PluginClapScan,
+            } => Some(Ok(CallResult::Query {
+                result: QueryResult::PluginClapScan {
+                    scan: self.shared.clap.info(),
+                },
+            })),
+            _ => None,
+        }
+    }
+
+    /// `plugin.clap_rescan` (0.106): scans on a `jstream-clap-scan` thread, as the startup
+    /// scan runs, and answers once it ends. Each plugin file is scanned in its own host
+    /// process, so a scan can take seconds; the session that asked keeps its events,
+    /// frames and other answers meanwhile. The call is audited when it answers.
+    fn clap_rescan(
+        &self,
+        audit: audit::Pending,
+        client_id: &ClientId,
+        request_id: &RequestId,
+    ) -> SnapshotReply {
+        let (reply, waiting) = snapshot::reply_pair();
+        let Some(hosts) = self.shared.clap.hosts() else {
+            let result = Err(ProtocolError::Unsupported {
+                call: "plugin.clap_rescan".into(),
+            });
+            self.record(audit.finish(client_id, request_id, &result));
+            reply.send(result);
+            return waiting;
+        };
+        let engine = self.clone();
+        let (client_id, request_id) = (client_id.clone(), request_id.clone());
+        let spawned = thread::Builder::new()
+            .name("jstream-clap-scan".into())
+            .spawn(move || {
+                engine.rescan_clap(hosts);
+                let result = Ok(CallResult::action());
+                engine.record(audit.finish(&client_id, &request_id, &result));
+                reply.send(result);
+            });
+        if let Err(error) = spawned {
+            tracing::warn!(%error, "could not start a thread to rescan the CLAP plugins");
+        }
+        waiting
     }
 
     /// Loads the WGSL effect packs in `root`, a folder of pack folders (ADR-0035), and
@@ -554,17 +648,22 @@ impl Engine {
     /// The body of the program stage's `jstream-device-losses` thread: for each GPU
     /// device the render thread lost (#349), with the pack kinds the frames before the
     /// loss drew, blames and quarantines them, re-plans without them, and sends
-    /// `gpu.device_lost`. The render thread hands the loss over a channel, so it takes
-    /// no lock and writes no file itself (R-RT-003). It ends once the render thread
-    /// drops its sender, and holds the shared collection like the capture-sizes thread.
+    /// `gpu.device_lost`; for each pack kind whose pass ran too long on the GPU, does
+    /// the same for that kind and sends `gpu.effect_slow`. The render thread hands them
+    /// over a channel, so it takes no lock and writes no file itself (R-RT-003). It ends
+    /// once the render thread drops its sender, and holds the shared collection like
+    /// the capture-sizes thread.
     pub(crate) fn device_loss_watch(
         &self,
-        losses: Receiver<crate::runtime::DeviceLoss>,
+        events: Receiver<crate::runtime::GpuEvent>,
     ) -> impl FnOnce() + Send + 'static {
         let shared = Arc::clone(&self.shared);
         move || {
-            for loss in losses {
-                shared.device_lost(loss);
+            for event in events {
+                match event {
+                    crate::runtime::GpuEvent::Lost(loss) => shared.device_lost(loss),
+                    crate::runtime::GpuEvent::Slow(slow) => shared.effect_slow(slow),
+                }
             }
         }
     }
@@ -679,6 +778,7 @@ impl Engine {
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
             state.audio.sync(state.graph.state(), state.live.audio());
+            state.camera_controls.sync(state.graph.state());
             state.route_audio();
             // The loaded collection is what the program mix draws now.
             state.publish_render();
@@ -1104,6 +1204,14 @@ impl Engine {
         // A webcam or capture card opens once, shared by the program stage's capture of
         // it and the preview's.
         backends.video_devices = Arc::new(SharedVideoDevices::new(backends.video_devices));
+        {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            let drawn = state.shown.as_ref().unwrap_or(&state.graph);
+            state
+                .camera_controls
+                .set_devices(Arc::clone(&backends.video_devices), drawn.state());
+        }
         let host = self.host();
         // The preview draws the program on the program stage, which it opens when no
         // output has (ADR-0117 §6), and captures what scenes and drafts show itself. The
@@ -1586,6 +1694,7 @@ impl Engine {
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
     /// gets an audit entry. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
+        self.shared.profile.end_views(client_id);
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
             let mut state = lock(&self.shared.state);
@@ -1692,9 +1801,10 @@ impl Engine {
     /// sessions. Only names, IDs and error codes are logged, never a command's arguments
     /// (R-SEC-001).
     ///
-    /// Every call but `video.snapshot` runs to completion here. A snapshot is queued
-    /// for the snapshot thread and comes back [`Executed::Pending`], with its span; its
-    /// outcome is logged when it completes.
+    /// Every call but `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
+    /// `plugin.clap_rescan` runs to completion here. Those are answered from another
+    /// thread and come back [`Executed::Pending`], with their span; their outcome is
+    /// logged when they complete.
     pub(crate) fn execute(
         &self,
         client_id: &ClientId,
@@ -1717,6 +1827,16 @@ impl Engine {
         ) {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
+        }
+        if matches!(
+            call,
+            Call::Action {
+                action: Action::PluginClapRescan
+            }
+        ) {
+            let audit = self.audit_context(client_id, &call);
+            drop(_entered);
+            return Executed::Pending(self.clap_rescan(audit, client_id, request_id), span);
         }
         if let Call::Query {
             query: Query::VideoFrames { strip, scene_id },
@@ -1772,6 +1892,8 @@ impl Engine {
             result
         } else if let Some(result) = self.pack_call(client_id, &call) {
             result
+        } else if let Some(result) = self.clap_call(&call) {
+            result
         } else if let Some(result) = self.collection_call(client_id, request_id, &call, previews) {
             result
         } else if let Call::Action {
@@ -1822,6 +1944,11 @@ impl Engine {
         } = call
         {
             self.preview_action(previews, action)
+        } else if let Call::Action {
+            action: Action::PreviewReport { view, counts },
+        } = &call
+        {
+            self.preview_report(client_id, view, *counts)
         } else if self.backends_ready()
             && matches!(
                 call,
@@ -1994,6 +2121,26 @@ impl Engine {
             },
             _ => return None,
         })
+    }
+
+    /// `preview.report` (ADR-0132): records the view's counts for `profile.get`. Only
+    /// reads the client's name from the collection state; changes nothing in it.
+    fn preview_report(
+        &self,
+        client_id: &ClientId,
+        view: &str,
+        counts: jstream_protocol::ViewCounts,
+    ) -> Result<CallResult, ProtocolError> {
+        jstream_protocol::check_view_label(view)?;
+        let client = lock(&self.shared.state)
+            .client_names
+            .get(client_id)
+            .cloned()
+            .unwrap_or_default();
+        self.shared
+            .profile
+            .report_view(client_id, &client, view, counts)?;
+        Ok(CallResult::Action { result: None })
     }
 
     /// `preview.subscribe` and `preview.unsubscribe`, on the calling session's
@@ -2314,28 +2461,65 @@ impl Engine {
         self
     }
 
-    /// `capture.targets`: what the platform's capture backend can capture now, listed
-    /// with no engine lock held, since listing windows calls the OS.
+    /// `capture.targets`: what the platform's capture backend can capture now, then the
+    /// video devices with the formats the engine reads of each, listed with no engine
+    /// lock held, since listing windows and devices calls the OS. A list that fails is
+    /// left out, and logged; the query fails only when both do.
     fn capture_targets(&self) -> Result<CallResult, ProtocolError> {
-        let capture = self.media.as_ref().and_then(|host| {
-            lock(&host.backends)
-                .as_ref()
-                .map(|backends| Arc::clone(&backends.capture))
+        let backends = self.media.as_ref().and_then(|host| {
+            lock(&host.backends).as_ref().map(|backends| {
+                (
+                    Arc::clone(&backends.capture),
+                    Arc::clone(&backends.video_devices),
+                )
+            })
         });
-        let Some(capture) = capture else {
+        let Some((capture, devices)) = backends else {
             return Err(ProtocolError::ActionFailed {
                 reason: "the engine has no capture backend".into(),
             });
         };
-        let mut targets: Vec<_> = capture
+        let captured = capture
             .targets()
-            .map_err(|err| ProtocolError::ActionFailed {
-                reason: format!("listing capture targets: {err}"),
-            })?
-            .into_iter()
-            .filter_map(capture_target_info)
-            .collect();
-        targets.sort_by_key(|info| info.kind != CaptureTargetKind::Display);
+            .map_err(|err| format!("listing capture targets: {err}"));
+        let listed = devices
+            .devices()
+            .map_err(|err| format!("listing video devices: {err}"));
+        let (mut targets, devices_listed) = match (captured, listed) {
+            (Err(capture), Err(devices)) => {
+                return Err(ProtocolError::ActionFailed {
+                    reason: format!("{capture}; {devices}"),
+                });
+            }
+            (captured, listed) => {
+                let targets: Vec<_> = match captured {
+                    Ok(targets) => targets
+                        .into_iter()
+                        .filter_map(capture_target_info)
+                        .collect(),
+                    Err(err) => {
+                        tracing::warn!(error = %err, "capture.targets lists the video devices only");
+                        Vec::new()
+                    }
+                };
+                let listed = listed.unwrap_or_else(|err| {
+                    tracing::warn!(error = %err, "capture.targets lists no video devices");
+                    Vec::new()
+                });
+                (targets, listed)
+            }
+        };
+        let rank = |kind: CaptureTargetKind| match kind {
+            CaptureTargetKind::Display => 0,
+            CaptureTargetKind::Window => 1,
+            _ => 2,
+        };
+        targets.sort_by_key(|info| rank(info.kind));
+        targets.extend(
+            devices_listed
+                .into_iter()
+                .map(|device| device_target_info(devices.as_ref(), device)),
+        );
         Ok(CallResult::Query {
             result: QueryResult::CaptureTargets { targets },
         })
@@ -3057,6 +3241,12 @@ impl Engine {
         worker.settled(Duration::from_secs(10))
     }
 
+    /// How many plans of the program mix ran (ADR-0103's meters), for tests.
+    #[cfg(test)]
+    pub(crate) fn plans(&self) -> u64 {
+        lock(&self.shared.state).live.meters().plans()
+    }
+
     /// How many times the live sources painted `source_id` (ADR-0103's meters), for
     /// tests.
     #[cfg(test)]
@@ -3198,6 +3388,7 @@ impl Shared {
             }
         };
         Ok(frames::Sample {
+            pinned: snapshot.shot().pin(),
             snapshot,
             live: state.render.load_live(),
             rev: state.graph.rev(),
@@ -3738,6 +3929,8 @@ struct State {
     live: LiveSources,
     /// The audio-only sources the program stage records, one mixer input each (C5).
     audio: AudioSources,
+    /// Each `webcam`'s camera controls, set on its device as they change (#1196).
+    camera_controls: crate::camera_controls::CameraControls,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -3921,6 +4114,7 @@ impl State {
         let result = CallResult::Batch {
             rev: applied.rev,
             removed_hotkeys: applied.removed_hotkeys,
+            removed_bindings: applied.removed_bindings,
             dropped_overrides: applied.dropped_overrides,
         };
         if let Some(keyed) = keyed {
@@ -4072,6 +4266,7 @@ impl State {
             let drawn = self.shown.as_ref().unwrap_or(&self.graph);
             self.live.sync(drawn.state());
             self.audio.sync(drawn.state(), self.live.audio());
+            self.camera_controls.sync(drawn.state());
         }
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
@@ -4753,9 +4948,8 @@ impl State {
             .place_keyframe(scene_id.clone(), keyframe_id.clone());
         self.refresh_shown();
         if let Some(((from, shared), program, mut run)) = started {
-            let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);
-            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+            if shared.is_err() {
                 run.pairs = false;
             }
             self.studio.switch(
@@ -5081,9 +5275,8 @@ impl State {
                     transition::From::OnScreen(visuals) => transition::shared_camera(visuals),
                     transition::From::Scene(scene) => Ok(transition::camera_of(&self.graph, scene)),
                 };
-                let to_camera = transition::camera_of(&self.graph, &scene_id);
                 let from_camera = shared.unwrap_or(None);
-                if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                if shared.is_err() {
                     run.pairs = false;
                 }
                 Some(transition::Running {
@@ -5205,9 +5398,8 @@ impl State {
             (self.graph.state().visible_in(&item_id, Some(program)) != shown).then_some(from)
         });
         if let (Some((program, mut run)), Some((from, shared))) = (run, from) {
-            let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);
-            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+            if shared.is_err() {
                 run.pairs = false;
             }
             self.studio.switch(
@@ -5653,11 +5845,13 @@ impl State {
             shown,
             live,
             audio,
+            camera_controls,
             ..
         } = self;
         let drawn = shown.as_ref().unwrap_or(graph);
         live.sync(drawn.state());
         audio.sync(drawn.state(), live.audio());
+        camera_controls.sync(drawn.state());
         self.route_audio();
         self.publish_render();
         self.feed_pages();
@@ -5866,15 +6060,74 @@ impl Shared {
                 return;
             }
             state.effects_seq = update.seq;
+            let changed = !update.removed.is_empty()
+                || !update.described.is_empty()
+                || state.quarantined != update.quarantined;
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
             state.quarantined = update.quarantined;
+            if changed {
+                state.subscribers.emit(
+                    &Event::KindsChanged {
+                        cause: KindsCause::EffectPacks,
+                    },
+                    &mut wake,
+                );
+            }
             state.live.set_effects(update.effects, update.sources);
             state.publish_render();
             state.sync_sizes(&mut wake);
             state.feed_pages();
         }
+        wake_all(wake);
+    }
+
+    /// A pack kind that ran too long on the program stage's GPU (#349): quarantines it
+    /// as a kind blamed for a device loss is, re-plans without it, then sends
+    /// `gpu.effect_slow`.
+    fn effect_slow(&self, slow: crate::runtime::SlowPass) {
+        let crate::runtime::SlowPass {
+            kind_id,
+            took,
+            limit,
+        } = slow;
+        tracing::warn!(
+            kind = %kind_id,
+            ?took,
+            ?limit,
+            "an effect-pack kind ran too long on the GPU"
+        );
+        // Under the packs' lock, as for a device loss. A late report of a kind already
+        // quarantined is dropped: it is no second blame (`blame_slow`).
+        let mut packs = lock(&self.effect_packs);
+        let quarantined = match packs.as_mut().map(|packs| packs.blame_slow(&kind_id)) {
+            Some(Some(crate::effect_packs::Blame {
+                quarantined,
+                update,
+                ..
+            })) => {
+                if let Some(update) = update {
+                    self.install_effects(update);
+                }
+                quarantined
+            }
+            Some(None) => return,
+            None => Vec::new(),
+        };
+        drop(packs);
+        let micros =
+            |time: std::time::Duration| u64::try_from(time.as_micros()).unwrap_or(u64::MAX);
+        let mut wake = Vec::new();
+        lock(&self.state).subscribers.emit(
+            &Event::GpuEffectSlow {
+                kind_id,
+                took_us: micros(took),
+                limit_us: micros(limit),
+                quarantined,
+            },
+            &mut wake,
+        );
         wake_all(wake);
     }
 
@@ -6109,7 +6362,63 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
             height: size.height(),
         }),
         primary: info.primary,
+        formats: Vec::new(),
+        controls: Vec::new(),
     })
+}
+
+/// A video device as `capture.targets` reports it, with the formats the engine reads
+/// of it (MJPEG among them, as every platform's codecs decode it) and its camera
+/// controls. A device whose formats or controls can't be read is listed without them.
+fn device_target_info(
+    devices: &dyn VideoDevices,
+    device: VideoDeviceInfo,
+) -> jstream_protocol::CaptureTargetInfo {
+    let formats = match devices.formats(&device.id) {
+        Ok(formats) => formats
+            .iter()
+            .filter(|format| crate::runtime::readable_format(format, true))
+            .filter_map(|format| {
+                Some(CaptureFormatInfo {
+                    width: format.size.width(),
+                    height: format.size.height(),
+                    fps: (crate::runtime::format_fps(format) * 100.0).round() / 100.0,
+                    pixel_format: crate::runtime::pixel_format_name(format.encoding)?.to_owned(),
+                })
+            })
+            .collect(),
+        Err(err) => {
+            tracing::warn!(device = %device.id, error = %err, "listing the video device's formats");
+            Vec::new()
+        }
+    };
+    let controls = match devices.controls(&device.id) {
+        Ok(controls) => controls
+            .into_iter()
+            .map(|c| jstream_protocol::CameraControlInfo {
+                name: c.id.name().to_owned(),
+                min: c.min,
+                max: c.max,
+                step: c.step,
+                default: c.default,
+                value: c.value,
+                auto: c.auto,
+            })
+            .collect(),
+        Err(err) => {
+            tracing::warn!(device = %device.id, error = %err, "listing the video device's camera controls");
+            Vec::new()
+        }
+    };
+    jstream_protocol::CaptureTargetInfo {
+        kind: CaptureTargetKind::Device,
+        target: device.id.as_str().to_owned(),
+        name: device.name,
+        size: None,
+        primary: false,
+        formats,
+        controls,
+    }
 }
 
 /// The run an item shown or hidden by `item.show`, `item.hide` or `item.toggle` moves

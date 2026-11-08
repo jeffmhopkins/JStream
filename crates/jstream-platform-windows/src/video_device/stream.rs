@@ -20,6 +20,7 @@ use windows::Win32::Media::MediaFoundation::{
     MF_SOURCE_READERF_NATIVEMEDIATYPECHANGED, MFSampleExtension_DeviceReferenceSystemTime,
 };
 
+use super::controls::Registered;
 use super::convert::Layout;
 use super::source::{MfStarted, Opened, VIDEO_STREAM, start_error, with_bytes};
 use crate::QpcClock;
@@ -62,6 +63,9 @@ pub(crate) enum Deliver {
 
 /// What the capture thread needs, moved into it.
 pub(crate) struct Capture {
+    /// The source's entry in the registry `set_control` finds it by, declared first so
+    /// it is gone before the source shuts down.
+    pub(crate) registered: Registered,
     pub(crate) opened: Opened,
     pub(crate) deliver: Deliver,
     pub(crate) size: FrameSize,
@@ -231,6 +235,8 @@ fn run(
         color,
         id,
         what,
+        // Bound last, so it drops before `opened` shuts the source down.
+        registered: _registered,
         ..
     } = capture;
     let lost = |reason: &str| PlatformError::DeviceLost {

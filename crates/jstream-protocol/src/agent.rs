@@ -1,4 +1,4 @@
-//! Asking the person before a new agent connects (0.107,
+//! Asking the person before a new agent connects (0.108,
 //! [ADR-0131](../../../docs/adr/0131-ask-before-a-new-agent-connects.md)).
 //!
 //! In the desktop app with MCP on, a connection that presents the control token from the

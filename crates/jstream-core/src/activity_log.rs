@@ -481,6 +481,10 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         },
         Edit::CanvasSetSize { width, height } => format!("Set the canvas to {width}×{height}"),
         Edit::CanvasSetFrameRate { fps } => format!("Set the base frame rate to {fps} fps"),
+        Edit::CanvasSetBlending { blending } => match blending {
+            jstream_protocol::Blending::Linear => "Set blending to linear light".to_owned(),
+            _ => "Set blending to browser-style (sRGB)".to_owned(),
+        },
         Edit::EncoderCreate { name, .. } => format!("Created encoder profile {}", quote(name)),
         Edit::EncoderUpdate { name, .. } => format!("Changed encoder profile {}", quote(name)),
         Edit::EncoderDelete { profile_id } => format!(
@@ -537,7 +541,14 @@ fn describe_edit(edit: &Edit, state: &State) -> String {
         Edit::HotkeySet { chord, action } => {
             format!("Bound {} to {}", chord.as_str(), humanize(action.name()))
         }
+        Edit::HotkeySetLabels { chord, .. } => {
+            format!("Changed the labels of the hotkey {}", chord.as_str())
+        }
         Edit::HotkeyClear { chord } => format!("Cleared the hotkey {}", chord.as_str()),
+        Edit::BindingSet { trigger, action } => {
+            format!("Bound {trigger} to {}", humanize(action.name()))
+        }
+        Edit::BindingClear { trigger } => format!("Cleared the binding of {trigger}"),
         Edit::TimelineSet {
             scene_id,
             timeline: info,
@@ -778,6 +789,33 @@ mod tests {
 
     fn db(value: f32) -> Finite32 {
         Finite32::new(value).expect("finite")
+    }
+
+    #[test]
+    fn controller_bindings_read_by_their_trigger() {
+        use jstream_protocol::{Action, Edit, SceneId, Trigger};
+        let graph = jstream_graph::Graph::new();
+        let trigger = Trigger::MidiNote {
+            note: 36,
+            channel: Some(10),
+            input: Some("Pads".into()),
+        };
+        let action = Action::SceneSwitch {
+            scene_id: SceneId::new("intro"),
+            preset_id: None,
+        };
+        let set = Edit::BindingSet {
+            trigger: trigger.clone(),
+            action,
+        };
+        assert_eq!(
+            super::describe_edit(&set, graph.state()),
+            "Bound MIDI note 36 on channel 10 from Pads to scene switch"
+        );
+        assert_eq!(
+            super::describe_edit(&Edit::BindingClear { trigger }, graph.state()),
+            "Cleared the binding of MIDI note 36 on channel 10 from Pads"
+        );
     }
 
     #[test]

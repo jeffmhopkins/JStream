@@ -156,7 +156,7 @@ pub enum ProtocolError {
         /// The server's request limit in bytes.
         limit_bytes: u64,
     },
-    /// The person declined this connection, or didn't answer in time (0.107,
+    /// The person declined this connection, or didn't answer in time (0.108,
     /// ADR-0131): only a `hello` fails with it, and the server then closes the
     /// connection. An agent reports it; connecting again asks again.
     #[error("not allowed: {reason}")]
@@ -257,6 +257,10 @@ pub enum EntityKind {
     Device,
     /// A hotkey binding, named by its chord.
     Hotkey,
+    /// A controller binding (0.96), named by its trigger as `Display` writes it, such as
+    /// `MIDI note 36 on channel 10`. Only an error answering a `binding.*` edit names it,
+    /// so a client older than 0.96, which sends none, never reads it.
+    Binding,
     /// An installed plugin (0.35). Only an error answering a `plugin.*` action names it,
     /// so a client older than 0.35, which sends none, never reads it.
     Plugin,
@@ -271,7 +275,7 @@ pub enum EntityKind {
     /// error answering `collection.new` or `collection.save_as` names it, so a client
     /// that sends neither never reads it.
     File,
-    /// An agent's request to connect, or a row of the approved list (0.107, ADR-0131).
+    /// An agent's request to connect, or a row of the approved list (0.108, ADR-0131).
     /// Only an error answering `agent.approve` or `agent.forget` names it.
     Approval,
 }
@@ -292,6 +296,7 @@ impl fmt::Display for EntityKind {
             EntityKind::Bus => "bus",
             EntityKind::Device => "device",
             EntityKind::Hotkey => "hotkey",
+            EntityKind::Binding => "binding",
             EntityKind::Plugin => "plugin",
             EntityKind::Pack => "pack",
             EntityKind::Timeline => "timeline",

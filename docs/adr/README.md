@@ -118,7 +118,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0102](0102-page-api-for-browser-sources.md) | Browser source pages can opt in to reading the engine through window.jstream | accepted | maintainer |  |
 | [ADR-0103](0103-per-item-performance-profile.md) | A performance profile per item, source and thread, readable over the protocol and MCP | accepted | agent |  |
 | [ADR-0104](0104-network-listener-over-tls.md) | Devices on the network reach JStream over TLS, with a self-signed certificate they pin | accepted | maintainer |  |
-| [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | accepted | agent |  |
+| [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | superseded | agent | [ADR-0126](0126-one-set-of-blend-modes-and-a-blending-space.md) |
 | [ADR-0106](0106-item-effects-in-canvas-space.md) | An item's effects can run over the canvas, after it is placed | accepted | agent |  |
 | [ADR-0107](0107-3d-models.md) | 3D models: meshes, materials and live textures in a scene | accepted | agent |  |
 | [ADR-0108](0108-camera-depth-of-field.md) | Depth of field for scene cameras | accepted | agent |  |
@@ -127,7 +127,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0111](0111-camera-up-at-the-poles.md) | A scene camera's up at either pole | accepted | agent |  |
 | [ADR-0112](0112-assignable-camera-zoom-bindings.md) | Assignable zoom bindings for a follow-cursor camera, heard while another app has the focus | accepted | maintainer |  |
 | [ADR-0113](0113-camera-motion-and-follow-pointer.md) | Camera motion, and a scene camera that follows the pointer over a capture | accepted | agent |  |
-| [ADR-0114](0114-browsers-keep-no-certificate-pin.md) | A paired browser keeps no certificate pin, so a new warning on its host means stop | accepted | agent |  |
+| [ADR-0114](0114-browsers-keep-no-certificate-pin.md) | A paired browser keeps no certificate pin, so a new warning on its host means stop | superseded | agent | [ADR-0130](0130-browsers-keep-no-certificate-pin-v2.md) |
 | [ADR-0115](0115-timelines-on-the-wire.md) | Timelines on the wire: global IDs, inert cues, studio-state playback and source.restart | accepted | agent |  |
 | [ADR-0116](0116-keyframe-tracks.md) | Keyframe tracks: a placed scene switches its own keyframe, as studio state, with a Move | accepted | agent |  |
 | [ADR-0117](0117-real-time-video-thread-model.md) | Real-time video thread model: a compositor-only render thread, producers that hand it GPU-ready frames, and one always-on stage | accepted | agent |  |
@@ -136,7 +136,18 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0120](0120-follow-pointer-is-a-filter.md) | Follow pointer is a filter on a capture, with a safe margin | accepted | agent |  |
 | [ADR-0121](0121-projects-open-new-and-save-as.md) | Projects: open, new and save as, over the protocol | accepted | agent |  |
 | [ADR-0122](0122-controller-input-midi-and-one-binding-system.md) | Controller input: MIDI and JTunnel, one binding system for every trigger | accepted | agent |  |
+| [ADR-0123](0123-lan-inputs-jtunnel-and-visca.md) | LAN inputs without TLS: JTunnel senders and VISCA, opt-in and accepted one peer at a time | accepted | maintainer |  |
 | [ADR-0124](0124-page-api-read-review.md) | What a page may read: one checkbox and one warning per kind of data | accepted | maintainer |  |
+| [ADR-0125](0125-item-effects-layer-grows-where-it-is-needed.md) | An item's effects layer grows at the first effect that draws past the box | accepted | agent |  |
+| [ADR-0126](0126-one-set-of-blend-modes-and-a-blending-space.md) | One set of blend modes, and a project setting for the space they mix in | accepted | agent |  |
 | [ADR-0127](0127-moves-interpolate-effect-settings.md) | A Move blends the settings of effects that differ only in their settings | accepted | agent |  |
+| [ADR-0128](0128-moves-between-2d-and-3d-glide.md) | A Move between a 2D side and a 3D one glides through the framing camera | accepted | agent |  |
+| [ADR-0129](0129-keyframe-timing-and-more-easings.md) | A keyframe times its items in moves into it, and three more easings | accepted | agent |  |
+| [ADR-0130](0130-browsers-keep-no-certificate-pin-v2.md) | A paired browser keeps no certificate pin, so a new warning on its host means checking the fingerprint again | accepted | agent |  |
 | [ADR-0131](0131-ask-before-a-new-agent-connects.md) | The desktop app asks the person before a new agent's first connection | accepted | agent |  |
+| [ADR-0132](0132-bench-gates-views-and-quality-probe.md) | Release gates from the profile: the client's views report back, a quality probe, and the bench's gates | accepted | agent |  |
+| [ADR-0133](0133-labels-on-hotkeys-and-timelines.md) | Labels on hotkeys and timelines, and a label's members | accepted | agent |  |
+| [ADR-0134](0134-html-pages-load-from-an-origin-of-their-own.md) | A page given as HTML loads from an origin of its own | accepted | agent |  |
+| [ADR-0136](0136-an-effects-outset-follows-its-settings.md) | An effect's outset follows its settings | accepted | agent |  |
+| [ADR-0137](0137-midi-visualization-sources.md) | MIDI visualization sources draw a lock-free per-input state on the CPU | accepted | agent |  |
 <!-- @generated end adr-index -->

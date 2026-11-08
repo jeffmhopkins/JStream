@@ -22,6 +22,7 @@ use crate::links;
 use crate::ui::{self, Ui};
 use crate::updates;
 use anyhow::Context;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::http::{Response, StatusCode};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
@@ -153,11 +154,24 @@ fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
 }
 
 /// Runs the app until its window closes: `ui` serves the pages, `script` (if the
-/// engine started) hands them the engine, and `host` is stopped on exit.
-pub fn run(ui: Ui, script: Option<String>, host: Option<Host>) -> anyhow::Result<()> {
+/// engine started) hands them the engine, `host` is stopped on exit, and
+/// `network_file` is where `set_network` saves "Allow devices on my network".
+pub fn run(
+    ui: Ui,
+    script: Option<String>,
+    host: Option<Host>,
+    network_file: Option<PathBuf>,
+) -> anyhow::Result<()> {
     let start = start_url()?;
-    let app = tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![crate::pick::pick_path])
+    let mut builder = tauri::Builder::default();
+    if let Some(file) = network_file {
+        builder = builder.manage(crate::network::Setting(file));
+    }
+    let app = builder
+        .invoke_handler(tauri::generate_handler![
+            crate::pick::pick_path,
+            crate::network::set_network
+        ])
         // Asynchronous so the update check's request to GitHub doesn't block the
         // window. File requests are answered on this call, as they were before.
         .register_asynchronous_uri_scheme_protocol(

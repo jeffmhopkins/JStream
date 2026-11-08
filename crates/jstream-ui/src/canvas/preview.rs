@@ -260,6 +260,8 @@ pub struct JpegSlot<T> {
     busy: bool,
     waiting: Option<T>,
     closed: bool,
+    /// Waiting pictures a newer one replaced, since [`JpegSlot::take_replaced`].
+    replaced: u64,
 }
 
 impl<T> Default for JpegSlot<T> {
@@ -268,6 +270,7 @@ impl<T> Default for JpegSlot<T> {
             busy: false,
             waiting: None,
             closed: false,
+            replaced: 0,
         }
     }
 }
@@ -280,10 +283,18 @@ impl<T> JpegSlot<T> {
             return None;
         }
         if self.busy {
-            self.waiting = Some(picture);
+            if self.waiting.replace(picture).is_some() {
+                self.replaced = self.replaced.saturating_add(1);
+            }
             return None;
         }
         Some(picture)
+    }
+
+    /// How many waiting pictures newer ones replaced since the last call: pictures the
+    /// view skipped.
+    pub fn take_replaced(&mut self) -> u64 {
+        std::mem::take(&mut self.replaced)
     }
 
     /// The decode of a picture `offer` or `settled` returned has started.
@@ -414,6 +425,8 @@ mod tests {
         slot.started();
         assert_eq!(slot.offer(2), None);
         assert_eq!(slot.offer(3), None, "replaces 2");
+        assert_eq!(slot.take_replaced(), 1);
+        assert_eq!(slot.take_replaced(), 0);
         assert_eq!(slot.settled(), Some(3));
         slot.started();
         assert_eq!(slot.settled(), None, "nothing waiting");

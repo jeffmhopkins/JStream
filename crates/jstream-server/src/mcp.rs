@@ -238,7 +238,7 @@ pub(crate) async fn handle(
     body: Body,
 ) -> Response {
     let peer = accepted.peer;
-    let credential = match app.gate.admit(&headers, peer) {
+    let credential = match app.gate.admit(&headers, peer, accepted.on()) {
         Ok(credential) => credential,
         Err(refusal) => return refusal.into_response(),
     };

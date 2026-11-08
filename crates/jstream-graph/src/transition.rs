@@ -135,6 +135,15 @@ fn check_duration(duration_ms: u32, at: usize) -> Result<(), ProtocolError> {
     }
 }
 
+/// A preset's easing: a `cubic_bezier` whose control points are out of range is
+/// `invalid_argument` on `easing.cubic_bezier.<field>` (ADR-0129).
+fn check_easing(easing: Easing, at: usize) -> Result<(), ProtocolError> {
+    match easing.problem() {
+        Some((field, reason)) => Err(invalid(at, &format!("easing.{field}"), reason)),
+        None => Ok(()),
+    }
+}
+
 fn find<'s>(
     state: &'s mut State,
     id: &TransitionPresetId,
@@ -159,6 +168,7 @@ fn create(
     check_name(edit.name, at)?;
     let descriptor = transition_kind(kinds, edit.kind, at, "kind")?;
     check_duration(edit.duration_ms, at)?;
+    check_easing(edit.easing, at)?;
     let settings = complete_settings_in(
         state,
         kinds,
@@ -196,6 +206,9 @@ fn update(
     }
     if let Some(duration_ms) = edit.duration_ms {
         check_duration(duration_ms, at)?;
+    }
+    if let Some(easing) = edit.easing {
+        check_easing(easing, at)?;
     }
     let kind_changes = edit.kind.is_some_and(|kind| kind != current.kind);
     let (settings, inverse_kind, inverse_patch) = if kind_changes {

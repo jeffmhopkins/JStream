@@ -148,11 +148,17 @@ pub fn DevicePreview(
     canvas.on_load({
         let screen = Rc::clone(&screen);
         move |element| {
-            let drawn = Screen::new(element, move || {
-                if shown.try_get_untracked() == Some(Shown::Starting) {
-                    shown.try_set(Shown::Live);
-                }
-            });
+            // A dialog's picture of a device, not a view of the show: its counts
+            // aren't reported.
+            let drawn = Screen::new(
+                element,
+                move || {
+                    if shown.try_get_untracked() == Some(Shown::Starting) {
+                        shown.try_set(Shown::Live);
+                    }
+                },
+                crate::views::ViewTally::default(),
+            );
             if drawn.is_none() {
                 shown.set(Shown::Ended("this browser can't draw on a canvas".into()));
             }

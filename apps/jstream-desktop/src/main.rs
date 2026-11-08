@@ -58,7 +58,12 @@ fn main() -> ExitCode {
         Ok(options) => app::start(&options, exe_dir.as_deref(), data.as_deref(), &secrets),
         Err(message) => Startup::problem(message),
     };
-    match jstream_desktop::shell::run(startup.ui, startup.script, startup.host) {
+    match jstream_desktop::shell::run(
+        startup.ui,
+        startup.script,
+        startup.host,
+        startup.network_file,
+    ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
             tracing::error!(error = format!("{error:#}"), "the window failed");

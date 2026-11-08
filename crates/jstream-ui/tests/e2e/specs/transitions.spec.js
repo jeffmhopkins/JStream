@@ -111,7 +111,8 @@ test('an item\'s scene switches are sent from the Inspector', async ({ page, dae
   await page.locator('.sources-panel li.row').filter({ hasText: 'Backdrop' }).locator('.row-main').click();
   const inspector = page.locator('.inspector');
   const fold = inspector.locator('section.fold').filter({ hasText: 'Scene switches' });
-  await fold.getByRole('button', { name: 'Scene switches' }).click();
+  await inspector.getByRole('tab', { name: 'Behaviour' }).click();
+  await expect(fold.getByRole('button', { name: 'Scene switches' })).toHaveAttribute('aria-expanded', 'true');
   await expect(fold.getByLabel('Glide to other scenes')).toHaveValue('auto');
   await expect(fold.getByLabel('Appear', { exact: true })).toHaveValue('inherit');
 

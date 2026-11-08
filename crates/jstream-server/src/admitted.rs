@@ -39,7 +39,7 @@ use futures_util::StreamExt;
 use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
     Action, ActionResult, AgentTransport, Call, CallResult, EntityKind, Event, Hello,
-    ProtocolError, Query, QueryResult, RequestId, Response, SecretString, Welcome,
+    NetworkAccess, ProtocolError, Query, QueryResult, RequestId, Response, SecretString, Welcome,
 };
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, PoisonError};
@@ -55,6 +55,9 @@ pub(crate) struct Admitted {
     /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
     /// Off, they reach `inner` like any other call.
     serves_devices: bool,
+    /// Where a device on the network reaches the server, while its network listener is
+    /// on: `pairing.start` answers with it (ADR-0104, 0.97).
+    network: Option<NetworkAccess>,
     /// The UI settings the server keeps.
     ui_settings: Arc<UiSettings>,
     /// Whether `hello` succeeded, which the calls answered here need too, and which
@@ -80,6 +83,9 @@ pub(crate) struct Served {
     pub(crate) pairing_offered: bool,
     /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
     pub(crate) serves_devices: bool,
+    /// Where a device on the network reaches the server, while its network listener is
+    /// on.
+    pub(crate) network: Option<NetworkAccess>,
     /// The UI settings the server keeps.
     pub(crate) ui_settings: Arc<UiSettings>,
     /// The agent approvals (ADR-0131).
@@ -97,6 +103,7 @@ impl Admitted {
             devices,
             pairing_offered,
             serves_devices,
+            network,
             ui_settings,
             approvals,
         } = served;
@@ -106,6 +113,7 @@ impl Admitted {
             devices,
             pairing_offered,
             serves_devices,
+            network,
             ui_settings,
             greeted: Arc::new(AtomicBool::new(false)),
             answered: AtomicU64::new(0),
@@ -236,6 +244,7 @@ impl Admitted {
             result: Some(ActionResult::PairingStart {
                 code: SecretString::new(code),
                 expires_in_secs: u32::try_from(CODE_LIFETIME.as_secs()).unwrap_or(u32::MAX),
+                network: self.network.clone(),
             }),
         })
     }
@@ -450,6 +459,7 @@ mod tests {
                     devices,
                     pairing_offered,
                     serves_devices,
+                    network: None,
                     ui_settings,
                     approvals,
                 },

@@ -7,8 +7,58 @@
 //! the same single-slot mailbox display capture uses. Raw frames are copied or converted
 //! to NV12 there (`convert`); MJPEG frames go to the engine's decoder. The paired audio
 //! endpoint is found by container ID (`pairing`).
+//!
+//! # Behaviour
+//!
+//! **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
+//! Foundation's source reader (ADR-0061):
+//! - **Devices:** the video capture devices Media Foundation enumerates. A device's
+//!   `DeviceId` is its symbolic link (its device interface path), which stays the same
+//!   across reboots and replugging into the same port; its name is the friendly name.
+//! - **Paired audio:** the first active WASAPI capture endpoint in the same device
+//!   container (the configuration manager's container ID), so it is an ID `WasapiAudio`
+//!   opens. Devices built into the computer share one container, which pairs nothing: a
+//!   laptop's camera is not paired with its microphone array.
+//! - **Formats:** the first video stream's native media types that the backend can
+//!   deliver, in the device's order: NV12 and I420 as they are, YUY2 (converted to NV12),
+//!   and MJPEG (decoded by the engine's `CaptureDecoder`). RGB, 10-bit and H.264 types are
+//!   left out. A type that repeats an earlier one's size, frame rate and encoding is
+//!   listed once, and the first is the one opened. Frame rates become frame periods
+//!   (`30000/1001` fps is `1001/30000`).
+//! - **Streams:** `open` selects the native type with converters disabled, so the reader
+//!   delivers exactly that type, and reads it synchronously on its own capture thread.
+//!   `open` waits up to 5 s for the first read, so a device another application holds is
+//!   `Busy` there. A denied camera privacy setting is an `Os` error that says so. Raw
+//!   frames are copied (NV12, I420) or converted to NV12 (YUY2, with each chroma sample
+//!   averaging the two rows of its block) on that thread by `jstream_platform::yuv`, the
+//!   converter Linux's V4L2 backend uses too, into the same single-slot
+//!   mailbox as display capture. Their colour is what the type declares, else BT.601
+//!   below 720 lines and BT.709 from there, in limited range.
+//! - **Threads:** `devices`, `formats` and `open` join the calling thread to the
+//!   multithreaded apartment for the call, as `WasapiAudio` does, and the capture thread
+//!   joins it for its lifetime. Each also starts Media Foundation; the thread releases the
+//!   reader, source and decoder before shutting it down.
+//! - **Times:** a sample's `MFSampleExtension_DeviceReferenceSystemTime` (QPC in 100 ns,
+//!   `QpcClock`'s time line) when it has one; otherwise the reader's timestamp, anchored
+//!   to `QpcClock` at the first frame.
+//! - **End of a stream:** a removed device, a reader error or end of stream ends the stream
+//!   with `DeviceLost`, as does a change of the device's format, so the engine reopens it.
+//!   A panic on the capture thread (the decoder's included) ends it with `InvalidState`.
+//!   Dropping the stream doesn't wait: the thread stops after its current read and then
+//!   releases the device and drops the decoder.
+//! - **MJPEG:** `MfMjpegDecoder` is the platform's `CaptureDecoder`, which
+//!   `MfCodecs::capture_decoder` makes for the engine: the first synchronous
+//!   MJPEG decoder MFT Media Foundation ranks (Microsoft's, on Windows), created on the
+//!   capture thread at the first frame and again if the size changes. It takes NV12
+//!   output when offered, else YUY2 converted to NV12. Decoded frames are BT.601 full
+//!   range, as JFIF defines, unless the decoder's type says otherwise. A frame it can't
+//!   decode is dropped and counted in `CaptureStats::frames_undecodable`.
+//! - **Not yet:** every MJPEG frame is decoded, including ones the mailbox then replaces
+//!   before render takes them.
 
 // Platform-independent, so they are tested on every platform.
+#[cfg(any(windows, test))]
+mod controls;
 #[cfg(any(windows, test))]
 mod convert;
 #[cfg(any(windows, test))]
@@ -32,11 +82,12 @@ pub use mjpeg::MfMjpegDecoder;
 mod backend {
     use jstream_platform::media::PixelFormat;
     use jstream_platform::{
-        CaptureDecoder, CaptureEncoding, CaptureStream, DeviceId, PlatformError, VideoDeviceFormat,
-        VideoDeviceInfo, VideoDevices,
+        CameraControlId, CameraControlInfo, CameraControlValue, CaptureDecoder, CaptureEncoding,
+        CaptureStream, DeviceId, PlatformError, VideoDeviceFormat, VideoDeviceInfo, VideoDevices,
     };
     use windows::Win32::Media::MediaFoundation::MF_SOURCE_READER_ALL_STREAMS;
 
+    use super::controls::{Controls, open_source, register};
     use super::convert::Layout;
     use super::format::color;
     use super::pairing::paired;
@@ -92,6 +143,36 @@ mod backend {
             let _mf = MfStarted::start()?;
             let opened = source::find(device)?.open()?;
             Ok(opened.natives()?.into_iter().map(|n| n.format).collect())
+        }
+
+        /// Read on the media source of the device's running capture when there is one,
+        /// else on a source activated for the call.
+        fn controls(&self, device: &DeviceId) -> Result<Vec<CameraControlInfo>, PlatformError> {
+            let _com = Com::init()?;
+            let _mf = MfStarted::start()?;
+            if let Some(running) = open_source(device.as_str()) {
+                return Ok(Controls::of(&running).list());
+            }
+            let opened = source::find(device)?.open()?;
+            Ok(Controls::of(opened.source()).list())
+        }
+
+        /// Set on the media source of the device's running capture when there is one,
+        /// so the stream keeps running in the new setting; else on a source activated for
+        /// the call, whose setting the camera keeps after it closes.
+        fn set_control(
+            &self,
+            device: &DeviceId,
+            control: CameraControlId,
+            value: CameraControlValue,
+        ) -> Result<(), PlatformError> {
+            let _com = Com::init()?;
+            let _mf = MfStarted::start()?;
+            if let Some(running) = open_source(device.as_str()) {
+                return Controls::of(&running).apply(control, value, device.as_str());
+            }
+            let opened = source::find(device)?.open()?;
+            Controls::of(opened.source()).apply(control, value, device.as_str())
         }
 
         fn open(
@@ -162,6 +243,7 @@ mod backend {
                     })?;
             }
             let stream = MfStream::start(Capture {
+                registered: register(&found.link, opened.source()),
                 opened,
                 mf,
                 deliver,
@@ -276,6 +358,37 @@ mod device_tests {
         }
         let (_, formats) = first_device_formats();
         assert!(formats.iter().all(|f| f.size.width() > 0));
+    }
+
+    /// Lists the first device's camera controls, then sets each to its value and, where
+    /// it has one, its automatic mode, both with the device closed and while it captures
+    /// (#1196). Setting a control to the value it has changes nothing on the camera.
+    #[test]
+    #[ignore = "needs a webcam"]
+    fn reads_and_sets_camera_controls_closed_and_open() {
+        use jstream_platform::CameraControlValue;
+        let devices = MfVideoDevices::new();
+        let (id, formats) = first_device_formats();
+        let controls = devices.controls(&id).expect("controls");
+        assert!(!controls.is_empty(), "the webcam lists no camera control");
+        let set_all = || {
+            for c in devices.controls(&id).expect("controls") {
+                assert!(c.min <= c.max && c.step >= 1, "{c:?}");
+                let value = if c.auto == Some(true) {
+                    CameraControlValue::Auto
+                } else {
+                    CameraControlValue::Manual(c.value)
+                };
+                devices.set_control(&id, c.id, value).expect("set_control");
+            }
+        };
+        set_all();
+        let format = formats
+            .iter()
+            .find(|f| !f.encoding.is_compressed())
+            .expect("an uncompressed format");
+        let _stream = devices.open(&id, format, None).expect("open");
+        set_all();
     }
 
     #[test]

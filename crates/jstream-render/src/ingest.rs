@@ -7,6 +7,11 @@
 //! alpha from tables built here with the CPU's functions, and converts NV12 in the same
 //! 16.16 fixed point. Only the rounding to half precision is the GPU's, so a texel can
 //! differ from the CPU's by one step of `f16` (a GPU may round either way).
+//!
+//! A conversion can also write a smaller texture than the frame (#1139): each texel is
+//! then the mean of the frame's texels under it, averaged in premultiplied linear light,
+//! as a box filter would draw them, so an upload drawn much smaller than its frame holds
+//! only the texels it needs.
 
 use jstream_media::{ColorInfo, ColorRange, ColorSpace, PixelFormat, VideoFrame};
 
@@ -132,7 +137,8 @@ impl<'a> Planes<'a> {
         HEADER_BYTES + self.plane0.len() + self.plane1.len()
     }
 
-    fn header(&self) -> Result<[u32; HEADER_WORDS], RenderError> {
+    /// The header, for a conversion into a `to` texture (the frame's size, or smaller).
+    fn header(&self, to: (u32, u32)) -> Result<[u32; HEADER_WORDS], RenderError> {
         let word = |v: usize| {
             u32::try_from(v).map_err(|_| RenderError::TooLarge {
                 what: "frame",
@@ -143,7 +149,7 @@ impl<'a> Planes<'a> {
         };
         let yuv = Yuv::new(self.color);
         let mut header = [0u32; HEADER_WORDS];
-        header[..13].copy_from_slice(&[
+        header[..15].copy_from_slice(&[
             self.width,
             self.height,
             self.mode as u32,
@@ -157,6 +163,8 @@ impl<'a> Planes<'a> {
             yuv.cb_g as u32,
             yuv.cr_g as u32,
             yuv.cb_b as u32,
+            to.0,
+            to.1,
         ]);
         Ok(header)
     }
@@ -307,7 +315,8 @@ impl Ingest {
         })
     }
 
-    /// Converts `planes` into the upload behind `image_bind`, `planes`' size, in a
+    /// Converts `planes` into the upload behind `image_bind`, `to` texels (`planes`'
+    /// size, or smaller each way, which averages the texels under each one), in a
     /// submit of its own: ordered after every submit already on the queue (so frames
     /// that sampled the old contents keep them) and before the next.
     pub(crate) fn convert(
@@ -315,8 +324,18 @@ impl Ingest {
         gpu: &Gpu,
         image_bind: &wgpu::BindGroup,
         planes: &Planes<'_>,
+        to: (u32, u32),
     ) -> Result<(), RenderError> {
-        let header = planes.header()?;
+        if to.0 == 0 || to.1 == 0 || to.0 > planes.width || to.1 > planes.height {
+            return Err(RenderError::Invalid {
+                what: "frame",
+                detail: format!(
+                    "a {}x{} frame can't be converted into {}x{} texels",
+                    planes.width, planes.height, to.0, to.1
+                ),
+            });
+        }
+        let header = planes.header(to)?;
         let len = planes.len().next_multiple_of(4);
         // Checked before a buffer is made or its bind group cached: the shader binds the
         // whole buffer, so it must fit one storage binding as well as one buffer.
@@ -364,11 +383,7 @@ impl Ingest {
             pass.set_pipeline(&self.pipeline);
             pass.set_bind_group(0, image_bind, &[]);
             pass.set_bind_group(1, &bind, &[]);
-            pass.dispatch_workgroups(
-                planes.width.div_ceil(GROUP),
-                planes.height.div_ceil(GROUP),
-                1,
-            );
+            pass.dispatch_workgroups(to.0.div_ceil(GROUP), to.1.div_ceil(GROUP), 1);
         }
         // The submit lock keeps another thread's staged platform fences off this submit,
         // as every submit on a platform context's queue does.
@@ -513,6 +528,68 @@ mod tests {
                 i % 4
             );
         }
+    }
+
+    /// A conversion into a smaller texture holds the mean of the frame's texels under
+    /// each of its own, premultiplied linear, as the CPU averages them, and a rewrite of
+    /// it does too (#1139).
+    #[test]
+    fn a_smaller_upload_averages_the_texels_under_each() {
+        let Some(opened) = open() else { return };
+        let compositor = &opened.compositor;
+        let (width, height, to) = (7u32, 5u32, (3u32, 2u32));
+        let rgba: Vec<u8> = (0..width * height * 4)
+            .map(|i| (i.wrapping_mul(97) % 256) as u8)
+            .collect();
+        let linear = |x: u32, y: u32| {
+            let at = ((y * width + x) * 4) as usize;
+            let a = f32::from(rgba[at + 3]) / 255.0;
+            let c =
+                |i: usize| crate::color::srgb_channel_to_linear(f32::from(rgba[at + i]) / 255.0);
+            [c(0) * a, c(1) * a, c(2) * a, a]
+        };
+        let mut want = Vec::new();
+        for ty in 0..to.1 {
+            for tx in 0..to.0 {
+                let x0 = tx * width / to.0;
+                let x1 = ((tx + 1) * width / to.0).max(x0 + 1);
+                let y0 = ty * height / to.1;
+                let y1 = ((ty + 1) * height / to.1).max(y0 + 1);
+                let mut sum = [0f32; 4];
+                for y in y0..y1 {
+                    for x in x0..x1 {
+                        for (s, v) in sum.iter_mut().zip(linear(x, y)) {
+                            *s += v;
+                        }
+                    }
+                }
+                let n = ((x1 - x0) * (y1 - y0)) as f32;
+                want.extend(sum.map(|s| crate::image::f16_bits(s / n)));
+            }
+        }
+        let image = compositor
+            .upload_rgba8_into(width, height, &rgba, to)
+            .expect("uploads");
+        assert_eq!((image.width(), image.height()), to);
+        assert_eq!(
+            (image.extent(), image.full()),
+            ((width, height), (width, height))
+        );
+        // Summed in another order on the GPU: within a step or two of half.
+        let close = |got: &[u16], what: &str| {
+            for (i, (g, w)) in got.iter().zip(&want).enumerate() {
+                assert!(
+                    g.abs_diff(*w) <= 2,
+                    "{what}: half {i} is {g:#06x}, the CPU's {w:#06x}"
+                );
+            }
+        };
+        close(&read_halves(compositor, &image), "upload");
+        let zeros = vec![0u8; rgba.len()];
+        compositor.rewrite_rgba8(&image, &zeros).expect("rewrites");
+        assert!(read_halves(compositor, &image).iter().all(|&h| h == 0));
+        compositor.rewrite_rgba8(&image, &rgba).expect("rewrites");
+        close(&read_halves(compositor, &image), "rewrite");
     }
 
     /// Every channel byte at every alpha, premultiplied on the GPU, matches the CPU
