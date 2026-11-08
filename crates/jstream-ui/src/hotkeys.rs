@@ -380,7 +380,11 @@ mod tests {
         assert_eq!(notches.turn(-50.0, 0), 0);
         assert_eq!(notches.turn(-120.0, 0), -1);
         assert_eq!(notches.turn(-50.0, 0), 0);
-        assert_eq!(notches.turn(-50.0, 0), 0, "the -50 before the notch is gone");
+        assert_eq!(
+            notches.turn(-50.0, 0),
+            0,
+            "the -50 before the notch is gone"
+        );
         assert_eq!(notches.turn(0.0, 0), 0);
         assert_eq!(notches.turn(f64::NAN, 0), 0);
     }

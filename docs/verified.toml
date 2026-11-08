@@ -5613,7 +5613,7 @@ stamp = { hash = "b3:277b6c03690fec29", by = "agent:wave-owner", note = "Docking
 stamp = { hash = "b3:4c3a9f4492301f3f", by = "agent:claude", note = "the global's list has network, networkOpen and allowNetwork; the Pairing bullet covers the desktop switch, its save path, failure, restart, port-failed notice and firewall note; with #1366 review r1's N1-N5: networkOpen on the global and the UI's port-failed notice, the retry log wording, allowNetwork resolving false on a failed command, the firewall note, and turning off keeping paired devices" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/hotkeys.rs"]
-stamp = { hash = "b3:40fd3fd5465cd72b", by = "agent:claude-linux-hotkeys", note = "hotkeys.rs's WheelNotches now counts notch-sized events on their own and sums small ones with a 1e-9 tolerance; the design section doesn't describe the counter and holds." }
+stamp = { hash = "b3:604e5810f6ea2293", by = "agent:claude-linux-hotkeys", note = "hotkeys.rs only rustfmt-wrapped one assert in the WheelNotches test; the section still holds against the counter it describes." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/icons.rs"]
 stamp = { hash = "b3:0e6aa9b851286a03", by = "agent:claude-3d", note = "The Add source dialog paragraph now says the engine's 3D model kind is listed beyond the prototype under Media and web with a cube icon; checked against add_source.rs known() and ORDER, and icons.rs." }
@@ -5820,7 +5820,7 @@ stamp = { hash = "b3:277b6c03690fec29", by = "agent:wave-owner", note = "Content
 stamp = { hash = "b3:4c3a9f4492301f3f", by = "agent:claude", note = "host.rs's desktop_network, desktop_network_open and allow_network, and NetworkAccessSetting on Devices, are in the bullets; with #1366 review r1's N1-N5: networkOpen on the global and the UI's port-failed notice, the retry log wording, allowNetwork resolving false on a failed command, the firewall note, and turning off keeping paired devices" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/hotkeys.rs"]
-stamp = { hash = "b3:40fd3fd5465cd72b", by = "agent:claude-linux-hotkeys", note = "Rewrote the WheelNotches sentence: 120 px a notch, an event of half a notch or more counts on its own (rounded, at least one) so Chromium's 120 (Linux, measured with real X input under Xvfb at DPR 1/1.5/2) and 100 (Windows) are each one step, smaller touchpad events carry; #1346 and the new wheel-chords.spec.js named. Matches hotkeys.rs and its tests." }
+stamp = { hash = "b3:604e5810f6ea2293", by = "agent:claude-linux-hotkeys", note = "hotkeys.rs only rustfmt-wrapped one assert in the WheelNotches test; the section still holds against the counter it describes." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/icons.rs"]
 stamp = { hash = "b3:0e6aa9b851286a03", by = "agent:claude-3d", note = "icons.rs gains a cube icon (in NAMES) for the 3D model type; the Contents line for icons.rs now names it. add_source.rs's catalogue gains the model kind (name, description, Media and web, 512x512), which Purpose doesn't list per kind." }
@@ -7329,7 +7329,7 @@ stamp = { hash = "b3:b260cf3d1c9f64f5", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR: KB-01 (C toggles crop mode, V leaves it) and KB-02 (Alt on a handle crops; Shift halves a crop drag's speed) match on_key and single_handle in mod.rs, which leaves Alt a plain resize while no size is known; transform.rs only makes rotate and from_local pub(crate) for crop.rs and changes no key." }
 
 ["UI-FEATURES#keyboard"."file:crates/jstream-ui/src/hotkeys.rs"]
-stamp = { hash = "b3:40fd3fd5465cd72b", by = "agent:claude-linux-hotkeys", note = "KB-07 says a wheel chord runs once per notch while the page has the focus; with the new counter that holds at both 100 and 120 px a notch." }
+stamp = { hash = "b3:604e5810f6ea2293", by = "agent:claude-linux-hotkeys", note = "hotkeys.rs only rustfmt-wrapped one assert in the WheelNotches test; the section still holds against the counter it describes." }
 
 ["UI-FEATURES#menus"."body"]
 stamp = { hash = "b3:9c35156a76e11edd", by = "agent:blend-amount", note = "CM-02 row now lists the Blending submenu's amount entries (opacity 100/75/50/25%, keyframe override) as item_menu.rs builds them" }
