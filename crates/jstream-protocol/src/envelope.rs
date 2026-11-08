@@ -208,6 +208,21 @@ impl CallResult {
     }
 }
 
+/// How a device on the network reaches the host's network listener (ADR-0104, 0.97):
+/// what the host shows beside a pairing code.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct NetworkAccess {
+    /// The listener's addresses, one per name and address its certificate carries, as
+    /// `https://<name>:<port>/`. The device opens one of them.
+    pub urls: Vec<String>,
+    /// The SHA-256 fingerprint of the listener's certificate, as `AB:CD:…` (32 bytes in
+    /// upper-case hex, colon-separated), the way a browser's certificate viewer writes
+    /// it. The person compares it with the one the device's browser shows before they
+    /// pair, and again whenever a paired device warns about the certificate
+    /// ([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)).
+    pub fingerprint: String,
+}
+
 /// What an action answered, for the few actions whose answer carries data. Its `type`
 /// tag repeats the action's name.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -229,6 +244,11 @@ pub enum ActionResult {
         code: SecretString,
         /// How long the code stays open, in seconds (120).
         expires_in_secs: u32,
+        /// Where a device on the network reaches the host, while the host's network
+        /// listener is on ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md),
+        /// 0.97). Absent otherwise: then only a device on this machine can pair.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        network: Option<NetworkAccess>,
     },
     /// The answer to `youtube.sign_in`.
     #[serde(rename = "youtube.sign_in")]

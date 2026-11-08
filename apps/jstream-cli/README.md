@@ -102,7 +102,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `collection info` | query `collection.info` (the project file the engine saves to, and the recent ones, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)) |
 | `collection open <path>`, `collection new <path>` | action `collection.open`, `collection.new` (an absolute path on the engine's machine; outputs stop and undo is cleared) |
 | `collection save-as <path>` | action `collection.save_as`; never replaces a file |
-| `pair` | action `pairing.start`: prints a one-time code to enter on the device |
+| `pair` | action `pairing.start`: prints a one-time code to enter on the device, and, when the server listens on the network, its addresses and certificate fingerprint |
 | `device list` | query `device.list` |
 | `device revoke <device-id>` | action `device.revoke` (also closes the device's connections) |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
@@ -232,7 +232,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Pairing** ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): `pair`
   prints `pairing code: XXXX-XXXX` and how long it stays open; the user enters it on the
   device, which posts it to the server's `/api/v1/pair` for a device token of its own
-  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). The code is
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). When the
+  server also listens on the local network, `pair` then prints the pairing page on each
+  of its addresses (`open on the device: <url>/pair`), the certificate's fingerprint, and that the
+  certificate warning is to be passed only if the fingerprint matches
+  ([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)). The code is
   printed because it is the answer, and is never logged. `device list` prints a table
   of `ID`, `NAME` and when each was paired and last used (Unix seconds), or `no paired
   devices`; `device revoke <id>` prints `device <id> revoked (<request>)`. The server

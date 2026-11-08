@@ -26,8 +26,8 @@ first cut defines its own wire types for them.
 Contents (a deliberately small first cut; [Design](#design) describes the whole model):
 - **Envelope** (`envelope.rs`): `ClientMessage` (`hello`, `request`) and `ServerMessage`
   (`welcome`, `response`, `error`, `event`), `Request`/`Call` and `Response`/`CallResult`,
-  and `ActionResult`, the data an action may answer with (`pairing.start`'s code,
-  `youtube.sign_in`'s consent URL, a YouTube broadcast).
+  and `ActionResult`, the data an action may answer with (`pairing.start`'s code and
+  network listener, `youtube.sign_in`'s consent URL, a YouTube broadcast).
   `ClientMessage::parse` maps every parse failure to `malformed`.
 - **History** (`history.rs`, [ADR-0032](../../docs/adr/0032-live-edits-and-undo.md)):
   `HistoryCall` with its `HistoryOp` (`history.undo`, `history.redo`), the fourth call
@@ -312,9 +312,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.97 because `scene.set_camera` accepts a camera on a keyframe
+`PROTOCOL_VERSION` is 0.98 because `scene.set_camera` accepts a camera on a keyframe
 of a 2D scene, which it refused before, and a Move between a 2D side and a 3D one glides
 ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md), a number the
+release queue set); 0.97 because `pairing.start`'s answer can carry `network`, the
+network listener's addresses and certificate fingerprint
+([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md), a number the
 release queue set); 0.96 because of controller bindings: `binding.set`,
 `binding.clear`, `Trigger`, `Binding`, `state.get`'s `bindings`, `delete.plan`'s
 `bindings`, the batch result's `removed_bindings` and the `binding` entity kind
@@ -1554,7 +1557,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
 
 **Pairing** (0.21, [ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
 `pairing.start` opens a one-time code and answers it in `result`
-(`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`), `device.list`
+(`{"type":"pairing.start","code":"XXXX-XXXX","expires_in_secs":120}`). Since 0.97 a
+server that also listens on the local network adds `network`, `{"urls":[…],
+"fingerprint":"AB:CD:…"}`: the addresses a device opens and the SHA-256 fingerprint of
+the listener's certificate, which a client shows so the person continues past the
+browser's warning only when it matches
+([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)); an older client
+ignores it. `device.list`
 lists the paired devices, and `device.revoke {device_id}` forgets one (`not_found` with
 entity `device` for an unknown one). They concern whom a listener admits, so the server
 in front of the engine answers them
