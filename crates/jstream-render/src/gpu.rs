@@ -323,6 +323,11 @@ fn request(instance: &wgpu::Instance, fallback: bool) -> Result<wgpu::Adapter, S
 }
 
 /// Polls a future that native wgpu completes on the first poll. `None` when it doesn't.
+/// The error `scope` caught, popping it, as text.
+pub(crate) fn scope_error(scope: wgpu::ErrorScopeGuard) -> Option<String> {
+    ready(scope.pop()).flatten().map(|error| error.to_string())
+}
+
 fn ready<F: Future>(future: F) -> Option<F::Output> {
     let mut future = std::pin::pin!(future);
     match future
