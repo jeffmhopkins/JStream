@@ -1328,6 +1328,12 @@ impl Engine {
         wanted.jtunnel_receiver().map(|receiver| receiver.stats())
     }
 
+    /// `profile.get`'s `network`: the JTunnel receiver's senders, while it is on.
+    fn jtunnel_profile(&self) -> Option<jstream_protocol::NetworkProfile> {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        wanted.jtunnel_receiver().map(|receiver| receiver.profile())
+    }
+
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
     /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
     /// that no backend is set; giving one builds the ones already there again.
@@ -2040,10 +2046,10 @@ impl Engine {
             // Outside the collection lock: reading the threads makes system calls.
             let cpu = self.shared.load.cpu_time();
             let inputs = drops::lock_ledger(&self.drops).input_totals();
+            let mut profile = self.shared.profile.profile(*seconds, *top, cpu, inputs);
+            profile.network = self.jtunnel_profile();
             Ok(CallResult::Query {
-                result: QueryResult::ProfileGet {
-                    profile: self.shared.profile.profile(*seconds, *top, cpu, inputs),
-                },
+                result: QueryResult::ProfileGet { profile },
             })
         } else if let Call::Action {
             action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),

@@ -229,19 +229,24 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 - **JTunnel receiver** (`jtunnel/`, [ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md),
   [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): off unless the host
   calls `Engine::start_jtunnel` with a `JtunnelSetup`, the senders this machine accepts
-  (`AcceptedSender`: a tunnel name of at most 31 bytes and the LAN address and port it
-  sends from, at most `MAX_SENDERS`, 32). It binds one UDP socket and runs a
+  (`AcceptedSender`: a tunnel name of at most 31 bytes, with no white space at either
+  end, and the IPv4 LAN address and port it sends from, an address mapped into IPv6
+  taken as itself; at most `MAX_SENDERS`, 32, no two at one address and port). It binds one UDP socket and runs a
   `jstream-jtunnel` thread that subscribes to each sender by name every half second and
   says bye when it stops; it never announces itself or sends audio or MIDI. It drops and
   counts every datagram from outside loopback, 10/8, 172.16/12, 192.168/16 and
   169.254/16 (`is_lan`), from an address it didn't subscribe to (an IPv4 address mapped
-  into IPv6 counts as itself), or that isn't an audio packet `jstream-jtunnel` accepts.
+  into IPv6 counts as itself), longer than a packet may be, or that isn't an audio
+  packet `jstream-jtunnel` accepts.
   Each sender's frames go through a `Playout` (jitter buffer, sequence tracking, clock
   estimate) held for the source's `latency_ms`, and each one due is handed to the
   source's mixer input as a device packet: the stream position as the device position,
   the frame's media-clock time, a concealed frame flagged silent, a restart flagged as a
   discontinuity. Opens and closes reach the thread over a bounded channel; a stream that
-  changes rate fails its input, which reopens at the new rate. 24-bit PCM and MIDI-only
+  changes rate fails its input, which reopens at the new rate. One source records a
+  sender at a time: a second one's open is refused, so it shows as unavailable, until
+  the first closes. Every input fails when the receiver stops or is replaced, so no
+  source keeps recording silence without saying why. 24-bit PCM and MIDI-only
   streams are taken (a MIDI-only stream feeds no input); Opus packets are counted as
   unsupported until a decoder is picked. A frame's MIDI events, due with it, are pushed
   through the sender's `MidiFeed` to the engine's `MidiInputs` under the sender's name
@@ -257,10 +262,16 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `engine` with no request ID, and the pages fed with it. It starts once per engine,
   however often the receiver starts again, holds the engine weakly and stops when the
   engine goes.
-  `Engine::jtunnel_stats` reads its counters (`JtunnelStats`, `midi` among them). Tests run a fake sender on loopback: the subscribe and its
+  `Engine::jtunnel_stats` reads its counters (`JtunnelStats`, `midi` among them), and
+  `profile.get`'s `network` (protocol 0.113, `Receiver::profile`) adds each sender's
+  playout as the thread last published it (`Seen`: whether it records, the held and
+  lead time, the drift, and the playout's counts), read without a lock. Tests run a
+  fake sender on loopback: the subscribe and its
   keepalive, the frames in order with their positions and times, the bye, an
-  unaccepted sender, a datagram that isn't JTunnel and a receiver's packet dropped and
-  counted, a rate change failing the input, Opus refused, and through the engine a
+  unaccepted sender, a datagram that isn't JTunnel, one too long and a receiver's packet
+  dropped and counted, a rate change failing the input, a second source for a sender
+  refused until the first closes, a stopped receiver's input told why, Opus refused, the profile's playout readings, the
+  accepted-sender and setup checks, and through the engine a
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
   reaching its MIDI input with no source recording it, and its clock giving that input
@@ -502,6 +513,9 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   session's end marks its views ended, and they are forgotten once no window reaches
   their last report. Each sample copies them, and a window lists the views reported
   since its base, with their growth.
+  The JTunnel receiver's `network` (protocol 0.113) isn't sampled: the engine adds it
+  to the window's result as the receiver reads it then, counts since it started (see
+  *JTunnel receiver* in [Contents](#contents-sources)).
   The quality probe (protocol 0.110, `quality.rs`,
   [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)):
   every output's `Encoders` holds a `ProbeTap`, which its render-thread tap shares.

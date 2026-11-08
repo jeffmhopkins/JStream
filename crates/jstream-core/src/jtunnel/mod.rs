@@ -59,21 +59,37 @@ pub struct AcceptedSender {
 }
 
 impl AcceptedSender {
-    /// A sender called `name` at `addr`.
+    /// A sender called `name` at `addr`. An IPv4 address mapped into IPv6 is taken as
+    /// itself, since the receive socket is IPv4.
     ///
     /// # Errors
-    /// A name that is empty, longer than JTunnel's 31 bytes or holds a control
-    /// character, or an address outside the LAN ranges ([`is_lan`]) or with port 0.
+    /// A name that is empty, longer than JTunnel's 31 bytes, holds a control character
+    /// or starts or ends with white space (a source's `sender` is trimmed, so it could
+    /// never match), or an address that is IPv6, outside the LAN ranges ([`is_lan`]) or
+    /// with port 0.
     pub fn new(name: &str, addr: SocketAddr) -> Result<Self, String> {
         if name.is_empty()
             || name.len() > wire::MAX_TUNNEL_NAME
             || name.chars().any(char::is_control)
+            || name.trim() != name
         {
             return Err(format!(
-                "a JTunnel sender's name must be 1 to {} bytes with no control characters",
+                "a JTunnel sender's name must be 1 to {} bytes with no control characters \
+                 and no white space at either end",
                 wire::MAX_TUNNEL_NAME
             ));
         }
+        let addr = match addr.ip() {
+            IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+                Some(v4) => SocketAddr::new(IpAddr::V4(v4), addr.port()),
+                None => {
+                    return Err(format!(
+                        "{addr} is an IPv6 address: JTunnel is received on IPv4 only"
+                    ));
+                }
+            },
+            IpAddr::V4(_) => addr,
+        };
         if !is_lan(addr.ip()) || addr.port() == 0 {
             return Err(format!(
                 "{addr} is not a LAN address and port: JTunnel is received only from \
@@ -129,7 +145,8 @@ impl JtunnelSetup {
     /// Receives from `accepted` on any interface, on a port the system picks.
     ///
     /// # Errors
-    /// More than [`MAX_SENDERS`], or one name twice.
+    /// More than [`MAX_SENDERS`], or one name or one address and port twice: the
+    /// receiver tells senders apart by where their datagrams come from.
     pub fn new(accepted: Vec<AcceptedSender>) -> Result<Self, String> {
         if accepted.len() > MAX_SENDERS {
             return Err(format!(
@@ -141,6 +158,12 @@ impl JtunnelSetup {
                 return Err(format!(
                     "the JTunnel sender `{}` is named twice",
                     sender.name
+                ));
+            }
+            if let Some(other) = accepted[..n].iter().find(|s| same(s.addr, sender.addr)) {
+                return Err(format!(
+                    "the JTunnel senders `{}` and `{}` both send from {}",
+                    other.name, sender.name, sender.addr
                 ));
             }
         }
@@ -187,6 +210,49 @@ struct Sender {
     accepted: AcceptedSender,
     /// Its stream's sample rate, from its latest audio packet; 0 before one.
     rate: AtomicU32,
+    /// The open stream that records it; 0 for none. One source at a time.
+    recorder: AtomicU64,
+    /// Its playout as the thread last read it, for `profile.get` (#1223).
+    seen: Seen,
+}
+
+/// A sender's playout as its thread last published it: each a plain counter or reading,
+/// read one at a time, so a profile may mix two of the thread's turns.
+#[derive(Default)]
+struct Seen {
+    recording: AtomicBool,
+    held_ns: AtomicU64,
+    lead_ns: AtomicU64,
+    /// The drift's bits; 0 for none (0.0 drift is stored as -0.0).
+    drift: AtomicU64,
+    played: AtomicU64,
+    concealed: AtomicU64,
+    late: AtomicU64,
+    repeats: AtomicU64,
+    restarts: AtomicU64,
+}
+
+impl Seen {
+    fn publish(&self, stream: &Stream, now_ns: u64) {
+        let r = Ordering::Relaxed;
+        let stats = stream.playout.stats();
+        self.recording.store(stream.handler.is_some(), r);
+        self.held_ns.store(stream.playout.held_ns(now_ns), r);
+        self.lead_ns.store(stream.playout.lead_ns(), r);
+        let drift = stream.playout.clock().drift_ppm().map_or(0, |ppm| {
+            if ppm == 0.0 {
+                (-0.0_f64).to_bits()
+            } else {
+                ppm.to_bits()
+            }
+        });
+        self.drift.store(drift, r);
+        self.played.store(stats.played, r);
+        self.concealed.store(stats.concealed, r);
+        self.late.store(stats.late, r);
+        self.repeats.store(stats.repeats, r);
+        self.restarts.store(stats.restarts, r);
+    }
 }
 
 /// What the receiver's thread is asked to do.
@@ -243,6 +309,8 @@ impl Receiver {
             .map(|accepted| Sender {
                 accepted: accepted.clone(),
                 rate: AtomicU32::new(0),
+                recorder: AtomicU64::new(0),
+                seen: Seen::default(),
             })
             .collect();
         let counters = Arc::new(JtunnelCounters::default());
@@ -296,6 +364,43 @@ impl Receiver {
         }
     }
 
+    /// Its senders and counters for `profile.get` (#1223): counts since it started.
+    pub(crate) fn profile(&self) -> jstream_protocol::NetworkProfile {
+        let r = Ordering::Relaxed;
+        let ms = |ns: u64| finite(ns as f32 / 1e6);
+        let stats = self.stats();
+        jstream_protocol::NetworkProfile {
+            inputs: self
+                .senders
+                .iter()
+                .map(|sender| {
+                    let seen = &sender.seen;
+                    let drift = seen.drift.load(r);
+                    jstream_protocol::NetworkInputProfile {
+                        sender: sender.accepted.name.clone(),
+                        sample_rate: sender.rate.load(Ordering::Acquire),
+                        recording: seen.recording.load(r),
+                        latency_ms: ms(seen.held_ns.load(r)),
+                        lead_ms: ms(seen.lead_ns.load(r)),
+                        drift_ppm: (drift != 0)
+                            .then(|| jstream_protocol::Finite32::new(f64::from_bits(drift) as f32))
+                            .flatten(),
+                        played: seen.played.load(r),
+                        concealed: seen.concealed.load(r),
+                        late: seen.late.load(r),
+                        repeats: seen.repeats.load(r),
+                        restarts: seen.restarts.load(r),
+                    }
+                })
+                .collect(),
+            outside_lan: stats.outside_lan,
+            unaccepted: stats.unaccepted,
+            malformed: stats.malformed,
+            unsupported: stats.unsupported,
+            midi: stats.midi,
+        }
+    }
+
     fn sender(&self, name: &str) -> Result<usize, String> {
         if name.is_empty() {
             return Err("no JTunnel sender is named".into());
@@ -324,11 +429,14 @@ impl Receiver {
     }
 
     /// Starts handing the sender `name`'s frames to `handler`, each held `latency_ms`
-    /// past its jitter-free arrival, until the returned stream is dropped. Opening the
-    /// same sender again replaces the earlier handler.
+    /// past its jitter-free arrival, until the returned stream is dropped. One source
+    /// records a sender at a time: a second one is refused until the first stream is
+    /// dropped, so it shows as unavailable rather than take the sender over (and be
+    /// taken over back on its own reopen).
     ///
     /// # Errors
-    /// As for [`input_format`](Self::input_format), or the thread has stopped.
+    /// As for [`input_format`](Self::input_format), a sender another stream records, or
+    /// the thread has stopped.
     pub(crate) fn open(
         &self,
         name: &str,
@@ -338,17 +446,29 @@ impl Receiver {
         let format = self.input_format(name)?;
         let sender = self.sender(name)?;
         let id = self.next_id.fetch_add(1, Ordering::Relaxed);
-        self.commands
-            .try_send(Command::Open {
-                sender,
-                id,
-                rate: format.sample_rate(),
-                lead_ns: u64::from(latency_ms) * 1_000_000,
-                handler,
-            })
-            .map_err(|_| "the JTunnel receiver is not taking inputs".to_owned())?;
+        let recorder = &self.senders[sender].recorder;
+        if recorder
+            .compare_exchange(0, id, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err(format!(
+                "another source already records the JTunnel sender `{name}`"
+            ));
+        }
+        let opened = self.commands.try_send(Command::Open {
+            sender,
+            id,
+            rate: format.sample_rate(),
+            lead_ns: u64::from(latency_ms) * 1_000_000,
+            handler,
+        });
+        if opened.is_err() {
+            recorder.store(0, Ordering::Release);
+            return Err("the JTunnel receiver is not taking inputs".to_owned());
+        }
         Ok(Box::new(NetworkStream {
             format,
+            senders: Arc::clone(&self.senders),
             sender,
             id,
             commands: self.commands.clone(),
@@ -373,6 +493,7 @@ impl Drop for Receiver {
 /// A sender's audio, flowing into one handler until dropped.
 struct NetworkStream {
     format: AudioFormat,
+    senders: Arc<[Sender]>,
     sender: usize,
     id: u64,
     commands: SyncSender<Command>,
@@ -386,6 +507,13 @@ impl AudioStream for NetworkStream {
 
 impl Drop for NetworkStream {
     fn drop(&mut self) {
+        // The sender is free for another source.
+        let _ = self.senders[self.sender].recorder.compare_exchange(
+            self.id,
+            0,
+            Ordering::AcqRel,
+            Ordering::Relaxed,
+        );
         // A full queue or a stopped thread: the handler goes when the thread does, or
         // when the next open for this sender replaces it.
         let _ = self.commands.try_send(Command::Close {
@@ -433,6 +561,7 @@ struct Run {
 
 impl Run {
     fn run(&mut self) {
+        // One byte more than a packet may be, so a longer datagram shows as one.
         let mut datagram = [0_u8; wire::MAX_PACKET_BYTES + 1];
         let mut samples = [0.0_f32; wire::MAX_FRAME_SAMPLES as usize * wire::CHANNELS as usize];
         let mut next_subscribe = Instant::now();
@@ -448,11 +577,28 @@ impl Run {
             // An error is a timeout, or an ICMP port-unreachable from a sender not
             // running yet, reported on the next receive on some systems.
             if let Ok((len, from)) = self.socket.recv_from(&mut datagram) {
-                self.receive(&datagram[..len], from, &mut samples);
+                if len > wire::MAX_PACKET_BYTES {
+                    // Cut short by the buffer: never parsed as if it were whole.
+                    self.counters.malformed.fetch_add(1, Ordering::Relaxed);
+                } else {
+                    self.receive(&datagram[..len], from, &mut samples);
+                }
             }
             self.play();
         }
         self.send_all(|out, _| wire::write_bye(out));
+        // A receiver stopped or replaced (the host started JTunnel again) leaves no
+        // source recording silently: each reopens on the receiver now running. Opens
+        // still queued count too.
+        self.commands();
+        for (index, stream) in self.streams.iter_mut().enumerate() {
+            if let Some(mut gone) = stream.handler.take() {
+                gone.handler.on_error(&PlatformError::DeviceLost {
+                    what: format!("the JTunnel sender `{}`", self.senders[index].accepted.name),
+                    reason: "the JTunnel receiver stopped".into(),
+                });
+            }
+        }
     }
 
     /// How long to wait for a datagram: until the next frame is due, within bounds.
@@ -491,6 +637,8 @@ impl Run {
                 }) => {
                     if let Some(stream) = self.streams.get_mut(sender) {
                         stream.playout.set_lead_ns(lead_ns);
+                        // `open` lets one stream record a sender at a time, so this
+                        // replaces only a closed one whose close is still queued.
                         stream.handler = Some(Handler { id, rate, handler });
                     }
                 }
@@ -608,8 +756,14 @@ impl Run {
                     },
                 });
             }
+            self.senders[index].seen.publish(stream, now);
         }
     }
+}
+
+/// `value`, or 0 if it isn't finite.
+fn finite(value: f32) -> jstream_protocol::Finite32 {
+    jstream_protocol::Finite32::new(value).unwrap_or_default()
 }
 
 /// Whether a datagram from `from` is from the sender at `addr`: the same IPv4 address

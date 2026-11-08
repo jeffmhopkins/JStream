@@ -69,10 +69,24 @@ fn an_accepted_sender_is_a_named_lan_address() {
         "Bitwig 192.168.1.5:9000",
         "Bitwig@192.168.1.5",
         "a\nb@192.168.1.5:9000",
+        // White space at either end: a source's `sender` is trimmed (review N6).
+        " Bitwig@192.168.1.5:9000",
+        "Bitwig @192.168.1.5:9000",
+        // The socket is IPv4 (review N1).
+        "Bitwig@[::1]:9000",
+        "Bitwig@[fe80::1]:9000",
         &format!("{}@192.168.1.5:9000", "x".repeat(32)),
     ] {
         assert!(bad.parse::<AcceptedSender>().is_err(), "{bad:?}");
     }
+    // An IPv4 address mapped into IPv6 is taken as itself.
+    let mapped: AcceptedSender = "Bitwig@[::ffff:192.168.1.5]:9000"
+        .parse()
+        .expect("accepted");
+    assert_eq!(
+        mapped.addr(),
+        "192.168.1.5:9000".parse().expect("an address")
+    );
 }
 
 #[test]
@@ -80,10 +94,12 @@ fn a_setup_names_each_sender_once_and_at_most_the_limit() {
     let one = |name: &str, port: u16| {
         AcceptedSender::new(name, SocketAddr::new(v4(127, 0, 0, 1), port)).expect("a sender")
     };
-    assert!(JtunnelSetup::new(vec![one("a", 1), one("b", 1)]).is_ok());
+    assert!(JtunnelSetup::new(vec![one("a", 1), one("b", 2)]).is_ok());
     assert!(JtunnelSetup::new(vec![one("a", 1), one("a", 2)]).is_err());
+    // Two names at one address and port: datagrams couldn't tell them apart (review N2).
+    assert!(JtunnelSetup::new(vec![one("a", 1), one("b", 1)]).is_err());
     let many = (0..=MAX_SENDERS)
-        .map(|n| one(&format!("s{n}"), 1))
+        .map(|n| one(&format!("s{n}"), u16::try_from(n + 1).expect("a port")))
         .collect();
     assert!(JtunnelSetup::new(many).is_err());
 }
@@ -283,9 +299,12 @@ fn datagrams_from_other_addresses_or_not_jtunnel_are_dropped_and_counted() {
     let mut out = [0; 64];
     let n = wire::write_subscribe(&mut out, b"x").expect("a packet");
     sender.socket.send_to(&out[..n], to).expect("sent");
+    // Longer than any packet: counted, not parsed cut short (review N5).
+    let long = vec![0_u8; wire::MAX_PACKET_BYTES + 1];
+    sender.socket.send_to(&long, to).expect("sent");
     assert!(eventually(|| {
         let stats = receiver.stats();
-        stats.unaccepted == 1 && stats.malformed == 2
+        stats.unaccepted == 1 && stats.malformed == 3
     }));
     assert!(
         receiver.input_format("Studio").is_err(),
@@ -315,6 +334,43 @@ fn a_rate_change_fails_the_input_so_it_reopens() {
             .sample_rate(),
         44_100
     );
+}
+
+/// Review N3: one source records a sender at a time, so a second is refused rather than
+/// take it over (and be taken over back on its own reopen); and a source whose receiver
+/// stops is told so, rather than keep recording silence.
+#[test]
+fn a_second_input_is_refused_and_a_stopped_one_told_why() {
+    let sender = FakeSender::new();
+    let receiver = start(&setup("Studio", &sender));
+    let (_, to) = sender.next();
+    sender.send(to, 48_000, 0, 0);
+    assert!(eventually(|| receiver.input_format("Studio").is_ok()));
+    let (first_tx, first) = channel();
+    let opened = receiver
+        .open("Studio", 10, Box::new(Collect(first_tx)))
+        .expect("an input");
+    let (second_tx, _second) = channel();
+    let refused = receiver.open("Studio", 10, Box::new(Collect(second_tx)));
+    assert!(
+        refused.is_err_and(|err| err.contains("another source")),
+        "a second source for the sender is unavailable"
+    );
+    // Once the first closes, the sender is free.
+    drop(opened);
+    let (third_tx, third) = channel();
+    let _third = receiver
+        .open("Studio", 10, Box::new(Collect(third_tx)))
+        .expect("the sender is free again");
+    let failed = |rx: &Rx<Got>| {
+        (0..50).any(|_| matches!(rx.recv_timeout(Duration::from_millis(100)), Ok(Got::Error)))
+    };
+    assert!(
+        !matches!(first.try_recv(), Ok(Got::Error)),
+        "a closed input isn't failed"
+    );
+    drop(receiver);
+    assert!(failed(&third), "the stopped receiver's input reports it");
 }
 
 #[test]
@@ -415,4 +471,36 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
         (first_ms..=now_ms).contains(&last),
         "stamped {last} ms, sent from {first_ms} ms, clock at {now_ms} ms"
     );
+}
+
+/// #1223: `profile.get`'s `network` reads each sender's playout and the drops.
+#[test]
+fn the_profile_reads_each_senders_playout() {
+    let sender = FakeSender::new();
+    let receiver = start(&setup("Studio", &sender));
+    let before = receiver.profile();
+    assert_eq!(before.inputs.len(), 1);
+    assert_eq!(before.inputs[0].sender, "Studio");
+    assert_eq!(before.inputs[0].sample_rate, 0, "nothing heard yet");
+    assert!(!before.inputs[0].recording);
+    let (_, to) = sender.next();
+    sender.send(to, 48_000, 0, 0);
+    assert!(eventually(|| receiver.input_format("Studio").is_ok()));
+    let (tx, rx) = channel();
+    let _stream = receiver
+        .open("Studio", 20, Box::new(Collect(tx)))
+        .expect("an input");
+    for seq in 1..=4 {
+        sender.send(to, 48_000, seq, 1000);
+    }
+    packets(&rx, 4);
+    FakeSender::new().send(to, 48_000, 0, 1);
+    assert!(eventually(|| {
+        let profile = receiver.profile();
+        let input = &profile.inputs[0];
+        profile.unaccepted == 1 && input.recording && input.played >= 4
+    }));
+    let input = &receiver.profile().inputs[0];
+    assert_eq!(input.sample_rate, 48_000);
+    assert_eq!(input.lead_ms.get(), 20.0);
 }

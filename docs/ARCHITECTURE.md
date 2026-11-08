@@ -978,7 +978,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   scene pass, the composite), each source's paints, looks and builds, the planner, and
   each named thread's CPU, past them each encoded stream and the mixer (0.92), and what
   the clients' views did with their preview pictures, as they report it with
-  `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md));
+  `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md)),
+  and each JTunnel sender's latency, buffer, drift and drops (0.113, #1223);
   `quality.probe` (0.110, [ADR-0145](adr/0145-the-quality-probe-reads-back-the-compositor.md))
   → PSNR and SSIM of a running output's next few encoded frames, decoded by the
   platform, against the frames its encoder was given;

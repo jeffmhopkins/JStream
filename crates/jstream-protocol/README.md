@@ -162,7 +162,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `ptz.list`, `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them),
+  holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
+  0.113, `NetworkProfile` and `NetworkInputProfile` among them),
   `quality.probe` (since 0.110, `quality.rs`: `ProbeStream`, `QualityProbeInfo` with its
   `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
   `MAX_PSNR_DB`), with `QueryResult`
@@ -332,7 +333,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.112 because the engine keeps a MIDI clock's tempo as the
+`PROTOCOL_VERSION` is 0.113 because `profile.get` reports the JTunnel receiver's
+senders: `network` (`NetworkProfile`, `NetworkInputProfile`, #1223, a number the release
+queue set); 0.112 because the engine keeps a MIDI clock's tempo as the
 shared values `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar`, which it sets
 itself with `values.changed` from the client `engine`, and a `browser` source's page may
 be granted those values, `page_api_tempo`, and one MIDI input's state, `page_api_midi`
@@ -1644,6 +1647,15 @@ Queries read and never change `rev`. Those that read the collection state carry 
   over the window (from zero for a view, or a restarted view, the window's start
   doesn't have), and `received_fps` and `shown_fps`, in client then label order. A
   view whose session has ended stays while a window reaches back to its last report.
+  Since 0.113, `network` (omitted while the JTunnel receiver is off, #1223) lists each
+  accepted sender as a `NetworkInputProfile`, in the order the host gave them: its
+  `sender` name, its stream's `sample_rate` (0 before anything arrived), whether a
+  source is `recording` it, `latency_ms` (how far ahead of now its held audio reaches:
+  the buffer's fill), `lead_ms` (the recording source's `latency_ms`), `drift_ppm` once
+  enough stream has arrived, and its frames `played`, `concealed`, `late`, `repeats` and
+  `restarts`; and the receiver's drops, `outside_lan`, `unaccepted`, `malformed` and
+  `unsupported`, with the `midi` messages it handed on. Unlike the rest of the profile,
+  these count from when the receiver started, not over the window.
   Runtime state, so no `rev`. Added in 0.73.
 - `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
   frames its encoder was given

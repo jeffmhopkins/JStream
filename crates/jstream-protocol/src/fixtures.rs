@@ -2170,6 +2170,26 @@ fn profile_info() -> ProfileInfo {
             received_fps: ms(30.0),
             shown_fps: ms(29.6),
         }],
+        network: Some(crate::NetworkProfile {
+            inputs: vec![crate::NetworkInputProfile {
+                sender: "Bitwig".into(),
+                sample_rate: 48_000,
+                recording: true,
+                latency_ms: ms(21.5),
+                lead_ms: ms(20.0),
+                drift_ppm: Some(ms(-12.5)),
+                played: 12_000,
+                concealed: 3,
+                late: 1,
+                repeats: 11_990,
+                restarts: 0,
+            }],
+            outside_lan: 0,
+            unaccepted: 2,
+            malformed: 0,
+            unsupported: 0,
+            midi: 640,
+        }),
     }
 }
 
