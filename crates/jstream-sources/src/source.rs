@@ -253,8 +253,8 @@ pub trait SourceKind: Send + Sync {
 }
 
 /// What sources are created with: where asset references point, how much a decoded
-/// asset may take, the platform backends the kinds that need one play through, and the
-/// featured chat message.
+/// asset may take, the platform backends the kinds that need one play through, the
+/// featured chat message, and the program's frame rate.
 #[derive(Clone, Default)]
 pub struct Context {
     /// The folders behind asset roots.
@@ -274,6 +274,21 @@ pub struct Context {
     pub browser: Option<Arc<dyn BrowserBackend>>,
     /// The featured chat message `chat_message` sources draw. Clones share it.
     pub chat: crate::ChatFeature,
+    /// The program's base frame rate (`canvas.set_frame_rate`), which a `browser` page
+    /// with an `fps` of 0 paints at (#1405). 0 until the host sets it, read as
+    /// [`jstream_protocol::DEFAULT_BASE_FPS`].
+    pub frame_rate: u32,
+}
+
+impl Context {
+    /// [`Self::frame_rate`], or the default base rate while the host hasn't set one.
+    pub fn program_fps(&self) -> u32 {
+        if self.frame_rate == 0 {
+            jstream_protocol::DEFAULT_BASE_FPS
+        } else {
+            self.frame_rate
+        }
+    }
 }
 
 impl std::fmt::Debug for Context {
@@ -285,6 +300,7 @@ impl std::fmt::Debug for Context {
             .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
             .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
             .field("chat", &self.chat)
+            .field("frame_rate", &self.frame_rate)
             .finish()
     }
 }
