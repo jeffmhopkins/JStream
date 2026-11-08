@@ -19,6 +19,7 @@ pub mod about;
 pub mod app;
 pub mod browse;
 pub mod canvas;
+pub mod clap_plugins;
 pub mod clipboard;
 pub mod dialog;
 pub mod dock;

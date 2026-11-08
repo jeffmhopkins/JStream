@@ -1483,6 +1483,7 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::EffectEnable {
             kind_id: "fx/blur".into(),
         },
+        Action::PluginClapRescan,
         Action::CodecDownload {
             download_id: "openh264".into(),
         },
@@ -1822,6 +1823,7 @@ pub(crate) fn queries() -> Vec<Query> {
             key: "workspace.dock".into(),
         },
         Query::PluginList,
+        Query::PluginClapScan,
         Query::CodecDownloads,
         Query::CollectionInfo,
         Query::YoutubeStats,
@@ -2936,6 +2938,30 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     grant: crate::PluginGrant::default(),
                 },
             ],
+        },
+        QueryResult::PluginClapScan {
+            scan: crate::ClapScanInfo::available(
+                vec![
+                    crate::ClapFolder::new(r"C:\Program Files\Common Files\CLAP", true),
+                    crate::ClapFolder::new(r"C:\Users\me\AppData\Local\Programs\Common\CLAP", false),
+                ],
+                false,
+                true,
+                vec![crate::ClapFound::new(
+                    "clap/com.example.reverb",
+                    "Room Reverb",
+                    r"C:\Program Files\Common Files\CLAP\Reverb.clap",
+                )],
+                vec![crate::ClapFailed::new(
+                    r"C:\Program Files\Common Files\CLAP\Broken.clap",
+                    "the plugin host crashed",
+                )],
+            ),
+        },
+        QueryResult::PluginClapScan {
+            scan: crate::ClapScanInfo::unavailable(Some(
+                "this platform has no CLAP plugin host yet".into(),
+            )),
         },
         QueryResult::CollectionInfo {
             path: "C:/Users/me/Videos/Show/show.json".into(),

@@ -150,6 +150,10 @@ struct Shared {
     /// The effect packs and their quarantine, once `watch_effect_packs` runs. On its own
     /// lock, never taken with the collection lock held: a poll reads files under it.
     effect_packs: Mutex<Option<crate::effect_packs::Packs>>,
+    /// The CLAP plugin hosts and the last scan, for `plugin.clap_scan` and
+    /// `plugin.clap_rescan` (0.106). Its locks are its own, never taken with the
+    /// collection lock held: a scan runs plugin host processes.
+    clap: crate::plugins::scan::ClapScans,
     /// The installed fonts `font.list` reports (ADR-0092), read from the OS's font
     /// folders on the first `font.list` and kept for the engine's life. Never read under
     /// the collection lock: reading them reads every font file.
@@ -216,6 +220,7 @@ impl Default for Engine {
                     #[cfg(feature = "wasm-plugins")]
                     automation: crate::plugins::automation::Registry::default(),
                     effect_packs: Mutex::new(None),
+                    clap: crate::plugins::scan::ClapScans::default(),
                     fonts: OnceLock::new(),
                     #[cfg(test)]
                     font_dirs: Mutex::new(None),
@@ -367,25 +372,99 @@ impl Engine {
     /// this can take seconds: call it from a worker thread. The engine's locks are held
     /// only to add the kinds, after the scan.
     ///
+    /// The engine keeps `hosts`, so `plugin.clap_rescan` (0.106) can scan again, and the
+    /// scan, which `plugin.clap_scan` reports. A scan that starts while another runs
+    /// waits for it.
+    ///
     /// From then on a source's audio chain runs its CLAP filters, each in a host process
     /// `hosts` starts. A collection may hold CLAP filters before the scan that
     /// describes their kinds (it loads before the scan runs): they are bypassed until
     /// then.
     pub fn scan_clap_plugins(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        self.shared.clap.set_hosts(Arc::clone(&hosts));
+        self.rescan_clap(hosts)
+    }
+
+    /// Records why this engine hosts no CLAP plugins, for `plugin.clap_scan` to report,
+    /// when the host couldn't set up its plugin hosts. Ignored once it has given some.
+    pub fn set_clap_unavailable(&self, reason: impl Into<String>) {
+        self.shared.clap.set_unavailable(reason.into());
+    }
+
+    /// One scan with `hosts`, after any scan running now.
+    fn rescan_clap(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        let _running = self.shared.clap.begin();
+        let _one_at_a_time = lock(&self.shared.clap.scan_lock);
         let scan = clap_kinds::scan(hosts.as_ref());
-        let mut state = lock(&self.shared.state);
-        state.graph = std::mem::take(&mut state.graph)
-            .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
-        state.audio.add_clap_plugins(
-            hosts,
-            scan.kinds.iter().map(|k| {
-                (
-                    k.descriptor.kind_id.clone(),
-                    (k.file.clone(), k.plugin_id.clone()),
-                )
-            }),
-        );
+        {
+            let mut state = lock(&self.shared.state);
+            state.graph = std::mem::take(&mut state.graph)
+                .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+            state.audio.add_clap_plugins(
+                hosts,
+                scan.kinds.iter().map(|k| {
+                    (
+                        k.descriptor.kind_id.clone(),
+                        (k.file.clone(), k.plugin_id.clone()),
+                    )
+                }),
+            );
+        }
+        self.shared.clap.finished(&scan);
+        for (file, error) in &scan.failed {
+            tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
+        }
+        tracing::info!(found = scan.kinds.len(), "scanned the CLAP plugins");
         scan
+    }
+
+    /// `plugin.clap_scan` and `plugin.clap_rescan` (0.106), or `None` for another call.
+    fn clap_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        match call {
+            Call::Query {
+                query: Query::PluginClapScan,
+            } => Some(Ok(CallResult::Query {
+                result: QueryResult::PluginClapScan {
+                    scan: self.shared.clap.info(),
+                },
+            })),
+            _ => None,
+        }
+    }
+
+    /// `plugin.clap_rescan` (0.106): scans on a `jstream-clap-scan` thread, as the startup
+    /// scan runs, and answers once it ends. Each plugin file is scanned in its own host
+    /// process, so a scan can take seconds; the session that asked keeps its events,
+    /// frames and other answers meanwhile. The call is audited when it answers.
+    fn clap_rescan(
+        &self,
+        audit: audit::Pending,
+        client_id: &ClientId,
+        request_id: &RequestId,
+    ) -> SnapshotReply {
+        let (reply, waiting) = snapshot::reply_pair();
+        let Some(hosts) = self.shared.clap.hosts() else {
+            let result = Err(ProtocolError::Unsupported {
+                call: "plugin.clap_rescan".into(),
+            });
+            self.record(audit.finish(client_id, request_id, &result));
+            reply.send(result);
+            return waiting;
+        };
+        let engine = self.clone();
+        let (client_id, request_id) = (client_id.clone(), request_id.clone());
+        let spawned = thread::Builder::new()
+            .name("jstream-clap-scan".into())
+            .spawn(move || {
+                engine.rescan_clap(hosts);
+                let result = Ok(CallResult::action());
+                engine.record(audit.finish(&client_id, &request_id, &result));
+                reply.send(result);
+            });
+        if let Err(error) = spawned {
+            tracing::warn!(%error, "could not start a thread to rescan the CLAP plugins");
+        }
+        waiting
     }
 
     /// Loads the WGSL effect packs in `root`, a folder of pack folders (ADR-0035), and
@@ -1737,9 +1816,10 @@ impl Engine {
     /// sessions. Only names, IDs and error codes are logged, never a command's arguments
     /// (R-SEC-001).
     ///
-    /// Every call but `video.snapshot` runs to completion here. A snapshot is queued
-    /// for the snapshot thread and comes back [`Executed::Pending`], with its span; its
-    /// outcome is logged when it completes.
+    /// Every call but `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
+    /// `plugin.clap_rescan` runs to completion here. Those are answered from another
+    /// thread and come back [`Executed::Pending`], with their span; their outcome is
+    /// logged when they complete.
     pub(crate) fn execute(
         &self,
         client_id: &ClientId,
@@ -1762,6 +1842,16 @@ impl Engine {
         ) {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
+        }
+        if matches!(
+            call,
+            Call::Action {
+                action: Action::PluginClapRescan
+            }
+        ) {
+            let audit = self.audit_context(client_id, &call);
+            drop(_entered);
+            return Executed::Pending(self.clap_rescan(audit, client_id, request_id), span);
         }
         if let Call::Query {
             query: Query::VideoFrames { strip, scene_id },
@@ -1816,6 +1906,8 @@ impl Engine {
         let result = if let Some(result) = self.plugin_call(client_id, &call) {
             result
         } else if let Some(result) = self.pack_call(client_id, &call) {
+            result
+        } else if let Some(result) = self.clap_call(&call) {
             result
         } else if let Some(result) = self.collection_call(client_id, request_id, &call, previews) {
             result

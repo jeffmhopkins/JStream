@@ -15,7 +15,8 @@
 //! heard only while JStream has the focus.
 //!
 //! Wheel chords (ADR-0112 §3) are registered only with a registrar that
-//! [hears the wheel](Registrar::hears_wheel) (on X11, `XGrabButton`), and only while a
+//! [hears the wheel](Registrar::hears_wheel) (on Windows, a `WH_MOUSE_LL` hook; on X11,
+//! `XGrabButton`), and only while a
 //! follow camera is live: while the scene on program or on preview, or the scene it is a
 //! keyframe scene of, has one (§5). A registered wheel chord is consumed, so the
 //! application under the pointer doesn't zoom too; the rest of the time it isn't
