@@ -1219,7 +1219,9 @@ and is placed in its parent: `render_image` makes a new one, and `render_into` r
 a layer the caller keeps, so a frame allocates no texture for it. A layer drawn over a
 transparent background remembers the box its items could reach, and its parent draws
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
-group of a few small items doesn't shade the whole canvas twice. The caller walks the
+group of a few small items doesn't shade the whole canvas twice. A blur or a mask over
+such a layer, as an item's effects, shades only that box grown by how far it reaches, and
+keeps the box for what reads it next. The caller walks the
 nesting, bounded in depth, and clears each scene's pass to its background (transparent
 without one), and the root of a mix to that background over black, fading from one
 scene's to the other's in linear light while a transition runs (`Color::over_black`,
@@ -1285,7 +1287,12 @@ treats a lost device as one event: it opens the compositor on a new device at on
 the render thread with the fallback's deadline, and the output repeats its last frame
 meanwhile and stays up. On the platform's context that is step 6's fallback, so capture
 moves to CPU frames. On a device of its own it is a new device, the hardware adapter
-first again. Encoders on the CPU path take the readback, so they don't reopen. A session
+first again. The platform's context is the engine's one context, lent to every
+compositor and to the browser engine
+([ADR-0117](adr/0117-real-time-video-thread-model.md) §5): once it is lost the engine
+opens a new one for the next holder that asks and hands it to the browser engine, while
+the stage that saw the loss stays on its own device until it stops. Encoders on the CPU
+path take the readback, so they don't reopen. A session
 that takes the context's encode targets (step 4) rules out leaving the context, so a lost
 context device fails its outputs at once instead
 ([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass
