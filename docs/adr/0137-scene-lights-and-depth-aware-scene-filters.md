@@ -9,7 +9,7 @@ tier = "agent"
 # ADR-0137: Scene lights and depth-aware scene filters
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
