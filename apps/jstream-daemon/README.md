@@ -269,6 +269,14 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   link-local, and the receiver drops everything not from an accepted sender
   ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
   A sender is accepted per machine, on the command line, never from the collection.
+- **PTZ cameras** (`--ptz-camera`, [ADR-0138](../../docs/adr/0138-ptz-cameras-shots-and-actions.md)).
+  Off unless a camera is listed. With one or more, the daemon starts the engine's PTZ
+  control after the backends, one thread and socket per camera, and logs how many at
+  `info`. A camera's address can't be outside the LAN ranges, two cameras can't share a
+  name or an address and VISCA address, and replies from anywhere else are dropped
+  ([jstream-core › PTZ cameras](../../crates/jstream-core/README.md#contents-media)).
+  The cameras are listed per machine, on the command line, never from the collection,
+  which names them only by name.
 - **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
   in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
   browser and the desktop app show the same workspace
@@ -779,7 +787,7 @@ folder another process is using, so the daemon couldn't start pages while the ap
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
-  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--log-dir`,
+  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--jtunnel-accept`, `--log-dir`,
   `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` with its `tls` feature (what a host links; `tls` for `--lan`),
