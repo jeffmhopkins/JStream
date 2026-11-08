@@ -186,7 +186,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
 }
 
 /// Builds the web UI for release with trunk into `dist` and returns it.
-fn build_ui(root: &Path, dist: &Path) -> Result<PathBuf> {
+pub(crate) fn build_ui(root: &Path, dist: &Path) -> Result<PathBuf> {
     let status = Command::new("trunk")
         .args(["build", "--release", "--locked", "--dist"])
         .arg(dist)
@@ -480,7 +480,7 @@ fn u32_at(image: &[u8], at: usize) -> Result<usize> {
 /// The commit the zip is built from, for its name when `--revision` names none:
 /// `git describe --always --dirty`. CI passes `--revision`, because a pull request's
 /// checkout is GitHub's merge commit, which is in no branch's history.
-fn describe(root: &Path) -> String {
+pub(crate) fn describe(root: &Path) -> String {
     Command::new("git")
         .args(["describe", "--always", "--dirty"])
         .current_dir(root)
