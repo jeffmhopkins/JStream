@@ -14,8 +14,8 @@ use jstream_platform::{
     CursorCapture, DeviceId, MediaClock, PlatformError, VideoSurface,
 };
 use jstream_protocol::{
-    CaptureTargetKind, Edit, Event, ItemId, PixelSize, ProtocolError, Query, QueryResult, Settings,
-    SourceId, SourceKind,
+    CaptureFormatInfo, CaptureTargetKind, Edit, Event, ItemId, PixelSize, ProtocolError, Query,
+    QueryResult, Settings, SourceId, SourceKind,
 };
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -186,10 +186,11 @@ fn capture_source(source: &str, kind: &str, target: &str) -> Edit {
     }
 }
 
-/// `capture.targets` lists what the backend can capture, displays first, with the IDs a
-/// source's `target` takes, whether or not an output runs. With no backend it fails.
+/// `capture.targets` lists what the backend can capture, displays first, then windows,
+/// then the video devices with the formats the engine reads, with the IDs a source's
+/// `target` or `device` takes, whether or not an output runs. With no backend it fails.
 #[test]
-fn capture_targets_lists_the_displays_then_the_windows() {
+fn capture_targets_lists_the_displays_then_the_windows_then_the_devices() {
     let setup = Setup::new();
     let engine = engine(
         share(&setup.fakes.backends),
@@ -217,8 +218,31 @@ fn capture_targets_lists_the_displays_then_the_windows() {
             (CaptureTargetKind::Display, "d2", "Second", false),
             (CaptureTargetKind::Display, "d1", "Main", true),
             (CaptureTargetKind::Window, "w1", "Editor", false),
+            (CaptureTargetKind::Device, FAKE_WEBCAM, "Fake webcam", false),
+            (
+                CaptureTargetKind::Device,
+                FAKE_CAPTURE_CARD,
+                "Fake capture card",
+                false
+            ),
         ]
     );
+    let format = |w, h, fps: f64, pf: &str| CaptureFormatInfo {
+        width: w,
+        height: h,
+        fps,
+        pixel_format: pf.into(),
+    };
+    assert_eq!(
+        targets[3].formats,
+        [
+            format(640, 360, 30.0, "nv12"),
+            format(640, 360, 30.0, "yuy2"),
+            format(1280, 720, 30.0, "mjpeg"),
+        ]
+    );
+    assert_eq!(targets[4].formats, [format(1280, 720, 60.0, "nv12")]);
+    assert!(targets[..3].iter().all(|t| t.formats.is_empty()));
     assert_eq!(
         targets[0].size,
         Some(PixelSize {

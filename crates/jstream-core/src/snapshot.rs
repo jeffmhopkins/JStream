@@ -4371,7 +4371,7 @@ impl CaptureKey {
     /// device opens once, so every source showing it shares one capture: its key names
     /// no source.
     pub(crate) fn for_source(spec: CaptureSpec, source: SourceId) -> Self {
-        let source = (!matches!(spec, CaptureSpec::Device(_))).then_some(source);
+        let source = (!matches!(spec, CaptureSpec::Device(..))).then_some(source);
         Self {
             spec,
             source,
