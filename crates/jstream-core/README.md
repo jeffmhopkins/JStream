@@ -1694,7 +1694,9 @@ anywhere else, `video.snapshot` included, it draws nothing. A page repaints on i
 own, so while a context is set a source that opens through the browser engine asks for a re-plan at
 the next program frame, painted yet or not, as an animation asks at its next frame: every frame of the frame grid, at 30 or at 60 (ADR-0119). A texture
 equal to the last one keeps its version, so the shot doesn't change. Without a
-context the page shows its stand-in, transparent. `LiveSources::audio` lists every
+context the page shows its stand-in, transparent. A page that paints on the CPU (CEF
+on Linux, ADR-0095) is a painter instead (*Live sources*): its paints reach the
+picture through its frame slot, with or without a context, and it asks for no re-plan. `LiveSources::audio` lists every
 running source's own audio (`Source::audio`, heard whether or not it is shown) for
 *Audio sources*.
 
@@ -1899,8 +1901,8 @@ zero its build kept (*Live sources*). A live frame is shared with
 the source (an `Arc` of its `VideoFrame`, not a copy) and gets a new version only when
 the source hands out a different one, so a still image is uploaded once. The plan also
 returns the earliest time one of its frames changes (`Source::next_change`), and the
-thread re-plans then, so an animated image or a video advances on the clock and a
-still one is never re-planned. That time is rounded to the frame grid at the
+thread re-plans then, so a source that changes with time and has no painter advances on
+the clock and a still one is never re-planned. That time is rounded to the frame grid at the
 collection's base rate (`LiveSources::wake_at`): the thread re-plans a quarter period
 before the first program tick at least that long after the change, so every change due
 before a tick shares one plan, finished by the tick, and animations out of phase with
@@ -1908,7 +1910,9 @@ each other plan once a frame at most, not once each (#1138). A change due in tha
 quarter is shown a tick later. A source with a `jstream_sources::Painter` (the
 `waveform` and `spectrum` kinds, which draw a whole frame and, for the spectrum, an
 FFT each 1/30 s, `chat_message`, which redraws when another message is featured, and
-`timer`, which redraws when the value it shows changes)
+`timer`, which redraws when the value it shows changes, and, drawing nothing, an
+animated `image`, a `media` file with video and a `browser` page that paints on the
+CPU, which hand out the frame due or painted last)
 is painted by that thread, holding no engine lock, so under the collection lock the
 plan only takes the frame painted last; `install`, `sync` and a clock swap hand the
 thread the running painters and their time zeros. A painter's frames go through a
