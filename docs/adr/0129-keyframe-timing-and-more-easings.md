@@ -77,7 +77,7 @@ never has.
 - Two keyframes of one scene can stagger the same items in opposite orders, which a
   frame strip shows (`two_keyframes_stagger_three_items_in_opposite_orders_in_a_frame_strip`).
 - The Inspector and the preset form offer `ease_in`, `hold` and a custom curve, which
-  starts from a back-out curve (`Bezier::BACK_OUT`), with its drawing and four points to
-  edit; in a keyframe scene the Inspector edits the keyframe's timing of the item (#1320).
+  starts from a back-out curve (`Bezier::BACK_OUT`). The curve's points, and a keyframe's
+  timing, are edited through the API and MCP for now; a UI for them is a follow-up.
 - A keyframe's timing is one more field of an override, stored, undone, reported by
   `state.get` and dropped with the override as the others are.

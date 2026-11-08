@@ -62,11 +62,7 @@ impl Point {
 pub fn with_point(curve: &Bezier, point: Point, value: f64) -> Option<Bezier> {
     let (min, max) = point.range();
     let rounded = (value.clamp(min, max) * 100.0).round() / 100.0;
-    #[expect(
-        clippy::cast_possible_truncation,
-        reason = "kept to the curve's small range first"
-    )]
-    let v = Finite32::new(rounded as f32)?;
+    let v = Finite32::new(super::inspector::to_f32(rounded))?;
     let mut next = *curve;
     match point {
         Point::X1 => next.x1 = v,
