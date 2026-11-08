@@ -15,7 +15,8 @@
 //! the stream-key and OAuth-token store (`LinuxSecrets`, ADR-0071): the Secret
 //! Service, else a `0600` file, the process's CPU time (`LinuxProcessCpu`) and its threads' (`LinuxThreadCpu`), and
 //! `NoMediaDecoders`, the stand-in until ADR-0072's media-file decoders exist, and
-//! `GlobalHotkeys`, the desktop app's global hotkeys as X11 key grabs (ADR-0112). `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
+//! `GlobalHotkeys`, the desktop app's global hotkeys as X11 key grabs (ADR-0112), and its
+//! Browse dialogs through the FileChooser portal (`portal_pick_path`). `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
 //! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and
 //! one of the crates allowed `unsafe` (R-UNSAFE-001): every system call is wrapped here
 //! behind safe APIs.
@@ -92,9 +93,11 @@ pub use pairing::{CardInputs, SoundCard};
 pub use pipewire::{PIPEWIRE_FLOOR, pipewire_version_supported};
 #[cfg(target_os = "linux")]
 pub use pipewire::{PipeWire, PipeWireAudio};
-#[cfg(target_os = "linux")]
-pub use portal::PortalCapture;
 pub use portal::{CursorModes, PersistMode, PortalPick, SourceTypes, handle_token, request_path};
+#[cfg(any(target_os = "linux", test))]
+pub use portal::{FileChoice, FileChoiceKind, filter_extensions};
+#[cfg(target_os = "linux")]
+pub use portal::{PortalCapture, pick_path as portal_pick_path};
 #[cfg(target_os = "linux")]
 pub use process::{LinuxProcessCpu, LinuxThreadCpu};
 #[cfg(target_os = "linux")]

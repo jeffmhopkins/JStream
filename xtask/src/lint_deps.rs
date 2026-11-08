@@ -85,8 +85,9 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
          its build script compiles CEF's C++ wrapper with CMake against the downloaded binaries. \
          Only with jstream-browser's `helper` feature (ADR-0046, ADR-0048), so the default graph lacks it",
     ),
-    // Tauri 2 (jstream-desktop, ADR-0045), a dependency on Windows only. `cargo metadata`
-    // lists every platform's packages, so most of these are never built for Windows.
+    // Tauri 2 (jstream-desktop, ADR-0045), a dependency on Windows, and on Linux with the
+    // `webkitgtk` feature (ADR-0140). `cargo metadata` lists every platform's packages, so
+    // most of these are never built for Windows.
     (
         "tauri",
         None,
@@ -104,25 +105,25 @@ const NATIVE_ALLOWLIST: &[(&str, Option<&str>, &str)] = &[
         "atk-sys",
         None,
         "`links = \"atk-1.0\"`: bindings to the system's ATK through pkg-config, compiling no C. \
-         Linux only, under Tauri's WebKitGTK webview; never built (jstream-desktop uses Tauri on Windows only)",
+         Linux only, under Tauri's WebKitGTK webview; built only with jstream-desktop's `webkitgtk` feature",
     ),
     (
         "gdk-sys",
         None,
         "`links = \"gdk-3\"`: bindings to the system's GDK through pkg-config, compiling no C. \
-         Linux only, under Tauri's WebKitGTK webview; never built (jstream-desktop uses Tauri on Windows only)",
+         Linux only, under Tauri's WebKitGTK webview; built only with jstream-desktop's `webkitgtk` feature",
     ),
     (
         "gtk-sys",
         None,
         "`links = \"gtk-3\"`: bindings to the system's GTK through pkg-config, compiling no C. \
-         Linux only, under Tauri's WebKitGTK webview; never built (jstream-desktop uses Tauri on Windows only)",
+         Linux only, under Tauri's WebKitGTK webview; built only with jstream-desktop's `webkitgtk` feature",
     ),
     (
         "webkit2gtk-sys",
         None,
         "`links = \"web_kit2\"`: bindings to the system's WebKitGTK through pkg-config, compiling \
-         no C. Linux only, under Tauri; never built (jstream-desktop uses Tauri on Windows only)",
+         no C. Linux only, under Tauri; built only with jstream-desktop's `webkitgtk` feature",
     ),
     (
         "objc2-exception-helper",

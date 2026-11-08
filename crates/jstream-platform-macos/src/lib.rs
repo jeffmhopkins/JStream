@@ -28,7 +28,7 @@
 //! exist only on macOS. On other platforms the crate builds its platform-independent
 //! helpers, which are tested everywhere.
 //!
-//! Docs: crates/jstream-platform-macos/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0063-macos-platform-support.md, docs/adr/0141-the-desktop-app-on-macos.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md
+//! Docs: crates/jstream-platform-macos/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0063-macos-platform-support.md, docs/adr/0142-the-desktop-app-on-macos.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0014-media-clock.md
 
 mod aac;
 mod annexb;

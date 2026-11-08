@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0141"
+id = "ADR-0142"
 title = "The desktop app on macOS, as an unsigned app bundle"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0141: The desktop app on macOS, as an unsigned app bundle
+# ADR-0142: The desktop app on macOS, as an unsigned app bundle
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

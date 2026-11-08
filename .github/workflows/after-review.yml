@@ -314,7 +314,7 @@ jobs:
           RESULT: ${{ job.status }}
         run: bash .github/after-review-status.sh
 
-  # The desktop app on macOS (ADR-0141): lints it natively, builds the release binary,
+  # The desktop app on macOS (ADR-0142): lints it natively, builds the release binary,
   # bundles JStream.app and the disk image (ad-hoc signed; scripts/mac/bundle-app.sh), then
   # starts the app from the bundle with a fresh home folder and waits for its window's UI
   # to finish the engine's handshake, which only the webview's page makes. The image is

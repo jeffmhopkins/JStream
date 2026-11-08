@@ -1,5 +1,5 @@
 #!/bin/bash
-# Bundles the desktop app for macOS (ADR-0141): JStream.app, with the `jstream` binary,
+# Bundles the desktop app for macOS (ADR-0142): JStream.app, with the `jstream` binary,
 # the web UI in Contents/Resources, the usage strings and the icon, inside a disk image
 # with a link to /Applications. Ad-hoc signed by default, as an unsigned build on Apple
 # Silicon must be; with --sign it signs with that Developer ID identity and the hardened
