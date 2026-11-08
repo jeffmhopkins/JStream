@@ -925,8 +925,10 @@ most it can draw past its input at any settings: drop shadow 300 (the largest of
 plus the largest blur), outline 65 (the widest stroke and its antialiased pixel), glow
 and bloom 100 (the largest radius), and border 129 (its widest outer stroke after its
 widest gap, and its antialiased pixel). So on an item the glow and shadow of an opaque
-picture show around its box (#1226). That room costs layer memory and fill: a
-1920×1080 box with a drop shadow is a 2520×1680 layer.
+picture show around its box (#1226). That room costs layer memory and fill, so an
+item's layer grows only by what its effects draw at their settings (ADR-0136): a
+1920×1080 box with a drop shadow at its largest is a 2520×1680 layer, and at its
+defaults a 1952×1112 one.
 
 Assets and references (V3), in `filter/assets/`: `apply_lut`, `image_mask` and
 `scene_mask`. Each reads one external image that the chain runtime hands over with
