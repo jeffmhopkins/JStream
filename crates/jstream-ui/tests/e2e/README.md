@@ -140,9 +140,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   resized from Edit mix… over the settings dialog ("Saved."), Edit encoder… opening on
   the recording's profile, off for the engine's default, and New… on a new one, and the
   mix deleted once the recording is back on the program; Start all starting both
-  recordings but not a stream without its key, then Stop all, with a running row's stats
+  recordings but not a stream without its key (then off), Stop all beside it while they
+  run, with a running row's stats
   line from a `stats.tick` (`statsTicks`) and none once stopped; Duplicate adding a copy
-  without the stream key and opening its settings; an open dialog following another
+  without the stream key and opening its settings, and a recording's copy writing to
+  "a (2).mp4"; an open dialog following another
   client's path change until the person types their own; a second client sees outputs
   created, started and deleted.
 - **Codec downloads** (`codec-downloads.spec.js`, in the Outputs panel's Encoders & mixes

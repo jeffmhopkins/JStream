@@ -444,9 +444,14 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   with its last reader, a reader that joins counting frames from then on, a lost
   device failing every reader and not shared again, a device the GPU view opened moved
   to the CPU path in place when a CPU reader joins, its counters carried on, and
-  `DeviceLost` for every reader when it doesn't open again there, and one open on the
-  CPU path refused by the GPU view (`runtime/devices.rs`), the format a webcam opens in, with and
-  without an MJPEG decoder, its frames, decoded or not, read as RGBA, a webcam
+  `DeviceLost` for every reader when it doesn't open again there, one open on the
+  CPU path refused by the GPU view, a device switched in place to the format a later
+  open asks for every reader, on the CPU path when it is there even when the GPU view
+  asks, and kept in its format when it doesn't list the new one, MJPEG included
+  (#1265) (`runtime/devices.rs`), the format a webcam opens in, with and
+  without an MJPEG decoder, and with the resolution, frame rate and pixel format its
+  settings ask for, falling back to the engine's choice when the device offers none
+  that matches, its frames, decoded or not, read as RGBA, a webcam
   opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
   refused format on the CPU path, a webcam on the CPU path left running, and not opened
   twice, when the GPU path is left, and one on the GPU path, running or still starting,
@@ -824,8 +829,12 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   `source.size_changed` for each one that changed, under the collection lock (see
   *Source sizes* in *Snapshots*).
 - **`capture.targets`** lists the platform capture backend's displays, then its
-  windows, with no engine lock held, since listing windows calls the OS. With no
-  backends it answers `action_failed`, and so it does when the OS refuses the list.
+  windows, then the video-device backend's devices, each with the formats the engine
+  reads of it (uncompressed RGBA, BGRA, NV12 or YUY2, and MJPEG), with no engine lock
+  held, since listing windows and devices calls the OS. A device whose formats can't be
+  read is listed without them. With no backends it answers `action_failed`, and so it
+  does when the OS refuses both lists; when one fails, it answers with the other and
+  logs a warning.
 - **`font.list`** ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) reads the OS's font folders
   (`jstream_sources::installed_fonts`) on the first call, with no engine lock held, and
   keeps the list in `Shared` for the engine's life (`tests/fonts.rs`, with a folder of
@@ -1525,9 +1534,9 @@ overrides them (ADR-0088). The chain phase draws the item into
 `GpuKey::ItemBox`, a layer the size of its planned box, in canvas pixels. The effects'
 outset is the sum of what each draws past its input at its settings
 (`jstream_render::video_filter_outset`: a drop shadow its offset plus its blur, a glow
-or a bloom its radius, an outline outside its width), each rounded up to 16 px
-(`OUTSET_STEP`) and at most its kind's `max_outset_px`; a kind it doesn't measure (a
-`border`, for now) and a pack effect that declares one take it whole (render › Filters). The chain grows the layer by it where the first
+or a bloom its radius, an outline outside its width, a border its outer stroke after
+its gap, #1376), each rounded up to 16 px (`OUTSET_STEP`) and at most its kind's
+`max_outset_px`; a pack effect that declares one takes it whole (render › Filters). The chain grows the layer by it where the first
 effect that draws past its input runs (`Chain::pad_at`, that effect's
 `VideoFilter::set_pad`), so the effects before it frame the box itself
 ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md),
@@ -1631,13 +1640,14 @@ lists the master's and outputs' video filters with the rest, and `plan_stages` h
 each its asset, so a LUT grades the program or one output.
 
 A filter that reads an asset (`apply_lut`'s `lut`, a `.cube` file or a tiled PNG, and
-`image_mask`'s `image`, whose first frame is the mask) gets it through the live
+`image_mask`'s `image`, whose first frame is the mask, and `border`'s `frame`, the
+image of its 9-slice frame, #1294) gets it through the live
 sources (`filter_assets.rs`). Each sync lists the assets the collection's video filters
 name, a source's, a scene's, an item's, the master stage's or an output's, enabled or not, so enabling one needs no load. The `jstream-sources` thread
 reads and decodes each new one, as it builds sources, and an asset no filter names any
 more is let go. A plan hands each chain filter the asset it names, numbered by its load,
 and each compositor makes the filter's reference image from it once: the LUT's tile
-layout (`jstream_render::lut_image`) or the mask uploaded as straight sRGB. A reference
+layout (`jstream_render::lut_image`) or the mask or frame uploaded as straight sRGB. A reference
 kind keeps no state between frames, so a new load makes the filter again with the new
 image, and the old filter, which holds the old image, is retired through the cache. A
 file that can't be read or decoded is logged and its filter passes its input through
@@ -2209,7 +2219,13 @@ captures the same display again. The sizes these captures see go nowhere; `sourc
 reports the program stage's. A webcam or capture card opens once, so the two share it:
 the engine wraps the backends' `VideoDevices` in `SharedVideoDevices`
 (`runtime/devices.rs`), whose open of a device already open returns another reader of
-the same stream, in the format it was opened in. Each reader takes every frame that
+the same stream. An open asking another format the device lists switches it in place,
+for every reader (#1265): the stream closes and opens again in the new format, on the
+CPU path when the device is there (even when the GPU view asks), its counters carried
+on; when the new format doesn't open, it opens again in the old one on the CPU path
+(not for MJPEG, which needs a decoder that open lacks), and when that fails too every
+reader reports it lost. A format the device doesn't list never closes it; the open
+shares it in the format it has. Each reader takes every frame that
 arrives after it joined, once; the newest frame waits in the device's slot until every
 reader has taken it or a newer one replaces it, and the last reader moves it out while
 the others copy it, outside the lock. A read takes the device's lock with `try_lock`
@@ -3551,7 +3567,9 @@ capture starts. A webcam or capture card is opened on the backends' `VideoDevice
 (shared with the preview thread's captures, `SharedVideoDevices`; see *Preview streams*
 in Design), in the format `device_format` picks from those it lists: on the backend's
 GPU view (`VideoDevices::on_context`) when there is one and it takes that uncompressed
-format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). The
+format, else on the CPU path; MJPEG always on the CPU path (see *Capture path*). A
+capture asking a format other than the one its device is open in switches the shared
+device to it for every reader (#1265; see *Preview streams*). The
 candidates are frames that arrive
 uncompressed as RGBA, BGRA or NV12 (YUY2 is delivered as NV12), the largest of at most
 1920x1080 (else the smallest), then the fastest. An empty `device` is the first device

@@ -907,7 +907,10 @@ fn capture_targets_prints_each_target() {
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "capture", "targets"]),
         ok("display mock:display (Mock display) 1920x1080, primary\n\
-             window mock:window (Mock window) 1280x720\n")
+             window mock:window (Mock window) 1280x720\n\
+             device mock:webcam (Mock webcam)\n\
+             \x20 1920x1080 30 fps mjpeg\n\
+             \x20 1280x720 60 fps nv12\n")
     );
 }
 
