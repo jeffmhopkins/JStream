@@ -224,7 +224,7 @@ pub(crate) struct Chain {
     pub(crate) input: GpuKey,
     pub(crate) filters: Vec<ChainFilter>,
     /// For an item's effects: the filter whose input is padded, and by how many layer
-    /// pixels on every side (ADR-0065 §5, [`Self::pad_at`]). `None` for any other chain.
+    /// pixels on every side (ADR-0065 §5, [`Self::pad_at_also`]). `None` for any other chain.
     pub(crate) pad: Option<(usize, u32)>,
 }
 
@@ -340,48 +340,38 @@ impl Chain {
     }
 
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
-    /// sum of what each draws past its input at its settings (ADR-0136).
-    /// Only an item's effects layer is padded by it; a source's or a scene's chain draws
-    /// at its input's size (ADR-0065 §5).
-    pub(crate) fn outset(&self) -> u32 {
-        self.outset_also(None)
-    }
-
-    /// [`Self::outset`], each filter taking the larger of its own settings' outset and
-    /// that of `also`'s settings at its place: the look a Move blends from (ADR-0127),
-    /// so the layer holds what the filters draw at any point of the blend.
-    pub(crate) fn outset_also(&self, also: Option<&[Settings]>) -> u32 {
+    /// sum of what each draws past its input at its settings (ADR-0136), each filter
+    /// taking the largest of its own settings' outset and that of each of `also`'s
+    /// settings at its place: the look a Move blends from (ADR-0127), or the least and
+    /// the most the settings that motion drives reach (ADR-0138), so the layer holds
+    /// what the filters draw at any point between. Only an item's effects layer is
+    /// padded by it; a source's or a scene's chain draws at its input's size
+    /// (ADR-0065 §5).
+    pub(crate) fn outset_also(&self, also: &[&[Settings]]) -> u32 {
         self.outsets(also).into_iter().fold(0, u32::saturating_add)
     }
 
     /// Each filter's outset, as [`Self::outset_also`] takes it.
-    fn outsets(&self, also: Option<&[Settings]>) -> Vec<u32> {
+    fn outsets(&self, also: &[&[Settings]]) -> Vec<u32> {
         self.filters
             .iter()
             .enumerate()
             .map(|(at, filter)| {
                 let own = outset_of(&filter.kind, &filter.settings);
-                also.and_then(|also| also.get(at))
-                    .map_or(own, |other| own.max(outset_of(&filter.kind, other)))
+                also.iter()
+                    .filter_map(|also| also.get(at))
+                    .fold(own, |most, other| most.max(outset_of(&filter.kind, other)))
             })
             .collect()
     }
 
     /// Where an item's effects layer grows, for a layer of `scale` pixels per canvas
     /// pixel (ADR-0065 §5): at the first filter that draws past its input, by the
-    /// outset of it and every filter after it. The filters before it see the item's
-    /// box itself, so rounded corners or a vignette frame the box, not the room a
-    /// later drop shadow needs. `None` when no filter draws past its input.
-    pub(crate) fn pad_at(&self, scale: f32) -> Option<(usize, u32)> {
-        self.pad_at_also(scale, None)
-    }
-
-    /// [`Self::pad_at`] with the outsets of [`Self::outset_also`].
-    pub(crate) fn pad_at_also(
-        &self,
-        scale: f32,
-        also: Option<&[Settings]>,
-    ) -> Option<(usize, u32)> {
+    /// outset of it and every filter after it, with the outsets of
+    /// [`Self::outset_also`]. The filters before it see the item's box itself, so
+    /// rounded corners or a vignette frame the box, not the room a later drop shadow
+    /// needs. `None` when no filter draws past its input.
+    pub(crate) fn pad_at_also(&self, scale: f32, also: &[&[Settings]]) -> Option<(usize, u32)> {
         let outsets = self.outsets(also);
         let first = outsets.iter().position(|px| *px > 0)?;
         let outset = outsets[first..]
@@ -425,6 +415,57 @@ impl Chain {
                 None => builtin.get(&filter.kind).cloned().unwrap_or_default(),
             })
             .collect()
+    }
+
+    /// Each filter's settings as planned, in order.
+    pub(crate) fn own_settings(&self) -> Vec<Settings> {
+        self.filters.iter().map(|f| f.settings.clone()).collect()
+    }
+
+    /// What filter `index`'s parameter `param` is, when a motion modifier can drive it
+    /// (ADR-0138): a number, with its smallest and largest value (unbounded ends
+    /// infinite) and whether it is whole (`int`), or a colour; with its default, which
+    /// a filter saved before its kind gained the parameter draws. `None` for another
+    /// type, or a parameter or filter it doesn't have.
+    pub(crate) fn drivable(
+        &self,
+        index: usize,
+        param: &str,
+    ) -> Option<(crate::driven::Target, serde_json::Value)> {
+        use crate::driven::Target;
+        static BUILTIN: OnceLock<BTreeMap<String, jstream_protocol::KindDescriptor>> =
+            OnceLock::new();
+        let builtin = BUILTIN.get_or_init(|| {
+            jstream_render::video_filter_descriptors()
+                .into_iter()
+                .map(|kind| (kind.kind_id.clone(), kind))
+                .collect()
+        });
+        let filter = self.filters.get(index)?;
+        let descriptor = match &filter.effect {
+            Some(effect) => effect.kind_descriptor(),
+            None => builtin.get(&filter.kind)?,
+        };
+        let described = descriptor.params.iter().find(|p| p.id == param)?;
+        let target = match described.ty {
+            jstream_protocol::ParamType::Float { min, max, .. } => Some(Target::Number {
+                range: (
+                    min.unwrap_or(f64::NEG_INFINITY),
+                    max.unwrap_or(f64::INFINITY),
+                ),
+                whole: false,
+            }),
+            jstream_protocol::ParamType::Int { min, max, .. } => Some(Target::Number {
+                range: (
+                    min.map_or(f64::NEG_INFINITY, |v| v as f64),
+                    max.map_or(f64::INFINITY, |v| v as f64),
+                ),
+                whole: true,
+            }),
+            jstream_protocol::ParamType::Color { .. } => Some(Target::Color),
+            _ => None,
+        }?;
+        Some((target, described.default.clone()))
     }
 
     /// The enabled filters' kinds and settings, in order: what makes two items' effects
@@ -2983,7 +3024,7 @@ mod tests {
         );
         let shot = shot(&graph);
         let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
-        assert_eq!(chain.map(super::Chain::outset), Some(32));
+        assert_eq!(chain.map(|chain| chain.outset_also(&[])), Some(32));
         assert_eq!(chain.and_then(|c| c.pad), Some((0, 32)));
     }
 

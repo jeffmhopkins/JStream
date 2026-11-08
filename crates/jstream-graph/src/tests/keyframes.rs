@@ -1165,6 +1165,7 @@ fn wiggle(id: &str, amplitude: f32) -> jstream_protocol::MotionModifier {
     jstream_protocol::MotionModifier {
         modifier_id: id.into(),
         property: jstream_protocol::MotionProperty::X,
+        effect: None,
         kind: jstream_protocol::MotionKind::Wiggle {
             amplitude: Finite32::new(amplitude).expect("finite"),
             frequency_hz: Finite32::ONE,

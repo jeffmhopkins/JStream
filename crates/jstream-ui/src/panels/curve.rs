@@ -82,7 +82,7 @@ fn y_at(y: f64) -> f64 {
     SIZE * 0.75 - y * SIZE * 0.5
 }
 
-/// The SVG path of `curve` from (0, 0) to (1, 1), on a [`SIZE`]-unit square.
+/// The SVG path of `curve` from (0, 0) to (1, 1), on a `SIZE`-unit square.
 pub fn curve_path(curve: &Bezier) -> String {
     let x = |t: f64| t * SIZE;
     format!(
@@ -98,7 +98,7 @@ pub fn curve_path(curve: &Bezier) -> String {
     )
 }
 
-/// The drawing's `viewBox`: the [`SIZE`]-unit square, grown up or down to take in a
+/// The drawing's `viewBox`: the `SIZE`-unit square, grown up or down to take in a
 /// handle that overshoots past it, so the whole curve shows.
 pub fn view_box(curve: &Bezier) -> String {
     let ys = [y_at(Point::Y1.of(curve)), y_at(Point::Y2.of(curve))];

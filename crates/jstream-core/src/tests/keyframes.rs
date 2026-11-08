@@ -1233,6 +1233,7 @@ fn drift_x(
         motion: vec![jstream_protocol::MotionModifier {
             modifier_id: "drift".into(),
             property: jstream_protocol::MotionProperty::X,
+            effect: None,
             kind: jstream_protocol::MotionKind::Drift {
                 rate_per_s: Finite32::new(rate).expect("finite"),
                 wrap: None,
@@ -1359,6 +1360,7 @@ fn pulse(item: &str, scene: Option<&str>) -> Edit {
         motion: vec![jstream_protocol::MotionModifier {
             modifier_id: "pulse".into(),
             property: jstream_protocol::MotionProperty::Opacity,
+            effect: None,
             kind: jstream_protocol::MotionKind::Audio {
                 audio: None,
                 audio_source: None,
@@ -1520,6 +1522,7 @@ fn jolt_and_drift() -> Edit {
             MotionModifier {
                 modifier_id: "jolt".into(),
                 property: MotionProperty::Y,
+                effect: None,
                 kind: MotionKind::Impulse {
                     amplitude: f(40.0),
                     frequency_hz: f(2.0),
@@ -1532,6 +1535,7 @@ fn jolt_and_drift() -> Edit {
             MotionModifier {
                 modifier_id: "drift".into(),
                 property: MotionProperty::X,
+                effect: None,
                 kind: MotionKind::Drift {
                     rate_per_s: f(100.0),
                     wrap: None,
@@ -1926,4 +1930,155 @@ fn a_move_from_2d_with_an_off_centre_item_at_the_framing_focal_length_fades() {
             .any(|track| matches!(track, Track::Pair { .. })),
         "it fades: {tracks:?}"
     );
+}
+
+// Motion that drives an effect's settings (ADR-0138).
+
+/// `a1`'s motion: a sine of `amplitude` over one second on its `halo` glow's `param`.
+fn pulse_halo(param: &str, amplitude: f32) -> Edit {
+    Edit::ItemSetMotion {
+        item_id: ItemId::new("a1"),
+        scene_id: None,
+        motion: vec![jstream_protocol::MotionModifier {
+            modifier_id: "pulse".into(),
+            property: jstream_protocol::MotionProperty::Effect,
+            effect: Some(jstream_protocol::MotionEffect {
+                filter_id: jstream_protocol::FilterId::new("halo"),
+                param: param.into(),
+            }),
+            kind: jstream_protocol::MotionKind::Oscillate {
+                shape: jstream_protocol::MotionShape::Sine,
+                amplitude: Finite32::new(amplitude).expect("finite"),
+                period_ms: 1000,
+                phase: Finite32::ZERO,
+            },
+            clock: jstream_protocol::MotionClock::Engine,
+            enabled: true,
+        }],
+    }
+}
+
+/// `a1`'s `halo` glow, at radius 4.
+fn halo() -> Edit {
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner};
+    Edit::FilterAdd {
+        owner: FilterOwner::Item {
+            item_id: ItemId::new("a1"),
+        },
+        chain: FilterChain::Video,
+        filter_id: FilterId::new("halo"),
+        kind: "glow".into(),
+        settings: serde_json::from_value(json!({"radius": 4.0})).expect("settings"),
+        enabled: None,
+        index: None,
+    }
+}
+
+/// The settings of `a1`'s effects in scene `a` as drawn at `at`.
+fn drawn_effects(engine: &Engine, at: jstream_media::MediaTime) -> Vec<Settings> {
+    let owner = crate::chain::ChainOwner::Item(SceneId::new("a"), ItemId::new("a1"));
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .drawn_settings(&owner, at)
+        .expect("a1's effects run")
+}
+
+/// A modifier on an effect's setting moves it each frame, kept within the range its
+/// kind gives it, leaves the item's box where it is, and pads the layer for the most
+/// it reaches (ADR-0138).
+#[test]
+fn a_modifier_drives_an_effect_setting_within_its_range() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![halo(), pulse_halo("radius", 20.0)]);
+    let radius = |at: f64| {
+        drawn_effects(&engine, secs(at))[0]
+            .get("radius")
+            .and_then(serde_json::Value::as_f64)
+            .expect("a number")
+    };
+    // A quarter period in, the sine is at its top: 4 + 20.
+    assert!((radius(0.25) - 24.0).abs() < 1e-3, "{}", radius(0.25));
+    // Three quarters in, at its bottom: 4 - 20, kept at the glow's least radius, 0.
+    assert_eq!(radius(0.75), 0.0);
+    // On the period, it adds 0 and the chain draws its own settings.
+    assert!((radius(1.0) - 4.0).abs() < 1e-3);
+    // The box doesn't move.
+    let x = moved_x(&engine, "a", secs(0.25));
+    let still = {
+        apply(
+            &control,
+            vec![Edit::ItemSetMotion {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                motion: Vec::new(),
+            }],
+        );
+        moved_x(&engine, "a", secs(0.25))
+    };
+    assert_eq!(x, still);
+    // The layer holds radius 24, rounded up to 32, not the 16 radius 4 needs.
+    apply(&control, vec![pulse_halo("radius", 20.0)]);
+    let hub = engine.render_hub().load();
+    let pad = hub
+        .shot()
+        .item_chain(&SceneId::new("a"), &ItemId::new("a1"))
+        .and_then(|chain| chain.pad);
+    assert_eq!(pad, Some((0, 32)));
+}
+
+/// A modifier on a colour setting lightens or darkens its red, green and blue, and one
+/// naming a setting the effect's kind doesn't have adds nothing (ADR-0138).
+#[test]
+fn a_modifier_moves_a_colour_and_one_on_a_missing_setting_adds_nothing() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![halo(), pulse_halo("color", 0.5)]);
+    // Three quarters in, the sine is at -0.5: white darkens to half.
+    let drawn = drawn_effects(&engine, secs(0.75));
+    let color = drawn[0].get("color").and_then(serde_json::Value::as_str);
+    assert!(
+        matches!(color, Some(c) if c.starts_with("#808080")),
+        "{color:?}"
+    );
+    apply(&control, vec![pulse_halo("missing", 20.0)]);
+    let drawn = drawn_effects(&engine, secs(0.25));
+    assert_eq!(drawn[0].get("radius"), Some(&json!(4.0)));
+    assert_eq!(drawn[0].get("missing"), None);
+}
+
+/// #1417 review B1: an edit that adds, then removes, only an effect modifier reaches the
+/// renderer, though it changes nothing else of the shot.
+#[test]
+fn an_edit_to_an_effect_modifier_alone_is_drawn() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![halo()]);
+    let color = |engine: &Engine| {
+        drawn_effects(engine, secs(0.75))[0]
+            .get("color")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    let white = color(&engine);
+    apply(&control, vec![pulse_halo("color", 0.5)]);
+    let dimmed = color(&engine);
+    assert!(
+        dimmed.as_deref().is_some_and(|c| c.starts_with("#808080")),
+        "{dimmed:?}"
+    );
+    apply(
+        &control,
+        vec![Edit::ItemSetMotion {
+            item_id: ItemId::new("a1"),
+            scene_id: None,
+            motion: Vec::new(),
+        }],
+    );
+    assert_eq!(color(&engine), white, "the pulse stops with its modifier");
 }
