@@ -84,7 +84,6 @@ pub(super) fn descriptor() -> KindDescriptor {
         ..p
     };
     KindDescriptor {
-        // The widest outer stroke after the widest gap.
         // The widest outer stroke after the widest gap, and its antialiased pixel.
         max_outset_px: Some((MAX_WIDTH + MAX_GAP) as u32 + 1),
         ..filter(
@@ -225,6 +224,17 @@ fn within(v: f32, lo: f64, hi: f64, fallback: f32) -> f32 {
         v.clamp(lo as f32, hi as f32)
     } else {
         fallback
+    }
+}
+
+/// How far the border draws past its input at `settings`, px (ADR-0136, #1376): its outer
+/// stroke after its gap, and the stroke's antialiased pixel; nothing without one.
+pub(super) fn outset(settings: &Settings) -> f32 {
+    let look = read(settings);
+    if look.outer_width > 0.0 {
+        look.outer_gap + look.outer_width + 1.0
+    } else {
+        0.0
     }
 }
 
@@ -393,7 +403,7 @@ impl Pass for Border {
 mod tests {
     use std::sync::Arc;
 
-    use super::{Border, KIND, perimeter, read};
+    use super::{Border, KIND, outset, perimeter, read};
     use crate::filter::testing::{filter, run, settings};
     use crate::tests::{near, open, solid};
     use serde_json::json;
@@ -402,6 +412,20 @@ mod tests {
     const R: [u8; 4] = [255, 0, 0, 255];
     const B: [u8; 4] = [0, 0, 255, 255];
     const GONE: [u8; 4] = [0, 0, 0, 0];
+
+    #[test]
+    fn the_outset_is_the_outer_stroke_after_its_gap() {
+        let at = |v: serde_json::Value| outset(&settings(KIND, v));
+        assert_eq!(at(json!({})), 0.0, "no outer stroke by default");
+        assert_eq!(at(json!({"outer_width": 3.0, "outer_gap": 4.0})), 8.0);
+        assert_eq!(
+            at(json!({"outer_gap": 40.0})),
+            0.0,
+            "a gap alone draws nothing"
+        );
+        let most = at(json!({"outer_width": 1e9, "outer_gap": 1e9}));
+        assert_eq!(Some(most as u32), super::descriptor().max_outset_px);
+    }
 
     #[test]
     fn settings_are_read_and_clamped() {
