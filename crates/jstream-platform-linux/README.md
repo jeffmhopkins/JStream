@@ -23,7 +23,7 @@ hands back ([R-UNSAFE-003](../../docs/RULES.md#R-UNSAFE-003)).
 
 This README is the crate's map. How each backend behaves (formats, timing, error
 mapping, threads) is in its module's rustdoc, next to the code:
-`cargo doc -p jstream-platform-linux --open`.
+`cargo doc -p jstream-platform-linux --document-private-items --open`.
 
 **System libraries are loaded at run time** (ADR-0060 §8). libpipewire, libva and
 libasound are opened with `dlopen` through `libloading` when a backend first needs them,

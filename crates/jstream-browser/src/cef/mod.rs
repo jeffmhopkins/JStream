@@ -25,6 +25,22 @@
 //! **Shutting down.** Dropping the backend asks the helper to close its pages and exit,
 //! waits for it (the helper allows its pages [`EXIT_GRACE`] less a margin to close), and
 //! kills it if it hasn't exited by then.
+//!
+//! # Starting and stopping
+//!
+//! `CefBackend::new` takes a `CefConfig` (the helper exe, the cache root and an optional
+//! log file; `CefConfig::beside_exe` finds the helper in the `browser` folder beside the
+//! running exe, as the portable zip lays it out, else next to the exe itself, and puts the
+//! cache under the host's state folder) and the media clock. The helper starts on the
+//! first `open`: `jstream-browser-helper.exe --jstream-pipe=<name>`, after the backend has
+//! created the two named pipes (`cef/pipe.rs`): one each way, each a single instance that
+//! refuses remote clients, under a fresh random name. Once both are connected, the
+//! process on the other end must be the helper the backend started. The backend then sends
+//! the cache and log settings and waits up to 30 s for CEF to start. A missing helper exe,
+//! a helper that exits or doesn't connect, or CEF failing to start fails that `open` and
+//! every later one with `BrowserError::Start`. A helper that stops later fails its pages,
+//! and the next `open` starts a new one. Dropping the backend asks the helper to close its
+//! pages and exit, and kills it after 15 s.
 
 #[cfg(target_os = "linux")]
 mod cpu;

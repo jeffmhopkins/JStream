@@ -45,7 +45,7 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   Outputs panel, `addOutput` adds one through its "+ Add output" dialog,
   `openOutputSettings` opens an output's settings dialog from its row's ⋯ menu, and
   `openEncoders` opens the Encoders & mixes dialog; `rev` reads the revision the header last heard
-  of; `showPanel` makes sure a docked panel's tab is the shown one; `describeKinds`
+  of; `showPanel` makes sure a docked panel's tab (in the dock's strip, not the Inspector's own Transform tab) is the shown one; `describeKinds`
   routes the page's WebSocket so that `kind.list` and `kind.describe` answer for the
   descriptors a test gives, which the mock engine can't, and passes every other message
   on; given `refuse`, it also holds back the requests that function names and refuses
@@ -302,8 +302,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   field is sent once on release, and text that isn't a number sends nothing while `−`
   and `,` are read; crop (with the folded "cropped" hint), opacity, the Fit select and
   the favourite star are sent; with no item selected the scene's object count, uses and Transition
-  in and out show, and a second selected item shows "+1". The mock engine doesn't
-  implement `scene.set_transitions`, so choosing one isn't run.
+  in and out show, and a second selected item shows "+1"; an item's sections are in
+  the Transform, Motion and Behaviour tabs, each hiding the others', with no Properties
+  section, the arrow keys moving along the strip with the focus, the tab kept across a
+  reload, and the header's Properties & filters… opening the Properties dialog. The mock
+  engine doesn't implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
   chain; with the Backdrop selected, its title, note, one video chain of its source
   (above the item's effects) with its count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
@@ -453,7 +456,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   opens the scene's Properties dialog, whose hotkey field takes a chord, clears on
   Backspace, and with a new name, a background colour with alpha, and Show in multiview and Include its audio when nested unchecked is saved by OK and read
   back by the dialog (the swatch showing the colour without its alpha); the canvas margin's Scene properties… opens it for the shown scene; the
-  Inspector's Scene switches send `item.set_transition` with the whole settings. The
+  Inspector's Scene switches, open in its Behaviour tab, send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
 - **3D scenes** (`scene-cameras.spec.js`): the shown scene's Properties turns on its 3D
   camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on

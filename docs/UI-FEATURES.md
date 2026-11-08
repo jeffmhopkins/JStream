@@ -62,7 +62,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Dialogs and windows](#dialogs) | 8 | 6 | 1 | 0 | 1 | 0 |
 | [Scenes panel](#scenes) | 11 | 11 | 0 | 0 | 0 | 0 |
 | [Sources panel](#objects) | 10 | 10 | 0 | 0 | 0 | 0 |
-| [Inspector](#inspector) | 10 | 10 | 0 | 0 | 0 | 0 |
+| [Inspector](#inspector) | 11 | 11 | 0 | 0 | 0 | 0 |
 | [Transform panel](#transform) | 4 | 4 | 0 | 0 | 0 | 0 |
 | [Filters](#filters) | 12 | 11 | 1 | 0 | 0 | 0 |
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
@@ -70,7 +70,7 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
 | [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
-| **Total** | **138** | **125** | **4** | **0** | **5** | **4** |
+| **Total** | **139** | **126** | **4** | **0** | **5** | **4** |
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
@@ -267,10 +267,10 @@ direction to keep the prototype's design while staying familiar to OBS users.
 covers = ["crates/jstream-ui/src/panels/inspector.rs", "crates/jstream-ui/src/panels/properties.rs"]
 -->
 
-Spec: [panels › inspector](../design/ui-prototype/spec-panels.md#inspector). Today the
-Inspector shows the item's placement, then the source's settings form in a Properties
-section. The Properties dialog (DL-02) uses the same form on a draft; the section stays
-in the Inspector until the Inspector's own rows say otherwise. A display or window
+Spec: [panels › inspector](../design/ui-prototype/spec-panels.md#inspector). The
+Inspector shows only the selected item's placement and behaviour, in tabs (IN-11). The
+source's settings form is in the Properties dialog (DL-02), which the header's
+Properties & filters… button opens (IN-01), on a draft (#1219). In that form, a display or window
 capture's target is picked from a list of the displays or open windows the engine
 reports (`capture.targets`), not typed as an ID. Beyond the prototype, as in OBS, a
 text source's Font is picked by name from the fonts installed on the engine's machine
@@ -281,7 +281,7 @@ the collection folder is stored relative to it.
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
-| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | ✅ | Type icon (the scene's icon for a scene), name (italic when the source is placed in another scene too), kind, "+N", the source's or scene's label chips and its always-shown tag button, whose popover opens under the header, and the favourite star (`source.set_meta`, `scene.set_meta`). |
+| IN-01 | Header | Type icon, name (italic for a reference), kind, "+N" for more selected, labels and favourite. | ✅ | Type icon (the scene's icon for a scene), name (italic when the source is placed in another scene too), kind, "+N", the source's or scene's label chips and its always-shown tag button, whose popover opens under the header, and the favourite star (`source.set_meta`, `scene.set_meta`). Beyond the prototype, an item's header has a Properties & filters… button that opens its source's Properties dialog (DL-02), or a nested scene's scene Properties, where the source's settings and filters are (#1219). |
 | IN-02 | Parameters | X, Y, W, H in px, and Rotation, as number fields bound to the canvas. | ✅ | Each change is one `item.set_geometry`. X and Y are the unrotated box's top-left corner. As OBS's bounding box type does, a Fit select sets how the source fills the box: Fit inside, Fill (crop) or Stretch. The fields show committed values, so a canvas drag shows in them once dropped. |
 | IN-03 | Size in % | W % and H % of the source's own size. | ✅ | The box's width and height against the source's size (`source.sizes` and `source.size_changed`, [ADR-0022](adr/0022-item-transform-and-canvas.md)), 0.1 to 10000 %, following the W/H link. Blank and disabled while the engine knows no size for the source. |
 | IN-04 | W/H link | Link toggle keeps the aspect ratio while editing W or H. | ✅ | On by default, kept while the panel is shown. |
@@ -290,7 +290,8 @@ the collection folder is stored relative to it.
 | IN-07 | Blending | Mode (9 modes) and Opacity %. | ✅ | Opacity is `item.set_opacity`, from 0 to 400%: above 100% it multiplies the item's light (#1101). The select lists all eleven modes, each sent as `item.set_blend`, and the engine draws them all (0.47, [ADR-0082](adr/0082-blend-modes-drawn.md); the two browser modes from 0.75, [ADR-0105](adr/0105-browser-matching-srgb-blend-modes.md)). |
 | IN-08 | Scene section | Objects count, "Used as a source in", hotkey. | ✅ | The Hotkey row lists the chords bound to the scene's `scene.switch`, each with × to unbind (`hotkey.clear`); Set key binds the next chord pressed (`hotkey.set`, after a `hotkey.clear` when it ran something else), and Escape cancels. A keyframe's header says “Keyframe of “<parent>””, and its item's blend mode is locked, with the prototype's note. |
 | IN-09 | Scene transitions | Transition in and out selects, with the "next scene's in wins" note. | ✅ | `scene.set_transitions`, with "Default (<name>)" for none and the folded hint. The presets come from the shared collection. |
-| IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | ✅ | The "Scene switches" section, folded, with "customised" while any value differs from the default: Delay (0–3000 ms, step 10), Easing (Inherit, Ease in-out, Ease out, Linear, Spring), Glide to other scenes (Auto, Never), Appear and Disappear (Inherit, Fade, Scale, Slide, None). Each change sends `item.set_transition` with the whole settings. A keyframe ([SC-07](#scenes)) doesn't show it, since a keyframe changes only placement, visibility, opacity, effects and motion. Beyond the prototype, a folded Hotkeys section under it has Toggle, Show and Hide rows like the scene's Hotkey row ([IN-08](#inspector)), bound to `item.toggle`, `item.show` and `item.hide` of the item's own placement, or in a keyframe scene of that keyframe's ([ADR-0101](adr/0101-item-show-hide-actions.md), protocol 0.80): pressed, the item appears or disappears on program with these Appear and Disappear effects, and removing the item removes its bindings. |
+| IN-10 | Scene switches per item | Delay, easing, glide, appear and disappear effects. | ✅ | The "Scene switches" section of the Behaviour tab (IN-11), with "customised" while any value differs from the default: Delay (0–3000 ms, step 10), Easing (Inherit, Ease in-out, Ease out, Linear, Spring), Glide to other scenes (Auto, Never), Appear and Disappear (Inherit, Fade, Scale, Slide, None). Each change sends `item.set_transition` with the whole settings. A keyframe ([SC-07](#scenes)) doesn't show it, since a keyframe changes only placement, visibility, opacity, effects and motion. Beyond the prototype, a Hotkeys section under it has Toggle, Show and Hide rows like the scene's Hotkey row ([IN-08](#inspector)), bound to `item.toggle`, `item.show` and `item.hide` of the item's own placement, or in a keyframe scene of that keyframe's ([ADR-0101](adr/0101-item-show-hide-actions.md), protocol 0.80): pressed, the item appears or disappears on program with these Appear and Disappear effects, and removing the item removes its bindings. |
+| IN-11 | Tabs | Beyond the prototype: an item's sections in tabs, with the header pinned. | ✅ | Transform (Parameters, 3D, Crop, Blending), Motion (the motion modifiers, with their count on the tab) and Behaviour (Scene switches, Hotkeys), one shown at a time (#1219). Left, Right, Home and End move along the strip, the tab last picked is kept in the browser's storage, and the header and strip stay pinned while the tab scrolls. A hidden tab stays mounted, so a field keeps what is typed in it. |
 
 <a id="transform"></a>
 ## Transform panel
@@ -497,7 +498,8 @@ not remove them; they move into the prototype's look.
   `read`, and grants and turns on, in one step, a plugin whose update needs a grant.
 - Motion in the Inspector
   ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md), `panels/motion.rs`):
-  the "Motion" section, folded, with the modifier count as its hint, lists the item's
+  the "Motion" section, in the Inspector's Motion tab (IN-11), with the modifier count
+  on the tab and as its hint while folded, lists the item's
   motion modifiers. Each is a row with Moves (X, Y, Scale, Rotation, Tilt, Turn, Depth,
   Opacity or a crop edge), How (Wiggle, Oscillate with its Shape, Drift, or Shake), that
   kind's fields (Amount, Speed, Detail and Seed; Amount, Period and Phase; Rate and Wrap;
