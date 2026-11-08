@@ -171,8 +171,16 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row then names what is asked for and not granted. A plugin off as `needs_grant` is
   granted a class and a folder and turned on in one step. The Inspector holds neither
   plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
-  between General, Plugins and Devices, and the install dialog opens centred over a
-  moved Settings dialog and closes alone on Escape.
+  between General, Plugins, Audio plugins and Devices, and the install dialog opens
+  centred over a moved Settings dialog and closes alone on Escape.
+- **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
+  answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter
+  on the program output's chain shows Plugins with "No CLAP audio plugins found." (gone
+  while a search is typed), whose link opens Settings on Audio plugins: the install
+  folder, each folder searched or missing, the summary and the file that failed. Rescan
+  sends one `plugin.clap_rescan`, then lists the plugin it found, Escape still closes
+  the dialog, and Add filter offers the plugin under Plugins. Against the mock engine
+  itself, the page gives its reason and no Rescan.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a

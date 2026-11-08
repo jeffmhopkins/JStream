@@ -77,7 +77,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
   `youtube.create_broadcast`, `youtube.bind_broadcast`, `youtube.transition_broadcast`,
   `live.set`, `live.cancel`, `plugin.install`, `plugin.grant`, `plugin.enable`,
-  `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
+  `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
   `collection.save_as`), with
@@ -157,7 +157,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `live.list`, `capture.targets`,
-  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `codec.downloads`, `pack.list`,
+  `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them), with `QueryResult`
@@ -250,7 +250,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   person grants, with `check`, which returns the `forbidden` error, and `problem`),
   `settings_reach` and `Reach` (the hosts and files a settings map names),
   `plugin_may_bind`, `PluginState`, `PluginDisabledReason`, and `PluginInfo` and
-  `PluginRequest`, what `plugin.list` reports ([Plugins](#plugins)).
+  `PluginRequest`, what `plugin.list` reports ([Plugins](#plugins)). And (`clap.rs`)
+  `ClapScanInfo` with its `ClapFolder`, `ClapFound` and `ClapFailed`, what
+  `plugin.clap_scan` reports of the CLAP plugin scan ([Plugins](#plugins)).
 - **Preview streams** (`preview.rs`, [ADR-0045](../../docs/adr/0045-leptos-web-ui.md)):
   `PreviewCodec` (`h264`, `jpeg`, `png`), `PreviewSettings` (`preview.subscribe`'s fields with
   their defaults and range checks, which the engine applies), `PreviewDraft` (its
@@ -321,7 +323,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.105 because a webcam's camera controls are settable:
+`PROTOCOL_VERSION` is 0.106 because a person can see and redo the CLAP plugin scan: the
+query `plugin.clap_scan` (`ClapScanInfo`) and the action `plugin.clap_rescan`
+([Plugins](#plugins), a number the release queue set); 0.105 because a webcam's camera controls are settable:
 `capture.targets` lists each device's `controls` (`CameraControlInfo`), and the
 `camera_controls` parameter type sets them on the device that its `target` parameter
 names (#1196, a number the release queue set); 0.104 because a chord may end in the wheel, `WheelUp` or
@@ -1605,6 +1609,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   none. Not collection state, so no `rev`. Added in 0.52 (see *UI settings* below).
 - `plugin.list`: the installed WASM automation plugins, ordered by ID. Not collection
   state, so no `rev`. Added in 0.58 (see *Plugins* below).
+- `plugin.clap_scan`: the CLAP plugin scan, its folders, what it found and what failed.
+  Runtime state, so no `rev`. Added in 0.95 (see *Plugins* below).
 - `collection.info`: the project file the engine saves to (`path`) and up to ten
   `recent` ones, most recent first. Not collection state, so no `rev`. Added in 0.94
   (see *Projects* below).
@@ -2184,6 +2190,21 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
+
+CLAP audio plugins ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) are
+not WASM plugins: the engine scans for `.clap` files and offers each effect as a
+`clap/<plugin id>` audio filter kind. Since 0.106 a person can see and redo that scan:
+- **`plugin.clap_scan`** answers a `ClapScanInfo`: `available` (whether this engine
+  hosts CLAP plugins, with a `reason` when it doesn't and knows why), `scanning`,
+  `scanned` (whether a scan has finished yet), `folders` (each folder searched, in
+  CLAP's order, as `{path, exists}`, so a client can say where to install one), `found`
+  (each effect as `{kind_id, name, file}`, ordered by kind ID; `name` is the plugin's
+  own text) and `failed` (each file the scan couldn't read, as `{file, reason}`).
+- **`plugin.clap_rescan`** scans again and answers once the scan ends; a scan already
+  running is waited for first. A kind found earlier stays until a restart. An engine
+  that hosts no CLAP plugins, the mock among them, answers it `unsupported`.
+- Both are a person's: no MCP tool carries them, no plugin is granted them (they name
+  files on the machine) and no hotkey binds the rescan.
 
 <a id="quarantine"></a>
 ## Effect quarantine

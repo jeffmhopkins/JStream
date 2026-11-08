@@ -1899,6 +1899,16 @@ pub enum Action {
         /// The kind, `<pack>/<effect>`.
         kind_id: String,
     },
+    /// Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since
+    /// the engine started is offered without a restart. It answers once the scan ends,
+    /// which takes a moment per plugin file; `plugin.clap_scan` then reports it. Each
+    /// effect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan
+    /// found stays until the engine restarts, so a filter that uses it keeps its
+    /// settings. A scan already running is waited for, then this one runs. For a person
+    /// only, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no
+    /// hotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.
+    #[serde(rename = "plugin.clap_rescan")]
+    PluginClapRescan,
     /// Downloads a codec library `codec.downloads` lists, from its maker's server, and
     /// checks it against what the engine pins (0.69, ADR-0061): on Linux, Cisco's
     /// OpenH264. Send it only when a person asks, after showing the download's `notice`
@@ -2065,6 +2075,7 @@ impl Action {
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
             Action::PluginEnable { .. } => "plugin.enable",
+            Action::PluginClapRescan => "plugin.clap_rescan",
             Action::EffectEnable { .. } => "effect.enable",
             Action::CodecDownload { .. } => "codec.download",
             Action::CodecDelete { .. } => "codec.delete",
@@ -2157,6 +2168,7 @@ impl Action {
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
+            | Action::PluginClapRescan
             | Action::EffectEnable { .. }
             | Action::CodecDownload { .. }
             | Action::CodecDelete { .. }
@@ -2214,6 +2226,11 @@ impl Action {
                 "type",
                 "a plugin action can't be bound: a person installs, grants and re-enables \
                  plugins through the UI (ADR-0069)",
+            )),
+            Action::PluginClapRescan => Some((
+                "type",
+                "`plugin.clap_rescan` can't be bound: a person rescans the CLAP plugins \
+                 through the UI (ADR-0035)",
             )),
             Action::EffectEnable { .. } => Some((
                 "type",
@@ -2319,6 +2336,7 @@ impl Action {
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }
             | Action::PluginInstall { .. }
+            | Action::PluginClapRescan
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
             | Action::EffectEnable { .. }
