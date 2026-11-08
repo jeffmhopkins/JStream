@@ -194,7 +194,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | Ask before a new agent connects, with always-allowed agents listed in Settings | ⏳ planned | #1229 |  |
 |  | Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects | ⏳ planned: finishes roadmap item 3D3 | #1231 |  |
 |  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned | #1222, #1223, #1224 |  |
-|  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 |  |
+|  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 | #1423 |
 
 <details open>
 <summary><b>Roadmap items in 0.1.0-alpha.5</b>: 2 of 2 merged</summary>

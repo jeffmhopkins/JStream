@@ -19,6 +19,7 @@ use crate::forget::ForgetSources;
 use crate::frames;
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
+use crate::jtunnel::JtunnelSetup;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
 use crate::load::LoadMeter;
 use crate::lock;
@@ -1260,6 +1261,35 @@ impl Engine {
         *lock(&host.vcam) = vcam;
         *lock(&host.backends) = Some(backends);
         self
+    }
+
+    /// Turns on receiving from JTunnel senders (ADR-0122, ADR-0123): binds the receive
+    /// socket and starts the thread that subscribes to each sender `setup` accepts, so
+    /// `network_audio` sources naming one record its audio. Off, the default, no socket
+    /// is open; starting again replaces the receiver. Requires
+    /// [`with_backends`](Self::with_backends) first, for the media clock arrivals are
+    /// stamped with. Returns the address it receives on.
+    ///
+    /// # Errors
+    /// No backends yet, or the socket could not be bound or the thread started.
+    pub fn start_jtunnel(&self, setup: &JtunnelSetup) -> std::io::Result<std::net::SocketAddr> {
+        let clock = self
+            .media
+            .as_ref()
+            .and_then(|host| lock(&host.backends).as_ref().map(|b| Arc::clone(&b.clock)))
+            .ok_or_else(|| std::io::Error::other("JTunnel needs the platform's backends first"))?;
+        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock)?);
+        let local = receiver.local_addr();
+        let wanted = lock(&self.shared.state).audio.wanted();
+        wanted.set_jtunnel(Some(receiver));
+        Ok(local)
+    }
+
+    /// What the JTunnel receiver has dropped and played, while it is on.
+    #[must_use]
+    pub fn jtunnel_stats(&self) -> Option<crate::jtunnel::JtunnelStats> {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        wanted.jtunnel_receiver().map(|receiver| receiver.stats())
     }
 
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they

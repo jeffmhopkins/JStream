@@ -19,7 +19,9 @@ The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): i
 `jstream-core` `Engine` and serves it through `jstream-server`'s authenticated WebSocket
 API on `127.0.0.1`, so `jstream-cli --url …` and the stdio MCP proxy `jstream-cli mcp`
 can drive it, with `--lan` also on a TLS-only network listener for paired devices
-([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), and turns on the server's MCP transport over streamable HTTP at `/mcp`, so
+([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)) and with
+`--jtunnel-accept` receiving JTunnel senders' audio
+([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and turns on the server's MCP transport over streamable HTTP at `/mcp`, so
 an agent can connect without the proxy. Like every host it only wires the engine to its interfaces
 ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): each connection and each MCP
 session gets its own `InProcessControl` session through the server's `Connector`. Layer 6, an app that links
@@ -210,6 +212,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--lan` | Also listens for devices on the network ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)): a second listener, TLS only, that admits paired devices and never the control token. Its certificate is made on first use (see **Network access** below). Default: off. |
 | `--lan-port <port>` | With `--lan`: the network listener's port, 1 to 65535. Default `4456`. |
 | `--lan-bind <addr>` | With `--lan`: listen on this one address (not a loopback one) instead of every interface. Default: every interface. |
+| `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes) and the LAN address and port it sends from, loopback, private IPv4 or link-local. Repeatable, one name once. A `network_audio` source naming the sender records its audio. Default: off, no JTunnel socket open. |
 | `--lan-renew` | With `--lan`: make a new key and certificate before serving, for when the machine's names or addresses changed. Every paired device then checks the new fingerprint, and a native client that pinned the old one pairs again. |
 | `--ptz-camera <spec>` | Lets this machine control a PTZ camera over VISCA ([ADR-0138](../../docs/adr/0138-ptz-cameras-shots-and-actions.md)), repeatable: `name@address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the camera's VISCA address (1 to 7, default 1), as in `wide@192.168.1.40:52381`. The address must be on the LAN ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and names and addresses must not repeat. Default: none, so no PTZ socket is open. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
@@ -258,6 +261,14 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   and macOS the first start can raise the firewall's prompt. A certificate file that
   can't be read or made, or that other users may access, is a startup failure (exit 1),
   and so is a network port that can't be bound.
+- **JTunnel** (`--jtunnel-accept`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)).
+  Off unless a sender is accepted. With one or more, the daemon starts the engine's
+  JTunnel receiver after the backends (arrivals are stamped on the media clock), on one
+  UDP socket on any interface and a port the system picks, and logs that port and the
+  senders at `info`. A sender's address can't be outside loopback, private IPv4 and
+  link-local, and the receiver drops everything not from an accepted sender
+  ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
+  A sender is accepted per machine, on the command line, never from the collection.
 - **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
   in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
   browser and the desktop app show the same workspace
