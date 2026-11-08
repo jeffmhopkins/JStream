@@ -151,23 +151,35 @@ fn pattern(across: f32, s: f32, w: f32, along: f32) -> f32 {
     return 1.0;
 }
 
+// `v` held half a texel inside the image px span `lo..hi`, so a bilinear sample never
+// blends in the next slice's texels (#1377); a span under a texel takes its middle.
+fn within_slice(v: f32, lo: f32, hi: f32) -> f32 {
+    let mid = (lo + hi) * 0.5;
+    return clamp(v, min(lo + 0.5, mid), max(hi - 0.5, mid));
+}
+
 // One axis of the 9-slice: the image coordinate, px, for `x` px along a side `len` px
 // long whose corners are `w` px, from an image `img` px long whose corners are `s`.
+// Each slice samples only its own texels.
 fn slice_axis(x: f32, len: f32, w: f32, s: f32, img: f32) -> f32 {
     let corner = min(s, img * 0.5);
     if (x < w) {
-        return x / w * corner;
+        return within_slice(x / w * corner, 0.0, corner);
     }
     if (x > len - w) {
-        return img - (len - x) / w * corner;
+        return within_slice(img - (len - x) / w * corner, img - corner, img);
     }
     let mid_img = max(img - 2.0 * corner, 1e-3);
     if (p.tile == 1u) {
         // Each tile at the corners' scale.
         let t = (x - w) * corner / w;
-        return corner + (t - floor(t / mid_img) * mid_img);
+        return within_slice(corner + (t - floor(t / mid_img) * mid_img), corner, img - corner);
     }
-    return corner + (x - w) / max(len - 2.0 * w, 1e-3) * mid_img;
+    return within_slice(
+        corner + (x - w) / max(len - 2.0 * w, 1e-3) * mid_img,
+        corner,
+        img - corner,
+    );
 }
 
 // The frame image at `q`, for a rectangle of half-size `half`.

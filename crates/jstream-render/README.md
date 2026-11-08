@@ -840,7 +840,8 @@ premultiplied linear light on the way out.
   image as a 9-slice frame instead of in its style and fill: the image's corners,
   `frame_slice` image px square (1 to 1024, default 16, held to half the image), fill
   the band's corners, `width` px square, and its middle runs along each side between
-  them, stretched or, with `frame_edges` `tile`, repeated at the corners' scale. The
+  them, stretched or, with `frame_edges` `tile`, repeated at the corners' scale; each
+  slice samples only its own texels, held half a texel inside it (#1377). The
   band is `width` px in from the rectangle's sides, cut to the rounded shape. The image
   is the pass's aux image, handed over as an image mask's is (`Pass::set_reference`,
   the shared `assets::Reference`); until it is there, the stroke draws in its style.

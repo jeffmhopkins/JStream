@@ -622,7 +622,8 @@ mod tests {
 
     /// A 9-slice frame (#1294): the image's 2 px corners fill the stroke's 2 px corners
     /// unstretched, and its middle stretches along the side, or tiles at the corners'
-    /// scale; inside the band the picture shows.
+    /// scale; no slice samples its neighbour's texels (#1377); inside the band the
+    /// picture shows.
     #[test]
     fn a_frame_image_draws_the_stroke_as_nine_slices() {
         let Some(mut opened) = open() else {
@@ -632,10 +633,35 @@ mod tests {
         let input = solid(&opened.compositor, 22, 22, W);
         let asset = json!({"type": "asset", "root": "app", "path": "frame.png"});
         for (edges, expected) in [
-            // Stretched, the 2 middle image px span the 18 px between the corners.
-            ("stretch", [(0, R), (6, B), (15, Y), (21, R)]),
+            // Stretched, the 2 middle image px span the 18 px between the corners; the
+            // px next to a corner (2 and 19) take none of the corner's red (#1377).
+            (
+                "stretch",
+                [
+                    (0, R),
+                    (1, R),
+                    (2, B),
+                    (6, B),
+                    (15, Y),
+                    (19, Y),
+                    (20, R),
+                    (21, R),
+                ],
+            ),
             // Tiled 1:1, they repeat every 2 px.
-            ("tile", [(0, R), (2, B), (3, Y), (4, B)]),
+            (
+                "tile",
+                [
+                    (0, R),
+                    (1, R),
+                    (2, B),
+                    (3, Y),
+                    (4, B),
+                    (5, Y),
+                    (19, Y),
+                    (20, R),
+                ],
+            ),
         ] {
             let mut f = filter(
                 KIND,
