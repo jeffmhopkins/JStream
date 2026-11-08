@@ -55,6 +55,7 @@ mod projects;
 mod reactive;
 mod runtime;
 mod session;
+mod slot;
 mod snapshot;
 mod studio;
 #[cfg(test)]
