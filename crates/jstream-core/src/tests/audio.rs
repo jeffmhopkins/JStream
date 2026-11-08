@@ -1475,3 +1475,101 @@ fn a_keyed_compressor_follows_its_key_sources_input() {
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
+
+/// A JTunnel sender on loopback, for `network_audio` (ADR-0122): waits for the
+/// receiver's subscribe, then sends one 2 ms frame of 24-bit PCM.
+fn jtunnel_sender() -> std::net::UdpSocket {
+    let socket = std::net::UdpSocket::bind("127.0.0.1:0").expect("a socket");
+    socket
+        .set_read_timeout(Some(Duration::from_secs(5)))
+        .expect("a timeout");
+    socket
+}
+
+fn send_pcm(sender: &std::net::UdpSocket) {
+    use jstream_jtunnel::wire::{self, AudioHeader, Codec, FrameOut};
+    let mut buf = [0; 64];
+    let (_, receiver) = sender.recv_from(&mut buf).expect("a subscribe");
+    let header = AudioHeader {
+        stream_id: 1,
+        seq: 0,
+        sample_rate: 48_000,
+        codec: Codec::Pcm24,
+        frame_samples: 96,
+    };
+    let audio = [0_u8; 96 * 2 * 3];
+    let frames = [FrameOut {
+        events: &[],
+        audio: &audio,
+    }];
+    let mut out = [0; wire::MAX_PACKET_BYTES];
+    let n = wire::write_audio(&mut out, &header, &frames).expect("a packet");
+    sender.send_to(&out[..n], receiver).expect("sent");
+}
+
+#[test]
+fn a_network_audio_source_records_an_accepted_jtunnel_sender_once_it_is_heard() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let sender = jtunnel_sender();
+    let mut setup = crate::JtunnelSetup::new(vec![
+        crate::AcceptedSender::new("Studio", sender.local_addr().expect("an address"))
+            .expect("accepted"),
+    ])
+    .expect("a setup");
+    setup.bind = "127.0.0.1:0".parse().expect("an address");
+    let engine = engine(&audio, &clock);
+    engine.start_jtunnel(&setup).expect("a receiver");
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    batch(
+        &control,
+        edits(vec![
+            audio_source("daw", "network_audio", Some(("sender", "Studio"))),
+            audio_source("other", "network_audio", Some(("sender", "Elsewhere"))),
+        ]),
+    )
+    .expect("network sources");
+    // Not heard from yet, and not accepted: both unavailable, the output running.
+    assert!(eventually(|| matches!(
+        status(&engine, "other"),
+        Some(AudioStatus::Unavailable(reason)) if reason.contains("not accepted")
+    )));
+    assert!(matches!(
+        status(&engine, "daw"),
+        Some(AudioStatus::Unavailable(reason)) if reason.contains("nothing has arrived")
+    ));
+    // Its first frame arrives: the next tick opens its input. A network source
+    // replaces the default devices, as any audio source does.
+    send_pcm(&sender);
+    assert!(eventually(
+        || status(&engine, "daw") == Some(AudioStatus::Recording)
+    ));
+    assert!(audio.input_targets().is_empty(), "{:?}", inputs(&audio));
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
+
+#[test]
+fn without_jtunnel_a_network_audio_source_is_unavailable() {
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    batch(
+        &control,
+        Batch::single(audio_source(
+            "daw",
+            "network_audio",
+            Some(("sender", "Studio")),
+        )),
+    )
+    .expect("a network source");
+    assert!(eventually(|| matches!(
+        status(&engine, "daw"),
+        Some(AudioStatus::Unavailable(reason)) if reason.contains("off on this machine")
+    )));
+    assert!(engine.jtunnel_stats().is_none());
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
+}

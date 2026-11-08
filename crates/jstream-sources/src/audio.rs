@@ -1,10 +1,11 @@
-//! The audio-only kinds: `audio_input`, `desktop_audio` and `app_audio`. They make no
-//! frames; the engine records each through the platform's audio I/O into a mixer input,
-//! from the [`AudioTarget`] its settings name.
+//! The audio-only kinds: `audio_input`, `desktop_audio`, `app_audio` and
+//! `network_audio`. They make no frames; the engine records each into a mixer input,
+//! from the [`AudioTarget`] its settings name: a device or application through the
+//! platform's audio I/O, a network sender through the engine's receiver (ADR-0122).
 
 use crate::describe::{kind, param};
 use crate::{Context, Source, SourceError, SourceKind};
-use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings};
+use jstream_protocol::{EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings};
 use serde_json::Value;
 
 /// The kind that records an input device, such as a microphone.
@@ -13,6 +14,21 @@ pub(crate) const AUDIO_INPUT: &str = "audio_input";
 pub(crate) const DESKTOP_AUDIO: &str = "desktop_audio";
 /// The kind that records what one application plays.
 pub(crate) const APP_AUDIO: &str = "app_audio";
+/// The kind that receives a network sender's audio, such as a DAW's over JTunnel.
+pub(crate) const NETWORK_AUDIO: &str = "network_audio";
+
+/// The longest network sender name: JTunnel's tunnel names are at most 31 bytes.
+pub const MAX_SENDER_NAME: usize = 31;
+/// The shortest and longest lead a network audio source holds its frames for, in
+/// milliseconds, and the default.
+pub const LATENCY_MS: (u32, u32, u32) = (5, 500, 40);
+
+/// How a network audio source receives its sender.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Transport {
+    /// JTunnel's UDP packets (wire version 2), subscribed to by tunnel name.
+    Jtunnel,
+}
 
 /// What an audio-only source records.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -30,6 +46,17 @@ pub enum AudioTarget {
     App {
         /// The executable's file name, such as `game.exe`. Empty matches nothing.
         exe: String,
+    },
+    /// A network sender, by its name on the transport. Empty, or a name the engine has
+    /// not accepted, records nothing.
+    Network {
+        /// How it is received.
+        transport: Transport,
+        /// The sender's name: a JTunnel tunnel name.
+        sender: String,
+        /// How long its frames are held past their jitter-free arrival, so a late one
+        /// still plays, in milliseconds.
+        latency_ms: u32,
     },
 }
 
@@ -55,6 +82,20 @@ impl AudioTarget {
             }
             DESKTOP_AUDIO => Some(Self::Desktop),
             APP_AUDIO => Some(Self::App { exe: text("exe") }),
+            NETWORK_AUDIO => {
+                let (min, max, default) = LATENCY_MS;
+                let latency_ms = settings
+                    .get("latency_ms")
+                    .and_then(Value::as_u64)
+                    .and_then(|ms| u32::try_from(ms).ok())
+                    .filter(|ms| (min..=max).contains(ms))
+                    .unwrap_or(default);
+                Some(Self::Network {
+                    transport: Transport::Jtunnel,
+                    sender: text("sender"),
+                    latency_ms,
+                })
+            }
             _ => None,
         }
     }
@@ -108,6 +149,61 @@ pub(crate) fn kinds() -> Vec<AudioKind> {
             }],
             ..kind(APP_AUDIO, "Application audio", false, true)
         }),
+        AudioKind(KindDescriptor {
+            params: vec![
+                ParamDescriptor {
+                    description: Some(
+                        "How the audio arrives. JTunnel is a DAW plugin that sends a \
+                         track over the local network."
+                            .into(),
+                    ),
+                    ..param(
+                        "transport",
+                        "Transport",
+                        ParamType::Enum {
+                            options: vec![EnumOption {
+                                value: "jtunnel".into(),
+                                label: "JTunnel".into(),
+                            }],
+                        },
+                        Value::from("jtunnel"),
+                    )
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The sender's name, as its plugin shows it. JStream receives only \
+                         from senders accepted on this machine."
+                            .into(),
+                    ),
+                    ..param(
+                        "sender",
+                        "Sender",
+                        line(MAX_SENDER_NAME as u32),
+                        Value::from(""),
+                    )
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "How long frames wait before they play, so one delayed on the \
+                         network still arrives in time. Higher survives a busier network; \
+                         lower is closer to live."
+                            .into(),
+                    ),
+                    ..param(
+                        "latency_ms",
+                        "Latency",
+                        ParamType::Int {
+                            min: Some(i64::from(LATENCY_MS.0)),
+                            max: Some(i64::from(LATENCY_MS.1)),
+                            step: Some(1),
+                            unit: Some("ms".into()),
+                        },
+                        Value::from(LATENCY_MS.2),
+                    )
+                },
+            ],
+            ..kind(NETWORK_AUDIO, "Network audio", false, true)
+        }),
     ]
 }
 
@@ -138,6 +234,22 @@ mod tests {
             AudioTarget::of(DESKTOP_AUDIO, &Settings::new()),
             Some(AudioTarget::Desktop)
         );
+        let mut network = settings(&[("transport", "jtunnel"), ("sender", " Bitwig 2 ")]);
+        network.insert("latency_ms", Value::from(25));
+        assert_eq!(
+            AudioTarget::of(NETWORK_AUDIO, &network),
+            Some(AudioTarget::Network {
+                transport: Transport::Jtunnel,
+                sender: "Bitwig 2".into(),
+                latency_ms: 25,
+            })
+        );
+        // A latency out of range, or missing, reads as the default.
+        network.insert("latency_ms", Value::from(9000));
+        assert!(matches!(
+            AudioTarget::of(NETWORK_AUDIO, &network),
+            Some(AudioTarget::Network { latency_ms: 40, .. })
+        ));
         assert_eq!(
             AudioTarget::of(APP_AUDIO, &settings(&[("exe", "Game.exe")])),
             Some(AudioTarget::App {
