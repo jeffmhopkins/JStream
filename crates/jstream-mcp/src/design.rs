@@ -158,7 +158,10 @@ about 1304 at the default 45°, and through it a flat item lands exactly on its 
 box, so start there and move the camera. A floor is an item with `tilt_deg` 90 placed \
 low, a wall one pushed back with negative `depth_px`; items draw far to near. Move \
 the camera with a keyframe scene that overrides it (`scene.set_camera` on the \
-variant) and a `move` transition, which glides the camera with the items. Depth of \
+variant) and a `move` transition, which glides the camera with the items. A 2D \
+scene's keyframe may have a camera of its own too: a `move` into it starts from the \
+framing camera, so a flat 2D layout tilts or pushes into 3D and back; keep the 2D \
+side's items flat (no tilt, turn or depth), or the move fades. Depth of \
 field: `focus_px` is the distance along the view that stays sharp and `blur_px` (0-64) \
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \

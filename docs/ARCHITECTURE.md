@@ -233,7 +233,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   there (`depth_px` its `z`), the camera sees them all, and its own perspective is
   ignored. Its items draw far to near by the depth of their centre, with stacking
   order breaking ties. A keyframe scene's variant follows its parent's camera unless it
-  overrides it, and only a parent with a camera allows overrides. `motion` is the item's
+  overrides it, and a keyframe of a 2D scene may have a camera of its own, which a Move
+  into it reaches from the framing camera
+  ([ADR-0128](adr/0128-moves-between-2d-and-3d-glide.md)). `motion` is the item's
   ordered list of at most 8 motion modifiers
   ([ADR-0099](adr/0099-native-motion-modifiers-and-timelines.md)), which the engine
   evaluates per frame on top of the stored values and never writes back. `crop` is in source pixels. A source's current size is runtime state,

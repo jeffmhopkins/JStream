@@ -1566,3 +1566,154 @@ fn a_fire_names_an_item_and_a_well_formed_modifier() {
     // A modifier the item doesn't hold is no error: a keyframe can override its list.
     trigger(&control, "a1", Some("elsewhere")).expect("fires nothing");
 }
+
+/// The framing camera for the default canvas, turned 20° about the canvas centre so it
+/// looks down at it from above.
+fn tilted_20() -> jstream_protocol::SceneCamera {
+    let framing = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas::DEFAULT);
+    let target = framing.target;
+    let distance = framing.position.z.get() - target.z.get();
+    let (sin, cos) = 20f32.to_radians().sin_cos();
+    jstream_protocol::SceneCamera {
+        position: jstream_protocol::Vec3 {
+            x: target.x,
+            y: Finite32::new(target.y.get() - distance * sin).expect("finite"),
+            z: Finite32::new(target.z.get() + distance * cos).expect("finite"),
+        },
+        ..framing
+    }
+}
+
+/// A Move from a 2D keyframe family's parent to its keyframe with a camera tilted 20°
+/// glides (ADR-0128): every item pairs, and the tracks are seen through a camera moving
+/// from the framing camera, which draws the 2D side as 2D does, to the tilted one.
+#[test]
+fn a_move_from_2d_to_a_tilted_keyframe_glides() {
+    use jstream_protocol::{Canvas, SceneCamera};
+    let engine = family();
+    let control = connected(&engine);
+    let tilted = tilted_20();
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let shot = hub.shot();
+    let tracks = shot.tracks().expect("a transition runs");
+    assert_eq!(tracks.len(), 2);
+    assert!(
+        tracks
+            .iter()
+            .all(|track| matches!(track, Track::Pair { .. })),
+        "every item glides: {tracks:?}"
+    );
+    let framing = SceneCamera::framing(Canvas::DEFAULT);
+    let start = shot.track_cameras(0.0).expect("a transition runs");
+    assert!(
+        start.iter().all(|camera| *camera == Some(framing)),
+        "{start:?}"
+    );
+    // Linear over 400 ms: halfway at 200.
+    let half = jstream_render::transition::lerp_camera(&framing, &tilted, 0.5);
+    let mid = shot.track_cameras(200.0).expect("a transition runs");
+    assert!(mid.iter().all(|camera| *camera == Some(half)), "{mid:?}");
+    let end = shot.track_cameras(400.0).expect("a transition runs");
+    assert!(end.iter().all(|camera| *camera == Some(tilted)), "{end:?}");
+    // And back: the Move out of 3D ends on the framing camera, then draws 2D.
+    switch(&control, "a", Some("move"));
+    let hub = engine.render_hub().load();
+    let back = hub.shot();
+    let tracks = back.tracks().expect("a transition runs");
+    assert!(
+        tracks
+            .iter()
+            .all(|track| matches!(track, Track::Pair { .. }))
+    );
+    let end = back.track_cameras(400.0).expect("a transition runs");
+    assert!(end.iter().all(|camera| *camera == Some(framing)), "{end:?}");
+}
+
+/// A Move between 2D and 3D fades where the 2D side has an item the framing camera
+/// can't draw as 2D does (ADR-0128): a tilted item with no perspective of its own.
+#[test]
+fn a_move_from_2d_with_a_tilted_item_into_3d_fades() {
+    let engine = family();
+    let control = connected(&engine);
+    let mut tilted_item = at(100.0);
+    tilted_item.tilt_deg = Finite32::new(30.0).expect("finite");
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::ItemSetGeometry {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                geometry: tilted_item,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted_20()),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let tracks = hub.shot().tracks().expect("a transition runs");
+    assert!(
+        !tracks
+            .iter()
+            .any(|track| matches!(track, Track::Pair { .. })),
+        "it fades: {tracks:?}"
+    );
+}
+
+/// An item off the canvas's centre with its own perspective at the framing camera's focal
+/// length still fades (ADR-0128 §2): its perspective projects about its own centre, the
+/// camera's about the canvas's, so gliding would make it jump on the first frame.
+#[test]
+fn a_move_from_2d_with_an_off_centre_item_at_the_framing_focal_length_fades() {
+    use jstream_protocol::{Canvas, SceneCamera};
+    let engine = family();
+    let control = connected(&engine);
+    let focal = SceneCamera::framing(Canvas::DEFAULT)
+        .view(Canvas::DEFAULT)
+        .expect("the framing camera has a view")
+        .focal_px();
+    let mut off_centre = at(100.0);
+    off_centre.tilt_deg = Finite32::new(30.0).expect("finite");
+    off_centre.perspective_px = Some(Finite32::new(focal).expect("finite"));
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::ItemSetGeometry {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                geometry: off_centre,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted_20()),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let tracks = hub.shot().tracks().expect("a transition runs");
+    assert!(
+        !tracks
+            .iter()
+            .any(|track| matches!(track, Track::Pair { .. })),
+        "it fades: {tracks:?}"
+    );
+}

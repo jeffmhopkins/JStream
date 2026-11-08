@@ -1028,8 +1028,8 @@ pub struct SceneInfo {
     #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
     pub filters: FilterChains,
     /// Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,
-    /// its override of its parent's camera; the keyframe shows the parent's camera where
-    /// it has none. Omitted for none, so missing (also from an older server) parses as a
+    /// its override of its parent's camera, which a keyframe of a 2D scene may have too
+    /// (ADR-0128); the keyframe shows the parent's camera where it has none. Omitted for none, so missing (also from an older server) parses as a
     /// 2D scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCamera>,
