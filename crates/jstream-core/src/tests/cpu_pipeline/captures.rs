@@ -243,6 +243,30 @@ fn capture_targets_lists_the_displays_then_the_windows_then_the_devices() {
     );
     assert_eq!(targets[4].formats, [format(1280, 720, 60.0, "nv12")]);
     assert!(targets[..3].iter().all(|t| t.formats.is_empty()));
+    let names: Vec<_> = targets[3]
+        .controls
+        .iter()
+        .map(|c| c.name.as_str())
+        .collect();
+    assert_eq!(names, ["brightness", "white_balance", "exposure"]);
+    assert_eq!(
+        targets[3].controls[1],
+        jstream_protocol::CameraControlInfo {
+            name: "white_balance".into(),
+            min: 2800,
+            max: 6500,
+            step: 10,
+            default: 4600,
+            value: 4600,
+            auto: Some(true),
+        }
+    );
+    assert!(
+        targets
+            .iter()
+            .filter(|t| t.target != FAKE_WEBCAM)
+            .all(|t| t.controls.is_empty())
+    );
     assert_eq!(
         targets[0].size,
         Some(PixelSize {
@@ -570,6 +594,77 @@ fn webcam(source: &str, device: &str) -> Edit {
         duplicated_from: None,
         settings: Settings([("device".to_owned(), json!(device))].into_iter().collect()),
     }
+}
+
+/// A webcam's `camera_controls` are set on its device as the source is made and as they
+/// change, with no output running and nothing captured (#1196): a number by hand, `"auto"`
+/// to the device, an empty `device` meaning the first one listed. A control left out of
+/// a later setting keeps its value.
+#[test]
+fn a_webcams_camera_controls_are_set_on_its_device() {
+    use jstream_platform::{CameraControlId, VideoDevices};
+    use std::time::{Duration, Instant};
+    let (fakes, devices) = with_devices();
+    let engine = engine(
+        share(&fakes.backends),
+        cpu_draw(),
+        Box::new(RecordingPublish::new()),
+    );
+    let control = connected(&engine);
+    let read = |id| {
+        devices
+            .controls(&DeviceId::new(FAKE_WEBCAM))
+            .expect("controls")
+            .into_iter()
+            .find(|c| c.id == id)
+            .map(|c| (c.value, c.auto))
+            .expect("listed")
+    };
+    let wait_for = |what: &str, done: &dyn Fn() -> bool| {
+        let start = Instant::now();
+        while !done() {
+            assert!(start.elapsed() < Duration::from_secs(10), "{what}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+    };
+    let mut cam = webcam("cam", "");
+    if let Edit::SourceCreate { settings, .. } = &mut cam {
+        settings.0.insert(
+            "camera_controls".into(),
+            json!({"white_balance": 5003, "brightness": 40}),
+        );
+    }
+    batch(&control, edits(vec![cam])).expect("created");
+    wait_for("the controls were set", &|| {
+        read(CameraControlId::WhiteBalance) == (5000, Some(false))
+            && read(CameraControlId::Brightness) == (40, None)
+    });
+    assert_eq!(devices.open_streams(), 0, "nothing was captured");
+
+    batch(
+        &control,
+        edits(vec![Edit::SourceSetSettings {
+            source_id: SourceId::new("cam"),
+            patch: Settings(
+                [(
+                    "camera_controls".to_owned(),
+                    json!({"white_balance": "auto", "exposure": -4}),
+                )]
+                .into_iter()
+                .collect(),
+            ),
+        }]),
+    )
+    .expect("changed");
+    wait_for("the change was set", &|| {
+        read(CameraControlId::WhiteBalance).1 == Some(true)
+            && read(CameraControlId::Exposure) == (-4, Some(false))
+    });
+    assert_eq!(
+        read(CameraControlId::Brightness),
+        (40, None),
+        "left as it was"
+    );
 }
 
 /// A webcam on program is opened on the video-device backend while an output runs:

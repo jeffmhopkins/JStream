@@ -8,7 +8,9 @@
 //! targets of its kind that `capture.targets` reports, read again each time the field
 //! gets focus, so a window opened since shows up. A `webcam`'s device is one too, and
 //! its format parameters (`capture_format`) are lists of what that device's listed
-//! formats offer. The fields of one form share one `capture.targets` answer.
+//! formats offer. Its `camera_controls` is a slider per control that device lists,
+//! with an Auto box where the device can set it itself. The fields of one form share
+//! one `capture.targets` answer.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0025-typed-settings-kind-descriptors.md
 
@@ -16,9 +18,9 @@ use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::store::{Studio, query};
 use jstream_control::protocol::{
-    AssetRoot, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
-    FontInfo, KindDescriptor, Media, ParamDescriptor, ParamType, Query, QueryResult, Reference,
-    Settings, SourceId, SourceInfo, SourceKind,
+    AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
+    CaptureTargetInfo, CaptureTargetKind, FontInfo, KindDescriptor, Media, ParamDescriptor,
+    ParamType, Query, QueryResult, Reference, Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -456,6 +458,9 @@ fn input_for(
         ParamType::CaptureFormat { part, target } => {
             capture_format_input(param, value, send, *part, target.clone(), settings)
         }
+        ParamType::CameraControls { target } => {
+            camera_controls_input(value, send, target.clone(), settings)
+        }
         ParamType::Scene => reference_select(value, send, move || {
             studio.collection.with(|c| {
                 c.iter()
@@ -704,6 +709,75 @@ pub fn device_formats<'t>(
     found.map_or(&[], |t| t.formats.as_slice())
 }
 
+/// The controls of the device that `device` names, as [`device_formats`] finds it.
+pub fn device_controls<'t>(
+    targets: &'t [CaptureTargetInfo],
+    device: &str,
+) -> &'t [CameraControlInfo] {
+    let mut devices = targets
+        .iter()
+        .filter(|t| t.kind == CaptureTargetKind::Device);
+    let found = if device.is_empty() {
+        devices.next()
+    } else {
+        devices.find(|t| t.target == device)
+    };
+    found.map_or(&[], |t| t.controls.as_slice())
+}
+
+/// A control as its row is built from: everything but what the device reports now
+/// (`value`, and whether `auto` is on), which the row reads from the latest list.
+pub fn control_identity(control: &CameraControlInfo) -> CameraControlInfo {
+    CameraControlInfo {
+        value: control.default,
+        auto: control.auto.map(|_| false),
+        ..control.clone()
+    }
+}
+
+/// The label a camera control's name shows as: `white_balance` is "White balance".
+pub fn control_label(name: &str) -> String {
+    let words = name.replace('_', " ");
+    let mut chars = words.chars();
+    chars
+        .next()
+        .map(|c| c.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+
+/// A `camera_controls` value with the control `name` set to `setting`: a number, or
+/// `"auto"`. `None` removes the entry, so the device keeps what it has.
+pub fn with_control(value: &Value, name: &str, setting: Option<Value>) -> Value {
+    let mut object = value.as_object().cloned().unwrap_or_default();
+    match setting {
+        Some(setting) => {
+            object.insert(name.to_owned(), setting);
+        }
+        None => {
+            object.remove(name);
+        }
+    }
+    Value::Object(object)
+}
+
+/// What one control of a `camera_controls` value shows: whether the device sets it
+/// itself, and the number the slider holds. A control the value doesn't name shows as
+/// the device reports it.
+pub fn control_shown(value: &Value, control: &CameraControlInfo) -> (bool, i32) {
+    match value.get(&control.name) {
+        // `"auto"` on a control with no automatic mode (stored for another camera, or
+        // through the API) shows as manual, so moving the slider takes it back.
+        Some(Value::String(s)) if s == CAMERA_CONTROL_AUTO => {
+            (control.auto.is_some(), control.value)
+        }
+        Some(v) => match v.as_i64().and_then(|n| i32::try_from(n).ok()) {
+            Some(n) => (false, n),
+            None => (control.auto == Some(true), control.value),
+        },
+        None => (control.auto == Some(true), control.value),
+    }
+}
+
 /// The label a `pixel_format` value shows as.
 pub fn pixel_format_label(value: &str) -> String {
     match value {
@@ -903,6 +977,153 @@ fn capture_format_input(
         }
     };
     view! { {body} }.into_any()
+}
+
+/// A webcam's camera controls: a slider and a number for each control the device that
+/// `target` picks lists in `capture.targets`, with an Auto box for one the device can
+/// set itself. Each change sends the whole object with that control's entry set.
+/// Until the list arrives, and for a device with no controls, it says so.
+fn camera_controls_input(
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+    target: String,
+    settings: Signal<Settings>,
+) -> AnyView {
+    let listing = CaptureListing::shared();
+    let listed = listing.listed;
+    listing.first();
+    // A memo of each control's identity, without the value the device reports, so a
+    // change to the setting, a re-list after a set or a change to any other field
+    // redraws no row: only another device or another set of controls does, and a slider
+    // keeps its focus as it steps. Each row reads the reported value itself.
+    let target_now = target.clone();
+    let controls = Memo::new(move |_| {
+        listed.with(|l| match l {
+            Some(Ok(targets)) => settings.with(|s| {
+                let device = s.get(&target).map(display).unwrap_or_default();
+                Some(Ok(device_controls(targets, &device)
+                    .iter()
+                    .map(control_identity)
+                    .collect::<Vec<_>>()))
+            }),
+            Some(Err(e)) => Some(Err(e.clone())),
+            None => None,
+        })
+    });
+    let body = move || {
+        match controls.get() {
+        None => view! { <span class="hint">"Listing the camera's controls…"</span> }.into_any(),
+        Some(Err(_)) => view! {
+            <span class="hint">"Couldn't list the camera's controls. Click here to try again."</span>
+        }
+        .into_any(),
+        Some(Ok(list)) if list.is_empty() => {
+            view! { <span class="hint">"This camera lists no controls."</span> }.into_any()
+        }
+        Some(Ok(list)) => list
+            .into_iter()
+            .map(|control| {
+                let name = control.name.clone();
+                let target = target_now.clone();
+                // What the device reports for this control now, from the latest list.
+                let reported = move || {
+                    listed.with(|l| match l {
+                        Some(Ok(targets)) => settings.with(|s| {
+                            let device = s.get(&target).map(display).unwrap_or_default();
+                            device_controls(targets, &device)
+                                .iter()
+                                .find(|c| c.name == name)
+                                .cloned()
+                        }),
+                        _ => None,
+                    })
+                };
+                camera_control_row(control, reported, value.clone(), send.clone())
+            })
+            .collect_view()
+            .into_any(),
+    }
+    };
+    // Focusing a control, or clicking the hint, asks for the list again, as a capture
+    // list does, so a failed or stale listing is read again.
+    view! {
+        <div class="camera-controls" tabindex="-1"
+            on:focusin=move |_| listing.refresh() on:click=move |_| {
+                if controls.with_untracked(|c| matches!(c, Some(Err(_)))) {
+                    listing.refresh();
+                }
+            }>
+            {body}
+        </div>
+    }
+    .into_any()
+}
+
+/// One control's row in [`camera_controls_input`].
+fn camera_control_row(
+    control: CameraControlInfo,
+    reported: impl Fn() -> Option<CameraControlInfo> + Clone + Send + Sync + 'static,
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+) -> AnyView {
+    let shown = {
+        let (value, control) = (value.clone(), control.clone());
+        move || control_shown(&value(), &reported().unwrap_or_else(|| control.clone()))
+    };
+    let number = {
+        let shown = shown.clone();
+        move || shown().1.to_string()
+    };
+    let is_auto = {
+        let shown = shown.clone();
+        move || shown().0
+    };
+    let on_number = {
+        let (value, send, name) = (value.clone(), send.clone(), control.name.clone());
+        let (min, max) = (control.min, control.max);
+        move |event: leptos::ev::Event| {
+            let text = event_target_value(&event);
+            let got = match text.trim().parse::<i32>() {
+                Ok(n) if (min..=max).contains(&n) => {
+                    Ok(with_control(&value(), &name, Some(Value::from(n))))
+                }
+                Ok(_) => Err(format!("{name} must be {min} to {max}")),
+                Err(_) => Err(format!("{name} must be a whole number")),
+            };
+            send(got)
+        }
+    };
+    let auto_box = control.auto.map(|_| {
+        let (value, send, name) = (value.clone(), send.clone(), control.name.clone());
+        let is_auto = is_auto.clone();
+        let number = number.clone();
+        view! {
+            <label class="camera-control-auto">
+                <input type="checkbox" prop:checked=is_auto
+                    on:change=move |event| {
+                        let setting = if event_target_checked(&event) {
+                            Value::from(CAMERA_CONTROL_AUTO)
+                        } else {
+                            Value::from(number().parse::<i32>().unwrap_or_default())
+                        };
+                        send(Ok(with_control(&value(), &name, Some(setting))))
+                    } />
+                "Auto"
+            </label>
+        }
+    });
+    let (min, max, step) = (control.min, control.max, control.step.max(1));
+    view! {
+        <div class="camera-control">
+            <span class="camera-control-name">{control_label(&control.name)}</span>
+            <input type="range" min=min.to_string() max=max.to_string() step=step.to_string()
+                prop:value=number.clone() prop:disabled=is_auto.clone() on:change=on_number.clone() />
+            <input type="number" min=min.to_string() max=max.to_string() step=step.to_string()
+                prop:value=number prop:disabled=is_auto on:change=on_number />
+            {auto_box}
+        </div>
+    }
+    .into_any()
 }
 
 /// A display or window to capture, picked from what `capture.targets` lists now. Until
@@ -1226,14 +1447,15 @@ fn asset_input(
 #[cfg(test)]
 mod tests {
     use super::{
-        BUNDLED_FONT, OTHER_FONT, asset_value, device_formats, display, draft_patch, font_choices,
-        format_choices, fps_text, is_visible, offers, parse, rgb_part, sections, takes_fonts,
-        target_choices, value_of, with_rgb,
+        BUNDLED_FONT, OTHER_FONT, asset_value, control_identity, control_label, control_shown,
+        device_controls, device_formats, display, draft_patch, font_choices, format_choices,
+        fps_text, is_visible, offers, parse, rgb_part, sections, takes_fonts, target_choices,
+        value_of, with_control, with_rgb,
     };
     use jstream_control::protocol::{
-        AssetRoot, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
-        EnumOption, FontInfo, KindCategory, KindDescriptor, ParamDescriptor, ParamType, PixelSize,
-        Reference, Settings, VisibleIf,
+        AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
+        CaptureTargetInfo, CaptureTargetKind, EnumOption, FontInfo, KindCategory, KindDescriptor,
+        ParamDescriptor, ParamType, PixelSize, Reference, Settings, VisibleIf,
     };
     use serde_json::{Value, json};
 
@@ -1578,7 +1800,50 @@ mod tests {
             size: None,
             primary: false,
             formats: Vec::new(),
+            controls: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_camera_control_shows_its_setting_or_what_the_device_reports() {
+        let exposure = CameraControlInfo {
+            name: "exposure".into(),
+            min: -11,
+            max: -2,
+            step: 1,
+            default: -6,
+            value: -5,
+            auto: Some(true),
+        };
+        let mut cam = target(CaptureTargetKind::Device, "cam", "Cam");
+        cam.controls = vec![exposure.clone()];
+        let listed = [target(CaptureTargetKind::Display, "d1", "Display 1"), cam];
+        assert_eq!(device_controls(&listed, "").len(), 1);
+        assert_eq!(device_controls(&listed, "cam")[0].name, "exposure");
+        assert!(device_controls(&listed, "gone").is_empty());
+        assert_eq!(control_label("white_balance"), "White balance");
+        // Not named: as the device reports it.
+        assert_eq!(control_shown(&json!({}), &exposure), (true, -5));
+        let set = with_control(&json!({"gain": 3}), "exposure", Some(json!(-8)));
+        assert_eq!(set, json!({"gain": 3, "exposure": -8}));
+        assert_eq!(control_shown(&set, &exposure), (false, -8));
+        let auto = with_control(&set, "exposure", Some(json!(CAMERA_CONTROL_AUTO)));
+        assert_eq!(control_shown(&auto, &exposure), (true, -5));
+        assert_eq!(with_control(&auto, "exposure", None), json!({"gain": 3}));
+        // A control with no auto mode never shows a stored "auto" as auto, which would
+        // disable its slider with no box to untick.
+        let manual_only = CameraControlInfo {
+            auto: None,
+            ..exposure.clone()
+        };
+        assert_eq!(control_shown(&auto, &manual_only), (false, -5));
+        // A row is keyed on what doesn't change as the device reports new values.
+        let moved = CameraControlInfo {
+            value: -9,
+            auto: Some(false),
+            ..exposure.clone()
+        };
+        assert_eq!(control_identity(&exposure), control_identity(&moved));
     }
 
     #[test]

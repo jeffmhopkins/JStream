@@ -946,7 +946,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   bindings and timelines that carry one label; `bus.list` (protocol 0.19) → the buses and sends;
   `capture.targets` (protocol 0.27) → the displays and windows a `display` or `window`
   source's `target` can name, and (0.90) the video devices a `webcam`'s `device` can
-  name, with their formats; `font.list` (protocol 0.68,
+  name, with their formats and (0.105) the camera controls a `webcam`'s
+  `camera_controls` setting sets on them; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
   and absolute path; `source.sizes` (protocol 0.40) → each source's current
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);

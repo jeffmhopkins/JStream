@@ -190,8 +190,9 @@ issues = [1228, 1060]
 [[target]]
 release = "alpha.5"
 title = "Webcam Properties: a device picker, resolution, frame rate and format, and camera controls"
-status = "planned"
+status = "review"
 issues = [1195, 1196]
+prs = [1262, 1348, 1393, 1396]
 
 [[target]]
 release = "alpha.5"

@@ -684,6 +684,7 @@ impl Engine {
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
             state.audio.sync(state.graph.state(), state.live.audio());
+            state.camera_controls.sync(state.graph.state());
             state.route_audio();
             // The loaded collection is what the program mix draws now.
             state.publish_render();
@@ -1109,6 +1110,14 @@ impl Engine {
         // A webcam or capture card opens once, shared by the program stage's capture of
         // it and the preview's.
         backends.video_devices = Arc::new(SharedVideoDevices::new(backends.video_devices));
+        {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            let drawn = state.shown.as_ref().unwrap_or(&state.graph);
+            state
+                .camera_controls
+                .set_devices(Arc::clone(&backends.video_devices), drawn.state());
+        }
         let host = self.host();
         // The preview draws the program on the program stage, which it opens when no
         // output has (ADR-0117 §6), and captures what scenes and drafts show itself. The
@@ -3813,6 +3822,8 @@ struct State {
     live: LiveSources,
     /// The audio-only sources the program stage records, one mixer input each (C5).
     audio: AudioSources,
+    /// Each `webcam`'s camera controls, set on its device as they change (#1196).
+    camera_controls: crate::camera_controls::CameraControls,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -4148,6 +4159,7 @@ impl State {
             let drawn = self.shown.as_ref().unwrap_or(&self.graph);
             self.live.sync(drawn.state());
             self.audio.sync(drawn.state(), self.live.audio());
+            self.camera_controls.sync(drawn.state());
         }
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
@@ -5724,11 +5736,13 @@ impl State {
             shown,
             live,
             audio,
+            camera_controls,
             ..
         } = self;
         let drawn = shown.as_ref().unwrap_or(graph);
         live.sync(drawn.state());
         audio.sync(drawn.state(), live.audio());
+        camera_controls.sync(drawn.state());
         self.route_audio();
         self.publish_render();
         self.feed_pages();
@@ -6229,12 +6243,13 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
         }),
         primary: info.primary,
         formats: Vec::new(),
+        controls: Vec::new(),
     })
 }
 
 /// A video device as `capture.targets` reports it, with the formats the engine reads
-/// of it: MJPEG among them, as every platform's codecs decode it. A device whose
-/// formats can't be read is listed without them.
+/// of it (MJPEG among them, as every platform's codecs decode it) and its camera
+/// controls. A device whose formats or controls can't be read is listed without them.
 fn device_target_info(
     devices: &dyn VideoDevices,
     device: VideoDeviceInfo,
@@ -6257,6 +6272,24 @@ fn device_target_info(
             Vec::new()
         }
     };
+    let controls = match devices.controls(&device.id) {
+        Ok(controls) => controls
+            .into_iter()
+            .map(|c| jstream_protocol::CameraControlInfo {
+                name: c.id.name().to_owned(),
+                min: c.min,
+                max: c.max,
+                step: c.step,
+                default: c.default,
+                value: c.value,
+                auto: c.auto,
+            })
+            .collect(),
+        Err(err) => {
+            tracing::warn!(device = %device.id, error = %err, "listing the video device's camera controls");
+            Vec::new()
+        }
+    };
     jstream_protocol::CaptureTargetInfo {
         kind: CaptureTargetKind::Device,
         target: device.id.as_str().to_owned(),
@@ -6264,6 +6297,7 @@ fn device_target_info(
         size: None,
         primary: false,
         formats,
+        controls,
     }
 }
 

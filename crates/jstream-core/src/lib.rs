@@ -25,6 +25,7 @@ mod activity_log;
 mod audio;
 mod audio_sources;
 mod audit;
+mod camera_controls;
 mod chain;
 mod codec_downloads;
 mod collection;

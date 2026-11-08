@@ -915,6 +915,37 @@ pub struct CaptureTargetInfo {
     /// window, and for a device whose formats couldn't be read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub formats: Vec<CaptureFormatInfo>,
+    /// For a device, the camera controls it offers, with their ranges and values now
+    /// (since 0.105). Omitted when empty: always for a display or a window, and for a
+    /// device with none or whose controls couldn't be read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub controls: Vec<CameraControlInfo>,
+}
+
+/// One camera control a video capture device offers, in a `capture.targets` result:
+/// what a `webcam` source's `camera_controls` setting takes for it (since 0.105).
+/// Values are in the platform's own units, from `min` to `max` in steps of `step`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CameraControlInfo {
+    /// The control's name, the key it takes in the setting: `brightness`, `contrast`,
+    /// `saturation`, `hue`, `sharpness`, `gamma`, `gain`, `white_balance`,
+    /// `backlight_compensation`, `power_line_frequency`, `exposure`, `focus`, `zoom`,
+    /// `pan`, `tilt` or `iris`. A later engine may list others.
+    pub name: String,
+    /// The lowest value.
+    pub min: i32,
+    /// The highest value.
+    pub max: i32,
+    /// The step between values; at least 1.
+    pub step: i32,
+    /// The device's default value.
+    pub default: i32,
+    /// The value now; while `auto` is `true`, as the device last reported it.
+    pub value: i32,
+    /// Whether the device can set it itself, and is now: omitted when it can't, else
+    /// `true` while it does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto: Option<bool>,
 }
 
 /// One format a video capture device captures in, in a `capture.targets` result: the

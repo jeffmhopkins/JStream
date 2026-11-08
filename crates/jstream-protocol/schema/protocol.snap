@@ -2063,6 +2063,56 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "CameraControlInfo": {
+      "description": "One camera control a video capture device offers, in a `capture.targets` result:\nwhat a `webcam` source's `camera_controls` setting takes for it (since 0.105).\nValues are in the platform's own units, from `min` to `max` in steps of `step`.",
+      "properties": {
+        "auto": {
+          "description": "Whether the device can set it itself, and is now: omitted when it can't, else\n`true` while it does.",
+          "type": [
+            "boolean",
+            "null"
+          ]
+        },
+        "default": {
+          "description": "The device's default value.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "max": {
+          "description": "The highest value.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "min": {
+          "description": "The lowest value.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "name": {
+          "description": "The control's name, the key it takes in the setting: `brightness`, `contrast`,\n`saturation`, `hue`, `sharpness`, `gamma`, `gain`, `white_balance`,\n`backlight_compensation`, `power_line_frequency`, `exposure`, `focus`, `zoom`,\n`pan`, `tilt` or `iris`. A later engine may list others.",
+          "type": "string"
+        },
+        "step": {
+          "description": "The step between values; at least 1.",
+          "format": "int32",
+          "type": "integer"
+        },
+        "value": {
+          "description": "The value now; while `auto` is `true`, as the device last reported it.",
+          "format": "int32",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "name",
+        "min",
+        "max",
+        "step",
+        "default",
+        "value"
+      ],
+      "type": "object"
+    },
     "CameraFollow": {
       "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
       "properties": {
@@ -2510,6 +2560,13 @@ source: crates/jstream-protocol/src/fixtures.rs
     "CaptureTargetInfo": {
       "description": "One display, window or video capture device in a `capture.targets` result.",
       "properties": {
+        "controls": {
+          "description": "For a device, the camera controls it offers, with their ranges and values now\n(since 0.105). Omitted when empty: always for a display or a window, and for a\ndevice with none or whose controls couldn't be read.",
+          "items": {
+            "$ref": "#/$defs/CameraControlInfo"
+          },
+          "type": "array"
+        },
         "formats": {
           "description": "For a device, the formats it captures in that the engine reads, in the order the\ndevice lists them (since 0.90). Omitted when empty: always for a display or a\nwindow, and for a device whose formats couldn't be read.",
           "items": {
@@ -9203,6 +9260,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "target"
           ],
           "type": "object"
+        },
+        {
+          "description": "The camera controls set on a video capture device (exposure, focus, white\nbalance and the like), each picked from the controls `capture.targets` lists\nfor the device that parameter `target` names, so a UI can offer those with their\nranges. Since 0.105. Its value is an object from a control's `name` to an\ninteger, which sets it by hand, or `\"auto\"`, which hands it to the device; a\ncontrol not in the object is left as the device has it. Its default is `{}`.",
+          "properties": {
+            "target": {
+              "description": "The ID of the parameter naming the device, a\n[`ParamType::CaptureTarget`] of kind `device`.",
+              "type": "string"
+            },
+            "type": {
+              "const": "camera_controls",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "target"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -14234,5 +14309,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.104"
+  "title": "JStream protocol 0.105"
 }

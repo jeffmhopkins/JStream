@@ -588,7 +588,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `resolution`, `fps` and `pixel_format`) lists "Auto" and what the formats listed for
   the chosen device offer with the other two parts chosen (sizes largest first, rates
   fastest first), and keeps a value the device doesn't offer as "<value> (not
-  offered)". A font setting (an `asset` that takes
+  offered)". A `camera_controls` (a `webcam`'s, protocol 0.105) is a row per control the
+  chosen device lists: its name ("White balance" for `white_balance`), a slider and a
+  number over the control's range, and an Auto box for a control the device can set
+  itself, which disables the slider while ticked. Each change sends the whole object
+  with that control's entry set; a control the setting leaves out shows what the
+  device reports, and `"auto"` stored for a control with no automatic mode shows as
+  manual, so the slider takes it back. Until the list arrives it says it is listing the
+  controls, a device with none says so, and a failed listing says so and asks again when
+  clicked; focusing a control asks again too. The rows are keyed on each control's identity
+  (`control_identity`: everything but the value and auto state the device reports, which
+  each row reads from the latest list), so a re-list after a set redraws none and a
+  slider keeps its focus; only another device or another set of controls does. A font setting (an `asset` that takes
   `ttf` or `otf` and only font types, `takes_fonts`) is a list from `font.list`
   ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)): "Bundled font" (none), each installed font by family and style
   (stored as an `absolute` asset of its path), and "Other file…", which shows the

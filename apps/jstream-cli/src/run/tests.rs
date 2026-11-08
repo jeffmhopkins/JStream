@@ -910,7 +910,9 @@ fn capture_targets_prints_each_target() {
              window mock:window (Mock window) 1280x720\n\
              device mock:webcam (Mock webcam)\n\
              \x20 1920x1080 30 fps mjpeg\n\
-             \x20 1280x720 60 fps nv12\n")
+             \x20 1280x720 60 fps nv12\n\
+             \x20 brightness 128 (0 to 255, step 1, default 128)\n\
+             \x20 exposure -6 (-11 to -2, step 1, default -6), auto\n")
     );
 }
 
