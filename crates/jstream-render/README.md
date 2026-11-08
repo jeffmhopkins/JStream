@@ -668,9 +668,10 @@ stage's and an output's over the mix an output draws
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
 `kind.list` gets these kinds, and `video_filter_outset(kind, settings)` how far a
-drop shadow, outline, glow or bloom draws past its input at its settings, never more
-than its `max_outset_px` (ADR-0136); core sizes an item's layer by it. It doesn't
-measure a `border` yet, which takes its declared 129 px.
+drop shadow, outline, glow, bloom or border draws past its input at its settings, never
+more than its `max_outset_px` (ADR-0136); core sizes an item's layer by it. A border
+draws past it only with an outer stroke: its gap, its width and an antialiased pixel
+(#1376).
 
 **The harness.**
 

@@ -1605,9 +1605,9 @@ overrides them (ADR-0088). The chain phase draws the item into
 `GpuKey::ItemBox`, a layer the size of its planned box, in canvas pixels. The effects'
 outset is the sum of what each draws past its input at its settings
 (`jstream_render::video_filter_outset`: a drop shadow its offset plus its blur, a glow
-or a bloom its radius, an outline outside its width), each rounded up to 16 px
-(`OUTSET_STEP`) and at most its kind's `max_outset_px`; a kind it doesn't measure (a
-`border`, for now) and a pack effect that declares one take it whole (render › Filters). The chain grows the layer by it where the first
+or a bloom its radius, an outline outside its width, a border its outer stroke after
+its gap, #1376), each rounded up to 16 px (`OUTSET_STEP`) and at most its kind's
+`max_outset_px`; a pack effect that declares one takes it whole (render › Filters). The chain grows the layer by it where the first
 effect that draws past its input runs (`Chain::pad_at`, that effect's
 `VideoFilter::set_pad`), so the effects before it frame the box itself
 ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md),
