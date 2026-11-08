@@ -708,10 +708,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   window sent and the engine refuses a batch with one such key. Cancel doesn't reach
   the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
   manifest's version by one and adds the pair to `renames` (`Declared::version`,
-  ADR-0025). The engine doesn't apply an effect's renames to stored settings yet
-  (#1353), so a filter left on the pack keeps the value under the old ID and draws the
-  new one at its default; the template says so, and asks that no `@renamed` line be
-  deleted, since each is a version.
+  ADR-0025). The engine moves every filter of the pack's kind through the renames when
+  the new version loads (#1353), so a filter left on the pack keeps its value under the
+  new ID; the template asks that no `@renamed` line be deleted, since each is a version.
   Save as pack… writes the shader under a pack ID the person types (`save_as_problem`
   checks it against `pack.list`) and moves only the filter being edited to the new
   kind (`move_to_kind`: a remove and an add in its place, one batch, its settings

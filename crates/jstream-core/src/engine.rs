@@ -610,25 +610,7 @@ impl Engine {
     /// collection lock only to serialize, and writes with only the file's lock held, so
     /// saves happen one at a time and a late one never overwrites a newer collection.
     fn save_collection(&self) {
-        let mut file = lock(&self.shared.collection_file);
-        let Some(file) = file.as_mut() else {
-            return;
-        };
-        let (rev, json) = {
-            let state = lock(&self.shared.state);
-            if state.graph.rev() <= file.saved() {
-                return;
-            }
-            (state.graph.rev(), state.graph.to_collection_json())
-        };
-        if let Err(err) = file.save(rev, &json) {
-            tracing::error!(
-                path = %file.path().display(),
-                rev = %rev,
-                error = %err,
-                "collection not saved"
-            );
-        }
+        self.shared.save_collection();
     }
 
     /// What an output in the collection is and where it sends, or `None` if the
@@ -5370,10 +5352,34 @@ impl Shared {
         wake_all(wake);
     }
 
+    /// Saves the collection to its file: [`Engine::save_collection`].
+    fn save_collection(&self) {
+        let mut file = lock(&self.collection_file);
+        let Some(file) = file.as_mut() else {
+            return;
+        };
+        let (rev, json) = {
+            let state = lock(&self.state);
+            if state.graph.rev() <= file.saved() {
+                return;
+            }
+            (state.graph.rev(), state.graph.to_collection_json())
+        };
+        if let Err(err) = file.save(rev, &json) {
+            tracing::error!(
+                path = %file.path().display(),
+                rev = %rev,
+                error = %err,
+                "collection not saved"
+            );
+        }
+    }
+
     /// Applies a change to the effect packs: their kinds to `kind.list`, their effects
     /// (the quarantined ones left out) to the chains, then re-plans.
     fn install_effects(&self, update: crate::effect_packs::Update) {
         let mut wake = Vec::new();
+        let mut save = false;
         {
             let mut state = lock(&self.state);
             // Every caller installs under the packs' lock, so updates come in order; one
@@ -5387,9 +5393,55 @@ impl Shared {
                 return;
             }
             state.effects_seq = update.seq;
+            // The version each changed kind had, for the filters stored by it.
+            let before: BTreeMap<String, Option<u32>> = update
+                .described
+                .iter()
+                .map(|kind| {
+                    let id = kind.kind_id.clone();
+                    let version = state.graph.kind(&id).map(|k| k.version);
+                    (id, version)
+                })
+                .collect();
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
+            // Sources and filters of a changed kind follow its renames (#1353, #1412,
+            // ADR-0025): one loaded before its pack, or one a reload raised the version of.
+            let migrations = &update.migrations;
+            let upgraded = state.graph.upgrade_kinds(&before, &|kind, stored, from| {
+                migrations.get(kind)?.migrate(stored, from)
+            });
+            if let Some(upgraded) = upgraded {
+                tracing::info!(
+                    rev = %upgraded.rev,
+                    changed = upgraded.set.len(),
+                    "stored settings moved to their pack kind's current version"
+                );
+                // A shader source's new settings (its size among them) reach its live
+                // source as after any batch.
+                if upgraded
+                    .set
+                    .iter()
+                    .any(|edit| matches!(edit, Edit::SourceSetSettings { .. }))
+                {
+                    let state = &mut *state;
+                    state.refresh_shown();
+                    let drawn = state.shown.as_ref().unwrap_or(&state.graph);
+                    state.live.sync(drawn.state());
+                }
+                state.history.record_engine(upgraded.rev, upgraded.touched);
+                state.subscribers.emit(
+                    &Event::StateChanged {
+                        rev: upgraded.rev,
+                        client_id: ClientId::new(crate::history::ENGINE_CLIENT),
+                        request_id: None,
+                        cause: None,
+                    },
+                    &mut wake,
+                );
+                save = true;
+            }
             state.quarantined = update.quarantined;
             state.live.set_effects(update.effects, update.sources);
             state.publish_render();
@@ -5397,6 +5449,9 @@ impl Shared {
             state.feed_pages();
         }
         wake_all(wake);
+        if save {
+            self.save_collection();
+        }
     }
 
     /// A GPU device loss on the program stage (#349): blames the pack kinds it drew,
