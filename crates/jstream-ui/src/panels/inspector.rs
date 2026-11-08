@@ -1655,7 +1655,9 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
 /// A Hotkey row: the chords bound to `action` (a scene's `scene.switch` or
 /// `scene.zoom_camera`, an item's `item.toggle`, `item.show` or `item.hide`), each with a
 /// button that unbinds it, and "Set key", which binds the next chord pressed (Escape
-/// cancels). A binding is sent at once.
+/// cancels). For an action that takes steps (`scene.zoom_camera`), a turn of the wheel
+/// over the button with a modifier held binds that wheel chord, such as `Ctrl+WheelUp`
+/// (ADR-0112 §3). A binding is sent at once.
 #[component]
 pub(crate) fn HotkeyRow(
     label: &'static str,
@@ -1672,10 +1674,20 @@ pub(crate) fn HotkeyRow(
         })
     });
     let capturing = RwSignal::new(false);
+    let takes_steps = id.with_value(jstream_control::protocol::Action::takes_steps);
     let send = move |edits: Vec<Edit>| {
         if let (Some(s), false) = (session.get(), edits.is_empty()) {
             studio.apply(&s, edits);
         }
+    };
+    let bind = move |chord: Chord| {
+        capturing.set(false);
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| hotkeys::bind_edits(c, &id.get_value(), &chord))
+                .unwrap_or_default()
+        });
+        send(edits);
     };
     let on_key = move |event: leptos::ev::KeyboardEvent| {
         if !capturing.get_untracked() {
@@ -1691,13 +1703,31 @@ pub(crate) fn HotkeyRow(
         let Some(chord) = hotkeys::of_event(&event) else {
             return;
         };
-        capturing.set(false);
-        let edits = studio.collection.with_untracked(|c| {
-            c.as_ref()
-                .map(|c| hotkeys::bind_edits(c, &id.get_value(), &chord))
-                .unwrap_or_default()
-        });
-        send(edits);
+        bind(chord);
+    };
+    let on_wheel = move |event: leptos::ev::WheelEvent| {
+        if !capturing.get_untracked() || !takes_steps {
+            return;
+        }
+        let shift = event.shift_key();
+        let Some(chord) = hotkeys::wheel_chord(
+            event.ctrl_key(),
+            event.alt_key(),
+            shift,
+            event.meta_key(),
+            hotkeys::wheel_delta(event.delta_x(), event.delta_y(), shift),
+        ) else {
+            return;
+        };
+        // The turn is the capture's: no wheel chord runs, and the page doesn't zoom.
+        event.stop_propagation();
+        event.prevent_default();
+        bind(chord);
+    };
+    let prompt = if takes_steps {
+        "Press a key or Ctrl+wheel…"
+    } else {
+        "Press a key…"
     };
     let chip = move |chord: Chord| {
         let shown = hotkeys::label(&chord);
@@ -1729,9 +1759,10 @@ pub(crate) fn HotkeyRow(
                     class:capturing=move || capturing.get()
                     on:click=move |_| capturing.update(|c| *c = !*c)
                     on:keydown=on_key
+                    on:wheel=on_wheel
                     on:blur=move |_| capturing.set(false)
                 >
-                    {move || if capturing.get() { "Press a key…" } else { "Set key" }}
+                    {move || if capturing.get() { prompt } else { "Set key" }}
                 </button>
             </span>
         </div>

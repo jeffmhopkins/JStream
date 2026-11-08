@@ -22,6 +22,12 @@
 //! page names on any layout. The table and the chord parsing are pure and tested on every
 //! platform.
 //!
+//! A wheel chord (`Ctrl+WheelUp`, ADR-0112 §3) is a passive grab of button 4 (up) or 5
+//! (down) with its modifiers (`xcb_grab_button`), which X reports as a press per notch.
+//! A grabbed notch goes to this listener and not to the window under the pointer, so
+//! the host grabs one only while it should be consumed (§5); the rest of the time the
+//! wheel passes through untouched.
+//!
 //! Wayland has no grab: on a Wayland session the host doesn't start this listener.
 //!
 //! [`set`]: GlobalHotkeys::set
@@ -39,21 +45,35 @@ pub struct GrabChord {
     pub shift: bool,
     /// The Super (Windows) key is held (`Meta`).
     pub meta: bool,
-    /// The key's X11 keycode.
-    pub keycode: u8,
+    /// The key, or the wheel's direction.
+    pub input: GrabInput,
+}
+
+/// What a chord ends in, as X11 grabs it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum GrabInput {
+    /// A key, by its X11 keycode.
+    Key(u8),
+    /// A pointer button: the wheel turns as buttons 4 (`WheelUp`) and 5 (`WheelDown`).
+    Button(u8),
 }
 
 /// The chord `Ctrl+Alt+Shift+Meta+<code>` (any of the modifiers, in that order), or
-/// `None` when it isn't one or its key has no keycode.
+/// `None` when it isn't one or its key has no keycode. A chord ending in `WheelUp` or
+/// `WheelDown` is the wheel's button.
 pub fn parse_chord(chord: &str) -> Option<GrabChord> {
     let mut parts: Vec<&str> = chord.split('+').collect();
-    let keycode = key_code(parts.pop()?)?;
+    let input = match parts.pop()? {
+        "WheelUp" => GrabInput::Button(4),
+        "WheelDown" => GrabInput::Button(5),
+        key => GrabInput::Key(key_code(key)?),
+    };
     let mut parsed = GrabChord {
         ctrl: false,
         alt: false,
         shift: false,
         meta: false,
-        keycode,
+        input,
     };
     for part in parts {
         let held = match part {
@@ -282,7 +302,7 @@ pub use listener::GlobalHotkeys;
 
 #[cfg(target_os = "linux")]
 mod listener {
-    use super::{ModifierMasks, parse_chord};
+    use super::{GrabInput, ModifierMasks, parse_chord};
     use crate::dl::SystemLibrary;
     use jstream_platform::PlatformError;
     use std::ffi::{c_char, c_int, c_uint, c_void};
@@ -351,6 +371,11 @@ mod listener {
     /// `XCB_MAPPING_NOTIFY`, and its `request` when the modifier map changed.
     const MAPPING_NOTIFY: u8 = 34;
     const MAPPING_MODIFIER: u8 = 0;
+    /// `XCB_BUTTON_PRESS`.
+    const BUTTON_PRESS: u8 = 4;
+    /// `XCB_EVENT_MASK_BUTTON_PRESS` and `XCB_EVENT_MASK_BUTTON_RELEASE`.
+    const BUTTON_PRESS_MASK: u16 = 1 << 2;
+    const BUTTON_RELEASE_MASK: u16 = 1 << 3;
     /// `XCB_GRAB_MODE_ASYNC`.
     const GRAB_MODE_ASYNC: u8 = 1;
     /// `BadAccess`: another client has grabbed the chord.
@@ -364,6 +389,9 @@ mod listener {
     type ScreenNextFn = unsafe extern "C" fn(*mut ScreenIterator);
     type GrabKeyFn = unsafe extern "C" fn(*mut Connection, u8, u32, u16, u8, u8, u8) -> Cookie;
     type UngrabKeyFn = unsafe extern "C" fn(*mut Connection, u8, u32, u16) -> Cookie;
+    type GrabButtonFn =
+        unsafe extern "C" fn(*mut Connection, u8, u32, u16, u8, u8, u32, u32, u8, u16) -> Cookie;
+    type UngrabButtonFn = unsafe extern "C" fn(*mut Connection, u8, u32, u16) -> Cookie;
     type RequestCheckFn = unsafe extern "C" fn(*mut Connection, Cookie) -> *mut GenericError;
     type ModMapFn = unsafe extern "C" fn(*mut Connection) -> Cookie;
     type ModMapReplyFn = unsafe extern "C" fn(
@@ -386,6 +414,8 @@ mod listener {
         screen_next: ScreenNextFn,
         grab_key: GrabKeyFn,
         ungrab_key: UngrabKeyFn,
+        grab_button: GrabButtonFn,
+        ungrab_button: UngrabButtonFn,
         request_check: RequestCheckFn,
         modifier_mapping: ModMapFn,
         modifier_mapping_reply: ModMapReplyFn,
@@ -403,8 +433,9 @@ mod listener {
             )?;
             // SAFETY: each type is the function's C declaration in xcb/xcb.h and
             // xcb/xproto.h: connections and replies as pointers, cookies and iterators
-            // as the `repr(C)` structs above, `xcb_window_t` as u32, `xcb_keycode_t`
-            // and the modes as u8, the modifier mask as u16. `_lib` keeps the library
+            // as the `repr(C)` structs above, `xcb_window_t` and `xcb_cursor_t` as u32,
+            // `xcb_keycode_t`, the button and the modes as u8, the event and modifier
+            // masks as u16. `_lib` keeps the library
             // loaded while the table lives.
             unsafe {
                 Ok(Self {
@@ -418,6 +449,8 @@ mod listener {
                     screen_next: lib.function("xcb_screen_next")?,
                     grab_key: lib.function("xcb_grab_key_checked")?,
                     ungrab_key: lib.function("xcb_ungrab_key_checked")?,
+                    grab_button: lib.function("xcb_grab_button_checked")?,
+                    ungrab_button: lib.function("xcb_ungrab_button_checked")?,
                     request_check: lib.function("xcb_request_check")?,
                     modifier_mapping: lib.function("xcb_get_modifier_mapping")?,
                     modifier_mapping_reply: lib.function("xcb_get_modifier_mapping_reply")?,
@@ -525,29 +558,54 @@ mod listener {
             masks
         }
 
-        /// Grabs `keycode` with `modifiers` on the root window, waiting for the server's
-        /// answer. `Err` holds the X error code.
-        fn grab(&self, keycode: u8, modifiers: u16) -> Result<(), u8> {
-            // SAFETY: the connection is open; the arguments are plain values.
+        /// Grabs a key or a button with `modifiers` on the root window, waiting for the
+        /// server's answer. `Err` holds the X error code. A button's grab is
+        /// asynchronous and reports only its press and release, so the wheel turn it
+        /// takes goes to this client alone and the pointer never freezes.
+        fn grab(&self, input: GrabInput, modifiers: u16) -> Result<(), u8> {
+            // SAFETY: the connection is open; the arguments are plain values (no confine
+            // window and no cursor are 0).
             let cookie = unsafe {
-                (self.xcb.grab_key)(
-                    self.connection,
-                    1,
-                    self.root,
-                    modifiers,
-                    keycode,
-                    GRAB_MODE_ASYNC,
-                    GRAB_MODE_ASYNC,
-                )
+                match input {
+                    GrabInput::Key(keycode) => (self.xcb.grab_key)(
+                        self.connection,
+                        1,
+                        self.root,
+                        modifiers,
+                        keycode,
+                        GRAB_MODE_ASYNC,
+                        GRAB_MODE_ASYNC,
+                    ),
+                    GrabInput::Button(button) => (self.xcb.grab_button)(
+                        self.connection,
+                        0,
+                        self.root,
+                        BUTTON_PRESS_MASK | BUTTON_RELEASE_MASK,
+                        GRAB_MODE_ASYNC,
+                        GRAB_MODE_ASYNC,
+                        0,
+                        0,
+                        button,
+                        modifiers,
+                    ),
+                }
             };
             self.check(cookie)
         }
 
         /// Lets go of a grab.
-        fn ungrab(&self, keycode: u8, modifiers: u16) {
+        fn ungrab(&self, input: GrabInput, modifiers: u16) {
             // SAFETY: the connection is open; the arguments are plain values.
-            let cookie =
-                unsafe { (self.xcb.ungrab_key)(self.connection, keycode, self.root, modifiers) };
+            let cookie = unsafe {
+                match input {
+                    GrabInput::Key(keycode) => {
+                        (self.xcb.ungrab_key)(self.connection, keycode, self.root, modifiers)
+                    }
+                    GrabInput::Button(button) => {
+                        (self.xcb.ungrab_button)(self.connection, button, self.root, modifiers)
+                    }
+                }
+            };
             let _ = self.check(cookie);
         }
 
@@ -590,7 +648,8 @@ mod listener {
                 return None;
             }
             // SAFETY: every event is 32 bytes, the size of `KeyEvent`, and starts with
-            // its response type; the key fields are read only for key events, and
+            // its response type; the key fields (a button event has the same layout)
+            // are read only for key and button events, and
             // `MappingNotify`'s `request` is its fifth byte.
             let (kind, keycode, state, time, request) = unsafe {
                 let e = &*event;
@@ -604,6 +663,10 @@ mod listener {
                     keycode,
                     state,
                     time,
+                },
+                BUTTON_PRESS => XEvent::Button {
+                    button: keycode,
+                    state,
                 },
                 MAPPING_NOTIFY if request == MAPPING_MODIFIER => XEvent::ModifiersChanged,
                 _ => XEvent::Other,
@@ -681,6 +744,8 @@ mod listener {
             state: u16,
             time: u32,
         },
+        /// A button press (`detail` is the button), as a wheel turn sends one.
+        Button { button: u8, state: u16 },
         /// The modifier map changed (`xmodmap`, `setxkbmap`): Num Lock, Alt or Super
         /// may be on another mask now.
         ModifiersChanged,
@@ -688,9 +753,10 @@ mod listener {
         Other,
     }
 
-    /// One grabbed chord: its keycode, its modifiers without the locks, and its name.
+    /// One grabbed chord: its key or button, its modifiers without the locks, and its
+    /// name.
     struct Grab {
-        keycode: u8,
+        input: GrabInput,
         modifiers: u16,
         chord: String,
     }
@@ -826,7 +892,17 @@ mod listener {
                         let held = display.masks.relevant(state);
                         if let Some(grab) = grabs
                             .iter()
-                            .find(|g| g.keycode == keycode && g.modifiers == held)
+                            .find(|g| g.input == GrabInput::Key(keycode) && g.modifiers == held)
+                        {
+                            on_press(&grab.chord);
+                        }
+                    }
+                    XEvent::Button { button, state } => {
+                        // Each notch of the wheel is one press of its button.
+                        let held = display.masks.relevant(state);
+                        if let Some(grab) = grabs
+                            .iter()
+                            .find(|g| g.input == GrabInput::Button(button) && g.modifiers == held)
                         {
                             on_press(&grab.chord);
                         }
@@ -877,14 +953,14 @@ mod listener {
             let modifiers = display.masks.of(parsed);
             if kept
                 .iter()
-                .any(|g| g.keycode == parsed.keycode && g.modifiers == modifiers)
+                .any(|g| g.input == parsed.input && g.modifiers == modifiers)
             {
                 continue;
             }
             let mut done = Vec::new();
             let mut refused = None;
             for lock in display.masks.lock_variants() {
-                match display.grab(parsed.keycode, modifiers | lock) {
+                match display.grab(parsed.input, modifiers | lock) {
                     Ok(()) => done.push(modifiers | lock),
                     Err(code) => {
                         refused = Some(code);
@@ -894,13 +970,13 @@ mod listener {
             }
             match refused {
                 None => kept.push(Grab {
-                    keycode: parsed.keycode,
+                    input: parsed.input,
                     modifiers,
                     chord,
                 }),
                 Some(code) => {
                     for mask in done {
-                        display.ungrab(parsed.keycode, mask);
+                        display.ungrab(parsed.input, mask);
                     }
                     let reason = if code == BAD_ACCESS {
                         "another application holds it".to_owned()
@@ -918,7 +994,7 @@ mod listener {
     fn ungrab(display: &Display, grabs: &[Grab]) {
         for grab in grabs {
             for lock in display.masks.lock_variants() {
-                display.ungrab(grab.keycode, grab.modifiers | lock);
+                display.ungrab(grab.input, grab.modifiers | lock);
             }
         }
     }
@@ -926,7 +1002,7 @@ mod listener {
 
 #[cfg(test)]
 mod tests {
-    use super::{GrabChord, ModifierMasks, key_code, parse_chord};
+    use super::{GrabChord, GrabInput, ModifierMasks, key_code, parse_chord};
     use jstream_protocol::Chord;
 
     #[test]
@@ -980,8 +1056,16 @@ mod tests {
                 alt: false,
                 shift: true,
                 meta: false,
-                keycode: 75,
+                input: GrabInput::Key(75),
             })
+        );
+        assert_eq!(
+            parse_chord("Ctrl+WheelUp").map(|c| (c.ctrl, c.input)),
+            Some((true, GrabInput::Button(4)))
+        );
+        assert_eq!(
+            parse_chord("Alt+Shift+WheelDown").map(|c| c.input),
+            Some(GrabInput::Button(5))
         );
         assert_eq!(parse_chord("Meta+KeyA").map(|c| c.meta), Some(true));
         assert_eq!(parse_chord("Ctrl+Ctrl+KeyA"), None);
@@ -1063,7 +1147,12 @@ mod x11_tests {
                     .ok()?;
                 open(std::ptr::null())
             };
-            (!display.is_null()).then_some(Self {
+            // Not `then_some`: it would build the value, and its `Drop` would close a
+            // null display, before checking.
+            if display.is_null() {
+                return None;
+            }
+            Some(Self {
                 lib_x11,
                 lib_xtst,
                 display,
@@ -1142,6 +1231,116 @@ mod x11_tests {
                 set(self.display, map);
                 free(map);
                 sync(self.display, 0);
+            }
+        }
+
+        /// Resolves an Xlib or XTEST function by name.
+        ///
+        /// # Safety
+        /// `F` must match the function's C declaration.
+        unsafe fn function<F: Copy>(&self, name: &[u8]) -> F {
+            // SAFETY: the caller's contract; both libraries outlive `self`'s use.
+            unsafe {
+                self.lib_x11
+                    .get::<F>(name)
+                    .or_else(|_| self.lib_xtst.get::<F>(name))
+                    .map(|f| *f)
+                    .unwrap_or_else(|e| panic!("{e}"))
+            }
+        }
+
+        /// Turns the wheel one notch (button 4 up, 5 down) with `keys` held, and flushes.
+        fn wheel(&self, keys: &[&str], button: u32) {
+            type Button = unsafe extern "C" fn(*mut std::ffi::c_void, u32, i32, u64) -> i32;
+            type Flush = unsafe extern "C" fn(*mut std::ffi::c_void) -> i32;
+            let codes: Vec<u8> = keys.iter().map(|k| Self::code(k)).collect();
+            for code in &codes {
+                self.key(*code, true);
+            }
+            // SAFETY: `int XTestFakeButtonEvent(Display *, unsigned int, Bool, unsigned
+            // long)` and `int XFlush(Display *)` on the open display.
+            unsafe {
+                let fake: Button = self.function(b"XTestFakeButtonEvent");
+                let flush: Flush = self.function(b"XFlush");
+                fake(self.display, button, 1, 0);
+                fake(self.display, button, 0, 0);
+                flush(self.display);
+            }
+            for code in codes.iter().rev() {
+                self.key(*code, false);
+            }
+        }
+
+        /// A window over the whole screen that listens for button presses, as the
+        /// application under the pointer would.
+        fn window(&self) -> u64 {
+            type Root = unsafe extern "C" fn(*mut std::ffi::c_void) -> u64;
+            type Create = unsafe extern "C" fn(
+                *mut std::ffi::c_void,
+                u64,
+                i32,
+                i32,
+                u32,
+                u32,
+                u32,
+                u64,
+                u64,
+            ) -> u64;
+            type Select = unsafe extern "C" fn(*mut std::ffi::c_void, u64, i64) -> i32;
+            type Map = unsafe extern "C" fn(*mut std::ffi::c_void, u64) -> i32;
+            type Sync = unsafe extern "C" fn(*mut std::ffi::c_void, i32) -> i32;
+            type Motion = unsafe extern "C" fn(*mut std::ffi::c_void, i32, i32, i32, u64) -> i32;
+            // SAFETY: `XDefaultRootWindow`, `XCreateSimpleWindow`, `XSelectInput`,
+            // `XMapRaised`, `XTestFakeMotionEvent` and `XSync` with their C signatures,
+            // on the open display.
+            unsafe {
+                let root: Root = self.function(b"XDefaultRootWindow");
+                let create: Create = self.function(b"XCreateSimpleWindow");
+                let select: Select = self.function(b"XSelectInput");
+                let map: Map = self.function(b"XMapRaised");
+                let motion: Motion = self.function(b"XTestFakeMotionEvent");
+                let sync: Sync = self.function(b"XSync");
+                let window = create(self.display, root(self.display), 0, 0, 400, 400, 0, 0, 0);
+                // ButtonPressMask.
+                select(self.display, window, 1 << 2);
+                map(self.display, window);
+                sync(self.display, 0);
+                motion(self.display, -1, 200, 200, 0);
+                sync(self.display, 0);
+                std::thread::sleep(Duration::from_millis(100));
+                window
+            }
+        }
+
+        /// How many button presses `window` has received since the last call.
+        fn presses_in(&self, window: u64) -> usize {
+            type Sync = unsafe extern "C" fn(*mut std::ffi::c_void, i32) -> i32;
+            type Check = unsafe extern "C" fn(*mut std::ffi::c_void, u64, i32, *mut u8) -> i32;
+            std::thread::sleep(Duration::from_millis(200));
+            // SAFETY: `XSync` and `Bool XCheckTypedWindowEvent(Display *, Window, int,
+            // XEvent *)` on the open display, with a buffer larger than an `XEvent`
+            // (192 bytes on 64-bit).
+            unsafe {
+                let sync: Sync = self.function(b"XSync");
+                let check: Check = self.function(b"XCheckTypedWindowEvent");
+                sync(self.display, 0);
+                let mut event = [0_u8; 256];
+                let mut count = 0;
+                while check(self.display, window, 4, event.as_mut_ptr()) != 0 {
+                    count += 1;
+                }
+                count
+            }
+        }
+
+        fn code(key: &str) -> u8 {
+            match key {
+                "Ctrl" => 37,
+                "Shift" => 50,
+                "Alt" => 64,
+                "CapsLock" => 66,
+                "NumLock" => 77,
+                code => super::key_code(code).unwrap_or_else(|| panic!("{code}")),
             }
         }
 
@@ -1250,6 +1449,30 @@ mod x11_tests {
         keyboard.tap(&["NumLock"]);
         keyboard.move_num_lock(4);
         assert_eq!(pressed(&presses), ["F7"]);
+
+        // A wheel chord takes the wheel's turns with its modifiers, and only those: the
+        // window under the pointer doesn't get them, but gets a plain turn.
+        let window = keyboard.window();
+        assert!(
+            hotkeys
+                .set(vec!["F7".into(), "Ctrl+WheelUp".into()])
+                .is_empty()
+        );
+        keyboard.wheel(&["Ctrl"], 4);
+        keyboard.wheel(&["Ctrl"], 4);
+        keyboard.wheel(&[], 4);
+        keyboard.wheel(&["Ctrl"], 5);
+        assert_eq!(pressed(&presses), ["Ctrl+WheelUp", "Ctrl+WheelUp"]);
+        assert_eq!(
+            keyboard.presses_in(window),
+            2,
+            "the plain turn and Ctrl+WheelDown"
+        );
+        // Let go, the wheel turn reaches the window again.
+        assert!(hotkeys.set(vec!["F7".into()]).is_empty());
+        keyboard.wheel(&["Ctrl"], 4);
+        assert!(pressed(&presses).is_empty());
+        assert_eq!(keyboard.presses_in(window), 1);
 
         // Holding a chord down runs it once, however long X auto-repeats it.
         let f7 = super::key_code("F7").unwrap_or_else(|| panic!("F7"));

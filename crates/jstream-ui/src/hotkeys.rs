@@ -62,7 +62,9 @@ const LINES_PER_NOTCH: f64 = 3.0;
 /// that clicks, so it counts on its own, rounded, at least one: a notch is one step
 /// whether the browser reports it as 100 or 120 pixels, and an event the browser
 /// coalesced from several notches counts each. Smaller events, from a smooth wheel or a
-/// touchpad, add up, carrying what's left over to the next event.
+/// touchpad, add up, carrying what's left over to the next event. A fast touchpad
+/// swipe whose events are each 60 pixels or more counts every event as a notch, as a
+/// wheel's would, rather than summing them.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct WheelNotches {
     /// The small turns not yet counted, in notches: negative is up.
@@ -119,6 +121,23 @@ pub fn wheel_delta(delta_x: f64, delta_y: f64, shift: bool) -> f64 {
     }
 }
 
+/// The wheel chord a turn of the wheel names, for a hotkey field taking the next chord
+/// (ADR-0112 §3): `delta` is [`wheel_delta`]'s, negative for up. None for a turn with no
+/// modifier held, which scrolls as usual: bound, a bare `WheelUp` would take every
+/// scroll of the page.
+pub fn wheel_chord(ctrl: bool, alt: bool, shift: bool, meta: bool, delta: f64) -> Option<Chord> {
+    let direction = if delta < 0.0 {
+        "WheelUp"
+    } else if delta > 0.0 {
+        "WheelDown"
+    } else {
+        return None;
+    };
+    (ctrl || alt || shift || meta)
+        .then(|| chord(ctrl, alt, shift, meta, direction))
+        .flatten()
+}
+
 /// A chord as people read it: `Ctrl+A` for `Ctrl+KeyA`, `Shift+1` for `Shift+Digit1`.
 pub fn label(chord: &Chord) -> String {
     chord
@@ -140,6 +159,25 @@ pub fn switch_to(scene_id: &SceneId) -> Action {
         scene_id: scene_id.clone(),
         preset_id: None,
     }
+}
+
+/// The default zoom bindings for `scene_id`'s follow camera (ADR-0112 §4):
+/// `Ctrl+WheelUp` zooms in a step and `Ctrl+WheelDown` out. None when either chord is
+/// bound already, to anything, so the offer never takes a chord from another action.
+pub fn default_zoom_edits(collection: &Collection, scene_id: &SceneId) -> Option<Vec<Edit>> {
+    let up = Chord::new("Ctrl+WheelUp");
+    let down = Chord::new("Ctrl+WheelDown");
+    if collection.hotkey(&up).is_some() || collection.hotkey(&down).is_some() {
+        return None;
+    }
+    let zoom = |chord: Chord, steps: i32| Edit::HotkeySet {
+        chord,
+        action: Action::SceneZoomCamera {
+            scene_id: scene_id.clone(),
+            steps,
+        },
+    };
+    Some(vec![zoom(up, 1), zoom(down, -1)])
 }
 
 /// The edits that bind `chord` to `action` (a scene's [`switch_to`], or an item's
@@ -330,6 +368,22 @@ mod tests {
         );
     }
 
+    /// A hotkey field takes a turn of the wheel with a modifier as a wheel chord, and
+    /// leaves a bare turn to scroll.
+    #[test]
+    fn a_turn_with_a_modifier_names_a_wheel_chord() {
+        assert_eq!(
+            wheel_chord(true, false, false, false, -100.0),
+            Some(Chord::new("Ctrl+WheelUp"))
+        );
+        assert_eq!(
+            wheel_chord(false, true, true, false, 3.0),
+            Some(Chord::new("Alt+Shift+WheelDown"))
+        );
+        assert_eq!(wheel_chord(false, false, false, false, -100.0), None);
+        assert_eq!(wheel_chord(true, false, false, false, 0.0), None);
+    }
+
     /// With Shift held, browsers report the wheel sideways: that turn counts.
     #[test]
     fn a_shift_wheel_turn_reads_the_sideways_delta() {
@@ -395,6 +449,41 @@ mod tests {
         assert_eq!(label(&Chord::new("Shift+Digit1")), "Shift+1");
         assert_eq!(label(&Chord::new("F5")), "F5");
         assert_eq!(label(&Chord::new("Numpad1")), "Numpad1");
+    }
+
+    /// The default zoom chords are offered only while neither is bound.
+    #[test]
+    fn the_default_zoom_chords_are_offered_while_neither_is_bound() {
+        let a = SceneId::new("a");
+        let mut collection = Collection::default();
+        let edits = default_zoom_edits(&collection, &a).unwrap_or_default();
+        assert_eq!(
+            edits,
+            vec![
+                Edit::HotkeySet {
+                    chord: Chord::new("Ctrl+WheelUp"),
+                    action: Action::SceneZoomCamera {
+                        scene_id: a.clone(),
+                        steps: 1,
+                    },
+                },
+                Edit::HotkeySet {
+                    chord: Chord::new("Ctrl+WheelDown"),
+                    action: Action::SceneZoomCamera {
+                        scene_id: a.clone(),
+                        steps: -1,
+                    },
+                },
+            ]
+        );
+        collection.hotkeys = vec![HotkeyBinding::new(
+            Chord::new("Ctrl+WheelDown"),
+            &Action::SceneZoomCamera {
+                scene_id: SceneId::new("b"),
+                steps: -1,
+            },
+        )];
+        assert_eq!(default_zoom_edits(&collection, &a), None);
     }
 
     #[test]

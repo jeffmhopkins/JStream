@@ -484,6 +484,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   direction has no binding isn't and runs nothing. With `Shift+WheelDown` bound, a
   Shift turn reported in `deltaX` runs it, and the unbound way still scrolls. The
   mock has no follow camera, so it refuses each zoom, and the test allows that error.
+  With a display capture placed in Main by another client and a Follow pointer effect
+  added to it (`kind.list` and `kind.describe` answered by the route), the Filters
+  window's keys offer the default `Ctrl+WheelUp`/`Ctrl+WheelDown` zoom (ADR-0112 §4),
+  bind both in one click, and drop the offer; Zoom out's Set key ignores a bare turn and
+  binds `Alt+WheelDown` from a turn with Alt held.
 - **3D scenes** (`scene-cameras.spec.js`): the shown scene's Properties turns on its 3D
   camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
