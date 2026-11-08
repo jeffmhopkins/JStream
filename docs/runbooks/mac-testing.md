@@ -62,6 +62,13 @@ What isn't on the Mac yet: browser sources and the virtual camera. The installer
 JStream in your browser; the desktop window comes as `JStream.app`, built apart from it
 (see [The script](#script)).
 
+**Trying `JStream.app`:** open the disk image, drag JStream to Applications, and open it
+(the first time, Allow it in System Settings › Privacy & Security). Then check by hand
+what CI can't: each kind of Browse button opens its panel (a file to open, a file to save
+and a folder), and the picked path lands in its field; a hotkey works while another app
+has the focus; and a wheel chord works there too once JStream has Accessibility, and
+only while JStream has the focus without it.
+
 <a id="script"></a>
 ## The script
 <!-- @section
