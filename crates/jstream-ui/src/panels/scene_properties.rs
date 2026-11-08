@@ -8,10 +8,12 @@
 //! `scene.set_camera_motion`, `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop
 //! drop it, and Defaults clears the overrides, the hotkey and the background and checks
 //! both switches again, keeping the name and the camera. A keyframe scene's camera is
-//! its override of its parent's, offered only while the parent has one. A keyframe
-//! scene shows its parent's background, which its dialog shows and doesn't edit. The
-//! scene's filters show on the right, each change sent at once, as the source
-//! Properties dialog's are.
+//! its override of its parent's, starting from the framing camera when the parent is
+//! 2D (ADR-0128). A keyframe scene shows its parent's background, which its dialog
+//! shows and doesn't edit. The scene's video chain (FL-06; a keyframe's is its parent's,
+//! ADR-0065 §3) is listed under the Properties entry on the left, as in the source
+//! Properties dialog ([`PropertiesAndFilters`]): a picked filter's settings show on the
+//! right, each change sent at once, and Cancel puts back every filter edit the dialog sent.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -20,12 +22,12 @@ use crate::dialog::Modal;
 use crate::hotkeys;
 use crate::icons::Icon;
 use crate::panels::camera_moves::CameraMoves;
-use crate::panels::filters::{Chains, FilterDialogs, scene_owner};
+use crate::panels::filters::{FilterUndo, PropertiesAndFilters, scene_owner};
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
-    Action, CameraMotionModifier, Chord, Edit, FilterOwner, Finite32, SceneCamera, SceneId,
-    TransitionPresetId, check_camera_motion, parse_rgba,
+    Action, CameraMotionModifier, Chord, Edit, FilterId, FilterOwner, Finite32, SceneCamera,
+    SceneId, TransitionPresetId, check_camera_motion, parse_rgba,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -95,13 +97,13 @@ impl SceneDraft {
 }
 
 /// The camera the dialog's switch starts `scene_id` from when it is turned on (ADR-0094
-/// §6): a keyframe scene's parent's, which its own then overrides, or `None` while that
-/// parent has none, as `scene.set_camera` refuses; any other scene's starts from one that
-/// shows it as it is now.
+/// §6): a keyframe scene's parent's, which its own then overrides; otherwise, and for a
+/// keyframe of a 2D scene (ADR-0128), one that shows it as it is now.
 pub fn camera_start(collection: &Collection, scene_id: &SceneId) -> Option<SceneCamera> {
+    let framing = SceneCamera::framing(collection.canvas);
     match collection.scene(scene_id)?.variant_of {
-        Some(_) => collection.parent_of(scene_id)?.camera,
-        None => Some(SceneCamera::framing(collection.canvas)),
+        Some(_) => Some(collection.parent_of(scene_id)?.camera.unwrap_or(framing)),
+        None => Some(framing),
     }
 }
 
@@ -210,24 +212,28 @@ pub fn scene_edits(
                 hotkeys::label(chord)
             ));
         }
-        // A rebind keeps the preset the old binding switched with.
-        let preset_id = collection
-            .scene_hotkey(scene_id)
-            .and_then(|b| match b.action() {
-                Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
-                _ => None,
-            });
+        // A rebind keeps the preset the old binding switched with, and its labels
+        // (ADR-0133).
+        let old = collection.scene_hotkey(scene_id);
+        let preset_id = old.and_then(|b| match b.action() {
+            Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
+            _ => None,
+        });
+        let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
             edits.push(Edit::HotkeyClear { chord });
         }
         if let Some(chord) = draft.hotkey.clone() {
             edits.push(Edit::HotkeySet {
-                chord,
+                chord: chord.clone(),
                 action: Action::SceneSwitch {
                     scene_id: scene_id.clone(),
                     preset_id,
                 },
             });
+            if !labels.is_empty() {
+                edits.push(Edit::HotkeySetLabels { chord, labels });
+            }
         }
     }
     Ok(edits)
@@ -291,6 +297,13 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             },
         )
     });
+    // Filter edits apply at once; Cancel puts back each one the dialog sent.
+    let undo = FilterUndo::begin(std::slice::from_ref(&owner));
+    let selected = RwSignal::new(None::<FilterId>);
+    let note = match parent {
+        Some(parent) => format!("those of “{parent}”, which this keyframe follows"),
+        None => "the whole scene".to_owned(),
+    };
     let before = StoredValue::new(opened.clone());
     let draft = RwSignal::new(opened);
     // A keyframe scene shows its parent's background (ADR-0089 §4).
@@ -336,8 +349,8 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     let camera_note = move || {
         let on = draft.with(|d| d.camera.is_some());
         match (&parent_name, parent_camera, on) {
-            (Some(parent), None, _) => {
-                format!("Give “{parent}” a camera first; a keyframe scene follows its parent.")
+            (Some(parent), None, false) => {
+                format!("Off, it is 2D like “{parent}”. On, a Move into it glides into 3D.")
             }
             (Some(parent), Some(_), false) => {
                 format!("Off, it follows the camera of “{parent}”. On, it moves the camera when you switch to it.")
@@ -401,7 +414,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             view! {
                 <div class="camera-fields">
                     <h3 class="camera-head">"Camera"</h3>
-                    <div class="camera-row">
+                    <div class="axis-row camera-row">
                         <span class="label">"Position"</span>
                         <div class="camera-axes">
                             {number("X", "Position X", CameraField::Position(0), "1")}
@@ -409,7 +422,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             {number("Z", "Position Z", CameraField::Position(2), "1")}
                         </div>
                     </div>
-                    <div class="camera-row">
+                    <div class="axis-row camera-row">
                         <span class="label">"Looks at"</span>
                         <div class="camera-axes">
                             {number("X", "Target X", CameraField::Target(0), "1")}
@@ -417,14 +430,14 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             {number("Z", "Target Z", CameraField::Target(2), "1")}
                         </div>
                     </div>
-                    <div class="camera-row">
+                    <div class="axis-row camera-row">
                         <span class="label">"Field of view"</span>
                         <div class="camera-control">
                             {number("", "Field of view", CameraField::Fov, "0.5")}
                             <span class="unit">"°"</span>
                         </div>
                     </div>
-                    <div class="camera-row">
+                    <div class="axis-row camera-row">
                         <span class="label">"Roll"</span>
                         <div class="camera-control">
                             {number("", "Roll", CameraField::Roll, "0.5")}
@@ -469,11 +482,11 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     </label>
                     {move || draft.with(|d| d.camera.is_some_and(|c| c.focus_px.is_some())).then(|| view! {
                         <div class="camera-sub">
-                            <div class="camera-row">
+                            <div class="axis-row camera-row">
                                 <span class="label">"Focus distance"</span>
                                 {number("", "Focus distance", CameraField::Focus, "1")}
                             </div>
-                            <div class="camera-row">
+                            <div class="axis-row camera-row">
                                 <span class="label">"Blur"</span>
                                 <div class="camera-control">
                                     {number("", "Blur", CameraField::Blur, "0.5")}
@@ -620,8 +633,17 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         });
     };
 
+    // Cancel: the draft goes, and every filter edit is put back.
+    let cancel = move || {
+        let edits = undo.restore();
+        if let (false, Some(s)) = (edits.is_empty(), session.get()) {
+            studio.apply(&s, edits);
+        }
+        close();
+    };
+
     view! {
-        <Modal label="Scene properties" class="props-dialog scene-props-dialog" cancel=close>
+        <Modal label="Scene properties" class="props-dialog scene-props-dialog" cancel=cancel>
             <div class="modal-header">
                 <div class="props-head">
                     <Icon name="layers" size=20 />
@@ -630,12 +652,11 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                         <span class="modal-sub">{subtitle}</span>
                     </div>
                 </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| cancel()>
                     "×"
                 </button>
             </div>
-            <div class="props-body">
-            <div class="props-settings">
+            <PropertiesAndFilters owner=owner video=true audio=false selected=selected note=note>
                 <label class="field props-name">
                     <span class="label">"Name"</span>
                     <input
@@ -738,12 +759,17 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     })}
                 </div>
                 {move || problem.get().map(|e| view! { <p class="problem" role="alert">{e}</p> })}
-            </div>
-            <SceneFilterSide owner=owner parent=parent />
-            </div>
+            </PropertiesAndFilters>
             <div class="modal-footer">
-                <button type="button" class="secondary props-defaults" on:click=defaults>"Defaults"</button>
-                <button type="button" class="secondary" on:click=move |_| close()>"Cancel"</button>
+                <button
+                    type="button"
+                    class="secondary props-defaults"
+                    hidden=move || selected.with(Option::is_some)
+                    on:click=defaults
+                >
+                    "Defaults"
+                </button>
+                <button type="button" class="secondary" on:click=move |_| cancel()>"Cancel"</button>
                 <button type="button" class="primary" data-primary on:click=ok>"OK"</button>
             </div>
         </Modal>
@@ -873,36 +899,10 @@ fn with_swatch(background: Option<&str>, picked: &str) -> String {
     }
 }
 
-/// The scene's video chain (FL-06), each change sent at once, and the Add filter button.
-/// A keyframe scene shows its parent's chain, which it has no other of (ADR-0065 §3).
-#[component]
-fn SceneFilterSide(owner: FilterOwner, parent: Option<String>) -> impl IntoView {
-    let dialogs = expect_context::<FilterDialogs>();
-    let add = {
-        let owner = owner.clone();
-        move |_| dialogs.add(owner.clone())
-    };
-    let note = match parent {
-        Some(parent) => format!("those of “{parent}”, which this keyframe follows"),
-        None => "the whole scene".to_owned(),
-    };
-    view! {
-        <div class="props-side">
-            <div class="props-side-head">
-                <span class="props-side-title">"Filters"</span>
-                <span class="props-side-note">{note}</span>
-            </div>
-            <Chains owner=owner video=true audio=false />
-            <p class="props-side-foot">"Changes apply right away. Fine-tune settings in the Filters panel."</p>
-            <button type="button" class="primary props-add-filter" on:click=add>"+ Add filter…"</button>
-        </div>
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::{HotkeyBinding, SceneInfo, SceneOptions};
+    use jstream_control::protocol::{HotkeyBinding, LabelId, SceneInfo, SceneOptions};
 
     fn switch(id: &str) -> Action {
         Action::SceneSwitch {
@@ -950,13 +950,15 @@ mod tests {
     fn a_new_hotkey_replaces_the_old_and_a_taken_one_is_refused() {
         let c = Collection {
             hotkeys: vec![
-                HotkeyBinding::new(Chord::new("F1"), &switch("a")),
+                HotkeyBinding::new(Chord::new("F1"), &switch("a"))
+                    .with_labels(vec![LabelId::new("live")]),
                 HotkeyBinding::new(Chord::new("F2"), &switch("b")),
             ],
             ..Collection::default()
         };
         let a = SceneId::new("a");
         let before = draft("A", Some("F1"));
+        // A rebind keeps the old binding's labels (ADR-0133).
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", Some("F3"))),
             Ok(vec![
@@ -966,6 +968,10 @@ mod tests {
                 Edit::HotkeySet {
                     chord: Chord::new("F3"),
                     action: switch("a"),
+                },
+                Edit::HotkeySetLabels {
+                    chord: Chord::new("F3"),
+                    labels: vec![LabelId::new("live")],
                 },
             ])
         );
@@ -1260,10 +1266,10 @@ mod tests {
         assert_eq!((camera.focus_px, camera.blur_px.get()), (None, 0.0));
     }
 
-    /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, and is
-    /// offered only while the parent has one; any other scene starts from the framing.
+    /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, or from the
+    /// framing when the parent is 2D (ADR-0128); any other scene starts from the framing.
     #[test]
-    fn a_keyframe_gets_own_camera_only_while_its_parent_has_one() {
+    fn a_keyframe_starts_its_own_camera_from_its_parents_or_the_framing() {
         let scenes: Vec<SceneInfo> = serde_json::from_value(serde_json::json!([
             { "scene_id": "p", "name": "P", "items": [] },
             { "scene_id": "k", "name": "K", "items": [], "variant_of": "p" },
@@ -1277,7 +1283,11 @@ mod tests {
         let k = SceneId::new("k");
         let framing = SceneCamera::framing(c.canvas);
         assert_eq!(camera_start(&c, &p), Some(framing));
-        assert_eq!(camera_start(&c, &k), None, "the parent has no camera");
+        assert_eq!(
+            camera_start(&c, &k),
+            Some(framing),
+            "a 2D parent's keyframe may have one (ADR-0128)"
+        );
         let mut parents = framing;
         CameraField::Position(0).set(&mut parents, 300.0);
         c.scenes[0].camera = Some(parents);

@@ -9,6 +9,7 @@
 //! (ADR-0112 §3), bound only to an action that takes steps.
 
 use crate::command::Action;
+use crate::id::LabelId;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use std::fmt;
@@ -23,7 +24,7 @@ use std::fmt;
 ///   physical key, whatever the keyboard layout, as browsers and the desktop host's
 ///   global-shortcut API both report it. Modifier keys themselves are not keys here.
 /// - Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since
-///   0.105, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,
+///   0.104, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,
 ///   or each 120 units of high-resolution wheel delta, so it can only be bound to an
 ///   action that takes one step ([`Action::takes_steps`]).
 ///
@@ -40,7 +41,7 @@ impl Chord {
     /// The modifiers, in the order a chord must list them.
     pub const MODIFIERS: [&'static str; 4] = ["Ctrl", "Alt", "Shift", "Meta"];
 
-    /// The wheel's two directions, which a chord may end in instead of a key (0.105,
+    /// The wheel's two directions, which a chord may end in instead of a key (0.104,
     /// ADR-0112 §3): `WheelUp` turns the wheel away from the person, `WheelDown`
     /// towards them.
     pub const WHEEL: [&'static str; 2] = ["WheelUp", "WheelDown"];
@@ -243,6 +244,10 @@ pub struct HotkeyBinding {
     /// run it. [`HotkeyBinding::action`] parses it.
     #[schemars(with = "Action")]
     pub action: serde_json::Value,
+    /// The labels it carries (ADR-0133, since 0.100), ordered by ID, as
+    /// `hotkey.set_labels` sets them. Omitted for none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<LabelId>,
 }
 
 impl HotkeyBinding {
@@ -253,7 +258,13 @@ impl HotkeyBinding {
             // An action is plain data: IDs, strings and a secret string, which always
             // serialize. A stream key is never bound, so none is copied here.
             action: serde_json::to_value(action).expect("invariant: an Action serializes to JSON"),
+            labels: Vec::new(),
         }
+    }
+
+    /// This binding carrying `labels`.
+    pub fn with_labels(self, labels: Vec<LabelId>) -> Self {
+        HotkeyBinding { labels, ..self }
     }
 
     /// The bound action, or `None` when it is one this version doesn't know.

@@ -415,6 +415,7 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
                     Some(ActionResult::PairingStart {
                         code,
                         expires_in_secs,
+                        network,
                     }),
             } => {
                 // The code is the answer: printed for the user to type on the device,
@@ -424,6 +425,19 @@ fn write_action(out: &mut dyn Write, action: &Action, response: &Response) -> Re
                     out,
                     "enter it on the device within {expires_in_secs} s; it works once"
                 )?;
+                // ADR-0130: a device on the network opens one of these addresses and
+                // trusts the certificate only if its fingerprint matches.
+                if let Some(network) = network {
+                    for url in &network.urls {
+                        let url = url.trim_end_matches('/');
+                        writeln!(out, "open on the device: {url}/pair")?;
+                    }
+                    writeln!(out, "certificate fingerprint: {}", network.fingerprint)?;
+                    writeln!(
+                        out,
+                        "continue past the certificate warning only if the fingerprint matches"
+                    )?;
+                }
             }
             _ => writeln!(
                 out,
@@ -444,12 +458,17 @@ fn write_response(out: &mut dyn Write, response: &Response, json: bool) -> Resul
         CallResult::Batch {
             rev,
             removed_hotkeys,
+            removed_bindings,
             dropped_overrides,
         } => {
             writeln!(out, "applied: rev {rev} ({})", response.id)?;
-            // ADR-0040 §3: a delete takes the hotkeys naming its target with it.
+            // ADR-0040 §3: a delete takes the hotkeys naming its target with it, and the
+            // controller bindings (ADR-0122).
             for binding in removed_hotkeys {
                 writeln!(out, "removed hotkey {}", binding.chord)?;
+            }
+            for binding in removed_bindings {
+                writeln!(out, "removed binding {}", binding.trigger)?;
             }
             // ADR-0040 §1: an item leaving its scene takes its keyframe overrides.
             for dropped in dropped_overrides {
@@ -573,6 +592,13 @@ fn write_query(out: &mut dyn Write, result: &QueryResult) -> Result<(), CliError
                     write!(out, ", primary")?;
                 }
                 writeln!(out)?;
+                for format in &target.formats {
+                    writeln!(
+                        out,
+                        "  {}x{} {} fps {}",
+                        format.width, format.height, format.fps, format.pixel_format
+                    )?;
+                }
             }
         }
         QueryResult::CollectionInfo { path, recent } => {

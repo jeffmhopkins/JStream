@@ -8,9 +8,9 @@ function zone(page, label) {
   return page.getByRole('region', { name: label, exact: true });
 }
 
-/** The tab of panel `name`. */
+/** The tab of panel `name`: a dock tab, not the Inspector's own. */
 function tab(page, name) {
-  return page.getByRole('tab', { name, exact: true });
+  return page.locator('.dock-strip').getByRole('tab', { name, exact: true });
 }
 
 /** Opens the header menu whose button starts with `label`. */

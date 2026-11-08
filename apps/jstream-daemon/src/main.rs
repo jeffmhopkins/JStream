@@ -278,6 +278,12 @@ fn run(mut options: Options) -> Result<(), Failure> {
         return Err(anyhow::anyhow!("unusable UI directory `{dir}`: not a directory").into());
     }
     let (token, provenance) = token::load_or_create(&path, &secrets)?;
+    // The network listener's certificate, beside the token file (ADR-0104 §4).
+    let network = options
+        .lan
+        .as_ref()
+        .map(|lan| network_config(lan, &path))
+        .transpose()?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
@@ -298,6 +304,7 @@ fn run(mut options: Options) -> Result<(), Failure> {
             Some(device_file),
             ui_settings,
             ui_dir,
+            network.as_ref().map(|(config, _)| config.clone()),
         )
         .await
         .map_err(anyhow::Error::from)?;
@@ -316,8 +323,27 @@ fn run(mut options: Options) -> Result<(), Failure> {
             .ui_url()
             .map(|url| format!("ui: {url}\n"))
             .unwrap_or_default();
+        let network_lines = match (&network, server.network_fingerprint()) {
+            (Some((_, notes)), Some(fingerprint)) => {
+                let mut lines = String::new();
+                for url in server.network_urls() {
+                    lines.push_str(&format!("network: {url} (TLS, paired devices only)\n"));
+                }
+                lines.push_str(&format!(
+                    "network certificate fingerprint (SHA-256): {fingerprint}\n\
+                     a new certificate warning on a paired device means: continue only if \
+                     the fingerprint matches this one\n"
+                ));
+                for note in notes {
+                    lines.push_str(note);
+                    lines.push('\n');
+                }
+                lines
+            }
+            _ => String::new(),
+        };
         let _ = print(&format!(
-            "{token_line}\n{mcp_line}{ui_line}listening on {}\n",
+            "{token_line}\n{mcp_line}{ui_line}{network_lines}listening on {}\n",
             server.ws_url()
         ));
         server
@@ -327,4 +353,56 @@ fn run(mut options: Options) -> Result<(), Failure> {
         let _ = print("stopped\n");
         Ok::<(), Failure>(())
     })
+}
+
+/// The network listener's settings for `--lan` (ADR-0104): its address, and the key and
+/// certificate in the file beside the token file, made on first use or by
+/// `--lan-renew`. Also the lines to print about the certificate: whether it was just
+/// made, and which of the machine's names and addresses it no longer carries.
+fn network_config(
+    lan: &args::Lan,
+    token_file: &Path,
+) -> Result<(jstream_server::NetworkConfig, Vec<String>), Failure> {
+    use jstream_server::identity::{Identity, Made, identity_file, machine_names};
+    let ip = lan
+        .bind
+        .unwrap_or(std::net::IpAddr::V4(std::net::Ipv4Addr::UNSPECIFIED));
+    let names = machine_names(ip);
+    let file = identity_file(token_file);
+    let mut notes = Vec::new();
+    let identity = if lan.renew {
+        let identity = Identity::renew(&file, &names).map_err(anyhow::Error::from)?;
+        notes.push(
+            "network certificate renewed: every paired device must check the new fingerprint, \
+             and a native client that pinned the old one must pair again"
+                .to_owned(),
+        );
+        identity
+    } else {
+        let (identity, made) =
+            Identity::load_or_create(&file, &names).map_err(anyhow::Error::from)?;
+        if made == Made::Created {
+            notes.push(format!(
+                "network certificate created: {} (user-only)",
+                file.display()
+            ));
+        }
+        let missing = identity.missing(&names);
+        if !missing.is_empty() {
+            let note = format!(
+                "the network certificate doesn't name {}: this machine's names or addresses \
+                 changed. Devices can still connect, with a name warning; to renew it, start \
+                 with --lan-renew (every paired device then checks the new fingerprint)",
+                missing.join(", ")
+            );
+            tracing::warn!(missing = %missing.join(", "), "network certificate names are out of date");
+            notes.push(note);
+        }
+        identity
+    };
+    let config = jstream_server::NetworkConfig {
+        bind: std::net::SocketAddr::new(ip, lan.port),
+        identity: Arc::new(identity),
+    };
+    Ok((config, notes))
 }

@@ -16,7 +16,7 @@ use jstream_protocol::{
     Action, Batch, BinaryFrame, Call, Edit, ItemId, PreviewCodec, PreviewDraft, ProtocolError,
     Query, QueryResult, Rev, SceneId, Settings, SourceId, SourceKind, WireError,
 };
-use jstream_sources::CaptureSpec;
+use jstream_sources::{CaptureSpec, DeviceFormatWant};
 use std::sync::{Arc, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
@@ -582,7 +582,10 @@ fn the_preview_captures_what_the_program_shows() {
     until_drawn(
         &mut frames,
         &seen,
-        &[CaptureSpec::Display(None), CaptureSpec::Device(None)],
+        &[
+            CaptureSpec::Display(None),
+            CaptureSpec::Device(None, DeviceFormatWant::default()),
+        ],
     );
     assert_eq!(devices.open_streams(), 1, "the webcam opens once");
 
@@ -657,14 +660,18 @@ fn a_draft_stream_shows_a_webcam_before_it_is_a_source() {
         subscribe_draft(1, "webcam", serde_json::json!({})),
     )
     .expect("subscribed");
-    until_drawn(&mut frames, &seen, &[CaptureSpec::Device(None)]);
+    until_drawn(
+        &mut frames,
+        &seen,
+        &[CaptureSpec::Device(None, DeviceFormatWant::default())],
+    );
     assert_eq!(devices.open_streams(), 1, "the draft opened the webcam");
     assert!(
         !hub.load()
             .shot()
             .captures()
             .iter()
-            .any(|key| matches!(key.spec, CaptureSpec::Device(_))),
+            .any(|key| matches!(key.spec, CaptureSpec::Device(..))),
         "the program shows no webcam"
     );
     let after = engine.rev();
@@ -708,7 +715,10 @@ fn a_draft_shares_the_webcam_the_program_shows() {
     until_drawn(
         &mut frames,
         &seen,
-        &[CaptureSpec::Device(None), CaptureSpec::Display(None)],
+        &[
+            CaptureSpec::Device(None, DeviceFormatWant::default()),
+            CaptureSpec::Display(None),
+        ],
     );
     assert_eq!(devices.open_streams(), 1, "the webcam opens once");
 }

@@ -5,7 +5,8 @@
 // keyframe removes it; a drag on the keyframe's canvas sends the keyframe's live values
 // and commits its override; a group's children list at the keyframe's overrides, whose
 // eye and box fields write them there (#846); the Inspector's Hotkey row binds F1 to
-// a scene, F1 then puts that scene on program, and the chip's × unbinds it.
+// a scene, F1 then puts that scene on program, and the chip's × unbinds it; and a
+// keyframe's timing of an item is set and cleared from the Inspector (ADR-0129).
 import { test, expect, connect, openAddSource, recordCalls, rev } from '../fixtures.js';
 
 function menu(page) {
@@ -268,4 +269,30 @@ test('a scene hotkey bound in the Inspector switches to its scene', async ({ pag
   await expect(row.locator('.set-key')).toHaveText('Set key');
   await row.getByRole('button', { name: 'Unbind F1' }).click();
   await expect(row).toContainText('none');
+});
+
+test('a keyframe\'s timing of an item is set and cleared from the Inspector', async ({ page, daemon, consoleErrors }) => {
+  const calls = await recordCalls(page);
+  await connect(page, daemon);
+  await choose(page, 'Main', 'New keyframe');
+  await backdrop(page).locator('.row-main').click();
+  await inspector(page).getByRole('tab', { name: 'Behaviour' }).click();
+  const fold = inspector(page).locator('section.fold').filter({ hasText: 'Timing into this keyframe' });
+  await expect(fold.getByRole('button', { name: 'Timing into this keyframe' })).toHaveAttribute('aria-expanded', 'true');
+  // Unset, a field shows no number: it follows the item's or the preset's.
+  const delay = fold.getByRole('textbox', { name: 'Delay', exact: true });
+  await expect(delay).toHaveValue('');
+  await expect(fold.getByRole('button', { name: 'Clear timing' })).toHaveCount(0);
+
+  consoleErrors.allow(/item\.(set_timing|clear_override)/);
+  await delay.fill('250');
+  await delay.press('Enter');
+  await expect.poll(() => calls.sent('item.set_timing').length).toBe(1);
+  expect(calls.sent('item.set_timing')[0]).toMatchObject({ item_id: 'box', timing: { delay_ms: 250 } });
+  await expect(delay).toHaveValue('250');
+
+  await fold.getByRole('button', { name: 'Clear timing' }).click();
+  await expect.poll(() => calls.sent('item.clear_override').length).toBe(1);
+  expect(calls.sent('item.clear_override')[0]).toMatchObject({ item_id: 'box', field: 'timing' });
+  await expect(delay).toHaveValue('');
 });
