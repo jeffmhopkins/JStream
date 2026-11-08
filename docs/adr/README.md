@@ -151,4 +151,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0136](0136-an-effects-outset-follows-its-settings.md) | An effect's outset follows its settings | accepted | agent |  |
 | [ADR-0137](0137-midi-visualization-sources.md) | MIDI visualization sources draw a lock-free per-input state on the CPU | accepted | agent |  |
 | [ADR-0141](0141-desktop-app-on-linux.md) | The desktop app on Linux: Tauri on WebKitGTK, behind a feature | accepted | maintainer |  |
+| [ADR-0142](0142-feeding-the-midi-sources-and-their-beat.md) | The engine feeds the MIDI sources on the media clock, with each input's tempo | accepted | agent |  |
 <!-- @generated end adr-index -->

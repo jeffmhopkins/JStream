@@ -51,6 +51,12 @@ Options:
                        changed. Every paired device has to check the new
                        fingerprint, and a native client that pinned the old
                        one has to pair again
+  --jtunnel-accept <name@address:port>
+                       receive from this JTunnel sender (ADR-0123): a DAW
+                       plugin's tunnel name and the LAN address and port it
+                       sends from (repeatable). Off without it: no socket is
+                       open. A `network_audio` source naming the sender then
+                       records its audio
   --ui-dir <dir>       serve the web UI's built files from this directory at
                        http://127.0.0.1:<port>/ (the browser asks for the token
                        as a password)
@@ -116,6 +122,9 @@ pub struct Options {
     pub effects_dir: Option<String>,
     /// `--lan` and its options: the network listener, off without it.
     pub lan: Option<Lan>,
+    /// `--jtunnel-accept`: the JTunnel senders to receive from, in the order given.
+    /// None turns the receiver off.
+    pub jtunnel: Vec<jstream_core::AcceptedSender>,
 }
 
 /// The network listener's options (`--lan`, ADR-0104).
@@ -210,6 +219,19 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 }
             }
             "--output" => options.outputs.push(OutputId::new(value()?.as_str())),
+            "--jtunnel-accept" => {
+                let text = value()?;
+                let sender = text
+                    .parse::<jstream_core::AcceptedSender>()
+                    .map_err(|err| format!("`--jtunnel-accept`: {err}"))?;
+                if options.jtunnel.iter().any(|s| s.name() == sender.name()) {
+                    return Err(format!(
+                        "`--jtunnel-accept` names the sender `{}` twice",
+                        sender.name()
+                    ));
+                }
+                options.jtunnel.push(sender);
+            }
             "--log-dir" => {
                 let dir = value()?;
                 if options.log_dir.replace(dir.clone()).is_some() {
@@ -310,6 +332,21 @@ mod tests {
         assert_eq!(serve("").port, 0);
     }
 
+    /// ADR-0123 §1: JTunnel is off unless a sender is accepted, each a LAN address.
+    #[test]
+    fn jtunnel_is_off_until_a_sender_is_accepted() {
+        assert!(serve("").jtunnel.is_empty());
+        let options =
+            serve("--jtunnel-accept Bitwig@192.168.1.5:9000 --jtunnel-accept Live@10.0.0.2:9000");
+        let names: Vec<&str> = options.jtunnel.iter().map(|s| s.name()).collect();
+        assert_eq!(names, ["Bitwig", "Live"]);
+        assert!(error("--jtunnel-accept Bitwig@8.8.8.8:9000").contains("not a LAN address"));
+        assert!(error("--jtunnel-accept Bitwig").contains("name@address:port"));
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-accept A@10.0.0.2:1").contains("twice")
+        );
+    }
+
     /// ADR-0104 §1: network access is off unless `--lan` turns it on, on a fixed port.
     #[test]
     fn the_network_listener_is_opt_in() {
@@ -368,6 +405,7 @@ mod tests {
                 plugin_dir: Some("/tmp/plugins".to_owned()),
                 effects_dir: Some("/tmp/effects".to_owned()),
                 lan: None,
+                jtunnel: Vec::new(),
             }
         );
     }

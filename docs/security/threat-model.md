@@ -79,7 +79,7 @@ shown by the menu item. Nothing is downloaded or installed. That read is not tel
                collection, asset files ──────┘   └── helper processes: browser pages, CLAP hosts
 ```
 
-Every arrow into the engine crosses one of five boundaries:
+Every arrow into the engine crosses one of six boundaries:
 
 1. **The control API** (WebSocket, MCP over HTTP, static UI files): one gate for all of
    them. See [Control server](#server).
@@ -90,6 +90,8 @@ Every arrow into the engine crosses one of five boundaries:
 5. **The network out**: streaming servers, Google, and, when the user asks or has turned
    the launch check on, GitHub's releases API (see [Assets](#assets)). See
    [Secrets](#secrets).
+6. **LAN inputs outside TLS**: JTunnel senders, once the person turns receiving on
+   and accepts one. See [LAN inputs](#lan-inputs).
 
 <a id="server"></a>
 ## Control server
@@ -643,6 +645,39 @@ A DLL registered by hand with `regsvr32` is registered where it is.
 
 **Gaps:** the copy's DACL and Frame Server loading it are not yet checked on Windows
 hardware (#563).
+
+<a id="lan-inputs"></a>
+## LAN inputs
+<!-- @section
+covers = ["crates/jstream-core/src/jtunnel/**"]
+depends_on = ["docs/adr/0123-lan-inputs-jtunnel-and-visca.md", "docs/RULES.md#R-SEC-002"]
+-->
+
+**Threats:** a host on the LAN, or beyond it, injecting audio into a show, or flooding
+the socket; a sender answering for another; JStream announcing itself or sending
+somewhere it shouldn't.
+
+**Controls on main** ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md)):
+- The JTunnel receiver is off unless the host turns it on with the senders it accepts:
+  the daemon's `--jtunnel-accept name@address:port`, each a LAN address. Off, no socket
+  is open.
+- It sends only subscribe and bye packets, only to accepted senders' addresses, which
+  must be loopback, private IPv4 or link-local. It never announces itself and never
+  sends audio or MIDI.
+- It drops and counts every datagram from outside those ranges, from an address it
+  didn't subscribe to, or that `jstream-jtunnel`'s parser refuses (fuzzed on its own).
+  Parsing and playout allocate nothing; a sender's audio goes only to the
+  `network_audio` source that names it, and its MIDI only to the MIDI state of its own
+  name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
+  doesn't trigger bindings (ADR-0142 §2).
+- The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
+  receives reaches the protocol.
+
+**Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
+inject audio into the source that records it, or notes into what its MIDI sources draw
+(ADR-0123 §6), as with JTunnel anywhere.
+Off by default, LAN only and accepted one sender at a time bound it to someone on the
+same network who already targets this machine.
 
 <a id="gaps"></a>
 ## Known gaps
