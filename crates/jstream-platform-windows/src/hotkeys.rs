@@ -13,6 +13,15 @@
 //! keyboard layout's virtual key at registration; the rest have fixed virtual keys. Both
 //! tables and the chord parsing are pure and tested on every platform.
 //!
+//! A wheel chord (`Ctrl+WheelUp`, ADR-0112 §3) has no `RegisterHotKey`: it is heard by a
+//! low-level mouse hook (`WH_MOUSE_LL`), which the listener thread installs only while a
+//! wheel chord is set, and removes when none is. The desktop host sets a wheel chord only
+//! while a follow camera is live (§5), so the hook is there only then. A turn whose
+//! modifiers are exactly a set chord's, in its direction, is the chord's: the hook
+//! swallows it, so no window scrolls, and it runs once per notch. Any other turn passes
+//! on. [`WheelChords`] does that matching and counting; it is pure and tested on every
+//! platform.
+//!
 //! [`set`]: GlobalHotkeys::set
 //!
 //! Docs: crates/jstream-platform-windows/README.md#purpose
@@ -184,27 +193,167 @@ fn virtual_key(code: &str) -> Option<u32> {
     })
 }
 
+/// The modifiers and direction of one wheel chord (`Ctrl+WheelUp`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WheelChord {
+    /// The modifiers held.
+    pub held: Held,
+    /// `WheelUp` (away from the user) rather than `WheelDown`.
+    pub up: bool,
+}
+
+/// The modifiers held during a wheel turn.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Held {
+    /// Ctrl is held.
+    pub ctrl: bool,
+    /// Alt is held.
+    pub alt: bool,
+    /// Shift is held.
+    pub shift: bool,
+    /// The Windows key is held (`Meta`).
+    pub win: bool,
+}
+
+/// The wheel chord `Ctrl+Alt+Shift+Meta+WheelUp` or `…+WheelDown` (any of the modifiers,
+/// in that order), or `None` when it isn't one.
+pub fn parse_wheel_chord(chord: &str) -> Option<WheelChord> {
+    let mut parts: Vec<&str> = chord.split('+').collect();
+    let up = match parts.pop()? {
+        "WheelUp" => true,
+        "WheelDown" => false,
+        _ => return None,
+    };
+    let mut held = Held::default();
+    for part in parts {
+        let on = match part {
+            "Ctrl" => &mut held.ctrl,
+            "Alt" => &mut held.alt,
+            "Shift" => &mut held.shift,
+            "Meta" => &mut held.win,
+            _ => return None,
+        };
+        if *on {
+            return None;
+        }
+        *on = true;
+    }
+    Some(WheelChord { held, up })
+}
+
+/// One wheel notch, in `WM_MOUSEWHEEL`'s units (`WHEEL_DELTA`).
+pub const WHEEL_DELTA: u32 = 120;
+
+/// The wheel chords set, and how far the wheel has turned toward the next notch of the
+/// last one turned. A high-resolution wheel or a touchpad reports parts of a notch, which
+/// add up while the same chord is turned.
+#[derive(Debug, Default)]
+pub struct WheelChords {
+    chords: Vec<(WheelChord, String)>,
+    /// The index in `chords` of the chord turned last, and how far it has turned past
+    /// its last whole notch.
+    carry: Option<(usize, u32)>,
+}
+
+impl WheelChords {
+    /// The chords among `chords` that are wheel chords, each as named; the rest are
+    /// returned for `RegisterHotKey`.
+    pub fn split(chords: Vec<String>) -> (WheelChords, Vec<String>) {
+        let mut wheel = Vec::new();
+        let mut keys = Vec::new();
+        for chord in chords {
+            match parse_wheel_chord(&chord) {
+                Some(parsed) => wheel.push((parsed, chord)),
+                None => keys.push(chord),
+            }
+        }
+        (
+            WheelChords {
+                chords: wheel,
+                carry: None,
+            },
+            keys,
+        )
+    }
+
+    /// No wheel chord is set.
+    pub fn is_empty(&self) -> bool {
+        self.chords.is_empty()
+    }
+
+    /// Every wheel chord set, as named.
+    pub fn names(&self) -> impl Iterator<Item = &str> {
+        self.chords.iter().map(|(_, name)| name.as_str())
+    }
+
+    /// A turn of `delta` (positive is up) with `held` down: `None` when no chord set is
+    /// those modifiers in that direction, so the turn passes on; else the chord's name
+    /// and how many whole notches it has turned now, which may be none. The turn is the
+    /// chord's either way, and isn't passed on.
+    pub fn turn(&mut self, held: Held, delta: i16) -> Option<(&str, u32)> {
+        if delta == 0 {
+            return None;
+        }
+        let up = delta > 0;
+        let Some(index) = self
+            .chords
+            .iter()
+            .position(|(chord, _)| chord.held == held && chord.up == up)
+        else {
+            self.carry = None;
+            return None;
+        };
+        let before = match self.carry {
+            Some((last, carry)) if last == index => carry,
+            _ => 0,
+        };
+        let turned = before + u32::from(delta.unsigned_abs());
+        self.carry = Some((index, turned % WHEEL_DELTA));
+        Some((self.chords[index].1.as_str(), turned / WHEEL_DELTA))
+    }
+}
+
 #[cfg(windows)]
 pub use listener::GlobalHotkeys;
 
 #[cfg(windows)]
 mod listener {
-    use super::{HotkeyChord, KeyCode, parse_chord};
+    use super::{Held, HotkeyChord, KeyCode, WheelChords, parse_chord};
     use jstream_platform::PlatformError;
+    use std::cell::RefCell;
     use std::sync::mpsc;
     use std::thread::JoinHandle;
-    use windows::Win32::Foundation::{LPARAM, WPARAM};
+    use windows::Win32::Foundation::{LPARAM, LRESULT, WPARAM};
+    use windows::Win32::System::LibraryLoader::GetModuleHandleW;
     use windows::Win32::System::Threading::GetCurrentThreadId;
     use windows::Win32::UI::Input::KeyboardAndMouse::{
-        HOT_KEY_MODIFIERS, MAPVK_VSC_TO_VK_EX, MOD_ALT, MOD_CONTROL, MOD_NOREPEAT, MOD_SHIFT,
-        MOD_WIN, MapVirtualKeyW, RegisterHotKey, UnregisterHotKey,
+        GetAsyncKeyState, HOT_KEY_MODIFIERS, MAPVK_VSC_TO_VK_EX, MOD_ALT, MOD_CONTROL,
+        MOD_NOREPEAT, MOD_SHIFT, MOD_WIN, MapVirtualKeyW, RegisterHotKey, UnregisterHotKey,
+        VIRTUAL_KEY, VK_CONTROL, VK_LWIN, VK_MENU, VK_RWIN, VK_SHIFT,
     };
     use windows::Win32::UI::WindowsAndMessaging::{
-        GetMessageW, MSG, PM_NOREMOVE, PeekMessageW, PostThreadMessageW, WM_APP, WM_HOTKEY, WM_QUIT,
+        CallNextHookEx, GetMessageW, HC_ACTION, HHOOK, MSG, MSLLHOOKSTRUCT, PM_NOREMOVE,
+        PeekMessageW, PostThreadMessageW, SetWindowsHookExW, UnhookWindowsHookEx, WH_MOUSE_LL,
+        WM_APP, WM_HOTKEY, WM_MOUSEWHEEL, WM_QUIT,
     };
 
     /// The message that tells the listener thread a new set of chords is waiting.
     const WM_SET: u32 = WM_APP + 1;
+    /// The message the wheel hook posts when it has heard a wheel chord.
+    const WM_WHEEL: u32 = WM_APP + 2;
+
+    /// The wheel hook's state. The hook runs on the thread that installed it, inside
+    /// that thread's `GetMessageW`, so it lives in that thread's own storage.
+    #[derive(Default)]
+    struct Wheel {
+        chords: WheelChords,
+        /// The wheel chords heard, one per notch, for the message loop to hand on.
+        heard: Vec<String>,
+    }
+
+    thread_local! {
+        static WHEEL: RefCell<Wheel> = RefCell::default();
+    }
 
     /// A request to the listener thread: register these chords in place of the last
     /// ones, and answer with the ones that couldn't be.
@@ -299,6 +448,7 @@ mod listener {
             return;
         }
         let mut registered: Vec<String> = Vec::new();
+        let mut hook: Option<HHOOK> = None;
         loop {
             // SAFETY: `msg` is a valid MSG to write into. A null window reads this
             // thread's messages, where `RegisterHotKey(None, …)` posts WM_HOTKEY.
@@ -313,11 +463,19 @@ mod listener {
                         on_press(chord);
                     }
                 }
+                WM_WHEEL => {
+                    let heard = WHEEL.with(|wheel| std::mem::take(&mut wheel.borrow_mut().heard));
+                    for chord in &heard {
+                        on_press(chord);
+                    }
+                }
                 WM_SET => {
                     while let Ok((chords, reply)) = incoming.try_recv() {
                         unregister(registered.len());
-                        let (kept, failed) = register(chords);
+                        let (wheel, keys) = WheelChords::split(chords);
+                        let (kept, mut failed) = register(keys);
                         registered = kept;
+                        failed.extend(hook_wheel(&mut hook, wheel));
                         let _ = reply.send(failed);
                     }
                 }
@@ -325,6 +483,99 @@ mod listener {
             }
         }
         unregister(registered.len());
+        let _ = hook_wheel(&mut hook, WheelChords::default());
+    }
+
+    /// Sets the wheel chords the hook hears to `chords`, installing the hook when there
+    /// are some and it isn't, and removing it when there are none. Returns each chord
+    /// with the reason when the hook can't be installed.
+    fn hook_wheel(hook: &mut Option<HHOOK>, chords: WheelChords) -> Vec<(String, String)> {
+        if chords.is_empty() {
+            if let Some(installed) = hook.take() {
+                // SAFETY: `installed` is the hook this thread installed and hasn't removed.
+                let _ = unsafe { UnhookWindowsHookEx(installed) };
+            }
+            WHEEL.with(|wheel| *wheel.borrow_mut() = Wheel::default());
+            return Vec::new();
+        }
+        if hook.is_none() {
+            // SAFETY: a null name is this process's own module; `wheel_proc` is a hook
+            // procedure with the signature WH_MOUSE_LL calls, and it stays loaded for
+            // the life of the process. A low-level hook runs on this thread, which pumps
+            // messages until it removes it.
+            let installed = unsafe { GetModuleHandleW(None) }.and_then(|module| unsafe {
+                SetWindowsHookExW(WH_MOUSE_LL, Some(wheel_proc), Some(module.into()), 0)
+            });
+            match installed {
+                Ok(installed) => *hook = Some(installed),
+                Err(error) => {
+                    let reason = format!("the wheel can't be hooked ({})", error.message());
+                    return chords
+                        .names()
+                        .map(|name| (name.to_owned(), reason.clone()))
+                        .collect();
+                }
+            }
+        }
+        WHEEL.with(|wheel| {
+            let mut wheel = wheel.borrow_mut();
+            wheel.chords = chords;
+            wheel.heard.clear();
+        });
+        Vec::new()
+    }
+
+    /// The low-level mouse hook: swallows a wheel turn that is a set wheel chord's, and
+    /// queues a press for each whole notch; passes on everything else.
+    unsafe extern "system" fn wheel_proc(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
+        if code == HC_ACTION as i32 && wparam.0 == WM_MOUSEWHEEL as usize && lparam.0 != 0 {
+            // SAFETY: for HC_ACTION, WH_MOUSE_LL's lParam points at an MSLLHOOKSTRUCT
+            // that is valid for this call.
+            let info = unsafe { &*(lparam.0 as *const MSLLHOOKSTRUCT) };
+            // The turn is the high word of mouseData, signed: positive is away from the
+            // user, in WHEEL_DELTA units per notch.
+            let delta = (info.mouseData >> 16) as u16 as i16;
+            let held = held();
+            let heard = WHEEL.with(|wheel| {
+                let Ok(mut wheel) = wheel.try_borrow_mut() else {
+                    return None;
+                };
+                let (name, notches) = wheel.chords.turn(held, delta)?;
+                let name = name.to_owned();
+                for _ in 0..notches {
+                    wheel.heard.push(name.clone());
+                }
+                Some(notches > 0)
+            });
+            if let Some(pressed) = heard {
+                if pressed {
+                    // SAFETY: plain values, to this thread's own queue.
+                    let _ = unsafe {
+                        PostThreadMessageW(GetCurrentThreadId(), WM_WHEEL, WPARAM(0), LPARAM(0))
+                    };
+                }
+                // Swallowed: no window sees the turn.
+                return LRESULT(1);
+            }
+        }
+        // SAFETY: the arguments are the ones this hook was called with.
+        unsafe { CallNextHookEx(None, code, wparam, lparam) }
+    }
+
+    /// The modifiers held now. A low-level hook runs before the input reaches any
+    /// thread's key state, so it asks for the keys' physical state.
+    fn held() -> Held {
+        let down = |key: VIRTUAL_KEY| {
+            // SAFETY: plain value; the high bit is set while the key is down.
+            let state = unsafe { GetAsyncKeyState(i32::from(key.0)) };
+            state < 0
+        };
+        Held {
+            ctrl: down(VK_CONTROL),
+            alt: down(VK_MENU),
+            shift: down(VK_SHIFT),
+            win: down(VK_LWIN) || down(VK_RWIN),
+        }
     }
 
     /// Registers each chord under its index, returning those registered (each at its
@@ -397,8 +648,108 @@ mod listener {
 
 #[cfg(test)]
 mod tests {
-    use super::{HotkeyChord, KeyCode, key_code, parse_chord};
+    use super::{
+        Held, HotkeyChord, KeyCode, WheelChord, WheelChords, key_code, parse_chord,
+        parse_wheel_chord,
+    };
     use jstream_protocol::Chord;
+
+    const CTRL: Held = Held {
+        ctrl: true,
+        alt: false,
+        shift: false,
+        win: false,
+    };
+
+    #[test]
+    fn a_wheel_chord_parses_into_its_modifiers_and_direction() {
+        assert_eq!(
+            parse_wheel_chord("Ctrl+WheelUp"),
+            Some(WheelChord {
+                held: CTRL,
+                up: true
+            })
+        );
+        let parsed = parse_wheel_chord("Alt+Shift+Meta+WheelDown");
+        assert_eq!(
+            parsed.map(|c| (c.held.alt, c.held.shift, c.held.win, c.up)),
+            Some((true, true, true, false))
+        );
+        assert_eq!(
+            parse_wheel_chord("WheelUp").map(|c| c.held),
+            Some(Held::default())
+        );
+        assert_eq!(parse_wheel_chord("Ctrl+Ctrl+WheelUp"), None);
+        assert_eq!(parse_wheel_chord("Ctrl+KeyA"), None);
+        for key in Chord::WHEEL {
+            assert!(parse_wheel_chord(&format!("Ctrl+{key}")).is_some(), "{key}");
+        }
+        // A wheel chord isn't a key chord, so it never goes to RegisterHotKey.
+        assert_eq!(parse_chord("Ctrl+WheelUp"), None);
+    }
+
+    #[test]
+    fn wheel_chords_are_split_from_key_chords() {
+        let (wheel, keys) = WheelChords::split(vec![
+            "F9".into(),
+            "Ctrl+WheelUp".into(),
+            "Ctrl+WheelDown".into(),
+        ]);
+        assert_eq!(keys, ["F9"]);
+        assert_eq!(
+            wheel.names().collect::<Vec<_>>(),
+            ["Ctrl+WheelUp", "Ctrl+WheelDown"]
+        );
+        assert!(WheelChords::split(vec!["F9".into()]).0.is_empty());
+    }
+
+    #[test]
+    fn a_wheel_chord_runs_once_per_notch_and_only_with_its_modifiers() {
+        let (mut wheel, _) =
+            WheelChords::split(vec!["Ctrl+WheelUp".into(), "Ctrl+WheelDown".into()]);
+        // One notch each way; two coalesced into one turn are two.
+        assert_eq!(wheel.turn(CTRL, 120), Some(("Ctrl+WheelUp", 1)));
+        assert_eq!(wheel.turn(CTRL, -120), Some(("Ctrl+WheelDown", 1)));
+        assert_eq!(wheel.turn(CTRL, 240), Some(("Ctrl+WheelUp", 2)));
+        // Without Ctrl, or with another modifier too, the turn passes on.
+        assert_eq!(wheel.turn(Held::default(), 120), None);
+        assert_eq!(
+            wheel.turn(
+                Held {
+                    shift: true,
+                    ..CTRL
+                },
+                120
+            ),
+            None
+        );
+        assert_eq!(wheel.turn(CTRL, 0), None);
+    }
+
+    #[test]
+    fn parts_of_a_notch_add_up_while_the_same_chord_turns() {
+        let (mut wheel, _) =
+            WheelChords::split(vec!["Ctrl+WheelUp".into(), "Ctrl+WheelDown".into()]);
+        // A high-resolution wheel's parts are the chord's, and swallowed, before a whole
+        // notch has turned.
+        assert_eq!(wheel.turn(CTRL, 40), Some(("Ctrl+WheelUp", 0)));
+        assert_eq!(wheel.turn(CTRL, 40), Some(("Ctrl+WheelUp", 0)));
+        assert_eq!(wheel.turn(CTRL, 60), Some(("Ctrl+WheelUp", 1)));
+        // 20 carried; turning back starts over.
+        assert_eq!(wheel.turn(CTRL, -100), Some(("Ctrl+WheelDown", 0)));
+        assert_eq!(wheel.turn(CTRL, 100), Some(("Ctrl+WheelUp", 0)));
+        // A turn no chord takes starts over too.
+        assert_eq!(wheel.turn(Held::default(), 100), None);
+        assert_eq!(wheel.turn(CTRL, 100), Some(("Ctrl+WheelUp", 0)));
+        assert_eq!(wheel.turn(CTRL, 20), Some(("Ctrl+WheelUp", 1)));
+    }
+
+    #[test]
+    fn a_turn_with_no_chord_in_its_direction_passes_on() {
+        let (mut wheel, _) = WheelChords::split(vec!["Ctrl+WheelUp".into()]);
+        assert_eq!(wheel.turn(CTRL, -120), None);
+        assert_eq!(wheel.turn(CTRL, 120), Some(("Ctrl+WheelUp", 1)));
+    }
 
     #[test]
     fn every_chord_key_but_numpad_enter_can_be_registered() {
