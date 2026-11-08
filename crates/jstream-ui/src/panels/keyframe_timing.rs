@@ -205,6 +205,7 @@ pub fn KeyframeTimingFields(
         <div class="field-grid keyframe-timing">
             <div class="timing-field" class:unset=move || !has(|t| t.delay_ms.is_some())()>
                 <NumberField label="Delay" unit="ms" value=delay step=10.0 decimals=0 min=0.0
+                    blank=Signal::derive(move || !has(|t| t.delay_ms.is_some())())
                     max=f64::from(MAX_DELAY_MS)
                     send=move |v| apply(with_delay(current(), v)) />
                 <Show when=has(|t| t.delay_ms.is_some())>
@@ -233,6 +234,7 @@ pub fn KeyframeTimingFields(
             </label>
             <div class="timing-field" class:unset=move || !has(|t| t.duration_ms.is_some())()>
                 <NumberField label="Duration" unit="ms" value=duration step=10.0 decimals=0
+                    blank=Signal::derive(move || !has(|t| t.duration_ms.is_some())())
                     min=0.0 max=f64::from(MAX_DURATION_MS)
                     send=move |v| apply(with_duration(current(), v)) />
                 <Show when=has(|t| t.duration_ms.is_some())>

@@ -98,6 +98,15 @@ pub fn curve_path(curve: &Bezier) -> String {
     )
 }
 
+/// The drawing's `viewBox`: the [`SIZE`]-unit square, grown up or down to take in a
+/// handle that overshoots past it, so the whole curve shows.
+pub fn view_box(curve: &Bezier) -> String {
+    let ys = [y_at(Point::Y1.of(curve)), y_at(Point::Y2.of(curve))];
+    let top = ys.iter().copied().fold(0.0, f64::min);
+    let bottom = ys.iter().copied().fold(SIZE, f64::max);
+    format!("0 {top} {SIZE} {}", bottom - top)
+}
+
 /// A custom curve's points: a drawing of the curve with its control handles, then the
 /// four fields. `curve` is the curve shown, `None` while there is none; `send` gets each
 /// changed curve and says whether it sent it.
@@ -110,6 +119,11 @@ pub fn CurveEditor(
     send: impl Fn(Bezier) -> bool + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let path = move || curve.get().map(|c| curve_path(&c)).unwrap_or_default();
+    let frame = move || {
+        curve
+            .get()
+            .map_or_else(|| format!("0 0 {SIZE} {SIZE}"), |c| view_box(&c))
+    };
     let handle = move |time: Point, progress: Point, from: f64| {
         move || {
             curve
@@ -142,7 +156,7 @@ pub fn CurveEditor(
     };
     view! {
         <div class="curve-editor">
-            <svg class="curve-drawing" viewBox="0 0 100 100" role="img"
+            <svg class="curve-drawing" viewBox=frame role="img"
                 aria-label="The custom curve">
                 <line class="curve-guide" x1="0" y1="75" x2="100" y2="75" />
                 <line class="curve-guide" x1="0" y1="25" x2="100" y2="25" />
@@ -189,5 +203,25 @@ mod tests {
             y2: f(1.0),
         };
         assert_eq!(curve_path(&c), "M 0 75 C 25 75 75 25 100 25");
+    }
+
+    /// The drawing grows to take in a handle past its square, and keeps the square
+    /// otherwise.
+    #[test]
+    fn the_drawing_takes_in_an_overshoot() {
+        let inside = Bezier {
+            x1: f(0.25),
+            y1: f(0.0),
+            x2: f(0.75),
+            y2: f(1.0),
+        };
+        assert_eq!(view_box(&inside), "0 0 100 100");
+        let over = Bezier {
+            y1: f(3.0),
+            y2: f(-2.0),
+            ..inside
+        };
+        // y 3 sits at 75 − 150 = −75, y −2 at 75 + 100 = 175.
+        assert_eq!(view_box(&over), "0 -75 100 250");
     }
 }

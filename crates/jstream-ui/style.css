@@ -1321,7 +1321,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .studio-off { padding: 4px 0; }
 /* A custom curve's points (ADR-0129): the drawing, then x1, y1, x2 and y2. */
 .curve-editor { display: grid; grid-template-columns: 96px 1fr; gap: 8px; align-items: start; }
-.curve-drawing { width: 96px; height: 96px; background: var(--line); border: 1px solid var(--border); border-radius: 4px; overflow: visible; }
+.curve-drawing { width: 96px; height: 96px; background: var(--line); border: 1px solid var(--border); border-radius: 4px; overflow: hidden; }
 .curve-guide { stroke: var(--border-strong); stroke-width: 0.5; stroke-dasharray: 2 2; }
 .curve-handle { stroke: var(--muted); stroke-width: 1; fill: none; }
 .curve-line { stroke: var(--accent); stroke-width: 2; fill: none; }

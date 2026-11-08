@@ -173,7 +173,8 @@ Contents ([Design](#design) explains the choices):
   `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
   field the panels share (`number.rs`), the custom curve editor the Inspector and the
-  preset form share (`curve.rs`, a point's range and the drawing's path tested natively),
+  preset form share (`curve.rs`, a point's range, the drawing's path and its frame, which grows to take in
+  an overshoot, tested natively),
   the keyframe timing fields (`keyframe_timing.rs`, the edit each change sends tested
   natively), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
