@@ -14,6 +14,7 @@ use crate::{
 };
 
 mod blend;
+mod content;
 mod minified;
 mod three_d;
 
