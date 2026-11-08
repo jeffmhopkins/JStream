@@ -15,7 +15,7 @@ block it, and nothing needs signing beyond what the linker does. The installer s
 inside [ADR-0063](../adr/0063-macos-platform-support.md): it installs no app bundle, and
 JStream runs from Terminal, so macOS attributes its permission prompts to Terminal
 (§11). The desktop app, `JStream.app` in an unsigned disk image, is built separately
-([ADR-0142](../adr/0142-the-desktop-app-on-macos.md); [The script](#script) says how). The hardware run that checks what CI can't is
+([ADR-0144](../adr/0144-the-desktop-app-on-macos.md); [The script](#script) says how). The hardware run that checks what CI can't is
 #1099.
 
 <a id="tester"></a>

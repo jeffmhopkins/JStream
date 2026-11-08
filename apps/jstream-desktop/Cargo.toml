@@ -78,7 +78,7 @@ jstream-platform-windows.workspace = true
 jstream-sources.workspace = true
 tauri.workspace = true
 
-# The window (WKWebView) and the live engine on macOS (ADR-0142): the platform backends,
+# The window (WKWebView) and the live engine on macOS (ADR-0144): the platform backends,
 # stream keys in the Keychain, the Browse panels, and the global hotkeys' Carbon and
 # event-tap listener.
 [target.'cfg(target_os = "macos")'.dependencies]

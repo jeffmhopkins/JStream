@@ -23,12 +23,12 @@ browser or the CLI uses, so the UI has one code path
 ([ADR-0045](../../docs/adr/0045-leptos-web-ui.md)). It ships as `jstream.exe` in the
 portable folder ([ADR-0066](../../docs/adr/0066-portable-windows-distribution-v2.md)), and
 on macOS as `JStream.app` in an unsigned disk image
-([ADR-0142](../../docs/adr/0142-the-desktop-app-on-macos.md)).
+([ADR-0144](../../docs/adr/0144-the-desktop-app-on-macos.md)).
 Layer 6, an app that links core and server
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 
 Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
-([ADR-0142](../../docs/adr/0142-the-desktop-app-on-macos.md)), and on Linux with the
+([ADR-0144](../../docs/adr/0144-the-desktop-app-on-macos.md)), and on Linux with the
 `webkitgtk` feature, on WebKitGTK; [ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)):
 - **Startup** (`app.rs`, `main.rs`): the command line, the log file, then the engine,
   its server and the UI bundle. Anything that fails becomes the page the window shows.
@@ -112,7 +112,7 @@ cargo run -p jstream-desktop -- --ui-dir crates/jstream-ui/dist
 On macOS, `scripts/mac/bundle-app.sh` then makes `JStream.app` and its disk image from
 a release build: the UI goes in the app's `Contents/Resources/ui`, where the app looks
 for it, and the bundle is ad-hoc signed
-([ADR-0142](../../docs/adr/0142-the-desktop-app-on-macos.md)). `--sign <identity>` signs
+([ADR-0144](../../docs/adr/0144-the-desktop-app-on-macos.md)). `--sign <identity>` signs
 it with a Developer ID and the hardened runtime (`entitlements.plist`) instead, and
 `--notarize <profile>` also notarises the image, once there is an Apple Developer account
 (ADR-0063's question 1). The after-review `macos-app` job builds the image and starts the
@@ -250,7 +250,7 @@ folder, and its log `logs\cef.log`.
 ## Design
 <!-- @section
 covers = ["apps/jstream-desktop/src/**", "apps/jstream-desktop/build.rs", "apps/jstream-desktop/media_foundation.rs", "apps/jstream-desktop/tests/delay_load.rs", "apps/jstream-desktop/tauri.conf.json", "apps/jstream-desktop/Info.plist", "apps/jstream-desktop/entitlements.plist", "scripts/mac/bundle-app.sh"]
-depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/adr/0142-the-desktop-app-on-macos.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
+depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-distribution-v2.md", "docs/adr/0144-the-desktop-app-on-macos.md", "docs/RULES.md#R-SEC-001", "docs/RULES.md#R-SEC-002"]
 -->
 
 - **The engine behind the API.** The engine is served on `127.0.0.1`, on a port the OS
@@ -447,7 +447,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   API. `tauri-build` writes ACL schemas to `gen/`, which is not committed. It runs on a
   native build only: a check of the app for macOS or Windows from another OS stops at
   `generate_context!`.
-- **The macOS app** ([ADR-0142](../../docs/adr/0142-the-desktop-app-on-macos.md)).
+- **The macOS app** ([ADR-0144](../../docs/adr/0144-the-desktop-app-on-macos.md)).
   `Info.plist` holds the camera, microphone and system audio recording usage strings
   macOS requires before its prompts; Tauri's context macro embeds it, with the product
   name, in the binary's `__TEXT,__info_plist` section, so a bare `jstream` from

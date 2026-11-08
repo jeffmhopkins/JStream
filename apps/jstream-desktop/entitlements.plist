@@ -2,7 +2,7 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <!--
   The hardened runtime's entitlements, used only when scripts/mac/bundle-app.sh signs
-  with a Developer ID (ADR-0142 §3): the camera and microphone, which the hardened runtime
+  with a Developer ID (ADR-0144 §3): the camera and microphone, which the hardened runtime
   otherwise refuses. Not sandboxed. An ad-hoc signed build needs none.
   Docs: apps/jstream-desktop/README.md#design
 -->
