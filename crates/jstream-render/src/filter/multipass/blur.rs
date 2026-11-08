@@ -49,6 +49,14 @@ impl Pass for Blur {
         self.area = area::read(settings);
     }
 
+    /// The blur's span, plus a working texel each for the downsample that gathers it and
+    /// the bilinear read back that spreads it: what the area keeps unblurred is the
+    /// input's own.
+    fn reach(&self) -> Option<f32> {
+        let plan = gauss::plan(self.radius);
+        Some(((plan.taps + 2) * plan.scale) as f32)
+    }
+
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
