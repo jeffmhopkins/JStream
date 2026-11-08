@@ -1080,7 +1080,7 @@ stamp = { hash = "b3:7b6e5ed3dd8380e8" }
 stamp = { hash = "b3:35328ace37395ff8" }
 
 ["CRATE-jstream-audio#purpose"."body"]
-stamp = { hash = "b3:ce87d44092c7e16f", by = "agent:page-api-3", note = "Added BusControl::peek_meter beside take_meter in the controls list: reads a bus's levels without restarting its held peak" }
+stamp = { hash = "b3:bb68c96a1e2d9cfd", by = "agent:readme-scrub", note = "Trimmed Purpose from 240 to about 90 lines. The API bullets restated each public item's rustdoc (Mixer, MixerControl, InputControl, BusControl, MasterControl, OutputTapControl, FilterSpec, Monitor and its socket all document their ranges, threads and allocation), so they become a table of entry points with the crate's limits. The per-module unit-test inventory becomes one paragraph; the sim, no_alloc and cost test paragraphs and the opt-level note stay. Checked every name in the table against lib.rs's exports. Intro, Time line and the Real-time design, Meters, Filters and Not yet sections unchanged." }
 
 ["CRATE-jstream-audio#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-audio"]
 stamp = { hash = "b3:308082ece28cb86f" }
