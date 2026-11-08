@@ -239,11 +239,20 @@ mod backend {
                 .filter(|a| node.query_control(a.cid).is_some_and(|q| usable(&q)));
             match value {
                 CameraControlValue::Manual(v) => {
+                    // The automatic mode as it was, put back if the value is refused, so a
+                    // failed set doesn't leave the control stuck at its old manual value.
+                    let was = auto.and_then(|a| Some((a, node.control(a.cid).ok()?)));
                     if let Some(a) = auto {
                         node.set_control(a.cid, a.off)?;
                     }
                     let snapped = info(&m, &q, v, None).snap(v);
-                    node.set_control(m.cid, snapped)
+                    let set = node.set_control(m.cid, snapped);
+                    if set.is_err()
+                        && let Some((a, value)) = was
+                    {
+                        let _ = node.set_control(a.cid, value);
+                    }
+                    set
                 }
                 CameraControlValue::Auto => {
                     let a = auto.ok_or_else(|| unsupported("automatic"))?;

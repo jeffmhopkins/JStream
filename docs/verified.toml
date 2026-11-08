@@ -3327,7 +3327,7 @@ stamp = { hash = "b3:13c76467b882e368", by = "agent:ab9c156e", note = "This PR (
 stamp = { hash = "b3:5771cb902dd6bd00", by = "agent:claude-linux-daemon", note = "Re-read: added NoMediaDecoders and LinuxProcessCpu bullets, LinuxBackends notes the daemon uses it, OpenH264Encoder takes RGBA/BGRA through the shared nv12 converter; not-here-yet updated (daemon keeps stream keys in LinuxSecrets). Cargo summary matches" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/v4l2.rs"]
-stamp = { hash = "b3:cb6175361c1f6ee4", by = "agent:claude-webcam", note = "Edited (#1196): V4l2Devices' row names its camera controls through VIDIOC_QUERYCTRL and VIDIOC_S_CTRL (v4l2/controls.rs maps them, device.rs runs the ioctls); the rest of the map holds" }
+stamp = { hash = "b3:8161b873a40d42d4", by = "agent:claude-webcam", note = "Edited (#1196): V4l2Devices' row names its camera controls through VIDIOC_QUERYCTRL and VIDIOC_S_CTRL (v4l2/controls.rs maps them, device.rs runs the ioctls). Review N2: a refused manual value now puts the automatic mode back, which the row doesn't describe; the rest of the map holds" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/v4l2/abi.rs"]
 stamp = { hash = "b3:58df4442e7ac976b", by = "agent:claude-webcam", note = "Edited (#1196): V4l2Devices' row names its camera controls through VIDIOC_QUERYCTRL and VIDIOC_S_CTRL (v4l2/controls.rs maps them, device.rs runs the ioctls); the rest of the map holds" }
