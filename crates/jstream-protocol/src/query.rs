@@ -349,7 +349,7 @@ pub enum Query {
         top: Option<u32>,
     },
     /// Measures how close a stream's decoded pictures are to the frames its encoder was
-    /// given (0.110, ADR-0132 §3, ADR-0143): the engine keeps the next `frames` frames
+    /// given (0.110, ADR-0132 §3, ADR-0145): the engine keeps the next `frames` frames
     /// the stream's encoder takes, from the next keyframe on, decodes the packets it
     /// makes of them with the platform's decoder, and answers PSNR and SSIM for each.
     /// Nothing is copied or decoded unless a probe is waiting. It waits for those frames

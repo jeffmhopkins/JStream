@@ -329,7 +329,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.110 because the query `quality.probe` (`ProbeStream`,
 `QualityProbeInfo`) measures a running output's encoded picture
-([Queries](#queries), [ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md),
+([Queries](#queries), [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
 a number the release queue set); 0.107 because the event `kinds.changed` (`KindsCause`) tells
 every client when a CLAP scan or the effect packs change the kinds
 ([Events](#events), #1328, a number the release queue set); 0.106 because a person can see and redo the CLAP plugin scan: the
@@ -1586,7 +1586,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   Runtime state, so no `rev`. Added in 0.73.
 - `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
   frames its encoder was given
-  ([ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md),
+  ([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
   refining [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md) §3).
   `stream` is a `ProbeStream`, so far only `{"type": "output", "output_id"}`, a running
   output's encoder session. The engine copies the next `frames` (1 to 10, default 3)

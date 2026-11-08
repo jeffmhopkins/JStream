@@ -1,4 +1,4 @@
-//! `quality.probe` (0.110, ADR-0132 §3 as ADR-0143 refines it): how close the pictures a
+//! `quality.probe` (0.110, ADR-0132 §3 as ADR-0145 refines it): how close the pictures a
 //! stream's decoder would show are to the frames its encoder was given, as PSNR and
 //! SSIM.
 

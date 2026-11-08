@@ -676,7 +676,7 @@ fn group_tool(defs: &Map<String, Value>, noun: &str, ops: &[(Op, Value)]) -> Too
         );
     }
     if ops.iter().any(|(op, _)| op.name == "quality.probe") {
-        // How an agent checks what a stream looks like to its viewers (ADR-0143).
+        // How an agent checks what a stream looks like to its viewers (ADR-0145).
         description.push_str(
             " `quality.probe` measures a running output's encoded picture against the \
              frames its encoder was given: PSNR in dB (above about 40 is hard to tell \

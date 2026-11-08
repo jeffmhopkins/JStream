@@ -960,7 +960,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   each named thread's CPU, past them each encoded stream and the mixer (0.92), and what
   the clients' views did with their preview pictures, as they report it with
   `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md));
-  `quality.probe` (0.110, [ADR-0143](adr/0143-the-quality-probe-reads-back-the-compositor.md))
+  `quality.probe` (0.110, [ADR-0145](adr/0145-the-quality-probe-reads-back-the-compositor.md))
   → PSNR and SSIM of a running output's next few encoded frames, decoded by the
   platform, against the frames its encoder was given;
   audio levels are the `meters.tick` event, not a query).
@@ -1115,7 +1115,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   change it, and measure again
   ([ADR-0103](adr/0103-per-item-performance-profile.md)). The `quality` tool's
   `quality.probe` tells it how a running output's picture looks after encoding
-  ([ADR-0143](adr/0143-the-quality-probe-reads-back-the-compositor.md)).
+  ([ADR-0145](adr/0145-the-quality-probe-reads-back-the-compositor.md)).
 - **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.

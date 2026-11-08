@@ -90,7 +90,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name, and the webcams a `webcam`'s `device` can, each with its formats, then its camera controls (name, value, range, step, default, and whether the camera sets it itself), on the lines below it) |
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
 | `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
-| `quality probe <output-id> [<frames>]` | query `quality.probe` (PSNR and SSIM of a running output's next 3, or up to 10, encoded frames against the frames its encoder was given, printed as JSON, [ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md)) |
+| `quality probe <output-id> [<frames>]` | query `quality.probe` (PSNR and SSIM of a running output's next 3, or up to 10, encoded frames against the frames its encoder was given, printed as JSON, [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `item show\|hide\|toggle <item-id> [--scene <scene-id>]` | action `item.show`, `item.hide` or `item.toggle` (the item's own placement, or the one a keyframe `--scene` overrides, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) |
@@ -302,7 +302,7 @@ measured the same way on every machine (#1220).
   switches to the other scene with `scene.switch_and_watch` and the `--preset`
   transition (default `fade`), saving the frame sheet as `<dir>/switch-<n>.png`, then
   probes the recording's stream with `quality.probe` (three frames, protocol 0.110,
-  [ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md)). At the
+  [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). At the
   end it waits for one more `stats.tick`, reads `profile.get` over the window, then
   stops and deletes the recording, puts back the scene that was on program, and deletes
   what it created. It cleans up after a failure too.

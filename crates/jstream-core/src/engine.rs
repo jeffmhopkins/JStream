@@ -2532,7 +2532,7 @@ impl Engine {
         })
     }
 
-    /// `quality.probe` (ADR-0132 §3, ADR-0143): PSNR and SSIM of a running output's
+    /// `quality.probe` (ADR-0132 §3, ADR-0145): PSNR and SSIM of a running output's
     /// stream against the frames its encoder was given, measured on a thread of its own
     /// ([`quality`](crate::quality)). Checks the call and finds the session under the
     /// locks, which it lets go of before the probe starts.

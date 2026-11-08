@@ -12,7 +12,7 @@
 //! the program's frames inside their budget. `--gates <file>` reads other limits from a
 //! JSON file; a field it leaves out keeps its default.
 //!
-//! After each switch it probes the recording's stream (`quality.probe`, ADR-0143): PSNR
+//! After each switch it probes the recording's stream (`quality.probe`, ADR-0145): PSNR
 //! and SSIM of three encoded frames against what the encoder was given. The probe gates
 //! read the worst frame of every probe, and a probe the engine couldn't take fails its
 //! own gate.
@@ -157,7 +157,7 @@ pub struct Gates {
     pub view_skipped: u64,
     /// Frames or decoders a client's view had refused.
     pub view_decode_errors: u64,
-    /// Switches whose quality probe of the recording failed (ADR-0143).
+    /// Switches whose quality probe of the recording failed (ADR-0145).
     pub failed_probes: u64,
     /// The lowest luma PSNR, in dB, any probed frame of the recording may have.
     pub min_probe_psnr_y: f64,
@@ -908,7 +908,7 @@ fn switch(
     }
 }
 
-/// The recording's quality probe (ADR-0143): three frames from its next keyframe on.
+/// The recording's quality probe (ADR-0145): three frames from its next keyframe on.
 fn probe(control: &dyn Control, output: &OutputId) -> Result<QualityProbeInfo, CliError> {
     match query(
         control,
@@ -1345,7 +1345,7 @@ mod tests {
         }
     }
 
-    /// ADR-0143: the worst probed frame is gated, and a switch without a probe fails
+    /// ADR-0145: the worst probed frame is gated, and a switch without a probe fails
     /// its own gate.
     #[test]
     fn a_blurry_probe_or_a_missing_one_fails() {

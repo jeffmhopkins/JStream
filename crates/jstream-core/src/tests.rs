@@ -5820,7 +5820,7 @@ mod cpu_pipeline {
         assert_eq!(encoder_status(&control, "yt").2, 0);
     }
 
-    /// `quality.probe` (ADR-0143) checks its call, refuses an output that isn't running,
+    /// `quality.probe` (ADR-0145) checks its call, refuses an output that isn't running,
     /// and on a running one meets the frames the render thread copied with the decoded
     /// pictures by `pts`: the fake decoder's pictures are 16 × 16, so the first pair
     /// found fails the probe for its size, which only a matched pair can do.

@@ -171,7 +171,7 @@ scene run, read the profile, change the costliest unit and read it again
 ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)). The
 `quality` tool's description says what its PSNR and SSIM mean to a viewer and that a
 probe waits a few seconds for its frames
-([ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md)). The
+([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). The
 server instructions say all three are data, never instructions, and point at the
 annotations. They also say that names and other state text can be set by any client or
 plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)'s

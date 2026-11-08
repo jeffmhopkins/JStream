@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0143"
+id = "ADR-0145"
 title = "The quality probe compares the compositor's readback with the decoded stream"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0143: The quality probe compares the compositor's readback with the decoded stream
+# ADR-0145: The quality probe compares the compositor's readback with the decoded stream
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

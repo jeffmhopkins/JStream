@@ -224,7 +224,7 @@ pub(crate) struct MixFrame {
     pub(crate) next: u64,
     /// Whether this tick reads it back into `out`: a session on the CPU path or a
     /// virtual camera is fed it, or a quality probe is armed on a GPU session it feeds
-    /// (ADR-0143). Without, `out` is left as it was.
+    /// (ADR-0145). Without, `out` is left as it was.
     pub(crate) readback: bool,
     /// Where it is read back: RGBA8 at `size` once a readback the draw recorded has
     /// finished, a tick or two after it was drawn (ADR-0117 §4).
@@ -245,7 +245,7 @@ pub(crate) struct MixFrame {
     pub(crate) push_at: Option<MediaTime>,
     /// Whether `push_at` is a frame newly read back, at the time it was drawn for,
     /// rather than the last one repeated: only such a frame is the reference of the GPU
-    /// frame of its draw (ADR-0143).
+    /// frame of its draw (ADR-0145).
     pub(crate) push_fresh: bool,
     /// Ticks this mix was not read back because every readback buffer was still on its
     /// way (R-RT-004), counted by the draw.
@@ -1180,7 +1180,7 @@ pub(crate) struct Encoders {
     /// the render thread with the tap. Dropped with the encoders if never attached.
     claim: Mutex<Option<GpuClaim>>,
     /// Where the render thread copies the frames it feeds the video session while a
-    /// `quality.probe` is armed (ADR-0143).
+    /// `quality.probe` is armed (ADR-0145).
     probe: Arc<ProbeTap>,
     drop_guard: Option<DropGuard>,
 }
@@ -1214,7 +1214,7 @@ impl Encoders {
         self.video.codec().hardware
     }
 
-    /// What a `quality.probe` of the video session needs (ADR-0143): its tap, a
+    /// What a `quality.probe` of the video session needs (ADR-0145): its tap, a
     /// subscription to its packets, and its size and encoder.
     pub(crate) fn probe_job(&self, codecs: Arc<dyn Codecs>, frames: u32) -> ProbeJob {
         let codec = self.video.codec();
@@ -2856,7 +2856,7 @@ pub(crate) struct VideoTap {
     /// A GPU session's claim on the context, released once the render thread has the
     /// tap ([`Frames::add`]), from when [`Frames::feeds_gpu`] keeps it there.
     claim: Option<GpuClaim>,
-    /// Where the frames pushed are copied while a `quality.probe` is armed (ADR-0143):
+    /// Where the frames pushed are copied while a `quality.probe` is armed (ADR-0145):
     /// an output's session has one, a preview's none.
     probe: Option<Arc<ProbeTap>>,
 }
@@ -3145,7 +3145,7 @@ impl Frames {
                 .iter()
                 .any(|owner| is_program(frame, size, owner.as_ref()));
             // A GPU session is read back too while a probe is armed on it: the readback
-            // is its reference frame (ADR-0143).
+            // is its reference frame (ADR-0145).
             frame.readback = held || taps.iter().any(|tap| !tap.gpu || tap.probed());
             encode.starved = false;
             let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
@@ -5431,7 +5431,7 @@ mod tests {
         assert_eq!(frame.push_time(us(133), false), Some(us(100)));
         assert!(
             frame.push_fresh,
-            "a probe of a GPU session takes it (ADR-0143)"
+            "a probe of a GPU session takes it (ADR-0145)"
         );
         // Nothing drawn this tick (a failed draw, a fallback opening): a repeat.
         assert_eq!(frame.push_time(us(166), false), Some(us(166)));

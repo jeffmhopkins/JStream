@@ -1,4 +1,4 @@
-//! `quality.probe` (ADR-0132 §3, as ADR-0143 refines it): PSNR and SSIM between the
+//! `quality.probe` (ADR-0132 §3, as ADR-0145 refines it): PSNR and SSIM between the
 //! frames an output's encoder session is given and the pictures the platform's decoder
 //! makes of the packets it sends.
 //!
