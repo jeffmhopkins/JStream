@@ -183,8 +183,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   without a lock or an allocation. A reader skips a log slot a push is writing. CC 120
   and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
   (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
-  `drawn(name)` is the state a source's `input` setting draws. `Context::midi` carries
-  it; with none, the kinds draw their first frame and never change.
+  `drawn(name)` is the state a source's `input` setting draws. `set_clock` gives it the
+  host's media clock once (`now_ms`), and the kinds measure a note's age on it, the
+  clock messages are stamped on, rather than on the paint time a source is given, which
+  counts from its own start. `Context::midi` carries it; with none, the kinds draw their
+  first frame and never change.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless

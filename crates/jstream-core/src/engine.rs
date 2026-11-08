@@ -200,6 +200,9 @@ impl Default for Engine {
                 state.live = LiveSources::new(host);
                 state.shared = shared.clone();
                 state.live.set_audio_scopes(Arc::clone(&audio_scopes));
+                state
+                    .live
+                    .set_midi(Arc::new(jstream_sources::MidiInputs::new()));
                 let profile = Profiler::new(frame_budget(), state.live.meters());
                 Shared {
                     state: Mutex::new(state),
@@ -1182,6 +1185,10 @@ impl Engine {
             let mut state = lock(&self.shared.state);
             let state = &mut *state;
             state.live.set_clock(Arc::clone(&backends.clock));
+            // MIDI is stamped on the media clock, and the sources draw against it.
+            if let Some(midi) = state.live.midi() {
+                midi.set_clock(Arc::clone(&backends.clock));
+            }
             state
                 .live
                 .set_media(Arc::clone(&backends.media), state.graph.state());
@@ -1249,9 +1256,12 @@ impl Engine {
             .as_ref()
             .and_then(|host| lock(&host.backends).as_ref().map(|b| Arc::clone(&b.clock)))
             .ok_or_else(|| std::io::Error::other("JTunnel needs the platform's backends first"))?;
-        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock)?);
+        let (wanted, midi) = {
+            let state = lock(&self.shared.state);
+            (state.audio.wanted(), state.live.midi())
+        };
+        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock, midi)?);
         let local = receiver.local_addr();
-        let wanted = lock(&self.shared.state).audio.wanted();
         wanted.set_jtunnel(Some(receiver));
         Ok(local)
     }

@@ -20,10 +20,11 @@ use crate::source::{at_millis, changed_non_live, millis, setting};
 use crate::{Context, Limits, Painter, Source, SourceError};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_midi::Message;
+use jstream_platform::MediaClock;
 use jstream_protocol::{KindDescriptor, Settings};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicI16, AtomicU8, AtomicU64, Ordering, fence};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, OnceLock, PoisonError};
 
 /// MIDI's channels.
 pub const CHANNELS: usize = 16;
@@ -261,6 +262,9 @@ fn index(channel: u8, key: u8) -> usize {
 pub struct MidiInputs {
     any: Arc<MidiState>,
     named: Arc<Mutex<BTreeMap<String, Arc<MidiState>>>>,
+    /// The media clock messages are stamped on, which the sources draw against: set
+    /// once, when the host has one, and shared by every clone and every source.
+    clock: Arc<OnceLock<Arc<dyn MediaClock>>>,
 }
 
 impl std::fmt::Debug for MidiInputs {
@@ -275,6 +279,20 @@ impl MidiInputs {
     /// No inputs yet.
     pub fn new() -> Self {
         Self::default()
+    }
+
+    /// Stamps the inputs on `clock` from now on: the sources that draw them, made
+    /// before or after, read the time from it, so a note's age is measured on the
+    /// clock its `at_ms` is on. Without one (tests), a source measures it on the time
+    /// it is painted for. Only the first clock set counts; it returns whether this was
+    /// it.
+    pub fn set_clock(&self, clock: Arc<dyn MediaClock>) -> bool {
+        self.clock.set(clock).is_ok()
+    }
+
+    /// The media clock's time now, in milliseconds, once it has one.
+    pub fn now_ms(&self) -> Option<u64> {
+        self.clock.get().map(|clock| clock_ms(clock.as_ref()))
     }
 
     /// The state every input feeds.
@@ -362,6 +380,10 @@ fn create<D: Draw>(
     let mut drawing = Drawing {
         draw,
         state,
+        clock: ctx
+            .midi
+            .as_ref()
+            .map_or_else(Arc::default, |inputs| Arc::clone(&inputs.clock)),
         frames: Frames::new(size)?,
         drawn: None,
         seen: None,
@@ -472,6 +494,9 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 struct Drawing<D> {
     draw: D,
     state: Arc<MidiState>,
+    /// The clock the input's messages are stamped on, once the host sets it; until
+    /// then it draws at the paint's time.
+    clock: Arc<OnceLock<Arc<dyn MediaClock>>>,
     frames: Frames,
     /// The frame tick drawn last.
     drawn: Option<u64>,
@@ -496,14 +521,28 @@ impl<D: Draw> Drawing<D> {
         self.drawn = Some(now);
         self.seen = Some(activity);
         let pts = tick_start(now);
+        // A note's age is measured on the clock it was stamped on; the frame's own
+        // time runs from the source's start, so it serves only without one.
+        let now_ms = self
+            .clock
+            .get()
+            .map_or_else(|| millis(pts), |clock| clock_ms(clock.as_ref()));
         let (draw, state) = (&mut self.draw, &self.state);
         let mut moving = false;
         self.frames.draw(pts, |canvas| {
-            moving = draw.draw(state, millis(pts), canvas);
+            moving = draw.draw(state, now_ms, canvas);
         });
         self.moving = moving;
         false
     }
+}
+
+/// `clock`'s time now, in whole milliseconds; 0 before its zero.
+fn clock_ms(clock: &dyn MediaClock) -> u64 {
+    clock
+        .now()
+        .rescale(Timebase::MILLIS, jstream_media::Rounding::Down)
+        .map_or(0, |t| u64::try_from(t.ticks()).unwrap_or(0))
 }
 
 /// The frame tick `at` falls in, at [`FPS`].

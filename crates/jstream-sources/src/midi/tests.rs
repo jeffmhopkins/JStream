@@ -513,3 +513,37 @@ fn times_at_the_end_of_the_clock_saturate() {
     assert_eq!(state.last_ms(), Some(u64::MAX - 1));
     assert!(tick(at_millis(u64::MAX / 2)) > 0);
 }
+
+/// A source made before the host sets the clock draws against it once set: a note's age
+/// is measured on the media clock it was stamped on, not on the time since the source
+/// started, which a painter is given.
+#[test]
+fn a_source_measures_note_ages_on_the_inputs_clock() {
+    struct At(u64);
+    impl MediaClock for At {
+        fn timebase(&self) -> Timebase {
+            Timebase::MILLIS
+        }
+        fn now(&self) -> MediaTime {
+            at_millis(self.0)
+        }
+    }
+    let inputs = Arc::new(MidiInputs::new());
+    let mut pads = source(
+        "midi_pads",
+        &inputs,
+        json!({"width": 20, "height": 10, "rows": 1, "columns": 2, "decay_ms": 100,
+               "color": "#ff0000", "pad": "#000000"}),
+    );
+    assert!(inputs.set_clock(Arc::new(At(10_000))));
+    assert!(
+        !inputs.set_clock(Arc::new(At(0))),
+        "only the first clock counts"
+    );
+    assert_eq!(inputs.now_ms(), Some(10_000));
+    // A hit 10 ms ago on the media clock, painted at the source's 40 ms.
+    inputs.push("", 9_990, &msg(&[0x99, 37, 127]));
+    inputs.push("", 9_990, &msg(&[0x89, 37, 0]));
+    let lit = pixel(&draw(&mut pads, ms(40)), 15, 5);
+    assert!(lit[0] > 200, "still lit: {lit:?}");
+}
