@@ -480,8 +480,12 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
   kind ID that draws the same WGSL (the quarantine keeps each blamed module's digest,
   ADR-0097), until a person re-enables them (`effect.enable`, which no MCP tool, plugin
   or hotkey carries), the whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
-  0.61). Not built yet: the GPU-time guard against long loops, which would turn an
-  effect off before the OS resets the device.
+  0.61). The GPU-time guard turns an effect off before the OS resets the device: where
+  the GPU has timestamp queries, a pack kind whose pass runs over half the frame budget
+  for 30 frames running on the program stage is quarantined the same way and reported
+  in `gpu.effect_slow` (protocol 0.102). A GPU without timestamp queries, a shader that
+  hangs the GPU at once, and the preview's drawing have only the device-loss guard.
+  Not run yet: a forced TDR on Windows hardware.
 
 <a id="mcp"></a>
 ## MCP agents
@@ -654,7 +658,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; Chromium's local network checks not yet confirmed on Windows hardware | Low |
 | #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
-| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), and quarantines the pack effect blamed for it, but the GPU-time guard that would stop a hang before the reset is not built, and a forced TDR hasn't run on Windows hardware | Medium |
+| #349 | WGSL | A shader that hangs the GPU in one frame can still reset it: the engine survives a lost device (#604) and quarantines the pack effect blamed for it, and the GPU-time guard quarantines one that runs over half the frame budget for 30 frames before a reset, but only where the GPU has timestamp queries and only on the program stage. A forced TDR hasn't run on Windows hardware | Medium |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |

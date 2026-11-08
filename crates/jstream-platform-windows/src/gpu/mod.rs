@@ -241,7 +241,10 @@ impl GpuInterop for WindowsGpu {
             })?;
         let (device, queue) = ready(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("jstream"),
-            required_features: wgpu::Features::TEXTURE_FORMAT_NV12,
+            // Timestamp queries where the adapter has them, so the compositor can time
+            // effect-pack passes on this device (#349).
+            required_features: wgpu::Features::TEXTURE_FORMAT_NV12
+                | (adapter.features() & wgpu::Features::TIMESTAMP_QUERY),
             ..Default::default()
         }))
         .ok_or_else(|| not_ready("request_device"))?

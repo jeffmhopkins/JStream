@@ -856,7 +856,9 @@ impl Studio {
                 ..
             } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
             // The kinds it quarantined are marked in `kind.list` now.
-            Event::GpuDeviceLost { quarantined, .. } if !quarantined.is_empty() => {
+            Event::GpuDeviceLost { quarantined, .. } | Event::GpuEffectSlow { quarantined, .. }
+                if !quarantined.is_empty() =>
+            {
                 let studio = *self;
                 let session = session.clone();
                 spawn_local(async move { studio.relist_kinds(&session).await });

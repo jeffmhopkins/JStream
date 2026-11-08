@@ -159,8 +159,8 @@ pub(crate) const REMOTE_PREFIX: &str = "remote_";
 /// §4), so an agent can't put a shader that hung the GPU back on air, and downloading or
 /// deleting a codec (ADR-0061), since Cisco's OpenH264 downloads only on a person's
 /// request, after they have seen its licence. The protocol keeps them for the UI. `events.rs` hides these nouns' events from agents too, so an
-/// `effect.*` event would never reach one; a loss is reported as `gpu.device_lost`,
-/// which does (ADR-0087 §5).
+/// `effect.*` event would never reach one; a loss is reported as `gpu.device_lost`, and
+/// a pass that ran too long as `gpu.effect_slow`, which do (ADR-0087 §5).
 pub(crate) const PEOPLE_ONLY: [&str; 4] = ["youtube", "plugin", "effect", "codec"];
 
 /// The nouns whose ops are deprecated, so no tool carries them either: an agent is

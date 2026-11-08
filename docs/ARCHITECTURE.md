@@ -841,8 +841,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   them. The event `plugin.state_changed` reports
   a plugin enabled or disabled, with why the engine disabled it. Likewise
   `effect.enable` (0.61, #349) is for a person: it re-enables an effect-pack kind the
-  engine quarantined because a GPU device loss was blamed on it, which the event
-  `gpu.device_lost` reports and `kind.list` marks (`quarantined`). The effect packs
+  engine quarantined because a GPU device loss was blamed on it, or because it ran
+  too long on the GPU, which the events `gpu.device_lost` and `gpu.effect_slow` (0.102)
+  report and `kind.list` marks (`quarantined`). The effect packs
   themselves are not for a person only: the actions `pack.write` and `pack.delete` and
   the queries `pack.list` and `pack.read` (0.72,
   [ADR-0097](adr/0097-agents-write-effect-packs.md)) write, remove, list and read a pack
@@ -1076,9 +1077,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   the UI ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md) §3). The same
   holds for the `plugin.*` ops and events: only a person installs or grants a plugin
   (ADR-0069 G1). And for the `effect.*` ops: only a person re-enables an effect pack
-  quarantined after a GPU device loss
+  quarantined after a GPU device loss or a pass that ran too long
   ([ADR-0087](adr/0087-effect-quarantine-after-gpu-device-loss.md) §4), though the
-  `gpu.device_lost` event that reports it reaches agents. And for the `codec.*` ops:
+  `gpu.device_lost` and `gpu.effect_slow` events that report it reach agents. And for the `codec.*` ops:
   Cisco's OpenH264 downloads only when a person asks, after seeing Cisco's licence
   ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). The `pack.*` ops are not
   held back: an agent may write, read and delete an effect pack's WGSL
@@ -1330,10 +1331,17 @@ filters bypassed, and the whole pack after a second loss blamed on one of its ef
 in a run) until a person re-enables them with `effect.enable`, and reported in the
 engine event `gpu.device_lost` (protocol 0.61). The quarantine is kept in the packs
 folder, across restarts and pack edits
-([jstream-core › Design](../crates/jstream-core/README.md#design)). Not built yet: the
-GPU-time guard (timestamp queries that quarantine an effect whose pass runs over half
-the frame budget for 30 frames running, before Windows' TDR fires), and a forced TDR on
-Windows hardware, which only a hardware run can check.
+([jstream-core › Design](../crates/jstream-core/README.md#design)). The GPU-time guard
+turns an effect off before Windows' TDR fires: where the GPU has timestamp queries,
+`jstream-render` brackets each pack kind's filter or shader source with two timestamps
+(`timer.rs`, read back a frame or two later without waiting), and the program stage's
+render thread quarantines a kind whose pass runs over half the frame budget for 30
+frames running, as a blamed kind is, reported in `gpu.effect_slow` (protocol 0.102)
+([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)). The preview's
+drawing isn't guarded; a shader that hangs the GPU there is caught by the program
+stage's guard or a device loss once it goes to program. A GPU without timestamp
+queries has only the device-loss guard. Not checked yet: a forced TDR on Windows
+hardware, which only a hardware run can do.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:

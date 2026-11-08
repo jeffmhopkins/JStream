@@ -73,8 +73,9 @@ through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-cl
 So are the `plugin.*` ops (install, grant, re-enable) and `plugin.state_changed`: only a
 person installs or grants a plugin (ADR-0069 G1), so an agent can't hand its access to
 code that keeps running after the conversation. So is `effect.enable` (`effect` is
-in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss was blamed
-on (#349). The `gpu.device_lost` event that reports the loss does reach agents. So are
+in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss, or a
+pass that ran too long, was blamed on (#349). The `gpu.device_lost` and
+`gpu.effect_slow` events that report them do reach agents. So are
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
