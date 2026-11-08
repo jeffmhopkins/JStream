@@ -978,7 +978,10 @@ impl LiveSources {
             }
             if jstream_sources::opens_browser(&entry.kind) {
                 // Not painted yet: the stand-in, until a re-plan finds the first paint.
-                let (frame, _) = Self::cpu_frame(source_id, running, at, now, versions)?;
+                // A page that paints on the CPU hands its paints over through its frame
+                // slot instead, with no re-plan (ADR-0117 §3).
+                let (frame, own) = Self::cpu_frame(source_id, running, at, now, versions)?;
+                let next = if running.slot.is_some() { own } else { next };
                 return Some(Look::Frame(frame, next));
             }
         }
