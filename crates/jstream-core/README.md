@@ -499,7 +499,8 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   over the shot in `snapshot.rs`, the shared parity fixture, a differential run against
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on whatever adapter opens (the software one in CI), frame sheets
-  (a `scene.switch_and_watch` showing a fade as it plays, a scene drawn alone, a scene
+  (a `scene.switch_and_watch` showing a fade as it plays, judged so either blending
+  space passes, and counting its times from the switch when the sheet starts late, a scene drawn alone, a scene
   sheet that hears a loud mix, the
   limits and the cap on sheets at once, in `tests/frames.rs`; the layout, tiling and
   downscale in `frames.rs`), nested-scene scheduling (order, depth
@@ -2182,9 +2183,13 @@ it with `not_found`, and an engine dropped meanwhile with `internal`.
 
 `scene.switch_and_watch` checks the sheet's limits, then runs the `scene.switch` it
 carries through `Engine::execute`, so the switch is logged, audited and emitted as a
-`scene.switch`; once it succeeds the sheet starts, its start read after the switch has
-published the new render snapshot. A failed switch takes no sheet. A running
-transition is drawn at each picture's time, so the sheet shows it as the output does.
+`scene.switch`; once it succeeds the sheet starts, after the switch has published the
+new render snapshot. Its `at_ms` count from the time the switch started its transition
+(`State::switched_at`), not from the sheet's own start, so however late a loaded
+machine starts the sheet, each picture's `at_ms` is how far into the transition it is;
+a switch to the scene already on program counts from the sheet's start. A failed
+switch takes no sheet. A running transition is drawn at each picture's time, so the
+sheet shows it as the output does.
 
 <a id="shared-values"></a>
 ## Shared values
