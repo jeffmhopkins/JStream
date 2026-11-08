@@ -973,6 +973,7 @@ fn capture_format_input(
     let body = move || {
         if listed_now.get() {
             let choices = choices.clone();
+            let current_now = current.clone();
             let selected = {
                 let current = current.clone();
                 move || {
@@ -985,10 +986,16 @@ fn capture_format_input(
                 <select class="capture-format" prop:value=selected.clone()
                     on:focus=move |_| listing.refresh() on:change=on_change.clone()>
                     {move || {
+                        // Each option says whether it is the current one, as a capture
+                        // target's do: `prop:value` can run before the options exist (#1371).
+                        let now = current_now();
                         choices()
                             .unwrap_or_default()
                             .into_iter()
-                            .map(|(v, label)| view! { <option value=v>{label}</option> })
+                            .map(|(v, label)| {
+                                let on = v == now;
+                                view! { <option value=v selected=on>{label}</option> }
+                            })
                             .collect_view()
                     }}
                 </select>
