@@ -116,7 +116,7 @@ pub trait Source: Send {
         None
     }
 
-    /// The source's one frame as a [`Still`], for a source that shows a single frame
+    /// The source's one frame as a [`Still`](crate::Still), for a source that shows a single frame
     /// it can make again (a still image, #1139): a host that holds the still's frame
     /// only while it needs the pixels lets them be freed, and [`frame`](Self::frame)
     /// then reads the file again. `None` (the default) for every other source.
