@@ -200,13 +200,17 @@ fn watch_the_fade_held(stall_ms: u32) -> Option<u32> {
                 "at {at} ms the fade has barely begun: {red} {green}"
             );
         } else if at < 450 {
+            // Both show, whichever space the project blends in: a linear-light mix
+            // keeps more red late in the fade than a browser-style (sRGB) one, which
+            // is down to about 10% by 400 ms (#1298).
             assert!(
-                (32..224).contains(red) && (32..224).contains(green),
+                (1..255).contains(red) && (1..255).contains(green),
                 "at {at} ms red and green are mixed: {red} {green}"
             );
         } else if at < 590 {
+            // An sRGB mix has no red left by about 570 ms, but green is still rising.
             assert!(
-                *red > 0 && *green < 255,
+                *green < 255,
                 "at {at} ms the fade isn't over: {red} {green}"
             );
         } else if at >= 600 {
