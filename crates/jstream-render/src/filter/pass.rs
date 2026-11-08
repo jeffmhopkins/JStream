@@ -87,6 +87,11 @@ pub(crate) trait Pass: Send {
     /// ([`Image::content`]) then has every pass drawn only over that content grown by
     /// this ([`Bound`]). `None`, the default, for a kind that can draw anywhere: one that
     /// holds frames, moves its input, draws a picture of its own or reshapes the frame.
+    /// Nothing checks the promise, and a wrong one cuts what the kind draws, so a kind
+    /// that gives one joins `a_filter_over_a_bounded_layer_draws_only_near_its_content`
+    /// (`src/tests/content.rs`), which draws it bounded and whole and compares the two.
+    /// A pass that draws into a frame placed differently from its output's (a shadow's
+    /// grown shape) moves the bound into it first ([`Bound::placed`]).
     fn reach(&self) -> Option<f32> {
         None
     }
@@ -622,6 +627,22 @@ pub(crate) struct Bound {
 }
 
 impl Bound {
+    /// The same pixels in a frame of `frame` pixels whose `origin` is the output's
+    /// top-left: a pass's scratch frame grown around the output (a shadow's shape).
+    pub(crate) fn placed(self, origin: (u32, u32), frame: (u32, u32)) -> Self {
+        let [x0, y0, x1, y1] = self.rect;
+        let (x, y) = origin;
+        Self {
+            rect: [
+                (x0 + x).min(frame.0),
+                (y0 + y).min(frame.1),
+                (x1 + x).min(frame.0),
+                (y1 + y).min(frame.1),
+            ],
+            frame,
+        }
+    }
+
     /// Texels of a target of `width` by `height` that can hold what the frame's `rect`
     /// does: scaled to the target, which spans the frame at its own scale, and grown by
     /// two texels for a target rounded up from it and for a filtered read. `None` when
