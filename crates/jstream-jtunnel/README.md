@@ -62,7 +62,10 @@ Contents:
   caller can bound it.
 
 `tests/no_alloc.rs` checks that parsing a packet, walking its events, decoding PCM,
-joining SysEx, tracking sequence numbers and playing frames out allocate nothing.
+joining SysEx, tracking sequence numbers and playing frames out allocate nothing, and
+that `parse_announcements` reads an mDNS answer about other names (a full datagram of
+records that point back at one 126-label name) without allocating: names are walked
+where they lie, and only a JTunnel instance's name is copied.
 `tests/link.rs` runs a sender 150 ppm off this machine's clock over 90 s of simulated
 Wi-Fi (jitter, 60 ms stalls, 2% loss, redundancy on): the drift is found within 20 ppm,
 every frame comes out in order with steps of 2 ms give or take 5%, and after settling

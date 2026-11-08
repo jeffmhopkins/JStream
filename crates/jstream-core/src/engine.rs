@@ -6470,9 +6470,6 @@ impl Drop for State {
 /// committed gesture's snapshot.
 const RELEASE_POLL: Duration = Duration::from_millis(4);
 
-/// Starts the `jstream-tempo` thread: it publishes the every-input MIDI tempo as the
-/// `tempo.*` shared values (ADR-0147) until the engine is gone. Returns whether it
-/// started.
 /// Sends `jtunnel.senders_changed` for each change the JTunnel receiver reports on
 /// `heard`, until that receiver stops (its sender is dropped with it) or the engine goes.
 /// The receiver's thread never takes the engine's lock: this one does.
@@ -6497,6 +6494,9 @@ fn spawn_jtunnel_events(shared: Weak<Shared>, heard: std::sync::mpsc::Receiver<(
     }
 }
 
+/// Starts the `jstream-tempo` thread: it publishes the every-input MIDI tempo as the
+/// `tempo.*` shared values (ADR-0147) until the engine is gone. Returns whether it
+/// started.
 fn spawn_tempo(shared: Weak<Shared>, midi: Arc<jstream_sources::MidiInputs>) -> bool {
     let started = thread::Builder::new()
         .name("jstream-tempo".into())

@@ -696,15 +696,17 @@ somewhere it shouldn't.
   refuses (fuzzed on its own). The socket is IPv4: an accepted sender's address is IPv4
   (or IPv4 mapped into IPv6, taken as itself), and no two accepted senders share an
   address and port, since datagrams are told apart by where they come from.
-  Parsing and playout allocate nothing; a sender's audio goes only to the
+  Parsing and playout allocate nothing, nor does reading an mDNS answer about anything
+  but a JTunnel instance, however its records repeat a long name (only a JTunnel
+  instance's name is copied, once it matches); a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
   name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
   doesn't trigger bindings (ADR-0142 §2).
 - An mDNS answer from a LAN address's port 5353 only lists a sender in
   `jtunnel.senders` (its name as `remote_name`, text from the LAN): listing trusts it
   with nothing, since only accepted senders are subscribed to and only their datagrams
-  are taken. The list holds at most 64 senders, each forgotten 35 s after it last
-  answered, so answers can't grow it without bound; an answer it can't read is counted
+  are taken. The list holds at most 64 senders, at most 8 from one IP address, each
+  forgotten 35 s after it last answered, so answers can't grow it without bound; an answer it can't read is counted
   as malformed. Plugins can't read the list.
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.

@@ -91,3 +91,33 @@ fn receiving_a_packet_does_not_allocate() {
     assert_eq!(whole, 200);
     assert!(played > 0);
 }
+
+/// Review B1 on #1447: an mDNS answer about anything but a JTunnel instance, however
+/// many records repeat however long a name, is read without allocating, so a LAN host's
+/// datagram to the receive socket costs the playout thread no allocations.
+#[test]
+fn an_mdns_answer_about_other_names_does_not_allocate() {
+    use jstream_jtunnel::dnssd::parse_announcements;
+    // 126 one-byte labels (the most a pointed-to name may have), then records that each point back at that name.
+    let mut m = vec![0, 0, 0x84, 0, 0, 0, 0, 0, 0, 0, 0, 0];
+    let name_at = m.len();
+    for _ in 0..126 {
+        m.extend_from_slice(&[1, b'a']);
+    }
+    m.push(0);
+    let srv = |m: &mut Vec<u8>| {
+        m.extend_from_slice(&[0, 33, 0, 1, 0, 0, 0, 30, 0, 6, 0, 0, 0, 0, 0x23, 0x28]);
+    };
+    srv(&mut m);
+    let mut records = 1_u16;
+    while m.len() + 18 <= 1472 {
+        m.extend_from_slice(&[0xC0 | (name_at >> 8) as u8, name_at as u8]);
+        srv(&mut m);
+        records += 1;
+    }
+    m[6..8].copy_from_slice(&records.to_be_bytes());
+    let before = violation_count();
+    let parsed = assert_no_alloc(|| parse_announcements(&m).map(|a| a.len()));
+    assert_eq!(parsed, Ok(0));
+    assert_eq!(violation_count(), before, "parsing allocated");
+}

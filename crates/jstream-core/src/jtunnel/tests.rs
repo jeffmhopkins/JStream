@@ -269,17 +269,45 @@ fn senders_that_answer_the_query_are_listed_and_trusted_with_nothing() {
         0,
         "answers are not unaccepted datagrams"
     );
-    // Many names from one host fill the list only to its bound.
-    for n in 0..MAX_LISTED + 10 {
+    // An answer longer than a JTunnel packet is read whole, not malformed (review N2).
+    let mut long = answer("Long", 9100, 30);
+    long.resize(wire::MAX_PACKET_BYTES + 200, 0);
+    let malformed = receiver.stats().malformed;
+    send(&long);
+    assert!(eventually(|| receiver
+        .heard()
+        .iter()
+        .any(|s| s.remote_name == "Long")));
+    assert_eq!(receiver.stats().malformed, malformed);
+    // Many names from one host list only as many as one host may have (review N3).
+    for n in 0..MAX_LISTED_PER_HOST + 10 {
         send(&answer(
             &format!("s{n}"),
             1000 + u16::try_from(n).expect("a port"),
             30,
         ));
     }
-    assert!(eventually(|| receiver.heard().len() == MAX_LISTED));
+    assert!(eventually(|| receiver.heard().len() == MAX_LISTED_PER_HOST));
     std::thread::sleep(Duration::from_millis(100));
-    assert_eq!(receiver.heard().len(), MAX_LISTED);
+    assert_eq!(receiver.heard().len(), MAX_LISTED_PER_HOST);
+    // Many hosts together fill the list only to its bound. Linux answers from any 127/8
+    // address; elsewhere only 127.0.0.1 is set up.
+    #[cfg(target_os = "linux")]
+    {
+        let port = responder.addr().port();
+        for host in 2..=u8::try_from(MAX_LISTED / MAX_LISTED_PER_HOST + 2).expect("few") {
+            let from = UdpSocket::bind((Ipv4Addr::new(127, 0, 0, host), port)).expect("a host");
+            for n in 0..MAX_LISTED_PER_HOST {
+                let name = format!("h{host}s{n}");
+                let datagram = answer(&name, 2000 + u16::try_from(n).expect("a port"), 30);
+                from.send_to(&datagram, receiver.local_addr())
+                    .expect("sent");
+            }
+        }
+        assert!(eventually(|| receiver.heard().len() == MAX_LISTED));
+        std::thread::sleep(Duration::from_millis(100));
+        assert_eq!(receiver.heard().len(), MAX_LISTED);
+    }
 }
 
 fn start(setup: &JtunnelSetup) -> Receiver {

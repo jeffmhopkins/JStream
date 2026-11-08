@@ -233,7 +233,9 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `_jtunnel._udp.local` to 224.0.0.251:5353, so a legacy unicast query that senders
   answer directly; `JtunnelSetup::discover` names where, `None` for nobody), lists those
   that answer from a LAN address's port 5353 in `jstream-jtunnel`'s `Directory` (at most
-  `MAX_LISTED`, 64, each forgotten 35 s after it last answered or at its goodbye), and
+  `MAX_LISTED`, 64, and `MAX_LISTED_PER_HOST`, 8, from one IP address, each forgotten
+  35 s after it last answered or at its goodbye; an answer is read whole up to mDNS's
+  9000 bytes, while a JTunnel datagram over a packet's length is malformed), and
   reports each change on the channel the host passes; the engine's
   `jstream-jtunnel-events` thread turns that into `jtunnel.senders_changed`, so the
   receiver's thread never takes the engine's lock. `jtunnel.senders` (protocol 0.114,
@@ -281,8 +283,9 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   reaching its MIDI input with no source recording it, and its clock giving that input
   a tempo and publishing the `tempo.*` values. A fake mDNS responder on loopback tests
   discovery: the query sent from the receive socket, the senders that answer listed
-  with whether they are accepted, a goodbye, an unreadable answer counted, the list's
-  bound, and through the engine `jtunnel.senders` off by default, then the sender
+  with whether they are accepted, a goodbye, an unreadable answer counted, a long
+  answer read whole, the per-host bound and (on Linux, from several loopback addresses)
+  the list's bound, and through the engine `jtunnel.senders` off by default, then the sender
   listed and `jtunnel.senders_changed` sent.
 - **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`

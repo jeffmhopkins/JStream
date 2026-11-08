@@ -69,6 +69,11 @@ const EXPIRE_EVERY: Duration = Duration::from_secs(1);
 /// The most senders listed at a time, so a host on the LAN that answers with many names
 /// can't grow the list without bound.
 pub const MAX_LISTED: usize = 64;
+/// The most senders listed from one IP address, so one host can't fill the list.
+pub const MAX_LISTED_PER_HOST: usize = 8;
+/// The longest datagram read whole: mDNS's largest message (RFC 6762 §17), since an
+/// answer can be longer than a JTunnel packet may be.
+const MAX_DATAGRAM: usize = 9000;
 /// mDNS's group and port, where the thread sends its queries.
 pub const MDNS: SocketAddr = SocketAddr::new(
     IpAddr::V4(Ipv4Addr::new(
@@ -631,8 +636,8 @@ struct Run {
 
 impl Run {
     fn run(&mut self) {
-        // One byte more than a packet may be, so a longer datagram shows as one.
-        let mut datagram = [0_u8; wire::MAX_PACKET_BYTES + 1];
+        // One byte more than a datagram may be, so a longer one shows as one.
+        let mut datagram = vec![0_u8; MAX_DATAGRAM + 1];
         let mut samples = [0.0_f32; wire::MAX_FRAME_SAMPLES as usize * wire::CHANNELS as usize];
         let mut next_subscribe = Instant::now();
         let mut next_query = Instant::now();
@@ -657,7 +662,7 @@ impl Run {
             // An error is a timeout, or an ICMP port-unreachable from a sender not
             // running yet, reported on the next receive on some systems.
             if let Ok((len, from)) = self.socket.recv_from(&mut datagram) {
-                if len > wire::MAX_PACKET_BYTES {
+                if len > MAX_DATAGRAM {
                     // Cut short by the buffer: never parsed as if it were whole.
                     self.counters.malformed.fetch_add(1, Ordering::Relaxed);
                 } else {
@@ -739,7 +744,10 @@ impl Run {
             .lock()
             .unwrap_or_else(PoisonError::into_inner);
         let before = directory.senders();
-        let room = MAX_LISTED.saturating_sub(directory.len());
+        let room = MAX_LISTED.saturating_sub(directory.len()).min(
+            MAX_LISTED_PER_HOST
+                .saturating_sub(before.iter().filter(|s| *s.address.ip() == from).count()),
+        );
         // A full list still takes refreshes and goodbyes of the senders on it.
         let mut fresh = 0;
         let taken: Vec<_> = announcements
@@ -851,6 +859,11 @@ impl Run {
             counters.unaccepted.fetch_add(1, Ordering::Relaxed);
             return;
         };
+        if datagram.len() > wire::MAX_PACKET_BYTES {
+            // Longer than a packet may be: never parsed as if it were one.
+            counters.malformed.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
         let Ok(Packet::Audio { header, frames }) = wire::parse(datagram) else {
             // A subscribe or bye is a receiver's, never a sender's.
             counters.malformed.fetch_add(1, Ordering::Relaxed);
