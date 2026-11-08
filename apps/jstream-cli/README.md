@@ -87,7 +87,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene switch <scene-id> [--preset <preset-id>]` | action `scene.switch` (to that scene, with the preset's transition, else the one the engine resolves) |
 | `studio get` | query `studio.get` (the scenes on program and preview) |
 | `studio set-preview <scene-id>` | action `studio.set_preview` |
-| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name) |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name, and the webcams a `webcam`'s `device` can, each with its formats, then its camera controls (name, value, range, step, default, and whether the camera sets it itself), on the lines below it) |
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
 | `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
 | `source list` | query `source.list` |
@@ -134,7 +134,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   any 3D it can draw from protocol 0.34. It sends no flip (`flip_h` and `flip_v` false):
   the command has no flip argument yet.
   `canvas.set_size <width> <height>` sets the canvas, and
-  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119). Groups
+  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119), and
+  `canvas.set_blending <srgb|linear>` the space every blend mode mixes in (ADR-0126). Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
   <index>`, and `scene.create` takes an optional trailing `role:group` or `role:scene`:
@@ -154,8 +155,7 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   its box or over the canvas after it is placed (protocol 0.76).
   `item.set_opacity <item-id> <0..4>` and `item.set_blend <item-id> <mode>` set an
   item's opacity (above 1 a gain on its light, protocol 0.83) and blend mode; the engine
-  draws every mode (protocol 0.47), and `normal_srgb` and `additive_srgb` (0.75) blend
-  as a browser does.
+  draws every mode (protocol 0.47), in the collection's blending space.
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
@@ -310,14 +310,25 @@ measured the same way on every machine (#1220).
   default (the alpha.5 bar) a run fails on any dropped frame or packet at any stage of
   `stats.tick`'s drop counts or the recording's own, a skipped render tick, a program
   frame over its budget, a recording under 98% of the program's frame rate, or a
-  switch without a frame sheet. `--gates
+  switch without a frame sheet. From `profile.get` (protocol 0.103,
+  [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)) it also fails
+  on any encoded stream's dropped or late frame (`streams`, outputs and preview streams
+  alike), the mixer's late block or skipped frame, an audio input's underrun or drop
+  (`mixer`), and a client view's placeholder, blank, skipped frame or decode error
+  (`views`; a view's reopens are listed, not gated, since a scene switch reopens the
+  canvas's stream). The view gates read what the clients connected to the engine
+  reported, such as the desktop app's canvas and projectors; with none, they pass, and
+  the summary says no client reported a view. `--gates
   <file>` reads a JSON object that overrides the limits it names: the counts
   `capture_frames`, `audio_frames`, `render_ticks`, `encode_frames`, `encode_blocks`,
-  `output_packets`, `recording_dropped_frames`, `recording_dropped_packets` and
-  `failed_switches`, `min_fps_ratio` (the share of the program's rate, 0.98) and
-  `max_over_budget_pct` (0). An unknown field is a usage error.
+  `output_packets`, `recording_dropped_frames`, `recording_dropped_packets`,
+  `failed_switches`, `stream_dropped_frames`, `stream_late_frames`,
+  `mixer_late_blocks`, `mixer_skipped_frames`, `mixer_underrun_frames`,
+  `mixer_dropped_frames`, `view_placeholders`, `view_blanks`, `view_skipped` and
+  `view_decode_errors` (each 0), `min_fps_ratio` (the share of the program's rate, 0.98)
+  and `max_over_budget_pct` (0). An unknown field is a usage error.
 - **Output.** It prints and writes `<dir>/summary.md`, a table per scenario of each
-  gate's measured value, limit and verdict, and writes `<dir>/report.json` with
+  gate's measured value, limit and verdict after a line per reported view, and writes `<dir>/report.json` with
   everything measured: the drops, the recording's frames, rate, bit rate and drops, the
   switches and the window's whole `profile.get`. It exits 0 when every gate passed and 4
   when one failed (the files are written either way). It exits 5 when a run couldn't

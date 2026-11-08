@@ -309,7 +309,7 @@ fn handshake_list_and_call_round_trip() {
     assert_eq!(
         ok(&state)["result"]["result"],
         json!({"type": "state.get", "rev": 2,
-               "canvas": {"width": 1920, "height": 1080}, "sources": [cam],
+               "canvas": {"width": 1920, "height": 1080}, "blending": "srgb", "sources": [cam],
                "scenes": [{"scene_id": "scn_1", "name": "Main", "items": [item]}],
                "outputs": [], "encoders": [], "video_mixes": [],
                "buses": [{"bus_id": "master", "name": "Master", "gain_db": 0.0, "muted": false}],

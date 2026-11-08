@@ -6,7 +6,7 @@ use std::time::Duration;
 use jstream_platform::FrameSync;
 
 use crate::blend::{self, BlendPipelines, Layouts, Steps};
-use crate::color::{self, premultiplied_linear};
+use crate::color::{self, premultiplied_linear, premultiplied_srgb};
 use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
@@ -16,7 +16,7 @@ use crate::mips::{MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
-use jstream_protocol::BlendMode;
+use jstream_protocol::{BlendMode, Blending};
 
 /// Bytes from one vertex to the next: 29 `f32`s (position, UV, opacity, alpha mode, `w`,
 /// the item's five edge lines of three each, its UV bounds, and its camera's depth of
@@ -88,9 +88,15 @@ pub struct Compositor {
     sampler: wgpu::Sampler,
     image_layout: wgpu::BindGroupLayout,
     blends: BlendPipelines,
+    /// The same, drawing into an sRGB-encoded target (ADR-0126 §3).
+    encoded_blends: BlendPipelines,
+    /// The space every scene this compositor draws mixes in.
+    blending: Blending,
     backdrop: Option<Backdrop>,
     resolve_layout: wgpu::BindGroupLayout,
     resolve: wgpu::RenderPipeline,
+    /// Decodes an sRGB-encoded target back to linear light, from the backdrop.
+    decode: wgpu::RenderPipeline,
     targets: Option<Targets>,
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
@@ -106,6 +112,9 @@ pub struct Compositor {
     models: ModelRuntime,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
+    /// Times effect-pack passes once [`Self::time_passes`] asked, on a device that can
+    /// (#349, `timer.rs`).
+    timer: Option<crate::timer::PassTimer>,
     /// The CPU frame conversion (ADR-0117 §2), built on the first upload. Behind a lock
     /// because uploads take `&self`; only the thread drawing with the compositor takes it.
     ingest: Mutex<Option<Ingest>>,
@@ -139,6 +148,19 @@ impl Compositor {
     /// side exceeds the adapter limit.
     pub fn upload_rgba8(&self, width: u32, height: u32, rgba: &[u8]) -> Result<Image, RenderError> {
         image::upload(&self.maker(), width, height, rgba)
+    }
+
+    /// [`Self::upload_rgba8`] into a texture of `to` texels, smaller than the frame each
+    /// way or its size, placed at the frame's size: each texel is the mean of the
+    /// frame's texels under it, in premultiplied linear light (#1139).
+    pub(crate) fn upload_rgba8_into(
+        &self,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+        to: (u32, u32),
+    ) -> Result<Image, RenderError> {
+        image::upload_into(&self.maker(), width, height, rgba, to)
     }
 
     /// Samples `texture`, which must already be on this device: 2D, one sample,
@@ -305,6 +327,20 @@ impl Compositor {
         };
         self.readback_wait = waiting.elapsed();
         Ok(Output::new(output, width, height, pixels))
+    }
+
+    /// Sets the space every scene this compositor draws from now on mixes in: the
+    /// project's [`Blending`] (ADR-0126). A new compositor mixes in linear light. In
+    /// [`Blending::Srgb`] each composite target holds sRGB-encoded colour while its
+    /// items draw, and one pass decodes it after the last, so what a render leaves is
+    /// premultiplied linear light either way.
+    pub fn set_blending(&mut self, blending: Blending) {
+        self.blending = blending;
+    }
+
+    /// The space set by [`Self::set_blending`].
+    pub fn blending(&self) -> Blending {
+        self.blending
     }
 
     /// How long the last [`Self::render`] spent waiting for its readback: the GPU
@@ -541,6 +577,10 @@ impl Compositor {
             });
         let padding = filter.pad();
         let (pass, scratch) = filter.parts();
+        let timing = match (&mut self.timer, pass.timed()) {
+            (Some(timer), Some(kind)) => timer.begin(&mut encoder, kind),
+            _ => None,
+        };
         scratch.begin();
         let mut ctx = filter::Ctx {
             gpu: &self.gpu,
@@ -572,7 +612,13 @@ impl Compositor {
         ctx.scratch.end();
         if let Err(err) = encoded {
             self.staged.clear();
+            if let (Some(timer), Some(timing)) = (&mut self.timer, timing) {
+                timer.abandon(timing);
+            }
             return Err(err);
+        }
+        if let (Some(timer), Some(timing)) = (&self.timer, &timing) {
+            timer.end(&mut encoder, timing);
         }
         // Staged only once recording succeeded, right before the submit it arms, and
         // handed back to the platform at the end of that submit, as `render` does: the
@@ -582,12 +628,18 @@ impl Compositor {
         for (sync, _) in &self.staged {
             if let Err(err) = sync.stage(&self.gpu.queue) {
                 self.staged.clear();
+                if let (Some(timer), Some(timing)) = (&mut self.timer, timing) {
+                    timer.abandon(timing);
+                }
                 return Err(RenderError::Sync(err));
             }
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         drop(submitting);
+        if let (Some(timer), Some(timing)) = (&self.timer, timing) {
+            timer.submitted(timing);
+        }
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -601,6 +653,28 @@ impl Compositor {
                 what: "image",
                 detail: "the filter input was made by another compositor".into(),
             })
+        }
+    }
+
+    /// Starts timing each effect-pack filter or shader source this compositor applies
+    /// on the GPU (#349), for [`Self::gpu_times`] to collect, and says whether it does:
+    /// `false` on a device without timestamp queries. A compositor times nothing until
+    /// asked, so one whose times nobody collects (a preview's) spends nothing on them.
+    pub fn time_passes(&mut self) -> bool {
+        if self.timer.is_none() {
+            self.timer = crate::timer::PassTimer::new(&self.gpu.device, &self.gpu.queue);
+        }
+        self.timer.is_some()
+    }
+
+    /// Hands `measured` the GPU time of each effect-pack filter or shader source applied
+    /// since the last call whose time has come back, with its kind ID (#349). A time
+    /// comes back a frame or two after its draw, read without waiting, and allocates
+    /// nothing. Nothing before [`Self::time_passes`], or on a device without timestamp
+    /// queries.
+    pub fn gpu_times(&mut self, measured: impl FnMut(&str, std::time::Duration)) {
+        if let Some(timer) = &mut self.timer {
+            timer.collect(&self.gpu.device, measured);
         }
     }
 
@@ -646,6 +720,13 @@ impl Compositor {
         self.gpu.faults.lost.get().cloned()
     }
 
+    /// Why the device was lost, when wgpu has already said so ([`Self::lost`]), without
+    /// polling: cheap enough to ask before every frame. The callback runs on a poll, and
+    /// the compositor polls its device as it reads frames back.
+    pub fn lost_already(&self) -> Option<&str> {
+        self.gpu.faults.lost.get().map(String::as_str)
+    }
+
     /// The first uncaptured wgpu error on this compositor's device since the last call:
     /// one no call returned, such as a validation error in a submitted command. wgpu's
     /// default would panic on it. The compositor installs its own handler instead, so a
@@ -670,7 +751,7 @@ impl Compositor {
     /// one `GpuContext` would make. Tests use it to check that images do not cross over.
     #[cfg(test)]
     pub(crate) fn sibling(&self) -> Self {
-        Self::new(Gpu {
+        let mut sibling = Self::new(Gpu {
             device: self.gpu.device.clone(),
             queue: self.gpu.queue.clone(),
             adapter: self.gpu.adapter.clone(),
@@ -680,7 +761,9 @@ impl Compositor {
             context: self.gpu.context.clone(),
             faults: Arc::clone(&self.gpu.faults),
             submit: self.gpu.submit.clone(),
-        })
+        });
+        sibling.blending = self.blending;
+        sibling
     }
 
     pub(crate) fn maker(&self) -> Maker<'_> {
@@ -712,20 +795,36 @@ impl Compositor {
         );
         let resolve_layout = resolve_layout(&gpu.device);
         // The backdrop is bound as the resolve's input is: one unfiltered FP16 texture.
-        let blends = BlendPipelines::new(
-            &gpu.device,
-            &Layouts {
-                image: &image_layout,
-                backdrop: &resolve_layout,
-                shader: &composite_shader,
-            },
-        );
+        let blends_for = |encoded| {
+            BlendPipelines::new(
+                &gpu.device,
+                &Layouts {
+                    image: &image_layout,
+                    backdrop: &resolve_layout,
+                    shader: &composite_shader,
+                    encoded,
+                },
+            )
+        };
+        let blends = blends_for(false);
+        let encoded_blends = blends_for(true);
         let resolve_shader = shader(
             &gpu.device,
             "jstream-render-resolve",
             include_str!("resolve.wgsl"),
         );
-        let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
+        let resolve = resolve_pipeline(
+            &gpu.device,
+            &resolve_layout,
+            &resolve_shader,
+            ("fs", wgpu::TextureFormat::Rgba8UnormSrgb),
+        );
+        let decode = resolve_pipeline(
+            &gpu.device,
+            &resolve_layout,
+            &resolve_shader,
+            ("fs_decode", wgpu::TextureFormat::Rgba16Float),
+        );
         let filters = filter::Runtime::new(&gpu.device);
         let mip_pipelines = MipPipelines::new(&gpu.device, &image_layout);
         let models = ModelRuntime::new(&gpu);
@@ -741,9 +840,12 @@ impl Compositor {
             sampler,
             image_layout,
             blends,
+            encoded_blends,
+            blending: Blending::Linear,
             backdrop: None,
             resolve_layout,
             resolve,
+            decode,
             targets: None,
             vertices: Vec::new(),
             vertex_buffer,
@@ -754,6 +856,7 @@ impl Compositor {
             mip_pipelines,
             models,
             readback_wait: std::time::Duration::ZERO,
+            timer: None,
             ingest: Mutex::new(None),
         }
     }
@@ -852,6 +955,9 @@ impl Compositor {
             } else {
                 shape.minification(texels)
             };
+            // How much of its frame's resolution the image needed, for an upload drawn
+            // at the size it is shown (`ResourceCache::upload_drawn`, #1139).
+            item.image.record_draw(least);
             // A 2D item minified at least twice along both axes never samples level 0.
             let skip = u32::from(least >= 2.0);
             let mips = (most > MINIFIED).then(|| {
@@ -1027,7 +1133,7 @@ impl Compositor {
         color::validate(scene.background)?;
         self.prepare(scene)?;
         self.ensure_vertex_buffer()?;
-        if self.draws.iter().any(|draw| draw.rect.is_some()) {
+        if self.blending == Blending::Srgb || self.draws.iter().any(|draw| draw.rect.is_some()) {
             self.ensure_backdrop(scene.canvas.width(), scene.canvas.height());
         }
         if !self.vertices.is_empty() {
@@ -1108,7 +1214,12 @@ impl Compositor {
         (view, texture): (&wgpu::TextureView, &wgpu::Texture),
         scene: &Scene<'_>,
     ) {
-        let clear = premultiplied_linear(scene.background);
+        let encoded = self.blending == Blending::Srgb;
+        let clear = if encoded {
+            premultiplied_srgb(scene.background)
+        } else {
+            premultiplied_linear(scene.background)
+        };
         let clear = wgpu::Color {
             r: f64::from(clear[0]),
             g: f64::from(clear[1]),
@@ -1138,6 +1249,42 @@ impl Compositor {
             }
             first = end;
         }
+        if encoded {
+            self.record_decode(encoder, (view, texture));
+        }
+    }
+
+    /// The decode pass of browser-style blending (ADR-0126 §3): the whole target is
+    /// copied into the backdrop, and drawn back as premultiplied linear light.
+    fn record_decode(
+        &self,
+        encoder: &mut wgpu::CommandEncoder,
+        (view, texture): (&wgpu::TextureView, &wgpu::Texture),
+    ) {
+        let Some(backdrop) = &self.backdrop else {
+            return;
+        };
+        self.record_backdrop_copy(
+            encoder,
+            texture,
+            Rect {
+                x: 0,
+                y: 0,
+                width: texture.width(),
+                height: texture.height(),
+            },
+        );
+        let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            label: Some("jstream-render-decode"),
+            color_attachments: &[Some(color_attachment(view, wgpu::LoadOp::Load))],
+            depth_stencil_attachment: None,
+            timestamp_writes: None,
+            occlusion_query_set: None,
+            multiview_mask: None,
+        });
+        pass.set_pipeline(&self.decode);
+        pass.set_bind_group(0, &backdrop.bind, &[]);
+        pass.draw(0..3, 0..1);
     }
 
     /// One render pass over `target` drawing `draws`, after clearing it to `clear` when
@@ -1171,7 +1318,11 @@ impl Compositor {
             };
             let vertices = draw.first_vertex..draw.first_vertex + draw.vertex_count;
             // `prepare` checked every item's mode.
-            let Ok(steps) = self.blends.steps(draw.blend) else {
+            let blends = match self.blending {
+                Blending::Srgb => &self.encoded_blends,
+                _ => &self.blends,
+            };
+            let Ok(steps) = blends.steps(draw.blend) else {
                 continue;
             };
             match steps {
@@ -1505,10 +1656,13 @@ fn resolve_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
     })
 }
 
+/// A full-target pass over one unfiltered FP16 texture: the resolve (`fs`, into the
+/// sRGB output) or the decode (`fs_decode`, back into an FP16 target).
 fn resolve_pipeline(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
     shader: &wgpu::ShaderModule,
+    (entry, format): (&str, wgpu::TextureFormat),
 ) -> wgpu::RenderPipeline {
     let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
         label: Some("jstream-render-resolve"),
@@ -1533,10 +1687,10 @@ fn resolve_pipeline(
         multisample: Default::default(),
         fragment: Some(wgpu::FragmentState {
             module: shader,
-            entry_point: Some("fs"),
+            entry_point: Some(entry),
             compilation_options: Default::default(),
             targets: &[Some(wgpu::ColorTargetState {
-                format: wgpu::TextureFormat::Rgba8UnormSrgb,
+                format,
                 blend: None,
                 write_mask: wgpu::ColorWrites::ALL,
             })],

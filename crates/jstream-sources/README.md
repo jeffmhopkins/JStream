@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -36,7 +36,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
   allocates, and a frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
-  the `waveform`, `spectrum`, `chat_message` and `timer` kinds draw theirs in a
+  the `waveform`, `spectrum`, `chat_message`, `timer` and `midi_*` kinds draw theirs in a
   `Painter` instead, and `frame`
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
@@ -78,10 +78,19 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   asks for frames under a lock paints before taking it, when `next_change` said a
   frame is due (the engine's `jstream-sources` thread does). A host that skipped a
   source nothing showed may paint it once under its lock, to catch it up before it is
-  shown again (the engine does, for a painter a plan reaches again). The `waveform` and
+  shown again (the engine does, for a painter a plan reaches again). The painter also
+  hands out the frame it painted last (`frame`) and says when the next is due
+  (`next_change`), as its source does, so a host can take new frames from it without
+  the source or its lock (the engine stores them in a frame slot, ADR-0117 §3). The `waveform` and
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
   message, and `timer`'s when the value it shows changes, once a second at most.
+  An animated `image`, a `media` file with video and a `browser` page that paints on
+  the CPU have a painter too, which draws nothing: the image's picks the frame due
+  (its frames are decoded when it is built), the media file's takes the decoded frames
+  due from its player's queue, and the page's hands out its latest paint. So their new
+  frames also reach the picture without a plan. A still image, a file with no video and
+  a page on the GPU have none.
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -166,6 +175,16 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   half-scale sine read at its amplitude by a band around it and not by one away from
   it, an inverted or NaN band reading 0, with its raw level, peak and onset, and a levels-only
   measure hearing the level with no spectrum.
+- `MidiState` and `MidiInputs` (`midi/`, [ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)):
+  what the `midi_*` kinds draw. A `MidiState` holds one input's held velocity per
+  channel and key, its controllers, pitch bend and channel pressure, and a log of the
+  last 1024 note events (`recent(out, most)`, oldest first), all in atomics, so any
+  thread pushes a `jstream_midi::Message` with `push(at_ms, message)` and any reads it
+  without a lock or an allocation. A reader skips a log slot a push is writing. CC 120
+  and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
+  (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
+  `drawn(name)` is the state a source's `input` setting draws. `Context::midi` carries
+  it; with none, the kinds draw their first frame and never change.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless
@@ -211,6 +230,25 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
+- `midi_keyboard`, `midi_piano_roll`, `midi_pads` and `midi_cc`
+  ([ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)): a MIDI input's state,
+  drawn on the CPU `width` by `height`. `input` names the input (empty: every input) and
+  `channel` the channel (1 to 16, 0 for every one). A change of size or `input` restarts
+  the source; `channel`, the colours and every kind-specific setting are live. A colour scales with velocity from 35% to full. The
+  keyboard lights the held keys from `low_key` to `high_key`, black keys over the line
+  between two white ones. The piano roll draws each note as a bar in its key's lane,
+  from its note-on to its note-off, scrolling left from the right edge over `seconds`
+  (0.5 to 30); it rebuilds the bars each frame from the log, and draws a key still held
+  after its note-on left the log from the left edge. The pads are a `rows` by `columns`
+  grid from `first_key` (the bottom-left pad, 36 by default, on channel 10), each lit by
+  its key while held and fading over `decay_ms` after its last note-on, so a short drum
+  hit shows. The meters draw a bar for each controller in `controllers` (a
+  comma-separated list, at most 16) and, with `pitch_bend`, one more from the middle.
+  Each paints at 30 fps through a `Painter` from a pool of four frames, as the scope
+  sources do, and settles on one frame, polled every 250 ms, while its input has no new
+  message and nothing it draws is moving. Tests push synthetic messages and read the
+  pixels: velocity, channel and input filtering, the fade, the scroll, the lost note-on,
+  settling, live and restarting changes, and every setting refused.
 - `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
   (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
   same asset root, or embedded as `data:` URIs) or a built-in `shape` (`plane`, `cube`,
@@ -537,10 +575,20 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   another message was featured since, and `frame` hands out the frame drawn last
   without drawing. Every setting but `font` is live.
 - `webcam`: a webcam or capture card, by the `device` setting, the ID the
-  platform's video-device backend lists it by (`VideoDevices::devices`). An empty
-  `device` captures the first device listed. Like `display` and `window`, it only says
-  what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
-  device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
+  platform's video-device backend lists it by (`VideoDevices::devices`), which
+  `capture.targets` lists (a `capture_target` of kind `device`, protocol 0.90). An empty
+  `device` captures the first device listed. `resolution` (`<width>x<height>`), `fps`
+  and `pixel_format` (`capture_format` parameters, in the Format group) ask for a format
+  the device lists; empty or 0 leaves that part to the engine, and a device that offers
+  no format matching them opens in the engine's choice. Like `display` and `window`, it
+  only says what to capture (`CaptureSpec::Device`, with a `DeviceFormatWant`), and the
+  engine opens the device. A new device or format needs a new source. `camera_controls`
+  (the Camera group, live, protocol 0.105, #1196) sets the device's controls: an object
+  of control name to a number or `"auto"`, as `capture.targets` lists them for the
+  device; a control it leaves out keeps what the device has. `webcam_controls(kind,
+  settings)` reads it, with the device as `webcam_device` gives it, as
+  `CameraControlSetting`s, and the engine sets them on the device while it captures,
+  never restarting the capture. The kind keeps version 1:
   before it had a setting, its sources couldn't start. It has audio too (#716): the
   input the platform pairs with the device, a webcam's microphone or a capture card's
   HDMI audio, which the engine records as an audio input's

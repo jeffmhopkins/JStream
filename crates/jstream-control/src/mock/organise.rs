@@ -9,8 +9,9 @@ use super::{
     Collection, already_exists, check_id, check_index, check_name, invalid, not_found, wire_index,
 };
 use jstream_protocol::{
-    Blocker, Edit, EntityKind, FolderId, FolderInfo, LabelId, LabelInfo, ProtocolError, SceneId,
-    SceneMeta, SourceId, SourceMeta, check_color, check_icon,
+    Blocker, Edit, EntityKind, FolderId, FolderInfo, LabelId, LabelInfo, LabelMembers,
+    LabelledScene, ProtocolError, SceneId, SceneMeta, SourceId, SourceMeta, check_color,
+    check_icon,
 };
 use std::collections::BTreeSet;
 
@@ -126,8 +127,9 @@ impl Collection {
         scenes.chain(folders).collect()
     }
 
-    /// Everything that stops deleting label `id`: the sources carrying it, by ID, then
-    /// the scenes carrying it, in display order.
+    /// Everything that stops deleting label `id`: the sources carrying it, by ID, the
+    /// scenes carrying it, in display order, then the hotkey bindings carrying it, by
+    /// chord (ADR-0133). The mock has no timelines.
     fn label_blockers(&self, id: &LabelId) -> Vec<Blocker> {
         let sources = self
             .sources
@@ -139,12 +141,49 @@ impl Collection {
             .iter()
             .filter(|s| s.meta.labels.contains(id))
             .map(|s| blocker(EntityKind::Scene, s.id.as_str(), "labels"));
-        sources.chain(scenes).collect()
+        let hotkeys = self
+            .hotkey_labels
+            .iter()
+            .filter(|(_, labels)| labels.contains(id))
+            .map(|(chord, _)| blocker(EntityKind::Hotkey, chord.as_str(), "labels"));
+        sources.chain(scenes).chain(hotkeys).collect()
+    }
+
+    /// What `label.members` lists for label `id`, as the graph lists it: its scenes in
+    /// display order, its sources by ID and its bindings by chord. The mock has no
+    /// timelines. `not_found` for a label that doesn't exist.
+    pub(super) fn label_members(&self, id: &LabelId) -> Result<LabelMembers, ProtocolError> {
+        let label = self.labels[self.label_index(id)?].clone();
+        Ok(LabelMembers {
+            label,
+            scenes: self
+                .scenes
+                .iter()
+                .filter(|s| s.meta.labels.contains(id))
+                .map(|s| LabelledScene {
+                    scene_id: s.id.clone(),
+                    name: s.name.clone(),
+                    variant_of: s.variant_of.clone(),
+                })
+                .collect(),
+            sources: self
+                .sources
+                .iter()
+                .filter(|(_, s)| s.meta.labels.contains(id))
+                .map(|(source_id, _)| source_id.clone())
+                .collect(),
+            hotkeys: self.hotkey_bindings(|labels| labels.contains(id)),
+            timelines: Vec::new(),
+        })
     }
 
     /// `labels` ordered by ID, as the engine stores them: `not_found` for a label that
     /// doesn't exist, `invalid_argument` for one listed twice.
-    fn checked_labels(&self, labels: &[LabelId], at: usize) -> Result<Vec<LabelId>, ProtocolError> {
+    pub(super) fn checked_labels(
+        &self,
+        labels: &[LabelId],
+        at: usize,
+    ) -> Result<Vec<LabelId>, ProtocolError> {
         let mut set = BTreeSet::new();
         for label in labels {
             self.label_index(label)?;
@@ -309,8 +348,9 @@ impl Collection {
     }
 
     /// `scene.set_camera` (ADR-0094), as the engine applies it: checked, a keyframe
-    /// scene's override only while its parent has a camera, and removing a parent's
-    /// camera drops its keyframes' overrides, which the inverse restores after it.
+    /// scene's override allowed whether or not its parent has a camera (ADR-0128), and
+    /// removing a parent's camera drops its keyframes' overrides, which the inverse
+    /// restores after it.
     fn set_scene_camera(
         &mut self,
         scene_id: &SceneId,
@@ -318,40 +358,27 @@ impl Collection {
         at: usize,
     ) -> Result<Vec<Edit>, ProtocolError> {
         let si = self.existing_scene(scene_id)?;
-        if let Some(camera) = camera {
-            if let Err(error) = camera.validate() {
-                let field = match error {
-                    jstream_protocol::GeometryError::FieldOfView => "camera.fov_deg",
-                    jstream_protocol::GeometryError::CameraAtTarget => "camera.target",
-                    jstream_protocol::GeometryError::FocusDistance => "camera.focus_px",
-                    jstream_protocol::GeometryError::Blur => "camera.blur_px",
-                    _ => "camera",
-                };
-                return Err(invalid(at, field, error.to_string()));
-            }
-            if let Some(parent) = self.scenes[si].variant_of.clone() {
-                let parent_has_one = self
-                    .scenes
-                    .iter()
-                    .any(|s| s.id == parent && s.camera.is_some());
-                if !parent_has_one {
-                    return Err(invalid(
-                        at,
-                        "camera",
-                        format!(
-                            "keyframe scene `{scene_id}` shows its parent `{parent}`, which has \
-                             no camera; set one on `{parent}` first"
-                        ),
-                    ));
-                }
-            }
+        // A keyframe of a 2D scene may have a camera of its own (ADR-0128).
+        if let Some(camera) = camera
+            && let Err(error) = camera.validate()
+        {
+            let field = match error {
+                jstream_protocol::GeometryError::FieldOfView => "camera.fov_deg",
+                jstream_protocol::GeometryError::CameraAtTarget => "camera.target",
+                jstream_protocol::GeometryError::FocusDistance => "camera.focus_px",
+                jstream_protocol::GeometryError::Blur => "camera.blur_px",
+                _ => "camera",
+            };
+            return Err(invalid(at, field, error.to_string()));
         }
         let old = std::mem::replace(&mut self.scenes[si].camera, camera.copied());
         let mut inverse = vec![Edit::SceneSetCamera {
             scene_id: scene_id.clone(),
             camera: old,
         }];
-        if camera.is_none() && self.scenes[si].variant_of.is_none() {
+        // A parent that had a camera and loses it takes its keyframes' overrides with it
+        // (ADR-0094 §6); a 2D parent's keyframes keep their own (ADR-0128).
+        if camera.is_none() && old.is_some() && self.scenes[si].variant_of.is_none() {
             for scene in &mut self.scenes {
                 if scene.variant_of.as_ref() == Some(scene_id)
                     && let Some(dropped) = scene.camera.take()

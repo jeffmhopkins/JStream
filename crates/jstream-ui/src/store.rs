@@ -30,6 +30,8 @@ pub struct Collection {
     pub canvas: Canvas,
     /// The base frame rate, 30 or 60 (ADR-0119).
     pub base_fps: u32,
+    /// The space every blend mode mixes in (ADR-0126).
+    pub blending: jstream_control::protocol::Blending,
     /// Every source, ordered by ID.
     pub sources: Vec<SourceInfo>,
     /// Every scene with its items, in display order. A keyframe scene's `items` are its
@@ -66,6 +68,7 @@ impl Collection {
                 rev,
                 canvas,
                 base_fps,
+                blending,
                 sources,
                 scenes,
                 outputs,
@@ -106,6 +109,7 @@ impl Collection {
                     rev,
                     canvas,
                     base_fps,
+                    blending,
                     sources,
                     scenes,
                     keyframe_children,
@@ -852,7 +856,9 @@ impl Studio {
                 ..
             } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
             // The kinds it quarantined are marked in `kind.list` now.
-            Event::GpuDeviceLost { quarantined, .. } if !quarantined.is_empty() => {
+            Event::GpuDeviceLost { quarantined, .. } | Event::GpuEffectSlow { quarantined, .. }
+                if !quarantined.is_empty() =>
+            {
                 let studio = *self;
                 let session = session.clone();
                 spawn_local(async move { studio.relist_kinds(&session).await });

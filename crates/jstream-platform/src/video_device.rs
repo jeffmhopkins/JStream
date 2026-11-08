@@ -72,6 +72,141 @@ pub struct VideoDeviceFormat {
     pub encoding: CaptureEncoding,
 }
 
+/// A camera control: an image or lens setting a device lets the application change
+/// while it captures (#1196). The names follow the OS APIs' common set: Windows'
+/// `IAMVideoProcAmp` and `IAMCameraControl`, and V4L2's user and camera control classes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum CameraControlId {
+    /// Image brightness.
+    Brightness,
+    /// Image contrast.
+    Contrast,
+    /// Colour saturation.
+    Saturation,
+    /// Hue.
+    Hue,
+    /// Sharpness.
+    Sharpness,
+    /// Gamma.
+    Gamma,
+    /// Gain, the sensor's amplification.
+    Gain,
+    /// White balance, as a colour temperature in kelvin.
+    WhiteBalance,
+    /// Backlight compensation.
+    BacklightCompensation,
+    /// The mains frequency the device filters flicker for: 0 off, 1 50 Hz, 2 60 Hz.
+    PowerLineFrequency,
+    /// Exposure time, in the backend's unit: log2 seconds on Windows (-6 is 1/64 s),
+    /// hundreds of microseconds on Linux.
+    Exposure,
+    /// Lens focus distance.
+    Focus,
+    /// Zoom.
+    Zoom,
+    /// Horizontal pan.
+    Pan,
+    /// Vertical tilt.
+    Tilt,
+    /// Iris (aperture).
+    Iris,
+}
+
+impl CameraControlId {
+    /// Every control, in the order the backends list them.
+    pub const ALL: [Self; 16] = [
+        Self::Brightness,
+        Self::Contrast,
+        Self::Saturation,
+        Self::Hue,
+        Self::Sharpness,
+        Self::Gamma,
+        Self::Gain,
+        Self::WhiteBalance,
+        Self::BacklightCompensation,
+        Self::PowerLineFrequency,
+        Self::Exposure,
+        Self::Focus,
+        Self::Zoom,
+        Self::Pan,
+        Self::Tilt,
+        Self::Iris,
+    ];
+
+    /// The control's stable name, in snake case (`white_balance`): what a setting stores.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Brightness => "brightness",
+            Self::Contrast => "contrast",
+            Self::Saturation => "saturation",
+            Self::Hue => "hue",
+            Self::Sharpness => "sharpness",
+            Self::Gamma => "gamma",
+            Self::Gain => "gain",
+            Self::WhiteBalance => "white_balance",
+            Self::BacklightCompensation => "backlight_compensation",
+            Self::PowerLineFrequency => "power_line_frequency",
+            Self::Exposure => "exposure",
+            Self::Focus => "focus",
+            Self::Zoom => "zoom",
+            Self::Pan => "pan",
+            Self::Tilt => "tilt",
+            Self::Iris => "iris",
+        }
+    }
+
+    /// The control [`name`](Self::name)d `name`, if any.
+    pub fn from_name(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|c| c.name() == name)
+    }
+}
+
+/// A camera control a device offers, as [`VideoDevices::controls`] lists it. Values are
+/// in the backend's own units, between `min` and `max` in steps of `step`.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct CameraControlInfo {
+    /// Which control.
+    pub id: CameraControlId,
+    /// The lowest value.
+    pub min: i32,
+    /// The highest value.
+    pub max: i32,
+    /// The step between values; at least 1.
+    pub step: i32,
+    /// The device's default value.
+    pub default: i32,
+    /// The value now. While `auto` is `Some(true)` it is the last value read, which the
+    /// device may be changing on its own.
+    pub value: i32,
+    /// Whether the device sets the control itself: `None` when it has no automatic mode,
+    /// else whether that mode is on now.
+    pub auto: Option<bool>,
+}
+
+/// What [`VideoDevices::set_control`] sets a control to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CameraControlValue {
+    /// This value, with the device's automatic mode off. Clamped to the control's range
+    /// and rounded to its step by the backend.
+    Manual(i32),
+    /// The device's automatic mode.
+    Auto,
+}
+
+impl CameraControlInfo {
+    /// `value` clamped to the range and rounded to the nearest step from `min`.
+    pub fn snap(&self, value: i32) -> i32 {
+        let step = i64::from(self.step.max(1));
+        let min = i64::from(self.min);
+        let max = i64::from(self.max.max(self.min));
+        let v = i64::from(value).clamp(min, max);
+        let snapped = (min + ((v - min + step / 2) / step) * step).clamp(min, max);
+        // In range of i32: clamped between two i32s.
+        i32::try_from(snapped).unwrap_or(self.min)
+    }
+}
+
 /// One compressed frame, as a device delivered it, handed to a [`CaptureDecoder`].
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct CompressedFrame<'a> {
@@ -143,6 +278,40 @@ pub trait VideoDevices: Send + Sync {
         format: &VideoDeviceFormat,
         decoder: Option<Box<dyn CaptureDecoder>>,
     ) -> Result<Box<dyn CaptureStream>, PlatformError>;
+
+    /// The camera controls `device` offers, with their ranges and current values
+    /// (#1196). Empty, the default, for a backend with no controls (macOS for now) and a
+    /// device with none (most capture cards). It reads them whether or not the device
+    /// is open.
+    ///
+    /// # Errors
+    /// [`PlatformError::NotFound`] when the device is gone, and [`PlatformError::Os`]
+    /// when the OS refuses.
+    fn controls(&self, device: &DeviceId) -> Result<Vec<CameraControlInfo>, PlatformError> {
+        let _ = device;
+        Ok(Vec::new())
+    }
+
+    /// Sets one of `device`'s camera controls, open or not. On an open device it applies
+    /// to the running stream without reopening it, so no frame is lost; on a closed one
+    /// it applies for as long as the device keeps it (until it is unplugged, on most).
+    ///
+    /// # Errors
+    /// [`PlatformError::Unsupported`] when the device doesn't offer `control`, or has no
+    /// automatic mode for [`CameraControlValue::Auto`] (the default, for every control),
+    /// [`PlatformError::NotFound`] when the device is gone, and [`PlatformError::Os`]
+    /// when the OS refuses.
+    fn set_control(
+        &self,
+        device: &DeviceId,
+        control: CameraControlId,
+        value: CameraControlValue,
+    ) -> Result<(), PlatformError> {
+        let _ = value;
+        Err(PlatformError::Unsupported {
+            what: format!("the {} control on {device}", control.name()),
+        })
+    }
 
     /// This backend on `context`'s device: its streams deliver `VideoSurface::Gpu`
     /// frames that render samples without a CPU copy (README › GPU frames), as
@@ -439,5 +608,149 @@ mod tests {
         ));
         drop(stream);
         assert_eq!(fake.open_streams(), 0);
+    }
+
+    #[test]
+    fn a_control_name_round_trips() {
+        for id in super::CameraControlId::ALL {
+            assert_eq!(super::CameraControlId::from_name(id.name()), Some(id));
+        }
+        assert_eq!(super::CameraControlId::from_name("shutter"), None);
+    }
+
+    #[test]
+    fn a_control_value_snaps_to_the_range_and_step() {
+        let info = super::CameraControlInfo {
+            id: super::CameraControlId::WhiteBalance,
+            min: 2800,
+            max: 6500,
+            step: 10,
+            default: 4600,
+            value: 4600,
+            auto: None,
+        };
+        assert_eq!(info.snap(4604), 4600);
+        assert_eq!(info.snap(4605), 4610);
+        assert_eq!(info.snap(100), 2800);
+        assert_eq!(info.snap(i32::MAX), 6500);
+        let zero_step = super::CameraControlInfo { step: 0, ..info };
+        assert_eq!(zero_step.snap(4601), 4601);
+    }
+
+    #[test]
+    fn the_fake_webcam_lists_and_sets_its_controls() {
+        use super::{CameraControlId, CameraControlValue};
+        let (_clock, _fake, devices) = setup();
+        let webcam = DeviceId::new(FAKE_WEBCAM);
+        let listed = devices.controls(&webcam).unwrap();
+        let ids: Vec<_> = listed.iter().map(|c| c.id).collect();
+        assert_eq!(
+            ids,
+            [
+                CameraControlId::Brightness,
+                CameraControlId::WhiteBalance,
+                CameraControlId::Exposure
+            ]
+        );
+        let get = |id| {
+            devices
+                .controls(&webcam)
+                .unwrap()
+                .into_iter()
+                .find(|c| c.id == id)
+                .unwrap()
+        };
+
+        devices
+            .set_control(
+                &webcam,
+                CameraControlId::WhiteBalance,
+                CameraControlValue::Manual(5003),
+            )
+            .unwrap();
+        let wb = get(CameraControlId::WhiteBalance);
+        assert_eq!((wb.value, wb.auto), (5000, Some(false)));
+        devices
+            .set_control(
+                &webcam,
+                CameraControlId::WhiteBalance,
+                CameraControlValue::Auto,
+            )
+            .unwrap();
+        assert_eq!(get(CameraControlId::WhiteBalance).auto, Some(true));
+
+        devices
+            .set_control(
+                &webcam,
+                CameraControlId::Brightness,
+                CameraControlValue::Manual(300),
+            )
+            .unwrap();
+        let brightness = get(CameraControlId::Brightness);
+        assert_eq!((brightness.value, brightness.auto), (255, None));
+        assert!(matches!(
+            devices.set_control(
+                &webcam,
+                CameraControlId::Brightness,
+                CameraControlValue::Auto
+            ),
+            Err(PlatformError::Unsupported { .. })
+        ));
+        assert!(matches!(
+            devices.set_control(
+                &webcam,
+                CameraControlId::Zoom,
+                CameraControlValue::Manual(1)
+            ),
+            Err(PlatformError::Unsupported { .. })
+        ));
+    }
+
+    #[test]
+    fn a_device_with_no_controls_or_gone_says_so() {
+        use super::{CameraControlId, CameraControlValue};
+        let (_clock, fake, devices) = setup();
+        let card = DeviceId::new(FAKE_CAPTURE_CARD);
+        assert!(devices.controls(&card).unwrap().is_empty());
+        let webcam = DeviceId::new(FAKE_WEBCAM);
+        fake.unplug(&webcam);
+        assert!(matches!(
+            devices.controls(&webcam),
+            Err(PlatformError::NotFound { .. })
+        ));
+        assert!(matches!(
+            devices.set_control(&webcam, CameraControlId::Gain, CameraControlValue::Auto),
+            Err(PlatformError::NotFound { .. })
+        ));
+    }
+
+    #[test]
+    fn a_backend_without_controls_lists_none_and_refuses_a_set() {
+        use super::{CameraControlId, CameraControlValue, VideoDeviceInfo};
+        struct Bare;
+        impl VideoDevices for Bare {
+            fn devices(&self) -> Result<Vec<VideoDeviceInfo>, PlatformError> {
+                Ok(Vec::new())
+            }
+            fn formats(&self, _: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
+                Ok(Vec::new())
+            }
+            fn open(
+                &self,
+                _: &DeviceId,
+                _: &VideoDeviceFormat,
+                _: Option<Box<dyn CaptureDecoder>>,
+            ) -> Result<Box<dyn CaptureStream>, PlatformError> {
+                Err(PlatformError::Unsupported {
+                    what: "open".into(),
+                })
+            }
+        }
+        let id = DeviceId::new("cam");
+        assert!(Bare.controls(&id).unwrap().is_empty());
+        assert!(matches!(
+            Bare.set_control(&id, CameraControlId::Focus, CameraControlValue::Auto),
+            Err(PlatformError::Unsupported { .. })
+        ));
     }
 }

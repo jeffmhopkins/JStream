@@ -25,6 +25,7 @@ mod activity_log;
 mod audio;
 mod audio_sources;
 mod audit;
+mod camera_controls;
 mod chain;
 mod codec_downloads;
 mod collection;
@@ -56,6 +57,7 @@ mod projects;
 mod reactive;
 mod runtime;
 mod session;
+mod slot;
 mod snapshot;
 mod studio;
 #[cfg(test)]

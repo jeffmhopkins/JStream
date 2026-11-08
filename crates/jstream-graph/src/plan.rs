@@ -10,9 +10,9 @@
 use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
-    Binding, DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId,
-    MixInput, OutputId, ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind,
-    TransitionPresetId, VideoMix, VideoMixId,
+    Binding, DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, ItemId, MixInput, OutputId,
+    ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind, TransitionPresetId,
+    VideoMix, VideoMixId,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -390,7 +390,7 @@ impl Graph {
         let hotkeys = state
             .hotkeys()
             .filter(|(_, action)| names_deleted(action))
-            .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+            .map(|(chord, action)| state.binding(chord, action))
             .collect();
         let bindings = state
             .bindings()

@@ -344,7 +344,7 @@ fn state_get_golden() {
         run_on(&engine, &["--json", "--mock", "state", "get"]),
         ok(&format!(
             "{}{}{},{}{}{}\n",
-            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"canvas":{"width":1920,"height":1080},"#,
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"canvas":{"width":1920,"height":1080},"blending":"srgb","#,
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
@@ -907,7 +907,12 @@ fn capture_targets_prints_each_target() {
     assert_eq!(
         run_on(&MockEngine::new(), &["--mock", "capture", "targets"]),
         ok("display mock:display (Mock display) 1920x1080, primary\n\
-             window mock:window (Mock window) 1280x720\n")
+             window mock:window (Mock window) 1280x720\n\
+             device mock:webcam (Mock webcam)\n\
+             \x20 1920x1080 30 fps mjpeg\n\
+             \x20 1280x720 60 fps nv12\n\
+             \x20 brightness 128 (0 to 255, step 1, default 128)\n\
+             \x20 exposure -6 (-11 to -2, step 1, default -6), auto\n")
     );
 }
 

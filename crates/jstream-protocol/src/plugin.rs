@@ -74,6 +74,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("source.sizes", Class(R)),
     ("item.list", Class(R)),
     ("state.get", Class(R)),
+    ("label.members", Class(R)),
     ("kind.list", Class(R)),
     ("kind.describe", Class(R)),
     ("output.list", Class(R)),
@@ -135,6 +136,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("item.clear_override", Class(E)),
     ("item.set_effects", Class(E)),
     ("item.set_motion", Class(E)),
+    ("item.set_timing", Class(E)),
     ("source.create", Class(E)),
     ("source.rename", Class(E)),
     ("source.set_settings", Class(E)),
@@ -156,8 +158,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("send.remove", Class(E)),
     ("canvas.set_size", Class(E)),
     ("canvas.set_frame_rate", Class(E)),
+    ("canvas.set_blending", Class(E)),
     ("hotkey.set", Class(E)),
     ("hotkey.clear", Class(E)),
+    ("hotkey.set_labels", Class(E)),
     ("binding.set", Class(E)),
     ("binding.clear", Class(E)),
     ("timeline.set", N),
@@ -219,6 +223,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("preview.subscribe", N),
     // Not named in any class, so "never" until a PR places them.
     ("preview.unsubscribe", N),
+    // A session's own views (ADR-0132): a plugin shows no preview streams.
+    ("preview.report", N),
     ("audio.reset_loudness", N),
     // A studio edit (ADR-0069 S2): it puts a scene on preview, not on air.
     ("studio.set_preview", Class(E)),

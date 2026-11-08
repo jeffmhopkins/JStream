@@ -64,6 +64,30 @@ pub struct ProfileInfo {
     /// mixer didn't run in it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub mixer: Option<MixerProfile>,
+    /// What the clients' views did with their preview streams in the window, as they
+    /// reported it with `preview.report` (since 0.103, ADR-0132): one per view a session
+    /// reported in the window, the session's that has ended included while the window
+    /// reaches back to its last report.
+    pub views: Vec<ViewProfile>,
+}
+
+/// One client view's preview pictures in the window ([`ProfileInfo::views`]), as its
+/// client reported them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ViewProfile {
+    /// The name the session's client gave in `hello`: third-party text (ADR-0059).
+    pub client: String,
+    /// The view's label, as the client reported it: third-party text.
+    pub view: String,
+    /// Each count's growth over the window.
+    #[serde(default)]
+    pub counts: crate::ViewCounts,
+    /// Frames that arrived, a second.
+    #[serde(default)]
+    pub received_fps: Finite32,
+    /// Pictures drawn, a second.
+    #[serde(default)]
+    pub shown_fps: Finite32,
 }
 
 /// One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached

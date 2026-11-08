@@ -73,8 +73,9 @@ through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-cl
 So are the `plugin.*` ops (install, grant, re-enable) and `plugin.state_changed`: only a
 person installs or grants a plugin (ADR-0069 G1), so an agent can't hand its access to
 code that keeps running after the conversation. So is `effect.enable` (`effect` is
-in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss was blamed
-on (#349). The `gpu.device_lost` event that reports the loss does reach agents. So are
+in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss, or a
+pass that ran too long, was blamed on (#349). The `gpu.device_lost` and
+`gpu.effect_slow` events that report them do reach agents. So are
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
 ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
@@ -158,8 +159,9 @@ server sent (each at most 512 characters). Nothing delimits the server's words t
 the description and the server instructions say the whole `reason` is untrusted. A
 window's `name` in a `capture.targets` result is its title (or, on macOS, its
 application's name), set by the application that owns it, in a field that isn't
-`remote_`-prefixed ([ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md));
-the `capture` tool's description and the server instructions say it is untrusted too. A
+`remote_`-prefixed ([ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md)),
+and so is a device's, set by its driver (protocol 0.90);
+the `capture` tool's description and the server instructions say they are untrusted too. A
 `font.list` font's `remote_family` and `remote_style` come from the font file, and the
 `font` tool's description says they are data, never instructions
 ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)). A `profile.get` thread's
@@ -183,18 +185,21 @@ title-safe area, alignment and spacing, a `backdrop` source rather than a flat c
 `text` faces, sizes, letter spacing and shadow to use, restrained colour and contrast,
 recipes for a lower third, a ticker (`scroll` with a negative speed and a `gap_x`) and
 a countdown or clock (`timer`, one size whatever it shows), grouping a multi-part graphic as a nested scene whose item's
-effects clip and shadow it as one, fitting an item to its text's `source.sizes`, a look no built-in filter makes as a custom shader the Filters window's shader editor opens (pack `custom-<word>`, effect `shader` in `shader.wgsl`, a `// @name` line and a `// @param` line per setting matching the manifest, #1232),
+effects clip and shadow it as one, fitting an item to its text's `source.sizes`, a look no built-in filter makes as a custom shader the Filters window's shader editor opens (pack `custom-<word>`, effect `shader` in `shader.wgsl`, a `// @name` line and a `// @param` line per setting matching the manifest, and a `// @renamed <old> <new>` line with a version bump and `renames` for a renamed setting, #1232, #1295),
 animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
 keyframe variants and blend modes (`item.set_blend`), the light and framing filters
 (`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
-and the `vignette`'s blends, shapes and three looks, #1226), layering by role
+and the `vignette`'s blends, shapes and three looks, #1226), the `border` kind's
+settings, its three looks, its 9-slice image frame (#1294) and the order to stack it with a shadow or glow (#1227),
+layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
 `scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy
 surfaces as a flipped, squashed, blurred `scene` item of the composite, masked in
-canvas space by an unflipped group around it and added at a low opacity because
-blending is linear, 3D sets through
+canvas space by an unflipped group around it and added at a low opacity, the blending
+space (`canvas.set_blending`: `srgb` to match a browser or design tool, `linear` for
+light that adds evenly, chosen before tuning opacities, ADR-0126), 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
@@ -220,7 +225,10 @@ modifier for something that follows a bus or a beat, which hears only while an o
 runs, [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone
-([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), and checking
+([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), one label on an
+effect's keyframe scenes, hotkeys and timelines, read back with `label.members` and
+changed together in one batch
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.

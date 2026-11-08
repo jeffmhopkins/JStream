@@ -55,6 +55,8 @@ enum Prop {
     /// An item's motion modifiers, the whole list, its own or a keyframe scene's
     /// override (ADR-0099).
     Motion,
+    /// A keyframe scene's timing for an item in transitions into it (ADR-0129).
+    Timing,
     /// An item's blend mode.
     Blend,
     /// An item's stacking position.
@@ -123,6 +125,8 @@ pub struct Touched {
     canvas: bool,
     /// Whether the base frame rate was set (ADR-0119).
     frame_rate: bool,
+    /// Whether the blending space was set (ADR-0126).
+    blending: bool,
     /// Whether the default transition preset was set.
     default_preset: bool,
     /// Whether the folders' order was set.
@@ -173,6 +177,7 @@ impl Touched {
                     OverrideField::Opacity => Prop::Opacity,
                     OverrideField::Effects => Prop::Effects,
                     OverrideField::Motion => Prop::Motion,
+                    OverrideField::Timing => Prop::Timing,
                 };
                 self.prop(Object::Item(item_id.clone()), prop);
             }
@@ -189,6 +194,7 @@ impl Touched {
             Edit::SceneReorder { .. } => self.scene_order = true,
             Edit::CanvasSetSize { .. } => self.canvas = true,
             Edit::CanvasSetFrameRate { .. } => self.frame_rate = true,
+            Edit::CanvasSetBlending { .. } => self.blending = true,
             Edit::ItemAdd {
                 scene_id,
                 item_id,
@@ -213,6 +219,9 @@ impl Touched {
             }
             Edit::ItemSetMotion { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Motion);
+            }
+            Edit::ItemSetTiming { item_id, .. } => {
+                self.prop(Object::Item(item_id.clone()), Prop::Timing);
             }
             Edit::ItemSetOpacity { item_id, .. } => {
                 self.prop(Object::Item(item_id.clone()), Prop::Opacity);
@@ -530,6 +539,13 @@ impl Touched {
             Edit::HotkeyClear { chord } => {
                 self.exists.insert(Object::Hotkey(chord.clone()));
             }
+            // A binding's labels are its metadata (ADR-0133), and use each label.
+            Edit::HotkeySetLabels { chord, labels } => {
+                self.prop(Object::Hotkey(chord.clone()), Prop::Meta);
+                for label in labels {
+                    self.uses.insert(Object::Label(label.clone()));
+                }
+            }
             Edit::BindingSet { trigger, action } => {
                 self.exists.insert(Object::Binding(trigger.clone()));
                 self.uses_named(action);
@@ -543,6 +559,9 @@ impl Touched {
                 self.exists
                     .insert(Object::Timeline(timeline.timeline_id.clone()));
                 self.uses.insert(Object::Scene(scene_id.clone()));
+                for label in &timeline.labels {
+                    self.uses.insert(Object::Label(label.clone()));
+                }
             }
             Edit::TimelineDelete { timeline_id } => {
                 self.exists.insert(Object::Timeline(timeline_id.clone()));
@@ -559,6 +578,7 @@ impl Touched {
         self.scene_order |= other.scene_order;
         self.canvas |= other.canvas;
         self.frame_rate |= other.frame_rate;
+        self.blending |= other.blending;
         self.default_preset |= other.default_preset;
         self.folder_order |= other.folder_order;
         self.label_order |= other.label_order;
@@ -606,6 +626,7 @@ impl Touched {
             || (self.scene_order && other.scene_order)
             || (self.canvas && other.canvas)
             || (self.frame_rate && other.frame_rate)
+            || (self.blending && other.blending)
             || (self.default_preset && other.default_preset)
             || (self.folder_order && other.folder_order)
             || (self.label_order && other.label_order)

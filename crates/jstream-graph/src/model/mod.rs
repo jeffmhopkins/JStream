@@ -81,6 +81,7 @@ use jstream_protocol::{
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
+use jstream_protocol::KeyframeTiming;
 pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
 /// A keyframe scene's overrides of its parent's items (ADR-0049 §1): per item, the
@@ -88,8 +89,9 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 /// [`Placement::Geometry`]. Overridden effects are [`Chains`] whose audio chain is
 /// always empty, which the keyframe draws in place of the item's own (ADR-0088).
 /// Overridden motion is a whole [`MotionList`], moved with in place of the item's own
-/// (ADR-0099).
-pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList>;
+/// (ADR-0099). An overridden timing applies to transitions into the keyframe (ADR-0129).
+pub type Overrides =
+    jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList, KeyframeTiming>;
 
 /// An item's motion modifiers (ADR-0099), in order, checked by `item.set_motion`.
 pub type MotionList = Vec<jstream_protocol::MotionModifier>;
@@ -190,6 +192,8 @@ pub struct State {
     pub(crate) canvas: Canvas,
     /// The base frame rate, 30 or 60 (ADR-0119). A new collection is 30.
     pub(crate) base_fps: u32,
+    /// The space every blend mode mixes in (ADR-0126). A new collection is `srgb`.
+    pub(crate) blending: jstream_protocol::Blending,
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
@@ -204,6 +208,9 @@ pub struct State {
     /// The master stage's chains (ADR-0080 §1).
     pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
+    /// The labels each binding carries (ADR-0133), ordered by ID. A chord with none has
+    /// no entry, and a cleared binding takes its entry with it.
+    pub(crate) hotkey_labels: BTreeMap<Chord, BTreeSet<LabelId>>,
     /// The controller bindings (ADR-0122), ordered by trigger.
     pub(crate) bindings: BTreeMap<Trigger, Action>,
     /// In folder order.
@@ -225,6 +232,7 @@ impl Default for State {
         Self {
             canvas: Canvas::default(),
             base_fps: jstream_protocol::DEFAULT_BASE_FPS,
+            blending: jstream_protocol::Blending::Srgb,
             sources: BTreeMap::new(),
             scenes: Vec::new(),
             outputs: BTreeMap::new(),
@@ -235,6 +243,7 @@ impl Default for State {
             sends: BTreeMap::new(),
             master: Chains::default(),
             hotkeys: BTreeMap::new(),
+            hotkey_labels: BTreeMap::new(),
             bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
@@ -255,6 +264,11 @@ impl State {
     /// The collection's base frame rate, 30 or 60 (ADR-0119).
     pub fn base_fps(&self) -> u32 {
         self.base_fps
+    }
+
+    /// The space every blend mode mixes in (ADR-0126).
+    pub fn blending(&self) -> jstream_protocol::Blending {
+        self.blending
     }
 
     /// Every source, ordered by ID. Sources have no display order of their own.
@@ -391,6 +405,29 @@ impl State {
     /// The action bound to this chord.
     pub fn hotkey(&self, chord: &Chord) -> Option<&Action> {
         self.hotkeys.get(chord)
+    }
+
+    /// The labels the binding of this chord carries, ordered by ID: none for a chord
+    /// with no binding (ADR-0133).
+    pub fn hotkey_labels(&self, chord: &Chord) -> Vec<LabelId> {
+        self.hotkey_labels
+            .get(chord)
+            .map(|labels| labels.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// The binding of `chord` to `action` as the wire reports it, with its labels.
+    pub fn binding(&self, chord: &Chord, action: &Action) -> jstream_protocol::HotkeyBinding {
+        jstream_protocol::HotkeyBinding::new(chord.clone(), action)
+            .with_labels(self.hotkey_labels(chord))
+    }
+
+    /// Every binding as the wire reports it, ordered by chord, with its labels.
+    pub fn hotkey_bindings(&self) -> Vec<jstream_protocol::HotkeyBinding> {
+        self.hotkeys
+            .iter()
+            .map(|(chord, action)| self.binding(chord, action))
+            .collect()
     }
 
     /// Every controller binding (ADR-0122), ordered by trigger: the trigger and the

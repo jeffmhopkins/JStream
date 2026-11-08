@@ -249,19 +249,26 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `state.changed`, so a chord bound or cleared from any client is heard or let go at
   once. `jstream_platform_windows::GlobalHotkeys` registers exactly those chords with
   `RegisterHotKey` on its own thread, and on Linux `jstream_platform_linux::GlobalHotkeys`
-  grabs them on the X root window with `xcb_grab_key`, so the app never sees any other
-  key; a press
+  grabs them on the X root window with `xcb_grab_key` (a wheel chord with
+  `xcb_grab_button` on button 4 or 5), so the app never sees any other key; a press
   runs the binding's action as an `action` call from that session, and nothing it
   hears is kept or sent anywhere else. A registered chord goes to JStream even while
   its window has the focus, so the page doesn't run it twice. A chord another
   application holds already is logged and heard only while JStream has the focus. The
   UI setting `hotkeys.global` turns it off (`false`; on otherwise), read through
   `Server::ui_settings`; the UI's Settings dialog shows it in the app. Every chord is
-  let go when it is turned off and when the app stops. On a Wayland session the Linux
-  listener doesn't start (Wayland has no grab; its GlobalShortcuts portal isn't wired
-  yet), and the app has no Linux window yet ([Purpose](#purpose)), so the X11 listener
-  runs once one lands. Wheel chords (ADR-0112 §3), the Wayland portal and the macOS
-  listener aren't built yet.
+  let go when it is turned off and when the app stops. Wheel chords (ADR-0112 §3) are
+  registered only with a listener that hears the wheel, which today is X11's, and only
+  while a follow camera is live: while the scene on program or on preview, or the scene
+  it is a keyframe scene of, has one, as `state.get` and `studio.get` say, kept up from
+  `state.changed` and `studio.changed` (§5). A grabbed wheel chord is consumed, so the
+  application under the pointer doesn't zoom too; the rest of the time it isn't grabbed
+  and the wheel passes through untouched. On Windows the page hears wheel chords while
+  it has the focus. On
+  a Wayland session the Linux listener doesn't start (Wayland has no grab; its
+  GlobalShortcuts portal isn't wired yet), and the app has no Linux window yet
+  ([Purpose](#purpose)), so the X11 listener runs once one lands. Windows' wheel hook
+  (`WH_MOUSE_LL`), the Wayland portal and the macOS listener aren't built yet.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing
   and the build doesn't need the bundle. WebView2 gives the scheme the origin

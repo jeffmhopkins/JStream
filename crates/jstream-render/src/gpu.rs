@@ -186,6 +186,8 @@ impl Gpu {
     fn from_adapter(adapter: wgpu::Adapter) -> Result<Self, RenderError> {
         let (device, queue) = ready(adapter.request_device(&wgpu::DeviceDescriptor {
             label: Some("jstream-render"),
+            // Times effect-pack passes where the adapter can (#349, `timer.rs`).
+            required_features: adapter.features() & wgpu::Features::TIMESTAMP_QUERY,
             ..Default::default()
         }))
         .ok_or_else(|| RenderError::Device {

@@ -3487,6 +3487,34 @@ fn the_base_frame_rate_defaults_to_30_and_60_is_an_option() {
     assert!(!saved.contains("base_fps"), "{saved}");
 }
 
+/// ADR-0126 §2: a new collection blends browser-style, `linear` is one edit away and
+/// undoes back, and the file names the space only when it is `linear`.
+#[test]
+fn the_blending_space_defaults_to_srgb_and_linear_is_an_option() {
+    use jstream_protocol::Blending;
+    let mut graph = fixture();
+    assert_eq!(graph.state().blending(), Blending::Srgb);
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::CanvasSetBlending {
+            blending: Blending::Linear,
+        }],
+    );
+    assert_eq!(graph.state().blending(), Blending::Linear);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::CanvasSetBlending {
+            blending: Blending::Srgb
+        }]
+    );
+    let saved = graph.to_collection_json();
+    assert!(saved.contains("\"blending\": \"linear\""), "{saved}");
+    apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(graph.state().blending(), Blending::Srgb);
+    let saved = graph.to_collection_json();
+    assert!(!saved.contains("blending"), "{saved}");
+}
+
 #[test]
 fn canvas_set_size_is_checked_and_undone() {
     let mut graph = fixture();
@@ -4665,6 +4693,38 @@ mod hotkeys {
         );
         assert_eq!(applied.inverse.edits, vec![set("F1", switch("a"))]);
         assert!(chords(&graph).is_empty());
+    }
+
+    /// A wheel chord binds an action that takes a step, `scene.zoom_camera`, and
+    /// nothing else (ADR-0112 §3).
+    #[test]
+    fn a_wheel_chord_binds_only_an_action_that_takes_steps() {
+        let mut graph = fixture();
+        let zoom = |steps| Action::SceneZoomCamera {
+            scene_id: SceneId::new("a"),
+            steps,
+        };
+        apply_ok(
+            &mut graph,
+            vec![
+                set("Ctrl+WheelUp", zoom(1)),
+                set("Ctrl+WheelDown", zoom(-1)),
+            ],
+        );
+        assert_eq!(
+            graph.state().hotkey(&Chord::new("Ctrl+WheelDown")),
+            Some(&zoom(-1))
+        );
+        assert_eq!(
+            apply_err(&mut graph, vec![set("Shift+WheelUp", switch("b"))]),
+            ProtocolError::invalid_argument(
+                "edits.0.action.type",
+                "a wheel chord runs once per notch, so it can only be bound to an action \
+                 that takes one step, such as `scene.zoom_camera` (ADR-0112)",
+            )
+        );
+        // A key binds a step action too.
+        apply_ok(&mut graph, vec![set("Equal", zoom(1))]);
     }
 
     /// Rebinding is a clear then a set, in one batch.
