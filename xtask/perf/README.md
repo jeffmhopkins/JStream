@@ -121,14 +121,17 @@ and exits non-zero when a row breaks a limit or a scene didn't run, naming each:
   across the run, from the first base row to the last. Resident memory isn't judged
   across the run, because the allocator keeps what a heavy scene used.
 
-The shipped limits are software-rendering bars, for lavapipe with the OpenH264
-recording: loose enough for a CI runner, tight enough that a scene that stops drawing,
-a several-fold regression or a leak fails. The scenes that software rendering makes slow
-(a 1080p blur, glow, shadow, outline, sharpen, key or scroll, the models, many item
-effects) have their own looser limits. A few that draw near the frame budget on a GitHub
-runner (a colour correction, a LUT, a scene mask, a scene chain) are judged on frame rate
-and mean frame time only. An unknown key fails, so a typo can't turn a
-limit off.
+The shipped limits are software-rendering bars for the `perf-linux` job: lavapipe on a
+4-CPU GitHub-hosted runner with the OpenH264 recording. They are loose enough for the
+spread between hosted runs (a scene's mean frame time has moved by up to 3x), and tight
+enough that a scene that stops drawing, a several-fold regression or a leak fails. So
+they judge each scene by its frame rate and mean frame time, and leave the share of
+frames over budget at 100%, because that share flips for any scene drawing near the
+33 ms budget. The base scene has a tighter frame-time bar, so a regression in a frame's
+fixed cost shows there first. The scenes that software rendering makes slow (a 1080p
+blur, glow, shadow, outline, sharpen, key or scroll, the models, many item effects, a
+scene chain) have their own looser limits. An unknown key fails, so a typo can't turn
+a limit off.
 
 `bench/gates-lavapipe.json` holds the `--bench` gates for the same runner: the bench's
 alpha.5 counters with room for software rendering, at least a fifth of the target frame
