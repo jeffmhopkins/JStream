@@ -676,8 +676,9 @@ impl jstream_browser::BrowserPage for PaintedPage {
 
 /// On the GPU path a browser page paints on the program stage's device, and the render
 /// thread samples its texture there as premultiplied sRGB: half-transparent red over
-/// the black canvas reads back as linear red one half, not the darker red reading it
-/// as straight alpha would give. The stage takes the device away when it stops.
+/// the black canvas reads back, in a new collection's browser-style blending
+/// (ADR-0126), as red 128, half the encoded value, not the darker red reading it as
+/// straight alpha would give (64). The stage takes the device away when it stops.
 #[test]
 fn a_browser_page_is_composited_from_its_gpu_frames() {
     let _gpu = one_gpu_test_at_a_time();
@@ -699,9 +700,8 @@ fn a_browser_page_is_composited_from_its_gpu_frames() {
     show_a_page(&control);
     block_on(control.call(output_call("yt", true))).expect("output.start");
 
-    // Linear red 128/255, premultiplied over black, encoded back to sRGB.
-    let half = 128.0_f32 / 255.0;
-    let red = (1.055 * half.powf(1.0 / 2.4) - 0.055) * 255.0;
+    // Full red at alpha 128/255 over black, mixed in sRGB-encoded values.
+    let red = 128.0_f32;
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut pixel = None;
     while Instant::now() < deadline {

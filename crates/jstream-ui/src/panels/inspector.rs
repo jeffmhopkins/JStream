@@ -287,8 +287,6 @@ pub fn blend_name(mode: BlendMode) -> &'static str {
         BlendMode::Lighten => "Lighten",
         BlendMode::Difference => "Difference",
         BlendMode::Exclusion => "Exclusion",
-        BlendMode::NormalSrgb => "Normal (browser)",
-        BlendMode::AdditiveSrgb => "Additive (browser)",
         _ => "Normal",
     }
 }

@@ -344,7 +344,7 @@ fn state_get_golden() {
         run_on(&engine, &["--json", "--mock", "state", "get"]),
         ok(&format!(
             "{}{}{},{}{}{}\n",
-            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"canvas":{"width":1920,"height":1080},"#,
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"canvas":{"width":1920,"height":1080},"blending":"srgb","#,
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),

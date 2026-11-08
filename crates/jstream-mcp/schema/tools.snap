@@ -1199,7 +1199,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -1245,15 +1245,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -2833,6 +2838,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -7200,7 +7223,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -7246,15 +7269,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -8834,6 +8862,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -12369,9 +12415,24 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `canvas` operation: set `op.type` to one of `canvas.set_size` (edit), `canvas.set_frame_rate` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `canvas` operation: set `op.type` to one of `canvas.set_size` (edit), `canvas.set_frame_rate` (edit), `canvas.set_blending` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
+              {
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
+                "type": "string"
+              },
+              {
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
+                "type": "string"
+              }
+            ]
+          },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",
             "type": "string"
@@ -12454,6 +12515,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               }
@@ -14950,7 +15029,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -14996,15 +15075,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -16584,6 +16668,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -19937,7 +20039,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -19982,16 +20084,6 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
-                "type": "string"
-              },
-              {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
-                "type": "string"
-              },
-              {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
                 "type": "string"
               }
             ]
@@ -22962,7 +23054,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -23008,15 +23100,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -24596,6 +24693,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },
@@ -31655,7 +31770,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "object"
           },
           "BlendMode": {
-            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
+            "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). The project's [`Blending`]\npicks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`\n(0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never\nsends them.",
             "oneOf": [
               {
                 "const": "normal",
@@ -31701,15 +31816,20 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "exclusion",
                 "description": "Like difference, with lower contrast.",
                 "type": "string"
-              },
+              }
+            ]
+          },
+          "Blending": {
+            "description": "The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).\n\nA new collection is [`Blending::Srgb`]. A collection saved before it gets one when it\nloads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`\notherwise, so its scenes keep their look.",
+            "oneOf": [
               {
-                "const": "normal_srgb",
-                "description": "Source-over mixed in sRGB-encoded values, as a web browser blends (since 0.75,\n#1096): a soft overlay designed in a browser keeps its strength, where `normal`\nmixes linear light and a faint veil over a dark backdrop comes out brighter.",
+                "const": "srgb",
+                "description": "Browser-style: colours mix in sRGB-encoded values, as CSS, a browser and most\ndesign tools mix them, so a design made there keeps its look.",
                 "type": "string"
               },
               {
-                "const": "additive_srgb",
-                "description": "Additive in sRGB-encoded values (since 0.75, #1096): the encoded colours add as in\na browser's `plus-lighter`, so a faint glow adds what it does in the browser. Alpha\nis source-over, so the two differ inside a translucent layer.",
+                "const": "linear",
+                "description": "Linear light: colours mix as light adds (ADR-0082 §2), so a glow or a fade of\ncamera footage stays physically even. Overlay, difference and exclusion still mix\nencoded values.",
                 "type": "string"
               }
             ]
@@ -33289,6 +33409,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "fps"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):\n`srgb`, browser-style and the default, or `linear`. It applies to every scene from\nthe next frame. Inverse: `canvas.set_blending` with the previous space.",
+                "properties": {
+                  "blending": {
+                    "$ref": "#/$defs/Blending",
+                    "description": "The space."
+                  },
+                  "type": {
+                    "const": "canvas.set_blending",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "blending"
                 ],
                 "type": "object"
               },

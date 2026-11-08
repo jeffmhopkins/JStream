@@ -167,6 +167,7 @@ impl Graph {
             rev: self.rev,
             canvas: self.state.canvas(),
             base_fps: self.state.base_fps(),
+            blending: self.state.blending(),
             sources: self
                 .state
                 .sources()
@@ -441,6 +442,7 @@ mod tests {
                 rev: Rev(0),
                 canvas: jstream_protocol::Canvas::DEFAULT,
                 base_fps: jstream_protocol::DEFAULT_BASE_FPS,
+                blending: jstream_protocol::Blending::Srgb,
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],

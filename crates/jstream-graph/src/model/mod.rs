@@ -192,6 +192,8 @@ pub struct State {
     pub(crate) canvas: Canvas,
     /// The base frame rate, 30 or 60 (ADR-0119). A new collection is 30.
     pub(crate) base_fps: u32,
+    /// The space every blend mode mixes in (ADR-0126). A new collection is `srgb`.
+    pub(crate) blending: jstream_protocol::Blending,
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
@@ -230,6 +232,7 @@ impl Default for State {
         Self {
             canvas: Canvas::default(),
             base_fps: jstream_protocol::DEFAULT_BASE_FPS,
+            blending: jstream_protocol::Blending::Srgb,
             sources: BTreeMap::new(),
             scenes: Vec::new(),
             outputs: BTreeMap::new(),
@@ -261,6 +264,11 @@ impl State {
     /// The collection's base frame rate, 30 or 60 (ADR-0119).
     pub fn base_fps(&self) -> u32 {
         self.base_fps
+    }
+
+    /// The space every blend mode mixes in (ADR-0126).
+    pub fn blending(&self) -> jstream_protocol::Blending {
+        self.blending
     }
 
     /// Every source, ordered by ID. Sources have no display order of their own.
