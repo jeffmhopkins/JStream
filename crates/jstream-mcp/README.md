@@ -186,7 +186,9 @@ animating with keyframe scenes, a `move` preset, crop reveals and staggered
 `delay_ms`, 3D placement (`tilt_deg`, `turn_deg`, `depth_px`, `perspective_px`) in
 keyframe variants and blend modes (`item.set_blend`), the light and framing filters
 (`bloom` for any picture's bright parts, `glow` around a shape and past an item's box,
-and the `vignette`'s blends, shapes and three looks, #1226), layering by role
+and the `vignette`'s blends, shapes and three looks, #1226), the `border` kind's
+settings, its three looks and the order to stack it with a shadow or glow (#1227),
+layering by role
 (#1062): background, light sources, the light they throw and the foreground as separate
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
 `scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy

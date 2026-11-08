@@ -4172,7 +4172,10 @@ impl Shot {
     /// read from the chain phase's steps ([`schedule_chains`]), so it counts what each
     /// frame runs once, before any mix draws. A scene's chain is its canvas-sized
     /// composite and one layer and pass per filter; an item's effects are its box's
-    /// layer and pass and one per effect, at the sizes [`Chains`] makes them. A source's
+    /// layer and pass and one per effect, at the sizes [`Chains`] makes them, plus one
+    /// layer and pass for the copy into the grown layer where the chain is padded
+    /// (ADR-0125, [`Chain::pad_layer`]). A filter's own scratch layers (a blur's) are
+    /// not counted. A source's
     /// chain (a `scene` source's included), a scene a `scene_mask` or a `scene` source's
     /// chain reads, and the reference layer a nested scene
     /// without a chain is drawn into for an item's effects (in place of the layer it
@@ -4221,14 +4224,19 @@ impl Shot {
                 | ChainOwner::Output(_) => continue,
             };
             let sizes = chain.layer_sizes(input.0, input.1);
-            // The composite or the box, then one per filter.
+            // An item's chain padded where an effect first draws past the box copies
+            // that effect's input into a grown layer first (ADR-0125, #1285).
+            let pad = chain.pad_layer(input.0, input.1);
+            // The composite or the box, then one per filter, and the pad copy.
             let count = u32::try_from(sizes.len())
                 .unwrap_or(u32::MAX)
-                .saturating_add(1);
+                .saturating_add(1)
+                .saturating_add(u32::from(pad.is_some()));
             *layers = layers.saturating_add(count);
             *passes = passes.saturating_add(count);
             let bytes = sizes
                 .into_iter()
+                .chain(pad)
                 .map(layer_bytes)
                 .fold(layer_bytes(input), u64::saturating_add);
             cost.layer_bytes = cost.layer_bytes.saturating_add(bytes);

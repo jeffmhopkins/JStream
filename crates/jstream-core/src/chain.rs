@@ -451,6 +451,19 @@ impl Chain {
             .collect()
     }
 
+    /// The scratch layer the padded filter copies its input into (ADR-0125), for an
+    /// input of `width` by `height`: that filter's input grown by the padding on every
+    /// side. `None` for a chain with no padding.
+    pub(crate) fn pad_layer(&self, width: u32, height: u32) -> Option<(u32, u32)> {
+        let (at, pad) = self.pad.filter(|(_, pad)| *pad > 0)?;
+        let input = match at.checked_sub(1) {
+            Some(before) => *self.layer_sizes(width, height).get(before)?,
+            None => (width, height),
+        };
+        let grow = pad.saturating_mul(2);
+        Some((input.0.saturating_add(grow), input.1.saturating_add(grow)))
+    }
+
     /// The size the chain draws for an input of `width` by `height`: the source's
     /// reported size once filtered (only aspect ratio changes it; a drop shadow, an
     /// outline or a glow draws within the frame, ADR-0065 §5).
@@ -2901,6 +2914,45 @@ mod tests {
         );
     }
 
+    /// A `border` with rounded corners and an outer stroke on an opaque item (#1227): the
+    /// stroke rings the box past its edge, in the room the border's own outset gives it,
+    /// and the corners of the picture are cut round. The `?` samples fall on the
+    /// antialiased curve of a corner; the grid's samples sit right of and below each
+    /// cell's centre, so the right and bottom corners show more of them.
+    #[test]
+    fn golden_a_border_rings_an_opaque_items_box() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (24.0, 12.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "border",
+                    serde_json::json!({
+                        "width": 0.0, "radius": 6.0, "outer_width": 3.0,
+                        "outer_color": "#0000ff"
+                    }),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            ................
+            ................
+            .....BBBBB?.....
+            ....BWWWWW??....
+            ....BWWWWWWB....
+            ....??WWWW?.....
+            .....?BBBB......
+            ................
+            ................
+            ",
+            "the outer stroke rings the box",
+        );
+    }
+
     /// A vignette before an effect that draws past the box (a glow, here an invisible
     /// one) frames the box itself, as it does alone: the layer grows only where the glow
     /// runs (`Chain::pad_at`), so rounded corners or a vignette followed by a shadow keep
@@ -2924,7 +2976,24 @@ mod tests {
         );
         let shot = shot(&graph);
         let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
-        assert_eq!(chain.and_then(|c| c.pad), Some((1, 100)));
+        let chain = chain.expect("cam's effects");
+        assert_eq!(chain.pad, Some((1, 100)));
+        // The pad copy is one more layer and pass, the glow's input grown by the pad
+        // on every side (#1285).
+        let box_size = (64, 36);
+        let sizes = chain.layer_sizes(box_size.0, box_size.1);
+        assert_eq!(chain.pad_layer(box_size.0, box_size.1), Some((264, 236)));
+        let bytes = |(w, h): (u32, u32)| u64::from(w) * u64::from(h) * 8;
+        let cost = shot.chain_cost([]);
+        assert_eq!(
+            (cost.item_layers, cost.item_passes),
+            (4, 4),
+            "the box, the vignette, the pad copy and the glow"
+        );
+        assert_eq!(
+            cost.layer_bytes,
+            bytes(box_size) + sizes.iter().copied().map(bytes).sum::<u64>() + bytes((264, 236))
+        );
         assert_golden(
             &shot,
             "
