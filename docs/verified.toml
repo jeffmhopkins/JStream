@@ -183,7 +183,7 @@ stamp = { hash = "b3:c06c302493ca4828", by = "agent:claude", note = "The retarge
 stamp = { hash = "b3:88c024dc41bdeac7", by = "agent:grok", note = "Re-read the collection line. It now includes base_fps 30 or 60 beside the canvas." }
 
 ["ARCH#gpu-pipeline"."body"]
-stamp = { hash = "b3:b60fab2fd7cd12a6", by = "agent:claude", note = "Added one sentence: a blur or mask over a bounded layer shades only its box grown by its reach and keeps it; re-read the nested-scene paragraph against compositor.rs and filter/pass.rs." }
+stamp = { hash = "b3:76f1b2e3a41f6eef", by = "agent:claude", note = "The bounded-filter sentence now names shadow and glow besides blur and mask; checked against drop_shadow.rs and glow.rs." }
 
 ["ARCH#gpu-pipeline"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -204,7 +204,7 @@ stamp = { hash = "b3:38e986c9266d0712", by = "agent:readme-scrub", note = "gpu/m
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:62dde016b3464f8d", by = "agent:claude", note = "Added one sentence: a blur or mask over a bounded layer shades only its box grown by its reach and keeps it; re-read the nested-scene paragraph against compositor.rs and filter/pass.rs." }
+stamp = { hash = "b3:539369e6b19bdf9f", by = "agent:claude", note = "The bounded-filter sentence now names shadow and glow besides blur and mask; checked against drop_shadow.rs and glow.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:8a1a50c3e47dcdb8", by = "agent:claude", note = "Re-read against the GPU ingest compute pass and the ReadbackRing: CPU frames convert on the GPU, CPU-path sessions and cameras are read back through a ring collected without waiting." }
@@ -309,7 +309,7 @@ stamp = { hash = "b3:caa25c7be1344676", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:96cc867cf8930c59", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds (render multipass/*) and their README text. drop_shadow, outline (outside) and glow grow the output, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/drop_shadow.rs"]
-stamp = { hash = "b3:6d3ecf42fb2ab2b1", by = "agent:claude", note = "#1362: render's filters now measure their outset by settings; the GPU pipeline section names only that item layers grow, which holds" }
+stamp = { hash = "b3:ae0efdf237e5f7d6", by = "agent:claude", note = "The bounded-filter sentence now names shadow and glow besides blur and mask; checked against drop_shadow.rs and glow.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/gauss.rs"]
 stamp = { hash = "b3:56b6972ca9ab7f88", by = "agent:claude", note = "#1070: blur's tap bound and whole-frame direct pass are filter internals; gpu-pipeline's description of passes and layers still holds" }
@@ -318,7 +318,7 @@ stamp = { hash = "b3:56b6972ca9ab7f88", by = "agent:claude", note = "#1070: blur
 stamp = { hash = "b3:e61a3cc39fba7047", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds (render multipass/*) and their README text. drop_shadow, outline (outside) and glow grow the output, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/glow.rs"]
-stamp = { hash = "b3:54a00b3b3ad1c131", by = "agent:claude", note = "#1362: render's filters now measure their outset by settings; the GPU pipeline section names only that item layers grow, which holds" }
+stamp = { hash = "b3:3cc14e92be9427d9", by = "agent:claude", note = "The bounded-filter sentence now names shadow and glow besides blur and mask; checked against drop_shadow.rs and glow.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/jfa_seed.wgsl"]
 stamp = { hash = "b3:9468c2db0f599c96", by = "agent:claude", note = "#717 review N1 and N2, no behaviour change. shadow.wgsl, outline.wgsl and jfa_seed.wgsl drop the inset_x and inset_y uniforms, always 0 since ADR-0065 §5 made these filters draw within their input, and read the input with load_edge(px, 1u); common.wgsl's placed() helper, which only applied that inset, goes. drop_shadow.rs and outline.rs stop writing the zero insets (the shape origin is the offset less the blur pad), and the Uniforms layout follows WGSL alignment, so the fields after them shift with the struct. The square() test helper drop_shadow.rs and glow.rs both copied is now one cfg(test) fn in multipass/mod.rs. The render tests (160, on llvmpipe) pass unchanged, the shadow, outline and glow pixel tests included. The section says a filter draws into a layer of the size it reports, unchanged, so it holds." }
@@ -405,7 +405,7 @@ stamp = { hash = "b3:83b2294da03c77cb", by = "agent:filters-1226", note = "Re-re
 stamp = { hash = "b3:c22b506007429415", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): render's filter/params.rs only gains max_outset_px: None on descriptor literals; the GPU pipeline text holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): render's filter/params.rs only gains max_outset_px: None on descriptor literals; the GPU pipeline text holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-render/src/filter/params.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-render/src/filter/params.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:5686fd5af17084d5", by = "agent:claude", note = "Added one sentence: a blur or mask over a bounded layer shades only its box grown by its reach and keeps it; re-read the nested-scene paragraph against compositor.rs and filter/pass.rs." }
+stamp = { hash = "b3:64f60a78a9c72cca", by = "agent:claude", note = "The bounded-filter sentence now names shadow and glow besides blur and mask; checked against drop_shadow.rs and glow.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:27e4c5c532c91d74", by = "agent:shader-source", note = "One sentence on shader-source programs drawing through the filter harness (ADR-0093). The S1 steps, compositor and encode text are unchanged. Round 2's allocation and clamp changes are inside the harness that sentence describes, so it still holds." }
@@ -474,7 +474,7 @@ stamp = { hash = "b3:0deda77496e58de8", by = "agent:claude", note = "Added one s
 stamp = { hash = "b3:62e2c7043b1b73e4", by = "agent:claude", note = "#1101 opacity above 1: composite shader multiplies premultiplied colour by opacity and alpha by min(opacity,1); transitions clamp opacity to [0,4]; device and pass structure unchanged | merge: main brought #1109 (normal_srgb and additive_srgb, protocol 0.75, ADR-0105), #1113 (3D models, ADR-0107 part 1) and #1074 (native motion, ADR-0099); the number stays a tentative 0.79 until the release queue assigns one: the section gains the 3D model paragraph and the seven backdrop modes, with this PR's gain sentence kept after the models | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): seven modes read a backdrop copy, and the two _srgb modes mix sRGB-encoded values to match a browser | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | review B1: composite.wgsl now scales the alpha by min(opacity, 1) times the coverage, not min(opacity * coverage, 1), so a 3D item's anti-aliased fringe stays soft at any gain (ADR-0050 decision 6); blend.rs's a_gain_keeps_the_edge_coverage checks fringe alphas at 2 and 4 against opacity 1 and fails on the old shader. The section's 'alpha by at most 1' still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests/content.rs"]
-stamp = { hash = "b3:b06c0efbd96f82d7", by = "agent:claude", note = "Added one sentence: a blur or mask over a bounded layer shades only its box grown by its reach and keeps it; re-read the nested-scene paragraph against compositor.rs and filter/pass.rs." }
+stamp = { hash = "b3:7984a0e0872283a7", by = "agent:claude", note = "The bounded-filter sentence now names shadow and glow besides blur and mask; checked against drop_shadow.rs and glow.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests/minified.rs"]
 stamp = { hash = "b3:f32c1662eefc9d23", by = "agent:sharpen-small-insets", note = "Added that 2D items drawn small (over 1.15 texels per pixel) sample the source's mip chain; render README step 2 matches" }
@@ -2484,7 +2484,7 @@ stamp = { hash = "b3:6fe378871c2a3ee9", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:d9b91e488d8d9030", by = "agent:shader-source", note = "Hot reload paragraph now names PackWatcher::mark_stale (forces the next poll to reload a folder a host replaced), load_pack (a poll's caught load on LOAD_THREAD, for checking a staged pack) and manifest_pack_id (the manifest's pack ID without shader validation), the three additions in pack.rs, watch.rs and lib.rs for ADR-0097." }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:18e5fd19503c33d2", by = "agent:claude", note = "Render's filters section gained the Bounded filters bullet; pack effects stay unbounded (no reach), so this crate's purpose and the harness link still hold." }
+stamp = { hash = "b3:3fe9515d7fb7abef", by = "agent:claude", note = "Render's Filters section only reworded its bounded-filters bullet; pack effects still give no reach, so this crate's purpose holds." }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -3009,7 +3009,7 @@ stamp = { hash = "b3:547465583e80c85e", by = "agent:claude", note = "This PR (#6
 stamp = { hash = "b3:98627206a3f8d59f", by = "agent:r9bzj2", note = "Only a new crate-map row for jstream-visca changed; nothing GPU-related, the section holds | merge: Re-read: the crate map gained main's midi/jtunnel rows and this PR's visca row; no GPU frame path changed | merge: main's #1280 widened the jstream-jtunnel row (sender clock, jitter buffer); the jstream-visca row beside it is unchanged; no GPU path changed | kept from the merged side: Only new crate-map rows for jstream-midi and jstream-jtunnel changed; nothing GPU-related, the section holds | kept from the merged side: Re-read: only the crate map's jstream-jtunnel row changed; no GPU frame path did" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:b60fab2fd7cd12a6", by = "agent:claude", note = "ARCH gpu-pipeline only gained the bounded blur and mask sentence inside jstream-render; GPU frame types, import and fence staging unchanged." }
+stamp = { hash = "b3:76f1b2e3a41f6eef", by = "agent:claude", note = "ARCH gpu-pipeline's bounded-filter sentence now also names shadow and glow; GPU frame types, import and fence staging here are unchanged." }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/RULES.md#unsafe"]
 stamp = { hash = "b3:4e4a50b071e5d372", by = "agent:wave-owner", note = "Merged main (wave/m1 and wave/m2) into wave/m3. The crate map, against wave/m3, gains main's MediaDecoders and paths in the platform row, the jstream-browser row, platform-windows without the CEF backend, the outputs row, the ADR-0058 links and the apps row's desktop, daemon and browser-helper text, beside wave/m3's CLAP rows. RULES#unsafe, against wave/m3, adds main's jstream-browser (ADR-0046) and jstream-browser-helper (ADR-0048, its RunWinMain export) to the unsafe list beside wave/m3's jstream-plugin-clap, and keeps the plugin-clap reachability rule. The GPU-frame types and who may use unsafe with them still hold." }
@@ -4374,7 +4374,7 @@ stamp = { hash = "b3:caa25c7be1344676", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:96cc867cf8930c59", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds and the resources-table row for the video delay's held frames (its VideoFilter keeps them, reused as the ring turns, dropped on a size change or a 0 delay), checked against video_delay.rs. Multi-pass draws use Ctx::scratch per call with no new thread or I/O; apply_filter still has no steady-path caller until V0; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/drop_shadow.rs"]
-stamp = { hash = "b3:6d3ecf42fb2ab2b1", by = "agent:claude", note = "#1362: multipass gains per-kind outset functions; the design section names no outset rule, so it holds" }
+stamp = { hash = "b3:ae0efdf237e5f7d6", by = "agent:claude", note = "Re-read the render_into content paragraph and pass steps; only filter-side reach changed (shadow, glow), which this section points to Filters for." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/gauss.rs"]
 stamp = { hash = "b3:56b6972ca9ab7f88", by = "agent:claude", note = "#1070: gauss/blur change is inside the multipass filters; Design's compositor and layer description unchanged" }
@@ -4383,7 +4383,7 @@ stamp = { hash = "b3:56b6972ca9ab7f88", by = "agent:claude", note = "#1070: gaus
 stamp = { hash = "b3:e61a3cc39fba7047", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds and the resources-table row for the video delay's held frames (its VideoFilter keeps them, reused as the ring turns, dropped on a size change or a 0 delay), checked against video_delay.rs. Multi-pass draws use Ctx::scratch per call with no new thread or I/O; apply_filter still has no steady-path caller until V0; holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/glow.rs"]
-stamp = { hash = "b3:54a00b3b3ad1c131", by = "agent:claude", note = "#1362: multipass gains per-kind outset functions; the design section names no outset rule, so it holds" }
+stamp = { hash = "b3:3cc14e92be9427d9", by = "agent:claude", note = "Re-read the render_into content paragraph and pass steps; only filter-side reach changed (shadow, glow), which this section points to Filters for." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/jfa_seed.wgsl"]
 stamp = { hash = "b3:9468c2db0f599c96", by = "agent:claude", note = "#717 review N1 and N2, no behaviour change. shadow.wgsl, outline.wgsl and jfa_seed.wgsl drop the inset_x and inset_y uniforms, always 0 since ADR-0065 §5 made these filters draw within their input, and read the input with load_edge(px, 1u); common.wgsl's placed() helper, which only applied that inset, goes. drop_shadow.rs and outline.rs stop writing the zero insets (the shape origin is the offset less the blur pad), and the Uniforms layout follows WGSL alignment, so the fields after them shift with the struct. The square() test helper drop_shadow.rs and glow.rs both copied is now one cfg(test) fn in multipass/mod.rs. The render tests (160, on llvmpipe) pass unchanged, the shadow, outline and glow pixel tests included. Design names no filter uniform, so it holds." }
@@ -4470,7 +4470,7 @@ stamp = { hash = "b3:83b2294da03c77cb", by = "agent:filters-1226", note = "Re-re
 stamp = { hash = "b3:c22b506007429415", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; design holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; design holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-render/src/filter/params.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-render/src/filter/params.rs." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:5686fd5af17084d5", by = "agent:claude", note = "The render_into content paragraph now says apply_filter_into sets its output's bound (a bounded filter's reach, or unknown) instead of forgetting it; re-read the pass steps against the compositor change." }
+stamp = { hash = "b3:64f60a78a9c72cca", by = "agent:claude", note = "Re-read the render_into content paragraph and pass steps; only filter-side reach changed (shadow, glow), which this section points to Filters for." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:27e4c5c532c91d74", by = "agent:shader-source", note = "The images this crate drops itself now include a shader-source program's feedback layers on a size change or restart. There is no new file or network I/O, and program uniform buffers ride the filter Scratch slots. Round 2: Program::encode and draw_program keep their lists or use fixed arrays, so 'does not allocate per item on the steady path' holds for programs." }
@@ -4539,7 +4539,7 @@ stamp = { hash = "b3:0deda77496e58de8", by = "agent:claude", note = "Added the #
 stamp = { hash = "b3:62e2c7043b1b73e4", by = "agent:claude", note = "#1101 opacity above 1: opacity bullet now describes the gain (colour times opacity, alpha times at most 1); new GPU test opacity_above_one_is_a_gain_on_the_light; blend reference handles gain | merge: main brought #1109 (normal_srgb and additive_srgb, protocol 0.75, ADR-0105), #1113 (3D models, ADR-0107 part 1) and #1074 (native motion, ADR-0099); the number stays a tentative 0.79 until the release queue assigns one: composite.wgsl and compositor.rs gain the _srgb modes and models beside this PR's gain; the design holds | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): the backdrop copy, pass break and layer isolation apply to the two modes unchanged | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | review B1: composite.wgsl now scales the alpha by min(opacity, 1) times the coverage, not min(opacity * coverage, 1), so a 3D item's anti-aliased fringe stays soft at any gain (ADR-0050 decision 6); blend.rs's a_gain_keeps_the_edge_coverage checks fringe alphas at 2 and 4 against opacity 1 and fails on the old shader. The section's 'alpha by at most 1' still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests/content.rs"]
-stamp = { hash = "b3:b06c0efbd96f82d7", by = "agent:claude", note = "The render_into content paragraph now says apply_filter_into sets its output's bound (a bounded filter's reach, or unknown) instead of forgetting it; re-read the pass steps against the compositor change." }
+stamp = { hash = "b3:7984a0e0872283a7", by = "agent:claude", note = "Re-read the render_into content paragraph and pass steps; only filter-side reach changed (shadow, glow), which this section points to Filters for." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests/minified.rs"]
 stamp = { hash = "b3:f32c1662eefc9d23", by = "agent:sharpen-small-insets", note = "Mips step 2 rewritten for 2D items past MINIFIED 1.15 and the half-size (skip 1) chain; resource table keys chains by crop and starting level; 2D minification goldens and their lavapipe numbers added; open question on mips for 2D moved to a small-sources note (#1139)" }
@@ -4551,7 +4551,7 @@ stamp = { hash = "b3:8a1615286e8d9f96", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:950ada971dc31a24", by = "agent:claude-motion", note = "blend_settings allocates a settings map per blended filter per frame on jstream-core's render thread only during a Move; no GPU or I/O work, so the bounded-work and reclamation statements hold" }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:18e5fd19503c33d2", by = "agent:claude", note = "Added the Bounded filters bullet: Pass::reach (blur span plus downsample and read-back texel, masks 0), Bound from the input's content grown by padding, reach and a pixel, every Ctx draw scissored to it at its target's scale plus two texels, output keeps it as content; other kinds unbounded. Re-read the harness bullets against pass.rs and compositor.rs." }
+stamp = { hash = "b3:3fe9515d7fb7abef", by = "agent:claude", note = "Rewrote the Bounded filters bullet: drop shadow and glow now give their offset plus blur span and move the bound into their grown shape frame (Bound::placed); every reach is whole support, so a whole draw is zero outside the bound (review N4); opt-ins join the bounded-vs-whole test (N2). Checked against pass.rs, drop_shadow.rs, glow.rs." }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
@@ -4626,7 +4626,7 @@ stamp = { hash = "b3:caa25c7be1344676", by = "agent:wave-owner", note = "main in
 stamp = { hash = "b3:96cc867cf8930c59", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/drop_shadow.rs"]
-stamp = { hash = "b3:6d3ecf42fb2ab2b1", by = "agent:claude", note = "#1362: Where they run and the outset paragraph now say the layer grows by the effects' outsets at their settings through video_filter_outset, capped at max_outset_px" }
+stamp = { hash = "b3:ae0efdf237e5f7d6", by = "agent:claude", note = "Rewrote the Bounded filters bullet: drop shadow and glow now give their offset plus blur span and move the bound into their grown shape frame (Bound::placed); every reach is whole support, so a whole draw is zero outside the bound (review N4); opt-ins join the bounded-vs-whole test (N2). Checked against pass.rs, drop_shadow.rs, glow.rs." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/gauss.rs"]
 stamp = { hash = "b3:56b6972ca9ab7f88", by = "agent:claude", note = "#1070: blur entry now gives scales 1 to 16, radius/scale at most 8, 17 loads a pass, and why the bound is low; checked against gauss.rs plan() and its test" }
@@ -4635,7 +4635,7 @@ stamp = { hash = "b3:56b6972ca9ab7f88", by = "agent:claude", note = "#1070: blur
 stamp = { hash = "b3:e61a3cc39fba7047", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/glow.rs"]
-stamp = { hash = "b3:54a00b3b3ad1c131", by = "agent:claude", note = "#1362: Where they run and the outset paragraph now say the layer grows by the effects' outsets at their settings through video_filter_outset, capped at max_outset_px" }
+stamp = { hash = "b3:3cc14e92be9427d9", by = "agent:claude", note = "Rewrote the Bounded filters bullet: drop shadow and glow now give their offset plus blur span and move the bound into their grown shape frame (Bound::placed); every reach is whole support, so a whole draw is zero outside the bound (review N4); opt-ins join the bounded-vs-whole test (N2). Checked against pass.rs, drop_shadow.rs, glow.rs." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/jfa_seed.wgsl"]
 stamp = { hash = "b3:9468c2db0f599c96", by = "agent:claude", note = "#717 review N1 and N2, no behaviour change. shadow.wgsl, outline.wgsl and jfa_seed.wgsl drop the inset_x and inset_y uniforms, always 0 since ADR-0065 §5 made these filters draw within their input, and read the input with load_edge(px, 1u); common.wgsl's placed() helper, which only applied that inset, goes. drop_shadow.rs and outline.rs stop writing the zero insets (the shape origin is the offset less the blur pad), and the Uniforms layout follows WGSL alignment, so the fields after them shift with the struct. The square() test helper drop_shadow.rs and glow.rs both copied is now one cfg(test) fn in multipass/mod.rs. The render tests (160, on llvmpipe) pass unchanged, the shadow, outline and glow pixel tests included. Filters names no shader uniform or WGSL helper, and its Bounds paragraph (within the input's frame) is what the code now does without a leftover inset, so it holds." }
@@ -4722,7 +4722,7 @@ stamp = { hash = "b3:83b2294da03c77cb", by = "agent:filters-1226", note = "Re-re
 stamp = { hash = "b3:c22b506007429415", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; no built-in kind declares an outset yet; Filters text holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; no built-in kind declares an outset yet; Filters text holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-render/src/filter/params.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-render/src/filter/params.rs." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:5686fd5af17084d5", by = "agent:claude", note = "Added the Bounded filters bullet: Pass::reach (blur span plus downsample and read-back texel, masks 0), Bound from the input's content grown by padding, reach and a pixel, every Ctx draw scissored to it at its target's scale plus two texels, output keeps it as content; other kinds unbounded. Re-read the harness bullets against pass.rs and compositor.rs." }
+stamp = { hash = "b3:64f60a78a9c72cca", by = "agent:claude", note = "Rewrote the Bounded filters bullet: drop shadow and glow now give their offset plus blur span and move the bound into their grown shape frame (Bound::placed); every reach is whole support, so a whole draw is zero outside the bound (review N4); opt-ins join the bounded-vs-whole test (N2). Checked against pass.rs, drop_shadow.rs, glow.rs." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:27e4c5c532c91d74", by = "agent:shader-source", note = "Added the Shader-source programs paragraph. It covers ExternalProgram, VideoFilter::program, PROGRAM_PRELUDE (prelude, colour.wgsl, noise.wgsl), sys and its bindings, per-count layouts, pass scale, the feedback history and restart, slots, set_audio, and the MAX_PROGRAM_BYTES (512 MiB) cap with its test. The filter prelude still ends with the colour helpers, now from colour.wgsl. Round 2: each side is held to 4096, so the output layer made before the cap check is at most 128 MiB, and a steady frame allocates no list (kept drawn and inputs lists, fixed sys and bind-group arrays)." }
@@ -4752,7 +4752,7 @@ stamp = { hash = "b3:547465583e80c85e", by = "agent:claude", note = "This PR (#6
 stamp = { hash = "b3:a2b6fb6e591a93b7" }
 
 ["CRATE-jstream-render#purpose"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
-stamp = { hash = "b3:b60fab2fd7cd12a6", by = "agent:claude", note = "Re-read: filters bounded by their input's content don't change what one scene or the crate's place means." }
+stamp = { hash = "b3:76f1b2e3a41f6eef", by = "agent:claude", note = "Re-read: shadow and glow bounds are inside the filter harness and don't change what one scene means." }
 
 ["CRATE-jstream-render#purpose"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -4863,7 +4863,7 @@ stamp = { hash = "b3:caa25c7be1344676", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:96cc867cf8930c59", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds (multipass/*.rs and *.wgsl: blur, pixelate, drop_shadow, outline, glow, video_delay, with area, bounds and gauss helpers) and registers them. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/drop_shadow.rs"]
-stamp = { hash = "b3:6d3ecf42fb2ab2b1", by = "agent:claude", note = "#1362: a new pub fn video_filter_outset; the crate's purpose is unchanged" }
+stamp = { hash = "b3:ae0efdf237e5f7d6", by = "agent:claude", note = "Re-read: shadow and glow bounds are inside the filter harness and don't change what one scene means." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/gauss.rs"]
 stamp = { hash = "b3:56b6972ca9ab7f88", by = "agent:claude", note = "#1070: blur tap bound lowered and a whole-frame full-scale blur draws into its output; purpose unchanged" }
@@ -4872,7 +4872,7 @@ stamp = { hash = "b3:56b6972ca9ab7f88", by = "agent:claude", note = "#1070: blur
 stamp = { hash = "b3:e61a3cc39fba7047", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds (multipass/*.rs and *.wgsl: blur, pixelate, drop_shadow, outline, glow, video_delay, with area, bounds and gauss helpers) and registers them. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/glow.rs"]
-stamp = { hash = "b3:54a00b3b3ad1c131", by = "agent:claude", note = "#1362: a new pub fn video_filter_outset; the crate's purpose is unchanged" }
+stamp = { hash = "b3:3cc14e92be9427d9", by = "agent:claude", note = "Re-read: shadow and glow bounds are inside the filter harness and don't change what one scene means." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/jfa_seed.wgsl"]
 stamp = { hash = "b3:9468c2db0f599c96", by = "agent:claude", note = "#717 review N1 and N2, no behaviour change. shadow.wgsl, outline.wgsl and jfa_seed.wgsl drop the inset_x and inset_y uniforms, always 0 since ADR-0065 §5 made these filters draw within their input, and read the input with load_edge(px, 1u); common.wgsl's placed() helper, which only applied that inset, goes. drop_shadow.rs and outline.rs stop writing the zero insets (the shape origin is the offset less the blur pad), and the Uniforms layout follows WGSL alignment, so the fields after them shift with the struct. The square() test helper drop_shadow.rs and glow.rs both copied is now one cfg(test) fn in multipass/mod.rs. The render tests (160, on llvmpipe) pass unchanged, the shadow, outline and glow pixel tests included. Purpose describes the filter harness at the level of what it offers, so it holds." }
@@ -4959,7 +4959,7 @@ stamp = { hash = "b3:83b2294da03c77cb", by = "agent:filters-1226", note = "Re-re
 stamp = { hash = "b3:c22b506007429415", by = "agent:claude", note = "This PR (#813 and #815): Stacked #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; purpose holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed) with #813's refresh: conflicts resolved by taking m1-5's side and re-applying #813's and this PR's own diff; the tree equals refreshed #813 plus this PR's changes. #813's record: #529 PR 2 (protocol 0.43): filter/params.rs only gains max_outset_px: None; purpose holds. Merge: refreshed onto wave/m1-5 (main after m1-4 landed); conflicts resolved by taking m1-5's side and re-applying this PR's own diff, plus max_outset_px: None on the e2e mock daemon's new KindDescriptor literal; snapshots regenerated. Merge of wave/m1-5 at bd50026: the wave didn't change crates/jstream-render/src/filter/params.rs. Merge of wave/m1-5 at e84bc9c: the wave didn't change crates/jstream-render/src/filter/params.rs." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/pass.rs"]
-stamp = { hash = "b3:5686fd5af17084d5", by = "agent:claude", note = "Re-read: filters bounded by their input's content don't change what one scene or the crate's place means." }
+stamp = { hash = "b3:64f60a78a9c72cca", by = "agent:claude", note = "Re-read: shadow and glow bounds are inside the filter harness and don't change what one scene means." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/prelude.wgsl"]
 stamp = { hash = "b3:27e4c5c532c91d74", by = "agent:shader-source", note = "Not in this cut now names shader-source programs as loaded by jstream-effects and only drawn here. The rest of the purpose (one scene, placement, device) is unchanged by the program module. Round 2's allocation and 4096-clamp changes leave it unchanged." }
@@ -5028,7 +5028,7 @@ stamp = { hash = "b3:0deda77496e58de8", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:62e2c7043b1b73e4", by = "agent:claude", note = "#1101 opacity above 1: compositor accepts opacity up to MAX_OPACITY; purpose unchanged | merge: main brought #1109 (normal_srgb and additive_srgb, protocol 0.75, ADR-0105), #1113 (3D models, ADR-0107 part 1) and #1074 (native motion, ADR-0099); the number stays a tentative 0.79 until the release queue assigns one: composite.wgsl, compositor.rs and the tests gain the _srgb modes, models and the huge-box guard; this PR's gain (colour times opacity, alpha times at most 1) applies before every mode, and the CPU reference applies it the same way | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): Item.blend lists the two modes as backdrop modes mixing sRGB-encoded values (fs_normal_srgb, fs_additive_srgb); the veil test checks a faint veil keeps its browser strength (linear normal about 94, review N3) | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | review B1: composite.wgsl now scales the alpha by min(opacity, 1) times the coverage, not min(opacity * coverage, 1), so a 3D item's anti-aliased fringe stays soft at any gain (ADR-0050 decision 6); blend.rs's a_gain_keeps_the_edge_coverage checks fringe alphas at 2 and 4 against opacity 1 and fails on the old shader. The section's 'alpha by at most 1' still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests/content.rs"]
-stamp = { hash = "b3:b06c0efbd96f82d7", by = "agent:claude", note = "Re-read: filters bounded by their input's content don't change what one scene or the crate's place means." }
+stamp = { hash = "b3:7984a0e0872283a7", by = "agent:claude", note = "Re-read: shadow and glow bounds are inside the filter harness and don't change what one scene means." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests/minified.rs"]
 stamp = { hash = "b3:f32c1662eefc9d23", by = "agent:sharpen-small-insets", note = "2D minified items now sample a mip chain (compositor/place/mips/image, new tests/minified.rs); purpose, scene model and crate boundaries unchanged" }
