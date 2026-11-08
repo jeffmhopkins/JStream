@@ -51,6 +51,7 @@ fn srgb_to_linear(c: vec3<f32>) -> vec3<f32> {
 }
 
 @group(0) @binding(0) var src: texture_2d<f32>;
+// Bound by the shared image layout; every pass reads with `textureLoad` instead.
 @group(0) @binding(1) var samp: sampler;
 
 const PREMULTIPLIED: u32 = 0u;

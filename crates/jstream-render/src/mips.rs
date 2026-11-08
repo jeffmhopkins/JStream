@@ -18,7 +18,7 @@
 //!
 //! Every level is the exact box average of the texels it covers (`mip.wgsl`), so a level
 //! of odd size, whose next level's texels each cover a little over 2×2, and a level 0
-//! that starts levels down, whose texels cover up to `2^k` on a side, both average every
+//! that starts levels down, whose texels cover about `2^k` on a side, both average every
 //! texel they cover.
 //!
 //! A chain is rebuilt on the GPU only when its image changed since its last build, so
@@ -32,7 +32,8 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use crate::image::{Alpha, Image};
 
 /// The most levels a chain starts below its region's size: level 0's texels then
-/// average up to 9×9 source texels each.
+/// average about `2^3` source texels per axis each: a little more (up to 10) where the
+/// region's size isn't a multiple of 8, and the whole region for one narrower than 16.
 pub(crate) const MAX_SKIP: u32 = 3;
 
 /// Never built.
@@ -229,11 +230,12 @@ pub(crate) struct Mips {
     region: Region,
     /// How many levels below the region's own size level 0 is, at most [`MAX_SKIP`].
     skip: u32,
-    /// Level 0's second group: the region, in the source's texture coordinates.
+    /// Level 0's second group: the region in source texels, and level 0's size.
     region_group: wgpu::BindGroup,
     /// Each level's render-target view, level 0 first.
     targets: Vec<wgpu::TextureView>,
-    /// Level `i`'s input for level `i + 1`: its view and the linear sampler.
+    /// Level `i`'s input for level `i + 1`: its view (and the linear sampler, which the
+    /// shared image layout binds and `mip.wgsl` no longer reads).
     inputs: Vec<wgpu::BindGroup>,
     /// The image's generation at the last build, or [`NEVER`].
     built: AtomicU64,

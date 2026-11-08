@@ -204,7 +204,7 @@ stamp = { hash = "b3:38e986c9266d0712", by = "agent:readme-scrub", note = "gpu/m
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:6b153b1913e00256", by = "agent:sharpen-small-insets", note = "Still accurate: 2D items drawn small sample a mip chain; how levels are averaged is the render README's detail" }
+stamp = { hash = "b3:141deaeefc3f9325", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:8a1a50c3e47dcdb8", by = "agent:claude", note = "Re-read against the GPU ingest compute pass and the ReadbackRing: CPU frames convert on the GPU, CPU-path sessions and cameras are read back through a ring collected without waiting." }
@@ -441,10 +441,10 @@ stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "This branch
 stamp = { hash = "b3:20c2eb20f669d847", by = "agent:claude", note = "#1362: render's filters now measure their outset by settings; the GPU pipeline section names only that item layers grow, which holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/mip.wgsl"]
-stamp = { hash = "b3:fa4edecc114873b7", by = "agent:sharpen-small-insets", note = "Still accurate: 2D items drawn small sample a mip chain; how levels are averaged is the render README's detail" }
+stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/mips.rs"]
-stamp = { hash = "b3:5595af014d1a57eb", by = "agent:sharpen-small-insets", note = "Still accurate: 2D items drawn small sample a mip chain; how levels are averaged is the render README's detail" }
+stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
 stamp = { hash = "b3:5e43b88f147c87ad", by = "agent:claude", note = "This PR only moves Lighting's definition to jstream-media, re-exported by render's model module; the model draw paragraph holds. | kept from the merged side: Whole change (ADR-0107): added the model draw (layer per placement, reversed depth, studio rig, f64 camera-relative map, Placement::Layer sorting) after the 3D scene paragraph, and benches for a 3D scene and a model. The review fixes (depth target per layer size, normal-map basis under mirrors and on back faces, buffer-limit refusal) are render-crate detail the paragraph doesn't go into, so it holds." }
@@ -474,7 +474,7 @@ stamp = { hash = "b3:aa818c5e7d5a5913", by = "agent:claude", note = "This branch
 stamp = { hash = "b3:62e2c7043b1b73e4", by = "agent:claude", note = "#1101 opacity above 1: composite shader multiplies premultiplied colour by opacity and alpha by min(opacity,1); transitions clamp opacity to [0,4]; device and pass structure unchanged | merge: main brought #1109 (normal_srgb and additive_srgb, protocol 0.75, ADR-0105), #1113 (3D models, ADR-0107 part 1) and #1074 (native motion, ADR-0099); the number stays a tentative 0.79 until the release queue assigns one: the section gains the 3D model paragraph and the seven backdrop modes, with this PR's gain sentence kept after the models | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): seven modes read a backdrop copy, and the two _srgb modes mix sRGB-encoded values to match a browser | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | review B1: composite.wgsl now scales the alpha by min(opacity, 1) times the coverage, not min(opacity * coverage, 1), so a 3D item's anti-aliased fringe stays soft at any gain (ADR-0050 decision 6); blend.rs's a_gain_keeps_the_edge_coverage checks fringe alphas at 2 and 4 against opacity 1 and fails on the old shader. The section's 'alpha by at most 1' still holds" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests/minified.rs"]
-stamp = { hash = "b3:9397dc3ccc3759b2", by = "agent:sharpen-small-insets", note = "Still accurate: 2D items drawn small sample a mip chain; how levels are averaged is the render README's detail" }
+stamp = { hash = "b3:0db97f69d5547fdf", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests/three_d.rs"]
 stamp = { hash = "b3:8a1615286e8d9f96", by = "agent:sharpen-small-insets", note = "Added that 2D items drawn small (over 1.15 texels per pixel) sample the source's mip chain; render README step 2 matches" }
@@ -4266,7 +4266,7 @@ stamp = { hash = "b3:83fd3bbd406c7796", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to youtube.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:d5014d5443628ec5", by = "agent:sharpen-small-insets", note = "Mips step 2 now describes the box-averaged passes (odd levels, level 0 uniform in texels) and skip up to 3; goldens list the odd-size test and new chain-skip checks; small-sources note updated" }
+stamp = { hash = "b3:f4779357215c92ec", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -4503,10 +4503,10 @@ stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "Passes step
 stamp = { hash = "b3:20c2eb20f669d847", by = "agent:claude", note = "#1362: multipass gains per-kind outset functions; the design section names no outset rule, so it holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/mip.wgsl"]
-stamp = { hash = "b3:fa4edecc114873b7", by = "agent:sharpen-small-insets", note = "Mips step 2 now describes the box-averaged passes (odd levels, level 0 uniform in texels) and skip up to 3; goldens list the odd-size test and new chain-skip checks; small-sources note updated" }
+stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/mips.rs"]
-stamp = { hash = "b3:5595af014d1a57eb", by = "agent:sharpen-small-insets", note = "Mips step 2 now describes the box-averaged passes (odd levels, level 0 uniform in texels) and skip up to 3; goldens list the odd-size test and new chain-skip checks; small-sources note updated" }
+stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
 stamp = { hash = "b3:5e43b88f147c87ad", by = "agent:claude", note = "This PR only replaces model/mod.rs's own Lighting enum with a re-export of jstream_media::model::Lighting; the Models paragraph (studio rig or unlit) holds. | kept from the merged side: Whole change (ADR-0107): added the Models paragraph to Placement math (f64 Solid, reversed Depth32Float, NEAR_W clip, opaque then blended, shader-side back faces, shading) and the model resources to the lifetime table. Review fixes: the paragraph now covers the bitangent sign from raw front_facing, back faces turning normal and tangent over together, no normal-map step without a normal texture, and the buffer-limit refusal; the depth-target row says it is the last layer's size, remade for another size, as depth_view does." }
@@ -4536,7 +4536,7 @@ stamp = { hash = "b3:aa818c5e7d5a5913", by = "agent:claude", note = "Round 2 (B1
 stamp = { hash = "b3:62e2c7043b1b73e4", by = "agent:claude", note = "#1101 opacity above 1: opacity bullet now describes the gain (colour times opacity, alpha times at most 1); new GPU test opacity_above_one_is_a_gain_on_the_light; blend reference handles gain | merge: main brought #1109 (normal_srgb and additive_srgb, protocol 0.75, ADR-0105), #1113 (3D models, ADR-0107 part 1) and #1074 (native motion, ADR-0099); the number stays a tentative 0.79 until the release queue assigns one: composite.wgsl and compositor.rs gain the _srgb modes and models beside this PR's gain; the design holds | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): the backdrop copy, pass break and layer isolation apply to the two modes unchanged | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | review B1: composite.wgsl now scales the alpha by min(opacity, 1) times the coverage, not min(opacity * coverage, 1), so a 3D item's anti-aliased fringe stays soft at any gain (ADR-0050 decision 6); blend.rs's a_gain_keeps_the_edge_coverage checks fringe alphas at 2 and 4 against opacity 1 and fails on the old shader. The section's 'alpha by at most 1' still holds" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests/minified.rs"]
-stamp = { hash = "b3:9397dc3ccc3759b2", by = "agent:sharpen-small-insets", note = "Mips step 2 now describes the box-averaged passes (odd levels, level 0 uniform in texels) and skip up to 3; goldens list the odd-size test and new chain-skip checks; small-sources note updated" }
+stamp = { hash = "b3:0db97f69d5547fdf", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests/three_d.rs"]
 stamp = { hash = "b3:8a1615286e8d9f96", by = "agent:sharpen-small-insets", note = "Mips step 2 rewritten for 2D items past MINIFIED 1.15 and the half-size (skip 1) chain; resource table keys chains by crop and starting level; 2D minification goldens and their lavapipe numbers added; open question on mips for 2D moved to a small-sources note (#1139)" }
@@ -4989,10 +4989,10 @@ stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "Added uploa
 stamp = { hash = "b3:20c2eb20f669d847", by = "agent:claude", note = "#1362: a new pub fn video_filter_outset; the crate's purpose is unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/mip.wgsl"]
-stamp = { hash = "b3:fa4edecc114873b7", by = "agent:sharpen-small-insets", note = "Mip levels are now exact box averages (mip.wgsl, textureLoad) and chains start up to MAX_SKIP levels down; purpose and crate boundaries unchanged" }
+stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/mips.rs"]
-stamp = { hash = "b3:5595af014d1a57eb", by = "agent:sharpen-small-insets", note = "Mip levels are now exact box averages (mip.wgsl, textureLoad) and chains start up to MAX_SKIP levels down; purpose and crate boundaries unchanged" }
+stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
 stamp = { hash = "b3:5e43b88f147c87ad", by = "agent:claude", note = "This PR only replaces model/mod.rs's own Lighting enum with a re-export of jstream_media::model::Lighting; ModelDraw and the 3D model bullet are unchanged and hold. | kept from the merged side: Whole change (ADR-0107): added upload_model/draw_model and Placement::Layer to what one scene means; models draw into a layer and sort at their centre. With the review fixes upload_model also refuses a primitive past max_buffer_size (Invalid), which its # Errors names; the depth target, bitangent and back-face fixes stay inside draw_model, so the bullet holds." }
@@ -5022,7 +5022,7 @@ stamp = { hash = "b3:aa818c5e7d5a5913", by = "agent:claude", note = "Round 2 (B1
 stamp = { hash = "b3:62e2c7043b1b73e4", by = "agent:claude", note = "#1101 opacity above 1: compositor accepts opacity up to MAX_OPACITY; purpose unchanged | merge: main brought #1109 (normal_srgb and additive_srgb, protocol 0.75, ADR-0105), #1113 (3D models, ADR-0107 part 1) and #1074 (native motion, ADR-0099); the number stays a tentative 0.79 until the release queue assigns one: composite.wgsl, compositor.rs and the tests gain the _srgb modes, models and the huge-box guard; this PR's gain (colour times opacity, alpha times at most 1) applies before every mode, and the CPU reference applies it the same way | kept from the merged side: #1096 adds blend modes normal_srgb and additive_srgb (protocol 0.75, ADR-0105; renumbered from 0.76 by the release queue): Item.blend lists the two modes as backdrop modes mixing sRGB-encoded values (fs_normal_srgb, fs_additive_srgb); the veil test checks a faint veil keeps its browser strength (linear normal about 94, review N3) | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | review B1: composite.wgsl now scales the alpha by min(opacity, 1) times the coverage, not min(opacity * coverage, 1), so a 3D item's anti-aliased fringe stays soft at any gain (ADR-0050 decision 6); blend.rs's a_gain_keeps_the_edge_coverage checks fringe alphas at 2 and 4 against opacity 1 and fails on the old shader. The section's 'alpha by at most 1' still holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests/minified.rs"]
-stamp = { hash = "b3:9397dc3ccc3759b2", by = "agent:sharpen-small-insets", note = "Mip levels are now exact box averages (mip.wgsl, textureLoad) and chains start up to MAX_SKIP levels down; purpose and crate boundaries unchanged" }
+stamp = { hash = "b3:0db97f69d5547fdf", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests/three_d.rs"]
 stamp = { hash = "b3:8a1615286e8d9f96", by = "agent:sharpen-small-insets", note = "2D minified items now sample a mip chain (compositor/place/mips/image, new tests/minified.rs); purpose, scene model and crate boundaries unchanged" }

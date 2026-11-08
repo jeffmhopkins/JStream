@@ -324,7 +324,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    When it spans `2^k` or more along both axes the sampler never reads the levels finer
    than `k`, so that item's chain starts `k` levels down (`Mips::skip`, at most
    `MAX_SKIP`, 3): level 0 is the region at `1 / 2^k` of its size, each of its texels
-   the box average of up to 9×9 source texels, and the chain holds `1 / 4^k` of the
+   the box average of about `2^k` source texels per axis (a few more where the region's
+   size isn't a multiple of `2^k`), and the chain holds `1 / 4^k` of the
    texels. A 1080p camera drawn at an eighth of its size keeps a 240×135 chain. An image keeps that chain apart from a full one of the same crop. A
    source drawn only at about its size or larger, and never in 3D, gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
@@ -1275,7 +1276,10 @@ a hardware GPU.
   every frame its source changes, so a 1080p camera in a small box costs a chain of up
   to an eighth of its size each way and its rebuild, which reads every source texel once. An upload only items draw is held at the size they draw it
   (`ResourceCache::upload_drawn`, #1139), so its chain is small too; an import (a
-  capture, a page) is not, beyond `MAX_SKIP` levels.
+  capture, a page) is not, beyond `MAX_SKIP` levels. One crop can now hold a chain at
+  each of the four starting levels, as many as an image keeps (`MAX_CHAINS`), so several
+  crops of one image drawn small at once, or a zoom through 2×, 4× and 8×, can push each
+  other's chains out and build them again.
 - **Encode target.** ARCH step 4 writes NV12/P010 straight into a shared texture and
   ends the submit in `PRESENT`. The NV12 pass samples this RGBA output into either the
   platform `encode_target`'s plane views or `Nv12Planes`, which is the CI path, and
