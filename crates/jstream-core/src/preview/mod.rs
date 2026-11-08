@@ -535,7 +535,8 @@ struct Work {
     /// The session the program stage feeds, while it draws this stream.
     staged: Option<Staged>,
     /// The stage couldn't take this JPEG or PNG stream: the hub draws it from now on,
-    /// rather than ask again on every pass.
+    /// rather than ask again on every pass. It lasts for the stream's life, so after a
+    /// one-off failure the hub keeps drawing it until the client subscribes again.
     unstaged: bool,
 }
 
@@ -687,6 +688,7 @@ impl Staged {
         size: FrameSize,
         stage: &Arc<Program>,
         rev: &Arc<AtomicU64>,
+        started: Instant,
     ) -> Result<Self, String> {
         let H264 {
             session, packets, ..
@@ -700,7 +702,10 @@ impl Staged {
             let rev = Arc::clone(rev);
             thread::Builder::new()
                 .name("jstream-preview-send".into())
-                .spawn(move || send_packets(&stream, &packets, size, &rev, &closing))
+                .spawn(move || {
+                    let mut clock = StreamClock::new(started);
+                    send_packets(&stream, &packets, size, &rev, &closing, &mut clock);
+                })
                 .map_err(|err| format!("starting the preview sender: {err}"))?
         };
         Ok(Self {
@@ -721,6 +726,7 @@ impl Staged {
         size: FrameSize,
         stage: &Arc<Program>,
         rev: &Arc<AtomicU64>,
+        started: Instant,
     ) -> Result<Self, String> {
         let (input, pictures) = picture_queue();
         let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
@@ -732,7 +738,10 @@ impl Staged {
             let rev = Arc::clone(rev);
             thread::Builder::new()
                 .name("jstream-preview-send".into())
-                .spawn(move || send_pictures(&stream, codec, &pictures, &rev, &closing))
+                .spawn(move || {
+                    let mut clock = StreamClock::new(started);
+                    send_pictures(&stream, codec, &pictures, &rev, &closing, &mut clock);
+                })
                 .map_err(|err| format!("starting the preview sender: {err}"))?
         };
         Ok(Self {
@@ -774,16 +783,51 @@ impl Drop for Staged {
     }
 }
 
-/// The sender thread of a [`Staged`] stream: sends each packet as it comes, its time
-/// counted from the first. A session that ends without being closed ends the stream.
+/// A staged stream's picture times (`pts_us`), which go on increasing across the stages
+/// and sizes it is drawn at, as the hub's own do: the first picture a sender sends is
+/// timed by how long the stream has been open, and each later one by how far its media
+/// time is past that first one's, never going back.
+struct StreamClock {
+    /// When the stream opened (the hub's `Work::started`).
+    started: Instant,
+    /// The first picture's media time (µs) and the time it was sent at.
+    first: Option<(i64, i64)>,
+    last: i64,
+}
+
+impl StreamClock {
+    fn new(started: Instant) -> Self {
+        Self {
+            started,
+            first: None,
+            last: 0,
+        }
+    }
+
+    /// The `pts_us` of a picture whose media time is `pts` (µs).
+    fn at(&mut self, pts: i64) -> i64 {
+        let started = self.started;
+        let (base, offset) = *self.first.get_or_insert_with(|| {
+            let open = started.elapsed().as_micros();
+            (pts, i64::try_from(open).unwrap_or(i64::MAX))
+        });
+        self.last = offset
+            .saturating_add(pts.saturating_sub(base))
+            .max(self.last);
+        self.last
+    }
+}
+
+/// The sender thread of a [`Staged`] stream: sends each packet as it comes, timed by
+/// `clock`. A session that ends without being closed ends the stream.
 fn send_packets(
     stream: &PreviewStream,
     packets: &Subscription,
     size: FrameSize,
     rev: &AtomicU64,
     closing: &AtomicBool,
+    clock: &mut StreamClock,
 ) {
-    let mut base = None;
     loop {
         match packets.recv() {
             Ok(packet) => {
@@ -791,13 +835,12 @@ fn send_packets(
                     .pts()
                     .rescale(Timebase::MICROS, Rounding::Nearest)
                     .map_or(0, MediaTime::ticks);
-                let base = *base.get_or_insert(pts);
                 stream.send(picture(
                     stream,
                     PreviewCodec::H264,
                     packet.is_keyframe(),
                     size,
-                    pts.saturating_sub(base),
+                    clock.at(pts),
                     Rev(rev.load(Ordering::Acquire)),
                     packet.data(),
                 ));
@@ -816,7 +859,7 @@ fn send_packets(
 }
 
 /// The thread of a [`Staged`] JPEG or PNG stream: encodes and sends each picture the
-/// stage pushes, its time counted from the first, as the hub would draw it: when it
+/// stage pushes, timed by `clock`, as the hub would draw it: when it
 /// differs from the last one sent, a keyframe was asked for, or [`KEYFRAME_EVERY`]
 /// passed, and only while the stream's queue has room. Ends when the stream closes it
 /// or the stage lets go of the queue (the hub then opens it on the next stage).
@@ -826,8 +869,8 @@ fn send_pictures(
     pictures: &PictureOutput,
     rev: &AtomicU64,
     closing: &AtomicBool,
+    clock: &mut StreamClock,
 ) {
-    let mut base = None;
     let mut last: Vec<u8> = Vec::new();
     let mut sent: Option<Instant> = None;
     let mut encoded = Vec::new();
@@ -846,7 +889,6 @@ fn send_pictures(
             .pts
             .rescale(Timebase::MICROS, Rounding::Nearest)
             .map_or(0, MediaTime::ticks);
-        let base = *base.get_or_insert(pts);
         let (width, height) = (shot.size.width(), shot.size.height());
         let payload = match codec {
             PreviewCodec::Png => snapshot::encode_png(width, height, &shot.rgba),
@@ -867,7 +909,7 @@ fn send_pictures(
                     codec,
                     true,
                     shot.size,
-                    pts.saturating_sub(base),
+                    clock.at(pts),
                     rev,
                     &payload,
                 ));
@@ -921,12 +963,12 @@ fn serve_staged(
                 .codecs
                 .as_ref()
                 .ok_or("this engine has no H.264 encoder")?;
-            let staged = Staged::open(stream, codecs.as_ref(), size, stage, rev)?;
+            let staged = Staged::open(stream, codecs.as_ref(), size, stage, rev, work.started)?;
             // A new session starts on a keyframe.
             stream.keyframe.store(false, Ordering::Release);
             staged
         } else {
-            Staged::open_pictures(stream, work.codec, size, stage, rev)?
+            Staged::open_pictures(stream, work.codec, size, stage, rev, work.started)?
         });
     }
     // A picture stream's request is its sender's to take (`send_pictures`).
@@ -1714,5 +1756,31 @@ fn picture(
             rev,
         },
         payload: Arc::from(payload),
+    }
+}
+
+#[cfg(test)]
+mod clock_tests {
+    use super::StreamClock;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn a_staged_streams_times_go_on_from_when_it_opened_and_never_back() {
+        let opened = Instant::now() - Duration::from_secs(5);
+        let mut first = StreamClock::new(opened);
+        let start = first.at(1_000);
+        assert!(
+            start >= 5_000_000,
+            "timed by how long the stream is open: {start}"
+        );
+        assert_eq!(first.at(41_000), start + 40_000, "then by media time");
+        assert_eq!(first.at(21_000), start + 40_000, "never back");
+        // A later stage's sender, its media time starting anew, goes on from there.
+        std::thread::sleep(Duration::from_millis(5));
+        let mut next = StreamClock::new(opened);
+        assert!(
+            next.at(0) >= start + 5_000,
+            "after the first sender's first picture"
+        );
     }
 }

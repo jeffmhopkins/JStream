@@ -2898,8 +2898,9 @@ impl TapInput {
     }
 }
 
-/// How many pictures a JPEG or PNG preview stream on the program stage may have waiting:
-/// one being encoded and the next. The render thread drops a frame beyond that.
+/// How many pictures a JPEG or PNG preview stream on the program stage may have waiting.
+/// The sender takes one off the queue before it encodes it, so two can wait while a
+/// third is being encoded. The render thread drops a frame beyond that.
 const PICTURE_DEPTH: usize = 2;
 
 /// One frame the program stage read back for a JPEG or PNG preview stream.
