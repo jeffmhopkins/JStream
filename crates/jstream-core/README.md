@@ -300,7 +300,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   platform has an encoder and in JPEG otherwise (`preview/jpeg.rs`, a baseline
   encoder of its own), or in PNG for a client that asks for it to take a screenshot
   (`video.snapshot`'s encoder, [ADR-0096](../../docs/adr/0096-item-lock-and-png-preview-frames.md)), drawn on the engine's `jstream-preview` thread with its own
-  compositor and its own captures of what the mix shows, a webcam's one open shared
+  compositor and its own captures of what the mix shows (an H.264 stream of the program
+  or of a scene is drawn by the program stage instead), a webcam's one open shared
   with the program stage (`runtime/devices.rs`; see
   *Preview streams* in [Design](#design)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
@@ -308,7 +309,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   display, window and webcam the program mix or a video mix shows
   (`runtime/captures.rs`, which starts and stops them on a `jstream-capture` thread),
   composites each video
-  mix the running outputs show, on its own ticks, from the render snapshot the control
+  mix the running outputs show, on its own ticks, then each monitored scene a preview
+  stream shows, from the render snapshot the control
   side publishes (`runtime/render.rs`) and reads the frames back, and the mixer thread
   polls the media clock. The render thread composites on the platform's GPU context
   when the interop opens one, and samples the captured textures there with no CPU copy
@@ -554,7 +556,9 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   from the preview's capture and closed with the stream, the collection untouched, a
   draft of the program's webcam sharing its one open beside a draft display, and a
   kind that captures nothing, an unknown kind, a refused setting and a scene with a
-  source refused), the
+  source refused; an H.264 stream of the program and one of a scene off program drawn
+  by the program stage, which opens for each with no output and stops once it closes,
+  with the preview thread's own drawing failing), the
   collection file (`src/tests/collection.rs`: created when missing with the sample
   labels at `rev` 0, batches, an undo
   and a redo each saved, a saved collection loaded by a new engine with its `rev` and
@@ -1615,7 +1619,8 @@ and its master chain run once per tick, as ADR-0080 §1 asks, and each output ch
 once. A failed stage chain draws a black frame: the unfiltered mix never leaves in its
 place. A frame without either chain draws as before, with no extra layer. The editing
 canvas, previews and `video.snapshot` draw with `View::default()`, before the master
-stage. The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
+stage, and so does the program stage's render thread for a monitored scene
+(`View::monitored`, which only marks it drawn by that thread). The stage's chains count toward `Shot::changes_with_time`, and `Chains::begin`
 keeps their filters with the shot's other chains, so a stateful kind sees each frame
 of its mix in order. Their filters hold no scene, source or bus reference (the graph
 refuses one), so none reads a scene, but one may read a file: the asset sync below
