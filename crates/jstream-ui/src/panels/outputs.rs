@@ -1034,6 +1034,43 @@ struct Panel {
 /// applies the last one anyway.
 const REREADS: u32 = 4;
 
+/// What [`settled_read`] read, and whether state changes kept arriving through every
+/// try, so the caller should read again later.
+struct Settled<T> {
+    value: T,
+    unsettled: bool,
+}
+
+/// Reads with `read` until no event (counted by `events`) arrives while a read is out,
+/// at most [`REREADS`] times, and returns the last read. Returns `None` as soon as
+/// `current` says a later read has taken over.
+async fn settled_read<T, F, Fut>(
+    mut read: F,
+    events: impl Fn() -> Option<u64>,
+    current: impl Fn() -> bool,
+) -> Option<Settled<T>>
+where
+    F: FnMut() -> Fut,
+    Fut: Future<Output = T>,
+{
+    let mut tries = 0;
+    loop {
+        tries += 1;
+        let heard = events();
+        let value = read().await;
+        if !current() {
+            return None;
+        }
+        let settled = events() == heard;
+        if settled || tries >= REREADS {
+            return Some(Settled {
+                value,
+                unsettled: !settled,
+            });
+        }
+    }
+}
+
 impl Panel {
     /// Shows `owner`'s chains in the Filters panel, from an FX button.
     fn show_chains(self, owner: FilterOwner) {
@@ -1084,22 +1121,21 @@ impl Panel {
         // read first would flicker the row back to its old state. After a few tries the
         // last read is applied anyway and a fresh reload settles it, so a steady stream
         // of changes can't stall the panel.
-        let mut tries = 0;
-        let loaded = loop {
-            tries += 1;
-            let heard = self.state_events.try_get_value();
-            let loaded = load(&*session.control).await;
-            if self.loads.try_get_value() != Some(mine) {
-                return;
-            }
-            if self.state_events.try_get_value() == heard {
-                break loaded;
-            }
-            if tries >= REREADS {
-                self.reload();
-                break loaded;
-            }
+        let reads = settled_read(
+            || load(&*session.control),
+            || self.state_events.try_get_value(),
+            || self.loads.try_get_value() == Some(mine),
+        );
+        let Some(Settled {
+            value: loaded,
+            unsettled,
+        }) = reads.await
+        else {
+            return;
         };
+        if unsettled {
+            self.reload();
+        }
         match loaded {
             Ok(snapshot) => {
                 self.rows.try_set(
@@ -2980,6 +3016,43 @@ mod tests {
 
     /// Duplicate copies the kind, target, encoder, mix, bus and filters in one batch,
     /// and never a stream key; the mock engine takes the batch.
+    #[test]
+    fn a_read_an_event_overtook_is_made_again_not_applied() {
+        use super::{REREADS, Settled, settled_read};
+        use std::cell::Cell;
+        // The first read is overtaken by a state change; the second isn't, and is the
+        // one returned.
+        let events = Cell::new(0_u64);
+        let reads = Cell::new(0_u32);
+        let read = || {
+            reads.set(reads.get() + 1);
+            if reads.get() == 1 {
+                events.set(events.get() + 1);
+            }
+            std::future::ready(reads.get())
+        };
+        let got = now(settled_read(read, || Some(events.get()), || true));
+        assert!(matches!(
+            got,
+            Some(Settled {
+                value: 2,
+                unsettled: false
+            })
+        ));
+        // Changes that never stop: the last of REREADS reads is returned, unsettled.
+        let reads = Cell::new(0_u32);
+        let read = || {
+            reads.set(reads.get() + 1);
+            events.set(events.get() + 1);
+            std::future::ready(reads.get())
+        };
+        let got = now(settled_read(read, || Some(events.get()), || true));
+        assert!(matches!(got, Some(Settled { value, unsettled: true }) if value == REREADS));
+        // A later reload took over: nothing is returned.
+        let got = now(settled_read(|| std::future::ready(1), || Some(0), || false));
+        assert!(got.is_none());
+    }
+
     #[test]
     fn a_duplicate_copies_settings_and_filters_but_not_the_key() {
         use super::{OutputDraft, duplicate_edits};
