@@ -302,7 +302,7 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
         .map_err(|error| error.to_string())
 }
 
-/// Linux's listener: X11 key grabs on their own connection, on an X11 session. Wayland
+/// Linux's listener: X11 key and wheel grabs on their own connection, on an X11 session. Wayland
 /// has no grab (its GlobalShortcuts portal isn't wired yet), so there it doesn't start.
 #[cfg(target_os = "linux")]
 fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
@@ -312,6 +312,9 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
     impl crate::hotkeys::Registrar for X11 {
         fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
             self.0.set(chords)
+        }
+        fn hears_wheel(&self) -> bool {
+            true
         }
     }
 

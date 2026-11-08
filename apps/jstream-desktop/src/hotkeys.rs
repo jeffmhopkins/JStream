@@ -12,17 +12,25 @@
 //! The off switch is the UI setting [`GLOBAL_KEY`] (ADR-0084), on unless it holds
 //! `false`. Off, every chord is let go, and the page hears them only while it has the
 //! focus, as before. A chord the OS refuses (another application holds it) is logged and
-//! heard only while JStream has the focus. Wheel chords (ADR-0112 §3) aren't keys, so
-//! they aren't registered: the page hears them while it has the focus.
+//! heard only while JStream has the focus.
+//!
+//! Wheel chords (ADR-0112 §3) are registered only with a registrar that
+//! [hears the wheel](Registrar::hears_wheel) (on X11, `XGrabButton`), and only while a
+//! follow camera is live: while the scene on program or on preview, or the scene it is a
+//! keyframe scene of, has one (§5). A registered wheel chord is consumed, so the
+//! application under the pointer doesn't zoom too; the rest of the time it isn't
+//! registered, and the wheel passes through untouched. Elsewhere the page hears wheel
+//! chords while it has the focus.
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
 use futures_util::{FutureExt, StreamExt};
 use jstream_control::{Control, ControlError};
 use jstream_protocol::{
-    Call, CallResult, Event, Hello, HotkeyBinding, PROTOCOL_VERSION, Query, QueryResult,
+    Call, CallResult, Event, Hello, HotkeyBinding, PROTOCOL_VERSION, Query, QueryResult, SceneId,
 };
 use serde_json::Value;
+use std::collections::HashMap;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
 
@@ -37,6 +45,11 @@ pub trait Registrar: Send + Sync + 'static {
     /// Listens for `chords` (as the protocol spells them) in place of the ones before,
     /// and returns each one it couldn't, with the reason.
     fn set(&self, chords: Vec<String>) -> Vec<(String, String)>;
+
+    /// Whether it can listen for wheel chords too. Default no: it is given only keys.
+    fn hears_wheel(&self) -> bool {
+        false
+    }
 }
 
 /// Whether global hotkeys are on, from the [`GLOBAL_KEY`] setting's value.
@@ -72,16 +85,18 @@ pub async fn run<C: Control>(
         })
         .await?;
     let mut events = control.events();
-    let mut bindings = read_bindings(&control).await?;
+    let mut state = read_state(&control).await?;
+    let mut studio = read_studio(&control).await?;
+    let hears_wheel = registrar.hears_wheel();
     let mut registered: Option<Vec<String>> = None;
     let mut switch_open = true;
     let result = loop {
-        // Keyboard chords only: the wheel needs a hook of its own (ADR-0112 §5), so a
-        // wheel chord is heard only while the page has the focus for now.
         let wanted: Vec<String> = if (switch.on)() {
-            bindings
+            let wheel = hears_wheel && state.follows(&studio);
+            state
+                .bindings
                 .iter()
-                .filter(|b| !b.chord.is_wheel())
+                .filter(|b| wheel || !b.chord.is_wheel())
                 .map(|b| b.chord.to_string())
                 .collect()
         } else {
@@ -94,12 +109,13 @@ pub async fn run<C: Control>(
         tokio::select! {
             event = events.next() => match event {
                 None => break Ok(()),
-                Some(Event::StateChanged { .. }) => {
-                    // Read once for every change already queued.
+                Some(event) => {
+                    // Take every event already queued, and read the state once for them.
+                    let mut changed = studio.note(&event);
                     let mut ended = false;
                     loop {
                         match events.next().now_or_never() {
-                            Some(Some(_)) => {}
+                            Some(Some(event)) => changed |= studio.note(&event),
                             Some(None) => {
                                 ended = true;
                                 break;
@@ -110,12 +126,13 @@ pub async fn run<C: Control>(
                     if ended {
                         break Ok(());
                     }
-                    match read_bindings(&control).await {
-                        Ok(read) => bindings = read,
-                        Err(error) => break Err(error),
+                    if changed {
+                        match read_state(&control).await {
+                            Ok(read) => state = read,
+                            Err(error) => break Err(error),
+                        }
                     }
                 }
-                Some(_) => {}
             },
             changed = switch.changes.changed(), if switch_open => {
                 // The settings are gone (the server stopped): keep what is registered.
@@ -123,7 +140,7 @@ pub async fn run<C: Control>(
             }
             press = presses.recv() => match press {
                 None => break Ok(()),
-                Some(chord) => run_binding(&control, &bindings, &chord).await,
+                Some(chord) => run_binding(&control, &state.bindings, &chord).await,
             },
         }
     };
@@ -149,8 +166,58 @@ async fn register(registrar: &Arc<dyn Registrar>, chords: Vec<String>) {
     tracing::debug!(heard = count - failed.len().min(count), "global hotkeys");
 }
 
-/// The collection's bindings, from `state.get`.
-async fn read_bindings<C: Control>(control: &C) -> Result<Vec<HotkeyBinding>, ControlError> {
+/// What the listener reads from `state.get`: the bindings, and the scenes with a follow
+/// camera.
+struct State {
+    bindings: Vec<HotkeyBinding>,
+    /// The scenes that have a follow camera. A keyframe scene draws its parent's, so it
+    /// reports none of its own.
+    follow: Vec<SceneId>,
+    /// Each keyframe scene's parent.
+    variant_of: HashMap<SceneId, SceneId>,
+}
+
+impl State {
+    /// Whether a follow camera is live: the scene on program or on preview, or the scene
+    /// it is a keyframe scene of, has one (ADR-0112 §5).
+    fn follows(&self, studio: &Studio) -> bool {
+        [&studio.program, &studio.preview]
+            .into_iter()
+            .flatten()
+            .any(|scene| {
+                let family = self.variant_of.get(scene).unwrap_or(scene);
+                self.follow.contains(family)
+            })
+    }
+}
+
+/// What is on program and on preview, from `studio.get` and then `studio.changed`.
+struct Studio {
+    program: Option<SceneId>,
+    preview: Option<SceneId>,
+}
+
+impl Studio {
+    /// Takes in what `event` says, and returns whether the state must be read again.
+    fn note(&mut self, event: &Event) -> bool {
+        match event {
+            Event::StateChanged { .. } => true,
+            Event::StudioChanged {
+                program_scene,
+                preview_scene,
+                ..
+            } => {
+                self.program.clone_from(program_scene);
+                self.preview.clone_from(preview_scene);
+                false
+            }
+            _ => false,
+        }
+    }
+}
+
+/// The collection's bindings and follow cameras, from `state.get`.
+async fn read_state<C: Control>(control: &C) -> Result<State, ControlError> {
     let response = control
         .call(Call::Query {
             query: Query::StateGet,
@@ -158,10 +225,48 @@ async fn read_bindings<C: Control>(control: &C) -> Result<Vec<HotkeyBinding>, Co
         .await?;
     match response.result {
         CallResult::Query {
-            result: QueryResult::StateGet { hotkeys, .. },
-        } => Ok(hotkeys),
+            result: QueryResult::StateGet {
+                hotkeys, scenes, ..
+            },
+        } => Ok(State {
+            bindings: hotkeys,
+            follow: scenes
+                .iter()
+                .filter(|scene| scene.camera_follow.is_some())
+                .map(|scene| scene.scene_id.clone())
+                .collect(),
+            variant_of: scenes
+                .into_iter()
+                .filter_map(|scene| Some((scene.scene_id, scene.variant_of?)))
+                .collect(),
+        }),
         _ => Err(ControlError::Disconnected {
             reason: "the engine answered `state.get` with another result".into(),
+        }),
+    }
+}
+
+/// What is on program and on preview, from `studio.get`.
+async fn read_studio<C: Control>(control: &C) -> Result<Studio, ControlError> {
+    let response = control
+        .call(Call::Query {
+            query: Query::StudioGet,
+        })
+        .await?;
+    match response.result {
+        CallResult::Query {
+            result:
+                QueryResult::StudioGet {
+                    program_scene,
+                    preview_scene,
+                    ..
+                },
+        } => Ok(Studio {
+            program: program_scene,
+            preview: preview_scene,
+        }),
+        _ => Err(ControlError::Disconnected {
+            reason: "the engine answered `studio.get` with another result".into(),
         }),
     }
 }
@@ -182,12 +287,12 @@ async fn run_binding<C: Control>(control: &C, bindings: &[HotkeyBinding], chord:
 
 #[cfg(test)]
 mod tests {
-    use super::{Registrar, Switch, global_on, run};
+    use super::{Registrar, State, Studio, Switch, global_on, run};
     use jstream_control::Control;
     use jstream_core::Engine;
     use jstream_protocol::{
-        Action, Batch, Call, CallResult, Chord, Edit, Hello, PROTOCOL_VERSION, Query, QueryResult,
-        SceneId,
+        Action, Batch, Call, CallResult, CameraFollow, Chord, Edit, Hello, ItemGeometry, ItemId,
+        PROTOCOL_VERSION, Query, QueryResult, SceneId, Size, SourceId, SourceKind, Vec2,
     };
     use serde_json::json;
     use std::sync::atomic::{AtomicBool, Ordering};
@@ -195,11 +300,16 @@ mod tests {
     use std::time::Duration;
     use tokio::sync::{mpsc, watch};
 
-    /// Records each set of chords it is given, and refuses `Ctrl+KeyC`.
+    /// Records each set of chords it is given, and refuses `Ctrl+KeyC`. It hears the
+    /// wheel when `.1` says so.
     #[derive(Default)]
-    struct Recorder(Mutex<Vec<Vec<String>>>);
+    struct Recorder(Mutex<Vec<Vec<String>>>, bool);
 
     impl Registrar for Recorder {
+        fn hears_wheel(&self) -> bool {
+            self.1
+        }
+
         fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
             let failed = chords
                 .iter()
@@ -361,6 +471,159 @@ mod tests {
         eventually(async || recorder.last().is_some_and(|last| last.len() == 2)).await;
 
         // Closing the presses ends it, and it lets every chord go.
+        drop(press);
+        listener
+            .await
+            .unwrap_or_else(|e| panic!("{e}"))
+            .unwrap_or_else(|e| panic!("run: {e}"));
+        assert_eq!(recorder.last(), Some(Vec::new()));
+    }
+
+    /// A follow camera is live while the scene on program or preview, or the scene it is
+    /// a keyframe scene of, has one.
+    #[test]
+    fn a_follow_camera_is_live_on_program_or_preview_and_through_its_keyframes() {
+        let id = |scene: &str| SceneId::new(scene);
+        let state = State {
+            bindings: Vec::new(),
+            follow: vec![id("f")],
+            variant_of: [(id("k"), id("f"))].into_iter().collect(),
+        };
+        let live = |program: &str, preview: Option<&str>| {
+            state.follows(&Studio {
+                program: Some(id(program)),
+                preview: preview.map(id),
+            })
+        };
+        assert!(live("f", None));
+        assert!(live("a", Some("f")));
+        assert!(live("k", Some("a")), "a keyframe scene draws its parent's");
+        assert!(!live("a", Some("b")));
+        assert!(!live("a", None));
+    }
+
+    /// With a registrar that hears the wheel, a wheel chord is registered only while a
+    /// follow camera is on program or preview, and let go when it leaves.
+    #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+    async fn wheel_chords_are_heard_only_while_a_follow_camera_is_live() {
+        let engine = Engine::new();
+        let client = engine.connect();
+        client
+            .hello(Hello {
+                protocol: PROTOCOL_VERSION,
+                client_name: "test".into(),
+            })
+            .await
+            .unwrap_or_else(|e| panic!("hello: {e}"));
+        let geometry = ItemGeometry::try_new(
+            Vec2::new(960.0, 540.0).unwrap_or_else(|| panic!("finite")),
+            Size::try_new(1440.0, 900.0).unwrap_or_else(|e| panic!("{e}")),
+        )
+        .unwrap_or_else(|e| panic!("{e}"));
+        let create = |scene: &str| Edit::SceneCreate {
+            scene_id: SceneId::new(scene),
+            name: scene.to_uppercase(),
+            role: None,
+        };
+        client
+            .call(batch(vec![
+                create("a"),
+                create("b"),
+                create("f"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("display"),
+                    name: "Display".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("f"),
+                    item_id: ItemId::new("screen"),
+                    source_id: SourceId::new("display"),
+                    transform: None,
+                    geometry: Some(geometry),
+                    opacity: None,
+                    blend: None,
+                },
+                Edit::SceneSetCameraFollow {
+                    scene_id: SceneId::new("f"),
+                    follow: Some(CameraFollow::of(ItemId::new("screen"))),
+                },
+                Edit::HotkeySet {
+                    chord: Chord::new("F9"),
+                    action: switch_to("b"),
+                },
+                Edit::HotkeySet {
+                    chord: Chord::new("Ctrl+WheelUp"),
+                    action: Action::SceneZoomCamera {
+                        scene_id: SceneId::new("f"),
+                        steps: 1,
+                    },
+                },
+            ]))
+            .await
+            .unwrap_or_else(|e| panic!("setup: {e}"));
+        let preview = |scene: &str| Call::Action {
+            action: Action::StudioSetPreview {
+                scene_id: SceneId::new(scene),
+            },
+        };
+        client
+            .call(preview("b"))
+            .await
+            .unwrap_or_else(|e| panic!("preview: {e}"));
+
+        let recorder = Arc::new(Recorder(Mutex::default(), true));
+        let (_changed, changes) = watch::channel(0_u64);
+        let (press, presses) = mpsc::unbounded_channel();
+        let listener = tokio::spawn(run(
+            engine.connect(),
+            Arc::clone(&recorder) as Arc<dyn Registrar>,
+            Switch {
+                on: Box::new(|| true),
+                changes,
+            },
+            presses,
+        ));
+        let keys = vec!["F9".to_owned()];
+        let both = vec!["Ctrl+WheelUp".to_owned(), "F9".to_owned()];
+        eventually(async || recorder.last() == Some(keys.clone())).await;
+
+        // The follow camera's scene on preview: the wheel chord is heard.
+        client
+            .call(preview("f"))
+            .await
+            .unwrap_or_else(|e| panic!("preview: {e}"));
+        eventually(async || recorder.last() == Some(both.clone())).await;
+
+        // Its follow camera turned off: let go.
+        client
+            .call(batch(vec![Edit::SceneSetCameraFollow {
+                scene_id: SceneId::new("f"),
+                follow: None,
+            }]))
+            .await
+            .unwrap_or_else(|e| panic!("unfollow: {e}"));
+        eventually(async || recorder.last() == Some(keys.clone())).await;
+
+        // Back on, then off preview: let go again.
+        client
+            .call(batch(vec![Edit::SceneSetCameraFollow {
+                scene_id: SceneId::new("f"),
+                follow: Some(CameraFollow::of(ItemId::new("screen"))),
+            }]))
+            .await
+            .unwrap_or_else(|e| panic!("follow: {e}"));
+        eventually(async || recorder.last() == Some(both.clone())).await;
+        client
+            .call(preview("a"))
+            .await
+            .unwrap_or_else(|e| panic!("preview: {e}"));
+        eventually(async || recorder.last() == Some(keys.clone())).await;
+
         drop(press);
         listener
             .await
