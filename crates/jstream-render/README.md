@@ -128,7 +128,11 @@ and calls this crate.
 - It does **not** open the media adapter. When platform interop works, the engine
   constructs the compositor on `GpuContext`'s device, queue and adapter
   ([jstream-platform › GPU frames](../jstream-platform/README.md#gpu-frames)), so
-  capture, composite and encode share one device. `Compositor::open` is the other
+  capture, composite and encode share one device. The engine opens that context once
+  and builds every compositor it needs on it (`Compositor::on_context`: the program
+  stage's, the preview's, the snapshot thread's), and they share one device-loss watch
+  (`GpuContext::watch`), so each sees the loss whichever was opened last;
+  `context_lost` asks the same watch without a compositor. `Compositor::open` is the other
   path: no interop (the fakes, CI, a headless machine). It opens a device itself,
   a hardware adapter first by default (`OpenOptions::hardware`), with the software
   adapter as the fallback, so ARCH principle 7's "runs with a software adapter" still
@@ -200,8 +204,9 @@ and calls this crate.
   would panic. `render` empties
   the slot, so an error that recurs every frame is logged once per frame until the caller
   gives up. The handler is per device: on the shared context an error that a browser or
-  capture thread raised is taken by the program's next `render` and counts against the
-  program's frames.
+  capture thread, or another compositor on the context (the preview's, a snapshot's),
+  raised is taken by whichever compositor's `render` comes next and counts against its
+  frames.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's, and so is the choice of encode target each tick. Also

@@ -96,7 +96,8 @@ use crate::chain::Chains;
 use crate::lock;
 use crate::profile::DrawMeter;
 use crate::runtime::{
-    CaptureBackends, Program, RenderCaptures, RenderSnapshot, output_size, spawn_captures,
+    CaptureBackends, Program, RenderCaptures, RenderSnapshot, SharedGpu, output_size,
+    spawn_captures,
 };
 use crate::snapshot::{self, CaptureKey, Captures, GpuKey, LiveParams, NoCaptures, Shot};
 
@@ -172,15 +173,21 @@ pub(crate) type PreviewDraw = Box<
 /// Opens the hub's [`PreviewDraw`], on the hub thread.
 pub(crate) type OpenPreviewDraw = Arc<dyn Fn() -> Result<PreviewDraw, String> + Send + Sync>;
 
-/// The hub's draw: its own wgpu compositor, hardware adapter first with the software one
-/// as the fallback (`OpenOptions::hardware`), drawing the program mix with
-/// [`snapshot::compose`] and the hub's captures.
-pub(crate) fn gpu_draw() -> OpenPreviewDraw {
-    Arc::new(|| {
-        let mut compositor =
-            Compositor::open(OpenOptions::hardware()).map_err(|err| err.to_string())?;
+/// The hub's draw: a wgpu compositor on the engine's GPU context (ADR-0117 §5), so it
+/// draws the browser pages painted there, or, when the engine has none, on a device of
+/// its own, hardware adapter first with the software one as the fallback
+/// (`OpenOptions::hardware`). It draws the program mix with [`snapshot::compose`] and the
+/// hub's captures.
+pub(crate) fn gpu_draw(gpu: Option<Arc<SharedGpu>>) -> OpenPreviewDraw {
+    Arc::new(move || {
+        let context = gpu.as_ref().and_then(|gpu| gpu.context());
+        let mut compositor = match &context {
+            Some(context) => Compositor::on_context(context),
+            None => Compositor::open(OpenOptions::hardware()).map_err(|err| err.to_string())?,
+        };
         tracing::info!(
             adapter = %compositor.adapter_description(),
+            shared = context.is_some(),
             "preview compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
@@ -634,6 +641,8 @@ pub(crate) struct PreviewCapture {
     pub(crate) clock: Timebase,
     /// Opens or shares the program stage that draws the program for H.264 streams.
     pub(crate) stage: Option<StageOpener>,
+    /// The engine's GPU context, which the hub's compositor opens on.
+    pub(crate) gpu: Arc<SharedGpu>,
 }
 
 /// Gives the hub the program stage to draw the program on (ADR-0117 §6): the running one,
@@ -808,7 +817,7 @@ impl PreviewCapture {
     /// Starts the `jstream-capture` thread, on the CPU path: the hub's compositor is not
     /// on the platform's GPU context. The sizes it reports go nowhere; the program stage
     /// reports the sizes `source.sizes` shows.
-    fn spawn(&self) -> Result<RenderCaptures, String> {
+    pub(crate) fn spawn(&self) -> Result<RenderCaptures, String> {
         let (sizes, _) = std::sync::mpsc::channel();
         spawn_captures(
             CaptureBackends {
@@ -911,7 +920,14 @@ impl PreviewHub {
                 self.inner.wake.notify_all();
                 return Ok(());
             }
-            let draw = state.draw.clone().unwrap_or_else(gpu_draw);
+            let draw = state.draw.clone().unwrap_or_else(|| {
+                gpu_draw(
+                    state
+                        .capture
+                        .as_ref()
+                        .map(|capture| Arc::clone(&capture.gpu)),
+                )
+            });
             let capture = state.capture.clone();
             let inner = Arc::clone(&self.inner);
             let handle = thread::Builder::new()
