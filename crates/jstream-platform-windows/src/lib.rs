@@ -25,7 +25,7 @@
 //! (configuration check, PCM conversion, packet timing and padding), the video encoder
 //! helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping),
 //! the H.264 decoder's helpers (configuration check, the display aperture, cropping
-//! into I420 or NV12, short buffers and odd offsets refused),
+//! into I420 or NV12, short buffers, odd offsets and chroma past the stride refused),
 //! the first-frame fallback with fake encoders (`codec::fallback`: a refused first
 //! frame reopened in software, a later refusal failing, `Busy` keeping it armed, a
 //! failed software open, and when it applies), the GPU capture ring's slot choice
