@@ -45,6 +45,7 @@ mod registry;
 mod scope;
 mod shape;
 mod source;
+mod still;
 mod text;
 mod timer;
 mod youtube_chat;
@@ -71,5 +72,6 @@ pub use source::{
     AssetRoots, Context, Limits, Painter, ShownModel, Source, SourceAudio, SourceKind,
     needs_restart,
 };
+pub use still::Still;
 pub use text::MAX_DENSITY;
 pub use youtube_chat::YOUTUBE_CHAT_CSS;

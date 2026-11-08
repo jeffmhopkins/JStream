@@ -454,7 +454,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 image it draws, its passes, then `end_frame`. `upload` keyed by an ID reuses the entry when the
 caller's version and the size are unchanged, rewrites the same texture for a new
 version, and makes a new texture (retiring the old one) for a new size; `layer` reuses
-a layer of the same size. `end_frame` retires every entry the frame did not use,
+a layer of the same size. `end_frame` retires every entry the frame did not use (but one `keep_while` keeps),
 registers `Queue::on_submitted_work_done` for the frame (the frame fence: it records
 the newest finished frame in an atomic), polls the device once without blocking, and
 returns the retired images whose last frame has finished. A steady frame allocates
@@ -464,6 +464,17 @@ several draws of one frame share (a source's video chain) can run once in it.
 `set_extent` places a key's image as if it were another size (ADR-0073); a reused entry
 keeps the extent it had, so a caller that sets one sets it on every frame, and a new
 texture starts at its own size (an upload held small, at its frame's).
+
+`upload_if_needed` and `upload_drawn_if_needed` are `upload` and `upload_drawn` of
+pixels the caller reads only if the cache must upload: the closure is called only when
+the entry doesn't hold that version at that size, and when it gives none the entry is
+left as it was (marked used, so what it held is still drawn) and the call returns
+`Ok(None)`. A caller that lets go of a still's pixels once uploaded (`jstream-core`'s
+`still`, #1139) uploads through them, and calls `keep_while(key, alive)`: the entry is
+kept while no frame uses it, for as long as the shared flag is true, so the still is
+drawn at once when it is shown again. The entry keeps the flag's `Arc` until it is
+replaced or retired and hands it back in `Reclaimed`, so the cache never drops the
+last reference on its thread.
 
 `upload_drawn` (#1139, ADR-0117 §2) is `upload` for a frame only items draw, so its
 texels need be no finer than its draws sample them. Each `render` notes on the image how

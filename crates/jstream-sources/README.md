@@ -34,7 +34,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
-  allocates, and a frame handed out stays valid after an update. Most make their frames
+  allocates (apart from a still image's once nothing holds its frame, below), and a
+  frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
   the `waveform`, `spectrum`, `chat_message` and `timer` kinds draw theirs in a
   `Painter` instead, and `frame`
@@ -91,6 +92,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   due from its player's queue, and the page's hands out its latest paint. So their new
   frames also reach the picture without a plan. A still image, a file with no video and
   a page on the GPU have none.
+- `Still`: a source's one frame that can be let go of and made again, from
+  `Source::still()` (default `None`; only a still `image` has one, #1139). Every frame
+  its `frame()` hands out shares one copy, freed once all are dropped; the next call
+  reads and decodes the file again, so it blocks and never runs on a real-time thread.
+  `frame_if_held()` gives the copy only if someone holds it (or the one decoded when the
+  source was built, until it is taken), and `held()` says whether anyone does. A file
+  that decodes again at another `size()` fails with `SourceError::Decode`, since what
+  shows the still is placed at the size it had. The image source's `frame` is its
+  still's, so a host that drops every frame it was handed makes the next `frame`
+  decode; the engine keeps a shown still's frame only while a draw needs it
+  (`jstream-core`'s `still`).
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -219,6 +231,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   10 ms or less shows for 100 ms, as in browsers. A GIF plays once plus its
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
+  A still image (one frame, or frames with no delay, which show the last) keeps only
+  that frame, as a `Still` that reads the file again once its pixels are let go of; an
+  animation keeps every frame.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
 - `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
   (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
