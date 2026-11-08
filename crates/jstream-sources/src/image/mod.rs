@@ -5,11 +5,12 @@ pub(crate) mod decode;
 use crate::color::rgba_frame;
 use crate::describe::{asset, kind, param};
 use crate::source::{self, at_millis, changed_non_live, millis};
-use crate::{Context, Source, SourceError, SourceKind};
+use crate::{Context, Painter, Source, SourceError, SourceKind};
 use jstream_media::{FrameSize, MediaTime, VideoFrame};
 use jstream_protocol::{KindDescriptor, Settings};
 use serde_json::Value;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 /// The `image` kind.
 pub(crate) struct ImageKind(KindDescriptor);
@@ -46,7 +47,10 @@ impl SourceKind for ImageKind {
         Ok(Box::new(ImageSource {
             descriptor: self.0.clone(),
             settings: settings.clone(),
-            animation,
+            shown: Arc::new(Shown {
+                animation,
+                index: AtomicUsize::new(0),
+            }),
         }))
     }
 }
@@ -55,16 +59,50 @@ impl SourceKind for ImageKind {
 struct ImageSource {
     descriptor: KindDescriptor,
     settings: Settings,
-    animation: Animation,
+    shown: Arc<Shown>,
 }
 
-impl Source for ImageSource {
-    fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(self.animation.frame_at(millis(at)))
+/// An image's frames and the one shown, which an animated image's [`Painter`] moves
+/// on, so the host's own thread can step it without the source (ADR-0117 §3).
+#[derive(Debug)]
+struct Shown {
+    animation: Animation,
+    /// The frame shown last: the one [`Painter::paint`] or [`Source::frame`] picked.
+    index: AtomicUsize,
+}
+
+impl Painter for Shown {
+    /// Picks the frame to show at `at`: no drawing, the frames are decoded already.
+    fn paint(&self, at: MediaTime) {
+        let index = self.animation.index(millis(at));
+        self.index.store(index, Ordering::Relaxed);
+    }
+
+    fn frame(&self) -> Arc<VideoFrame> {
+        let index = self.index.load(Ordering::Relaxed);
+        self.animation.frame(index)
     }
 
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
         self.animation.next_change(millis(at)).map(at_millis)
+    }
+}
+
+impl Source for ImageSource {
+    fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
+        self.shown.paint(at);
+        Ok(self.shown.frame())
+    }
+
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        self.shown.next_change(at)
+    }
+
+    /// An animated image's: the host steps it on its own thread and takes each new
+    /// frame without a plan. A still image has none.
+    fn painter(&self) -> Option<Arc<dyn Painter>> {
+        let painter: Arc<dyn Painter> = self.shown.clone();
+        self.shown.animation.animated().then_some(painter)
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
@@ -136,8 +174,15 @@ impl Animation {
             .is_some_and(|plays| t >= self.play_ms.saturating_mul(u64::from(plays)))
     }
 
-    fn frame_at(&self, t: u64) -> Arc<VideoFrame> {
-        Arc::clone(&self.frames[self.index(t)])
+    /// Frame `index`, or the last one past the end.
+    fn frame(&self, index: usize) -> Arc<VideoFrame> {
+        let last = self.frames.len() - 1;
+        Arc::clone(&self.frames[index.min(last)])
+    }
+
+    /// Whether it has more than one frame to show.
+    fn animated(&self) -> bool {
+        self.frames.len() > 1 && self.play_ms > 0
     }
 
     /// When, in ms after the start, the frame shown at `t` is next replaced.

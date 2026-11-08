@@ -20,7 +20,9 @@ use std::sync::Arc;
 /// updated; a `media` file decodes them ahead on a thread of its own and hands each
 /// over under a short lock; a source whose frames follow something live (the
 /// `waveform`, `spectrum` and `chat_message` kinds) draws them in its [`Painter`]
-/// instead, and `frame` hands out the one painted last.
+/// instead, and `frame` hands out the one painted last. An animated image, a media file
+/// and a page that paints on the CPU have a painter that draws nothing, so a host can
+/// take their new frames from it without the source.
 pub trait Source: Send {
     /// The frame to show at `at`, the time since the source started on the media clock
     /// (ADR-0014, docs/adr/0014-media-clock.md). A time before the start shows the
