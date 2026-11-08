@@ -180,7 +180,7 @@ stamp = { hash = "b3:a5d5430cfcf7beeb", by = "agent:claude", note = "Against wav
 stamp = { hash = "b3:c06c302493ca4828", by = "agent:claude", note = "The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
 
 ["ARCH#data-model"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:88c024dc41bdeac7", by = "agent:grok", note = "Re-read the collection line. It now includes base_fps 30 or 60 beside the canvas." }
+stamp = { hash = "b3:e18335bee26d0731", by = "agent:claude", note = "Re-read against without_kinds now stamping removed kinds' versions on filters; the not-yet line still says filters follow renames on a new version and sources are refused, which holds" }
 
 ["ARCH#gpu-pipeline"."body"]
 stamp = { hash = "b3:b6e380145e0327e1", by = "agent:claude", note = "Added that the program stage's cache keeps an undrawn still's texture so a cut back is drawn at once; matches core still.rs and render README" }
@@ -510,7 +510,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:09879d6f277ae766", by = "agent:claude", note = "edited: a device's name in capture.targets is untrusted text, as a window's | kept from the merged side: Re-read it. The tool snapshot includes the longer canvas.set_frame_rate description. The section does not name a frame rate." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:077f8b43af5070f4", by = "agent:claude", note = "Re-read: the MCP section points to the design guidance; its rename advice now matches the engine, nothing in the section needed a change." }
+stamp = { hash = "b3:df235c114cd4a134", by = "agent:claude", note = "Re-read against the design.rs wording change; the MCP section doesn't detail rename guidance, still holds" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -555,7 +555,7 @@ stamp = { hash = "b3:c4172c4918851ee6", by = "agent:browser-linux", note = "Adde
 stamp = { hash = "b3:53ac1caed5b44522", by = "agent:claude", note = "dist.rs now builds and ships jstream-plugin-host.exe (#1187); the paragraph says the zip holds it, no longer 'from M3'" }
 
 ["ARCH#persistence"."body"]
-stamp = { hash = "b3:770babb13029e236", by = "agent:grok", note = "Re-read the collections bullet: presets are still omitted at the initial cut, and an unchanged 300 ms stock Cut loads at duration 0 with no schema bump, matching loaded_cut_duration." }
+stamp = { hash = "b3:c8c9801579e85439", by = "agent:claude", note = "Re-read against persist now writing a filter's recorded version first; added a sentence that a filter keeps and saves the version its settings were stored by (removed kind or downgraded pack)" }
 
 ["ARCH#persistence"."dep:docs/RULES.md#R-API-003"]
 stamp = { hash = "b3:f17cde9b0d3da07c" }
@@ -585,7 +585,7 @@ stamp = { hash = "b3:900763c7ba171cf0", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:0d7676aa9124e4f3", by = "agent:claude-timelines", note = "Added schema version 6 for a scene's timelines; checked persist/mod.rs (v5_to_v6 refuses timelines), the v6 fixture and the v5 fixture test." }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:f2969b76a1cb6a09", by = "agent:grok", note = "Re-read it. base_fps is collection state, omitted from the file while it is 30, so a collection that has not opted in saves as before. Schema version stays 6." }
+stamp = { hash = "b3:48b1528d6cf435d0", by = "agent:claude", note = "Re-read against persist now writing a filter's recorded version first; added a sentence that a filter keeps and saves the version its settings were stored by (removed kind or downgraded pack)" }
 
 ["ARCH#persistence"."file:crates/jstream-graph/src/persist/tests.rs"]
 stamp = { hash = "b3:4105b2427082d483", by = "agent:grok", note = "Re-read the collections bullet: presets are still omitted at the initial cut, and an unchanged 300 ms stock Cut loads at duration 0 with no schema bump, matching loaded_cut_duration." }
@@ -2088,7 +2088,7 @@ stamp = { hash = "b3:24a2b1142112717f", by = "agent:claude", note = "This PR add
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:38e502ac632896fa", by = "agent:claude", note = "Replaced 'not migrated yet' with the upgrade: older-version settings through Effect::migrate, fitted to the kind, newer ones kept, one revision with state.changed from client engine, saved, logged in undo history; checked against install_effects and Graph::upgrade_filters." }
+stamp = { hash = "b3:a8d63e9c7f4c37ed", by = "agent:claude", note = "Re-read against the #1411 r1 fixes: upgrade now only runs for a version change, keeps undeclared and invalid values, fills only missing params with defaults, and keeps a newer version through a save; rewrote the effect-packs paragraph to say so" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:14c9709fcd23f48e", by = "agent:release-thread", note = "merge: merged main (#1111 0.76 effects space, #1122 0.77 depth of field, #1127 0.78 shared values, #1144 section split) and renumbered this PR's opacity gain from 0.79 to 0.83 per the release queue; re-read against the opacity-above-1 change and what main brought, and it holds (snapshots regenerated at 0.83) | merge: wave/alpha4 into #1104 (protocol 0.83): crates/jstream-protocol/README.md#filters re-verified on the wave after #1080 (frame sheets, video.frames and scene.switch_and_watch (0.82)); #1125 (item motion, item.set_motion (ADR-0099, 0.81)); #1082 (item.show, item.hide and item.toggle (ADR-0101, 0.80)); #1134 (file filters on master and output chains (0.79)). snapshot.rs's canvas-space track takes the motion's opacity through motion::opacity_of, so #1104's opacity gain (above 1, to MAX_OPACITY 4, #1101) holds there too; the filters dep's file-filter text doesn't change this section. | kept from the merged side: Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on | kept from the merged side: File filters on master/output chains, whole PR: the graph and mock refuse only scene, source and bus references on a master or output filter, the engine loads their assets (live.rs sync_assets, plan_stages hands them over), Add filter offers Apply LUT there; protocol 0.79 (version.rs, the versions entry at the head, the filters paragraph, FilterOwner::Master's doc, parity.rs's reason, snapshots regenerated). Tests: chain.rs the_output_stage_reads_its_filters_assets, tests/sources.rs a_master_or_output_filters_asset_is_loaded_for_its_chain, graph master_and_output_chains_are_validated, mock a_master_or_output_filter_may_name_a_file (review N1). Main brought #1144 (protocol and core README split into topic sections), #1111 (0.76), #1122 (0.77), #1127 (shared values, 0.78) and smaller PRs; this branch's text reads right in the merged sections." }
@@ -2211,7 +2211,7 @@ stamp = { hash = "b3:122185294299b4ac", by = "agent:claude-timelines", note = "R
 stamp = { hash = "b3:ae4278703c1195f9", by = "agent:grok", note = "Re-read the virtual-camera sentence. A virtual_cam start still publishes the program as a webcam, and the camera stays 30 fps at either base rate." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:38e502ac632896fa", by = "agent:claude", note = "Re-read: the daemon's design depends on core snapshots only for pack loading; the pack watcher and effects dir are unchanged, and filters now follow renames inside the engine, which the daemon needs no change for." }
+stamp = { hash = "b3:a8d63e9c7f4c37ed", by = "agent:claude", note = "Re-read the design section against #1411 r1 fixes: the daemon still loads the collection before watching packs, and the core snapshot section it depends on now says same-version reloads leave settings alone; nothing in this section changes" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note = "depends_on now names the core sections this design links to (#design for one engine and a session per connection, #snapshots for live sources, #outputs for the placeholder outputs, #wasm-plugins, #logging, #audit-log) instead of the whole old core #design, which is split into topic sections; re-read those passages against them; holds | merge: #1126 changes only core #wasm-plugins' Disabling bullet (save before the event); the daemon's saved-plugin passage still holds; the other core deps are unchanged by the merge" }
@@ -2220,7 +2220,7 @@ stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:8283d20f57184259", by = "agent:claude", note = "#1307 round 1: main.rs's extra fingerprint line doesn't change the Listening or parser text; still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:770babb13029e236", by = "agent:grok", note = "Re-read the collection-file bullet: the daemon still loads and upgrades the file, and an unchanged 300 ms stock Cut now loads at duration 0, so it remains a collection the engine can load." }
+stamp = { hash = "b3:c8c9801579e85439", by = "agent:claude", note = "Re-read the design section against #1411 r1 fixes: the daemon still loads the collection before watching packs, and the core snapshot section it depends on now says same-version reloads leave settings alone; nothing in this section changes" }
 
 ["CRATE-jstream-daemon#design"."file:apps/jstream-daemon/Cargo.toml"]
 stamp = { hash = "b3:cac2c0cc0638742f", by = "agent:claude", note = "#1129: Listening rewritten for the opt-in network listener (every interface by default, --lan-bind, fixed port, certificate beside the token file, renew only on --lan-renew); parser option list and the tls-feature dependency match Cargo.toml and args.rs" }
@@ -2607,7 +2607,7 @@ stamp = { hash = "b3:0f0f40966c64dd97", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:4500e061e4435b08", by = "agent:claude-443", note = "Re-read the API list: added VideoSession::codec (the codec encoding now, recorded once by the encode thread through Driver::codec_changed and a OnceLock). Dependencies unchanged." }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:081289e925763df0", by = "agent:claude", note = "Added Graph::upgrade_filters to the load paragraph: missing kinds or a changed version upgraded from the recorded or previous version through the caller's migration, fitted, newer kept, a revision with no inverse returning filter.set_settings and Touched; checked against filter.rs and its test." }
+stamp = { hash = "b3:546443b58a55834a", by = "agent:claude", note = "Re-read against the #1411 r1 fixes: rewrote the upgrade paragraph (same-version untouched, undeclared values kept, defaults only for missing params, newer version recorded and saved, without_kinds stamps the removed kind's version, patch of changed keys only); tests in tests/filters.rs cover each" }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#batches"]
 stamp = { hash = "b3:2e5a06e41abf4ced", by = "agent:narrow-hot-sections", note = "depends_on now names the protocol sections that hold the edit model it implements (#design, #calls, #placement, #batches) instead of the whole old #design, which is split into topic sections; re-read the purpose against them: its edits are the protocol's Edits, applied in atomic batches with rev; holds" }
@@ -2643,7 +2643,7 @@ stamp = { hash = "b3:a9f2141f4d7dd0e4", by = "agent:claude", note = "Review B2: 
 stamp = { hash = "b3:42485db0e5133b45" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/filter.rs"]
-stamp = { hash = "b3:78c955c26ee66585", by = "agent:claude", note = "Added Graph::upgrade_filters to the load paragraph: missing kinds or a changed version upgraded from the recorded or previous version through the caller's migration, fitted, newer kept, a revision with no inverse returning filter.set_settings and Touched; checked against filter.rs and its test." }
+stamp = { hash = "b3:6bc8dede9b533d74", by = "agent:claude", note = "Re-read against the #1411 r1 fixes: rewrote the upgrade paragraph (same-version untouched, undeclared values kept, defaults only for missing params, newer version recorded and saved, without_kinds stamps the removed kind's version, patch of changed keys only); tests in tests/filters.rs cover each" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/hotkey.rs"]
 stamp = { hash = "b3:4d42fe4f815c0a13", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
@@ -2658,7 +2658,7 @@ stamp = { hash = "b3:0a7e85d9d1e242cb", by = "agent:claude", note = "Added Graph
 stamp = { hash = "b3:f504267e720dfacc", by = "agent:claude@session_01KvbMUfF6qWHBFeeJD6AGai", note = "Body unions E2's video_mixes state, mix blockers and delete.plan repoints with K1's hotkeys (state, plan listing removed bindings, rebuild last) and the parity fixture text (two mixes, less the vcam and hotkeys); matches lib.rs, plan.rs, read.rs, persist/mod.rs and tests.rs (48 random edits)" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/model/mod.rs"]
-stamp = { hash = "b3:88c024dc41bdeac7", by = "agent:grok", note = "Re-read the State bullet and the undo-conflict sentence. base_fps is collection state, 30 or 60, and two frame-rate edits conflict with each other." }
+stamp = { hash = "b3:e18335bee26d0731", by = "agent:claude", note = "Re-read against the #1411 r1 fixes: rewrote the upgrade paragraph (same-version untouched, undeclared values kept, defaults only for missing params, newer version recorded and saved, without_kinds stamps the removed kind's version, patch of changed keys only); tests in tests/filters.rs cover each" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/motion.rs"]
 stamp = { hash = "b3:dd522dbc4de49b1b", by = "agent:release-thread", note = "Motion bullet now says anim_modifiers converts an audio modifier into Kind::Audio and leaves what it hears to the engine, as motion.rs does; set_motion's checks still go through check_motion, which now covers the audio parameters (protocol 0.84). | merge: #1125's squash (native motion, with its round 8 B8 and round 9 B10 fixes for canvas-space items) is this input's base in the wave, and nothing else in the wave changed it. | merge: wave/alpha4 into #1149 (audio motion, 0.86): the wave changed crates/jstream-graph/src/motion.rs through #1157 (camera motion and the follow-cursor camera with assignable zoom, ADR-0113, 0.85); #1156 (one-shot impulse motion fired by item.trigger_motion, the triggered clock, 0.84). motion.rs converts #1149's audio modifier (ADR-0100, now 0.86) into Kind::Audio beside the merged impulse kind and camera modifiers; the purpose names both. The wire-accepts test now checks its ten kinds as two lists, since one list holds at most eight. | kept from the merged side: Motion bullet (motion.rs: check_motion on the whole list, MotionList, keyframe override via placement_mut, anim_modifiers, which now leaves out a modifier with an Unknown value so the item stays still); restore list adds item.set_motion; SCHEMA_VERSION 4 with items' and overrides' motion, the 3-to-4 migration and load order adding item.set_motion before set_effects, as persist/mod.rs does; the protocol design dep changed only by the Unknown fallback, the shown clock's wording and the live-value note | merge: wave/alpha4 into #1125 (protocol 0.81): the merge brought into crates/jstream-graph/src/motion.rs no merged PR, only the conflict resolution. Re-read the Motion and inverse bullets: an item's restore is item.add, then reorder, crop, visible, transition, locked, item.set_motion and item.set_effects_space where they differ (apply.rs, persist/mod.rs, read.rs), and the persist loader pushes both (object cloned for the motion push). | kept from the merged side: Re-read against ADR-0113: added the Scene fields, the two camera edits with their checks, inverses and keyframe refusal, camera_anim_modifiers, schema_version 5 with its migration and dropped inert follow, and where the load rebuilds them (after outputs' buses, before hotkeys). | merge: wave/alpha4 into #1157 (protocol 0.85): the merge brought into crates/jstream-graph/src/motion.rs #1156 (item.trigger_motion, the impulse kind and the triggered clock (#1107, 0.84)). graph motion.rs passes #1156's one-shot motion's impulse kind and triggered clock through anim_modifiers, beside #1157's camera motion, follow camera and scene.zoom_camera (ADR-0113, now 0.85)'s camera lists; the Motion bullet holds. | kept from the merged side: #1107: anim_modifiers maps the impulse kind and the triggered clock to jstream-anim's; the bounds test covers both impulse extremes and the triggered clock" }
@@ -2685,7 +2685,7 @@ stamp = { hash = "b3:900763c7ba171cf0", by = "agent:claude-3d-cameras", note = "
 stamp = { hash = "b3:0d7676aa9124e4f3", by = "agent:claude-timelines", note = "Added Scene.timelines, a Timelines bullet (timeline.rs: check order, inverses, global ID via State::timeline, unchecked cues, timeline::restore on scene.delete), timelines in remove_missing_items' hotkey removal, SCHEMA_VERSION 6, the v5_to_v6 migration and loading timelines before hotkeys; checked against timeline.rs, hotkey.rs, apply.rs, persist/mod.rs and tests/timelines.rs." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/mod.rs"]
-stamp = { hash = "b3:f2969b76a1cb6a09", by = "agent:grok", note = "Re-read the State bullet and the undo-conflict sentence. base_fps is collection state, 30 or 60, and two frame-rate edits conflict with each other." }
+stamp = { hash = "b3:48b1528d6cf435d0", by = "agent:claude", note = "Re-read against the #1411 r1 fixes: rewrote the upgrade paragraph (same-version untouched, undeclared values kept, defaults only for missing params, newer version recorded and saved, without_kinds stamps the removed kind's version, patch of changed keys only); tests in tests/filters.rs cover each" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/persist/tests.rs"]
 stamp = { hash = "b3:4105b2427082d483", by = "agent:grok", note = "Re-read the load rebuild and the test list: the stock 300 ms Cut loads at duration 0, a retimed cut is kept, and transitions stay omitted while they are the initial cut alone." }
@@ -2706,7 +2706,7 @@ stamp = { hash = "b3:87b1c1edacf0e9a3", by = "agent:grok", note = "Re-read the S
 stamp = { hash = "b3:ac2f87745d7c8b47", by = "agent:claude-3d-cameras", note = "Re-read against ADR-0113: added the Scene fields, the two camera edits with their checks, inverses and keyframe refusal, camera_anim_modifiers, schema_version 5 with its migration and dropped inert follow, and where the load rebuilds them (after outputs' buses, before hotkeys)." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/filters.rs"]
-stamp = { hash = "b3:7f942a6d743592d7", by = "agent:claude", note = "Added Graph::upgrade_filters to the load paragraph: missing kinds or a changed version upgraded from the recorded or previous version through the caller's migration, fitted, newer kept, a revision with no inverse returning filter.set_settings and Touched; checked against filter.rs and its test." }
+stamp = { hash = "b3:789ee9eb51e3f638", by = "agent:claude", note = "Re-read against the #1411 r1 fixes: rewrote the upgrade paragraph (same-version untouched, undeclared values kept, defaults only for missing params, newer version recorded and saved, without_kinds stamps the removed kind's version, patch of changed keys only); tests in tests/filters.rs cover each" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/keyframes.rs"]
 stamp = { hash = "b3:98fd77e053acfd2c", by = "agent:release-thread", note = "#1101 opacity above 1: item.set_opacity, item.add and keyframe overrides now accept 0 to MAX_OPACITY (4); a const assert keeps anim's copy equal | renumber: the release queue gave 0.77 to #1122 and 0.78 to #1127, so this PR's placeholder is now 0.79 (version.rs, the version sentence with 0.76 to 0.78 left, the since notes, CLI usage and the snapshots) | merge: wave/alpha4 into #1104 (protocol 0.83): the merge brought into crates/jstream-graph/src/tests/keyframes.rs #1125 (item motion, item.set_motion (ADR-0099, 0.81)). The graph keeps #1104's opacity gain (above 1, to MAX_OPACITY 4, #1101) (apply.rs, keyframe tests) beside #1125's Motion bullet and restore edits; persist tests keep both; holds. | kept from the merged side: Added a Motion bullet (motion.rs: check_motion on the whole list, MotionList, keyframe override via placement_mut, anim_modifiers); restore list adds item.set_motion; the file is SCHEMA_VERSION 4 (the old 'now 2' was stale) with items' and overrides' motion, the 3-to-4 migration, and load order adding item.set_motion before set_effects, as persist/mod.rs does; touched.rs Prop::Motion and read.rs to_info need no new text | #1130: set_transform_still_takes_a_transform_past_drawable pins that item.set_transform stores a transform past check_drawable, on an item and in a keyframe (ADR-0022)" }
@@ -2769,7 +2769,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:077f8b43af5070f4", by = "agent:claude", note = "Re-read the guidance text in design.rs: the renames sentence now says the engine moves existing filters' values when the new version loads, which matches the engine; nothing else in the section changed." }
+stamp = { hash = "b3:df235c114cd4a134", by = "agent:claude", note = "Re-read against the design.rs wording change (renames keep earlier entries pointed at the newest ID); the custom-shader bullet still describes the @renamed line, version bump and renames correctly" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2802,7 +2802,7 @@ stamp = { hash = "b3:d3eeb18e517f4d4c", by = "agent:grok", note = "Re-read the s
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:077f8b43af5070f4", by = "agent:claude", note = "Re-read: the purpose's custom-shader summary still holds; only the design guidance's rename sentence changed." }
+stamp = { hash = "b3:df235c114cd4a134", by = "agent:claude", note = "Re-read against the design.rs wording change (renames keep earlier entries pointed at the newest ID); the purpose section names no rename detail, still holds" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -6630,7 +6630,7 @@ stamp = { hash = "b3:b0a2a9cd68f6facd" }
 stamp = { hash = "b3:cff01f3b41e04a7a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "R-API-002 now points at PEOPLE_ONLY and DEPRECATED in jstream-mcp tools.rs instead of naming youtube as the one exception; rest of the section unchanged" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#persistence"]
-stamp = { hash = "b3:770babb13029e236", by = "agent:grok", note = "Re-read R-API-001 and R-API-003: the Cut duration change is an existing field's default and a load normalisation, not a schema_version bump, so no migration fixture is required." }
+stamp = { hash = "b3:c8c9801579e85439", by = "agent:claude", note = "Re-read R-API-003 against the persistence change (a filter saves the version its settings were stored by): no schema_version bump and no file shape change, so the rule holds" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
 stamp = { hash = "b3:2701ec7906f7a0f7", by = "agent:claude-webcam", note = "the 0.90 bump adds only, as a minor protocol change; the rule holds | merge: #1307 adds the opt-in TLS network listener for paired devices; it doesn't touch capture.targets, CaptureFormat params or protocol 0.90's additions, so this branch's text holds | kept from the merged side: Re-read the compatibility rule against the protocol dependency. 0.89 is an additive minor: old clients keep working, and base_fps is omitted at 30. | kept from the merged side: #1129 adds no protocol message or version; the compatibility rules still hold as written" }
