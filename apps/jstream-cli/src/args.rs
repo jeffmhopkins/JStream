@@ -9,8 +9,9 @@ use crate::bench::{self, BenchOptions, Scenario};
 use crate::exit::CliError;
 use jstream_control::protocol::{
     Action, Batch, BlendMode, Blending, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32,
-    FitMode, IdempotencyKey, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, Query, Rev,
-    RtmpTarget, SceneId, SceneRole, Size, SourceId, SourceKind, TransitionPresetId, Vec2,
+    FitMode, IdempotencyKey, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind,
+    ProbeStream, Query, Rev, RtmpTarget, SceneId, SceneRole, Size, SourceId, SourceKind,
+    TransitionPresetId, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -50,6 +51,10 @@ Commands:
   profile get [<seconds>]          where the engine's time went over the last 5 (or
                                    <seconds>, up to 60) seconds: per drawing thread,
                                    item, source and thread, as JSON (query profile.get)
+  quality probe <output-id> [<frames>]
+                                   PSNR and SSIM of a running output's next 3 (or
+                                   <frames>, up to 10) encoded frames against what its
+                                   encoder was given, as JSON (query quality.probe)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   item show|hide|toggle <item-id> [--scene <scene-id>]
@@ -336,6 +341,19 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             seconds: Some(number(seconds, "seconds")?),
             top: None,
         }),
+        ["quality", "probe", id, rest @ ..] => {
+            let frames = match rest {
+                [] => None,
+                [frames] => Some(number(frames, "frames")?),
+                _ => return Err(usage("quality probe takes an output ID and a frame count")),
+            };
+            Command::Query(Query::QualityProbe {
+                stream: ProbeStream::Output {
+                    output_id: OutputId::new(*id),
+                },
+                frames,
+            })
+        }
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -906,8 +924,8 @@ mod tests {
     use crate::exit::CliError;
     use jstream_control::protocol::{
         Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32, FitMode,
-        IdempotencyKey, ItemId, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole,
-        SourceId, SourceKind, TransitionPresetId,
+        IdempotencyKey, ItemId, OutputId, OutputKind, ProbeStream, Query, Rev, RtmpTarget, SceneId,
+        SceneRole, SourceId, SourceKind, TransitionPresetId,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -1091,6 +1109,20 @@ mod tests {
             })
         );
         assert!(err(&["profile", "get", "ten"]).contains("seconds"));
+        let probe = |frames| {
+            Command::Query(Query::QualityProbe {
+                stream: ProbeStream::Output {
+                    output_id: OutputId::new("rec"),
+                },
+                frames,
+            })
+        };
+        assert_eq!(ok(&["quality", "probe", "rec"]).command, probe(None));
+        assert_eq!(
+            ok(&["quality", "probe", "rec", "5"]).command,
+            probe(Some(5))
+        );
+        assert!(err(&["quality", "probe", "rec", "five"]).contains("frames"));
     }
 
     #[test]

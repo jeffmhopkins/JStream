@@ -85,6 +85,7 @@ use crate::profile::{
     DrawMeter, MixerGuard, MixerMeter, MixerSource, Phase, StreamGuard, StreamMeter, StreamTotals,
     streams,
 };
+use crate::quality::{ProbeJob, ProbeTap};
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -222,7 +223,8 @@ pub(crate) struct MixFrame {
     /// The first base tick it is due on again.
     pub(crate) next: u64,
     /// Whether this tick reads it back into `out`: a session on the CPU path or a
-    /// virtual camera is fed it. Without, `out` is left as it was.
+    /// virtual camera is fed it, or a quality probe is armed on a GPU session it feeds
+    /// (ADR-0145). Without, `out` is left as it was.
     pub(crate) readback: bool,
     /// Where it is read back: RGBA8 at `size` once a readback the draw recorded has
     /// finished, a tick or two after it was drawn (ADR-0117 §4).
@@ -241,9 +243,17 @@ pub(crate) struct MixFrame {
     pushed: Option<MediaTime>,
     /// This tick's [`MixFrame::push_time`].
     pub(crate) push_at: Option<MediaTime>,
+    /// Whether `push_at` is a frame newly read back, at the time it was drawn for,
+    /// rather than the last one repeated: only such a frame is the reference of the GPU
+    /// frame of its draw (ADR-0145).
+    pub(crate) push_fresh: bool,
     /// Ticks this mix was not read back because every readback buffer was still on its
     /// way (R-RT-004), counted by the draw.
     pub(crate) unread: u64,
+    /// Whether this tick reads it back only for a quality probe of a GPU session, which
+    /// is sent every frame whether or not the readback keeps up: its `unread` are no
+    /// dropped frames, so [`MixFrame::take_unread`] counts none (ADR-0145).
+    pub(crate) probe_only: bool,
     /// The platform's NV12 encode target on the compositor's device to convert it into
     /// this tick (ARCH › GPU pipeline, step 4), for the sessions on the GPU path.
     pub(crate) nv12: Option<GpuFrame>,
@@ -259,11 +269,15 @@ impl MixFrame {
     fn push_time(&mut self, due: MediaTime, broken: bool) -> Option<MediaTime> {
         let fresh = self.fresh.take();
         let awaiting = std::mem::take(&mut self.awaiting);
+        self.push_fresh = false;
         if !self.due {
             return None;
         }
         let at = match fresh {
-            Some(pts) if !broken => pts,
+            Some(pts) if !broken => {
+                self.push_fresh = true;
+                pts
+            }
             _ if awaiting && !broken => return None,
             _ => due,
         };
@@ -300,9 +314,18 @@ impl MixFrame {
             awaiting: false,
             pushed: None,
             push_at: None,
+            push_fresh: false,
             unread: 0,
+            probe_only: false,
             nv12: None,
         }
+    }
+
+    /// This tick's frames not read back, which go into the published drops (R-RT-004),
+    /// and resets them. A readback only for a probe drops no frame, so it counts none.
+    fn take_unread(&mut self) -> u64 {
+        let unread = std::mem::take(&mut self.unread);
+        if self.probe_only { 0 } else { unread }
     }
 }
 
@@ -870,6 +893,7 @@ impl Program {
                 audio: Mutex::new(None),
                 attached: AtomicBool::new(false),
                 claim: Mutex::new(claim),
+                probe: Arc::new(ProbeTap::default()),
                 drop_guard: Some(DropGuard::new(engine.drop_ledger(), ids)),
             })
         })
@@ -933,6 +957,7 @@ impl Program {
             input: encoders.video.input(),
             gpu: *encoders.video.path() == VideoPath::Gpu,
             claim: lock(&encoders.claim).take(),
+            probe: Some(Arc::clone(&encoders.probe)),
         };
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
     }
@@ -952,6 +977,7 @@ impl Program {
             input,
             gpu: false,
             claim: None,
+            probe: None,
         };
         let _ = self.video_taps.send((feed, tap));
     }
@@ -1165,6 +1191,9 @@ pub(crate) struct Encoders {
     /// A GPU-path session's claim on the context, until [`Program::attach`] hands it to
     /// the render thread with the tap. Dropped with the encoders if never attached.
     claim: Mutex<Option<GpuClaim>>,
+    /// Where the render thread copies the frames it feeds the video session while a
+    /// `quality.probe` is armed (ADR-0145).
+    probe: Arc<ProbeTap>,
     drop_guard: Option<DropGuard>,
 }
 
@@ -1195,6 +1224,21 @@ impl Encoders {
     /// that refused its first frame fell back to software (#443).
     pub(crate) fn hardware(&self) -> bool {
         self.video.codec().hardware
+    }
+
+    /// What a `quality.probe` of the video session needs (ADR-0145): its tap, a
+    /// subscription to its packets, and its size and encoder.
+    pub(crate) fn probe_job(&self, codecs: Arc<dyn Codecs>, frames: u32) -> ProbeJob {
+        let codec = self.video.codec();
+        ProbeJob {
+            tap: Arc::clone(&self.probe),
+            packets: self.video.subscribe(),
+            codecs,
+            size: self.feed.size,
+            encoder: codec.name.clone(),
+            hardware: codec.hardware,
+            frames,
+        }
     }
 }
 
@@ -2824,6 +2868,16 @@ pub(crate) struct VideoTap {
     /// A GPU session's claim on the context, released once the render thread has the
     /// tap ([`Frames::add`]), from when [`Frames::feeds_gpu`] keeps it there.
     claim: Option<GpuClaim>,
+    /// Where the frames pushed are copied while a `quality.probe` is armed (ADR-0145):
+    /// an output's session has one, a preview's none.
+    probe: Option<Arc<ProbeTap>>,
+}
+
+impl VideoTap {
+    /// Whether a probe is armed on the session, so its frames are copied.
+    fn probed(&self) -> bool {
+        self.probe.as_ref().is_some_and(|probe| probe.armed())
+    }
 }
 
 /// Whether video sessions may open on the platform's GPU context, shared by
@@ -3102,7 +3156,11 @@ impl Frames {
             let held = held
                 .iter()
                 .any(|owner| is_program(frame, size, owner.as_ref()));
-            frame.readback = held || taps.iter().any(|tap| !tap.gpu);
+            // A GPU session is read back too while a probe is armed on it: the readback
+            // is its reference frame (ADR-0145).
+            let fed = held || taps.iter().any(|tap| !tap.gpu);
+            frame.readback = fed || taps.iter().any(|tap| tap.probed());
+            frame.probe_only = frame.readback && !fed;
             encode.starved = false;
             let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
             if !frame.due || gpu_taps == 0 {
@@ -3551,7 +3609,7 @@ fn render_loop(job: RenderJob) {
             reader.adopt();
         }
         for frame in &mut frames.mixes {
-            unread = unread.saturating_add(std::mem::take(&mut frame.unread));
+            unread = unread.saturating_add(frame.take_unread());
         }
         drops.publish(
             capture_drops(captures.stats())
@@ -3574,16 +3632,27 @@ fn render_loop(job: RenderJob) {
             if frame.due {
                 push_each(
                     targets,
-                    |tap| match (tap.gpu, &encode.shown) {
-                        // Every target was held, or a covered draw failed: the frame
-                        // is dropped, not repeated.
-                        (true, _) if starved => true,
-                        (true, Some(target)) => push_gpu(&tap.input, target, due),
-                        (false, _) if !shown.is_empty() => match frame.push_at {
-                            Some(pts) => push_frame(&tap.input, frame.size, pts, shown),
-                            None => true,
-                        },
-                        _ => true,
+                    |tap| {
+                        // A probe's reference: the frame a CPU session is pushed, or
+                        // for a GPU one the frame newly read back, at the time it was
+                        // drawn for, which the GPU frame of that draw went out with.
+                        if let (Some(probe), Some(pts)) = (&tap.probe, frame.push_at)
+                            && !shown.is_empty()
+                            && (!tap.gpu || frame.push_fresh)
+                        {
+                            probe.offer(frame.size, pts, shown);
+                        }
+                        match (tap.gpu, &encode.shown) {
+                            // Every target was held, or a covered draw failed: the
+                            // frame is dropped, not repeated.
+                            (true, _) if starved => true,
+                            (true, Some(target)) => push_gpu(&tap.input, target, due),
+                            (false, _) if !shown.is_empty() => match frame.push_at {
+                                Some(pts) => push_frame(&tap.input, frame.size, pts, shown),
+                                None => true,
+                            },
+                            _ => true,
+                        }
                     },
                     |tap| collector.free(Garbage::Video(tap.input)),
                 );
@@ -4970,6 +5039,7 @@ mod tests {
             input,
             gpu: false,
             claim: None,
+            probe: None,
         }
     }
 
@@ -5119,6 +5189,7 @@ mod tests {
                 input: session.input(),
                 gpu: true,
                 claim: None,
+                probe: None,
             },
         );
         assert!(frames.feeds_gpu());
@@ -5162,6 +5233,7 @@ mod tests {
                 input: session.input(),
                 gpu: true,
                 claim: Some(claim),
+                probe: None,
             },
         );
         assert!(frames.feeds_gpu());
@@ -5371,8 +5443,13 @@ mod tests {
         frame.fresh = Some(us(100));
         frame.awaiting = true;
         assert_eq!(frame.push_time(us(133), false), Some(us(100)));
+        assert!(
+            frame.push_fresh,
+            "a probe of a GPU session takes it (ADR-0145)"
+        );
         // Nothing drawn this tick (a failed draw, a fallback opening): a repeat.
         assert_eq!(frame.push_time(us(166), false), Some(us(166)));
+        assert!(!frame.push_fresh, "a repeat is no GPU frame's reference");
         // The readback recorded before the repeat lands after it, and is dropped.
         frame.fresh = Some(us(133));
         assert_eq!(frame.push_time(us(200), false), None);
@@ -5386,6 +5463,26 @@ mod tests {
         // A frame not due pushes nothing.
         frame.due = false;
         assert_eq!(frame.push_time(us(266), false), None);
+    }
+
+    /// A mix read back only for a probe of a GPU session drops no frame when its
+    /// readback falls behind, so its misses never reach the published drops; a mix
+    /// whose readback feeds a session or a camera counts them (R-RT-004, ADR-0145).
+    #[test]
+    fn a_readback_only_for_a_probe_counts_no_drops() {
+        let size = FrameSize::new(4, 4).expect("size");
+        let mut frame = MixFrame::new(None, size, 1, None);
+        frame.unread = 2;
+        assert_eq!(frame.take_unread(), 2, "a fed readback's misses are drops");
+        assert_eq!(frame.unread, 0, "reset");
+        frame.probe_only = true;
+        frame.unread = 3;
+        assert_eq!(
+            frame.take_unread(),
+            0,
+            "only the probe's reference was missed"
+        );
+        assert_eq!(frame.unread, 0, "reset");
     }
 
     /// Less than a period late keeps the tick. A period or more skips to the latest
