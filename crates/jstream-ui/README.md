@@ -153,7 +153,10 @@ Contents ([Design](#design) explains the choices):
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
   `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
-  field the panels share (`number.rs`), the Inspector's Motion section (`motion.rs`: its
+  field the panels share (`number.rs`: `NumberField`, which can sit inline with a short
+  caption and without steppers, and `AxisRow`, a row of such fields under one label, as
+  the Inspector's Position, Size and Scale and the scene camera's rows are, #1219,
+  #1214), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
