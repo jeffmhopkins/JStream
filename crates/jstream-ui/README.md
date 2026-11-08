@@ -117,8 +117,8 @@ Contents ([Design](#design) explains the choices):
   (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
   kind and reads `kind.list` again, as a `gpu.device_lost` or `gpu.effect_slow` that
-  quarantined kinds does,
-  since no event reports a quarantine's change. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
+  quarantined kinds does. `kinds.changed` (0.107), from a CLAP scan or the effect packs,
+  perhaps another client's, and `events.dropped` read it again too. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
@@ -232,8 +232,14 @@ Contents ([Design](#design) explains the choices):
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
-  Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Devices)
+  Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Audio
+  plugins, Devices)
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
+- **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
+  plugins page: the CLAP scan's folders, the effects found and the files that failed
+  (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with
+  its `summary` and `install_folder`, tested natively. Add filter (`panels/filters.rs`)
+  links to it from an audio chain's empty Plugins group.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel on the Settings dialog's
   Devices page, which says no device can pair unless the server pairs devices (start pairing and show the code, list and
   revoke devices), `NetworkAccessSetting`, the desktop app's "Allow devices on my
@@ -1067,6 +1073,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   when it asks for folders, a box of absolute paths, one a line. Its OK sends
   `plugin.grant` with the ticked choices; for a plugin off as `needs_grant` it reads
   "Grant and turn on" and sends `plugin.enable` after it.
+- **Audio plugins** ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md),
+  protocol 0.106). The Settings dialog's Audio plugins page reads `plugin.clap_scan` each
+  time it opens. It names the first folder searched as where to put a `.clap` file, lists
+  every folder with whether it exists, the effects found and the files that failed with
+  the host's reason (paths and names are shown as data), and a summary line. Rescan
+  sends `plugin.clap_rescan`, which answers once the scan ends, then re-reads `kind.list`
+  (`Studio::relist_kinds`) and the scan. While it runs the button reads "Scanning…" and
+  ignores presses, and it keeps the focus, so Escape still closes the dialog. An engine
+  that hosts no CLAP plugins gets its reason and no Rescan. Add filter shows an audio
+  chain's Plugins group even with no CLAP kind, unless a search is typed: "No CLAP audio
+  plugins found." with a link that opens the page (`SettingsDialog`).
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
   The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
   in Live) reads the scenes (groups left out) and presets with

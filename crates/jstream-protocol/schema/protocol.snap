@@ -874,6 +874,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since\nthe engine started is offered without a restart. It answers once the scan ends,\nwhich takes a moment per plugin file; `plugin.clap_scan` then reports it. Each\neffect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan\nfound stays until the engine restarts, so a filter that uses it keeps its\nsettings. A scan already running is waited for, then this one runs. For a person\nonly, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no\nhotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.",
+          "properties": {
+            "type": {
+              "const": "plugin.clap_rescan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Downloads a codec library `codec.downloads` lists, from its maker's server, and\nchecks it against what the engine pins (0.69, ADR-0061): on Linux, Cisco's\nOpenH264. Send it only when a person asks, after showing the download's `notice`\nand a link to its `license_url`. It answers once the library is in place, which\ntakes as long as the download; outputs started afterwards can encode with it.\nSucceeds for one already installed, downloading it again. For a person only: no\nMCP tool carries it, no plugin is granted it and no hotkey binds it. Fails with\n`invalid_argument` on `download_id` for an ID `codec.downloads` doesn't list, and\n`action_failed` when the download fails or doesn't match the pin (nothing is kept\nthen), with the reason.",
           "properties": {
             "download_id": {
@@ -2708,6 +2721,119 @@ source: crates/jstream-protocol/src/fixtures.rs
     "Chord": {
       "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n- Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since\n  0.104, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,\n  or each 120 units of high-resolution wheel delta, so it can only be bound to an\n  action that takes one step ([`Action::takes_steps`]).\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
       "type": "string"
+    },
+    "ClapFailed": {
+      "description": "A plugin file the CLAP scan couldn't read.",
+      "properties": {
+        "file": {
+          "description": "The file.",
+          "type": "string"
+        },
+        "reason": {
+          "description": "Why: the host's error, such as a crash, a timeout or a plugin host that can't\nstart.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "file",
+        "reason"
+      ],
+      "type": "object"
+    },
+    "ClapFolder": {
+      "description": "A folder the CLAP scan searches.",
+      "properties": {
+        "exists": {
+          "description": "Whether it exists. One that doesn't is where plugins could be installed.",
+          "type": "boolean"
+        },
+        "path": {
+          "description": "The folder's path, as the engine's platform writes it.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "path",
+        "exists"
+      ],
+      "type": "object"
+    },
+    "ClapFound": {
+      "description": "An audio effect the CLAP scan found.",
+      "properties": {
+        "file": {
+          "description": "The plugin file it is in.",
+          "type": "string"
+        },
+        "kind_id": {
+          "description": "Its filter kind, `clap/<plugin id>`.",
+          "type": "string"
+        },
+        "name": {
+          "description": "The plugin's name, as its file gives it: the plugin's own text, to show as data.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind_id",
+        "name",
+        "file"
+      ],
+      "type": "object"
+    },
+    "ClapScanInfo": {
+      "description": "What `plugin.clap_scan` reports: whether this engine hosts CLAP plugins, the folders\nit searches, and what its last scan found.",
+      "properties": {
+        "available": {
+          "description": "Whether this engine hosts CLAP plugins at all. `false` on a platform with no\nplugin host yet, and when the host couldn't be set up; `reason` then says why.",
+          "type": "boolean"
+        },
+        "failed": {
+          "default": [],
+          "description": "The plugin files the last scan couldn't read, in the order it met them.",
+          "items": {
+            "$ref": "#/$defs/ClapFailed"
+          },
+          "type": "array"
+        },
+        "folders": {
+          "default": [],
+          "description": "The folders searched, in CLAP's order, each with whether it exists. The scan looks\nin the ones that do, and below them.",
+          "items": {
+            "$ref": "#/$defs/ClapFolder"
+          },
+          "type": "array"
+        },
+        "found": {
+          "default": [],
+          "description": "The audio effects the last scan found, ordered by kind ID. Each is the filter kind\n`kind_id` in `kind.list`.",
+          "items": {
+            "$ref": "#/$defs/ClapFound"
+          },
+          "type": "array"
+        },
+        "reason": {
+          "description": "Why CLAP plugins are unavailable, when `available` is `false` and the engine knows.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "scanned": {
+          "default": false,
+          "description": "Whether a scan has finished since the engine started. Until one has, `found` and\n`failed` are empty.",
+          "type": "boolean"
+        },
+        "scanning": {
+          "default": false,
+          "description": "Whether a scan is running now. The lists are the last finished scan's until it\nends.",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "available"
+      ],
+      "type": "object"
     },
     "ClientId": {
       "description": "A connected client, assigned by the server in `welcome`. Undo history and the\naudit log are keyed by it.",
@@ -6756,6 +6882,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "client_id"
           ],
           "type": "object"
+        },
+        {
+          "description": "The kinds `kind.list` and `kind.describe` answer changed without an edit (0.107,\n#1328): a CLAP scan found an effect or a changed one, or an effect pack was\nadded, changed or removed, or one of its effects was quarantined or re-enabled.\nRuntime state, so no `rev`. A client that keeps the kinds reads `kind.list`\nagain; one that misses it sees the change on its next read.",
+          "properties": {
+            "cause": {
+              "$ref": "#/$defs/KindsCause",
+              "description": "What changed them."
+            },
+            "type": {
+              "const": "kinds.changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "cause"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -7783,6 +7927,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         "version"
       ],
       "type": "object"
+    },
+    "KindsCause": {
+      "description": "What changed the kinds ([`Event::KindsChanged`], 0.107).",
+      "oneOf": [
+        {
+          "const": "clap_scan",
+          "description": "A CLAP plugin scan, at start or from `plugin.clap_rescan`.",
+          "type": "string"
+        },
+        {
+          "const": "effect_packs",
+          "description": "The effect packs: a pack added, changed or removed (by the folder watcher,\n`pack.write` or `pack.delete`), or an effect quarantined after a GPU device loss\nor re-enabled with `effect.enable`.",
+          "type": "string"
+        }
+      ]
     },
     "LabelId": {
       "description": "A label that sources carry (ADR-0024 §4).",
@@ -10904,6 +11063,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Reads the CLAP audio plugin scan (0.106, ADR-0035): whether this engine hosts CLAP\nplugins, the folders it searches (with whether each exists), the effects its last\nscan found and the files it couldn't scan, with why. A client shows it so a person\ncan see where to install a plugin and why one is missing. For a person only, like\n`plugin.clap_rescan`: no plugin is granted it and no MCP tool carries it, since it\nnames files on the machine. Runtime state, so no `rev`.",
+          "properties": {
+            "type": {
+              "const": "plugin.clap_scan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the codec libraries the engine can download on a person's request (0.69,\nADR-0061): on Linux, Cisco's OpenH264, the software H.264 encoder, which Cisco's\npatent licence covers only when Cisco's own binary is downloaded to the machine.\nEach one carries the notice and licence link a client shows wherever it offers\nthe download, whether it is installed, and whether the machine has a hardware\nencoder for its codec. For a person only, like `codec.download`: no MCP tool\ncarries it and no plugin is granted it. Runtime state, so no `rev`. An engine\nwhose platform downloads no codec, or that has no codec backend, lists none.",
           "properties": {
             "type": {
@@ -11998,6 +12170,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "plugins"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `plugin.clap_scan` (0.106). Runtime state, so it carries no `rev`.",
+          "properties": {
+            "scan": {
+              "$ref": "#/$defs/ClapScanInfo",
+              "description": "The scan."
+            },
+            "type": {
+              "const": "plugin.clap_scan",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scan"
           ],
           "type": "object"
         },

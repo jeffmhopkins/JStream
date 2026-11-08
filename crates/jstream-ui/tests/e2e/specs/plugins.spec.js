@@ -9,7 +9,7 @@ import { test, expect, connect, showPanel } from '../fixtures.js';
 async function openPlugins(page) {
   await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
   await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Plugins…' }).click();
-  await expect(page.getByRole('dialog', { name: 'Settings' }).getByRole('tab', { name: 'Plugins' }))
+  await expect(page.getByRole('dialog', { name: 'Settings' }).getByRole('tab', { name: 'Plugins', exact: true }))
     .toHaveAttribute('aria-selected', 'true');
 }
 
@@ -172,11 +172,13 @@ test('plugins and devices live in the Settings dialog, not the Inspector', async
   await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
   await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
-  const tab = (name) => settings.getByRole('tab', { name });
+  const tab = (name) => settings.getByRole('tab', { name, exact: true });
   await expect(tab('General')).toHaveAttribute('aria-selected', 'true');
   await expect(settings.getByRole('checkbox', { name: 'Check for updates at launch' })).toBeVisible();
   await tab('Plugins').click();
   await expect(settings.locator('section.plugins').getByText('No plugins installed.')).toBeVisible();
+  await page.keyboard.press('ArrowDown');
+  await expect(tab('Audio plugins')).toHaveAttribute('aria-selected', 'true');
   await page.keyboard.press('ArrowDown');
   await expect(tab('Devices')).toHaveAttribute('aria-selected', 'true');
   await expect(tab('Devices')).toBeFocused();
