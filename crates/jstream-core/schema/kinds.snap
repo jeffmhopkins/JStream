@@ -1907,6 +1907,92 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "midi_beat",
+    "category": "source",
+    "name": "MIDI beat",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The input it draws: a MIDI port's or JTunnel sender's name. Empty draws every input at once.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 480,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 80,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "beats_per_bar",
+        "type": "int",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 4,
+        "label": "Beats per bar",
+        "description": "How many beats a bar has: MIDI clock counts beats but carries no meter.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#36c3ffff",
+        "label": "Beat",
+        "live": true
+      },
+      {
+        "id": "downbeat",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffb000ff",
+        "label": "First beat",
+        "description": "The colour of each bar's first beat.",
+        "live": true
+      },
+      {
+        "id": "off",
+        "type": "color",
+        "alpha": true,
+        "default": "#2a2a2aff",
+        "label": "Other beats",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "midi_cc",
     "category": "source",
     "name": "MIDI controller meters",
