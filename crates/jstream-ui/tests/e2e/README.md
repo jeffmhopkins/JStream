@@ -433,14 +433,19 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   a click opens the group's scene at its own box), and Reset to “Main” brings it back.
   The Inspector's Hotkey row binds F1 to Intro (which a second client
   sees), F1 on the canvas then puts Intro on program on both clients, binding F1 to
-  Main takes it from Intro, Escape cancels a capture and × unbinds.
+  Main takes it from Intro, Escape cancels a capture and × unbinds. In the keyframe,
+  the Backdrop's Timing into this keyframe shows an unset Delay blank, a typed delay
+  sends `item.set_timing` naming the item, and Clear timing sends `item.clear_override`
+  of `timing` and blanks the field again.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): in studio mode a scene
   picked for preview goes to program with Transition, and the old program scene comes
   back on preview; Transition and Cut are off while preview is the program scene; the
   studio bar shows only in studio mode; the preset picker lists the default with its
   kind and "+ New preset…", the default's editor has no duration, Delete or Make
   default and counts its overrides, and choosing Fade and "+ New preset…" send their
-  `transition.update` and `transition.create`. The mock engine refuses preset edits,
+  `transition.update` and `transition.create`; a Fade's Custom curve easing shows the
+  curve's drawing and points, and an x1 past 1 is sent as 1 in the easing's
+  `transition.update`. The mock engine refuses preset edits,
   so the panel after an edit is tested natively.
 - **Scene transitions** (`transitions.spec.js`): a scene row's Transition in submenu
   checks "Default (Cut)", lists the Cut preset with its kind, and sends
