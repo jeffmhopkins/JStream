@@ -66,7 +66,7 @@ use jstream_protocol::{
     ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
 };
 use jstream_render::{
-    Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
+    Compositor, Copier, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
     RenderError, ResourceCache,
 };
 use jstream_sources::AudioScopes;
@@ -1579,7 +1579,7 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
         cache.draw_uploads_small(true);
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
-        let mut readbacks = Readbacks::default();
+        let mut readbacks = Readbacks::copied();
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
             if let Some(hook) = &hook {
                 hook(&compositor);
@@ -1685,10 +1685,14 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
 }
 
 /// The readback rings of the mixes read back, one per mix by its feed's identity
-/// ([`Frames::add`]), kept in the draw so they go with its compositor's device.
+/// ([`Frames::add`]), kept in the draw so they go with its compositor's device. Their
+/// mapped buffers are copied out on the draw's `jstream-readback` thread, so the render
+/// thread copies no pixels (ADR-0117 §4); the thread ends with the draw.
 #[derive(Default)]
 struct Readbacks {
     rings: Vec<(ReadbackKey, ReadbackRing<MediaTime>)>,
+    /// `None` only if the OS refused the thread: the render thread copies, as before.
+    copier: Option<Copier>,
 }
 
 /// A mix's identity, as [`Frames::add`] matches feeds.
@@ -1710,6 +1714,19 @@ impl ReadbackKey {
 }
 
 impl Readbacks {
+    /// Rings copied out on a `jstream-readback` thread of their own.
+    fn copied() -> Self {
+        let copier = Copier::spawn()
+            .inspect_err(|err| {
+                tracing::warn!(%err, "no readback thread: the render thread copies frames");
+            })
+            .ok();
+        Self {
+            rings: Vec::new(),
+            copier,
+        }
+    }
+
     /// Drops the rings of mixes no longer drawn, or no longer read back.
     fn retain(&mut self, frames: &[MixFrame]) {
         self.rings
@@ -1727,7 +1744,11 @@ impl Readbacks {
                     divisor: frame.divisor,
                     owner: frame.owner.clone(),
                 };
-                self.rings.push((key, ReadbackRing::default()));
+                let ring = match &self.copier {
+                    Some(copier) => ReadbackRing::with_copier(copier),
+                    None => ReadbackRing::default(),
+                };
+                self.rings.push((key, ring));
                 self.rings.len() - 1
             }
         };
