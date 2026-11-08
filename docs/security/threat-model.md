@@ -674,8 +674,10 @@ somewhere it shouldn't.
   sends audio or MIDI.
 - It drops and counts every datagram from outside those ranges, from an address it
   didn't subscribe to, or that `jstream-jtunnel`'s parser refuses (fuzzed on its own).
-  Parsing and playout allocate nothing; a sender's frames go only to the
-  `network_audio` source that names it.
+  Parsing and playout allocate nothing; a sender's audio goes only to the
+  `network_audio` source that names it, and its MIDI only to the MIDI state of its own
+  name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
+  doesn't trigger bindings (ADR-0142 §2).
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
 - PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) pass the same
@@ -683,7 +685,8 @@ somewhere it shouldn't.
   for what they may send and receive.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
-inject audio into the source that records it (ADR-0123 §6), as with JTunnel anywhere.
+inject audio into the source that records it, or notes into what its MIDI sources draw
+(ADR-0123 §6), as with JTunnel anywhere.
 Off by default, LAN only and accepted one sender at a time bound it to someone on the
 same network who already targets this machine.
 

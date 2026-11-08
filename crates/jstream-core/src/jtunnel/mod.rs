@@ -37,6 +37,7 @@ use jstream_media::{AudioFormat, ChannelLayout, MediaTime, Rounding, SampleForma
 use jstream_platform::{
     AudioInputHandler, AudioPacket, AudioPacketFlags, AudioStream, MediaClock, PlatformError,
 };
+use jstream_sources::{MidiFeed, MidiInputs};
 
 /// How often a sender is subscribed to again: JTunnel's keepalive.
 const SUBSCRIBE_EVERY: Duration = Duration::from_millis(500);
@@ -165,6 +166,8 @@ pub struct JtunnelStats {
     pub played: u64,
     /// Of those, frames concealed with silence.
     pub concealed: u64,
+    /// MIDI messages handed to the MIDI inputs.
+    pub midi: u64,
 }
 
 /// The receiver's counters, shared with its thread.
@@ -176,6 +179,7 @@ struct JtunnelCounters {
     unsupported: AtomicU64,
     played: AtomicU64,
     concealed: AtomicU64,
+    midi: AtomicU64,
 }
 
 /// One accepted sender, as both sides see it.
@@ -225,7 +229,11 @@ impl Receiver {
     ///
     /// # Errors
     /// The socket could not be bound or set up, or the thread could not start.
-    pub(crate) fn start(setup: &JtunnelSetup, clock: Arc<dyn MediaClock>) -> io::Result<Self> {
+    pub(crate) fn start(
+        setup: &JtunnelSetup,
+        clock: Arc<dyn MediaClock>,
+        midi: Option<Arc<MidiInputs>>,
+    ) -> io::Result<Self> {
         let socket = UdpSocket::bind(setup.bind)?;
         socket.set_read_timeout(Some(MAX_WAIT))?;
         let local = socket.local_addr()?;
@@ -248,7 +256,10 @@ impl Receiver {
                 clock,
                 inbox,
                 stop: Arc::clone(&stop),
-                streams: (0..senders.len()).map(|_| Stream::new()).collect(),
+                streams: senders
+                    .iter()
+                    .map(|sender| Stream::new(midi.as_deref(), &sender.accepted.name))
+                    .collect(),
             };
             thread::Builder::new()
                 .name("jstream-jtunnel".into())
@@ -281,6 +292,7 @@ impl Receiver {
             unsupported: read(&c.unsupported),
             played: read(&c.played),
             concealed: read(&c.concealed),
+            midi: read(&c.midi),
         }
     }
 
@@ -387,6 +399,9 @@ impl Drop for NetworkStream {
 struct Stream {
     playout: Playout,
     handler: Option<Handler>,
+    /// Where its MIDI goes: its own input's state and the every-input one, looked up
+    /// once so the thread takes no lock per message, and its clock's tempo (ADR-0142).
+    midi: Option<MidiFeed>,
 }
 
 struct Handler {
@@ -396,10 +411,11 @@ struct Handler {
 }
 
 impl Stream {
-    fn new() -> Self {
+    fn new(midi: Option<&MidiInputs>, name: &str) -> Self {
         Self {
             playout: Playout::new(u64::from(jstream_sources::LATENCY_MS.2) * 1_000_000),
             handler: None,
+            midi: midi.map(|inputs| inputs.feed(name)),
         }
     }
 }
@@ -555,6 +571,19 @@ impl Run {
                 drop(gone);
             }
             while let Some(due) = stream.playout.pop(now) {
+                // MIDI is drawn whether or not a source records the audio, stamped at
+                // its sample within the frame.
+                if let Some(feed) = &mut stream.midi {
+                    for (offset, event) in due.events() {
+                        if let wire::Event::Midi(message) = event {
+                            let ns = due.time_ns.saturating_add(
+                                u64::from(offset) * 1_000_000_000 / u64::from(rate.max(1)),
+                            );
+                            feed.push(ns, &message);
+                            self.counters.midi.fetch_add(1, Ordering::Relaxed);
+                        }
+                    }
+                }
                 let Some(handler) = stream.handler.as_mut() else {
                     continue;
                 };
