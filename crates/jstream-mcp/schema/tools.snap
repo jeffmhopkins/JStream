@@ -23346,6 +23346,41 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": true
       },
+      "description": "Runs one `jtunnel` operation: set `op.type` to one of `jtunnel.senders` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `jtunnel` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Lists the JTunnel senders heard on the LAN (0.114, ADR-0123 §3): each sender that\nanswered the receiver's mDNS query for `_jtunnel._udp.local` in the last 35 s,\nordered by name, then address, with whether this machine accepts it. Runtime\nstate, so no `rev`. `on` is false, and the list empty, while the receiver is off,\nwhich is the default (ADR-0123 §1). `jtunnel.senders_changed` says when the list\nchanges.",
+                "properties": {
+                  "type": {
+                    "const": "jtunnel.senders",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "jtunnel"
+    },
+    {
+      "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
       "description": "Runs one `kind` operation: set `op.type` to one of `kind.list` (query), `kind.describe` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "additionalProperties": false,

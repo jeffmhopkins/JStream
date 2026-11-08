@@ -18,7 +18,8 @@ use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-/// The UI bundle's folder beside the exe, when `--ui-dir` doesn't name one.
+/// The UI bundle's folder beside the exe (in a macOS app, in its resources:
+/// [`bundled_ui_dir`]), when `--ui-dir` doesn't name one.
 pub const UI_DIR: &str = "ui";
 
 /// The collection file in the data folder.
@@ -181,7 +182,7 @@ pub fn start(
     };
     let ui_dir = match (&options.ui_dir, exe_dir) {
         (Some(dir), _) => dir.clone(),
-        (None, Some(exe_dir)) => exe_dir.join(UI_DIR),
+        (None, Some(exe_dir)) => bundled_ui_dir(exe_dir),
         (None, None) => PathBuf::from(UI_DIR),
     };
     let ui = Ui::files(&ui_dir, host.ws_origin());
@@ -238,6 +239,21 @@ fn network_access(data: &Path) -> Option<host::Network> {
     }
 }
 
+/// The UI bundle for an exe in `exe_dir`: the [`UI_DIR`] folder beside it, or in a macOS
+/// app (`JStream.app/Contents/MacOS/jstream`) the one in `Contents/Resources`, where an
+/// app keeps what isn't code, so the bundle can be signed as it is.
+pub fn bundled_ui_dir(exe_dir: &Path) -> PathBuf {
+    let in_app = exe_dir.file_name().is_some_and(|name| name == "MacOS")
+        && exe_dir
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == "Contents");
+    match exe_dir.parent() {
+        Some(contents) if in_app => contents.join("Resources").join(UI_DIR),
+        _ => exe_dir.join(UI_DIR),
+    }
+}
+
 /// Logs to the log file in `data`'s `logs` folder (and to stderr in a debug build),
 /// filtered by `RUST_LOG` (default `info`). Returns the file's path, or why there is
 /// none; the app runs either way.
@@ -277,6 +293,25 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<OsString> {
         list.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn a_macos_app_keeps_its_ui_in_resources() {
+        use super::bundled_ui_dir;
+        use std::path::Path;
+        assert_eq!(
+            bundled_ui_dir(Path::new("/Applications/JStream.app/Contents/MacOS")),
+            Path::new("/Applications/JStream.app/Contents/Resources/ui")
+        );
+        assert_eq!(
+            bundled_ui_dir(Path::new("/opt/jstream")),
+            Path::new("/opt/jstream/ui")
+        );
+        // A `MacOS` folder outside an app's `Contents` is an ordinary folder.
+        assert_eq!(
+            bundled_ui_dir(Path::new("/tmp/MacOS")),
+            Path::new("/tmp/MacOS/ui")
+        );
     }
 
     #[test]

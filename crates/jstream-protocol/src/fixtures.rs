@@ -1861,6 +1861,7 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::VideoMixList,
         Query::CaptureTargets,
         Query::PtzList,
+        Query::JtunnelSenders,
         Query::FontList,
         Query::ValuesList { prefix: None },
         Query::ValuesList {
@@ -2170,6 +2171,26 @@ fn profile_info() -> ProfileInfo {
             received_fps: ms(30.0),
             shown_fps: ms(29.6),
         }],
+        network: Some(crate::NetworkProfile {
+            inputs: vec![crate::NetworkInputProfile {
+                sender: "Bitwig".into(),
+                sample_rate: 48_000,
+                recording: true,
+                latency_ms: ms(21.5),
+                lead_ms: ms(20.0),
+                drift_ppm: Some(ms(-12.5)),
+                played: 12_000,
+                concealed: 3,
+                late: 1,
+                repeats: 11_990,
+                restarts: 0,
+            }],
+            outside_lan: 0,
+            unaccepted: 2,
+            malformed: 0,
+            unsupported: 0,
+            midi: 640,
+        }),
     }
 }
 
@@ -2824,6 +2845,25 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::JtunnelSenders {
+            on: true,
+            senders: vec![
+                crate::JtunnelSenderInfo {
+                    remote_name: "Bitwig".into(),
+                    address: "192.168.1.5:9000".into(),
+                    accepted: true,
+                },
+                crate::JtunnelSenderInfo {
+                    remote_name: "Laptop".into(),
+                    address: "192.168.1.9:9000".into(),
+                    accepted: false,
+                },
+            ],
+        },
+        QueryResult::JtunnelSenders {
+            on: false,
+            senders: Vec::new(),
+        },
         QueryResult::PtzList {
             cameras: vec![
                 crate::PtzCameraInfo {
@@ -3376,6 +3416,7 @@ pub(crate) fn events() -> Vec<Event> {
             outcome,
         });
     }
+    events.push(Event::JtunnelSendersChanged {});
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
         plugin_id: PluginId::new("plg_1"),

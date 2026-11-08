@@ -82,7 +82,7 @@ fn crash_line(line: &str) {
     let _ = writeln!(std::io::stderr().lock(), "{line}");
 }
 
-/// No window here: says so and fails.
+/// No window here (not Windows, macOS, or Linux with `webkitgtk`): says so and fails.
 #[cfg(not(webview))]
 fn main() -> ExitCode {
     use std::io::Write;

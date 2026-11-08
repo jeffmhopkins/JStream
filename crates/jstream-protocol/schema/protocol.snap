@@ -7333,6 +7333,19 @@ source: crates/jstream-protocol/src/fixtures.rs
             "outcome"
           ],
           "type": "object"
+        },
+        {
+          "description": "The JTunnel senders `jtunnel.senders` lists changed (0.114, ADR-0123 §3): one was\nheard for the first time, said goodbye, or went unheard for 35 s. Runtime state,\nso no `rev`. A client that shows them reads `jtunnel.senders` again.",
+          "properties": {
+            "type": {
+              "const": "jtunnel.senders_changed",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -8235,6 +8248,29 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "Whether it may pair in a `move` transition."
         }
       },
+      "type": "object"
+    },
+    "JtunnelSenderInfo": {
+      "description": "A JTunnel sender heard on the LAN (`jtunnel.senders`, 0.114, ADR-0123 §3): it\nanswered the receiver's mDNS query. Listing it trusts it with nothing.",
+      "properties": {
+        "accepted": {
+          "description": "Whether this machine accepts it: a sender the host accepts has this name and this\naddress and port.",
+          "type": "boolean"
+        },
+        "address": {
+          "description": "The address and port it sends from, as `192.168.1.5:9000`: where its answer came\nfrom, with the port its announcement names.",
+          "type": "string"
+        },
+        "remote_name": {
+          "description": "Its tunnel name, as it announces it: text from the LAN, so `remote_` (ADR-0059).\nA host that accepts it accepts this name.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "remote_name",
+        "address",
+        "accepted"
+      ],
       "type": "object"
     },
     "KeyframeTiming": {
@@ -9230,6 +9266,134 @@ source: crates/jstream-protocol/src/fixtures.rs
         "urls",
         "fingerprint"
       ],
+      "type": "object"
+    },
+    "NetworkInputProfile": {
+      "description": "One accepted JTunnel sender ([`NetworkProfile::inputs`]).",
+      "properties": {
+        "concealed": {
+          "default": 0,
+          "description": "Frames concealed with silence because they didn't come in time.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "drift_ppm": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Finite32"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The drift between its clock and this machine's, in parts per million, once\nenough of its stream has arrived; omitted before. Positive: its clock runs slow."
+        },
+        "late": {
+          "default": 0,
+          "description": "Frames that came after their turn, and were dropped.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "latency_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "How far ahead of now its held audio reaches, in milliseconds: the buffer's\nfill, which JTunnel shows as its latency."
+        },
+        "lead_ms": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "How long past its jitter-free arrival each frame is held, in milliseconds: the\nrecording source's `latency_ms`."
+        },
+        "played": {
+          "default": 0,
+          "description": "Frames played with their audio.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "recording": {
+          "default": false,
+          "description": "Whether a source records it now.",
+          "type": "boolean"
+        },
+        "repeats": {
+          "default": 0,
+          "description": "Redundant copies and repeated datagrams.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "restarts": {
+          "default": 0,
+          "description": "Times its stream restarted.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sample_rate": {
+          "default": 0,
+          "description": "Its stream's sample rate; 0 before anything has arrived from it.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sender": {
+          "default": "",
+          "description": "Its tunnel name, as a `network_audio` source's `sender` names it.",
+          "type": "string"
+        }
+      },
+      "type": "object"
+    },
+    "NetworkProfile": {
+      "description": "The JTunnel receiver ([`ProfileInfo::network`], ADR-0122, ADR-0123). Unlike the rest\nof the profile, its counts run from when the receiver started, not over the window.",
+      "properties": {
+        "inputs": {
+          "default": [],
+          "description": "Each sender the receiver accepts, in the order the host gave them.",
+          "items": {
+            "$ref": "#/$defs/NetworkInputProfile"
+          },
+          "type": "array"
+        },
+        "malformed": {
+          "default": 0,
+          "description": "Datagrams that aren't a JTunnel packet it accepts, or longer than one may be.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "midi": {
+          "default": 0,
+          "description": "MIDI messages it handed to the MIDI inputs.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "outside_lan": {
+          "default": 0,
+          "description": "Datagrams from outside the LAN ranges.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unaccepted": {
+          "default": 0,
+          "description": "Datagrams from a LAN address it doesn't subscribe to.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "unsupported": {
+          "default": 0,
+          "description": "Audio packets in a codec it can't decode yet (Opus).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
       "type": "object"
     },
     "OutputHealth": {
@@ -11662,6 +11826,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Lists the JTunnel senders heard on the LAN (0.114, ADR-0123 §3): each sender that\nanswered the receiver's mDNS query for `_jtunnel._udp.local` in the last 35 s,\nordered by name, then address, with whether this machine accepts it. Runtime\nstate, so no `rev`. `on` is false, and the list empty, while the receiver is off,\nwhich is the default (ADR-0123 §1). `jtunnel.senders_changed` says when the list\nchanges.",
+          "properties": {
+            "type": {
+              "const": "jtunnel.senders",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file\nin the OS's font folders that parses, as a family and style to show and the\nabsolute path an `asset` setting names it by. Runtime state, so no `rev`. The\nengine reads the folders once, on the first `font.list`; a font installed after\nthat shows once it restarts.",
           "properties": {
             "type": {
@@ -12780,6 +12957,32 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `jtunnel.senders`.",
+          "properties": {
+            "on": {
+              "description": "Whether the JTunnel receiver runs, and so whether it asks the LAN for senders.",
+              "type": "boolean"
+            },
+            "senders": {
+              "description": "The senders heard, ordered by name, then address.",
+              "items": {
+                "$ref": "#/$defs/JtunnelSenderInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "jtunnel.senders",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "on",
+            "senders"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `font.list`.",
           "properties": {
             "fonts": {
@@ -13083,6 +13286,17 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The audio mixer and its inputs in the window (since 0.92). Omitted when the\nmixer didn't run in it."
+            },
+            "network": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/NetworkProfile"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The JTunnel receiver's senders and what it dropped (since 0.113, #1223). Omitted\nwhile the receiver is off."
             },
             "plan": {
               "$ref": "#/$defs/PlanProfile",
@@ -15463,5 +15677,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.112"
+  "title": "JStream protocol 0.114"
 }

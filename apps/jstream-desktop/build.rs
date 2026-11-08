@@ -1,4 +1,4 @@
-//! Where the app has a window (Windows, and Linux with the `webkitgtk` feature):
+//! Where the app has a window (Windows, macOS, and Linux with the `webkitgtk` feature):
 //! generates the Tauri context (`tauri.conf.json`, the icon) and sets the `webview` cfg
 //! the window's code is gated on. On Windows with MSVC it also delay-loads the Media
 //! Foundation DLLs, so the app starts on a Windows without Media Foundation and says so
@@ -13,14 +13,23 @@ include!("media_foundation.rs");
 fn main() {
     println!("cargo:rerun-if-changed=build.rs");
     println!("cargo:rerun-if-changed=media_foundation.rs");
+    // Tauri's context macro embeds it on macOS (`Info.plist`'s own comment).
+    println!("cargo:rerun-if-changed=Info.plist");
     println!("cargo::rustc-check-cfg=cfg(webview)");
     // The target's, not the host's: build scripts run on the host.
     let os = std::env::var("CARGO_CFG_TARGET_OS").unwrap_or_default();
     let webkitgtk = std::env::var_os("CARGO_FEATURE_WEBKITGTK").is_some();
-    if os == "windows" || (os == "linux" && webkitgtk) {
+    if os == "windows" || os == "macos" || (os == "linux" && webkitgtk) {
         println!("cargo:rustc-cfg=webview");
     }
-    #[cfg(any(windows, all(target_os = "linux", feature = "webkitgtk")))]
+    // `tauri-build` is a build dependency only there, and this script is compiled for the
+    // host, so it runs on a native build (a check from another OS has no context to
+    // generate).
+    #[cfg(any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", feature = "webkitgtk")
+    ))]
     {
         // Declares `pick_path`, `set_network` and `set_jtunnel` so tauri-build writes
         // `allow-pick-path`, `allow-set-network` and `allow-set-jtunnel` (the `browse`,

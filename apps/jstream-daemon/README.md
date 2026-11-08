@@ -212,7 +212,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--lan` | Also listens for devices on the network ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)): a second listener, TLS only, that admits paired devices and never the control token. Its certificate is made on first use (see **Network access** below). Default: off. |
 | `--lan-port <port>` | With `--lan`: the network listener's port, 1 to 65535. Default `4456`. |
 | `--lan-bind <addr>` | With `--lan`: listen on this one address (not a loopback one) instead of every interface. Default: every interface. |
-| `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes) and the LAN address and port it sends from, loopback, private IPv4 or link-local. Repeatable, one name once. A `network_audio` source naming the sender records its audio. Default: off, no JTunnel socket open. |
+| `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes, no white space at either end) and the IPv4 LAN address and port it sends from, loopback, private or link-local. Repeatable, each name and each address and port once. A `network_audio` source naming the sender records its audio. Default: off, no JTunnel socket open. |
 | `--lan-renew` | With `--lan`: make a new key and certificate before serving, for when the machine's names or addresses changed. Every paired device then checks the new fingerprint, and a native client that pinned the old one pairs again. |
 | `--ptz-camera <spec>` | Lets this machine control a PTZ camera over VISCA ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)), repeatable: `name@address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the camera's VISCA address (1 to 7, default 1), as in `wide@192.168.1.40:52381`. The address must be on the LAN ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and names and addresses must not repeat. Default: none, so no PTZ socket is open. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
@@ -266,7 +266,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   JTunnel receiver after the backends (arrivals are stamped on the media clock), on one
   UDP socket on any interface and a port the system picks, and logs that port and the
   senders at `info`. A sender's address can't be outside loopback, private IPv4 and
-  link-local, and the receiver drops everything not from an accepted sender
+  link-local, and the receiver drops everything not from an accepted sender, but for
+  the answers to its mDNS query, which only list senders in `jtunnel.senders`
   ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
   A sender is accepted per machine, on the command line, never from the collection.
 - **PTZ cameras** (`--ptz-camera`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)).

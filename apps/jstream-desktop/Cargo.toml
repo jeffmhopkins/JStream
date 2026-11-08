@@ -80,6 +80,13 @@ jstream-platform-windows.workspace = true
 jstream-sources.workspace = true
 tauri.workspace = true
 
+# The window (WKWebView) and the live engine on macOS (ADR-0144): the platform backends,
+# stream keys in the Keychain, the Browse panels, and the global hotkeys' Carbon and
+# event-tap listener.
+[target.'cfg(target_os = "macos")'.dependencies]
+jstream-platform-macos.workspace = true
+tauri.workspace = true
+
 # On Linux, the live engine's backends and stream key store (as the daemon's), the file
 # dialog's portal, and the global hotkeys' listeners and the session kind that picks one
 # (ADR-0112); with `webkitgtk`, the window (Tauri on WebKitGTK).
@@ -87,8 +94,9 @@ tauri.workspace = true
 jstream-platform-linux.workspace = true
 tauri = { workspace = true, optional = true }
 
-# Generates the Tauri context from `tauri.conf.json` and embeds the icon and manifest.
-[target.'cfg(windows)'.build-dependencies]
+# Generates the Tauri context from `tauri.conf.json` and embeds the icon and manifest
+# (on macOS, `Info.plist` too).
+[target.'cfg(any(windows, target_os = "macos"))'.build-dependencies]
 tauri-build.workspace = true
 
 # The same on Linux, with `webkitgtk`.
