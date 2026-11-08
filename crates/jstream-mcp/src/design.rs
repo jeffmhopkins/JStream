@@ -84,7 +84,12 @@ plate 10 px wide or cropped to nothing, text at opacity 0), add its on state wit
 `move` transition preset (`transition.create`, 500-800 ms, `ease_out`) and switch \
 between them with it. Reveal text with a crop that opens with its plate rather than a \
 fade over it, and stagger the parts with `item.set_transition` `delay_ms` (0, 120, \
-200). Items with no partner in the other scene appear and disappear by their \
+200). To lead with a part in one move and trail with it in another, give each keyframe \
+its own order with `item.set_timing` (the keyframe's `scene_id`, the item, and a \
+`timing` of `delay_ms`, `easing` and `duration_ms`), which applies only to switches into \
+that keyframe. Easings: `ease_out` for arrivals, `ease_in` for exits, `hold` for a jump \
+at a set time, and `{\"cubic_bezier\": {x1, y1, x2, y2}}` (y up to 3) for an overshoot. \
+Items with no partner in the other scene appear and disappear by their \
 transition's `appear` and `disappear` (`slide`, `scale` or `fade`). Keep moves under a \
 second and ease them; a cut beats a slow move. A variant that overrides an item's \
 geometry stores the whole geometry, so nudging x there also fixes its size and angles \

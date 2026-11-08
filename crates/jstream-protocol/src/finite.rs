@@ -22,6 +22,12 @@ impl Finite32 {
     /// One.
     pub const ONE: Finite32 = Finite32(1.0);
 
+    /// Wraps `value` in a constant, which fails to compile if it is NaN or infinite.
+    pub(crate) const fn const_new(value: f32) -> Finite32 {
+        assert!(value.is_finite(), "a constant must be finite");
+        Finite32(value)
+    }
+
     /// Wraps `value`, or returns `None` if it is NaN or infinite.
     pub const fn new(value: f32) -> Option<Finite32> {
         if value.is_finite() {

@@ -1170,6 +1170,34 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "Bezier": {
+            "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+            "properties": {
+              "x1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's time."
+              },
+              "x2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's time."
+              },
+              "y1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's progress."
+              },
+              "y2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's progress."
+              }
+            },
+            "required": [
+              "x1",
+              "y1",
+              "x2",
+              "y2"
+            ],
+            "type": "object"
+          },
           "BlendMode": {
             "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
@@ -1709,7 +1737,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "Easing": {
-            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and\n`cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).\nThe named curves are strings (`\"ease_out\"`); a `cubic_bezier` is an object\n(`{\"cubic_bezier\": {\"x1\": 0.2, \"y1\": 0, \"x2\": 0, \"y2\": 1}}`).",
             "oneOf": [
               {
                 "const": "ease_in_out",
@@ -1722,6 +1750,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               {
+                "const": "ease_in",
+                "description": "Cubic ease-in: slow at the start, fast at the end.",
+                "type": "string"
+              },
+              {
                 "const": "linear",
                 "description": "Constant speed.",
                 "type": "string"
@@ -1730,6 +1763,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
                 "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "A step: the value holds its start until the end, then takes its end at once.",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -1891,6 +1942,34 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "motion"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes a keyframe scene's timing for an item in transitions into that keyframe\n(ADR-0129, since 0.99): its delay, easing and duration there, each in place of the\nitem's own or the preset's. `scene_id` must name a keyframe scene whose tree holds\nthe item, with the errors of the placement edits addressed to a keyframe; any other\nscene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000\nis `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or\n`x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3\n(`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the\noverride. Inverse: `item.set_timing` with the old timing, or `item.clear_override`\nof `timing` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "timing": {
+                    "$ref": "#/$defs/KeyframeTiming",
+                    "description": "Its timing in transitions into the keyframe."
+                  },
+                  "type": {
+                    "const": "item.set_timing",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "timing"
                 ],
                 "type": "object"
               },
@@ -4367,6 +4446,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "[`Easing::Spring`].",
                 "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "[`Easing::EaseIn`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "[`Easing::Hold`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "[`Easing::CubicBezier`] (since 0.99).",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -4488,6 +4590,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Glide",
                 "default": "auto",
                 "description": "Whether it may pair in a `move` transition."
+              }
+            },
+            "type": "object"
+          },
+          "KeyframeTiming": {
+            "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
+            "properties": {
+              "delay_ms": {
+                "description": "Milliseconds before the item starts moving, in place of its own `delay_ms`; the\npreset's `stagger_ms` × its index still adds to it. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "duration_ms": {
+                "description": "How long the item takes, in place of the preset's `duration_ms`. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "easing": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ItemEasing"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its easing in place of its own."
               }
             },
             "type": "object"
@@ -5103,6 +5240,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "motion",
                 "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
+                "type": "string"
+              },
+              {
+                "const": "timing",
+                "description": "Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,\nADR-0129).",
                 "type": "string"
               }
             ]
@@ -6996,6 +7138,34 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "Bezier": {
+            "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+            "properties": {
+              "x1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's time."
+              },
+              "x2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's time."
+              },
+              "y1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's progress."
+              },
+              "y2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's progress."
+              }
+            },
+            "required": [
+              "x1",
+              "y1",
+              "x2",
+              "y2"
+            ],
+            "type": "object"
+          },
           "BlendMode": {
             "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
@@ -7535,7 +7705,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "Easing": {
-            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and\n`cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).\nThe named curves are strings (`\"ease_out\"`); a `cubic_bezier` is an object\n(`{\"cubic_bezier\": {\"x1\": 0.2, \"y1\": 0, \"x2\": 0, \"y2\": 1}}`).",
             "oneOf": [
               {
                 "const": "ease_in_out",
@@ -7548,6 +7718,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               {
+                "const": "ease_in",
+                "description": "Cubic ease-in: slow at the start, fast at the end.",
+                "type": "string"
+              },
+              {
                 "const": "linear",
                 "description": "Constant speed.",
                 "type": "string"
@@ -7556,6 +7731,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
                 "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "A step: the value holds its start until the end, then takes its end at once.",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -7717,6 +7910,34 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "motion"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes a keyframe scene's timing for an item in transitions into that keyframe\n(ADR-0129, since 0.99): its delay, easing and duration there, each in place of the\nitem's own or the preset's. `scene_id` must name a keyframe scene whose tree holds\nthe item, with the errors of the placement edits addressed to a keyframe; any other\nscene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000\nis `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or\n`x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3\n(`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the\noverride. Inverse: `item.set_timing` with the old timing, or `item.clear_override`\nof `timing` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "timing": {
+                    "$ref": "#/$defs/KeyframeTiming",
+                    "description": "Its timing in transitions into the keyframe."
+                  },
+                  "type": {
+                    "const": "item.set_timing",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "timing"
                 ],
                 "type": "object"
               },
@@ -10193,6 +10414,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "[`Easing::Spring`].",
                 "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "[`Easing::EaseIn`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "[`Easing::Hold`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "[`Easing::CubicBezier`] (since 0.99).",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -10314,6 +10558,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Glide",
                 "default": "auto",
                 "description": "Whether it may pair in a `move` transition."
+              }
+            },
+            "type": "object"
+          },
+          "KeyframeTiming": {
+            "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
+            "properties": {
+              "delay_ms": {
+                "description": "Milliseconds before the item starts moving, in place of its own `delay_ms`; the\npreset's `stagger_ms` × its index still adds to it. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "duration_ms": {
+                "description": "How long the item takes, in place of the preset's `duration_ms`. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "easing": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ItemEasing"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its easing in place of its own."
               }
             },
             "type": "object"
@@ -10929,6 +11208,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "motion",
                 "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
+                "type": "string"
+              },
+              {
+                "const": "timing",
+                "description": "Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,\nADR-0129).",
                 "type": "string"
               }
             ]
@@ -14571,6 +14855,34 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "Bezier": {
+            "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+            "properties": {
+              "x1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's time."
+              },
+              "x2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's time."
+              },
+              "y1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's progress."
+              },
+              "y2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's progress."
+              }
+            },
+            "required": [
+              "x1",
+              "y1",
+              "x2",
+              "y2"
+            ],
+            "type": "object"
+          },
           "BlendMode": {
             "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
@@ -15110,7 +15422,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "Easing": {
-            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and\n`cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).\nThe named curves are strings (`\"ease_out\"`); a `cubic_bezier` is an object\n(`{\"cubic_bezier\": {\"x1\": 0.2, \"y1\": 0, \"x2\": 0, \"y2\": 1}}`).",
             "oneOf": [
               {
                 "const": "ease_in_out",
@@ -15123,6 +15435,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               {
+                "const": "ease_in",
+                "description": "Cubic ease-in: slow at the start, fast at the end.",
+                "type": "string"
+              },
+              {
                 "const": "linear",
                 "description": "Constant speed.",
                 "type": "string"
@@ -15131,6 +15448,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
                 "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "A step: the value holds its start until the end, then takes its end at once.",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -15292,6 +15627,34 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "motion"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes a keyframe scene's timing for an item in transitions into that keyframe\n(ADR-0129, since 0.99): its delay, easing and duration there, each in place of the\nitem's own or the preset's. `scene_id` must name a keyframe scene whose tree holds\nthe item, with the errors of the placement edits addressed to a keyframe; any other\nscene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000\nis `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or\n`x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3\n(`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the\noverride. Inverse: `item.set_timing` with the old timing, or `item.clear_override`\nof `timing` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "timing": {
+                    "$ref": "#/$defs/KeyframeTiming",
+                    "description": "Its timing in transitions into the keyframe."
+                  },
+                  "type": {
+                    "const": "item.set_timing",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "timing"
                 ],
                 "type": "object"
               },
@@ -17768,6 +18131,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "[`Easing::Spring`].",
                 "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "[`Easing::EaseIn`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "[`Easing::Hold`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "[`Easing::CubicBezier`] (since 0.99).",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -17889,6 +18275,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Glide",
                 "default": "auto",
                 "description": "Whether it may pair in a `move` transition."
+              }
+            },
+            "type": "object"
+          },
+          "KeyframeTiming": {
+            "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
+            "properties": {
+              "delay_ms": {
+                "description": "Milliseconds before the item starts moving, in place of its own `delay_ms`; the\npreset's `stagger_ms` × its index still adds to it. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "duration_ms": {
+                "description": "How long the item takes, in place of the preset's `duration_ms`. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "easing": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ItemEasing"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its easing in place of its own."
               }
             },
             "type": "object"
@@ -18504,6 +18925,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "motion",
                 "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
+                "type": "string"
+              },
+              {
+                "const": "timing",
+                "description": "Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,\nADR-0129).",
                 "type": "string"
               }
             ]
@@ -19354,9 +19780,37 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.show` (action), `item.hide` (action), `item.toggle` (action), `item.trigger_motion` (action), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `item` operation: set `op.type` to one of `item.clear_override` (edit), `item.set_effects` (edit), `item.set_motion` (edit), `item.set_timing` (edit), `item.add` (edit), `item.remove` (edit), `item.move` (edit), `item.set_transform` (edit), `item.set_geometry` (edit), `item.set_visible` (edit), `item.set_opacity` (edit), `item.set_blend` (edit), `item.reorder` (edit), `item.set_source` (edit), `item.set_crop` (edit), `item.set_transition` (edit), `item.set_locked` (edit), `item.set_effects_space` (edit), `item.show` (action), `item.hide` (action), `item.toggle` (action), `item.trigger_motion` (action), `item.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "Bezier": {
+            "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+            "properties": {
+              "x1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's time."
+              },
+              "x2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's time."
+              },
+              "y1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's progress."
+              },
+              "y2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's progress."
+              }
+            },
+            "required": [
+              "x1",
+              "y1",
+              "x2",
+              "y2"
+            ],
+            "type": "object"
+          },
           "BlendMode": {
             "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
@@ -19574,6 +20028,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "[`Easing::Spring`].",
                 "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "[`Easing::EaseIn`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "[`Easing::Hold`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "[`Easing::CubicBezier`] (since 0.99).",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -19695,6 +20172,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Glide",
                 "default": "auto",
                 "description": "Whether it may pair in a `move` transition."
+              }
+            },
+            "type": "object"
+          },
+          "KeyframeTiming": {
+            "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
+            "properties": {
+              "delay_ms": {
+                "description": "Milliseconds before the item starts moving, in place of its own `delay_ms`; the\npreset's `stagger_ms` × its index still adds to it. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "duration_ms": {
+                "description": "How long the item takes, in place of the preset's `duration_ms`. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "easing": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ItemEasing"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its easing in place of its own."
               }
             },
             "type": "object"
@@ -20158,6 +20670,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "motion",
                 "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
                 "type": "string"
+              },
+              {
+                "const": "timing",
+                "description": "Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,\nADR-0129).",
+                "type": "string"
               }
             ]
           },
@@ -20367,6 +20884,34 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "motion"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes a keyframe scene's timing for an item in transitions into that keyframe\n(ADR-0129, since 0.99): its delay, easing and duration there, each in place of the\nitem's own or the preset's. `scene_id` must name a keyframe scene whose tree holds\nthe item, with the errors of the placement edits addressed to a keyframe; any other\nscene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000\nis `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or\n`x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3\n(`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the\noverride. Inverse: `item.set_timing` with the old timing, or `item.clear_override`\nof `timing` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "timing": {
+                    "$ref": "#/$defs/KeyframeTiming",
+                    "description": "Its timing in transitions into the keyframe."
+                  },
+                  "type": {
+                    "const": "item.set_timing",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "timing"
                 ],
                 "type": "object"
               },
@@ -22245,6 +22790,34 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "Bezier": {
+            "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+            "properties": {
+              "x1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's time."
+              },
+              "x2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's time."
+              },
+              "y1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's progress."
+              },
+              "y2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's progress."
+              }
+            },
+            "required": [
+              "x1",
+              "y1",
+              "x2",
+              "y2"
+            ],
+            "type": "object"
+          },
           "BlendMode": {
             "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
@@ -22784,7 +23357,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "Easing": {
-            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and\n`cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).\nThe named curves are strings (`\"ease_out\"`); a `cubic_bezier` is an object\n(`{\"cubic_bezier\": {\"x1\": 0.2, \"y1\": 0, \"x2\": 0, \"y2\": 1}}`).",
             "oneOf": [
               {
                 "const": "ease_in_out",
@@ -22797,6 +23370,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               {
+                "const": "ease_in",
+                "description": "Cubic ease-in: slow at the start, fast at the end.",
+                "type": "string"
+              },
+              {
                 "const": "linear",
                 "description": "Constant speed.",
                 "type": "string"
@@ -22805,6 +23383,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
                 "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "A step: the value holds its start until the end, then takes its end at once.",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -22966,6 +23562,34 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "motion"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes a keyframe scene's timing for an item in transitions into that keyframe\n(ADR-0129, since 0.99): its delay, easing and duration there, each in place of the\nitem's own or the preset's. `scene_id` must name a keyframe scene whose tree holds\nthe item, with the errors of the placement edits addressed to a keyframe; any other\nscene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000\nis `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or\n`x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3\n(`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the\noverride. Inverse: `item.set_timing` with the old timing, or `item.clear_override`\nof `timing` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "timing": {
+                    "$ref": "#/$defs/KeyframeTiming",
+                    "description": "Its timing in transitions into the keyframe."
+                  },
+                  "type": {
+                    "const": "item.set_timing",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "timing"
                 ],
                 "type": "object"
               },
@@ -25438,6 +26062,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "[`Easing::Spring`].",
                 "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "[`Easing::EaseIn`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "[`Easing::Hold`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "[`Easing::CubicBezier`] (since 0.99).",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -25559,6 +26206,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Glide",
                 "default": "auto",
                 "description": "Whether it may pair in a `move` transition."
+              }
+            },
+            "type": "object"
+          },
+          "KeyframeTiming": {
+            "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
+            "properties": {
+              "delay_ms": {
+                "description": "Milliseconds before the item starts moving, in place of its own `delay_ms`; the\npreset's `stagger_ms` × its index still adds to it. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "duration_ms": {
+                "description": "How long the item takes, in place of the preset's `duration_ms`. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "easing": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ItemEasing"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its easing in place of its own."
               }
             },
             "type": "object"
@@ -26174,6 +26856,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "motion",
                 "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
+                "type": "string"
+              },
+              {
+                "const": "timing",
+                "description": "Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,\nADR-0129).",
                 "type": "string"
               }
             ]
@@ -30763,6 +31450,34 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "Bezier": {
+            "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+            "properties": {
+              "x1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's time."
+              },
+              "x2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's time."
+              },
+              "y1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's progress."
+              },
+              "y2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's progress."
+              }
+            },
+            "required": [
+              "x1",
+              "y1",
+              "x2",
+              "y2"
+            ],
+            "type": "object"
+          },
           "BlendMode": {
             "description": "How an item composites onto what is below it (ADR-0023 §1, register D13).\n\nThe list is the modes the UI offers, and the compositor draws every one (ADR-0082, since\n0.47; before it the engine refused all but `normal`). They blend in linear light,\nexcept overlay, difference and exclusion, and the two `_srgb` modes (since 0.75),\nwhich blend sRGB-encoded values.",
             "oneOf": [
@@ -31302,7 +32017,7 @@ source: crates/jstream-mcp/src/tests.rs
             "type": "string"
           },
           "Easing": {
-            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and\n`cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).\nThe named curves are strings (`\"ease_out\"`); a `cubic_bezier` is an object\n(`{\"cubic_bezier\": {\"x1\": 0.2, \"y1\": 0, \"x2\": 0, \"y2\": 1}}`).",
             "oneOf": [
               {
                 "const": "ease_in_out",
@@ -31315,6 +32030,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               {
+                "const": "ease_in",
+                "description": "Cubic ease-in: slow at the start, fast at the end.",
+                "type": "string"
+              },
+              {
                 "const": "linear",
                 "description": "Constant speed.",
                 "type": "string"
@@ -31323,6 +32043,24 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
                 "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "A step: the value holds its start until the end, then takes its end at once.",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -31484,6 +32222,34 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "item_id",
                   "motion"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Writes a keyframe scene's timing for an item in transitions into that keyframe\n(ADR-0129, since 0.99): its delay, easing and duration there, each in place of the\nitem's own or the preset's. `scene_id` must name a keyframe scene whose tree holds\nthe item, with the errors of the placement edits addressed to a keyframe; any other\nscene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000\nis `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or\n`x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3\n(`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the\noverride. Inverse: `item.set_timing` with the old timing, or `item.clear_override`\nof `timing` when the keyframe didn't override it.",
+                "properties": {
+                  "item_id": {
+                    "$ref": "#/$defs/ItemId",
+                    "description": "The item in the parent's tree."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The keyframe scene."
+                  },
+                  "timing": {
+                    "$ref": "#/$defs/KeyframeTiming",
+                    "description": "Its timing in transitions into the keyframe."
+                  },
+                  "type": {
+                    "const": "item.set_timing",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id",
+                  "item_id",
+                  "timing"
                 ],
                 "type": "object"
               },
@@ -33960,6 +34726,29 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "[`Easing::Spring`].",
                 "type": "string"
+              },
+              {
+                "const": "ease_in",
+                "description": "[`Easing::EaseIn`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "[`Easing::Hold`] (since 0.99).",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "[`Easing::CubicBezier`] (since 0.99).",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
           },
@@ -34081,6 +34870,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Glide",
                 "default": "auto",
                 "description": "Whether it may pair in a `move` transition."
+              }
+            },
+            "type": "object"
+          },
+          "KeyframeTiming": {
+            "description": "A keyframe scene's timing for one item in transitions into it (ADR-0129, since\n0.99): each field set replaces the item's own (`delay_ms`, `easing`) or the preset's\n(`duration_ms`) when a switch, a placed keyframe or a hotkey moves program to that\nkeyframe. An omitted field follows the item and the preset. A transition into any\nother member of the family doesn't use it.",
+            "properties": {
+              "delay_ms": {
+                "description": "Milliseconds before the item starts moving, in place of its own `delay_ms`; the\npreset's `stagger_ms` × its index still adds to it. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "duration_ms": {
+                "description": "How long the item takes, in place of the preset's `duration_ms`. At most 60000.",
+                "format": "uint32",
+                "minimum": 0,
+                "type": [
+                  "integer",
+                  "null"
+                ]
+              },
+              "easing": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/ItemEasing"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "Its easing in place of its own."
               }
             },
             "type": "object"
@@ -34696,6 +35520,11 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "motion",
                 "description": "Its motion modifiers, the whole list (`item.set_motion`, since 0.81, ADR-0099).",
+                "type": "string"
+              },
+              {
+                "const": "timing",
+                "description": "Its timing in transitions into the keyframe (`item.set_timing`, since 0.99,\nADR-0129).",
                 "type": "string"
               }
             ]
@@ -35610,8 +36439,36 @@ source: crates/jstream-mcp/src/tests.rs
       "description": "Runs one `transition` operation: set `op.type` to one of `transition.create` (edit), `transition.update` (edit), `transition.delete` (edit), `transition.set_default` (edit). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
+          "Bezier": {
+            "description": "The two control points of a [`Easing::CubicBezier`] curve, as CSS writes them. `x1`\nand `x2` (time) lie in `[0, 1]`; `y1` and `y2` (progress) in\n`[-2, 3]` ([`MAX_BEZIER_OVERSHOOT`]), so the curve may overshoot either end.",
+            "properties": {
+              "x1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's time."
+              },
+              "x2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's time."
+              },
+              "y1": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The first control point's progress."
+              },
+              "y2": {
+                "$ref": "#/$defs/Finite32",
+                "description": "The second control point's progress."
+              }
+            },
+            "required": [
+              "x1",
+              "y1",
+              "x2",
+              "y2"
+            ],
+            "type": "object"
+          },
           "Easing": {
-            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5).",
+            "description": "How a value moves from its start to its end over a transition\n([ADR-0029](../../../docs/adr/0029-transitions.md) §5; `ease_in`, `hold` and\n`cubic_bezier` since 0.99, [ADR-0129](../../../docs/adr/0129-keyframe-timing-and-more-easings.md)).\nThe named curves are strings (`\"ease_out\"`); a `cubic_bezier` is an object\n(`{\"cubic_bezier\": {\"x1\": 0.2, \"y1\": 0, \"x2\": 0, \"y2\": 1}}`).",
             "oneOf": [
               {
                 "const": "ease_in_out",
@@ -35624,6 +36481,11 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "string"
               },
               {
+                "const": "ease_in",
+                "description": "Cubic ease-in: slow at the start, fast at the end.",
+                "type": "string"
+              },
+              {
                 "const": "linear",
                 "description": "Constant speed.",
                 "type": "string"
@@ -35632,8 +36494,31 @@ source: crates/jstream-mcp/src/tests.rs
                 "const": "spring",
                 "description": "`1 − e^(−6p)·cos(11p)`: overshoots the end and settles back.",
                 "type": "string"
+              },
+              {
+                "const": "hold",
+                "description": "A step: the value holds its start until the end, then takes its end at once.",
+                "type": "string"
+              },
+              {
+                "additionalProperties": false,
+                "description": "The CSS `cubic-bezier(x1, y1, x2, y2)` curve from `(0, 0)` to `(1, 1)`.",
+                "properties": {
+                  "cubic_bezier": {
+                    "$ref": "#/$defs/Bezier"
+                  }
+                },
+                "required": [
+                  "cubic_bezier"
+                ],
+                "type": "object"
               }
             ]
+          },
+          "Finite32": {
+            "description": "A finite `f32`. On the wire it is a plain JSON number, which must narrow to a finite\n`f32` (magnitude up to about `3.4028235e38`); anything else fails to deserialize.",
+            "format": "float",
+            "type": "number"
           },
           "IdempotencyKey": {
             "description": "Makes a retried batch safe: the engine applies a batch with a given key at most\nonce per client and answers a retry with the original result.",

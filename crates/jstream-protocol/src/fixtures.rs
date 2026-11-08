@@ -36,6 +36,7 @@ use crate::{
     AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
     SourceMeter,
 };
+use crate::{Bezier, DroppedOverride, ItemOverride, KeyframeTiming, OverrideField};
 use crate::{Binding, Chord, DeviceId, DeviceInfo, HotkeyBinding, Trigger};
 use crate::{Canvas as CameraCanvas, SceneCamera};
 use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
@@ -43,7 +44,6 @@ use crate::{
     Drawer, DrawerProfile, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
     ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
 };
-use crate::{DroppedOverride, ItemOverride, OverrideField};
 use crate::{
     Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
     TransitionPresetInfo, TransitionStarted, TransitionsInfo,
@@ -649,6 +649,63 @@ fn keyframe_edits() -> Vec<Edit> {
             scene_id: Some(SceneId::new("scn_1_wide")),
             motion: keyframe_motion(),
         },
+        // A keyframe's timing for an item in moves into it, every field, then one
+        // field, then none, which clears it (ADR-0129).
+        Edit::ItemSetTiming {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_2"),
+            timing: keyframe_timing(),
+        },
+        Edit::ItemSetTiming {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_3"),
+            timing: KeyframeTiming {
+                easing: Some(ItemEasing::Hold),
+                ..KeyframeTiming::default()
+            },
+        },
+        Edit::ItemSetTiming {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_3"),
+            timing: KeyframeTiming::default(),
+        },
+        // The easings ADR-0129 adds, on a preset and an item.
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::EaseIn),
+            patch: Settings::new(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::Hold),
+            patch: Settings::new(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::CubicBezier(Bezier {
+                x1: Finite32::new(0.68).expect("finite"),
+                y1: Finite32::new(-0.6).expect("finite"),
+                x2: Finite32::new(0.32).expect("finite"),
+                y2: Finite32::new(1.6).expect("finite"),
+            })),
+            patch: Settings::new(),
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_4"),
+            transition: ItemTransition {
+                easing: ItemEasing::EaseIn,
+                ..ItemTransition::default()
+            },
+        },
     ];
     // Every property and every shape, in lists of at most 8 (ADR-0099).
     let every: Vec<MotionModifier> = MotionProperty::ALL
@@ -697,6 +754,7 @@ fn keyframe_edits() -> Vec<Edit> {
             OverrideField::Visible,
             OverrideField::Effects,
             OverrideField::Motion,
+            OverrideField::Timing,
         ]
         .map(|field| Edit::ItemClearOverride {
             scene_id: SceneId::new("scn_1_wide"),
@@ -738,7 +796,23 @@ fn item_overrides() -> Vec<ItemOverride> {
         opacity: Some(Finite32::new(0.5).expect("finite")),
         effects: Some(keyframe_effects()),
         motion: Some(keyframe_motion()),
+        timing: Some(keyframe_timing()),
     }]
+}
+
+/// A keyframe's timing for one item: every field, the easing a curve (ADR-0129).
+fn keyframe_timing() -> KeyframeTiming {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    KeyframeTiming {
+        delay_ms: Some(150),
+        easing: Some(ItemEasing::CubicBezier(Bezier {
+            x1: f(0.3),
+            y1: f(-0.5),
+            x2: f(0.2),
+            y2: f(1.5),
+        })),
+        duration_ms: Some(800),
+    }
 }
 
 /// A gentle sway: every kind, every option, on the properties a sway moves (ADR-0099).

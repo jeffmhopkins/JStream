@@ -63,7 +63,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `send.remove`, `hotkey.set`,
   `hotkey.clear`, `binding.set`, `binding.clear`, `transition.create`, `transition.update`, `transition.delete`,
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
-  `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
+  `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
   `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
@@ -178,7 +178,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `ItemOverride`, what a keyframe scene overrides for one item as `SceneInfo.overrides`
-  reports it (its `effects` since 0.63, its `motion` since 0.81), `OverrideField`, the field `item.clear_override` removes, and
+  reports it (its `effects` since 0.63, its `motion` since 0.81, its `timing` since 0.99), `OverrideField`, the field `item.clear_override` removes, and
   `DroppedOverride`, an override a batch dropped, and `PlacedKeyframe` (since 0.88),
   a placed scene's switched keyframe ([Keyframe tracks](#keyframe-tracks)).
 - **Motion** (`motion.rs`, since 0.81,
@@ -312,7 +312,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.98 because `scene.set_camera` accepts a camera on a keyframe
+`PROTOCOL_VERSION` is 0.99 because a keyframe scene can time an item in switches into it
+(`item.set_timing`, `ItemOverride.timing`, `KeyframeTiming`, `OverrideField::Timing`) and
+the easings gain `ease_in`, `hold` and `cubic_bezier`
+([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md), a number the
+release queue set); 0.98 because `scene.set_camera` accepts a camera on a keyframe
 of a 2D scene, which it refused before, and a Move between a 2D side and a 3D one glides
 ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md), a number the
 release queue set); 0.97 because `pairing.start`'s answer can carry `network`, the
@@ -751,6 +755,17 @@ keeps the addressing of the edit it undoes.
   effect are edges of the keyframe scene; a blocker names them as
   `overrides.<item_id>.effects.<filter_id>.<param>` of that scene, and `delete.plan`
   clears them with `item.set_effects`.
+- **Timing** (0.99, [ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)):
+  an override's `timing` is a `KeyframeTiming {delay_ms?, easing?, duration_ms?}` for
+  switches into that keyframe: the item takes the keyframe's delay and easing in place
+  of its own `ItemTransition`'s, and its duration in place of the preset's, whether it
+  glides in, appears or leaves; an omitted field follows the item and the preset, and
+  the preset's `stagger_ms` still adds to the delay. A switch into any other scene, the
+  parent and the other keyframes included, doesn't use it. `item.set_timing { scene_id,
+  item_id, timing }` writes it whole; only a keyframe scene takes it (the item's own
+  scene is `invalid_argument` on `edits.N.scene_id`), a delay or duration over 60000 is
+  `invalid_argument` on `edits.N.timing.<field>`, and a timing with no field set removes
+  it. Its inverse is the old timing, or `item.clear_override` of `timing`.
 - A variant depends on its parent: `scene.delete` of a parent is refused while it has
   variants (blockers with field `variant_of`), and `delete.plan` of a parent deletes its
   variants, and the `scene` sources that show them, before it.
@@ -1311,8 +1326,15 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   Like a switch it changes no `rev` and is never undone; a switch leaves preview where
   it is.
 
-`Easing::apply` is the one easing function every implementation evaluates, so the UI's
-preview of a transition and the engine's render agree.
+An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
+([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
+`hold` (no progress until the end, then the whole jump) or `{"cubic_bezier": {x1, y1, x2,
+y2}}`, CSS's curve, with `x1` and `x2` in 0 to 1 and `y1` and `y2` in -2 to 3, so it may
+overshoot (`Bezier`; `Bezier::BACK_OUT` is the curve a client offers first). A point out
+of range is `invalid_argument` on `…easing.cubic_bezier.<field>`, on a preset, on an
+item's `transition` or on a keyframe's `timing`. `ItemEasing` is the same list plus
+`inherit`. `Easing::apply` is the one easing function every implementation evaluates, so
+the UI's preview of a transition and the engine's render agree.
 
 <a id="batches"></a>
 ## Batches, revisions and `expected_rev`
@@ -2263,7 +2285,10 @@ after 1.0:
   0.75 can't parse `item.list`, `scene.list` or `state.get` once an item uses one (the
   whole response fails, and `WsControl` ends the session), as with `OutputKind` in 0.9.
   `BlendMode` still has no `Unknown` fallback; whether it gets one, and whether such a
-  break counts as a minor bump, are part of open question 8.
+  break counts as a minor bump, are part of open question 8. 0.99 adds the `Easing` and
+  `ItemEasing` values `ease_in`, `hold` and `cubic_bezier` (ADR-0129) on the same
+  terms: a client older than 0.99 can't parse `state.get` or an item listing once a
+  preset, an item or a keyframe's timing uses one.
 - **Major (breaking):** removing or renaming anything, changing a field's type or
   meaning, or making an optional field required. It needs an ADR and one minor release
   that deprecates the old form first.

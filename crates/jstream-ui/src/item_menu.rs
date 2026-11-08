@@ -1967,6 +1967,7 @@ mod tests {
         };
         let none = |item: &str| ItemOverride {
             motion: Default::default(),
+            timing: None,
             item_id: ItemId::new(item),
             geometry: None,
             transform: None,

@@ -554,7 +554,8 @@ omitted while absent, are `schema_version` 5. A scene's `timelines` (ADR-0115), 
 by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writes no
 `camera_follow`: a follow camera is its item's `follow_pointer` effect. Version 8
 (ADR-0124) gives a `browser` source's page API a checkbox per kind of data, and a collection's
-`bindings` (ADR-0122) are `schema_version` 9. Loading creates the folders top level first, then
+`bindings` (ADR-0122) are `schema_version` 9. An override's `timing` (ADR-0129), omitted
+while absent, is `schema_version` 10. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -572,8 +573,9 @@ the engine's; this crate does no I/O.
   scene or whose effects are full, and 7 to 8 turns on a `browser` source's
   `page_api_shared_values` or `page_api_audio` where its `page_api_values` or
   `page_api_bus` already grant something, so rebuilding it with its kind's defaults
-  takes nothing away, and 8 to 9 adds `bindings`, refusing a version 8 file that
-  holds them),
+  takes nothing away, 8 to 9 adds `bindings`, refusing a version 8 file that
+  holds them, and 9 to 10 adds an override's `timing`, refusing one in a version 9
+  file),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -587,7 +589,8 @@ the engine's; this crate does no I/O.
   settings refer to, then its labels and favourite), then every source's filters, then
   items in their placement form with their crop and visibility, opacity, blend,
   transition settings and motion, then the keyframe scenes' overrides as placement edits
-  addressed to them (then `item.set_motion` for their motion and `item.set_effects` for
+  addressed to them (then `item.set_motion` for their motion, `item.set_timing` for
+  their timing and `item.set_effects` for
   their effects, keeping a filter of an unknown
   kind as an item's own effect keeps one), then encoder profiles, then the presets and the default (the
   initial `cut` is updated in place when the file has it, and deleted when it doesn't;

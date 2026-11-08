@@ -141,6 +141,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0125](0125-item-effects-layer-grows-where-it-is-needed.md) | An item's effects layer grows at the first effect that draws past the box | accepted | agent |  |
 | [ADR-0127](0127-moves-interpolate-effect-settings.md) | A Move blends the settings of effects that differ only in their settings | accepted | agent |  |
 | [ADR-0128](0128-moves-between-2d-and-3d-glide.md) | A Move between a 2D side and a 3D one glides through the framing camera | accepted | agent |  |
+| [ADR-0129](0129-keyframe-timing-and-more-easings.md) | A keyframe times its items in moves into it, and three more easings | accepted | agent |  |
 | [ADR-0130](0130-browsers-keep-no-certificate-pin-v2.md) | A paired browser keeps no certificate pin, so a new warning on its host means checking the fingerprint again | accepted | agent |  |
 | [ADR-0131](0131-ask-before-a-new-agent-connects.md) | The desktop app asks the person before a new agent's first connection | accepted | agent |  |
 | [ADR-0134](0134-html-pages-load-from-an-origin-of-their-own.md) | A page given as HTML loads from an origin of its own | accepted | agent |  |

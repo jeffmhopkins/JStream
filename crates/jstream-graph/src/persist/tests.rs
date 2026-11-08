@@ -47,9 +47,14 @@ const V7: &str = include_str!("fixtures/v7.json");
 /// as version 1 must.
 const V8: &str = include_str!("fixtures/v8.json");
 
-/// A collection file at schema version 9, the current one: version 8 with two controller
-/// bindings (ADR-0122). The same rule applies once version 10 exists.
+/// A collection file at schema version 9: version 8 with two controller bindings
+/// (ADR-0122). It must keep loading as version 1 must.
 const V9: &str = include_str!("fixtures/v9.json");
+
+/// A collection file at schema version 10, the current one: version 9 with keyframe scene
+/// `k`'s timing for item `i3` in transitions into it (ADR-0129). The same rule applies
+/// once version 11 exists.
+const V10: &str = include_str!("fixtures/v10.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -416,6 +421,34 @@ fn v9_graph() -> Graph {
     graph
 }
 
+/// The v9 collection plus keyframe scene `k`'s timing for item `i3`: a 120 ms delay, a
+/// cubic-bezier easing and a 900 ms duration (ADR-0129), in one more batch: what
+/// version 10 saves.
+fn v10_graph() -> Graph {
+    use jstream_protocol::{Bezier, Finite32, ItemEasing, KeyframeTiming};
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    let mut graph = v9_graph();
+    let applied = graph.apply(
+        &[Edit::ItemSetTiming {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("i3"),
+            timing: KeyframeTiming {
+                delay_ms: Some(120),
+                easing: Some(ItemEasing::CubicBezier(Bezier {
+                    x1: f(0.2),
+                    y1: f(-0.4),
+                    x2: f(0.3),
+                    y2: f(1.4),
+                })),
+                duration_ms: Some(900),
+            },
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 fn color(id: &str, follow: Option<&str>) -> Edit {
     let follow = follow.map_or(Value::Null, |id| json!({"type": "source", "source_id": id}));
     Edit::SourceCreate {
@@ -487,7 +520,7 @@ fn edit_file(edit: impl FnOnce(&mut Value)) -> String {
 
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v9_graph().to_collection_json(), V9);
+    assert_eq!(v10_graph().to_collection_json(), V10);
 }
 
 #[test]
@@ -496,6 +529,40 @@ fn the_v9_fixture_loads_exactly() {
     let loaded = load(V9);
     assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(8)));
     assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+#[test]
+fn the_v10_fixture_loads_exactly() {
+    let expected = v10_graph();
+    let loaded = load(V10);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(9)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// A version 9 file has no keyframe timing (ADR-0129): one there is refused, and without
+/// it the file loads.
+#[test]
+fn a_version_9_keyframe_timing_is_refused() {
+    let mut value: Value = serde_json::from_str(V10).expect("the v10 fixture");
+    value["schema_version"] = json!(9);
+    assert_eq!(
+        load(&value.to_string()).map(|g| g.rev()),
+        Err(LoadError::Migration {
+            from: 9,
+            reason: "a version 9 keyframe override has no `timing`".into()
+        })
+    );
+    let k = value["scenes"]
+        .as_array()
+        .and_then(|scenes| scenes.iter().position(|s| s["id"] == "k"))
+        .expect("the v10 fixture has scene `k`");
+    let overrides = value["scenes"][k]["overrides"]
+        .as_array_mut()
+        .expect("overrides");
+    for o in overrides.iter_mut() {
+        o.as_object_mut().map(|o| o.remove("timing"));
+    }
+    assert_eq!(load(&value.to_string()).map(|g| g.rev()), Ok(Rev(9)));
 }
 
 /// Version 8 upgrades unchanged: it has no controller bindings, and one there is

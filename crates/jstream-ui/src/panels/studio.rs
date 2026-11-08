@@ -19,7 +19,7 @@ use crate::panels::outputs::{action, edit};
 use crate::session::Session;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
-    Action, CUT, Call, CallResult, Easing, Edit, Event, KindCategory, KindDescriptor,
+    Action, Bezier, CUT, Call, CallResult, Easing, Edit, Event, KindCategory, KindDescriptor,
     MAX_DURATION_MS, ParamDescriptor, ParamType, Query, QueryResult, Rev, SceneId, SceneRole,
     Settings, TransitionPresetId, TransitionPresetInfo, TransitionsInfo, builtin_transition_kinds,
     check_preset_timing,
@@ -314,12 +314,17 @@ pub fn next_preset_id<'a>(
         .map_or_else(|| TransitionPresetId::new(base), TransitionPresetId::new)
 }
 
-/// Every easing, in the order the form offers them.
-pub const EASINGS: [Easing; 4] = [
+/// Every easing, in the order the form offers them, a custom curve last (ADR-0129).
+/// Picking the curve starts from [`Bezier::BACK_OUT`]; its points are edited through
+/// the API.
+pub const EASINGS: [Easing; 7] = [
     Easing::EaseInOut,
     Easing::EaseOut,
+    Easing::EaseIn,
     Easing::Linear,
     Easing::Spring,
+    Easing::Hold,
+    Easing::CubicBezier(Bezier::BACK_OUT),
 ];
 
 /// An easing's wire name, which the form uses as its option value.
@@ -329,6 +334,9 @@ pub fn easing_value(easing: Easing) -> &'static str {
         Easing::EaseOut => "ease_out",
         Easing::Linear => "linear",
         Easing::Spring => "spring",
+        Easing::EaseIn => "ease_in",
+        Easing::Hold => "hold",
+        Easing::CubicBezier(_) => "cubic_bezier",
     }
 }
 
@@ -339,6 +347,9 @@ pub fn easing_label(easing: Easing) -> &'static str {
         Easing::EaseOut => "Ease out",
         Easing::Linear => "Linear",
         Easing::Spring => "Spring",
+        Easing::EaseIn => "Ease in",
+        Easing::Hold => "Hold, then jump",
+        Easing::CubicBezier(_) => "Custom curve",
     }
 }
 
@@ -1450,7 +1461,9 @@ fn PresetEditor(
                                 .map(|easing| view! {
                                     <option
                                         value=easing_value(easing)
-                                        prop:selected=move || draft.with(|d| d.easing == easing)
+                                        prop:selected=move || draft.with(|d| {
+                                            easing_value(d.easing) == easing_value(easing)
+                                        })
                                     >
                                         {easing_label(easing)}
                                     </option>
@@ -2089,6 +2102,14 @@ mod tests {
     fn easings_read_as_text() {
         assert_eq!(parse_easing("spring"), Some(Easing::Spring));
         assert_eq!(parse_easing("bounce"), None);
+        assert_eq!(parse_easing("ease_in"), Some(Easing::EaseIn));
+        assert_eq!(parse_easing("hold"), Some(Easing::Hold));
+        assert_eq!(
+            parse_easing("cubic_bezier"),
+            Some(Easing::CubicBezier(
+                jstream_control::protocol::Bezier::BACK_OUT
+            ))
+        );
     }
 
     #[test]
