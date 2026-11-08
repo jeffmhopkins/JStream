@@ -184,6 +184,8 @@ pub(crate) fn gpu_draw() -> OpenPreviewDraw {
             "preview compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
+        // A still drawn small holds only the texels it is drawn with (#1139).
+        cache.draw_uploads_small(true);
         let mut chains = Chains::default();
         let draw: PreviewDraw = Box::new(move |shot, live, captures, size, at, out, meter| {
             cache.begin_frame();
