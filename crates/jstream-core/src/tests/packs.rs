@@ -233,6 +233,49 @@ fn a_reload_moves_live_filters_through_the_renames() {
     );
 }
 
+/// An undo step that re-adds a filter deleted before its pack's renames answers
+/// `undo_conflict`, as the other steps the upgrade invalidates do (#1418, ADR-0032):
+/// its settings still hold the old IDs, which the new version refuses.
+#[test]
+fn undoing_a_delete_from_before_the_renames_is_an_undo_conflict() {
+    let temp = Temp::new("renames-delete");
+    let path = temp.0.join("scenes.json");
+    let engine = Engine::new()
+        .with_collection_file(&path)
+        .expect("collection file");
+    engine.watch_effect_packs(temp.0.join("effects"));
+    let control = connected(&engine);
+    write(&control, MUL).expect("written");
+    tinted(&control);
+    super::batch(
+        &control,
+        Batch {
+            edits: vec![Edit::FilterRemove {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("bg"),
+                },
+                filter_id: FilterId::new("tint"),
+            }],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("the filter is deleted");
+    let before = engine.rev();
+
+    // No filter of the kind is left to move, but the new version is still a revision.
+    write_renamed(&control);
+    assert_eq!(engine.rev(), before.next().expect("rev"), "one revision");
+
+    let undo = block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo))));
+    assert_eq!(
+        undo.err().as_ref().and_then(super::code),
+        Some("undo_conflict")
+    );
+    assert!(saved_filter(&path).is_null(), "the filter stays deleted");
+}
+
 /// A filter loaded from the collection file before its pack keeps its settings as the
 /// file has them, and they follow the renames from the recorded version once the pack
 /// loads (#1353).

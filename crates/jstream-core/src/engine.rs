@@ -5407,17 +5407,21 @@ impl Shared {
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
             // Filters of a changed kind follow its renames (#1353, ADR-0025): a filter
-            // loaded before its pack, or one a reload raised the version of.
+            // loaded before its pack, or one a reload raised the version of. A new version
+            // is logged even when no filter moved, so an undo step still holding a
+            // deleted filter's old settings conflicts with it (#1418).
             let migrations = &update.migrations;
             let upgraded = state.graph.upgrade_filters(&before, &|kind, stored, from| {
                 migrations.get(kind)?.migrate(stored, from)
             });
             if let Some(upgraded) = upgraded {
-                tracing::info!(
-                    rev = %upgraded.rev,
-                    filters = upgraded.set.len(),
-                    "filters' stored settings moved to their effect's current version"
-                );
+                if !upgraded.set.is_empty() {
+                    tracing::info!(
+                        rev = %upgraded.rev,
+                        filters = upgraded.set.len(),
+                        "filters' stored settings moved to their effect's current version"
+                    );
+                }
                 state.history.record_engine(upgraded.rev, upgraded.touched);
                 state.subscribers.emit(
                     &Event::StateChanged {
