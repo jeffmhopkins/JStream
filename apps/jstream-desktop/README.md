@@ -476,12 +476,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   page makes.
 - **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
   (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
-  clock the mixer runs on. Its pages paint onto a device of the media adapter the app
-  opens for them (`WindowsGpu::open_device`) until a program stage runs; the engine then
-  lends the backend the stage's own context in its place, so the mix draws the pages,
-  and takes it back when the stage stops or leaves the GPU path mid-run, after which
-  the pages deliver no frames for the rest of that stage. The backend is added after the OS backends, so sources open on the media
-  clock. CEF runs only in the sandboxed browser helper, which the backend starts on the
+  clock the mixer runs on. Its pages paint on the engine's one GPU context, on the media
+  adapter, which the engine hands the backend when the app gives it the backend
+  (`Engine::with_browser`), and which every program stage, the preview and snapshots draw
+  on too ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5). Pages move
+  only when a lost context is replaced. The backend is added after the OS backends, so
+  sources open on the media clock and the engine has its context. CEF runs only in the sandboxed browser helper, which the backend starts on the
   first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
   doesn't link CEF, so a missing helper or missing CEF files fail that source, not the
   app. With no device, pages play audio but show no frames.
