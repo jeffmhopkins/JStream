@@ -519,7 +519,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:09879d6f277ae766", by = "agent:claude", note = "edited: a device's name in capture.targets is untrusted text, as a window's | kept from the merged side: Re-read it. The tool snapshot includes the longer canvas.set_frame_rate description. The section does not name a frame rate." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:eb6a300a0a282c6a", by = "agent:claude", note = "Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
+stamp = { hash = "b3:4d4cb123adcf4558", by = "agent:claude", note = "The MCP notes' list of light and framing filters now includes scanlines | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2778,7 +2778,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:eb6a300a0a282c6a", by = "agent:claude", note = "Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
+stamp = { hash = "b3:4d4cb123adcf4558", by = "agent:claude", note = "design notes now name scanlines and its three looks among the light and framing filters; the README's summary of the notes still holds | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2811,7 +2811,7 @@ stamp = { hash = "b3:d3eeb18e517f4d4c", by = "agent:grok", note = "Re-read the s
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:eb6a300a0a282c6a", by = "agent:claude", note = "Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
+stamp = { hash = "b3:4d4cb123adcf4558", by = "agent:claude", note = "design.rs gains scanlines guidance; the crate's purpose is unchanged | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -5469,7 +5469,7 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:e02ede5a02f8d2a6", by = "agent:claude", note = "Rewrote the @renamed sentence: the engine now moves filters left on the pack through the renames when the new version loads (#1353); Save as pack still carries values on the client." }
+stamp = { hash = "b3:463c88ba53faac44", by = "agent:claude", note = "Add filter dialog list and the presets sentence now name scanlines and Monitor, CRT and Film grain | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: Rewrote the @renamed sentence: the engine now moves filters left on the pack through the renames when the new version loads (#1353); Save as pack still carries values on the client." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:8c9742657710ad9f", by = "agent:claude", note = "edited: the device list labels, one shared capture.targets answer per form, and the capture_format lists | kept from the merged side: Re-read Design against the control dependency. The UI still drives the engine through the protocol. It does not set the base frame rate yet." }
@@ -6498,7 +6498,7 @@ stamp = { hash = "b3:134f387287849ce3", by = "agent:claude", note = "Go Live ste
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#live"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:7be834b95dd5222e", by = "agent:claude", note = "Re-read: going live is unaffected by the FL-12 renames sentence." }
+stamp = { hash = "b3:bc386cafe29154cf", by = "agent:claude", note = "UI-FEATURES only gained the scanlines presets in FL-11; going live steps unchanged | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: Re-read: going live is unaffected by the FL-12 renames sentence." }
 
 ["GETTING-STARTED#record"."body"]
 stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recording now adds through + Add output and changes its file in the output's settings (double-click its row) instead of the card's Edit; Browse… is in both." }
@@ -6507,7 +6507,7 @@ stamp = { hash = "b3:beae3183193cb336", by = "agent:outputs-1206", note = "Recor
 stamp = { hash = "b3:0c2a09f6ea00437b", by = "agent:claude", note = "Desktop usage gained --mcp/--port and the Agents bullet only; this section's steps don't use them and hold" }
 
 ["GETTING-STARTED#record"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:7be834b95dd5222e", by = "agent:claude", note = "Re-read: recording is unaffected by the FL-12 renames sentence." }
+stamp = { hash = "b3:bc386cafe29154cf", by = "agent:claude", note = "UI-FEATURES only gained the scanlines presets in FL-11; recording steps unchanged | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: Re-read: recording is unaffected by the FL-12 renames sentence." }
 
 ["GETTING-STARTED#requirements"."body"]
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
@@ -6525,7 +6525,7 @@ stamp = { hash = "b3:773f1114869d4a64", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:eed5a8099d78c9a9", by = "agent:claude", note = "edited step 2: a webcam's resolution, frame rate and video format, or Auto | merge: #1259 adds Video settings and #1261 3D model items to this body and UI-FEATURES; step 2's webcam resolution, frame rate and format still hold | kept from the merged side: Re-read the first-scene steps: a desktop file field now has Browse, and a browser still types the path. The rest of the scene, canvas and panel steps still match. | merge: merge #1249: Help's Check for updates and File Settings are named, and a file field still has Browse. The rest of the first-scene steps hold. | kept from the merged side: Re-read against the header section: Help now also has Check for updates (compares this build, links a newer release, downloads nothing) and File Settings can check once at launch, off until turned on. The scene, source and panel steps are unchanged. | kept from the merged side: UI-FEATURES DL-06 now lists the 3D model type, so step 2's list of types gains a 3D model (a glTF or GLB file, or a built-in shape such as a cube); the rest of the steps hold. | merge: The merge brought in #1259 (File › Video settings… for the canvas resolution and frame rate: video_settings.rs, a header menu entry, a Purpose bullet, a Design sentence, a GETTING-STARTED paragraph and UI-FEATURES rows); none of it touches the 3D model source. The new canvas-size paragraph sits before step 1; step 2's source list with the 3D model still holds. | kept from the merged side: Added a paragraph pointing at File › Video settings… for canvas resolution and 30/60 fps, as UI-FEATURES HD-11 describes" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md"]
-stamp = { hash = "b3:7be834b95dd5222e", by = "agent:claude", note = "Re-read: the scene guide doesn't cover custom shader renames; the FL-12 change doesn't affect it." }
+stamp = { hash = "b3:bc386cafe29154cf", by = "agent:claude", note = "UI-FEATURES only gained the scanlines presets in FL-11; nothing in the getting-started scene steps changes | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: Re-read: the scene guide doesn't cover custom shader renames; the FL-12 change doesn't affect it." }
 
 ["GETTING-STARTED#trouble"."body"]
 stamp = { hash = "b3:cdea88ae9fde1c6f", by = "agent:wave-owner", note = '''merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: logs\jstream-desktop.log and cef.log, crash-*.txt with secrets redacted and never uploaded (R-SEC-004, desktop Usage), issue and private-advisory links (registered in external.toml), SECURITY.md''' }
@@ -7152,7 +7152,7 @@ stamp = { hash = "b3:367da9f5cc37e69d", by = "agent:obs-ui-thread", note = "edit
 stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Docking now says the Inspector shows the selected item only; workspace.rs mounts just Inspector for PanelId::Inspector; app.rs provides SettingsDialog and draws Settings in the shell" }
 
 ["UI-FEATURES#filters"."body"]
-stamp = { hash = "b3:3169e41e041b98ca", by = "agent:claude", note = "FL-12 now says the engine moves stored values of filters left on the pack through the renames when the new version loads (#1353), and Save as pack carries them to the new kind." }
+stamp = { hash = "b3:96a37f7d6a6d01bd", by = "agent:claude", note = "FL-11 now lists the scanlines' Monitor, CRT and Film grain presets (#1406), matching filter_presets.rs | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: FL-12 now says the engine moves stored values of filters left on the pack through the renames when the new version loads (#1353), and Save as pack carries them to the new kind." }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/custom_shader.rs"]
 stamp = { hash = "b3:9bbb001fcee138c7", by = "agent:claude", note = "FL-12 now says the engine moves stored values of filters left on the pack through the renames when the new version loads (#1353), and Save as pack carries them to the new kind." }
@@ -7266,7 +7266,7 @@ stamp = { hash = "b3:23bc657bf1f5d312", by = "agent:claude", note = "no status c
 stamp = { hash = "b3:e562ed3306cd0292", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match" }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#filters"]
-stamp = { hash = "b3:3169e41e041b98ca", by = "agent:claude", note = "Re-read: FL-12 keeps its status; the summary counts are unchanged." }
+stamp = { hash = "b3:96a37f7d6a6d01bd", by = "agent:claude", note = "FL-11 stays built; the summary counts are unchanged | merge: #1411 (filters follow an effect pack's renames, #1353) rewrote the custom-shader renames text beside this branch's scanlines additions; the merge kept both and each still holds | kept from the merged side: Re-read: FL-12 keeps its status; the summary counts are unchanged." }
 
 ["UI-FEATURES#summary"."dep:docs/UI-FEATURES.md#header"]
 stamp = { hash = "b3:3cd7d7b88f14dd0c", by = "agent:claude-settings", note = "No row was added or changed status: HD-01's notes and the docking prose changed, counts 133/121/3/0/5/4 still match | merge: main added HD-11 (Video settings), counted in its header totals; this branch adds no row | kept from the merged side: Header bar counts now 11 rows with 9 done for HD-11 Video settings; total 134 and 122 done" }
