@@ -485,8 +485,9 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
-  Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), the `YouTube` kind, a virtual
+  Not yet: settings migrations between kind versions for sources and presets (a source
+  saved at another version is refused on load; a filter of an effect pack's kind follows
+  the effect's renames when its new version loads, #1353), the `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -1465,7 +1466,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   A filter whose kind the engine doesn't describe (a pack that isn't installed, or a
   CLAP plugin before the scan that runs after the load) loads with its settings and
   version verbatim and is saved back as it was; the engine bypasses it until its kind
-  appears.
+  appears. A filter keeps the version its settings were stored by, and that is what a
+  save writes: one of a removed kind, or one a downgraded pack can't read, keeps the
+  older or newer version until a pack of that version moves it (#1353).
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
   `filters` and an item's `effects`, each omitted while empty; the migration from 1
