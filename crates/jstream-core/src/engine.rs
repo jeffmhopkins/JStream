@@ -2595,8 +2595,13 @@ impl Engine {
             let encoders = gate
                 .running
                 .get(output_id)
-                .and_then(Running::encoders)
-                .ok_or_else(not_running)?;
+                .ok_or_else(not_running)?
+                .encoders()
+                .ok_or_else(|| ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` sends no video, so there is none to probe"
+                    ),
+                })?;
             Ok(encoders.probe_job(codecs, frames))
         })();
         match job {

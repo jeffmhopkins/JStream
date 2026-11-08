@@ -455,7 +455,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)):
   every output's `Encoders` holds a `ProbeTap`, which its render-thread tap shares.
   `quality.probe` checks the call and finds the running output's session under the
-  locks, arms the tap and subscribes to the session's packets, then answers `Pending`
+  locks, subscribes to the session's packets (from the keyframe the subscription asks
+  for, with no second request) and arms the tap, then answers `Pending`
   from a `jstream-quality-probe` thread. While the tap is armed the render thread
   copies each frame it pushes to that session, with its `pts`, against credit the
   probe grants (four between two of its reads), under a lock it only tries, so it never
@@ -3533,7 +3534,9 @@ BT.709 in the target's range) is a submit of its own that stages the target's fe
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back as RGBA8, and virtual cameras the program; a
 mix with a session on the GPU path is read back too while a quality probe is armed on
-that session, whose reference frames are those readbacks (ADR-0145); a
+that session, whose reference frames are those readbacks (ADR-0145), and a
+readback made only for the probe that falls behind is no dropped frame, so it is never
+counted in the drops (`MixFrame::probe_only`); a
 mix none of them is fed is not read back, and each readback is counted
 (`OutputStats::readbacks`, one per mix read back). The readback never waits for the
 GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw

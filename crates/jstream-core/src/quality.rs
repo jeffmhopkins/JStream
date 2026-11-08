@@ -214,9 +214,9 @@ fn probe(job: &ProbeJob, armed: &Armed) -> Result<QualityProbeInfo, ProtocolErro
                 "this platform has no decoder for the stream's {codec:?}: {err}"
             ))
         })?;
-    // The probe asks for a keyframe of its own: the subscription's request came before
-    // the tap was armed.
-    job.packets.request_keyframe();
+    // No keyframe of its own: the subscription starts at the one it asked for, and every
+    // picture decoded after it meets a reference copied after the tap was armed, so a
+    // second request would only force another IDR onto the live stream.
     let deadline = Instant::now() + PROBE_TIMEOUT;
     let want = job.frames as usize;
     let mut matcher = Matcher::default();
@@ -561,8 +561,17 @@ mod tests {
                 };
             }
         }
-        let q = measure(0, &a, &noisy).unwrap();
-        assert!(q.ssim_y.get() < 0.95, "{q:?}");
+        let mut shifted = a.clone();
+        for y in 0..32 {
+            for v in shifted.row_mut(0, y).unwrap().iter_mut() {
+                *v = v.saturating_add(12);
+            }
+        }
+        let noise = measure(0, &a, &noisy).unwrap();
+        let shift = measure(0, &a, &shifted).unwrap();
+        assert!(noise.ssim_y.get() < 0.95, "{noise:?}");
+        assert!(shift.ssim_y.get() > 0.95, "{shift:?}");
+        assert!(noise.ssim_y.get() < shift.ssim_y.get());
     }
 
     #[test]

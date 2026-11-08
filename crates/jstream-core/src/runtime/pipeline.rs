@@ -250,6 +250,10 @@ pub(crate) struct MixFrame {
     /// Ticks this mix was not read back because every readback buffer was still on its
     /// way (R-RT-004), counted by the draw.
     pub(crate) unread: u64,
+    /// Whether this tick reads it back only for a quality probe of a GPU session, which
+    /// is sent every frame whether or not the readback keeps up: its `unread` are no
+    /// dropped frames, so [`MixFrame::take_unread`] counts none (ADR-0145).
+    pub(crate) probe_only: bool,
     /// The platform's NV12 encode target on the compositor's device to convert it into
     /// this tick (ARCH › GPU pipeline, step 4), for the sessions on the GPU path.
     pub(crate) nv12: Option<GpuFrame>,
@@ -312,8 +316,16 @@ impl MixFrame {
             push_at: None,
             push_fresh: false,
             unread: 0,
+            probe_only: false,
             nv12: None,
         }
+    }
+
+    /// This tick's frames not read back, which go into the published drops (R-RT-004),
+    /// and resets them. A readback only for a probe drops no frame, so it counts none.
+    fn take_unread(&mut self) -> u64 {
+        let unread = std::mem::take(&mut self.unread);
+        if self.probe_only { 0 } else { unread }
     }
 }
 
@@ -3146,7 +3158,9 @@ impl Frames {
                 .any(|owner| is_program(frame, size, owner.as_ref()));
             // A GPU session is read back too while a probe is armed on it: the readback
             // is its reference frame (ADR-0145).
-            frame.readback = held || taps.iter().any(|tap| !tap.gpu || tap.probed());
+            let fed = held || taps.iter().any(|tap| !tap.gpu);
+            frame.readback = fed || taps.iter().any(|tap| tap.probed());
+            frame.probe_only = frame.readback && !fed;
             encode.starved = false;
             let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
             if !frame.due || gpu_taps == 0 {
@@ -3595,7 +3609,7 @@ fn render_loop(job: RenderJob) {
             reader.adopt();
         }
         for frame in &mut frames.mixes {
-            unread = unread.saturating_add(std::mem::take(&mut frame.unread));
+            unread = unread.saturating_add(frame.take_unread());
         }
         drops.publish(
             capture_drops(captures.stats())
@@ -5449,6 +5463,26 @@ mod tests {
         // A frame not due pushes nothing.
         frame.due = false;
         assert_eq!(frame.push_time(us(266), false), None);
+    }
+
+    /// A mix read back only for a probe of a GPU session drops no frame when its
+    /// readback falls behind, so its misses never reach the published drops; a mix
+    /// whose readback feeds a session or a camera counts them (R-RT-004, ADR-0145).
+    #[test]
+    fn a_readback_only_for_a_probe_counts_no_drops() {
+        let size = FrameSize::new(4, 4).expect("size");
+        let mut frame = MixFrame::new(None, size, 1, None);
+        frame.unread = 2;
+        assert_eq!(frame.take_unread(), 2, "a fed readback's misses are drops");
+        assert_eq!(frame.unread, 0, "reset");
+        frame.probe_only = true;
+        frame.unread = 3;
+        assert_eq!(
+            frame.take_unread(),
+            0,
+            "only the probe's reference was missed"
+        );
+        assert_eq!(frame.unread, 0, "reset");
     }
 
     /// Less than a period late keeps the tick. A period or more skips to the latest

@@ -40,7 +40,10 @@ without any platform code.
    back only while a probe is armed. The thread never blocks on the probe or frees a
    copy: it copies only against credit the probe grants (a few frames between two of the
    probe's reads), under a lock it only tries, and the probe disarms the tap before it
-   drops the receiving end. Nothing is copied or read back while no probe is armed.
+   drops the receiving end. Nothing is copied or read back while no probe is armed. A
+   GPU session is sent every frame whether or not that readback keeps up, so a readback
+   made only for the probe that falls behind is no dropped frame: it is never counted
+   in the output's drops.
 2. **The packets come from a subscription to the session**, which starts at the next
    keyframe and asks for one. A `jstream-quality-probe` thread decodes them with the
    platform's decoder (NV12 out, software preferred), meets each picture with its
