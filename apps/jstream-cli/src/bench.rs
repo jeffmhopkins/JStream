@@ -11,6 +11,11 @@
 //! packet at any stage, no skipped render tick, the recording at the program's rate and
 //! the program's frames inside their budget. `--gates <file>` reads other limits from a
 //! JSON file; a field it leaves out keeps its default.
+//!
+//! After each switch it probes the recording's stream (`quality.probe`, ADR-0143): PSNR
+//! and SSIM of three encoded frames against what the encoder was given. The probe gates
+//! read the worst frame of every probe, and a probe the engine couldn't take fails its
+//! own gate.
 
 use crate::block::block_on;
 use crate::exit::CliError;
@@ -20,6 +25,7 @@ use jstream_control::protocol::{
     QueryResult, RecordContainer, SceneId, Settings, Size, SourceId, SourceKind,
     TransitionPresetId, Vec2, ViewCounts,
 };
+use jstream_control::protocol::{MAX_PSNR_DB, ProbeStream, QualityProbeInfo};
 use jstream_control::{Control, EventStream};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -151,12 +157,20 @@ pub struct Gates {
     pub view_skipped: u64,
     /// Frames or decoders a client's view had refused.
     pub view_decode_errors: u64,
+    /// Switches whose quality probe of the recording failed (ADR-0143).
+    pub failed_probes: u64,
+    /// The lowest luma PSNR, in dB, any probed frame of the recording may have.
+    pub min_probe_psnr_y: f64,
+    /// The lowest luma SSIM any probed frame of the recording may have.
+    pub min_probe_ssim_y: f64,
 }
 
 impl Default for Gates {
     /// The alpha.5 bar: nothing dropped or late anywhere, the recording at the
     /// program's rate (within 2%, for the stats' one-second granularity), every program
-    /// frame in budget, and every client view showing pictures without a placeholder.
+    /// frame in budget, every client view showing pictures without a placeholder, and
+    /// every probed frame of the recording at 35 dB luma PSNR and 0.95 SSIM or better,
+    /// where a hardware H.264 encoder at the default profile's rate sits well above.
     fn default() -> Self {
         Gates {
             capture_frames: 0,
@@ -180,6 +194,9 @@ impl Default for Gates {
             view_blanks: 0,
             view_skipped: 0,
             view_decode_errors: 0,
+            failed_probes: 0,
+            min_probe_psnr_y: 35.0,
+            min_probe_ssim_y: 0.95,
         }
     }
 }
@@ -250,6 +267,12 @@ pub struct Switch {
     /// Why there is no sheet.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+    /// The recording's quality probe after the switch, when it answered.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub probe: Option<QualityProbeInfo>,
+    /// Why there is no probe.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub probe_error: Option<String>,
 }
 
 /// What the recording did over the window.
@@ -805,14 +828,12 @@ fn measure(
         if Instant::now() >= next_switch && plan.scenes.len() > 1 {
             let scene = plan.scenes[target % plan.scenes.len()].clone();
             target += 1;
-            switches.push(switch(
-                control,
-                &scene,
-                options,
-                dir,
-                window,
-                switches.len(),
-            ));
+            let mut switched = switch(control, &scene, options, dir, window, switches.len());
+            match probe(control, &plan.output) {
+                Ok(probe) => switched.probe = Some(probe),
+                Err(error) => switched.probe_error = Some(error.to_string()),
+            }
+            switches.push(switched);
             next_switch += beat;
         }
         thread::sleep(Duration::from_millis(20));
@@ -873,14 +894,52 @@ fn switch(
             at_ms,
             sheet: Some(file),
             error: None,
+            probe: None,
+            probe_error: None,
         },
         Err(error) => Switch {
             scene: scene.to_string(),
             at_ms,
             sheet: None,
             error: Some(error.to_string()),
+            probe: None,
+            probe_error: None,
         },
     }
+}
+
+/// The recording's quality probe (ADR-0143): three frames from its next keyframe on.
+fn probe(control: &dyn Control, output: &OutputId) -> Result<QualityProbeInfo, CliError> {
+    match query(
+        control,
+        Query::QualityProbe {
+            stream: ProbeStream::Output {
+                output_id: output.clone(),
+            },
+            frames: None,
+        },
+    )? {
+        QueryResult::QualityProbe { probe } => Ok(probe),
+        other => Err(CliError::Bench(format!(
+            "the engine answered quality.probe with {}",
+            other.name()
+        ))),
+    }
+}
+
+/// The worst luma PSNR and SSIM of any frame the switches' probes measured, or the
+/// best possible values when none did.
+fn worst_probe(switches: &[Switch]) -> (f64, f64) {
+    switches
+        .iter()
+        .filter_map(|switch| switch.probe.as_ref())
+        .flat_map(|probe| &probe.frames)
+        .fold((f64::from(MAX_PSNR_DB), 1.0), |(psnr, ssim), frame| {
+            (
+                psnr.min(f64::from(frame.psnr_y.get())),
+                ssim.min(f64::from(frame.ssim_y.get())),
+            )
+        })
 }
 
 fn save_sheet(sheet: &FrameSheet, dir: &Path, n: usize) -> Result<String, CliError> {
@@ -955,6 +1014,8 @@ fn judge(scenario: Scenario, measured: Measured, gates: &Gates) -> Run {
         0.0
     };
     let failed = switches.iter().filter(|s| s.sheet.is_none()).count() as u64;
+    let failed_probes = switches.iter().filter(|s| s.probe.is_none()).count() as u64;
+    let (probe_psnr_y, probe_ssim_y) = worst_probe(&switches);
     let streams = profile
         .streams
         .iter()
@@ -1074,6 +1135,13 @@ fn judge(scenario: Scenario, measured: Measured, gates: &Gates) -> Run {
             count(views.decode_errors),
             count(gates.view_decode_errors),
         ),
+        Check::at_most(
+            "failed_probes",
+            count(failed_probes),
+            count(gates.failed_probes),
+        ),
+        Check::at_least("probe_psnr_y", probe_psnr_y, gates.min_probe_psnr_y),
+        Check::at_least("probe_ssim_y", probe_ssim_y, gates.min_probe_ssim_y),
     ];
     let pass = checks.iter().all(|check| check.pass);
     Run {
@@ -1188,6 +1256,13 @@ pub fn summary(report: &Report) -> String {
                     switch.scene
                 );
             }
+            if let Some(error) = &switch.probe_error {
+                let _ = writeln!(
+                    text,
+                    "\nSwitch {n} to `{}`: no quality probe ({error}).",
+                    switch.scene
+                );
+            }
         }
         text.push('\n');
     }
@@ -1244,9 +1319,72 @@ mod tests {
                 at_ms: 4000,
                 sheet: Some("switch-0.png".into()),
                 error: None,
+                probe: Some(probed(&[(42.0, 0.99), (41.0, 0.985)])),
+                probe_error: None,
             }],
             profile,
         }
+    }
+
+    /// A probe whose frames have these luma PSNRs and SSIMs.
+    fn probed(frames: &[(f32, f32)]) -> QualityProbeInfo {
+        let finite = |v: f32| Finite32::new(v).expect("finite");
+        QualityProbeInfo {
+            frames: frames
+                .iter()
+                .map(
+                    |&(psnr_y, ssim_y)| jstream_control::protocol::FrameQuality {
+                        psnr_y: finite(psnr_y),
+                        psnr: finite(psnr_y),
+                        ssim_y: finite(ssim_y),
+                        ..Default::default()
+                    },
+                )
+                .collect(),
+            ..QualityProbeInfo::default()
+        }
+    }
+
+    /// ADR-0143: the worst probed frame is gated, and a switch without a probe fails
+    /// its own gate.
+    #[test]
+    fn a_blurry_probe_or_a_missing_one_fails() {
+        let tick = Tick {
+            drops: DropCounts::default(),
+            recording: Some(stats(0, 0, 0, 0)),
+        };
+        let last = Tick {
+            drops: DropCounts::default(),
+            recording: Some(stats(600, 10_000, 1, 0)),
+        };
+        let mut run = measured(tick, last, profile(1000.0 / 60.0, 600, 0));
+        run.switches[0].probe = Some(probed(&[(44.0, 0.99), (31.5, 0.93)]));
+        let mut missing = run.switches[0].clone();
+        missing.probe = None;
+        missing.probe_error = Some("no decoder".into());
+        run.switches.push(missing);
+        let judged = judge(Scenario::Basic, run, &Gates::default());
+        let failed: Vec<_> = judged
+            .checks
+            .iter()
+            .filter(|check| !check.pass)
+            .map(|check| (check.name, check.value))
+            .collect();
+        assert_eq!(
+            failed,
+            [
+                ("failed_probes", 1.0),
+                ("probe_psnr_y", 31.5),
+                ("probe_ssim_y", f64::from(0.93f32))
+            ]
+        );
+        let text = summary(&Report {
+            cli: "test",
+            gates: Gates::default(),
+            runs: vec![judged],
+            pass: false,
+        });
+        assert!(text.contains("no quality probe (no decoder)"), "{text}");
     }
 
     #[test]

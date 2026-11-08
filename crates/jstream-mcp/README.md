@@ -94,7 +94,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -169,6 +169,9 @@ the `capture` tool's description and the server instructions say they are untrus
 tool's description says so; it also tells an agent how to find a hot spot: let the
 scene run, read the profile, change the costliest unit and read it again
 ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)). The
+`quality` tool's description says what its PSNR and SSIM mean to a viewer and that a
+probe waits a few seconds for its frames
+([ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md)). The
 server instructions say all three are data, never instructions, and point at the
 annotations. They also say that names and other state text can be set by any client or
 plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)'s

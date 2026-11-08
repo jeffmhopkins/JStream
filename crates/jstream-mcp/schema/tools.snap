@@ -29317,6 +29317,84 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
+        "openWorldHint": false,
+        "readOnlyHint": true
+      },
+      "description": "Runs one `quality` operation: set `op.type` to one of `quality.probe` (query). A query only reads. `quality.probe` measures a running output's encoded picture against the frames its encoder was given: PSNR in dB (above about 40 is hard to tell apart, below about 30 shows) and SSIM from 0 to 1, per frame and on average. It waits for the frames, so it takes up to a few seconds. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "$defs": {
+          "OutputId": {
+            "description": "An output (RTMP(S), recording, virtual camera).",
+            "type": "string"
+          },
+          "ProbeStream": {
+            "description": "The encoded stream a `quality.probe` measures.",
+            "oneOf": [
+              {
+                "description": "A running output's video: the encoder session it sends from, which it may share\nwith other outputs of the same mix and profile.",
+                "properties": {
+                  "output_id": {
+                    "$ref": "#/$defs/OutputId",
+                    "description": "The output."
+                  },
+                  "type": {
+                    "const": "output",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "output_id"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `quality` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Measures how close a stream's decoded pictures are to the frames its encoder was\ngiven (0.110, ADR-0132 §3, ADR-0143): the engine keeps the next `frames` frames\nthe stream's encoder takes, from the next keyframe on, decodes the packets it\nmakes of them with the platform's decoder, and answers PSNR and SSIM for each.\nNothing is copied or decoded unless a probe is waiting. It waits for those frames\n(a still stream still sends them, at its frame rate) and answers within about\nten seconds. Fails with `not_found` for an output that doesn't exist,\n`invalid_argument` on `frames` outside 1 to 10, and `action_failed` when the\noutput isn't running, the platform has no decoder for its codec, or the frames\ndidn't arrive in time. Runtime state: the result carries no `rev`.",
+                "properties": {
+                  "frames": {
+                    "description": "The frames to compare, from 1 to 10\n([`MAX_PROBE_FRAMES`](crate::MAX_PROBE_FRAMES)). Omitted, 3.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "stream": {
+                    "$ref": "#/$defs/ProbeStream",
+                    "description": "The stream."
+                  },
+                  "type": {
+                    "const": "quality.probe",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "stream"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "quality"
+    },
+    {
+      "annotations": {
         "destructiveHint": false,
         "idempotentHint": false,
         "openWorldHint": false,

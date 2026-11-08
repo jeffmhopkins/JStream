@@ -297,7 +297,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/runtime/**"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/quality.rs", "crates/jstream-core/src/runtime/**"]
 -->
 
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
@@ -422,6 +422,19 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   session's end marks its views ended, and they are forgotten once no window reaches
   their last report. Each sample copies them, and a window lists the views reported
   since its base, with their growth.
+  The quality probe (protocol 0.110, `quality.rs`,
+  [ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md)):
+  every output's `Encoders` holds a `ProbeTap`, which its render-thread tap shares.
+  `quality.probe` checks the call and finds the running output's session under the
+  locks, arms the tap and subscribes to the session's packets, then answers `Pending`
+  from a `jstream-quality-probe` thread. While the tap is armed the render thread
+  copies each frame it pushes to that session, with its `pts`, against credit the
+  probe grants (four between two of its reads), under a lock it only tries, so it never
+  waits or frees a copy; a session on the GPU path is read back for it only then. The
+  probe thread decodes the packets with the platform's decoder (NV12, software
+  preferred), meets each picture with its reference by `pts` in microseconds, whichever
+  arrives first (16 of each wait at most), and measures PSNR and SSIM as NV12; it
+  disarms the tap before it drops the channel. It answers within ten seconds, or fails.
 
 <a id="contents-tests"></a>
 ## Contents: tests
@@ -524,6 +537,9 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   absolute on this machine, no `.part` file left by a failed start), recording while
   streaming on one shared encoder session (and separate sessions on separate
   profiles, and on a half-rate video mix held to its rate without being starved), a
+  quality probe's checks (an unknown output, too many frames, a stopped output) and,
+  on a running recording, its copied frames meeting the fake decoder's pictures by
+  `pts` (which then fail it for their 16 × 16 size), a
   second hardware session refused as `hardware_session_limit` naming the holder, under
   `prefer` or `require`, with `avoid` opening software beside it and `prefer` still
   falling back when no hardware session is open, and an HEVC start the machine lists no
@@ -790,6 +806,9 @@ releasing it (see *Snapshots*). A frame sheet's thread reads the same once per p
 before the picture is handed off. `plugin.clap_scan` and `plugin.clap_rescan` (0.106) run
 outside it: a rescan runs plugin host processes for seconds and takes the collection
 lock only to add the kinds it found (see *CLAP plugins* under Purpose).
+`quality.probe` (0.110) checks the output under the collection lock and finds its
+session under the pipeline gate, one after the other, then measures on a thread of its
+own with neither held (see *Contents: media*).
 
 A pipeline `output.start` or `output.stop` holds the collection lock only while it
 changes that output's state and queues events. Opening devices, waiting for the
@@ -3167,7 +3186,9 @@ changes go to the `jstream-camera-controls` thread over a channel, sent under th
 collection lock; that thread takes no engine lock while it sets them on the device. The CLAP scan's locks
 (`ClapScans`: one held for a whole scan, so scans run one at a time, and leaf locks on
 its hosts, reason and last scan) are taken with no engine lock held; a scan takes the
-collection lock under its scan lock only to add the kinds it found.
+collection lock under its scan lock only to add the kinds it found. A quality probe's
+tap lock (`ProbeTap`) is a leaf: the probe takes it with no engine lock held, and the
+render thread only tries it.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit
@@ -3477,6 +3498,8 @@ the tick's frame is dropped for that mix's GPU sessions and counted in
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
 It pushes that target, stamped with the tick's time, to every such session. Sessions
 on the CPU path get the mix read back as RGBA8, and virtual cameras the program; a
+mix with a session on the GPU path is read back too while a quality probe is armed on
+that session, whose reference frames are those readbacks (ADR-0143); a
 mix none of them is fed is not read back, and each readback is counted
 (`OutputStats::readbacks`, one per mix read back). The readback never waits for the
 GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw

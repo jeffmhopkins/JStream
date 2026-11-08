@@ -348,6 +348,25 @@ pub enum Query {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top: Option<u32>,
     },
+    /// Measures how close a stream's decoded pictures are to the frames its encoder was
+    /// given (0.110, ADR-0132 §3, ADR-0143): the engine keeps the next `frames` frames
+    /// the stream's encoder takes, from the next keyframe on, decodes the packets it
+    /// makes of them with the platform's decoder, and answers PSNR and SSIM for each.
+    /// Nothing is copied or decoded unless a probe is waiting. It waits for those frames
+    /// (a still stream still sends them, at its frame rate) and answers within about
+    /// ten seconds. Fails with `not_found` for an output that doesn't exist,
+    /// `invalid_argument` on `frames` outside 1 to 10, and `action_failed` when the
+    /// output isn't running, the platform has no decoder for its codec, or the frames
+    /// didn't arrive in time. Runtime state: the result carries no `rev`.
+    #[serde(rename = "quality.probe")]
+    QualityProbe {
+        /// The stream.
+        stream: crate::quality::ProbeStream,
+        /// The frames to compare, from 1 to 10
+        /// ([`MAX_PROBE_FRAMES`](crate::MAX_PROBE_FRAMES)). Omitted, 3.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        frames: Option<u32>,
+    },
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -424,6 +443,7 @@ impl Query {
             Query::CodecDownloads => "codec.downloads",
             Query::CollectionInfo => "collection.info",
             Query::ProfileGet { .. } => "profile.get",
+            Query::QualityProbe { .. } => "quality.probe",
         }
     }
 }
@@ -828,6 +848,13 @@ pub enum QueryResult {
         #[serde(flatten)]
         profile: ProfileInfo,
     },
+    /// The result of `quality.probe` (0.110). Runtime state, so it carries no `rev`.
+    #[serde(rename = "quality.probe")]
+    QualityProbe {
+        /// The measurement.
+        #[serde(flatten)]
+        probe: crate::quality::QualityProbeInfo,
+    },
 }
 
 impl QueryResult {
@@ -870,6 +897,7 @@ impl QueryResult {
             QueryResult::CodecDownloads { .. } => "codec.downloads",
             QueryResult::CollectionInfo { .. } => "collection.info",
             QueryResult::ProfileGet { .. } => "profile.get",
+            QueryResult::QualityProbe { .. } => "quality.probe",
         }
     }
 }

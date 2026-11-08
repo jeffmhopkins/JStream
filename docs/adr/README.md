@@ -151,4 +151,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0136](0136-an-effects-outset-follows-its-settings.md) | An effect's outset follows its settings | accepted | agent |  |
 | [ADR-0137](0137-midi-visualization-sources.md) | MIDI visualization sources draw a lock-free per-input state on the CPU | accepted | agent |  |
 | [ADR-0140](0140-source-types-and-decoding-scope-v3.md) | Source types and decoding scope v3: Linux decodes the engine's own H.264 through Cisco's OpenH264 | accepted | maintainer |  |
+| [ADR-0143](0143-the-quality-probe-reads-back-the-compositor.md) | The quality probe compares the compositor's readback with the decoded stream | accepted | agent |  |
 <!-- @generated end adr-index -->

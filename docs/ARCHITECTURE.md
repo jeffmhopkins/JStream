@@ -960,6 +960,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   each named thread's CPU, past them each encoded stream and the mixer (0.92), and what
   the clients' views did with their preview pictures, as they report it with
   `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md));
+  `quality.probe` (0.110, [ADR-0143](adr/0143-the-quality-probe-reads-back-the-compositor.md))
+  → PSNR and SSIM of a running output's next few encoded frames, decoded by the
+  platform, against the frames its encoder was given;
   audio levels are the `meters.tick` event, not a query).
 - **Events** (`state.changed{rev}`, `output.state_changed`, `events.dropped`, `stats.tick{seq, drops, load, chains, outputs}`, `meters.tick`,
   `source.size_changed` (protocol 0.40), …).
@@ -1071,7 +1074,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
@@ -1110,7 +1113,9 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 - **Profiling:** the `profile` tool's `profile.get` tells an agent where a frame's time
   goes, by thread, scene, item, chain and source, so it can find what makes a scene slow,
   change it, and measure again
-  ([ADR-0103](adr/0103-per-item-performance-profile.md)).
+  ([ADR-0103](adr/0103-per-item-performance-profile.md)). The `quality` tool's
+  `quality.probe` tells it how a running output's picture looks after encoding
+  ([ADR-0143](adr/0143-the-quality-probe-reads-back-the-compositor.md)).
 - **Preview streams** need a binary channel, which MCP doesn't have, so the `preview`
   tool's `preview.subscribe` fails with `action_failed`; an agent looks with
   `video.snapshot`.

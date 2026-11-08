@@ -90,6 +90,7 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name, and the webcams a `webcam`'s `device` can, each with its formats, then its camera controls (name, value, range, step, default, and whether the camera sets it itself), on the lines below it) |
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
 | `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
+| `quality probe <output-id> [<frames>]` | query `quality.probe` (PSNR and SSIM of a running output's next 3, or up to 10, encoded frames against the frames its encoder was given, printed as JSON, [ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `item show\|hide\|toggle <item-id> [--scene <scene-id>]` | action `item.show`, `item.hide` or `item.toggle` (the item's own placement, or the one a keyframe `--scene` overrides, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) |
@@ -299,7 +300,9 @@ measured the same way on every machine (#1220).
   a recorded frame (within 20 seconds, or the run fails) and lasts `--seconds` (5 to 60,
   default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
   switches to the other scene with `scene.switch_and_watch` and the `--preset`
-  transition (default `fade`), saving the frame sheet as `<dir>/switch-<n>.png`. At the
+  transition (default `fade`), saving the frame sheet as `<dir>/switch-<n>.png`, then
+  probes the recording's stream with `quality.probe` (three frames, protocol 0.110,
+  [ADR-0143](../../docs/adr/0143-the-quality-probe-reads-back-the-compositor.md)). At the
   end it waits for one more `stats.tick`, reads `profile.get` over the window, then
   stops and deletes the recording, puts back the scene that was on program, and deletes
   what it created. It cleans up after a failure too.
@@ -318,19 +321,22 @@ measured the same way on every machine (#1220).
   (`views`; a view's reopens are listed, not gated, since a scene switch reopens the
   canvas's stream). The view gates read what the clients connected to the engine
   reported, such as the desktop app's canvas and projectors; with none, they pass, and
-  the summary says no client reported a view. `--gates
+  the summary says no client reported a view. The probe gates fail a switch whose probe
+  the engine couldn't take (the summary says why), and the worst frame of every probe
+  under 35 dB luma PSNR or 0.95 luma SSIM. `--gates
   <file>` reads a JSON object that overrides the limits it names: the counts
   `capture_frames`, `audio_frames`, `render_ticks`, `encode_frames`, `encode_blocks`,
   `output_packets`, `recording_dropped_frames`, `recording_dropped_packets`,
   `failed_switches`, `stream_dropped_frames`, `stream_late_frames`,
   `mixer_late_blocks`, `mixer_skipped_frames`, `mixer_underrun_frames`,
   `mixer_dropped_frames`, `view_placeholders`, `view_blanks`, `view_skipped` and
-  `view_decode_errors` (each 0), `min_fps_ratio` (the share of the program's rate, 0.98)
-  and `max_over_budget_pct` (0). An unknown field is a usage error.
+  `view_decode_errors` and `failed_probes` (each 0), `min_fps_ratio` (the share of the
+  program's rate, 0.98), `max_over_budget_pct` (0), `min_probe_psnr_y` (35) and
+  `min_probe_ssim_y` (0.95). An unknown field is a usage error.
 - **Output.** It prints and writes `<dir>/summary.md`, a table per scenario of each
   gate's measured value, limit and verdict after a line per reported view, and writes `<dir>/report.json` with
   everything measured: the drops, the recording's frames, rate, bit rate and drops, the
-  switches and the window's whole `profile.get`. It exits 0 when every gate passed and 4
+  switches with their probes, and the window's whole `profile.get`. It exits 0 when every gate passed and 4
   when one failed (the files are written either way). It exits 5 when a run couldn't
   finish: the recording sent no frame within 20 seconds (on an engine with no H.264
   encoder, say), or the engine answered with something the bench can't read. An engine
@@ -341,8 +347,8 @@ measured the same way on every machine (#1220).
   write there: it runs on the same machine, or the path is one both share. Otherwise
   its recording fails to start and the run exits 5.
 - **Not yet:** media, browser, display and webcam scenarios; per-output and preview
-  stream stats in `profile.get`; the clients' received frame rate; an image-quality
-  probe; a CI job (#1220).
+  stream stats in `profile.get`; the clients' received frame rate; a probe of a preview
+  stream; a CI job (#1220).
 
 **Exit codes.** Provisional until the maintainer confirms the scheme
 ([open question 4](#design)); after that, a released code keeps its meaning.

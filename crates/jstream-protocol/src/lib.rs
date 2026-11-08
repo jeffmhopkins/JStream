@@ -37,6 +37,7 @@ pub mod parity;
 mod plugin;
 mod preview;
 mod profile;
+mod quality;
 mod query;
 mod schema;
 mod settings;
@@ -137,6 +138,10 @@ pub use profile::{
     DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
     MAX_PROFILE_TOP, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
     ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile, ViewProfile,
+};
+pub use quality::{
+    DEFAULT_PROBE_FRAMES, FrameQuality, MAX_PROBE_FRAMES, MAX_PSNR_DB, ProbeStream,
+    QualityProbeInfo, probe_frames,
 };
 pub use query::{
     CameraControlInfo, CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget,
