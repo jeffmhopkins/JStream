@@ -198,7 +198,7 @@ pub(crate) fn file_uri_path(uri: &str) -> Option<PathBuf> {
     Some(path)
 }
 
-/// Shows `choice` through the portal for the window `parent` (see [`request`]) and
+/// Shows `choice` through the portal for the window `parent` (see `request`) and
 /// returns the path the person picked, or `None` if they cancelled. Blocks until they
 /// answer, for up to an hour, so it must not run on a UI thread.
 ///
