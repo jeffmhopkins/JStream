@@ -396,9 +396,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu, Check for updates
   and About dialog link to), or to Cisco's OpenH264 licence at exactly
   `https://www.openh264.org/BINARY_LICENSE.txt` (the link in About and in Outputs ›
-  Encoders, #1165), opens in the system browser, through Explorer (on Linux `xdg-open`,
-  found on `PATH`) with the URL as one argument, and never in the window. So a page can
-  make the app start one OS process, Explorer or `xdg-open`, for those URLs only; the Cisco URL is that one string, and no comma,
+  Encoders, #1165), opens in the system browser, through Explorer (on macOS `/usr/bin/open`, on Linux
+  `xdg-open`, found on `PATH`) with the URL as one argument, and never in the window. So a
+  page can make the app start one OS process, Explorer, `open` or `xdg-open`, for those
+  URLs only; the Cisco URL is that one string, and no comma,
   backslash, quote, space or percent escape can reach its command line. Every
   other new window is refused, and a
   projector can open none. The page gets two Tauri commands, `pick_path` (`pick.rs`)
