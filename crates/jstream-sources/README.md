@@ -186,10 +186,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `drawn(name)` is the state a source's `input` setting draws. An input thread pushes
   through a `MidiFeed` (`feed(name)`): its own state and the every-input one, looked up
   once, and a `jstream-midi` `Tempo` tracker its clock and transport messages run,
-  which publishes a `TempoReading` (time, BPM, beat, playing) to both states
-  (`MidiState::tempo`) through a sequence-numbered cell, without a lock. The
-  every-input state takes one feed's clock at a time, until that clock has been silent
-  for `CLOCK_TIMEOUT_MS` (500). `set_clock` gives it the
+  which publishes a `TempoReading` (time, last timing clock, BPM, beat, playing) to both
+  states (`MidiState::tempo`) through a sequence-numbered cell, without a lock. Only a
+  timing clock (`F8`) counts as a running clock. The every-input state takes one feed's
+  clock at a time, until that clock has been silent for `CLOCK_TIMEOUT_MS` (500); a
+  lone stop or song position doesn't take it from a clock that runs. `set_clock` gives it the
   host's media clock once (`now_ms`), and the kinds measure a note's age on it, the
   clock messages are stamped on, rather than on the paint time a source is given, which
   counts from its own start. `Context::midi` carries it; with none, the kinds draw their
@@ -262,10 +263,13 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   of `beats_per_bar` cells (1 to 16, default 4) for the bar its `input`'s MIDI clock is
   in, the beat it is on lit: the bar's first in `downbeat`, the others in `color`,
   flashing at full as the beat starts and dimming to 35% as it passes. Stopped, the
-  beat the song is on shows at 35%; with no clock for half a second, nothing is lit. It
-  has no `channel`, since clock is for the whole input. Size and `input` restart it;
-  the rest is live. Tests feed clock and transport and read the pixels: the beat lit,
-  the downbeat, stopped and a stopped clock.
+  beat the song is on shows at 35%, whether or not the sender's clock still runs;
+  playing with no timing clock for half a second, nothing is lit. It has no `channel`,
+  since clock is for the whole input. Size and `input` restart it; the rest is live.
+  While a clock runs, each of its 24 messages a beat counts as a change, so every MIDI
+  source of that input (and of every input) redraws at its 30 fps. Tests feed clock and
+  transport and read the pixels: the beat lit, the downbeat, stopped with and without a
+  clock, and a playing song's clock going quiet.
 - `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
   (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
   same asset root, or embedded as `data:` URIs) or a built-in `shape` (`plane`, `cube`,

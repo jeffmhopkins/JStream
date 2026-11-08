@@ -306,6 +306,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             <FilterSettings />
             <AddFilter />
             <crate::settings::Settings />
+            <crate::agents::AgentPrompt />
             <ContextMenu />
         </div>
     }
