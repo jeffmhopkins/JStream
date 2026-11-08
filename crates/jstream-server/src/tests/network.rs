@@ -249,6 +249,31 @@ fn the_network_listener_is_tls_only_and_takes_device_tokens_only() {
     assert_eq!(reply.status, 101, "{}", reply.body);
 }
 
+/// The host UI's own token (ADR-0131 §2) is the host's alone: the network listener
+/// refuses it as it refuses the control token.
+#[test]
+fn the_network_listener_refuses_the_host_uis_token() {
+    const UI: &str = "ui-token-network-1";
+    let (harness, identity) = start_network(|config| {
+        config.ui_token = match crate::Token::new(UI) {
+            Ok(token) => Some(token),
+            Err(error) => panic!("ui token: {error}"),
+        };
+    });
+    let bearer = format!("Bearer {UI}");
+    let reply = harness
+        .tls_request(
+            identity.fingerprint(),
+            "GET",
+            crate::WS_PATH,
+            &upgrade_headers(&bearer),
+            "",
+        )
+        .expect("tls");
+    assert_eq!(reply.status, 401, "{}", reply.body);
+    assert!(reply.body.contains("paired device"), "{}", reply.body);
+}
+
 /// ADR-0044's five wrong attempts hold across both listeners: four from the host and
 /// one from the network void the code, so the network adds no guesses at it.
 #[test]

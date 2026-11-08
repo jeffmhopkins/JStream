@@ -6,7 +6,9 @@
 //! fresh at each start and kept only in memory, and accepts the webview's origin besides
 //! its own. MCP is off: nothing outside the app knows the token. With `--mcp` ([`Agents`])
 //! it lets agents in as the daemon does: it listens on a fixed port, takes its token from
-//! a user-only token file that MCP clients read, and serves MCP at `/mcp`. With
+//! a user-only token file that MCP clients read, and serves MCP at `/mcp`. The webview
+//! then gets a second token, made at each start and kept only in memory, and the server
+//! asks the person before a new agent with the file's token connects (ADR-0131). With
 //! [`Network`] ("Allow devices on my network", `network.rs`) it also opens the TLS
 //! network listener and pairs devices (ADR-0104, ADR-0044).
 //!
@@ -120,10 +122,24 @@ impl Host {
         };
         secrets.register(&token);
         let mut config = ServerConfig::new(server_token);
-        if let Some(agents) = agents {
-            config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, agents.port));
-            config.mcp = true;
-        }
+        // With agents, the webview gets a token of its own, made now and kept only in
+        // memory, so the server can tell it from the agents that read the token file and
+        // ask the person before a new one connects (ADR-0131).
+        let token = match agents {
+            None => token,
+            Some(agents) => {
+                config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, agents.port));
+                config.mcp = true;
+                let ui_token = new_token()?;
+                secrets.register(&ui_token);
+                config.ui_token = Some(Token::new(ui_token.clone())?);
+                config.ask_agents = true;
+                config.approvals_file = Some(jstream_server::token_file::approvals_file(
+                    &agents.token_file,
+                ));
+                ui_token
+            }
+        };
         config.extra_origins = vec![origin.to_owned()];
         // The window needs no pairing, so without network access the host pairs no device
         // (ADR-0047), with or without agents. With it, devices on the network pair over
@@ -217,8 +233,10 @@ impl Host {
         format!("ws://{authority}")
     }
 
-    /// The control token. Handed only to the webview and never logged; stored only in
-    /// the token file, with `--mcp`.
+    /// The webview's token, handed only to it and never logged: the control token, kept
+    /// only in memory, or with `--mcp` a second token kept only in memory, so the token
+    /// file's never reaches the webview and the server asks about the agents that use it
+    /// (ADR-0131).
     pub fn token(&self) -> &str {
         &self.token
     }
@@ -984,14 +1002,15 @@ mod tests {
             Some(format!("http://127.0.0.1:{port}/mcp").as_str())
         );
         let written = std::fs::read_to_string(&agents.token_file).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(
-            written.trim(),
+        let file_token = written.trim().to_owned();
+        assert_ne!(
+            file_token,
             host.token(),
-            "the window and the file share one token"
+            "the window has a token of its own, kept only in memory (ADR-0131)"
         );
         assert!(
-            secrets.is_registered(host.token()),
-            "redacted from crash reports"
+            secrets.is_registered(host.token()) && secrets.is_registered(&file_token),
+            "both are redacted from crash reports"
         );
         let initialize = |token: &str| {
             let body = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}"#;
@@ -1012,9 +1031,12 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{e}"));
             String::from_utf8_lossy(&head).into_owned()
         };
+        let host_token = host.token().to_owned();
         assert_eq!(initialize(host.token()), "HTTP/1.1 200");
+        // An agent with the file's token gets in too; its engine session waits for the
+        // person (ADR-0131), which `initialize` doesn't.
+        assert_eq!(initialize(&file_token), "HTTP/1.1 200");
         assert_eq!(initialize("wrong"), "HTTP/1.1 401");
-        let token = host.token().to_owned();
         host.stop();
 
         let again = Host::start(
@@ -1026,7 +1048,17 @@ mod tests {
             None,
         )
         .unwrap_or_else(|e| panic!("a host: {e:#}"));
-        assert_eq!(again.token(), token, "the token file's token is reused");
+        let reread = std::fs::read_to_string(&agents.token_file).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            reread.trim(),
+            file_token,
+            "the token file's token is reused"
+        );
+        assert_ne!(
+            again.token(),
+            host_token,
+            "the window's token is new at each start"
+        );
         again.stop();
 
         let plain = Host::start(
@@ -1041,7 +1073,7 @@ mod tests {
         assert_eq!(plain.mcp_url(), None);
         assert_ne!(
             plain.token(),
-            token,
+            file_token,
             "without --mcp the token is fresh and in memory"
         );
         plain.stop();

@@ -361,9 +361,10 @@ fn ipv4_addresses_match_mapped_or_not() {
 fn a_senders_midi_feeds_its_midi_input_without_a_source() {
     let sender = FakeSender::new();
     let midi = Arc::new(MidiInputs::new());
+    let started = Instant::now();
     let receiver = Receiver::start(
         &setup("Keys", &sender),
-        Arc::new(Clock(Instant::now())),
+        Arc::new(Clock(started)),
         Some(Arc::clone(&midi)),
     )
     .expect("a receiver");
@@ -405,6 +406,9 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
         0,
         "a MIDI-only stream feeds no input"
     );
-    // Stamped on the media clock: some time after the test's clock started.
-    assert!(keys.last_ms().is_some());
+    // Stamped on the media clock: the sender's frames are due at the receiver's clock
+    // time, so no stamp is past the clock's now.
+    let now_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
+    let last = keys.last_ms().expect("a stamp");
+    assert!(last <= now_ms, "stamped {last} ms, clock at {now_ms} ms");
 }
