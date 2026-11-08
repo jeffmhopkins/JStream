@@ -26,7 +26,7 @@ Layer 6, an app that links core and server
 ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)).
 
 Contents (the window runs on Windows, on WebView2, and on Linux with the `webkitgtk`
-feature, on WebKitGTK; [ADR-0140](../../docs/adr/0140-desktop-app-on-linux.md)):
+feature, on WebKitGTK; [ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)):
 - **Startup** (`app.rs`, `main.rs`): the command line, the log file, then the engine,
   its server and the UI bundle. Anything that fails becomes the page the window shows.
 - **Engine host** (`host.rs`): the engine (on Windows and 64-bit Linux a live one,
@@ -387,7 +387,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   Foundation import listed nowhere still gets past it.
 - **Linux behind a feature.** Tauri is a Windows dependency, and on Linux an optional
   one that the `webkitgtk` feature turns on with `tauri-build`
-  ([ADR-0140](../../docs/adr/0140-desktop-app-on-linux.md)). `build.rs` sets the
+  ([ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)). `build.rs` sets the
   `webview` cfg where there is a window, and the window's code (`shell.rs`, `pick.rs`,
   `set_network`, the windowed `main`) is gated on it. So the Linux CI jobs build and
   test everything but the window without GTK or WebKitGTK, and the `desktop-linux` job

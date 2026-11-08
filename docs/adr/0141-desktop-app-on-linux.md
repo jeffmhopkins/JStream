@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0140"
+id = "ADR-0141"
 title = "The desktop app on Linux: Tauri on WebKitGTK, behind a feature"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0140: The desktop app on Linux: Tauri on WebKitGTK, behind a feature
+# ADR-0141: The desktop app on Linux: Tauri on WebKitGTK, behind a feature
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
