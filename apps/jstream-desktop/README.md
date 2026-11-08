@@ -38,7 +38,7 @@ feature, on WebKitGTK; [ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)):
   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), the setting in the
   data folder's `network.json`, the network listener's configuration, and `set_network`,
   the command that saves it.
-- **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows and on an X11 session): hears the bound
+- **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows, X11 and Wayland): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
@@ -267,7 +267,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   that isn't the listener's fails the retry too, with its own error. The page is told
   whether the listener opened (`networkOpen`), so Settings › Devices says when the
   setting is on but devices can't connect.
-- **Hotkeys while another app has the focus.** On Windows and on Linux under X11 the host hears the
+- **Hotkeys while another app has the focus.** On Windows and on Linux the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
   `hotkeys.rs` opens its own session on the engine (`jstream-desktop hotkeys` in the
@@ -294,11 +294,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   and the wheel passes through untouched. On Windows the hook swallows a turn only when
   its modifiers are exactly a registered chord's, in its direction, and counts one press
   per notch of 120 (`WHEEL_DELTA`), adding up a high-resolution wheel's parts; any other
-  turn passes on. On
-  a Wayland session the Linux listener doesn't start (Wayland has no grab; its
-  GlobalShortcuts portal isn't wired yet). The X11 listener runs in the Linux window
-  (`webkitgtk`), and the log says when a listener started. The Wayland portal and the
-  macOS listener aren't built yet.
+  turn passes on. Wayland has no grab, so on a Wayland
+  session the host asks the compositor through the GlobalShortcuts portal instead
+  (`jstream_platform_linux::PortalHotkeys`): each set of chords opens a new portal
+  session and binds one shortcut per chord, its id the chord and its preferred trigger
+  the same chord in the shortcuts format (`CTRL+SHIFT+a`). The desktop shows its own
+  confirmation and may let the person pick other keys; whatever they pick, an
+  activation names the chord, which runs its binding. Only the portal's own bus
+  connection is heard. Declined, or on a desktop without the interface, the hotkeys
+  are heard only while JStream has the focus, and the log says so. Wheel chords can't
+  be shortcuts, so on Wayland they are heard only while the page has the focus
+  (`Host::global_wheel` is false, and the bootstrap global says so, `globalWheel`).
+  The listeners run in the Linux window (`webkitgtk`), and the log says when one
+  started. The macOS listener isn't built yet.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing
   and the build doesn't need the bundle. WebView2 gives the scheme the origin
@@ -323,7 +331,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   (not Windows). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the data
   folder, `network`, whether "Allow devices on my network" was on at start,
-  `networkOpen`, whether its listener then opened, and two functions. `browse` calls the app's command `pick_path` and resolves to the
+  `networkOpen`, whether its listener then opened, `globalWheel`, whether wheel chords
+  are heard while another app has the focus (false on Wayland or with no listener, so
+  the Follow pointer pane says they aren't), and two functions. `browse` calls the app's command `pick_path` and resolves to the
   filesystem path the person picked, or null if they cancelled or the dialog failed.
   `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was
   saved, false when the command fails too (see *Network access*).

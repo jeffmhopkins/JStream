@@ -99,6 +99,17 @@ pub fn same_engine(desktop_url: &str, session_url: &str) -> bool {
     !desktop_url.is_empty() && desktop_url == session_url
 }
 
+/// Whether the desktop app hears wheel chords while another app has the focus (the
+/// global's `globalWheel`): `Some(false)` on Wayland, or when no hotkey listener runs,
+/// so a pane offering wheel chords can say they work only while JStream has the focus.
+/// `None` outside the desktop app, or from an app that doesn't say.
+pub fn desktop_global_wheel() -> Option<bool> {
+    let global = global()?;
+    Reflect::get(&global, &JsValue::from_str("globalWheel"))
+        .ok()?
+        .as_bool()
+}
+
 /// What the desktop app says about its virtual camera (the global's `vcam`), if the
 /// page runs in it: `registered`, `not_registered`, `outdated` or `off`.
 pub fn desktop_vcam() -> Option<String> {

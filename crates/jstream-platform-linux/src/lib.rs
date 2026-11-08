@@ -95,9 +95,9 @@ pub use pipewire::{PIPEWIRE_FLOOR, pipewire_version_supported};
 pub use pipewire::{PipeWire, PipeWireAudio};
 pub use portal::{CursorModes, PersistMode, PortalPick, SourceTypes, handle_token, request_path};
 #[cfg(any(target_os = "linux", test))]
-pub use portal::{FileChoice, FileChoiceKind, filter_extensions};
+pub use portal::{FileChoice, FileChoiceKind, filter_extensions, shortcut_trigger};
 #[cfg(target_os = "linux")]
-pub use portal::{PortalCapture, pick_path as portal_pick_path};
+pub use portal::{PortalCapture, PortalHotkeyEvent, PortalHotkeys, pick_path as portal_pick_path};
 #[cfg(target_os = "linux")]
 pub use process::{LinuxProcessCpu, LinuxThreadCpu};
 #[cfg(target_os = "linux")]

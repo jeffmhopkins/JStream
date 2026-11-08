@@ -3087,6 +3087,12 @@ fn FilterPane(target: Target) -> impl IntoView {
                             </button>
                         </p>
                     })}
+                    {(crate::host::desktop_global_wheel() == Some(false)).then(|| view! {
+                        <p class="note zoom-focus-only">
+                            "On this desktop, wheel chords are heard only while JStream has \
+                             the focus. To zoom from another app, bind keys."
+                        </p>
+                    })}
                 </div>
             })
         })

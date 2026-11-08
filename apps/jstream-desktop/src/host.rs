@@ -75,8 +75,10 @@ pub struct Host {
     mcp_url: Option<String>,
     /// The network listener's addresses and certificate fingerprint, with [`Network`].
     network: Option<(Vec<String>, String)>,
-    /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows and on X11.
+    /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows, X11 and Wayland.
     hotkeys: Option<JoinHandle<()>>,
+    /// Whether that listener hears wheel chords while another app has the focus.
+    global_wheel: bool,
 }
 
 impl Host {
@@ -162,7 +164,11 @@ impl Host {
         #[cfg(any(windows, target_os = "linux"))]
         let hotkeys = global_hotkeys(&runtime, &listening, server.ui_settings());
         #[cfg(not(any(windows, target_os = "linux")))]
-        let hotkeys = None;
+        let hotkeys: Option<(JoinHandle<()>, bool)> = None;
+        let (hotkeys, global_wheel) = match hotkeys {
+            Some((task, wheel)) => (Some(task), wheel),
+            None => (None, false),
+        };
         if let (Some(agents), Some(mcp_url)) = (agents, &mcp_url) {
             tracing::info!(
                 url = %ws_url,
@@ -185,6 +191,7 @@ impl Host {
             mcp_url,
             network,
             hotkeys,
+            global_wheel,
         })
     }
 
@@ -219,6 +226,13 @@ impl Host {
         &self.token
     }
 
+    /// Whether wheel chords are heard while another app has the focus: a hotkey
+    /// listener that hears the wheel runs (Windows, X11). On Wayland, or with no
+    /// listener, they are heard only while the page has the focus.
+    pub fn global_wheel(&self) -> bool {
+        self.global_wheel
+    }
+
     /// Stops the server, closing every connection, and waits for it (at most
     /// 5 s). The engine stops when its last session goes.
     pub fn stop(mut self) {
@@ -246,14 +260,15 @@ impl Host {
 
 /// Starts the global hotkeys (ADR-0112 §5 and §6, `crate::hotkeys`) on `runtime`: the
 /// OS listener ([`hotkey_listener`]) and a session on `engine` that keeps it in step with
-/// the bindings and the `hotkeys.global` UI setting. `None`, logged, when the listener
-/// can't start: the page still hears hotkeys while it has the focus.
+/// the bindings and the `hotkeys.global` UI setting, and whether the listener hears
+/// wheel chords. `None`, logged, when the listener can't start: the page still hears
+/// hotkeys while it has the focus.
 #[cfg(any(windows, target_os = "linux"))]
 fn global_hotkeys(
     runtime: &Runtime,
     engine: &Arc<Engine>,
     settings: jstream_server::UiSettingsView,
-) -> Option<JoinHandle<()>> {
+) -> Option<(JoinHandle<()>, bool)> {
     use crate::hotkeys::{self, GLOBAL_KEY, Switch};
 
     let (press, presses) = tokio::sync::mpsc::unbounded_channel();
@@ -269,8 +284,9 @@ fn global_hotkeys(
             return None;
         }
     };
+    let wheel = listener.hears_wheel();
     tracing::info!(
-        wheel = listener.hears_wheel(),
+        wheel,
         "global hotkeys can be heard while another app has the focus"
     );
     let switch = Switch {
@@ -278,11 +294,12 @@ fn global_hotkeys(
         on: Box::new(move || hotkeys::global_on(settings.get(GLOBAL_KEY).as_ref())),
     };
     let session = engine.connect();
-    Some(runtime.spawn(async move {
+    let task = runtime.spawn(async move {
         if let Err(error) = hotkeys::run(session, listener, switch, presses).await {
             tracing::warn!(%error, "global hotkeys stopped");
         }
-    }))
+    });
+    Some((task, wheel))
 }
 
 /// What a global hotkey listener calls with each chord pressed.
@@ -310,8 +327,8 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
         .map_err(|error| error.to_string())
 }
 
-/// Linux's listener: X11 key and wheel grabs on their own connection, on an X11 session. Wayland
-/// has no grab (its GlobalShortcuts portal isn't wired yet), so there it doesn't start.
+/// Linux's listener: X11 key and wheel grabs on their own connection, on an X11 session,
+/// and the GlobalShortcuts portal on a Wayland one ([`wayland_listener`]).
 #[cfg(target_os = "linux")]
 fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
     use jstream_platform_linux::{GlobalHotkeys, Session, SessionKind};
@@ -330,9 +347,44 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
         SessionKind::X11 => GlobalHotkeys::start(on_press)
             .map(|listener| Arc::new(X11(listener)) as Arc<dyn crate::hotkeys::Registrar>)
             .map_err(|error| error.to_string()),
-        SessionKind::Wayland => Err("a Wayland session has no global key grabs".into()),
+        SessionKind::Wayland => wayland_listener(on_press),
         SessionKind::Headless => Err("there is no graphical session".into()),
     }
+}
+
+/// Wayland's listener: the GlobalShortcuts portal, which shows the desktop's own
+/// confirmation when chords are bound. It takes keys only: wheel chords are heard only
+/// while JStream has the focus (ADR-0112 §5).
+#[cfg(target_os = "linux")]
+fn wayland_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
+    use jstream_platform_linux::{PortalHotkeyEvent, PortalHotkeys};
+
+    struct Wayland(PortalHotkeys);
+    impl crate::hotkeys::Registrar for Wayland {
+        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
+            self.0.set(chords)
+        }
+    }
+
+    PortalHotkeys::start(move |event| match event {
+        PortalHotkeyEvent::Pressed(chord) => on_press(chord),
+        PortalHotkeyEvent::Bound(count) => {
+            tracing::info!(
+                count,
+                "the desktop bound the global hotkeys (GlobalShortcuts portal)"
+            );
+        }
+        PortalHotkeyEvent::NotBound(error) => tracing::warn!(
+            %error,
+            "the desktop didn't bind the global hotkeys: they are heard only while JStream \
+             has the focus"
+        ),
+        PortalHotkeyEvent::Stopped(error) => {
+            tracing::warn!(%error, "the global hotkeys' portal connection broke");
+        }
+    })
+    .map(|listener| Arc::new(Wayland(listener)) as Arc<dyn crate::hotkeys::Registrar>)
+    .map_err(|error| format!("the GlobalShortcuts portal: {error}"))
 }
 
 /// A new control token: 32 random bytes from the OS, as lowercase hex, which is valid

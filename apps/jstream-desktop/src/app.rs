@@ -191,8 +191,11 @@ pub fn start(
         host.token(),
         vcam.as_str(),
         collection.as_ref(),
-        network::allowed(&network::setting_file(data)),
-        host.network().is_some(),
+        bootstrap::Flags {
+            network: network::allowed(&network::setting_file(data)),
+            network_open: host.network().is_some(),
+            global_wheel: host.global_wheel(),
+        },
     );
     Startup {
         ui,

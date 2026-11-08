@@ -89,7 +89,9 @@ Contents ([Design](#design) explains the choices):
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
   same-origin opener's for a projector window), if the page runs there,
-  `desktop_vcam()`, what that global says about the virtual camera, `browse`,
+  `desktop_vcam()`, what that global says about the virtual camera,
+  `desktop_global_wheel()`, whether the app hears wheel chords while another app has
+  the focus (false on Wayland), `browse`,
   which calls the global's `browse` to open a native dialog, and `desktop_network()`
   and `allow_network`, which read and save the app's "Allow devices on my network". `same_engine` says
   whether the open session is that app's own engine.
@@ -280,7 +282,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
-  `network`, `networkOpen`, `browse` and `allowNetwork`) before the page loads,
+  `network`, `networkOpen`, `globalWheel`, `browse` and `allowNetwork`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
