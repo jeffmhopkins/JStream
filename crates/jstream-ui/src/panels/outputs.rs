@@ -1030,6 +1030,10 @@ struct Panel {
     stats: RwSignal<BTreeMap<OutputId, OutputStatsInfo>>,
 }
 
+/// How many reads [`Panel::refresh`] makes while state changes keep arriving, before it
+/// applies the last one anyway.
+const REREADS: u32 = 4;
+
 impl Panel {
     /// Shows `owner`'s chains in the Filters panel, from an FX button.
     fn show_chains(self, owner: FilterOwner) {
@@ -1074,35 +1078,44 @@ impl Panel {
         }) else {
             return;
         };
-        {
+        // A state change heard while a read was out may be newer than what it read (an
+        // output started just after its status was read), so that read is dropped and
+        // another one, sent after the change, is made in its place. Applying the older
+        // read first would flicker the row back to its old state. After a few tries the
+        // last read is applied anyway and a fresh reload settles it, so a steady stream
+        // of changes can't stall the panel.
+        let mut tries = 0;
+        let loaded = loop {
+            tries += 1;
             let heard = self.state_events.try_get_value();
             let loaded = load(&*session.control).await;
             if self.loads.try_get_value() != Some(mine) {
                 return;
             }
-            // A state change heard while this read was out may be newer than what it
-            // read (an output started just after its status was read): the rows take
-            // what was read, and a fresh read, sent after the change, settles them.
-            if self.state_events.try_get_value() != heard {
-                self.reload();
+            if self.state_events.try_get_value() == heard {
+                break loaded;
             }
-            match loaded {
-                Ok(snapshot) => {
-                    self.rows.try_set(
-                        snapshot
-                            .outputs
-                            .into_iter()
-                            .map(|row| (row.info.output_id.clone(), row))
-                            .collect(),
-                    );
-                    self.encoders.try_set(snapshot.encoders);
-                    self.buses.try_set(snapshot.buses);
-                    self.mixes.try_set(snapshot.mixes);
-                    self.scenes.try_set(snapshot.scenes);
-                }
-                Err(problem) => {
-                    self.problem.try_set(Some(problem));
-                }
+            if tries >= REREADS {
+                self.reload();
+                break loaded;
+            }
+        };
+        match loaded {
+            Ok(snapshot) => {
+                self.rows.try_set(
+                    snapshot
+                        .outputs
+                        .into_iter()
+                        .map(|row| (row.info.output_id.clone(), row))
+                        .collect(),
+                );
+                self.encoders.try_set(snapshot.encoders);
+                self.buses.try_set(snapshot.buses);
+                self.mixes.try_set(snapshot.mixes);
+                self.scenes.try_set(snapshot.scenes);
+            }
+            Err(problem) => {
+                self.problem.try_set(Some(problem));
             }
         }
     }

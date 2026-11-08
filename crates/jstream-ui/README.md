@@ -855,7 +855,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   bundle's `icon.png` (see [Build](#build)).
 - **Outputs.** The panel reads the outputs, encoder profiles, video mixes, buses and scenes with `state.get`, then
   each output's `output.status`, and re-reads them on `state.changed` and
-  `events.dropped`; `output.state_changed` updates one output's state in place. Since
+  `events.dropped`; `output.state_changed` updates one output's state in place, and a
+  read that one arrived during is made again rather than applied, so a row never steps
+  back to an older state. Since
   #1206 the dock is a compact list: the header has the health (a dot and a word, the
   detail on hover; it sums `stats.tick`'s drop totals over the last five ticks, and a
   `seq` that doesn't increase or a total that shrinks, an engine restart, starts it
