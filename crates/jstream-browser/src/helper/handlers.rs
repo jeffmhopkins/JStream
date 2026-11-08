@@ -7,7 +7,7 @@
 //!
 //! # Behaviour
 //!
-//! **Audio** (`helper/handlers.rs`): the audio handler asks for 48 kHz stereo in 10 ms
+//! The audio handler asks for 48 kHz stereo in 10 ms
 //! packets and sends each interleaved (mono doubled, channels past two dropped). A stream
 //! error fails the page's audio in the engine, which reopens its input, except while the
 //! page is closing, when "Socket closed unexpectedly" is CEF's normal end of the stream.

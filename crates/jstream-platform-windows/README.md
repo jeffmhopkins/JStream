@@ -27,7 +27,7 @@ every platform.
 
 This README is the crate's map. How each backend behaves (formats, timing, threads,
 teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
-`cargo doc -p jstream-platform-windows --target x86_64-pc-windows-msvc --open`.
+`cargo doc -p jstream-platform-windows --target x86_64-pc-windows-msvc --document-private-items --open`.
 
 | Type | Trait | Module | What it is |
 |---|---|---|---|
@@ -51,7 +51,7 @@ Not here yet: Media Foundation's packet-level video decoders (`MfCodecs`; media 
 decode through `MfMediaDecoders`), the virtual camera taking `VideoSurface::Gpu`, and a
 `Backends` constructor, which needs all of them.
 
-**Tests.** The helpers that don't call Windows (format choice, target IDs, AAC and video
+**Tests.** `lib.rs`'s rustdoc lists every test and what it checks. The helpers that don't call Windows (format choice, target IDs, AAC and video
 encoder configuration, the first-frame fallback, the GPU capture ring, credential names
 and limits, the virtual camera's format, the media-file conversions, the dialog filter)
 run on every platform. The clock, the credential round trip and the Media Foundation

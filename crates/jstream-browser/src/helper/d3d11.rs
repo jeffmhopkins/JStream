@@ -7,7 +7,7 @@
 //!
 //! # Behaviour
 //!
-//! **Frames** (`helper/d3d11.rs`): a D3D11 device on the engine's adapter. Each
+//! A D3D11 device on the engine's adapter. Each
 //! accelerated paint's texture is opened, checked to be single-mip BGRA8, and copied into
 //! the next of three textures the page shares with the engine through NT handles; the
 //! copy is waited for before the callback returns, since CEF takes its texture back then.
