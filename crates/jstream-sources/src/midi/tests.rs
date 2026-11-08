@@ -541,9 +541,14 @@ fn a_source_measures_note_ages_on_the_inputs_clock() {
         "only the first clock counts"
     );
     assert_eq!(inputs.now_ms(), Some(10_000));
-    // A hit 10 ms ago on the media clock, painted at the source's 40 ms.
+    // Painted at the source's 40 ms: a hit 10 ms ago on the media clock still shows,
+    // and one 500 ms ago has faded, though both are far after 40 ms.
+    inputs.push("", 9_500, &msg(&[0x99, 36, 127]));
+    inputs.push("", 9_500, &msg(&[0x89, 36, 0]));
     inputs.push("", 9_990, &msg(&[0x99, 37, 127]));
     inputs.push("", 9_990, &msg(&[0x89, 37, 0]));
-    let lit = pixel(&draw(&mut pads, ms(40)), 15, 5);
+    let frame = draw(&mut pads, ms(40));
+    let lit = pixel(&frame, 15, 5);
     assert!(lit[0] > 200, "still lit: {lit:?}");
+    assert_eq!(pixel(&frame, 5, 5), BLACK, "faded on the media clock");
 }
