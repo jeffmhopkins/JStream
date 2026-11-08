@@ -98,6 +98,8 @@ pub(crate) struct ModelRuntime {
     material_layout: wgpu::BindGroupLayout,
     opaque: wgpu::RenderPipeline,
     blended: wgpu::RenderPipeline,
+    /// The model's view depth (ADR-0137 decision 4), keeping the larger value.
+    depth_only: wgpu::RenderPipeline,
     sampler: wgpu::Sampler,
     frame: wgpu::Buffer,
     frame_bind: wgpu::BindGroup,
@@ -228,6 +230,55 @@ impl ModelRuntime {
         };
         let opaque = pipeline(false);
         let blended = pipeline(true);
+        let largest = wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::One,
+            dst_factor: wgpu::BlendFactor::One,
+            operation: wgpu::BlendOperation::Max,
+        };
+        let depth_only = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("jstream-render-model-view-depth"),
+            layout: Some(&layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                buffers: &[Some(wgpu::VertexBufferLayout {
+                    array_stride: VERTEX_STRIDE,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &wgpu::vertex_attr_array![
+                        0 => Float32x3,
+                        1 => Float32x3,
+                        2 => Float32x4,
+                        3 => Float32x2,
+                        4 => Float32x4,
+                    ],
+                })],
+            },
+            // Both faces: the nearest of them wins the blend.
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                front_face: wgpu::FrontFace::Cw,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_depth"),
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: LAYER_FORMAT,
+                    blend: Some(wgpu::BlendState {
+                        color: largest,
+                        alpha: largest,
+                    }),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
         let sampler = device.create_sampler(&wgpu::SamplerDescriptor {
             label: Some("jstream-render-model-sampler"),
             address_mode_u: wgpu::AddressMode::Repeat,
@@ -281,6 +332,7 @@ impl ModelRuntime {
             material_layout,
             opaque,
             blended,
+            depth_only,
             sampler,
             frame,
             frame_bind,
@@ -563,6 +615,86 @@ impl ModelRuntime {
                 for &(_, index) in &self.order {
                     draw_one(&mut pass, &model.primitives[index]);
                 }
+            }
+        }
+        gpu.queue.submit([encoder.finish()]);
+        target.mark_changed();
+        drop(submitting);
+        Ok(())
+    }
+
+    /// Adds `draw`'s view depth to `target` (ADR-0137 decision 4), keeping what is there
+    /// where it is nearer. Nothing without a camera.
+    pub(crate) fn draw_depth(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let model = &draw.model.inner;
+        if !model.owner.is(owner) {
+            return Err(RenderError::Invalid {
+                what: "model",
+                detail: "the model was uploaded by another compositor".into(),
+            });
+        }
+        let Some(view) = target.target().filter(|_| target.owner().is(owner)) else {
+            return Err(RenderError::Invalid {
+                what: "layer",
+                detail: "the target is not a layer this compositor made".into(),
+            });
+        };
+        let Some(camera) = draw.camera else {
+            return Ok(());
+        };
+        let canvas = Canvas {
+            width: target.width(),
+            height: target.height(),
+        };
+        let camera = camera.view(canvas).map_err(placement)?;
+        let solid = draw
+            .geometry
+            .solid(model.bounds, Some(&camera))
+            .map_err(placement)?;
+        // With perspective the orthographic depth scale is unused.
+        let clip = solid.clip_matrix(canvas, 0.0);
+        let frame = frame_bytes(&solid, &clip, Lighting::Unlit);
+        let lock = gpu.submit.clone();
+        let submitting = lock.lock();
+        gpu.queue.write_buffer(&self.frame, 0, &frame);
+        let mut encoder = gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-model-view-depth"),
+            });
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-model-view-depth"),
+                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
+                    view,
+                    depth_slice: None,
+                    resolve_target: None,
+                    ops: wgpu::Operations {
+                        load: wgpu::LoadOp::Load,
+                        store: wgpu::StoreOp::Store,
+                    },
+                })],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.depth_only);
+            pass.set_bind_group(0, &self.frame_bind, &[]);
+            for p in &model.primitives {
+                let Some(material) = model.materials.get(p.material) else {
+                    continue;
+                };
+                pass.set_bind_group(1, &material.bind, &[]);
+                pass.set_vertex_buffer(0, p.vertices.slice(..));
+                pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
+                pass.draw_indexed(0..p.index_count, 0, 0..1);
             }
         }
         gpu.queue.submit([encoder.finish()]);

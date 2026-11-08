@@ -15,7 +15,7 @@ use crate::ingest::Ingest;
 use crate::mips::{MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
-use crate::scene::{Output, Scene, Snapshot};
+use crate::scene::{Output, Placement, Scene, Snapshot};
 use jstream_protocol::BlendMode;
 
 /// Bytes from one vertex to the next: 29 `f32`s (position, UV, opacity, alpha mode, `w`,
@@ -368,6 +368,117 @@ impl Compositor {
     /// a layer this compositor made, is not the canvas size, or is placed by `scene`
     /// itself (a layer cannot be sampled while it is drawn into).
     pub fn render_into(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
+        let view = self.scene_target(scene, target)?;
+        self.load(scene)?;
+        // The submit lock is held from staging through the submit, as in `render`.
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
+        self.stage_sources(scene)?;
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-layer"),
+            });
+        self.record_mips(&mut encoder, scene);
+        self.record_composite(&mut encoder, (view, target.texture()), scene);
+        self.record_release(&mut encoder);
+        self.gpu.queue.submit([encoder.finish()]);
+        target.mark_changed();
+        drop(submitting);
+        // The platform reuses a frame's texture once nothing holds it.
+        self.staged.clear();
+        Ok(())
+    }
+
+    /// Draws `scene`'s view depth into `target`, a [`Self::layer`] of the canvas size,
+    /// replacing what it held (ADR-0137 decision 4): red holds `1 / w`, which is `f / D`
+    /// for the nearest thing at `D` along its camera's viewing axis, and every channel is
+    /// 0 where nothing is (infinitely far). Each card seen through a camera writes where
+    /// its alpha, with its opacity and its sharp edge, is at least one half; the larger
+    /// value wins, so draw order doesn't matter. A [`Placement::Layer`] (a model's
+    /// layer) writes nothing here: [`Self::draw_model_depth`] adds a model's own depth.
+    /// A scene with no camera has no depth, and leaves `target` all 0.
+    ///
+    /// # Errors
+    /// As for [`Self::render_into`].
+    pub fn render_view_depth(
+        &mut self,
+        scene: &Scene<'_>,
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let view = self.scene_target(scene, target)?;
+        self.load(scene)?;
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
+        self.stage_sources(scene)?;
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-view-depth"),
+            });
+        self.record_mips(&mut encoder, scene);
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-view-depth"),
+                color_attachments: &[Some(color_attachment(
+                    view,
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                ))],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            pass.set_pipeline(self.blends.depth());
+            for draw in &self.draws {
+                let item = &scene.items[draw.index];
+                if item.camera.is_none() || matches!(item.placement, Placement::Layer(_)) {
+                    continue;
+                }
+                let bind_group = match &draw.mips {
+                    Some(mips) => &mips.bind_group,
+                    None => item.image.bind_group(),
+                };
+                pass.set_bind_group(0, bind_group, &[]);
+                pass.draw(
+                    draw.first_vertex..draw.first_vertex + draw.vertex_count,
+                    0..1,
+                );
+            }
+        }
+        self.record_release(&mut encoder);
+        self.gpu.queue.submit([encoder.finish()]);
+        target.mark_changed();
+        drop(submitting);
+        self.staged.clear();
+        Ok(())
+    }
+
+    /// Adds a model's own depth to a view depth that [`Self::render_view_depth`] drew
+    /// into `target` (ADR-0137 decision 4): `1 / w` per fragment of the model where its
+    /// material's alpha is at least one half, the larger value winning. Only a model seen
+    /// through a camera has depth there; without one this draws nothing.
+    ///
+    /// # Errors
+    /// As for [`Self::draw_model`].
+    pub fn draw_model_depth(
+        &mut self,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        self.models.draw_depth(&self.gpu, &self.owner, draw, target)
+    }
+
+    /// The view of `target` when it is a layer of this compositor, of `scene`'s canvas
+    /// size, that `scene` doesn't place.
+    fn scene_target<'t>(
+        &self,
+        scene: &Scene<'_>,
+        target: &'t Image,
+    ) -> Result<&'t wgpu::TextureView, RenderError> {
         let view = match target.target() {
             Some(view) if target.owner().is(&self.owner) => view,
             _ => {
@@ -399,26 +510,7 @@ impl Compositor {
                 detail: format!("item {index} places the layer being drawn into"),
             });
         }
-        self.load(scene)?;
-        // The submit lock is held from staging through the submit, as in `render`.
-        let lock = self.gpu.submit.clone();
-        let submitting = lock.lock();
-        self.stage_sources(scene)?;
-        let mut encoder = self
-            .gpu
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("jstream-render-layer"),
-            });
-        self.record_mips(&mut encoder, scene);
-        self.record_composite(&mut encoder, (view, target.texture()), scene);
-        self.record_release(&mut encoder);
-        self.gpu.queue.submit([encoder.finish()]);
-        target.mark_changed();
-        drop(submitting);
-        // The platform reuses a frame's texture once nothing holds it.
-        self.staged.clear();
-        Ok(())
+        Ok(view)
     }
 
     /// Uploads a 3D model (ADR-0107): its meshes, its textures with the mips the model

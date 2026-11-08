@@ -185,3 +185,25 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
     }
     return vec4<f32>(color * base.a, base.a);
 }
+
+// The model's view depth (ADR-0137 decision 4): red holds 1 / w, the viewer's distance
+// over the fragment's along the viewing axis, where the material's alpha is at least one
+// half. The pipeline keeps the larger value, so the nearest thing wins. Only a model seen
+// with perspective (a camera) is drawn here.
+@fragment
+fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
+    let base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
+    let mode = material.flags.x;
+    var alpha = 1.0;
+    if mode > 1.5 {
+        alpha = base.a;
+    } else if mode > 0.5 && base.a < material.flags.y {
+        alpha = 0.0;
+    }
+    let p = frame.params.x;
+    let w = (p - in.seen.z) / max(p, 1e-6);
+    if alpha < 0.5 || p <= 0.0 || w <= 0.0 {
+        discard;
+    }
+    return vec4<f32>(1.0 / w, 0.0, 0.0, 1.0);
+}

@@ -24,6 +24,8 @@
 //! - `model_1080p`: one built-in sphere drawn into a 1080p layer through that camera,
 //!   lit by the studio rig, then placed in the scene (ADR-0107), the per-frame cost of a
 //!   model; and the same with a cube, the cheapest closed shape.
+//! - `depth_fog_1080p_camera`: what a depth-aware scene filter adds to N of those
+//!   cards (ADR-0137): the scene's view depth, then `depth_fog` over its composite.
 //! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (the bytes copied into a
 //!   buffer, then premultiplied in linear light on the GPU), as an image or media source
 //!   does on a new frame: `rewrite` with the GPU's work waited for, `rewrite_call` the
@@ -38,8 +40,8 @@ use jstream_media::model::Material;
 use jstream_media::model::shapes::Shape;
 use jstream_protocol::{Finite32, ItemGeometry, SceneCamera, Size, Vec2, Vec3};
 use jstream_render::{
-    BlendMode, Color, Compositor, Crop, Image, Item, LegacyTransform, Lighting, ModelDraw,
-    OpenOptions, Placement, Scene,
+    BlendMode, Color, Compositor, Crop, FilterClock, Image, Item, LegacyTransform, Lighting,
+    ModelDraw, OpenOptions, Placement, Scene, VideoFilter, ViewDepth,
 };
 
 const WIDTH: u32 = 1920;
@@ -313,6 +315,62 @@ fn three_d(c: &mut Criterion) {
                     depth_run: 0,
                 }];
                 black_box(compositor.render(&scene(&items), false).expect("render"));
+                wait(&compositor);
+            });
+        });
+    }
+    group.finish();
+
+    // A scene's view depth and depth fog over its composite (ADR-0137): the cost a
+    // depth-aware scene filter adds on top of drawing the scene, which is drawn once
+    // outside the loop.
+    let kind = jstream_render::depth_filter_descriptors()
+        .into_iter()
+        .find(|kind| kind.kind_id == "depth_fog")
+        .expect("invariant: depth fog is a depth-aware kind");
+    let defaults = jstream_protocol::Settings(
+        kind.params
+            .iter()
+            .map(|param| (param.id.clone(), param.default.clone()))
+            .collect(),
+    );
+    let mut fog = VideoFilter::new("depth_fog", &defaults).expect("invariant: it builds");
+    let depth = std::sync::Arc::new(
+        compositor
+            .layer(WIDTH, HEIGHT)
+            .expect("invariant: the canvas fits"),
+    );
+    let composite = compositor
+        .layer(WIDTH, HEIGHT)
+        .expect("invariant: the canvas fits");
+    let fogged = compositor
+        .layer(WIDTH, HEIGHT)
+        .expect("invariant: the canvas fits");
+    let focal_px = camera
+        .view(jstream_protocol::Canvas {
+            width: WIDTH,
+            height: HEIGHT,
+        })
+        .expect("invariant: the camera is valid")
+        .focal_px();
+    fog.set_depth(Some(ViewDepth {
+        image: std::sync::Arc::clone(&depth),
+        focal_px,
+    }));
+    let mut group = c.benchmark_group("depth_fog_1080p_camera");
+    group.sample_size(20);
+    for count in [4, 16] {
+        let items = cards(&images[..count]);
+        let scene = scene(&items);
+        compositor.render_into(&scene, &composite).expect("render");
+        group.bench_with_input(BenchmarkId::new("items", count), &scene, |b, scene| {
+            b.iter(|| {
+                compositor
+                    .render_view_depth(scene, &depth)
+                    .expect("view depth");
+                compositor
+                    .apply_filter_into(&mut fog, &composite, &fogged, FilterClock::default())
+                    .expect("fog");
                 wait(&compositor);
             });
         });

@@ -33,8 +33,9 @@ pub use filter::{
     ExternalFilter, ExternalProgram, FIRST_INPUT_BINDING, FilterClock, Lut, LutError,
     MAX_PROGRAM_BYTES, PRELUDE as FILTER_PRELUDE, PROGRAM_AUDIO_BANDS, PROGRAM_MAX_INPUTS,
     PROGRAM_MAX_PASSES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio, ProgramImage,
-    ProgramInput, ProgramPass, VideoFilter, descriptors as video_filter_descriptors, lut_image,
-    outset as video_filter_outset,
+    ProgramInput, ProgramPass, VideoFilter, ViewDepth,
+    depth_descriptors as depth_filter_descriptors, descriptors as video_filter_descriptors,
+    lut_image, outset as video_filter_outset, reads_depth as video_filter_reads_depth,
 };
 pub use gpu::{OpenOptions, adapter_available};
 pub use image::Image;

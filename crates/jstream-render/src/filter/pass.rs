@@ -58,6 +58,12 @@ pub(crate) trait Pass: Send {
         let _ = (slot, image);
     }
 
+    /// Hands a depth-aware filter its scene's view depth (ADR-0137 decision 5), or takes
+    /// it away with `None`. Other kinds ignore it.
+    fn set_depth(&mut self, depth: Option<super::ViewDepth>) {
+        let _ = depth;
+    }
+
     /// Hands a shader source its audio levels for the next frame. Other kinds ignore it.
     fn set_audio(&mut self, audio: super::ProgramAudio) {
         let _ = audio;
