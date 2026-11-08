@@ -10,6 +10,7 @@
   var scenes = { program: null, preview: null };
   var values = new Map();
   var levels = null;
+  var midi = "null";
 
   function emit(type, detail) {
     var set = listeners[type];
@@ -105,6 +106,13 @@
       return levels;
     };
   }
+  if (grant.midi) {
+    // The granted MIDI input's latest reading, a fresh copy each time: `null` before
+    // the engine has sent one.
+    api.midi = function () {
+      return JSON.parse(midi);
+    };
+  }
   Object.defineProperty(window, "jstream", {
     value: Object.freeze(api),
     enumerable: true,
@@ -112,7 +120,8 @@
     writable: false,
   });
 
-  // One update: JSON text with any of `clock`, `source`, `scenes`, `levels` and `values`.
+  // One update: JSON text with any of `clock`, `source`, `scenes`, `levels`, `midi` and
+  // `values`.
   return function (text) {
     var update = JSON.parse(text);
     if (update.clock) {
@@ -138,6 +147,11 @@
     if (grant.levels && update.levels !== undefined) {
       levels = reading(update.levels);
       emit("levels", levels);
+    }
+    // A reading comes only when it changed, and each is reported.
+    if (grant.midi && update.midi !== undefined && JSON.stringify(update.midi) !== midi) {
+      midi = JSON.stringify(update.midi);
+      emit("midi", JSON.parse(midi));
     }
     if (grant.values && update.values) {
       Object.keys(update.values).forEach(function (name) {

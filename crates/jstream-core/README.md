@@ -202,7 +202,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   Audio-only kinds make no frames and have no live source. The `waveform` and
   `spectrum` sources draw the program mix's audio, a bus's, or another source's, from
   the engine's `AudioScopes`. A `browser` source granted the page API is told what it
-  shows its page: its visibility, the scenes, the shared values and a bus's levels (see *Page API* in
+  shows its page: its visibility, the scenes, the shared values, a bus's levels and a
+  MIDI input's state (see *Page API* in
   [Design](#design)).
 - **Audio sources** (`audio_sources.rs`): while the program stage runs, one mixer
   input for each `audio_input`, `desktop_audio` and `app_audio` source whose audio is
@@ -243,6 +244,14 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §2), stamped on the
   media clock at their sample offset, whether or not a source records the sender; its
   clock and transport messages also run the sender's tempo there (§3).
+  A `jstream-tempo` thread (`tempo.rs`, [ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md)
+  §1) starts with the receiver and, every 20 ms, reads the every-input state's tempo
+  and publishes it as the shared values `tempo.bpm` (to a tenth, moved only by a tenth
+  or more, removed while no clock runs), `tempo.playing`, `tempo.beat` and `tempo.bar`
+  (whole beats and four-beat bars), each change a `values.changed` from the client
+  `engine` with no request ID, and the pages fed with it. It starts once per engine,
+  however often the receiver starts again, holds the engine weakly and stops when the
+  engine goes.
   `Engine::jtunnel_stats` reads its counters (`JtunnelStats`, `midi` among them). Tests run a fake sender on loopback: the subscribe and its
   keepalive, the frames in order with their positions and times, the bye, an
   unaccepted sender, a datagram that isn't JTunnel and a receiver's packet dropped and
@@ -250,7 +259,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
   reaching its MIDI input with no source recording it, and its clock giving that input
-  a tempo.
+  a tempo and publishing the `tempo.*` values.
 - **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
@@ -1573,7 +1582,11 @@ overrides applied as for audio), the two scenes' IDs and names, the shared value
 each bus's post-fader levels (`AudioRouting::page_levels`, read without restarting the
 held peak that `meters.tick` takes; empty while no mixer runs, and read only while a
 page is granted). Attaching and detaching the mixer feed the pages too, so a page given
-a bus reads `null` and then its levels.
+a bus reads `null` and then its levels. A source granted a MIDI input finds it in the
+engine's `MidiInputs` as it opens, and reads it itself on each look
+([ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md) §5); the engine's
+`tempo.*` values reach pages as other shared values do, but only a page granted
+`page_api_tempo` (ADR-0147 §2).
 The source sends its page only what changed, so this costs nothing when no page is
 granted and little when nothing changed, and at most one update per page frame (ADR-0102
 decision 3): what changes within a frame is merged and held, and `page_view` returns
@@ -2240,7 +2253,8 @@ step. `values.set` checks the name and size with the protocol's
 shared checks and the 256-name limit, changes nothing on a refusal, and emits
 `values.changed` only when the value really changed. It is not in the activity or audit
 log, as `live.set` isn't: it carries data and may come many times a second.
-`values.list` reads them by name, and the page feed reads them all (`SharedValues::map`,
+The engine sets the `tempo.*` values itself from the MIDI clock (see *JTunnel receiver* in
+[Contents](#contents-sources)). `values.list` reads them by name, and the page feed reads them all (`SharedValues::map`,
 *Page API* under [Snapshots](#snapshots)).
 
 <a id="preview-streams"></a>
@@ -3276,7 +3290,8 @@ drop ledger's, never the collection lock (see *Audio sources*). The JTunnel rece
 slot in it is a leaf mutex of its own, held only to set or clone the receiver; the
 receiver's thread takes no lock, getting opens and closes over a channel; its senders'
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
-lock held. The camera controls'
+lock held. The `jstream-tempo` thread reads the MIDI state without a lock and takes
+the collection lock only to publish a tempo value that changed. The camera controls'
 changes go to the `jstream-camera-controls` thread over a channel, sent under the
 collection lock; that thread takes no engine lock while it sets them on the device. The CLAP scan's locks
 (`ClapScans`: one held for a whole scan, so scans run one at a time, and leaf locks on
@@ -3376,7 +3391,9 @@ revisions and error codes are logged, never a call's arguments
 ([R-SEC-001](../../docs/RULES.md#R-SEC-001)). A timeline's cues are not calls, so they
 log nothing: `timeline.cue_fired` reports each, with its error. A CLAP scan, at start
 or from `plugin.clap_rescan`, logs a `warn` for each file it couldn't read (its path and
-the host's error) and an `info` with how many effects it found.
+the host's error) and an `info` with how many effects it found. A `tempo.*` value the
+shared values refuse is a `debug`, and a `jstream-tempo` thread that can't start a
+`warn`.
 
 <a id="audit-log"></a>
 ## Audit log

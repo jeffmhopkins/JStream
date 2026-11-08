@@ -226,6 +226,51 @@ impl BrowserKind {
                     visible_if: Some(page_api_on("page_api_audio")),
                     ..param("page_api_bus", "Bus", ParamType::Bus, Value::Null)
                 },
+                ParamDescriptor {
+                    description: Some(
+                        "Also give the page the engine's tempo: the tempo.* shared values, \
+                         and the tempo in jstream.midi()'s reading (ADR-0147)."
+                            .into(),
+                    ),
+                    warning: Some(
+                        "A page given the tempo can follow the song's beat and transport, \
+                         and a page from the web can send that anywhere."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param("page_api_tempo", "Tempo", ParamType::Bool, json!(false))
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "Also give the page one MIDI input's held notes, controllers and \
+                         latest notes, with jstream.midi() (ADR-0147); its tempo too while \
+                         Tempo is on."
+                            .into(),
+                    ),
+                    // ADR-0124 §7's warning, word for word.
+                    warning: Some(
+                        "A page given MIDI sees every note and control on its port.".into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param("page_api_midi", "MIDI", ParamType::Bool, json!(false))
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The MIDI input the page may read: a MIDI port's or JTunnel sender's \
+                         name. Empty gives it every input at once."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api_midi")),
+                    ..param(
+                        "page_api_midi_input",
+                        "MIDI input",
+                        text(crate::midi::MAX_INPUT_NAME as u32, false),
+                        json!(""),
+                    )
+                },
             ],
             ..kind(BROWSER, "Browser", true, true)
         })
@@ -318,7 +363,16 @@ pub(crate) fn open(
                 .as_ref()
                 .zip(ctx.audio.as_ref())
                 .map(|(bus, scopes)| scopes.bus(bus));
-            Feed::new(grant, fps, scope)
+            let midi = grant
+                .midi
+                .as_deref()
+                .zip(ctx.midi.as_ref())
+                .map(|(input, inputs)| inputs.drawn(input));
+            let feed = Feed::new(grant, fps, scope);
+            match midi {
+                Some(state) => feed.with_midi(state),
+                None => feed,
+            }
         }),
         hidden: false,
     }))
