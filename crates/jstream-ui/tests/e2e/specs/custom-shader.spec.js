@@ -2,19 +2,22 @@
 // effect pack and opens the editor over the Filters window, which shows the shader in
 // colour, indents on Tab, compiles a moment after each change and marks the line the
 // engine names. Save as pack… writes it under a chosen ID and moves the filter there,
-// and an `@renamed` line raises the manifest's version with its `renames`. The mock engine loads no packs and describes no kinds, so the page's
+// and an `@renamed` line raises the manifest's version with its `renames`. Add source ›
+// Shader (ADR-0135) writes a source pack, places its source and opens the same editor
+// over its Properties, which open it again from Edit shader…. The mock engine loads no packs and describes no kinds, so the page's
 // socket answers `kind.list`, `kind.describe`, `pack.list`, `pack.read` and `pack.write`
 // here, from the packs the test writes, and refuses a filter of a written pack with a
 // setting its kind doesn't declare; every other message goes on to the mock daemon.
-import { test, expect, connect, showPanel } from '../fixtures.js';
+import { test, expect, connect, openAddSource, showPanel } from '../fixtures.js';
 
 const SHARPEN = {
   kind_id: 'sharpen', category: 'video_filter', name: 'Sharpen', version: 1, video: true, audio: false,
   params: [{ id: 'amount', type: 'float', min: 0, max: 1, step: 0.05, default: 0.2, label: 'Amount', live: true }],
 };
 
-/** The kind a written custom shader pack has: its manifest's name and version, and a
- * setting per `// @param` line of its shader (a colour or a float). */
+/** The kind a written custom shader pack has: a source when its manifest has a
+ * `[[source]]` (ADR-0135), else a video filter, with its manifest's name and version, and
+ * a setting per `// @param` line of its shader (a colour or a float). */
 function shaderKind(pack, files) {
   const manifest = files.find((f) => f.path === 'effect.toml')?.text ?? '';
   const shader = files.find((f) => f.path === 'shader.wgsl')?.text ?? '';
@@ -23,7 +26,8 @@ function shaderKind(pack, files) {
   const params = [...shader.matchAll(/^\/\/ @param (\S+) (\S+)/gm)].map(([, id, type]) => (type === 'color'
     ? { id, type: 'color', alpha: true, default: '#ff9a3cff', label: id, live: true }
     : { id, type: 'float', min: 0, max: 1, default: 0.5, label: id, live: true }));
-  return { kind_id: `${pack}/shader`, category: 'video_filter', name, version, video: true, audio: false, params };
+  const category = /^\[\[source\]\]$/m.test(manifest) ? 'source' : 'video_filter';
+  return { kind_id: `${pack}/shader`, category, name, version, video: true, audio: false, params };
 }
 
 /** Adds a Custom shader to the Backdrop from Add filter, and returns its editor. */
@@ -213,4 +217,69 @@ test('Save as pack… writes the shader under a new ID and moves the filter to i
   // The new filter took the value under its new ID, and nothing the kind doesn't declare.
   expect(adds.at(-1).kind).toBe('warm-look/shader');
   expect(adds.at(-1).settings).toEqual({ mix_amount: 0.25 });
+});
+
+test('Add source › Shader writes a source pack, places it and opens the editor over its Properties', async ({ page, daemon }) => {
+  const { writes } = await fakePacks(page);
+  await connect(page, daemon);
+  const add = await openAddSource(page);
+  await add.getByRole('option', { name: 'Shader' }).click();
+  await add.getByRole('button', { name: 'Create', exact: true }).click();
+  await expect(add).toBeHidden();
+
+  // The source template went out as the first custom pack, a `[[source]]` with one pass.
+  await expect.poll(() => writes.length).toBe(1);
+  expect(writes[0].pack).toBe('custom-1');
+  let manifest = writes[0].files.find((f) => f.path === 'effect.toml').text;
+  expect(manifest).toContain('[[source]]\nid = "shader"\nname = "Shader source"\n');
+  expect(manifest).toContain('width = 1920\nheight = 1080\n');
+  expect(manifest).toContain('[[source.pass]]\nid = "previous"\nshader = "shader.wgsl"\ninputs = []\n');
+
+  // The source is placed in the scene, and its Properties open with the editor over them.
+  await expect(page.locator('.sources-panel li.row')).toHaveCount(2);
+  const props = page.getByRole('dialog', { name: 'Properties' });
+  await expect(props).toBeVisible();
+  const editor = page.getByRole('dialog', { name: 'Custom shader' });
+  await expect(editor.locator('.modal-sub')).toHaveText('Effect pack “custom-1”');
+  const code = editor.getByRole('textbox', { name: 'Shader (WGSL)' });
+  await expect(code).toHaveValue(/^\/\/ @name Shader source\n\/\/ @size 1920x1080\n/);
+  await expect(editor.locator('.shader-shade .hl-annotation').first()).toHaveText('// @name Shader source');
+  // A source can't move to another kind, so it has no Save as pack….
+  await expect(editor.getByRole('button', { name: 'Save as pack…' })).toHaveCount(0);
+
+  // The source annotations reach the manifest: a size, and feedback as the pass's input.
+  const edited = (await code.inputValue())
+    .replace('// @name Shader source', '// @name Plasma')
+    .replace('// @size 1920x1080', '// @size 640x360\n// @feedback');
+  await code.fill(edited);
+  await expect(editor.locator('.shader-status')).toHaveText('Compiled. The picture shows this version.');
+  manifest = writes.at(-1).files.find((f) => f.path === 'effect.toml').text;
+  expect(writes.at(-1).pack).toBe('custom-1');
+  expect(manifest).toContain('name = "Plasma"\n');
+  expect(manifest).toContain('width = 640\nheight = 360\n');
+  expect(manifest).toContain('inputs = ["previous"]');
+
+  // A setting that takes a source setting's ID is refused before anything is written.
+  const before = writes.length;
+  await code.fill(edited.replace('// @feedback', '// @feedback\n// @param width float 0..1 = 0.5 "Width"'));
+  await expect(editor.locator('.shader-status.problem').first()).toContainText('width');
+  expect(writes.length).toBe(before);
+  await code.fill(edited);
+  await expect(editor.locator('.shader-status')).toHaveText('Compiled. The picture shows this version.');
+
+  // Done closes the editor over Properties, whose Edit shader… opens it again on the pack.
+  await editor.getByRole('button', { name: 'Done' }).click();
+  await expect(editor).toBeHidden();
+  await expect(props).toBeVisible();
+  await props.getByRole('button', { name: 'Edit shader…' }).click();
+  await expect(editor.locator('.modal-sub')).toHaveText('Effect pack “custom-1”');
+  await expect(code).toHaveValue(edited);
+  await editor.getByRole('button', { name: 'Done' }).click();
+  await expect(editor).toBeHidden();
+
+  // Add source now lists the written shader by its name, beside Shader.
+  await props.getByRole('button', { name: 'Close' }).first().click();
+  const again = await openAddSource(page);
+  await expect(again.getByRole('option', { name: 'Plasma' })).toBeVisible();
+  await expect(again.getByRole('option', { name: 'Shader', exact: true })).toBeVisible();
 });

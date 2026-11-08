@@ -375,6 +375,17 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    compositor's, the canvas size, and not placed by the scene being drawn into it,
    or the call is `RenderError::Invalid` before any GPU work. Submits that placed the
    layer earlier are ordered before the redraw, so they keep the old contents.
+   A layer drawn over a transparent background also keeps what its scene could have
+   drawn into: the bounding box of every drawn polygon, a texel of margin, clipped
+   (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current
+   change count only, so any later write forgets them, and `apply_filter_into` forgets
+   them on its output, which it does not count. A scene placing the layer as a 2D item
+   in `normal`, `additive` or `screen`, at a size that needs no chain, draws only the
+   part of its quad whose UVs are inside those bounds (`Shape::trim_to`, the same
+   affine map cut down). Outside them every bilinear tap reads only transparent
+   texels, which those modes leave the backdrop under unchanged, so the pixels are the
+   same and fewer are shaded. A chain spreads texels past the margin and the other
+   modes read the backdrop, so those draw the whole quad.
    **`rewrite_rgba8`** refills an upload in place the same way (pass 1 into the
    existing texture).
 5. **Readback**, only when asked. `copy_texture_to_buffer` into a map-read buffer,
