@@ -157,8 +157,8 @@ release = "alpha.5"
 title = "Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus"
 status = "planned"
 issues = [1225, 1216, 1214, 1188, 1325]
-prs = [1251, 1270, 1278, 1329]
-note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer a filter with a safe margin (#1225, #1216); #1278 hears bound hotkeys while another app has the focus (#1188), and #1329 does on Linux under X11 (#1325)"
+prs = [1251, 1270, 1278, 1329, 1343]
+note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer a filter with a safe margin (#1225, #1216); #1278 hears bound hotkeys while another app has the focus (#1188), and #1329 does on Linux under X11 (#1325); #1343 adds wheel chords such as Ctrl+WheelUp, heard in the page (ADR-0112 §3)"
 
 [[target]]
 release = "alpha.5"

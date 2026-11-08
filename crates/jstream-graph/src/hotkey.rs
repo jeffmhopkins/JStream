@@ -1,6 +1,7 @@
 //! Hotkey bindings (ADR-0024 §5) and controller bindings (ADR-0122): the `hotkey.*` and
 //! `binding.*` edits, the labels a hotkey binding carries (ADR-0133), and the removal of
-//! the bindings that name a deleted object (ADR-0040 §3).
+//! the bindings that name a deleted object (ADR-0040 §3). A wheel chord binds only an
+//! action that takes steps (ADR-0112 §3).
 //!
 //! A binding names an object when its action does ([`Action::named_objects`]). Every
 //! object a binding names exists: `hotkey.set` checks it, and the delete edits remove
@@ -42,7 +43,7 @@ fn set(
     if state.hotkeys.contains_key(chord) {
         return Err(already_exists(EntityKind::Hotkey, chord.as_str()));
     }
-    check_bindable(state, action, at)?;
+    check_bindable(state, action, chord.is_wheel(), at)?;
     state.hotkeys.insert(chord.clone(), action.clone());
     Ok(vec![Edit::HotkeyClear {
         chord: chord.clone(),
@@ -122,7 +123,7 @@ fn bind(
     if state.bindings.contains_key(trigger) {
         return Err(already_exists(EntityKind::Binding, &trigger.to_string()));
     }
-    check_bindable(state, action, at)?;
+    check_bindable(state, action, false, at)?;
     state.bindings.insert(trigger.clone(), action.clone());
     Ok(vec![Edit::BindingClear {
         trigger: trigger.clone(),
@@ -141,10 +142,24 @@ fn unbind(state: &mut State, trigger: &Trigger) -> Result<Vec<Edit>, ProtocolErr
 }
 
 /// Checks that `action` can be bound, for a hotkey or a controller binding: the action's
-/// own rule, then that every object it names exists.
-fn check_bindable(state: &State, action: &Action, at: usize) -> Result<(), ProtocolError> {
+/// own rule, then for a `wheel` chord that it takes steps, then that every object it
+/// names exists.
+fn check_bindable(
+    state: &State,
+    action: &Action,
+    wheel: bool,
+    at: usize,
+) -> Result<(), ProtocolError> {
     if let Some((field, reason)) = action.bind_problem() {
         return Err(invalid(at, &format!("action.{field}"), reason));
+    }
+    if wheel && !action.takes_steps() {
+        return Err(invalid(
+            at,
+            "action.type",
+            "a wheel chord runs once per notch, so it can only be bound to an action that \
+             takes one step, such as `scene.zoom_camera` (ADR-0112)",
+        ));
     }
     for (entity, id) in action.named_objects() {
         if !exists(state, entity, id) {
