@@ -16,9 +16,9 @@ use crate::app::SessionContext;
 use crate::icons::Icon;
 use crate::store::{Studio, query};
 use jstream_control::protocol::{
-    AssetRoot, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
-    FontInfo, KindDescriptor, Media, ParamDescriptor, ParamType, Query, QueryResult, Reference,
-    Settings, SourceId, SourceInfo, SourceKind,
+    AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
+    CaptureTargetInfo, CaptureTargetKind, FontInfo, KindDescriptor, Media, ParamDescriptor,
+    ParamType, Query, QueryResult, Reference, Settings, SourceId, SourceInfo, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -456,6 +456,9 @@ fn input_for(
         ParamType::CaptureFormat { part, target } => {
             capture_format_input(param, value, send, *part, target.clone(), settings)
         }
+        ParamType::CameraControls { target } => {
+            camera_controls_input(value, send, target.clone(), settings)
+        }
         ParamType::Scene => reference_select(value, send, move || {
             studio.collection.with(|c| {
                 c.iter()
@@ -704,6 +707,61 @@ pub fn device_formats<'t>(
     found.map_or(&[], |t| t.formats.as_slice())
 }
 
+/// The controls of the device that `device` names, as [`device_formats`] finds it.
+pub fn device_controls<'t>(
+    targets: &'t [CaptureTargetInfo],
+    device: &str,
+) -> &'t [CameraControlInfo] {
+    let mut devices = targets
+        .iter()
+        .filter(|t| t.kind == CaptureTargetKind::Device);
+    let found = if device.is_empty() {
+        devices.next()
+    } else {
+        devices.find(|t| t.target == device)
+    };
+    found.map_or(&[], |t| t.controls.as_slice())
+}
+
+/// The label a camera control's name shows as: `white_balance` is "White balance".
+pub fn control_label(name: &str) -> String {
+    let words = name.replace('_', " ");
+    let mut chars = words.chars();
+    chars
+        .next()
+        .map(|c| c.to_uppercase().chain(chars).collect())
+        .unwrap_or_default()
+}
+
+/// A `camera_controls` value with the control `name` set to `setting`: a number, or
+/// `"auto"`. `None` removes the entry, so the device keeps what it has.
+pub fn with_control(value: &Value, name: &str, setting: Option<Value>) -> Value {
+    let mut object = value.as_object().cloned().unwrap_or_default();
+    match setting {
+        Some(setting) => {
+            object.insert(name.to_owned(), setting);
+        }
+        None => {
+            object.remove(name);
+        }
+    }
+    Value::Object(object)
+}
+
+/// What one control of a `camera_controls` value shows: whether the device sets it
+/// itself, and the number the slider holds. A control the value doesn't name shows as
+/// the device reports it.
+pub fn control_shown(value: &Value, control: &CameraControlInfo) -> (bool, i32) {
+    match value.get(&control.name) {
+        Some(Value::String(s)) if s == CAMERA_CONTROL_AUTO => (true, control.value),
+        Some(v) => match v.as_i64().and_then(|n| i32::try_from(n).ok()) {
+            Some(n) => (false, n),
+            None => (control.auto == Some(true), control.value),
+        },
+        None => (control.auto == Some(true), control.value),
+    }
+}
+
 /// The label a `pixel_format` value shows as.
 pub fn pixel_format_label(value: &str) -> String {
     match value {
@@ -903,6 +961,109 @@ fn capture_format_input(
         }
     };
     view! { {body} }.into_any()
+}
+
+/// A webcam's camera controls: a slider and a number for each control the device that
+/// `target` picks lists in `capture.targets`, with an Auto box for one the device can
+/// set itself. Each change sends the whole object with that control's entry set.
+/// Until the list arrives, and for a device with no controls, it says so.
+fn camera_controls_input(
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+    target: String,
+    settings: Signal<Settings>,
+) -> AnyView {
+    let listing = CaptureListing::shared();
+    let listed = listing.listed;
+    listing.first();
+    let controls = move || {
+        listed.with(|l| match l {
+            Some(Ok(targets)) => settings.with(|s| {
+                let device = s.get(&target).map(display).unwrap_or_default();
+                Some(device_controls(targets, &device).to_vec())
+            }),
+            Some(Err(_)) => Some(Vec::new()),
+            None => None,
+        })
+    };
+    let body = move || match controls() {
+        None => view! { <span class="hint">"Listing the camera's controls…"</span> }.into_any(),
+        Some(list) if list.is_empty() => {
+            view! { <span class="hint">"This camera lists no controls."</span> }.into_any()
+        }
+        Some(list) => list
+            .into_iter()
+            .map(|control| camera_control_row(control, value.clone(), send.clone()))
+            .collect_view()
+            .into_any(),
+    };
+    view! { <div class="camera-controls">{body}</div> }.into_any()
+}
+
+/// One control's row in [`camera_controls_input`].
+fn camera_control_row(
+    control: CameraControlInfo,
+    value: impl Fn() -> Value + Clone + Send + Sync + 'static,
+    send: impl Fn(Result<Value, String>) + Clone + Send + Sync + 'static,
+) -> AnyView {
+    let shown = {
+        let (value, control) = (value.clone(), control.clone());
+        move || control_shown(&value(), &control)
+    };
+    let number = {
+        let shown = shown.clone();
+        move || shown().1.to_string()
+    };
+    let is_auto = {
+        let shown = shown.clone();
+        move || shown().0
+    };
+    let on_number = {
+        let (value, send, name) = (value.clone(), send.clone(), control.name.clone());
+        let (min, max) = (control.min, control.max);
+        move |event: leptos::ev::Event| {
+            let text = event_target_value(&event);
+            let got = match text.trim().parse::<i32>() {
+                Ok(n) if (min..=max).contains(&n) => {
+                    Ok(with_control(&value(), &name, Some(Value::from(n))))
+                }
+                Ok(_) => Err(format!("{name} must be {min} to {max}")),
+                Err(_) => Err(format!("{name} must be a whole number")),
+            };
+            send(got)
+        }
+    };
+    let auto_box = control.auto.map(|_| {
+        let (value, send, name) = (value.clone(), send.clone(), control.name.clone());
+        let is_auto = is_auto.clone();
+        let number = number.clone();
+        view! {
+            <label class="camera-control-auto">
+                <input type="checkbox" prop:checked=is_auto
+                    on:change=move |event| {
+                        let setting = if event_target_checked(&event) {
+                            Value::from(CAMERA_CONTROL_AUTO)
+                        } else {
+                            Value::from(number().parse::<i32>().unwrap_or_default())
+                        };
+                        send(Ok(with_control(&value(), &name, Some(setting))))
+                    } />
+                "Auto"
+            </label>
+        }
+    });
+    let (min, max, step) = (control.min, control.max, control.step.max(1));
+    view! {
+        <div class="camera-control">
+            <span class="camera-control-name">{control_label(&control.name)}</span>
+            <input type="range" min=min.to_string() max=max.to_string() step=step.to_string()
+                prop:value=number.clone() prop:disabled=is_auto.clone() on:change=on_number.clone() />
+            <input type="number" min=min.to_string() max=max.to_string() step=step.to_string()
+                prop:value=number prop:disabled=is_auto on:change=on_number />
+            {auto_box}
+        </div>
+    }
+    .into_any()
 }
 
 /// A display or window to capture, picked from what `capture.targets` lists now. Until
@@ -1226,14 +1387,15 @@ fn asset_input(
 #[cfg(test)]
 mod tests {
     use super::{
-        BUNDLED_FONT, OTHER_FONT, asset_value, device_formats, display, draft_patch, font_choices,
-        format_choices, fps_text, is_visible, offers, parse, rgb_part, sections, takes_fonts,
-        target_choices, value_of, with_rgb,
+        BUNDLED_FONT, OTHER_FONT, asset_value, control_label, control_shown, device_controls,
+        device_formats, display, draft_patch, font_choices, format_choices, fps_text, is_visible,
+        offers, parse, rgb_part, sections, takes_fonts, target_choices, value_of, with_control,
+        with_rgb,
     };
     use jstream_control::protocol::{
-        AssetRoot, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
-        EnumOption, FontInfo, KindCategory, KindDescriptor, ParamDescriptor, ParamType, PixelSize,
-        Reference, Settings, VisibleIf,
+        AssetRoot, CAMERA_CONTROL_AUTO, CameraControlInfo, CaptureFormatInfo, CaptureFormatPart,
+        CaptureTargetInfo, CaptureTargetKind, EnumOption, FontInfo, KindCategory, KindDescriptor,
+        ParamDescriptor, ParamType, PixelSize, Reference, Settings, VisibleIf,
     };
     use serde_json::{Value, json};
 
@@ -1578,7 +1740,36 @@ mod tests {
             size: None,
             primary: false,
             formats: Vec::new(),
+            controls: Vec::new(),
         }
+    }
+
+    #[test]
+    fn a_camera_control_shows_its_setting_or_what_the_device_reports() {
+        let exposure = CameraControlInfo {
+            name: "exposure".into(),
+            min: -11,
+            max: -2,
+            step: 1,
+            default: -6,
+            value: -5,
+            auto: Some(true),
+        };
+        let mut cam = target(CaptureTargetKind::Device, "cam", "Cam");
+        cam.controls = vec![exposure.clone()];
+        let listed = [target(CaptureTargetKind::Display, "d1", "Display 1"), cam];
+        assert_eq!(device_controls(&listed, "").len(), 1);
+        assert_eq!(device_controls(&listed, "cam")[0].name, "exposure");
+        assert!(device_controls(&listed, "gone").is_empty());
+        assert_eq!(control_label("white_balance"), "White balance");
+        // Not named: as the device reports it.
+        assert_eq!(control_shown(&json!({}), &exposure), (true, -5));
+        let set = with_control(&json!({"gain": 3}), "exposure", Some(json!(-8)));
+        assert_eq!(set, json!({"gain": 3, "exposure": -8}));
+        assert_eq!(control_shown(&set, &exposure), (false, -8));
+        let auto = with_control(&set, "exposure", Some(json!(CAMERA_CONTROL_AUTO)));
+        assert_eq!(control_shown(&auto, &exposure), (true, -5));
+        assert_eq!(with_control(&auto, "exposure", None), json!({"gain": 3}));
     }
 
     #[test]

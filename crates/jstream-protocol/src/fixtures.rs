@@ -38,11 +38,11 @@ use crate::{
 };
 use crate::{Bezier, DroppedOverride, ItemOverride, KeyframeTiming, OverrideField};
 use crate::{Binding, Chord, DeviceId, DeviceInfo, HotkeyBinding, Trigger};
-use crate::{Canvas as CameraCanvas, SceneCamera};
 use crate::{
-    CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind, FontInfo,
-    PixelSize, SourceSize,
+    CameraControlInfo, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
+    FontInfo, PixelSize, SourceSize,
 };
+use crate::{Canvas as CameraCanvas, SceneCamera};
 use crate::{
     Drawer, DrawerProfile, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
     ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
@@ -2189,6 +2189,13 @@ fn color_kind() -> KindDescriptor {
                 },
                 json!(""),
             ),
+            param(
+                "camera_controls",
+                ParamType::CameraControls {
+                    target: "camera".into(),
+                },
+                json!({"exposure": -6, "white_balance": "auto"}),
+            ),
         ],
     }
 }
@@ -2634,6 +2641,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     }),
                     primary: true,
                     formats: Vec::new(),
+                    controls: Vec::new(),
                 },
                 CaptureTargetInfo {
                     kind: CaptureTargetKind::Window,
@@ -2642,6 +2650,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     size: None,
                     primary: false,
                     formats: Vec::new(),
+                    controls: Vec::new(),
                 },
                 CaptureTargetInfo {
                     kind: CaptureTargetKind::Device,
@@ -2654,6 +2663,15 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         height: 1080,
                         fps: 29.97,
                         pixel_format: "mjpeg".into(),
+                    }],
+                    controls: vec![CameraControlInfo {
+                        name: "white_balance".into(),
+                        min: 2800,
+                        max: 6500,
+                        step: 10,
+                        default: 4600,
+                        value: 4600,
+                        auto: Some(true),
                     }],
                 },
             ],

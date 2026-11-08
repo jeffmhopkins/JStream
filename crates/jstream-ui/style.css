@@ -2005,3 +2005,10 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .shader-save-as-row input { flex: 1 1 auto; min-width: 0; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
 .shader-save-as-open { margin-right: auto; }
 .shader-unsaved { margin-right: auto; align-self: center; font-size: 12px; color: var(--problem); }
+
+/* A webcam's camera controls: one row per control, name, slider, number, Auto. */
+.camera-controls { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.camera-controls .hint { color: var(--muted); font-size: 0.85rem; }
+.camera-control { display: grid; grid-template-columns: 9em minmax(0, 1fr) 5em auto; gap: 6px; align-items: center; }
+.camera-control input[type="number"] { width: 100%; }
+.camera-control-auto { display: flex; gap: 4px; align-items: center; font-size: 0.85rem; }

@@ -157,6 +157,7 @@ impl CaptureKind {
         let mut params = vec![target];
         if flavor == Flavor::Device {
             params.extend(format_params(param_id));
+            params.push(controls_param(param_id));
         }
         // A webcam has no pointer to show; a display or window capture may leave it out.
         if flavor != Flavor::Device {
@@ -241,6 +242,74 @@ fn format_params(target: &str) -> Vec<jstream_protocol::ParamDescriptor> {
              choose: uncompressed when it can.",
         ),
     ]
+}
+
+/// A `webcam`'s camera controls (#1196): set on the device as they change, live, so a
+/// change never restarts the capture.
+fn controls_param(target: &str) -> jstream_protocol::ParamDescriptor {
+    let mut p = param(
+        CAMERA_CONTROLS,
+        "Camera controls",
+        ParamType::CameraControls {
+            target: target.into(),
+        },
+        json!({}),
+    );
+    p.description = Some(
+        "The device's camera controls to set, by name, each to a number in the range \
+         `capture.targets` lists for it or to `\"auto\"` to let the device set it: \
+         `{\"exposure\": -6, \"white_balance\": \"auto\"}`. A control left out keeps what \
+         the device has. Applied while the device captures, without restarting it."
+            .into(),
+    );
+    p.group = Some("Camera".into());
+    p.live = true;
+    p
+}
+
+/// The `webcam` setting that holds its camera controls.
+const CAMERA_CONTROLS: &str = "camera_controls";
+
+/// What a `webcam` source's `camera_controls` setting sets one control to.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum CameraControlSetting {
+    /// This value, by hand.
+    Manual(i32),
+    /// The device's automatic mode.
+    Auto,
+}
+
+/// The camera controls a source of `kind_id` with these settings sets, by control name,
+/// with its device as [`webcam_device`] gives it; `None` when `kind_id` is not
+/// `webcam`. Entries that aren't an integer or `"auto"` are left out, as is a setting
+/// that isn't an object (settings are checked before they are stored, so neither
+/// happens to a stored one).
+pub fn webcam_controls(
+    kind_id: &str,
+    settings: &Settings,
+) -> Option<(
+    Option<String>,
+    std::collections::BTreeMap<String, CameraControlSetting>,
+)> {
+    let device = webcam_device(kind_id, settings)?;
+    let controls = settings
+        .get(CAMERA_CONTROLS)
+        .and_then(serde_json::Value::as_object)
+        .map(|object| {
+            object
+                .iter()
+                .filter_map(|(name, v)| {
+                    let setting = if v.as_str() == Some(jstream_protocol::CAMERA_CONTROL_AUTO) {
+                        CameraControlSetting::Auto
+                    } else {
+                        CameraControlSetting::Manual(i32::try_from(v.as_i64()?).ok()?)
+                    };
+                    Some((name.clone(), setting))
+                })
+                .collect()
+        })
+        .unwrap_or_default();
+    Some((device, controls))
 }
 
 /// What a `webcam`'s format settings ask. A device that offers no format matching them

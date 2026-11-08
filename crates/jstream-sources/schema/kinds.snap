@@ -2058,6 +2058,16 @@ source: crates/jstream-sources/tests/kinds.rs
         "description": "How the device sends its frames: `mjpeg` (compressed, decoded by the engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine choose: uncompressed when it can.",
         "group": "Format",
         "live": false
+      },
+      {
+        "id": "camera_controls",
+        "type": "camera_controls",
+        "target": "device",
+        "default": {},
+        "label": "Camera controls",
+        "description": "The device's camera controls to set, by name, each to a number in the range `capture.targets` lists for it or to `\"auto\"` to let the device set it: `{\"exposure\": -6, \"white_balance\": \"auto\"}`. A control left out keeps what the device has. Applied while the device captures, without restarting it.",
+        "group": "Camera",
+        "live": true
       }
     ]
   },
