@@ -295,7 +295,7 @@ pub fn blend_name(mode: BlendMode) -> &'static str {
 
 /// A field's value as the box's `f32`. The fields keep values within ±100000, well
 /// inside `f32`'s range.
-fn to_f32(value: f64) -> f32 {
+pub(super) fn to_f32(value: f64) -> f32 {
     #[expect(
         clippy::cast_possible_truncation,
         reason = "field values are clamped to ±100000, well inside f32"
