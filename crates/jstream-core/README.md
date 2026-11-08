@@ -1591,7 +1591,8 @@ effect that draws past its input runs (`Chain::pad_at`, that effect's
 [ADR-0136](../../docs/adr/0136-an-effects-outset-follows-its-settings.md)). While a Move blends an item's effects (ADR-0127), each effect's outset is
 the larger of the two looks' (`widen`, `Chain::outset_also`), so the layer holds both,
 and an item whose motion drives its effects' settings (ADR-0138, `driven.rs`) is padded
-for the least and the most they reach (`Driven::extremes`). A box
+for the least and the most they reach (`Driven::extremes`), from its own settings and,
+during a Move, from the look it leaves. A box
 longer with its outset than 8192 pixels on a side is scaled down uniformly. The item is
 drawn cropped and fitted, centred, flat and unrotated,
 with its fit and flips, and its live values applied. Then the chain runs into

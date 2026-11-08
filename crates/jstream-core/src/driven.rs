@@ -29,6 +29,10 @@
 //! padded for the most and the least the settings reach, so a pulsing outer stroke or
 //! glow is never cut.
 //!
+//! A setting that a filter saved before its kind had it lacks moves from the kind's
+//! default. A shot whose driven settings changed is a new shot, so an edit to an effect
+//! modifier alone reaches the renderer.
+//!
 //! Docs: docs/adr/0138-motion-drives-effect-settings.md
 
 use jstream_anim::{Kind, Modifier};
