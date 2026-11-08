@@ -23,9 +23,9 @@ use jstream_platform::{
 };
 
 use super::ffi::{
-    Api, BufferInfo, DECODER_OPTION_FRAMES_REMAINING, DECODER_OPTION_TRACE_LEVEL, DS_ERROR_FREE,
-    Decoder, DecoderVtbl, DecodingParam, ERROR_CON_DISABLE, VIDEO_BITSTREAM_AVC, VIDEO_FORMAT_I420,
-    VideoProperty, WELS_LOG_QUIET,
+    Api, BufferInfo, DECODER_OPTION_TRACE_LEVEL, DS_ERROR_FREE, Decoder, DecoderVtbl,
+    DecodingParam, ERROR_CON_DISABLE, VIDEO_BITSTREAM_AVC, VIDEO_FORMAT_I420, VideoProperty,
+    WELS_LOG_QUIET,
 };
 
 /// The name the decoder lists under. It names Cisco, as its licence asks.
@@ -41,8 +41,7 @@ pub fn openh264_decoder_info() -> CodecInfo {
     }
 }
 
-/// The most pictures `finish` flushes, whatever the library says it holds: H.264's
-/// decoded picture buffer holds at most 16.
+/// The most pictures `finish` flushes: H.264's decoded picture buffer holds at most 16.
 const MAX_FLUSH: usize = 16;
 
 /// One OpenH264 decoder session.
@@ -294,6 +293,8 @@ impl VideoDecoder for OpenH264Decoder {
             pts.rescale(timebase, jstream_platform::media::Rounding::Nearest)
                 .map_err(PlatformError::Media)?
         };
+        // Never empty (`Packet::new` refuses that), so the library never takes it for
+        // the end of the stream.
         let data = packet.data();
         let len = c_int::try_from(data.len()).map_err(|_| PlatformError::Unsupported {
             what: format!("a {}-byte packet for OpenH264", data.len()),
@@ -327,21 +328,9 @@ impl VideoDecoder for OpenH264Decoder {
     fn finish(&mut self, out: &mut Vec<VideoSurface>) -> Result<(), PlatformError> {
         if !self.finished {
             self.finished = true;
-            let mut remaining: c_int = 0;
-            // SAFETY: the decoder is live, and the option takes an `int` to write.
-            let rc = unsafe {
-                (self.vtbl().get_option)(
-                    self.decoder.as_ptr(),
-                    DECODER_OPTION_FRAMES_REMAINING,
-                    (&raw mut remaining).cast(),
-                )
-            };
-            let remaining = if rc == 0 {
-                usize::try_from(remaining).unwrap_or(0).min(MAX_FLUSH)
-            } else {
-                0
-            };
-            for _ in 0..remaining {
+            // Flush until the library has no picture left, rather than trusting its
+            // count of them, and never more than a picture buffer holds.
+            for _ in 0..MAX_FLUSH {
                 let mut planes = [std::ptr::null_mut(); 3];
                 let mut info = BufferInfo::with_time_stamp(0);
                 let flush = self.vtbl().flush_frame;

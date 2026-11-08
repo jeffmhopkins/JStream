@@ -39,7 +39,8 @@ aac-encoder = ["dep:jstream-aac"]
 hw-tests = []
 # The one test that downloads Cisco's OpenH264 binary from Cisco's server, to record or
 # re-check the pin (ADR-0140). It touches the network, so it is off by default, the test
-# is also `#[ignore]`d, and CI never turns it on (R-TEST-004). Run it by hand with
+# is also `#[ignore]`d. CI's `e2e-stream` job turns it on, the one run against the real
+# library; anywhere else, run it by hand with
 # `cargo test -p jstream-platform-linux --features openh264-download -- --ignored downloads_the_pinned`.
 openh264-download = []
 

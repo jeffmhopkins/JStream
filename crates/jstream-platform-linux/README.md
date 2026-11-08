@@ -76,5 +76,5 @@ adapter where there is no GPU. Three kinds are opt-in:
   GPU, PipeWire daemon, Secret Service, sound card or webcam;
 - the `openh264-download` feature and `--ignored` run the one test that downloads from
   Cisco, which is how the pin is recorded, and round-trips a stream through Cisco's
-  encoder and decoder (CI's `e2e-stream` job runs it);
+  encoder and decoder, luma and both chroma planes (CI's `e2e-stream` job runs it);
 - DMA-BUF import and export need a GPU driver, so they are covered only by `hw-tests`.
