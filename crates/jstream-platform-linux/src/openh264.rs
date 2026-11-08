@@ -1,5 +1,6 @@
-//! Cisco's OpenH264 binary: Linux's software H.264 encoder, downloaded from Cisco on the
-//! user's request and loaded at run time (docs/adr/0061-source-types-and-decoding-scope-v2.md).
+//! Cisco's OpenH264 binary: Linux's software H.264 encoder, and the decoder for the
+//! streams the engine encodes itself, downloaded from Cisco on the user's request and
+//! loaded at run time (docs/adr/0140-source-types-and-decoding-scope-v3.md).
 //!
 //! JStream never ships, mirrors, builds or patches OpenH264. [`OpenH264Store::install`]
 //! fetches the one pinned release ([`OPENH264_PIN`]) from Cisco's server, checks the
@@ -10,11 +11,12 @@
 //! the file it wrote, and checks its hash again each time; a copy from anywhere else is
 //! never loaded. [`OpenH264Store::remove`] deletes it again.
 //!
-//! The encoder itself is [`OpenH264Encoder`], on hand-written declarations of the few
-//! calls it makes (`ffi.rs`), so no crate links or builds OpenH264 and `deny.toml`'s
+//! The encoder itself is [`OpenH264Encoder`] and the decoder [`OpenH264Decoder`], on
+//! hand-written declarations of the few calls they make (`ffi.rs`), so no crate links or builds OpenH264 and `deny.toml`'s
 //! `openh264` bans stay (R-DEP-002).
 
 mod bzip2;
+mod decoder;
 mod encoder;
 mod ffi;
 mod https;
@@ -26,10 +28,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use jstream_platform::media::Codec;
-use jstream_platform::{CodecDownload, PlatformError, VideoEncoder, VideoEncoderConfig};
+use jstream_platform::{
+    CodecDownload, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+    VideoEncoderConfig,
+};
 
 use crate::dl::SystemLibrary;
 
+pub use decoder::{OPENH264_DECODER_NAME, OpenH264Decoder, openh264_decoder_info};
 pub use encoder::{OPENH264_ENCODER_NAME, OpenH264Encoder, openh264_encoder_info};
 pub use https::HttpsFetch;
 
@@ -234,6 +240,20 @@ impl OpenH264Store {
         encoder::params(config)?;
         let api = Arc::new(self.load()?);
         Ok(Box::new(OpenH264Encoder::open(api, config)?))
+    }
+
+    /// Opens a decoder for `config` on the stored library, for a stream the engine
+    /// encoded itself (ADR-0140).
+    ///
+    /// # Errors
+    /// As for [`video_encoder`](Self::video_encoder), and as for opening the decoder.
+    pub fn video_decoder(
+        &self,
+        config: &VideoDecoderConfig,
+    ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+        decoder::check(config)?;
+        let api = Arc::new(self.load()?);
+        Ok(Box::new(OpenH264Decoder::open(api, config)?))
     }
 
     /// Loads the stored library after checking it is the one this store wrote.

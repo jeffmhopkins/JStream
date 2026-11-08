@@ -62,7 +62,7 @@ mod controls;
 #[cfg(any(windows, test))]
 mod convert;
 #[cfg(any(windows, test))]
-mod format;
+pub(crate) mod format;
 #[cfg(windows)]
 mod mjpeg;
 #[cfg(any(windows, test))]

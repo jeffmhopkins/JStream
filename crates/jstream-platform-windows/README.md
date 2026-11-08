@@ -35,7 +35,7 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | `WindowsProcessCpu`, `WindowsThreadCpu`, `WindowsThreadPriority` | `ProcessCpu`, `ThreadCpu`, `ThreadPriority` | `process.rs` | CPU time, and MMCSS for the real-time threads |
 | `WasapiAudio` | `AudioIo` | `audio/` | endpoints, inputs, outputs, loopback and process loopback; event-driven, shared mode, one MMCSS "Pro Audio" thread per stream |
 | `WgcCapture` | `Capture` | `capture/` | Windows.Graphics.Capture of displays and windows, on the CPU path or the GPU path (`on_gpu`) |
-| `MfCodecs` | `Codecs` | `codec/` | Media Foundation AAC and H.264, HEVC and AV1 encoders, on CPU frames or the context's encode targets, with the first-frame software fallback |
+| `MfCodecs` | `Codecs` | `codec/` | Media Foundation AAC and H.264, HEVC and AV1 encoders, on CPU frames or the context's encode targets, with the first-frame software fallback, and the H.264 decoder MFT for the engine's own streams ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)) |
 | `MfVideoDevices`, `MfMjpegDecoder` | `VideoDevices`, `CaptureDecoder` | `video_device/` | webcams and capture cards, paired with their microphones, their camera controls (`IAMVideoProcAmp` and `IAMCameraControl` on the media source), and MJPEG decoding |
 | `MfMediaDecoders` | `MediaDecoders` | `decode/` | local media files through the Source Reader |
 | `WindowsGpu` | `GpuInterop` | `gpu/` | the DX12 wgpu device on the media adapter, a D3D11 device beside it, shared NV12 encode targets and fences ([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)) |
@@ -47,12 +47,13 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | `PluginBlock`, `ProAudioThread`, `WindowsPluginHosts` | `PluginHosts` | `plugin_block.rs`, `plugin_hosts.rs` | CLAP filters hosted out of process: the shared block, the audio thread and the host processes ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) |
 | `pick_path` | | `dialog.rs` | the desktop app's Browse dialogs: a file, a save or a folder |
 
-Not here yet: Media Foundation's packet-level video decoders (`MfCodecs`; media files
-decode through `MfMediaDecoders`), the virtual camera taking `VideoSurface::Gpu`, and a
-`Backends` constructor, which needs all of them.
+Not here yet: packet-level decoders for HEVC and AV1 (`MfCodecs` decodes H.264 only;
+media files decode through `MfMediaDecoders`), the virtual camera taking
+`VideoSurface::Gpu`, and a `Backends` constructor, which needs all of them.
 
 **Tests.** `lib.rs`'s rustdoc lists every test and what it checks. The helpers that don't call Windows (format choice, target IDs, AAC and video
-encoder configuration, the first-frame fallback, the GPU capture ring, credential names
+encoder configuration, the first-frame fallback, the H.264 decoder's configuration
+check and picture cropping, the GPU capture ring, credential names
 and limits, the virtual camera's format, the media-file conversions, the dialog filter)
 run on every platform. The clock, the credential round trip and the Media Foundation
 probe run in CI's Windows job. Tests against real devices, the OS encoders, the GPU and

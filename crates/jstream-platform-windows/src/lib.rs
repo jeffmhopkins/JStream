@@ -9,7 +9,7 @@
 //! both ends) with the plugin host's MMCSS registration (`ProAudioThread`),
 //! `check_media_foundation`, which reports a Windows N edition without Media Foundation,
 //! and user-only files for a host's secrets (`create_private_file`,
-//! `check_private_file`), and the process's CPU time (`WindowsProcessCpu`) and its threads' (`WindowsThreadCpu`), and the MMCSS tasks of the real-time threads (`WindowsThreadPriority`), and the desktop app's global hotkeys (`GlobalHotkeys`, ADR-0112); packet video decoders follow. Layer 2, and one of the few crates allowed
+//! `check_private_file`), and the process's CPU time (`WindowsProcessCpu`) and its threads' (`WindowsThreadCpu`), and the MMCSS tasks of the real-time threads (`WindowsThreadPriority`), and the desktop app's global hotkeys (`GlobalHotkeys`, ADR-0112), and Media Foundation's H.264 decoder for the engine's own streams (ADR-0140); HEVC and AV1 packet decoders follow. Layer 2, and one of the few crates allowed
 //! `unsafe` (R-UNSAFE-001): every OS call is wrapped here behind safe APIs.
 //!
 //! The backends exist only on Windows. On other platforms the crate builds empty except
@@ -24,6 +24,8 @@
 //! and the mailbox are `jstream-platform`'s, tested there), the AAC helpers
 //! (configuration check, PCM conversion, packet timing and padding), the video encoder
 //! helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping),
+//! the H.264 decoder's helpers (configuration check, the display aperture, cropping
+//! into I420 or NV12, short buffers and odd offsets refused),
 //! the first-frame fallback with fake encoders (`codec::fallback`: a refused first
 //! frame reopened in software, a later refusal failing, `Busy` keeping it armed, a
 //! failed software open, and when it applies), the GPU capture ring's slot choice
@@ -72,7 +74,8 @@
 //! MJPEG format for two seconds each (checking size, format and `pts`), open a device
 //! twice (shared or `Busy`), and refuse an unknown device or format; an unplug test
 //! runs only when `JSTREAM_UNPLUG_TEST` is set. The H.264 tests encode two seconds in
-//! software from NV12 and from RGBA (the engine's input), and in hardware from RGBA;
+//! software from NV12 and from RGBA (the engine's input), and in hardware from RGBA,
+//! and the software stream decodes back, every picture at its size and `pts`;
 //! the HEVC and AV1 tests encode two seconds in hardware from RGBA. The media-file
 //! tests play the video file `JSTREAM_TEST_MEDIA` names (over two seconds long): thirty
 //! frames in order, opaque and of the stream's size, a seek to the middle landing at or
