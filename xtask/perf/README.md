@@ -130,10 +130,12 @@ frames over budget at 100%, because that share flips for any scene drawing near 
 33 ms budget. The base scene has a tighter frame-time bar, so a regression in a frame's
 fixed cost shows there first. The scenes that software rendering makes slow (a 1080p
 blur, glow, shadow, outline, sharpen, key or scroll, the models, many item effects, a
-scene chain) have their own looser limits. An unknown key fails, so a typo can't turn
+scene chain, six scenes nested in browser-style blending) have their own looser limits. An unknown key fails, so a typo can't turn
 a limit off.
 
 `bench/gates-lavapipe.json` holds the `--bench` gates for the same runner: the bench's
 alpha.5 counters with room for software rendering, at least a fifth of the target frame
-rate and no budget on frames over time. It sits in a folder of its own because every
+rate and no budget on frames over time, and quality-probe floors of 30 dB luma PSNR and
+0.90 SSIM for Cisco's OpenH264 at software rates
+([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). It sits in a folder of its own because every
 `*.json` beside this file is read as a scene.

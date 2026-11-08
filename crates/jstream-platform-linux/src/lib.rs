@@ -8,9 +8,10 @@
 //! libpipewire (`PipeWire`) with audio input, output and loopback through it
 //! (`PipeWireAudio`), ALSA audio input and output as ADR-0060 §4's fallback
 //! (`AlsaAudio`, libasound loaded at run time), libva, VA-API H.264 and HEVC encoding from CPU
-//! frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder,
-//! downloaded only on the user's request and checked against its pin (`OpenH264Store`,
-//! `OpenH264Encoder`, ADR-0061), and AAC encoding on JStream's own AAC-LC encoder
+//! frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder
+//! and the decoder of the engine's own H.264 streams, downloaded only on the user's
+//! request and checked against its pin (`OpenH264Store`, `OpenH264Encoder`,
+//! `OpenH264Decoder`, ADR-0140), and AAC encoding on JStream's own AAC-LC encoder
 //! (`RustAacEncoder`, feature `aac-encoder`), which `VaapiCodecs` opens,
 //! the stream-key and OAuth-token store (`LinuxSecrets`, ADR-0071): the Secret
 //! Service, else a `0600` file, the process's CPU time (`LinuxProcessCpu`) and its threads' (`LinuxThreadCpu`), and
@@ -26,7 +27,7 @@
 //! on Linux. On other platforms the crate builds empty except for its
 //! platform-independent helpers, which are tested everywhere.
 //!
-//! Docs: crates/jstream-platform-linux/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0060-linux-platform-support.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0062-aac-lc-encoder-patent-check.md, docs/adr/0014-media-clock.md, docs/adr/0071-linux-secret-store.md, docs/adr/0112-assignable-camera-zoom-bindings.md
+//! Docs: crates/jstream-platform-linux/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0060-linux-platform-support.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0062-aac-lc-encoder-patent-check.md, docs/adr/0014-media-clock.md, docs/adr/0071-linux-secret-store.md, docs/adr/0112-assignable-camera-zoom-bindings.md
 
 #[cfg(feature = "aac-encoder")]
 mod aac;
@@ -81,10 +82,10 @@ pub use hotkeys::{
 };
 #[cfg(target_os = "linux")]
 pub use openh264::{
-    Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_DOWNLOAD_ID,
-    OPENH264_ENCODER_NAME, OPENH264_LICENSE_TEXT, OPENH264_LICENSE_URL, OPENH264_NOTICE,
-    OPENH264_PIN, OpenH264Encoder, OpenH264Pin, OpenH264Store, openh264_encoder_info,
-    wants_software,
+    Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_DECODER_NAME,
+    OPENH264_DOWNLOAD_ID, OPENH264_ENCODER_NAME, OPENH264_LICENSE_TEXT, OPENH264_LICENSE_URL,
+    OPENH264_NOTICE, OPENH264_PIN, OpenH264Decoder, OpenH264Encoder, OpenH264Pin, OpenH264Store,
+    openh264_decoder_info, openh264_encoder_info, wants_software,
 };
 #[cfg(target_os = "linux")]
 pub use pairing::PairedAudio;

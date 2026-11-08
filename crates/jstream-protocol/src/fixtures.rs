@@ -1803,6 +1803,18 @@ pub(crate) fn queries() -> Vec<Query> {
             seconds: Some(10),
             top: Some(5),
         },
+        Query::QualityProbe {
+            stream: crate::ProbeStream::Output {
+                output_id: OutputId::new("out_1"),
+            },
+            frames: None,
+        },
+        Query::QualityProbe {
+            stream: crate::ProbeStream::Output {
+                output_id: OutputId::new("out_1"),
+            },
+            frames: Some(5),
+        },
         Query::LiveList,
         Query::YoutubeStatus,
         Query::YoutubeListBroadcasts {
@@ -1885,6 +1897,30 @@ pub(crate) fn queries() -> Vec<Query> {
 }
 
 /// A live broadcast's audience, every count reported.
+fn quality_probe() -> crate::QualityProbeInfo {
+    let db = |v: f32| Finite32::new(v).expect("finite");
+    let frame = |pts_us, psnr_y, psnr, ssim_y| crate::FrameQuality {
+        pts_us,
+        psnr_y: db(psnr_y),
+        psnr: db(psnr),
+        ssim_y: db(ssim_y),
+    };
+    crate::QualityProbeInfo {
+        encoder: "OpenH264 (Cisco Systems, software)".into(),
+        hardware: false,
+        decoder: "OpenH264 decoder (Cisco Systems, software)".into(),
+        width: 1280,
+        height: 720,
+        frames: vec![
+            frame(2_000_000, 42.5, 44.0, 0.985),
+            frame(2_033_333, 41.5, 43.0, 0.975),
+        ],
+        psnr_y: db(42.0),
+        psnr: db(43.5),
+        ssim_y: db(0.98),
+    }
+}
+
 fn profile_info() -> ProfileInfo {
     let ms = |value: f32| Finite32::new(value).expect("finite");
     ProfileInfo {
@@ -2787,6 +2823,9 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         },
         QueryResult::ProfileGet {
             profile: profile_info(),
+        },
+        QueryResult::QualityProbe {
+            probe: quality_probe(),
         },
         QueryResult::FontList {
             fonts: vec![

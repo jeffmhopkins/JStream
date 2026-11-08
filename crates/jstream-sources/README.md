@@ -12,11 +12,11 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md", "docs/adr/0142-feeding-the-midi-sources-and-their-beat.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md", "docs/adr/0142-feeding-the-midi-sources-and-their-beat.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
-kind lives here ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): its
+kind lives here ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)): its
 descriptor, which the engine reports through `kind.list` and `kind.describe` and
 validates settings against
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)), and the code that
@@ -138,7 +138,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   a read retries when a claim reached a slot it copied, so it never returns a window
   mixed from two passes of the ring. The analysis (the FFT included) runs in the
   source's `Painter`, on the thread that paints, never on the mixer thread
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)'s audio → render
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)'s audio → render
   path).
 - `AudioScopes`: where those sources find their scope, by their `audio_source` and
   `audio` settings: the program mix's (`program()`, which always exists), a bus's
@@ -395,7 +395,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   Changing it needs a new source, so the capture starts again.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), so it plays the
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), so it plays the
   containers and codecs the OS does. `create` opens the file through
   `AssetRoots::open` and decodes its first frame, so a file the platform can't play,
   one with neither video nor audio, or one without a media backend
@@ -701,7 +701,7 @@ Windows its bundled `jiff-tzdb`) for the `timer`'s time of day, each with defaul
 features off.
 `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
 distance transform, the glTF loader (`model/gltf/tests.rs`: GLB and `.gltf` files built

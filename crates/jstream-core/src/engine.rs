@@ -56,7 +56,7 @@ use jstream_protocol::{
     CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
     Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
     IdempotencyKey, KindsCause, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState,
-    OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
+    OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream, ProtocolError, Query, QueryResult,
     RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
     TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
@@ -1841,7 +1841,7 @@ impl Engine {
     /// sessions. Only names, IDs and error codes are logged, never a command's arguments
     /// (R-SEC-001).
     ///
-    /// Every call but `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
+    /// Every call but `video.snapshot`, `video.frames`, `quality.probe`, `scene.switch_and_watch` and
     /// `plugin.clap_rescan` runs to completion here. Those are answered from another
     /// thread and come back [`Executed::Pending`], with their span; their outcome is
     /// logged when they complete.
@@ -1879,11 +1879,18 @@ impl Engine {
             return Executed::Pending(self.clap_rescan(audit, client_id, request_id), span);
         }
         if let Call::Query {
+            query: Query::QualityProbe { stream, frames },
+        } = &call
+        {
+            drop(_entered);
+            return Executed::Pending(self.quality_probe(stream, *frames), span);
+        }
+        if let Call::Query {
             query: Query::VideoFrames { strip, scene_id },
         } = call
         {
             drop(_entered);
-            let reply = self.frame_sheet(strip, scene_id, frames::query_answer);
+            let reply = self.frame_sheet(strip, scene_id, None, frames::query_answer);
             return Executed::Pending(reply, span);
         }
         if let Call::Action {
@@ -1908,10 +1915,17 @@ impl Engine {
             };
             return match self.execute(client_id, request_id, switch, previews) {
                 Executed::Ready(result) => match *result {
-                    Ok(_) => Executed::Pending(
-                        self.frame_sheet(strip, None, frames::action_answer),
-                        span,
-                    ),
+                    Ok(_) => {
+                        #[cfg(test)]
+                        thread::sleep(Duration::from_millis(
+                            SHEET_STALL_MS.load(Ordering::Relaxed),
+                        ));
+                        let switched_at = lock(&self.shared.state).switched_at;
+                        Executed::Pending(
+                            self.frame_sheet(strip, None, switched_at, frames::action_answer),
+                            span,
+                        )
+                    }
                     Err(error) => Executed::Ready(Box::new(Err(error))),
                 },
                 pending @ Executed::Pending(..) => pending,
@@ -2565,6 +2579,58 @@ impl Engine {
         })
     }
 
+    /// `quality.probe` (ADR-0132 §3, ADR-0145): PSNR and SSIM of a running output's
+    /// stream against the frames its encoder was given, measured on a thread of its own
+    /// ([`quality`](crate::quality)). Checks the call and finds the session under the
+    /// locks, which it lets go of before the probe starts.
+    fn quality_probe(&self, stream: &ProbeStream, frames: Option<u32>) -> SnapshotReply {
+        let job = (|| {
+            let frames = jstream_protocol::probe_frames(frames)?;
+            let ProbeStream::Output { output_id } = stream else {
+                return Err(ProtocolError::invalid_argument(
+                    "stream",
+                    "this engine probes only an output's stream",
+                ));
+            };
+            if lock(&self.shared.state)
+                .graph
+                .state()
+                .output(output_id)
+                .is_none()
+            {
+                return Err(ProtocolError::NotFound {
+                    entity: EntityKind::Output,
+                    id: output_id.to_string(),
+                });
+            }
+            let not_running = || ProtocolError::ActionFailed {
+                reason: format!("output `{output_id}` is not running, so it has no stream"),
+            };
+            let codecs = self.codecs().ok_or_else(not_running)?;
+            let host = self.media.as_ref().ok_or_else(not_running)?;
+            let gate = lock(&host.gate);
+            let encoders = gate
+                .running
+                .get(output_id)
+                .ok_or_else(not_running)?
+                .encoders()
+                .ok_or_else(|| ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` sends no video, so there is none to probe"
+                    ),
+                })?;
+            Ok(encoders.probe_job(codecs, frames))
+        })();
+        match job {
+            Ok(job) => crate::quality::start(job),
+            Err(error) => {
+                let (reply, waiting) = snapshot::reply_pair();
+                reply.send(Err(error));
+                waiting
+            }
+        }
+    }
+
     /// The codec backend, when the engine has media backends.
     fn codecs(&self) -> Option<Arc<dyn Codecs>> {
         self.media.as_ref().and_then(|host| {
@@ -3133,12 +3199,14 @@ impl Engine {
 
     /// A frame sheet (#1061): `strip`'s pictures of the program mix, or of `scene_id`'s
     /// scene alone, taken in real time from now by a `jstream-frames` thread and drawn
-    /// by the snapshot thread ([`frames`]). Its answer is `answer`'s wrapping of the
-    /// sheet, or the error that stopped it.
+    /// by the snapshot thread ([`frames`]). Each picture's `at_ms` counts from `since`
+    /// (the switch, for `scene.switch_and_watch`), else from now. Its answer is
+    /// `answer`'s wrapping of the sheet, or the error that stopped it.
     fn frame_sheet(
         &self,
         strip: FrameStrip,
         scene_id: Option<SceneId>,
+        since: Option<jstream_media::MediaTime>,
         answer: fn(FrameSheet) -> CallResult,
     ) -> SnapshotReply {
         let (reply, waiting) = snapshot::reply_pair();
@@ -3148,7 +3216,7 @@ impl Engine {
         }
         let begin = Instant::now();
         let start = match self.shared.sample(scene_id.as_ref(), None) {
-            Ok(sample) => sample.at,
+            Ok(sample) => since.unwrap_or(sample.at),
             Err(error) => {
                 reply.send(Err(error));
                 return waiting;
@@ -3344,6 +3412,12 @@ impl Engine {
 /// A frame sheet's samples, each read when it is due (`begin` plus its offset). Stops
 /// with `internal` if the engine ends, and with the read's error (a scene deleted
 /// meanwhile) if one fails.
+/// A pause between a `scene.switch_and_watch`'s switch and its sheet's start, for tests:
+/// a loaded machine's delay, made on purpose.
+#[cfg(test)]
+pub(crate) static SHEET_STALL_MS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
 fn take_samples(
     shared: &Weak<Shared>,
     strip: &FrameStrip,
@@ -3996,6 +4070,10 @@ struct State {
     /// transition, a fire or a `source.restart` it starts takes as its start
     /// (ADR-0099 decision 4).
     cue_at: Option<jstream_media::MediaTime>,
+    /// When the last `scene.switch` started its transition, or `None` when it changed
+    /// nothing: what a `scene.switch_and_watch` sheet's `at_ms` counts from, so a picture
+    /// is judged by the fade's own time however long the sheet took to start.
+    switched_at: Option<jstream_media::MediaTime>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -5271,6 +5349,7 @@ impl State {
         named: Option<&TransitionPresetId>,
         wake: &mut Vec<Waker>,
     ) -> Result<(), ProtocolError> {
+        self.switched_at = None;
         studio::exists(self.graph.state(), &scene_id)?;
         let from_scene = self.studio.program().cloned();
         let (preset_id, run) =
@@ -5279,6 +5358,7 @@ impl State {
             return Ok(());
         }
         let now = self.action_now();
+        self.switched_at = Some(now);
         let running = match (run, from_scene) {
             (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
