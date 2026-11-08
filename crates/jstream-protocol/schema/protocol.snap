@@ -7374,6 +7374,33 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "FrameQuality": {
+      "description": "One frame a probe compared with its decoded picture.",
+      "properties": {
+        "psnr": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "PSNR over every luma and chroma sample, in dB, at most [`MAX_PSNR_DB`]."
+        },
+        "psnr_y": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "PSNR of the luma plane, in dB, at most [`MAX_PSNR_DB`]."
+        },
+        "pts_us": {
+          "default": 0,
+          "description": "The frame's presentation time on the stream, in microseconds.",
+          "format": "int64",
+          "type": "integer"
+        },
+        "ssim_y": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "SSIM of the luma plane, from 0 to 1 (1 is identical), over 8 × 8 windows."
+        }
+      },
+      "type": "object"
+    },
     "GestureId": {
       "description": "A live-value gesture (ADR-0032): a drag, a fader move or a live dialog. Chosen by\nthe client that opens it, and unique among that client's open gestures.",
       "type": "string"
@@ -10083,6 +10110,29 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "ProbeStream": {
+      "description": "The encoded stream a `quality.probe` measures.",
+      "oneOf": [
+        {
+          "description": "A running output's video: the encoder session it sends from, which it may share\nwith other outputs of the same mix and profile.",
+          "properties": {
+            "output_id": {
+              "$ref": "#/$defs/OutputId",
+              "description": "The output."
+            },
+            "type": {
+              "const": "output",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "output_id"
+          ],
+          "type": "object"
+        }
+      ]
+    },
     "ProfileStream": {
       "description": "An encoded stream, by what it feeds ([`StreamProfile::stream`]).",
       "oneOf": [
@@ -11360,6 +11410,33 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type"
           ],
           "type": "object"
+        },
+        {
+          "description": "Measures how close a stream's decoded pictures are to the frames its encoder was\ngiven (0.110, ADR-0132 §3, ADR-0145): the engine keeps the next `frames` frames\nthe stream's encoder takes, from the next keyframe on, decodes the packets it\nmakes of them with the platform's decoder, and answers PSNR and SSIM for each.\nNothing is copied or decoded unless a probe is waiting. It waits for those frames\n(a still stream still sends them, at its frame rate) and answers within about\nten seconds. Fails with `not_found` for an output that doesn't exist,\n`invalid_argument` on `frames` outside 1 to 10, and `action_failed` when the\noutput isn't running, the platform has no decoder for its codec, or the frames\ndidn't arrive in time. Runtime state: the result carries no `rev`.",
+          "properties": {
+            "frames": {
+              "description": "The frames to compare, from 1 to 10\n([`MAX_PROBE_FRAMES`](crate::MAX_PROBE_FRAMES)). Omitted, 3.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "stream": {
+              "$ref": "#/$defs/ProbeStream",
+              "description": "The stream."
+            },
+            "type": {
+              "const": "quality.probe",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "stream"
+          ],
+          "type": "object"
         }
       ]
     },
@@ -12580,6 +12657,71 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "$ref": "#/$defs/ViewProfile"
               },
               "type": "array"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `quality.probe` (0.110). Runtime state, so it carries no `rev`.",
+          "properties": {
+            "decoder": {
+              "default": "",
+              "description": "The decoder the engine decoded it with.",
+              "type": "string"
+            },
+            "encoder": {
+              "default": "",
+              "description": "The encoder that made the stream, as `encoder.list` names it.",
+              "type": "string"
+            },
+            "frames": {
+              "default": [],
+              "description": "The frames compared, in presentation order.",
+              "items": {
+                "$ref": "#/$defs/FrameQuality"
+              },
+              "type": "array"
+            },
+            "hardware": {
+              "default": false,
+              "description": "Whether it is a hardware encoder.",
+              "type": "boolean"
+            },
+            "height": {
+              "default": 0,
+              "description": "The encoded height, in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "psnr": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The mean of the frames' `psnr`."
+            },
+            "psnr_y": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The mean of the frames' `psnr_y`."
+            },
+            "ssim_y": {
+              "$ref": "#/$defs/Finite32",
+              "default": 0.0,
+              "description": "The mean of the frames' `ssim_y`."
+            },
+            "type": {
+              "const": "quality.probe",
+              "type": "string"
+            },
+            "width": {
+              "default": 0,
+              "description": "The encoded width, in pixels.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
             }
           },
           "required": [
@@ -14814,5 +14956,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.109"
+  "title": "JStream protocol 0.110"
 }

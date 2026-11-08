@@ -88,6 +88,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),
+    // Only numbers about a stream's pictures, never the pictures (ADR-0145).
+    ("quality.probe", Class(R)),
     ("privacy.get", Class(R)),
     // The pixels of a user's capture could leak through any granted host; with no
     // filesystem grant there is nowhere safe for them.

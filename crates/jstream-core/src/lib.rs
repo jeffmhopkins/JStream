@@ -55,6 +55,7 @@ mod preview;
 mod private_file;
 mod profile;
 mod projects;
+mod quality;
 mod reactive;
 mod runtime;
 mod session;

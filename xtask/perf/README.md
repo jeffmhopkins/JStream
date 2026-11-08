@@ -135,5 +135,7 @@ a limit off.
 
 `bench/gates-lavapipe.json` holds the `--bench` gates for the same runner: the bench's
 alpha.5 counters with room for software rendering, at least a fifth of the target frame
-rate and no budget on frames over time. It sits in a folder of its own because every
+rate and no budget on frames over time, and quality-probe floors of 30 dB luma PSNR and
+0.90 SSIM for Cisco's OpenH264 at software rates
+([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). It sits in a folder of its own because every
 `*.json` beside this file is read as a scene.

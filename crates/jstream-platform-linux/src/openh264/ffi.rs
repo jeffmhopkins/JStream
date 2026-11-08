@@ -161,8 +161,6 @@ pub(super) const ERROR_CON_DISABLE: c_int = 0;
 pub(super) const VIDEO_BITSTREAM_AVC: c_int = 0;
 /// `DECODER_OPTION_TRACE_LEVEL` (an `int`, a `WELS_LOG_*` level).
 pub(super) const DECODER_OPTION_TRACE_LEVEL: c_int = 9;
-/// `DECODER_OPTION_NUM_OF_FRAMES_REMAINING_IN_BUFFER` (an `int`, read with `GetOption`).
-pub(super) const DECODER_OPTION_FRAMES_REMAINING: c_int = 18;
 
 /// `SVideoProperty`.
 #[repr(C)]
@@ -285,7 +283,8 @@ pub(super) type VersionFn = unsafe extern "C" fn(*mut Version);
 pub(super) struct Api {
     pub create: CreateFn,
     pub destroy: DestroyFn,
-    /// The decoder's pair. `None` only for the tests' fake encoder library.
+    /// The decoder's pair: `None` for a library without it, and for the tests' fake
+    /// encoder library.
     pub decoder: Option<(CreateDecoderFn, DestroyDecoderFn)>,
     /// `None` for the fake library in tests.
     _lib: Option<SystemLibrary>,
@@ -295,21 +294,23 @@ impl Api {
     /// Resolves the entry points from `lib` and checks that it is release `expected`.
     ///
     /// # Errors
-    /// [`PlatformError::MissingComponent`] when a symbol is missing or the library is
-    /// another release, whose struct layouts these declarations don't match.
+    /// [`PlatformError::MissingComponent`] when an encoder symbol is missing or the
+    /// library is another release, whose struct layouts these declarations don't match.
     pub(super) fn load(
         lib: SystemLibrary,
         expected: (u32, u32, u32),
     ) -> Result<Self, PlatformError> {
         // SAFETY: the five types are the C declarations quoted on them, from
         // `codec_api.h` at the pinned release; `lib` is kept in the returned `Api`, so
-        // the pointers are never called after it is unloaded.
-        let (create, destroy, create_decoder, destroy_decoder, version) = unsafe {
+        // the pointers are never called after it is unloaded. The decoder's pair is
+        // optional, so a library without it still encodes.
+        let (create, destroy, decoder, version) = unsafe {
             (
                 lib.function::<CreateFn>("WelsCreateSVCEncoder")?,
                 lib.function::<DestroyFn>("WelsDestroySVCEncoder")?,
-                lib.function::<CreateDecoderFn>("WelsCreateDecoder")?,
-                lib.function::<DestroyDecoderFn>("WelsDestroyDecoder")?,
+                lib.function::<CreateDecoderFn>("WelsCreateDecoder")
+                    .ok()
+                    .zip(lib.function::<DestroyDecoderFn>("WelsDestroyDecoder").ok()),
                 lib.function::<VersionFn>("WelsGetCodecVersionEx")?,
             )
         };
@@ -330,7 +331,7 @@ impl Api {
         Ok(Self {
             create,
             destroy,
-            decoder: Some((create_decoder, destroy_decoder)),
+            decoder,
             _lib: Some(lib),
         })
     }

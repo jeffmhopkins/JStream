@@ -148,7 +148,7 @@ covers = ["crates/jstream-protocol/src/filter.rs", "crates/jstream-protocol/src/
 <a id="contents-calls"></a>
 ## Contents: queries, kinds and events
 <!-- @section
-covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/keyframe.rs", "crates/jstream-protocol/src/youtube.rs", "crates/jstream-protocol/src/transition.rs", "crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/settings.rs", "crates/jstream-protocol/src/event.rs", "crates/jstream-protocol/src/plugin.rs", "crates/jstream-protocol/src/preview.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/activity.rs"]
+covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/keyframe.rs", "crates/jstream-protocol/src/youtube.rs", "crates/jstream-protocol/src/transition.rs", "crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/settings.rs", "crates/jstream-protocol/src/event.rs", "crates/jstream-protocol/src/plugin.rs", "crates/jstream-protocol/src/preview.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/quality.rs", "crates/jstream-protocol/src/activity.rs"]
 -->
 
 - **Queries** (`query.rs`): `state.get`, `scene.list`, `source.list`, `item.list`,
@@ -160,7 +160,10 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
-  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them), with `QueryResult`
+  holds, `StreamProfile`, `ProfileStream`, `MixerProfile` and `ViewProfile` among them),
+  `quality.probe` (since 0.110, `quality.rs`: `ProbeStream`, `QualityProbeInfo` with its
+  `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
+  `MAX_PSNR_DB`), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
   (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
@@ -327,7 +330,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.109 because a motion modifier can drive a number or colour
+`PROTOCOL_VERSION` is 0.110 because the query `quality.probe` (`ProbeStream`,
+`QualityProbeInfo`) measures a running output's encoded picture
+([Queries](#queries), [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
+a number the release queue set); 0.109 because a motion modifier can drive a number or colour
 setting of one of its item's effects (#1404): `MotionProperty::Effect` and `MotionModifier.effect`
 (`MotionEffect`, [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md),
 #1294, a number the release queue set); 0.108 because the person is asked before a new agent connects:
@@ -1454,7 +1460,7 @@ Edits are only sent inside a `Batch`; a single edit is a batch of one.
 <a id="queries"></a>
 ## Queries
 <!-- @section
-covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/activity.rs"]
+covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/profile.rs", "crates/jstream-protocol/src/quality.rs", "crates/jstream-protocol/src/activity.rs"]
 -->
 
 Queries read and never change `rev`. Those that read the collection state carry the
@@ -1589,6 +1595,24 @@ Queries read and never change `rev`. Those that read the collection state carry 
   doesn't have), and `received_fps` and `shown_fps`, in client then label order. A
   view whose session has ended stays while a window reaches back to its last report.
   Runtime state, so no `rev`. Added in 0.73.
+- `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
+  frames its encoder was given
+  ([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md),
+  refining [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md) §3).
+  `stream` is a `ProbeStream`, so far only `{"type": "output", "output_id"}`, a running
+  output's encoder session. The engine copies the next `frames` (1 to 10, default 3)
+  frames the render thread pushes to the session, from the next keyframe on, decodes
+  the session's packets with the platform's decoder, and answers a `QualityProbeInfo`:
+  the `encoder` (and whether it is `hardware`), the `decoder`, the encoded `width` and
+  `height`, each frame's `FrameQuality` (`pts_us` on the engine's clock, `psnr_y` and
+  `psnr` in dB up to `MAX_PSNR_DB`, 100, for identical pictures, and `ssim_y` from 0 to
+  1), and their means. Both pictures are compared as NV12 in BT.709 limited range.
+  Nothing is copied or decoded unless a probe waits, and one probe of a session runs at
+  a time. Fails with `not_found` for an unknown output, `invalid_argument` on `frames`,
+  and `action_failed` when the output isn't running, the platform has no decoder for
+  its codec, another probe of the stream runs, or the frames don't come back within ten
+  seconds. A plugin with the `read` class may call it. Runtime state, so no `rev`.
+  Added in 0.110.
 - `privacy.get`: deprecated
   ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), removed in
   1.0. JStream has no privacy screen, so it always answers `on: false`. Added in 0.33.
