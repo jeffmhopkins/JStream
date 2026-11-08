@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0137"
+id = "ADR-0143"
 title = "Scene lights and depth-aware scene filters"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0137: Scene lights and depth-aware scene filters
+# ADR-0143: Scene lights and depth-aware scene filters
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
