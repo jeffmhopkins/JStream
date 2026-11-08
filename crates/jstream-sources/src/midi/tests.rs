@@ -552,3 +552,112 @@ fn a_source_measures_note_ages_on_the_inputs_clock() {
     assert!(lit[0] > 200, "still lit: {lit:?}");
     assert_eq!(pixel(&frame, 5, 5), BLACK, "faded on the media clock");
 }
+
+// ---- tempo and midi_beat -------------------------------------------------------------
+
+const MS: u64 = 1_000_000;
+
+/// Sends `feed` start, then clocks at `bpm` from `from_ms` for `beats`, and returns the
+/// time of the last one in milliseconds.
+fn play(feed: &mut MidiFeed, bpm: f64, from_ms: u64, beats: u64) -> u64 {
+    let spacing = 60_000.0 * MS as f64 / (bpm * 24.0);
+    let start = from_ms * MS;
+    feed.push(start, &Message::Start);
+    let mut last = start;
+    for n in 0..beats * 24 + 1 {
+        last = start + (n as f64 * spacing).round() as u64;
+        feed.push(last, &Message::TimingClock);
+    }
+    last / MS
+}
+
+/// ADR-0142 §3: a feed's clock gives its input a tempo, beat and transport, published
+/// to its own state and the every-input one.
+#[test]
+fn a_feeds_clock_gives_its_input_a_tempo() {
+    let inputs = MidiInputs::new();
+    let mut feed = inputs.feed("Keys");
+    assert_eq!(inputs.drawn("Keys").tempo(), None);
+    let last = play(&mut feed, 120.0, 1_000, 2);
+    let tempo = inputs.drawn("Keys").tempo().expect("a tempo");
+    assert_eq!(tempo.at_ms, last);
+    assert!(tempo.playing);
+    assert!((tempo.bpm.expect("a bpm") - 120.0).abs() < 0.5, "{tempo:?}");
+    assert!((tempo.beat - 2.0).abs() < 1e-9, "{tempo:?}");
+    assert_eq!(inputs.any().tempo(), Some(tempo));
+    // Carried on between clocks, never past the next one.
+    assert!((tempo.beat_at(last + 10) - (2.0 + 10.0 / 500.0)).abs() < 1e-3);
+    assert!((tempo.beat_at(last + 400) - (2.0 + 1.0 / 24.0)).abs() < 1e-9);
+    assert!(tempo.clock(last + CLOCK_TIMEOUT_MS));
+    assert!(!tempo.clock(last + CLOCK_TIMEOUT_MS + 1));
+    // The messages reached the state too.
+    assert!(inputs.drawn("Keys").changes() > 48);
+    feed.push((last + 5) * MS, &Message::Stop);
+    let stopped = inputs.drawn("Keys").tempo().expect("a tempo");
+    assert!(!stopped.playing);
+    assert_eq!(stopped.beat_at(last + 400), stopped.beat, "stopped holds");
+}
+
+/// The every-input state takes one input's clock at a time: another's waits until the
+/// first has been silent for the timeout.
+#[test]
+fn every_input_follows_one_clock_at_a_time() {
+    let inputs = MidiInputs::new();
+    let (mut first, mut second) = (inputs.feed("A"), inputs.feed("B"));
+    let last = play(&mut first, 120.0, 0, 1);
+    second.push((last + 1) * MS, &Message::Start);
+    second.push((last + 2) * MS, &Message::TimingClock);
+    assert!(
+        inputs.any().tempo().expect("a tempo").at_ms == last,
+        "A keeps it"
+    );
+    assert_eq!(inputs.drawn("B").tempo().expect("B's own").at_ms, last + 2);
+    let late = last + CLOCK_TIMEOUT_MS + 1;
+    second.push(late * MS, &Message::TimingClock);
+    assert_eq!(
+        inputs.any().tempo().expect("a tempo").at_ms,
+        late,
+        "B takes it"
+    );
+}
+
+/// `midi_beat` lights the bar's beat its input is on: the first in its own colour, a
+/// beat flashing as it starts and dimming as it passes, stopped at 35%, and nothing once
+/// the clock stops.
+#[test]
+fn a_beat_source_lights_the_beat_the_clock_is_on() {
+    let inputs = Arc::new(MidiInputs::new());
+    let mut beat = source(
+        "midi_beat",
+        &inputs,
+        json!({"input": "Keys", "width": 40, "height": 10, "beats_per_bar": 4,
+               "color": "#ff0000", "downbeat": "#00ff00", "off": "#000000"}),
+    );
+    // Nothing yet: every beat off.
+    let idle = draw(&mut beat, ms(0));
+    assert_eq!(pixel(&idle, 5, 5), BLACK);
+    let mut feed = inputs.feed("Keys");
+    // Five beats in at 120 BPM: the bar's second beat, just started.
+    let last = play(&mut feed, 120.0, 0, 5);
+    let frame = draw(&mut beat, ms(last));
+    assert_eq!(pixel(&frame, 5, 5), BLACK, "the first beat is past");
+    assert_eq!(pixel(&frame, 15, 5), RED, "the second flashes");
+    assert_eq!(pixel(&frame, 25, 5), BLACK);
+    // Four beats on: the downbeat, in its own colour.
+    let mut at = last;
+    let spacing = 500.0 / 24.0;
+    for n in 1..=72 {
+        at = last + (f64::from(n) * spacing).round() as u64;
+        feed.push(at * MS, &Message::TimingClock);
+    }
+    let frame = draw(&mut beat, ms(at));
+    assert_eq!(pixel(&frame, 5, 5), [0, 255, 0, 255], "the downbeat");
+    assert_eq!(pixel(&frame, 15, 5), BLACK);
+    // Stopped: where the song is, dimmed.
+    feed.push((at + 1) * MS, &Message::Stop);
+    let frame = draw(&mut beat, ms(at + 40));
+    assert_eq!(pixel(&frame, 5, 5), [0, 89, 0, 255]);
+    // The clock gone quiet: nothing lit.
+    let frame = draw(&mut beat, ms(at + CLOCK_TIMEOUT_MS + 40));
+    assert_eq!(pixel(&frame, 5, 5), BLACK);
+}

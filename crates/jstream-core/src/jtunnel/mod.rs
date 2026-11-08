@@ -36,7 +36,7 @@ use jstream_media::{AudioFormat, ChannelLayout, MediaTime, Rounding, SampleForma
 use jstream_platform::{
     AudioInputHandler, AudioPacket, AudioPacketFlags, AudioStream, MediaClock, PlatformError,
 };
-use jstream_sources::{MidiInputs, MidiState};
+use jstream_sources::{MidiFeed, MidiInputs};
 
 /// How often a sender is subscribed to again: JTunnel's keepalive.
 const SUBSCRIBE_EVERY: Duration = Duration::from_millis(500);
@@ -414,8 +414,8 @@ struct Stream {
     playout: Playout,
     handler: Option<Handler>,
     /// Where its MIDI goes: its own input's state and the every-input one, looked up
-    /// once so the thread takes no lock per message (ADR-0137).
-    midi: Option<(Arc<MidiState>, Arc<MidiState>)>,
+    /// once so the thread takes no lock per message, and its clock's tempo (ADR-0142).
+    midi: Option<MidiFeed>,
 }
 
 struct Handler {
@@ -429,7 +429,7 @@ impl Stream {
         Self {
             playout: Playout::new(u64::from(jstream_sources::LATENCY_MS.2) * 1_000_000),
             handler: None,
-            midi: midi.and_then(|inputs| Some((inputs.input(name)?, inputs.any()))),
+            midi: midi.map(|inputs| inputs.feed(name)),
         }
     }
 }
@@ -587,14 +587,13 @@ impl Run {
             while let Some(due) = stream.playout.pop(now) {
                 // MIDI is drawn whether or not a source records the audio, stamped at
                 // its sample within the frame.
-                if let Some((own, any)) = &stream.midi {
+                if let Some(feed) = &mut stream.midi {
                     for (offset, event) in due.events() {
                         if let wire::Event::Midi(message) = event {
                             let ns = due.time_ns.saturating_add(
                                 u64::from(offset) * 1_000_000_000 / u64::from(rate.max(1)),
                             );
-                            own.push(ns / 1_000_000, &message);
-                            any.push(ns / 1_000_000, &message);
+                            feed.push(ns, &message);
                             self.counters.midi.fetch_add(1, Ordering::Relaxed);
                         }
                     }

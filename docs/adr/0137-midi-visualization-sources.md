@@ -61,13 +61,6 @@ The forces:
    and JTunnel, a beat indicator from the tempo, and exposing the state to browser pages
    are later steps. Whichever of them changes the protocol takes a slot in the protocol
    queue then.
-6. **Feeding it** (amended with #1224's host wiring). The engine makes one `MidiInputs`
-   and gives it its media clock (`set_clock`), and the JTunnel receiver pushes each
-   accepted sender's MIDI events to it under the sender's name, at the media-clock time
-   of their sample offset. The kinds measure a note's age on that clock (`now_ms`), not
-   on the paint time a source is given, which counts from the source's start: the two
-   differ, and comparing them hid every note. MIDI from JTunnel only feeds what these
-   sources draw; it doesn't reach the binding system (ADR-0122).
 
 <a id="consequences"></a>
 ## Consequences
@@ -88,5 +81,5 @@ The forces:
 - A settled source compares a count of every message pushed, not the clock or the note
   log, so a controller change in the same millisecond as the last one, or from an input
   whose clock lags, still redraws it.
-- JTunnel feeds `MidiInputs`; local MIDI ports don't yet, so a controller plugged into
-  this machine draws nothing until the host opens its ports.
+- Until the host feeds `MidiInputs`, the kinds draw only in tests, and their defaults are
+  idle frames. The host wiring is the next step of #1224.

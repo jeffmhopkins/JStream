@@ -17,8 +17,8 @@
 //! stopwatch or clock, drawn as text in a box of one size), and `display`, `window`
 //! and `webcam` (a webcam or capture card), which say what the platform captures
 //! ([`CaptureSpec`]). `midi_keyboard`, `midi_piano_roll`, `midi_pads` and `midi_cc`
-//! (ADR-0137) draw a MIDI input's notes and controllers from the [`MidiInputs`] in
-//! [`Context::midi`]. The audio-only kinds (`audio_input`, `desktop_audio`, `network_audio` and
+//! (ADR-0137) draw a MIDI input's notes and controllers, and `midi_beat` its clock's
+//! beat, from the [`MidiInputs`] in [`Context::midi`]. The audio-only kinds (`audio_input`, `desktop_audio`, `network_audio` and
 //! `app_audio`) make no frames: the engine records the [`AudioTarget`] their settings
 //! name. `jstream-core` drives sources from its `jstream-sources` thread
 //! through [`Registry::create`], [`Source::frame`], [`Source::next_change`],
@@ -65,7 +65,9 @@ pub use image::{StillImage, decode_still};
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;
 pub use media::MediaAudio;
-pub use midi::{MAX_INPUTS, MidiInputs, MidiState, NoteEvent};
+pub use midi::{
+    CLOCK_TIMEOUT_MS, MAX_INPUTS, MidiFeed, MidiInputs, MidiState, NoteEvent, TempoReading,
+};
 pub use model::ModelKind;
 pub use page_api::{BusLevels, PageView};
 pub use registry::Registry;

@@ -12,8 +12,10 @@
 //! frame painted last, as the scope sources do.
 
 mod kinds;
+mod tempo;
 
-pub(crate) use kinds::{CcKind, KeyboardKind, PadsKind, PianoRollKind};
+pub(crate) use kinds::{BeatKind, CcKind, KeyboardKind, PadsKind, PianoRollKind};
+pub use tempo::{CLOCK_TIMEOUT_MS, MidiFeed, TempoReading};
 
 use crate::color::{parse_color, rgba_frame};
 use crate::source::{at_millis, changed_non_live, millis, setting};
@@ -105,6 +107,8 @@ pub struct MidiState {
     /// Messages pushed, of every kind: what a settled source compares to see whether
     /// anything changed.
     changes: AtomicU64,
+    /// The tempo the input's clock gives, which its [`MidiFeed`] publishes.
+    tempo: tempo::TempoCell,
 }
 
 impl Default for MidiState {
@@ -131,6 +135,7 @@ impl MidiState {
             pushed: AtomicU64::new(0),
             last_ms: AtomicU64::new(0),
             changes: AtomicU64::new(0),
+            tempo: tempo::TempoCell::new(),
         }
     }
 
@@ -191,6 +196,12 @@ impl MidiState {
         };
         slot.event.store(event.pack(), Ordering::Relaxed);
         slot.seq.store(n + 1, Ordering::Release);
+    }
+
+    /// The tempo the input's MIDI clock gave last, from its [`MidiFeed`]; `None` before
+    /// it has sent clock or transport.
+    pub fn tempo(&self) -> Option<TempoReading> {
+        self.tempo.read()
     }
 
     /// The velocity `key` is held at on `channel` (0 to 15), or 0 when it is up.

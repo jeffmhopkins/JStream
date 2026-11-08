@@ -355,7 +355,7 @@ fn ipv4_addresses_match_mapped_or_not() {
     ));
 }
 
-/// ADR-0137: a sender's MIDI reaches its own MIDI input and the every-input one, from a
+/// ADR-0142 §2: a sender's MIDI reaches its own MIDI input and the every-input one, from a
 /// MIDI-only stream that no source records, stamped on the media clock.
 #[test]
 fn a_senders_midi_feeds_its_midi_input_without_a_source() {
@@ -370,7 +370,9 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
     let (_, to) = sender.next();
     let note_on: &[u8] = &[0x90, 60, 100];
     let cc: &[u8] = &[0xB3, 7, 99];
-    let events = [(0_u16, note_on), (10, cc)];
+    let start: &[u8] = &[0xFA];
+    let clock: &[u8] = &[0xF8];
+    let events = [(0_u16, note_on), (10, cc), (20, start), (30, clock)];
     for seq in 0..40 {
         let header = AudioHeader {
             stream_id: 3,
@@ -393,7 +395,11 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
         || keys.held(0, 60) == 100 && keys.controller(3, 7) == 99
     ));
     assert_eq!(midi.any().held(0, 60), 100);
-    assert_eq!(receiver.stats().midi, 2);
+    assert!(eventually(|| receiver.stats().midi == 4));
+    // Its clock runs the input's tempo (ADR-0142 §3).
+    let tempo = keys.tempo().expect("a tempo from the sender's clock");
+    assert!(tempo.playing);
+    assert_eq!(midi.any().tempo(), Some(tempo));
     assert_eq!(
         receiver.stats().played,
         0,

@@ -237,16 +237,19 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   changes rate fails its input, which reopens at the new rate. 24-bit PCM and MIDI-only
   streams are taken (a MIDI-only stream feeds no input); Opus packets are counted as
   unsupported until a decoder is picked. A frame's MIDI events, due with it, are pushed
-  to the engine's `MidiInputs` under the sender's name and to its every-input state
-  ([ADR-0137](../../docs/adr/0137-midi-visualization-sources.md) §6), stamped on the
-  media clock at their sample offset, whether or not a source records the sender.
+  through the sender's `MidiFeed` to the engine's `MidiInputs` under the sender's name
+  and to its every-input state
+  ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §2), stamped on the
+  media clock at their sample offset, whether or not a source records the sender; its
+  clock and transport messages also run the sender's tempo there (§3).
   `Engine::jtunnel_stats` reads its counters (`JtunnelStats`, `midi` among them). Tests run a fake sender on loopback: the subscribe and its
   keepalive, the frames in order with their positions and times, the bye, an
   unaccepted sender, a datagram that isn't JTunnel and a receiver's packet dropped and
   counted, a rate change failing the input, Opus refused, and through the engine a
   `network_audio` source recording once its sender is heard, unavailable for a sender
   not accepted and with the receiver off, and a MIDI-only sender's notes and controllers
-  reaching its MIDI input with no source recording it.
+  reaching its MIDI input with no source recording it, and its clock giving that input
+  a tempo.
 - **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix

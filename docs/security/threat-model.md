@@ -669,7 +669,7 @@ somewhere it shouldn't.
   Parsing and playout allocate nothing; a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
   name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
-  doesn't trigger bindings (ADR-0137 §6).
+  doesn't trigger bindings (ADR-0142 §2).
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
 
