@@ -368,27 +368,41 @@ Spec: [panels › outputs](../design/ui-prototype/spec-panels.md#outputs-panel).
 panel manages outputs (create, keys, start and stop, encoders and video mixes), which the
 prototype doesn't show; that stays ([Beyond](#beyond)). Since #1206 the dock holds a
 compact, live-first list, OBS-style: the header's "Outputs" carries the pipeline's health
-as a dot and a word ("Healthy", "Dropping (N)", "No stats yet", with the detail on hover),
-then one row per output with its kind icon, ID, a one-line summary (the server's host, the
+as a dot and a word ("Healthy", "Dropping (N)", "No stats yet", with the detail on hover)
+and "▶ Start all", which starts every output that can start, of any kind (a stream
+without its key is left), and once none can becomes a red "■ Stop all", which stops every
+running one; then one row per output with its kind icon, ID, a one-line summary (the server's host, the
 recording's file name or "Webcam", then the encoder profile's name), a ⚠ when the engine
 says the key would cross the network unencrypted (the full warning on hover), a state
 badge (grey stopped, amber starting or stopping, red live, red outline failed), Start
 (▶, off with the reason under the name, such as "Set a stream key first.") or a red Stop
-(■), its FX button and a ⋯ menu (Settings…, Delete…, the same on a right-click). A live
-row gets a red edge. Under the rows, "+ Add output" and "Encoders & mixes…" open dialogs.
+(■), its FX button and a ⋯ menu (Settings…, Duplicate, Delete…, the same on a
+right-click). A live row gets a red edge, and a running one a second line from
+`stats.tick`'s `outputs`: its bitrate, what it dropped this run (frames and packets) and
+its uptime ("2.45 Mbps · 0 dropped · 00:12:34"). Duplicate adds a copy under the first free
+ID in one batch (the kind, target, encoder, mix, bus and filters, but not the stream key,
+which the page never has) and opens the copy's settings. Under the rows, "+ Add output"
+and "Encoders & mixes…" open dialogs.
 
 An output's settings dialog (Settings…, or a double-click on its row) has General (the
 server URL or the recording's path, with Browse… in the desktop app, and the stream key),
-Video (the mix, or "Program (canvas size)"), Encoder (the profile, with "Encoders &
-mixes…") and Audio (the bus). Nothing applies until OK or Apply, which send what changed
+Video (the mix, or "Program (canvas size)", with Edit mix…), Encoder (the profile, with
+Edit encoder…, off for the engine's default, and New…, which open the Encoders & mixes
+dialog on that profile or on a new one) and Audio (the bus). Nothing applies until OK or Apply, which send what changed
 as one batch (`output.set_target`, `output.set_path` (#1072), `output.set_encoder`,
 `output.set_video_mix`, `output.set_audio_buses`), then the key. A set key reads
 "••••••••" with Change… and Remove; the key is write-only, so there is no Show. While the
 output runs, its target and bus are off, with a note. Delete… (bottom left) and the row's
 Delete… ask first. "+ Add output" opens the same dialog with a kind picker (Stream,
 Recording, Virtual camera); OK becomes Add and sends `output.create` with the other fields
-in one batch, then the key. If the key is refused after the output was created, the dialog stays open on that output, and Add again sets only its key rather than adding a second one; a virtual camera sends no encoder, mix or bus. The Encoders & mixes dialog holds the encoder profile and video mix lists
-and their forms; a new profile is named "Default H.264".
+in one batch, then the key. If the key is refused after the output was created, the dialog stays open on that output, and Add again sets only its key rather than adding a second one; a virtual camera sends no encoder, mix or bus. While the
+dialog is open, another client's change to the output reaches each field still as the
+dialog started it, and a field the person changed keeps theirs. The Encoders & mixes
+dialog lists the encoder profiles and video mixes on the left, each with its name and a
+short summary ("H.264 · 8000 kbps · HW", "1080 × 1920 · Program"), and edits the one
+picked on the right, with the whole of what it encodes or shows, Save, Cancel and Delete
+(off, naming the outputs, while one uses it); "+ New encoder" and "+ New video mix" start
+one, and a saved one stays picked. A new profile is named "Default H.264".
 
 | ID | Feature | Requirement | Status | Notes |
 |---|---|---|---|---|
