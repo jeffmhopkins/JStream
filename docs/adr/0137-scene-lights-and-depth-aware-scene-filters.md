@@ -110,8 +110,11 @@ use the new `lighting` value `scene`:
 - **Only in a 3D scene.** Lights are placed in the camera's space. In a 2D scene each
   model is seen by its own viewer (ADR-0107 decision 3) and there is no shared space, so
   a `scene`-lit model there is lit by the studio rig.
-- **Bounded.** A scene's first 8 point, spot and directional lights in stacking order
-  light it; any after them are ignored and logged once. Ambient lights have no limit.
+- **Bounded.** A scene's first 8 point, spot and directional lights in the collection's
+  stacking order, before any depth sort, light it, so which 8 apply doesn't change as a
+  camera moves; any after them are ignored and logged once. A light counts toward the 8
+  whether or not it is lit at that moment, so fading one of the first 8 to nothing never
+  switches a ninth on. Ambient lights have no limit.
 - **Precision.** Light positions and aims are taken into the camera's viewing frame on
   the CPU in `f64`, as model transforms are, and only the result is `f32`.
 - **Flat items are not lit** by scene lights. A card shows its source as it is. Lighting
@@ -168,7 +171,9 @@ to it beside its input and the camera's focal length in its parameters, so it ca
 | `max` | The most fog anywhere, 0 to 1 | 1 |
 | `background` | Whether fog fills where nothing was drawn (infinitely far) | `true` |
 
-At distance `D`, the fog amount `a` is `(D − start) / (end − start)` for `linear`, or
+At distance `D`, the fog amount `a` is `(D − start) / (end − start)` for `linear` (when
+`end_px` is at or before `start_px`, a step: no fog nearer than `start_px` and the most
+fog from it on), or
 `1 − exp(−density · (D − start) / 1000)` for `exponential`, clamped to 0 to 1 and then
 to `max`, and 0 where `D < start`. The pixel becomes `mix(pixel, fog, a)`, both
 premultiplied, in linear light: fog is a layer of opacity `a` over what is there. Where
