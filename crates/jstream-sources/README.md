@@ -538,9 +538,20 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   });
   ```
 
+  `page_api_tempo` adds the engine's `tempo.*` values, which no `page_api_values` entry
+  covers without it (ADR-0124 decision 7), and a MIDI reading's tempo.
+  `page_api_midi` adds `jstream.midi()` and a `midi` event for the MIDI input that
+  `page_api_midi_input` names (empty for every input; read only while the checkbox is
+  on), as [ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md) decides:
+  its tempo (`{bpm, playing, clock, beat, at}`, or `null` without the tempo grant),
+  held notes, non-zero
+  controllers, bend and pressure, with channels 1 to 16, and the last two seconds'
+  note-ons as `[at, channel, key, velocity]`, times on `jstream.clock`; at most 128
+  notes, 256 controllers and 32 recent notes. Never raw bytes or SysEx.
+
   The source sends its page only what changed (`page_api.rs`, `Feed`):
   the visibility with the clock time each part last became true, the scenes, the
-  levels, and the
+  levels, the MIDI reading, and the
   covered values, with a removal for one that went or left the grant's cover; and a
   clock anchor first, every 250 ms after that, and at once when the clock goes back or
   jumps more than a second. The anchor's lead is one frame of `fps` plus the mean age of
@@ -548,7 +559,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   of `fps`: what changes sooner is merged (the latest visibility, scenes and anchor, and
   each value's latest), held, and sent once the frame has passed, a held anchor moved to
   the clock's time as it goes. While the granted bus has a reading, the next page frame
-  is always due, so the page reads the bus every frame. `youtube_chat` never sets any
+  is always due, so the page reads the bus every frame. While the granted MIDI input
+  moves (a message since the last look, or, with the tempo granted, a song playing) the
+  next page frame is due too; while it rests, the source looks again every quarter
+  second, unless the engine gave it no MIDI state. `youtube_chat` never sets any
   of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,

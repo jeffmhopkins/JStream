@@ -335,7 +335,11 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.113 because `profile.get` reports the JTunnel receiver's
 senders: `network` (`NetworkProfile`, `NetworkInputProfile`, #1223, a number the release
-queue set; 0.112 is another PR's); 0.111 (a number the release queue set)
+queue set); 0.112 because the engine keeps a MIDI clock's tempo as the
+shared values `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar`, which it sets
+itself with `values.changed` from the client `engine`, and a `browser` source's page may
+be granted those values, `page_api_tempo`, and one MIDI input's state, `page_api_midi`
+(ADR-0147, a number the release queue set); 0.111 (a number the release queue set)
 because the engine drives PTZ cameras: the actions `ptz.drive`, `ptz.aim`,
 `ptz.home`, `ptz.recall`, `ptz.store` and `ptz.focus`, the query `ptz.list`, and a
 scene's `ptz_shots`, set with `scene.set_ptz_shots` ([PTZ cameras](#ptz)); 0.110 because the query `quality.probe` (`ProbeStream`,
@@ -2453,6 +2457,14 @@ ADR-0032's live values either, which are a gesture's uncommitted edits.
   bad name or an oversized value is refused (`bind_problem`), so a saved binding never
   fails every press. Its value is then saved with the binding. A plugin may call
   `values.list` (class `read`), never `values.set`, which no class names yet.
+- Since 0.112 the engine sets four values itself, from the MIDI clock its every-input
+  MIDI state follows ([ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md),
+  ADR-0122 §4): `tempo.bpm` (beats per minute to a tenth, removed while no clock runs),
+  `tempo.playing` (`true` while the transport plays and its clock runs), and `tempo.beat`
+  and `tempo.bar` (whole quarter notes and four-beat bars since the song's start). Its
+  `values.changed` names the client `engine` and has no `request_id`. A client may still
+  set these names, as any; the engine's next change overwrites them. A page reads them
+  only with its source's `page_api_tempo`, never through `page_api_values`.
 
 <a id="errors"></a>
 ## Errors

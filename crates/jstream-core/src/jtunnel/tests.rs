@@ -418,6 +418,7 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
     let start: &[u8] = &[0xFA];
     let clock: &[u8] = &[0xF8];
     let events = [(0_u16, note_on), (10, cc), (20, start), (30, clock)];
+    let first_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     for seq in 0..40 {
         let header = AudioHeader {
             stream_id: 3,
@@ -451,10 +452,13 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
         "a MIDI-only stream feeds no input"
     );
     // Stamped on the media clock: the sender's frames are due at the receiver's clock
-    // time, so no stamp is past the clock's now.
+    // time, so every stamp lies between the first send and the clock's now.
     let now_ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX);
     let last = keys.last_ms().expect("a stamp");
-    assert!(last <= now_ms, "stamped {last} ms, clock at {now_ms} ms");
+    assert!(
+        (first_ms..=now_ms).contains(&last),
+        "stamped {last} ms, sent from {first_ms} ms, clock at {now_ms} ms"
+    );
 }
 
 /// #1223: `profile.get`'s `network` reads each sender's playout and the drops.

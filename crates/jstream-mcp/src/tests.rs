@@ -532,6 +532,8 @@ fn instructions_carry_the_design_guidance() {
         "`video.snapshot`",
         "`jstream.levels()`",
         "`page_api_audio`",
+        "`jstream.midi()`",
+        "`page_api_midi`",
     ] {
         assert!(legacy.contains(needle), "{needle}");
     }

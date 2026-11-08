@@ -64,6 +64,7 @@ mod session;
 mod slot;
 mod snapshot;
 mod studio;
+mod tempo;
 #[cfg(test)]
 mod tests;
 mod timelines;

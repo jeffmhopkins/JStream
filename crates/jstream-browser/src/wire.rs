@@ -263,6 +263,7 @@ impl ToHelper {
                         1 | (u8::from(api.scenes) << 1)
                             | (u8::from(api.values) << 2)
                             | (u8::from(api.levels) << 3)
+                            | (u8::from(api.midi) << 4)
                     }
                 });
             }
@@ -304,6 +305,7 @@ impl ToHelper {
                 out.opt_str(data.source.as_deref())?;
                 out.opt_str(data.scenes.as_deref())?;
                 out.opt_str(data.levels.as_deref())?;
+                out.opt_str(data.midi.as_deref())?;
                 out.len(data.values.len())?;
                 for (name, value) in &data.values {
                     out.str(name)?;
@@ -344,10 +346,11 @@ impl ToHelper {
                 };
                 let page_api = match body.u8()? {
                     0 => None,
-                    flags if flags & !0b1111 == 0 && flags & 1 == 1 => Some(PageApi {
+                    flags if flags & !0b1_1111 == 0 && flags & 1 == 1 => Some(PageApi {
                         scenes: flags & 0b10 != 0,
                         values: flags & 0b100 != 0,
                         levels: flags & 0b1000 != 0,
+                        midi: flags & 0b1_0000 != 0,
                     }),
                     _ => return Err(WireError::Malformed("a page API's flags are unknown")),
                 };
@@ -400,6 +403,7 @@ impl ToHelper {
                 let source = body.opt_string()?;
                 let scenes = body.opt_string()?;
                 let levels = body.opt_string()?;
+                let midi = body.opt_string()?;
                 let count = body.len()?;
                 // Each value takes at least five bytes, so a count the message can't hold
                 // is refused before anything is allocated for it.
@@ -417,6 +421,7 @@ impl ToHelper {
                         source,
                         scenes,
                         levels,
+                        midi,
                         values,
                     },
                 }
@@ -706,6 +711,7 @@ mod tests {
                         scenes: true,
                         values: false,
                         levels: true,
+                        midi: true,
                     }),
                     ..spec(PageLocation::Web("https://example.com/".into()))
                 },
@@ -724,6 +730,7 @@ mod tests {
                     source: Some(r#"{"shown":true}"#.into()),
                     scenes: Some(r#"{"program":null,"preview":null}"#.into()),
                     levels: Some(r#"{"peak":[0.5,0.25],"rms":[0.1,0.1],"bands":[]}"#.into()),
+                    midi: Some(r#"{"input":"","notes":[]}"#.into()),
                     values: vec![
                         ("status.text".into(), Some(r#""On air""#.into())),
                         ("counter.a".into(), None),

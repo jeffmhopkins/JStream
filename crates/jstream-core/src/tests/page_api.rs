@@ -57,6 +57,7 @@ struct Seen {
     source: Option<Value>,
     scenes: Option<Value>,
     levels: Option<Value>,
+    midi: Option<Value>,
     values: BTreeMap<String, Option<Value>>,
     clock: bool,
 }
@@ -68,6 +69,7 @@ impl Seen {
             source,
             scenes,
             levels,
+            midi,
             values,
         } in page.take_data()
         {
@@ -81,6 +83,9 @@ impl Seen {
             }
             if let Some(levels) = levels {
                 self.levels = Some(parse(levels));
+            }
+            if let Some(midi) = midi {
+                self.midi = Some(parse(midi));
             }
             for (name, value) in values {
                 self.values.insert(name, value.map(parse));

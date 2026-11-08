@@ -26,6 +26,9 @@ pub struct PageApi {
     pub values: bool,
     /// `jstream.levels()`: one bus's levels and bands, sent each page frame.
     pub levels: bool,
+    /// `jstream.midi()`: one MIDI input's tempo, held notes, controllers and latest
+    /// notes (ADR-0147).
+    pub midi: bool,
 }
 
 /// One update to a page's `window.jstream`: each field the engine sends is the latest of
@@ -44,6 +47,9 @@ pub struct PageData {
     /// The granted bus's latest reading, as a JSON object (`peak`, `rms`, `bands`), or
     /// `null` while there is none.
     pub levels: Option<String>,
+    /// The granted MIDI input's latest reading, as a JSON object (`input`, `tempo`,
+    /// `notes`, `controllers`, `recent`).
+    pub midi: Option<String>,
     /// Shared values by name: each value's JSON text, or `None` for one removed.
     pub values: Vec<(String, Option<String>)>,
 }
@@ -55,6 +61,7 @@ impl PageData {
             && self.source.is_none()
             && self.scenes.is_none()
             && self.levels.is_none()
+            && self.midi.is_none()
             && self.values.is_empty()
     }
 
@@ -63,6 +70,7 @@ impl PageData {
         16 + self.source.as_ref().map_or(0, String::len)
             + self.scenes.as_ref().map_or(0, String::len)
             + self.levels.as_ref().map_or(0, String::len)
+            + self.midi.as_ref().map_or(0, String::len)
             + self
                 .values
                 .iter()
@@ -71,7 +79,7 @@ impl PageData {
     }
 
     /// The update as one or more, each within [`MAX_PAGE_DATA_BYTES`]: the clock,
-    /// visibility, scenes and levels in the first, and the values in order, each whole in one of
+    /// visibility, scenes, levels and MIDI in the first, and the values in order, each whole in one of
     /// them. Sent in order, they leave the page as the one update would.
     pub fn split(self) -> Vec<PageData> {
         if self.bytes() <= MAX_PAGE_DATA_BYTES {
@@ -179,8 +187,8 @@ impl ApiHome {
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
 pub(crate) fn shim(api: PageApi) -> String {
     let grant = format!(
-        "{{scenes:{},values:{},levels:{}}}",
-        api.scenes, api.values, api.levels
+        "{{scenes:{},values:{},levels:{},midi:{}}}",
+        api.scenes, api.values, api.levels, api.midi
     );
     include_str!("page_api.js").replace("__GRANT__", &grant)
 }
@@ -196,6 +204,7 @@ pub(crate) struct PageCache {
     source: Option<String>,
     scenes: Option<String>,
     levels: Option<String>,
+    midi: Option<String>,
     values: std::collections::BTreeMap<String, String>,
 }
 
@@ -215,6 +224,9 @@ impl PageCache {
         if let Some(levels) = &data.levels {
             self.levels = Some(levels.clone());
         }
+        if let Some(midi) = &data.midi {
+            self.midi = Some(midi.clone());
+        }
         for (name, value) in &data.values {
             match value {
                 Some(value) => self.values.insert(name.clone(), value.clone()),
@@ -233,6 +245,7 @@ impl PageCache {
             source: self.source.clone(),
             scenes: self.scenes.clone(),
             levels: self.levels.clone(),
+            midi: self.midi.clone(),
             values: self
                 .values
                 .iter()
@@ -261,6 +274,9 @@ pub(crate) fn update_json(data: &PageData) -> String {
     }
     if let Some(levels) = &data.levels {
         fields.push(format!("\"levels\":{levels}"));
+    }
+    if let Some(midi) = &data.midi {
+        fields.push(format!("\"midi\":{midi}"));
     }
     if !data.values.is_empty() {
         let values: Vec<String> = data
@@ -352,6 +368,7 @@ mod tests {
             source: Some(r#"{"shown":true}"#.into()),
             scenes: None,
             levels: Some(r#"{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]}"#.into()),
+            midi: Some(r#"{"input":"Keys","notes":[[1,60,100]]}"#.into()),
             values: vec![
                 ("status.text".into(), Some(r#""On air""#.into())),
                 ("counter.a".into(), None),
@@ -359,7 +376,7 @@ mod tests {
         };
         assert_eq!(
             update_json(&data),
-            r#"{"clock":{"t":10.5,"lead":0.25},"source":{"shown":true},"levels":{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]},"values":{"status.text":"On air","counter.a":null}}"#
+            r#"{"clock":{"t":10.5,"lead":0.25},"source":{"shown":true},"levels":{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]},"midi":{"input":"Keys","notes":[[1,60,100]]},"values":{"status.text":"On air","counter.a":null}}"#
         );
         assert_eq!(update_json(&PageData::default()), "{}");
         // A name that isn't a value's is never written.
@@ -423,8 +440,9 @@ mod tests {
             scenes: true,
             values: false,
             levels: true,
+            midi: true,
         });
-        assert!(shim.ends_with("})({scenes:true,values:false,levels:true})\n"));
+        assert!(shim.ends_with("})({scenes:true,values:false,levels:true,midi:true})\n"));
         assert!(!shim.contains("__GRANT__"));
     }
 }
