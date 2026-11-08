@@ -327,7 +327,8 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `PROTOCOL_VERSION` is 0.112 because the engine keeps a MIDI clock's tempo as the
 shared values `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar`, which it sets
 itself with `values.changed` from the client `engine`, and a `browser` source's page may
-be granted one MIDI input's state, `page_api_midi` (ADR-0147, a number the release queue
+be granted those values, `page_api_tempo`, and one MIDI input's state, `page_api_midi`
+(ADR-0147, a number the release queue
 set; 0.108 to 0.111 are other PRs'); 0.107 because the event `kinds.changed` (`KindsCause`) tells
 every client when a CLAP scan or the effect packs change the kinds
 ([Events](#events), #1328, a number the release queue set); 0.106 because a person can see and redo the CLAP plugin scan: the
@@ -2331,7 +2332,8 @@ ADR-0032's live values either, which are a gesture's uncommitted edits.
   `tempo.playing` (`true` while the transport plays and its clock runs), and `tempo.beat`
   and `tempo.bar` (whole quarter notes and four-beat bars since the song's start). Its
   `values.changed` names the client `engine` and has no `request_id`. A client may still
-  set these names, as any; the engine's next change overwrites them.
+  set these names, as any; the engine's next change overwrites them. A page reads them
+  only with its source's `page_api_tempo`, never through `page_api_values`.
 
 <a id="errors"></a>
 ## Errors

@@ -5907,13 +5907,15 @@ impl State {
     }
 
     /// Sets the `tempo.*` shared values the MIDI clock gave (ADR-0147), credited to the
-    /// client `engine`, and tells the pages and clients that read them.
+    /// client `engine`, and tells the pages and clients that read them. Returns whether
+    /// every change was set: a refused one is tried again at the next look.
     fn publish_tempo(
         &mut self,
         changes: &[(&str, Option<serde_json::Value>)],
         wake: &mut Vec<Waker>,
-    ) {
+    ) -> bool {
         let mut any = false;
+        let mut all = true;
         for (name, value) in changes {
             match self.values.set(name, value.clone()) {
                 Ok(true) => {
@@ -5929,13 +5931,17 @@ impl State {
                     );
                 }
                 Ok(false) => {}
-                // Only a full store refuses one; the next change tries again.
-                Err(error) => tracing::debug!(name, %error, "a tempo value wasn't set"),
+                // Only a full store refuses one; the next look tries again.
+                Err(error) => {
+                    all = false;
+                    tracing::debug!(name, %error, "a tempo value wasn't set");
+                }
             }
         }
         if any {
             self.feed_pages();
         }
+        all
     }
 
     /// Tells each page granted the page API what it may read now (ADR-0102): its
@@ -6335,10 +6341,14 @@ fn spawn_tempo(shared: Weak<Shared>, midi: Arc<jstream_sources::MidiInputs>) -> 
                     continue;
                 }
                 let mut wake = Vec::new();
-                lock(&engine.state).publish_tempo(&next.changes(&published), &mut wake);
+                let all = lock(&engine.state).publish_tempo(&next.changes(&published), &mut wake);
                 drop(engine);
                 wake_all(wake);
-                published = next;
+                // A refused value stays unpublished, so the next look tries it again; the
+                // ones set this time are then unchanged and send nothing.
+                if all {
+                    published = next;
+                }
             }
         });
     if let Err(error) = &started {

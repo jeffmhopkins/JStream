@@ -270,8 +270,10 @@ and `page_api_midi_input` to the MIDI input's name (empty for every input), and 
 pressure, recent}`, where `tempo` is `null` or `{bpm, playing, clock, beat, at}`, `notes` \
 and `controllers` are `[channel, key or controller, value]` with channels 1 to 16, and \
 `recent` holds the last two seconds' note-ons as `[at, channel, key, velocity]`; times \
-are seconds on `jstream.clock`. The engine also keeps `tempo.bpm`, `tempo.playing`, \
-`tempo.beat` and `tempo.bar` as shared values, which `values.list` reads. Keep continuous motion \
+are seconds on `jstream.clock`; `tempo` is there only while `page_api_tempo` is on too. \
+The engine also keeps `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar` as \
+shared values, which `values.list` reads and a page reads only with `page_api_tempo`, \
+never through `page_api_values`. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. \

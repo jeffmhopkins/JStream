@@ -366,9 +366,11 @@ location removes it.
 **Built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source may opt
 its page in to a read-only `window.jstream` with the engine animation clock and the
 page's own visibility, and, per further checkbox, the program and preview scenes, named
-shared values, one bus's levels and bands (never its samples), and one MIDI input's
-held notes, controllers, recent note-ons and tempo (never raw bytes or SysEx,
-[ADR-0147](../adr/0147-midi-tempo-and-state-for-pages.md)). Each checkbox shows
+shared values, one bus's levels and bands (never its samples), the engine's tempo, and
+one MIDI input's held notes, controllers and recent note-ons (never raw bytes or SysEx,
+[ADR-0147](../adr/0147-midi-tempo-and-state-for-pages.md)). The tempo has a checkbox
+of its own, as ADR-0124 decision 7 asks: the `tempo.*` values never reach a page through
+the shared values grant, and a MIDI reading carries a tempo only with it. Each checkbox shows
 its warning beside it, and the Sources panel badges a source whose page is granted
 anything ([ADR-0124](../adr/0124-page-api-read-review.md), which also lists what no
 setting ever grants). The renderer

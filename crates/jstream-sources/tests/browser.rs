@@ -83,6 +83,7 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
             ("page_api_values", false),
             ("page_api_audio", false),
             ("page_api_bus", false),
+            ("page_api_tempo", false),
             ("page_api_midi", false),
             ("page_api_midi_input", false),
         ]
@@ -391,6 +392,73 @@ fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
     assert!(matches!(bad, Err(SourceError::Setting { param, .. }) if param == "page_api_values"));
 }
 
+/// ADR-0124 §7: the engine's `tempo.*` values reach a page only through `page_api_tempo`,
+/// whatever its shared values grant names.
+#[test]
+fn the_tempo_values_need_their_own_checkbox() {
+    use jstream_browser::PageApi;
+    use jstream_media::{MediaTime, Timebase};
+    use jstream_sources::PageView;
+    use std::collections::BTreeMap;
+
+    static NO_BUSES: BTreeMap<jstream_protocol::BusId, jstream_sources::BusLevels> =
+        BTreeMap::new();
+    let mut values = BTreeMap::new();
+    values.insert("status.text".to_owned(), json!("On air"));
+    values.insert("tempo.bpm".to_owned(), json!(120.0));
+    values.insert("tempo.playing".to_owned(), json!(true));
+    let view = PageView {
+        now: MediaTime::new(1000, Timebase::MILLIS),
+        program: true,
+        preview: false,
+        program_scene: None,
+        preview_scene: None,
+        values: &values,
+        buses: &NO_BUSES,
+    };
+    let sent = |page: &jstream_browser::fake::FakePageState| -> Vec<String> {
+        page.take_data()
+            .into_iter()
+            .flat_map(|data| data.values)
+            .map(|(name, _)| name)
+            .collect()
+    };
+
+    let browser = FakeBrowser::new();
+    let ctx = ctx(&browser, None);
+    let mut untimed = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/")),
+            ("page_api", json!(true)),
+            ("page_api_shared_values", json!(true)),
+            ("page_api_values", json!("status.*, tempo.*, tempo.bpm")),
+        ]),
+    )
+    .expect("a page");
+    untimed.page_view(&view);
+    assert_eq!(sent(&browser.pages()[0]), ["status.text"]);
+
+    let mut timed = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/")),
+            ("page_api", json!(true)),
+            ("page_api_tempo", json!(true)),
+        ]),
+    )
+    .expect("a page");
+    assert_eq!(
+        browser.pages()[1].spec().page_api,
+        Some(PageApi {
+            values: true,
+            ..PageApi::default()
+        })
+    );
+    timed.page_view(&view);
+    assert_eq!(sent(&browser.pages()[1]), ["tempo.bpm", "tempo.playing"]);
+}
+
 #[test]
 fn no_url_is_a_blank_page_and_a_file_wins_over_a_url() {
     let browser = FakeBrowser::new();
@@ -610,7 +678,23 @@ fn a_page_granted_midi_reads_its_input() {
             &jstream_midi::Message::TimingClock,
         );
     }
-    let due = granted.page_view(&view(1900));
+    // Without the tempo checkbox, a MIDI page reads no tempo (ADR-0124 §7): its reading
+    // doesn't change.
+    granted.page_view(&view(1900));
+    assert!(page.take_data().iter().all(|data| data.midi.is_none()));
+    let mut timed = create(
+        &ctx,
+        &settings(&[
+            ("url", json!("https://example.com/")),
+            ("page_api", json!(true)),
+            ("page_api_midi", json!(true)),
+            ("page_api_midi_input", json!("Keys")),
+            ("page_api_tempo", json!(true)),
+        ]),
+    )
+    .expect("a page granted the tempo");
+    let page = &browser.pages()[1];
+    let due = timed.page_view(&view(1900));
     let reading: Value =
         serde_json::from_str(page.take_data()[0].midi.as_deref().expect("a reading"))
             .expect("JSON");
@@ -631,7 +715,7 @@ fn a_page_granted_midi_reads_its_input() {
         ]),
     )
     .expect("a page");
-    assert_eq!(browser.pages()[1].spec().page_api, Some(PageApi::default()));
+    assert_eq!(browser.pages()[2].spec().page_api, Some(PageApi::default()));
     drop(plain);
     let long = create(
         &ctx,

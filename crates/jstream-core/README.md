@@ -1522,8 +1522,9 @@ held peak that `meters.tick` takes; empty while no mixer runs, and read only whi
 page is granted). Attaching and detaching the mixer feed the pages too, so a page given
 a bus reads `null` and then its levels. A source granted a MIDI input finds it in the
 engine's `MidiInputs` as it opens, and reads it itself on each look
-([ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md) §4); the engine's
-`tempo.*` values reach pages as other shared values do.
+([ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md) §5); the engine's
+`tempo.*` values reach pages as other shared values do, but only a page granted
+`page_api_tempo` (ADR-0147 §2).
 The source sends its page only what changed, so this costs nothing when no page is
 granted and little when nothing changed, and at most one update per page frame (ADR-0102
 decision 3): what changes within a frame is merged and held, and `page_view` returns

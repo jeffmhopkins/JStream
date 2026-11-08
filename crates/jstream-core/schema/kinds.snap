@@ -1032,11 +1032,25 @@ source: crates/jstream-core/src/kinds.rs
         "live": false
       },
       {
+        "id": "page_api_tempo",
+        "type": "bool",
+        "default": false,
+        "label": "Tempo",
+        "description": "Also give the page the engine's tempo: the tempo.* shared values, and the tempo in jstream.midi()'s reading (ADR-0147).",
+        "warning": "A page given the tempo can follow the song's beat and transport, and a page from the web can send that anywhere.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
         "id": "page_api_midi",
         "type": "bool",
         "default": false,
         "label": "MIDI",
-        "description": "Also give the page one MIDI input's tempo, held notes, controllers and latest notes, with jstream.midi() (ADR-0147).",
+        "description": "Also give the page one MIDI input's held notes, controllers and latest notes, with jstream.midi() (ADR-0147); its tempo too while Tempo is on.",
         "warning": "A page given MIDI sees every note and control on its port.",
         "group": "Page API",
         "visible_if": {

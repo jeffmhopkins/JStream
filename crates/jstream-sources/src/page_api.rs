@@ -26,6 +26,10 @@ const MIDI_RECENT_MS: u64 = 2000;
 /// How often a page granted MIDI is looked at while its input rests, in seconds.
 const MIDI_IDLE: f64 = 0.25;
 
+/// The prefix of the engine's tempo values (ADR-0147), which only `page_api_tempo`
+/// grants.
+const TEMPO: &str = "tempo";
+
 /// The longest `page_api_values` setting, in bytes.
 pub(crate) const MAX_VALUES_GRANT_BYTES: usize = 1024;
 
@@ -82,6 +86,9 @@ pub(crate) struct Grant {
     /// The MIDI input it may read (`page_api_midi_input`; empty for every input), while
     /// `page_api_midi` is on (ADR-0147).
     pub(crate) midi: Option<String>,
+    /// Whether it may read the tempo (`page_api_tempo`, ADR-0124 §7): the engine's
+    /// `tempo.*` values, and a MIDI reading's `tempo`. No values grant covers them.
+    pub(crate) tempo: bool,
 }
 
 /// One entry of `page_api_values`.
@@ -164,6 +171,7 @@ impl Grant {
             values,
             bus,
             midi,
+            tempo: on("page_api_tempo"),
         }))
     }
 
@@ -171,7 +179,7 @@ impl Grant {
     pub(crate) fn api(&self) -> PageApi {
         PageApi {
             scenes: self.scenes,
-            values: !self.values.is_empty(),
+            values: !self.values.is_empty() || self.tempo,
             levels: self.bus.is_some(),
             midi: self.midi.is_some(),
         }
@@ -179,6 +187,13 @@ impl Grant {
 
     /// Whether the page may read the value `name`.
     pub(crate) fn covers(&self, name: &str) -> bool {
+        if name == TEMPO
+            || name
+                .strip_prefix(TEMPO)
+                .is_some_and(|rest| rest.starts_with('.'))
+        {
+            return self.tempo;
+        }
         self.values.iter().any(|covered| match covered {
             Covered::Name(own) => own == name,
             Covered::Below(prefix) => name
@@ -369,7 +384,8 @@ impl Feed {
     /// next page frame is always due, for the reading then; while that input rests, a
     /// look every [`MIDI_IDLE`] sees it move again.
     pub(crate) fn due(&self) -> Option<MediaTime> {
-        let resting = self.grant.midi.is_some() && !self.midi_moving;
+        // With no MIDI state to read, there's nothing to look at.
+        let resting = self.midi.is_some() && !self.midi_moving;
         if self.pending.is_empty() && !self.metering && !self.midi_moving {
             if !resting {
                 return None;
@@ -452,15 +468,16 @@ impl Feed {
             } else {
                 0
             };
-            let playing = state.tempo().is_some_and(|t| t.playing && t.clock(now_ms));
+            let tempo = self.grant.tempo;
+            let playing = tempo && state.tempo().is_some_and(|t| t.playing && t.clock(now_ms));
             self.midi_moving = self.midi_seen != Some(changes) || playing;
             if self.midi_moving || self.midi_sent.is_none() {
                 self.midi_seen = Some(changes);
-                let reading = midi_json(input, state, now_ms, &mut self.events);
+                let reading = midi_json(input, state, tempo, now_ms, &mut self.events);
                 data.midi = changed(&mut self.midi_sent, reading);
             }
         }
-        if !self.grant.values.is_empty() {
+        if !self.grant.values.is_empty() || self.grant.tempo {
             let grant = &self.grant;
             let values = &mut self.values;
             values.retain(|name, _| {
@@ -529,13 +546,20 @@ fn levels_json(levels: &BusLevels, bands: Option<&[f32]>) -> String {
 }
 
 /// A MIDI input's state at `now_ms` as the page's `midi` JSON (ADR-0147): its `tempo`
-/// (`null` before its clock or transport), held `notes` and non-zero `controllers` as
+/// (`null` before its clock or transport, or without `tempo`, the tempo grant), held `notes` and non-zero `controllers` as
 /// `[channel, key or controller, value]` with channels 1 to 16, non-zero `bend` and
 /// `pressure` as `[channel, value]`, and the `recent` note-ons of the last two seconds as
 /// `[at, channel, key, velocity]`, oldest first. Times are seconds on the page's clock.
-fn midi_json(input: &str, state: &MidiState, now_ms: u64, events: &mut Vec<NoteEvent>) -> String {
+fn midi_json(
+    input: &str,
+    state: &MidiState,
+    tempo: bool,
+    now_ms: u64,
+    events: &mut Vec<NoteEvent>,
+) -> String {
     let secs = |ms: u64| ms as f64 / 1000.0;
-    let tempo = state.tempo().map_or(Value::Null, |t| {
+    let reading = if tempo { state.tempo() } else { None };
+    let tempo = reading.map_or(Value::Null, |t| {
         json!({
             "bpm": t.bpm.map(|bpm| (bpm * 100.0).round() / 100.0),
             "playing": t.playing,
@@ -708,6 +732,7 @@ mod tests {
             values: vec![Covered::Below("status".into())],
             bus: None,
             midi: None,
+            tempo: false,
         };
         let mut feed = Feed::new(grant, 50, None);
         let mut values = BTreeMap::new();
@@ -759,6 +784,7 @@ mod tests {
             values: vec![Covered::Below("counter".into())],
             bus: None,
             midi: None,
+            tempo: false,
         };
         // 50 a second: one page frame is 20 ms.
         let mut feed = Feed::new(grant, 50, None);
@@ -907,6 +933,7 @@ mod tests {
                 values: Vec::new(),
                 bus: None,
                 midi: None,
+                tempo: false,
             },
             30,
             None,
@@ -935,6 +962,7 @@ mod tests {
                 values: Vec::new(),
                 bus: None,
                 midi: None,
+                tempo: false,
             },
             25,
             None,

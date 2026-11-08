@@ -71,7 +71,9 @@ pub(crate) fn extra_info(api: PageApi, home: &ApiHome) -> Option<DictionaryValue
 
 /// `data` as the process message its page's main frame is sent: the clock (a flag and
 /// two numbers), the visibility, scenes, levels and MIDI (empty for none: JSON text is
-/// never empty), then each value's name and JSON text (empty for one removed).
+/// never empty), then each value's name and JSON text (empty for one removed). The
+/// layout is private to this crate: the engine and the helper it starts are always the
+/// same build, so a reordering here needs no version, only [`read_message`] to match.
 pub(crate) fn message(data: &PageData) -> Option<ProcessMessage> {
     let message = process_message_create(Some(&MESSAGE.into()))?;
     let list = message.argument_list()?;

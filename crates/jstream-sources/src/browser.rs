@@ -228,8 +228,24 @@ impl BrowserKind {
                 },
                 ParamDescriptor {
                     description: Some(
-                        "Also give the page one MIDI input's tempo, held notes, controllers \
-                         and latest notes, with jstream.midi() (ADR-0147)."
+                        "Also give the page the engine's tempo: the tempo.* shared values, \
+                         and the tempo in jstream.midi()'s reading (ADR-0147)."
+                            .into(),
+                    ),
+                    warning: Some(
+                        "A page given the tempo can follow the song's beat and transport, \
+                         and a page from the web can send that anywhere."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param("page_api_tempo", "Tempo", ParamType::Bool, json!(false))
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "Also give the page one MIDI input's held notes, controllers and \
+                         latest notes, with jstream.midi() (ADR-0147); its tempo too while \
+                         Tempo is on."
                             .into(),
                     ),
                     // ADR-0124 §7's warning, word for word.
