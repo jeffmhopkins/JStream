@@ -16,6 +16,7 @@ use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
+use crate::wipe::Wipe;
 use jstream_protocol::BlendMode;
 
 /// Bytes from one vertex to the next: 29 `f32`s (position, UV, opacity, alpha mode, `w`,
@@ -120,6 +121,8 @@ pub struct Compositor {
     /// submit hands back to the platform (`PRESENT`) after its last use.
     staged: Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     filters: filter::Runtime,
+    /// Writes transparent over part of a layer, in place of clearing all of it (#1449).
+    wipe: Wipe,
     mip_pipelines: MipPipelines,
     models: ModelRuntime,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
@@ -292,6 +295,7 @@ impl Compositor {
             &mut encoder,
             (&targets.working_view, &targets.working),
             scene,
+            None,
         );
         self.record_resolve(&mut encoder, targets);
         if let Some(buffer) = &readback_buffer {
@@ -435,7 +439,12 @@ impl Compositor {
                 label: Some("jstream-render-layer"),
             });
         self.record_mips(&mut encoder, scene);
-        self.record_composite(&mut encoder, (view, target.texture()), scene);
+        // Over a transparent background, a layer whose content is known need only be
+        // made transparent where that is, not cleared whole (#1449).
+        let prior = (scene.background.a == 0.0)
+            .then(|| target.content())
+            .flatten();
+        self.record_composite(&mut encoder, (view, target.texture()), scene, prior);
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         target.mark_changed();
@@ -595,9 +604,6 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-filter"),
             });
-        // A filter can draw anywhere in its output, unless what it reads is bounded and
-        // its kind says how far past that it draws (#1070).
-        output.set_content(None);
         let padding = filter.pad();
         let (pass, scratch) = filter.parts();
         let bound = bound_of(input, padding, size, pass.reach());
@@ -617,6 +623,8 @@ impl Compositor {
             holds: &mut self.staged,
             scratch,
             bound,
+            wipe: &self.wipe,
+            written: Vec::new(),
         };
         ctx.holds.clear();
         let encoded = if padding == 0 {
@@ -631,6 +639,7 @@ impl Compositor {
         };
         ctx.hold(input);
         ctx.scratch.end();
+        let written = std::mem::take(&mut ctx.written);
         if let Err(err) = encoded {
             self.staged.clear();
             return Err(err);
@@ -648,15 +657,12 @@ impl Compositor {
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
-        output.set_content(bound.map(|bound| {
-            let [x0, y0, x1, y1] = bound.rect;
-            Region {
-                x: x0,
-                y: y0,
-                width: x1 - x0,
-                height: y1 - y0,
-            }
-        }));
+        // What each image drawn into can hold now (#1070, #1449): a filter can draw
+        // anywhere in its output, unless what it reads is bounded and its kind says how
+        // far past that it draws, and every draw is then cut to that.
+        for (image, content) in written {
+            image.set_content(content);
+        }
         drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
@@ -797,6 +803,7 @@ impl Compositor {
         );
         let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
         let filters = filter::Runtime::new(&gpu.device);
+        let wipe = Wipe::new(&gpu.device);
         let mip_pipelines = MipPipelines::new(&gpu.device, &image_layout);
         let models = ModelRuntime::new(&gpu);
         let vertex_buffer = gpu.device.create_buffer(&wgpu::BufferDescriptor {
@@ -822,6 +829,7 @@ impl Compositor {
             order: Vec::new(),
             staged: Vec::new(),
             filters,
+            wipe,
             mip_pipelines,
             models,
             readback_wait: std::time::Duration::ZERO,
@@ -1212,6 +1220,7 @@ impl Compositor {
         encoder: &mut wgpu::CommandEncoder,
         (view, texture): (&wgpu::TextureView, &wgpu::Texture),
         scene: &Scene<'_>,
+        prior: Option<Region>,
     ) {
         let clear = premultiplied_linear(scene.background);
         let clear = wgpu::Color {
@@ -1220,6 +1229,9 @@ impl Compositor {
             b: f64::from(clear[2]),
             a: f64::from(clear[3]),
         };
+        // A target known transparent outside `prior` is loaded and made transparent over
+        // that alone; any other is cleared whole.
+        let start = prior.map_or(Start::Clear(clear), Start::Wipe);
         let reads = |draw: &Draw| draw.rect.is_some();
         let count = self.draws.len();
         let mut cleared = false;
@@ -1227,7 +1239,7 @@ impl Compositor {
         loop {
             if let Some(rect) = self.draws.get(first).and_then(|draw| draw.rect) {
                 if !cleared {
-                    self.record_draws(encoder, view, Some(clear), &[], scene);
+                    self.record_draws(encoder, view, Some(start), &[], scene);
                     cleared = true;
                 }
                 self.record_backdrop_copy(encoder, texture, rect);
@@ -1235,7 +1247,7 @@ impl Compositor {
             let end = (first + 1..count)
                 .find(|&index| reads(&self.draws[index]))
                 .unwrap_or(count.max(first));
-            let load = (!cleared).then_some(clear);
+            let load = (!cleared).then_some(start);
             self.record_draws(encoder, view, load, &self.draws[first..end], scene);
             cleared = true;
             if end >= count {
@@ -1245,17 +1257,20 @@ impl Compositor {
         }
     }
 
-    /// One render pass over `target` drawing `draws`, after clearing it to `clear` when
-    /// that is set.
+    /// One render pass over `target` drawing `draws`, after making it ready as `start`
+    /// says when that is set.
     fn record_draws(
         &self,
         encoder: &mut wgpu::CommandEncoder,
         target: &wgpu::TextureView,
-        clear: Option<wgpu::Color>,
+        start: Option<Start>,
         draws: &[Draw],
         scene: &Scene<'_>,
     ) {
-        let load = clear.map_or(wgpu::LoadOp::Load, wgpu::LoadOp::Clear);
+        let load = match start {
+            Some(Start::Clear(clear)) => wgpu::LoadOp::Clear(clear),
+            Some(Start::Wipe(_)) | None => wgpu::LoadOp::Load,
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-composite"),
             color_attachments: &[Some(color_attachment(target, load))],
@@ -1264,6 +1279,10 @@ impl Compositor {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if let Some(Start::Wipe(region)) = start {
+            let size = (scene.canvas.width(), scene.canvas.height());
+            self.wipe.record(&mut pass, region, size);
+        }
         if draws.is_empty() {
             return;
         }
@@ -1710,6 +1729,15 @@ fn texture(
         usage,
         view_formats: &[],
     })
+}
+
+/// How a composite readies its target before the first draw.
+#[derive(Clone, Copy)]
+enum Start {
+    /// Cleared whole to the background.
+    Clear(wgpu::Color),
+    /// Loaded, transparent outside the region, and made transparent over it.
+    Wipe(Region),
 }
 
 fn color_attachment(

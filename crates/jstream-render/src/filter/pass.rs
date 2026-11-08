@@ -18,6 +18,8 @@ use crate::error::RenderError;
 use crate::filter::FilterClock;
 use crate::gpu::Gpu;
 use crate::image::{self, Image, LAYER_FORMAT, Maker, Owner};
+use crate::mips::Region;
+use crate::wipe::{self, Wipe};
 
 /// The WGSL every filter shader starts with: the vertex stage, the bindings and the colour
 /// helpers. Effect packs validate against it.
@@ -610,6 +612,12 @@ pub(crate) struct Ctx<'a> {
     /// Where in the output frame the filter can draw anything, when its input's content
     /// and its [`Pass::reach`] say so: every draw is cut to it, at its target's scale.
     pub(crate) bound: Option<Bound>,
+    /// Writes transparent over part of a target, in place of clearing all of it (#1449).
+    pub(crate) wipe: &'a Wipe,
+    /// What this submit's draws leave in each image they draw into, as
+    /// [`Image::content`] says it (`None` where they can leave anything): set on the
+    /// images once the submit is made, since a recording that fails changes none.
+    pub(crate) written: Vec<(Image, Option<Region>)>,
 }
 
 /// The output pixels a bounded filter can draw into: `[x0, y0, x1, y1]` of a frame of
@@ -687,7 +695,28 @@ impl Ctx<'_> {
         image::layer(&self.maker, width, height)
     }
 
-    /// Records clearing `target`, a layer, to transparent.
+    /// Where `image` can be other than transparent once the draws recorded so far run.
+    fn prior(&self, image: &Image) -> Option<Region> {
+        self.written
+            .iter()
+            .rev()
+            .find(|(written, _)| written.texture() == image.texture())
+            .map_or_else(|| image.content(), |(_, region)| *region)
+    }
+
+    /// Records that, once this submit runs, `image` is transparent outside `region`.
+    fn wrote(&mut self, image: &Image, region: Option<Region>) {
+        match self
+            .written
+            .iter_mut()
+            .find(|(written, _)| written.texture() == image.texture())
+        {
+            Some(slot) => slot.1 = region,
+            None => self.written.push((image.clone(), region)),
+        }
+    }
+
+    /// Records clearing `target`, a layer, to transparent; nothing when it already is.
     pub(crate) fn clear(&mut self, target: &Image) -> Result<(), RenderError> {
         let Some(view) = target.target() else {
             return Err(RenderError::Invalid {
@@ -695,6 +724,9 @@ impl Ctx<'_> {
                 detail: "the target is not a layer".into(),
             });
         };
+        if self.prior(target).is_some_and(wipe::is_empty) {
+            return Ok(());
+        }
         drop(self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-clear"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -711,6 +743,7 @@ impl Ctx<'_> {
             occlusion_query_set: None,
             multiview_mask: None,
         }));
+        self.wrote(target, Some(wipe::EMPTY));
         Ok(())
     }
 
@@ -780,14 +813,43 @@ impl Ctx<'_> {
             frame_buffer,
             params_buffer,
         );
-        let load = match shader.blend {
-            Blend::Replace => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-            Blend::Over => wgpu::LoadOp::Load,
-        };
         // A bounded filter draws only where it can draw anything; the clear covers the rest.
         let cut = self
             .bound
             .map(|bound| bound.in_target(draw.target.width(), draw.target.height()));
+        // A target known transparent outside a region is loaded, not cleared: a draw that
+        // replaces all of that region needs nothing more, and one that doesn't first
+        // makes it transparent (#1449).
+        let prior = self.prior(draw.target);
+        let clear = wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT);
+        let (load, wipe, after) = match (shader.blend, cut) {
+            (Blend::Replace, None) => (clear, None, None),
+            (Blend::Replace, Some(None)) => match prior {
+                Some(prior) if wipe::is_empty(prior) => (wgpu::LoadOp::Load, None, Some(prior)),
+                _ => (clear, None, Some(wipe::EMPTY)),
+            },
+            (Blend::Replace, Some(Some(rect))) => match prior {
+                Some(prior) => (
+                    wgpu::LoadOp::Load,
+                    (!wipe::within(prior, rect)).then_some(prior),
+                    Some(wipe::region(rect)),
+                ),
+                None => (clear, None, Some(wipe::region(rect))),
+            },
+            (Blend::Over, None) => (wgpu::LoadOp::Load, None, None),
+            (Blend::Over, Some(None)) => (wgpu::LoadOp::Load, None, prior),
+            (Blend::Over, Some(Some(rect))) => (
+                wgpu::LoadOp::Load,
+                None,
+                prior.map(|prior| wipe::union(prior, wipe::region(rect))),
+            ),
+        };
+        self.wrote(draw.target, after);
+        // Nothing to draw into a target that needs no clear.
+        if matches!(cut, Some(None)) && matches!(load, wgpu::LoadOp::Load) {
+            return Ok(());
+        }
+        let size = (draw.target.width(), draw.target.height());
         let pipeline = self.runtime.pipeline(&self.gpu.device, shader)?;
         let mut pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(shader.label),
@@ -805,6 +867,9 @@ impl Ctx<'_> {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if let Some(region) = wipe {
+            self.wipe.record(&mut pass, region, size);
+        }
         match cut {
             // Nothing to draw: the pass only clears.
             Some(None) => return Ok(()),
@@ -845,6 +910,8 @@ impl Ctx<'_> {
                 ),
             });
         }
+        // A program can draw anything anywhere in its target.
+        self.wrote(target, None);
         for input in inputs {
             self.hold(input);
         }

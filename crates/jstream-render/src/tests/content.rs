@@ -341,3 +341,114 @@ fn a_filter_keeps_the_bound_only_when_it_can() {
     let pixels = read(&mut opened, &blurred);
     assert!(pixels.rgba().iter().all(|&byte| byte == 0));
 }
+
+/// Every texel of `image`, not only those its content says can hold anything, which a
+/// read draws alone.
+fn whole(opened: &mut Opened, image: &Image) -> Snapshot {
+    let content = image.content();
+    image.set_content(None);
+    let pixels = read(opened, image);
+    image.set_content(content);
+    pixels
+}
+
+/// Draws a red square at `at` and a half-opaque green bar below it into `layer`, a
+/// 96x96 transparent scene.
+fn moved(compositor: &mut Compositor, layer: &Image, at_x: f32, at_y: f32) {
+    let red = solid(compositor, 3, 3, [255, 0, 0, 255]);
+    let green = solid(compositor, 4, 1, [0, 255, 0, 128]);
+    let items = [
+        item(&red, at([at_x, at_y], [1.0, 1.0], 0.0), Crop::NONE, 1.0),
+        item(
+            &green,
+            at([at_x, at_y + 9.0], [2.0, 2.0], 0.0),
+            Crop::NONE,
+            1.0,
+        ),
+    ];
+    compositor
+        .render_into(
+            &Scene {
+                canvas: FrameSize::new(96, 96).expect("invariant: non-zero"),
+                background: Color::TRANSPARENT,
+                items: &items,
+            },
+            layer,
+        )
+        .expect("render into the layer");
+}
+
+/// A layer drawn again after its content moved, or after it emptied, is made
+/// transparent where it was rather than cleared whole (#1449), and holds the same pixels
+/// as a new layer drawn once.
+#[test]
+fn a_layer_drawn_again_keeps_nothing_of_what_it_held() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let reused = opened.compositor.layer(96, 96).expect("layer");
+    moved(&mut opened.compositor, &reused, 10.0, 12.0);
+    assert!(reused.content().is_some());
+    moved(&mut opened.compositor, &reused, 60.0, 50.0);
+    let fresh = opened.compositor.layer(96, 96).expect("layer");
+    moved(&mut opened.compositor, &fresh, 60.0, 50.0);
+    let (again, once) = (whole(&mut opened, &reused), whole(&mut opened, &fresh));
+    assert_eq!(
+        again.rgba(),
+        once.rgba(),
+        "the moved content leaves nothing behind"
+    );
+
+    opened
+        .compositor
+        .render_into(
+            &Scene {
+                canvas: FrameSize::new(96, 96).expect("invariant: non-zero"),
+                background: Color::TRANSPARENT,
+                items: &[],
+            },
+            &reused,
+        )
+        .expect("an empty scene");
+    let emptied = whole(&mut opened, &reused);
+    assert!(
+        emptied.rgba().iter().all(|&byte| byte == 0),
+        "an emptied layer"
+    );
+}
+
+/// A filter drawn again into the same output and scratch after its input's content
+/// moved keeps nothing of the last frame: the same pixels as a new filter into a new
+/// output, for each kind that bounds what it draws.
+#[test]
+fn a_bounded_filter_drawn_again_keeps_nothing_of_the_last_frame() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let kinds = [
+        ("blur", json!({ "radius": 6.0 })),
+        (
+            "drop_shadow",
+            json!({ "color": "#0000ffc0", "offset_x": 6.0, "offset_y": -4.0, "blur": 5.0 }),
+        ),
+        (
+            "glow",
+            json!({ "color": "#ffff00", "radius": 8.0, "strength": 2.0 }),
+        ),
+    ];
+    let input = opened.compositor.layer(96, 96).expect("layer");
+    for (kind, settings) in kinds {
+        let mut reused = filter(kind, settings.clone());
+        moved(&mut opened.compositor, &input, 10.0, 12.0);
+        let output = filtered(&mut opened, &mut reused, &input);
+        assert!(output.content().is_some(), "{kind}: bounded");
+        moved(&mut opened.compositor, &input, 60.0, 50.0);
+        opened
+            .compositor
+            .apply_filter_into(&mut reused, &input, &output, FilterClock { seconds: 0.0 })
+            .expect("apply the filter again");
+        let fresh = filtered(&mut opened, &mut filter(kind, settings), &input);
+        let (again, once) = (whole(&mut opened, &output), whole(&mut opened, &fresh));
+        same(kind, &again, &once);
+    }
+}
