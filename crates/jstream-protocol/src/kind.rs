@@ -46,8 +46,9 @@ pub struct KindSummary {
     /// with.
     pub version: u32,
     /// An effect-pack kind the engine quarantined after a GPU device loss was blamed on
-    /// it (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables
-    /// it (`effect.enable`). Omitted when `false`.
+    /// it (0.61, `gpu.device_lost`), or after it ran too long on the GPU (0.102,
+    /// `gpu.effect_slow`): its filters are bypassed until a person re-enables it
+    /// (`effect.enable`). Omitted when `false`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub quarantined: bool,
 }

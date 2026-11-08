@@ -833,7 +833,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
+          "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
           "properties": {
             "kind_id": {
               "description": "The kind, `<pack>/<effect>`.",
@@ -6502,6 +6502,46 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "An effect-pack kind ran too long on the program stage's GPU (0.102, #349): its\npass took more than half the frame budget in 30 frames running, as timestamp\nqueries measure it where the GPU has them. The engine quarantines it before the\nOS resets a device it hangs, as after a device loss (`gpu.device_lost`): its\nfilters are bypassed until a person re-enables it (`effect.enable`), and a kind\nblamed a second time in a run quarantines its whole pack. Runtime state: a client\nthat misses it sees the quarantine in `kind.list`.",
+          "properties": {
+            "kind_id": {
+              "description": "The kind that ran too long.",
+              "type": "string"
+            },
+            "limit_us": {
+              "description": "The limit it ran over, half the frame budget, in microseconds.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "quarantined": {
+              "default": [],
+              "description": "The kinds this quarantined, ordered by ID: the slow one, or every kind of its\npack when the pack was blamed before in this run. Empty when its pack was\nunloaded meanwhile.",
+              "items": {
+                "type": "string"
+              },
+              "type": "array"
+            },
+            "took_us": {
+              "description": "Its pass's GPU time in the last of those frames, in microseconds.",
+              "format": "uint64",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "gpu.effect_slow",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "kind_id",
+            "took_us",
+            "limit_us"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A timeline started, was sought, looped, ended, stopped or was removed (ADR-0115,\nsince 0.87): never once a frame. Playing is studio state, so it carries no `rev`.",
           "properties": {
             "change": {
@@ -7646,7 +7686,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         },
         "quarantined": {
-          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables\nit (`effect.enable`). Omitted when `false`.",
+          "description": "An effect-pack kind the engine quarantined after a GPU device loss was blamed on\nit (0.61, `gpu.device_lost`), or after it ran too long on the GPU (0.102,\n`gpu.effect_slow`): its filters are bypassed until a person re-enables it\n(`effect.enable`). Omitted when `false`.",
           "type": "boolean"
         },
         "version": {
@@ -14067,5 +14107,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.101"
+  "title": "JStream protocol 0.102"
 }

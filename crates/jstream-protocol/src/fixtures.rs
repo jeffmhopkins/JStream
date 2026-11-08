@@ -3091,6 +3091,12 @@ pub(crate) fn events() -> Vec<Event> {
         quarantined: vec!["fx/blur".into()],
         recovering: true,
     });
+    events.push(Event::GpuEffectSlow {
+        kind_id: "fx/blur".into(),
+        took_us: 21_400,
+        limit_us: 16_666,
+        quarantined: vec!["fx/blur".into()],
+    });
     events.push(Event::StatsTick {
         seq: 4,
         drops: DropCounts {

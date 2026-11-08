@@ -554,17 +554,22 @@ impl Engine {
     /// The body of the program stage's `jstream-device-losses` thread: for each GPU
     /// device the render thread lost (#349), with the pack kinds the frames before the
     /// loss drew, blames and quarantines them, re-plans without them, and sends
-    /// `gpu.device_lost`. The render thread hands the loss over a channel, so it takes
-    /// no lock and writes no file itself (R-RT-003). It ends once the render thread
-    /// drops its sender, and holds the shared collection like the capture-sizes thread.
+    /// `gpu.device_lost`; for each pack kind whose pass ran too long on the GPU, does
+    /// the same for that kind and sends `gpu.effect_slow`. The render thread hands them
+    /// over a channel, so it takes no lock and writes no file itself (R-RT-003). It ends
+    /// once the render thread drops its sender, and holds the shared collection like
+    /// the capture-sizes thread.
     pub(crate) fn device_loss_watch(
         &self,
-        losses: Receiver<crate::runtime::DeviceLoss>,
+        events: Receiver<crate::runtime::GpuEvent>,
     ) -> impl FnOnce() + Send + 'static {
         let shared = Arc::clone(&self.shared);
         move || {
-            for loss in losses {
-                shared.device_lost(loss);
+            for event in events {
+                match event {
+                    crate::runtime::GpuEvent::Lost(loss) => shared.device_lost(loss),
+                    crate::runtime::GpuEvent::Slow(slow) => shared.effect_slow(slow),
+                }
             }
         }
     }
@@ -5915,6 +5920,54 @@ impl Shared {
             state.sync_sizes(&mut wake);
             state.feed_pages();
         }
+        wake_all(wake);
+    }
+
+    /// A pack kind that ran too long on the program stage's GPU (#349): quarantines it
+    /// as a kind blamed for a device loss is, re-plans without it, then sends
+    /// `gpu.effect_slow`.
+    fn effect_slow(&self, slow: crate::runtime::SlowPass) {
+        let crate::runtime::SlowPass {
+            kind_id,
+            took,
+            limit,
+        } = slow;
+        tracing::warn!(
+            kind = %kind_id,
+            ?took,
+            ?limit,
+            "an effect-pack kind ran too long on the GPU"
+        );
+        // Under the packs' lock, as for a device loss. A late report of a kind already
+        // quarantined is dropped: it is no second blame (`blame_slow`).
+        let mut packs = lock(&self.effect_packs);
+        let quarantined = match packs.as_mut().map(|packs| packs.blame_slow(&kind_id)) {
+            Some(Some(crate::effect_packs::Blame {
+                quarantined,
+                update,
+                ..
+            })) => {
+                if let Some(update) = update {
+                    self.install_effects(update);
+                }
+                quarantined
+            }
+            Some(None) => return,
+            None => Vec::new(),
+        };
+        drop(packs);
+        let micros =
+            |time: std::time::Duration| u64::try_from(time.as_micros()).unwrap_or(u64::MAX);
+        let mut wake = Vec::new();
+        lock(&self.state).subscribers.emit(
+            &Event::GpuEffectSlow {
+                kind_id,
+                took_us: micros(took),
+                limit_us: micros(limit),
+                quarantined,
+            },
+            &mut wake,
+        );
         wake_all(wake);
     }
 

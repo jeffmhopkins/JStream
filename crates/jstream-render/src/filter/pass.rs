@@ -74,6 +74,13 @@ pub(crate) trait Pass: Send {
     /// transparent, as when it is shown again. Other kinds ignore it.
     fn restart(&mut self) {}
 
+    /// The kind to time this filter's GPU work under, for an effect pack's filter or
+    /// shader source (#349): the guard turns a pack effect off when it runs too long.
+    /// `None`, the default, for the built-in kinds, which are not timed.
+    fn timed(&self) -> Option<&str> {
+        None
+    }
+
     /// Records the filter into `ctx`: read `input`, fill all of `output`, a layer of
     /// [`Self::output_size`]. Multi-pass filters draw into [`Ctx::scratch`] images first,
     /// and keep nothing from them past the call; an image kept between frames comes from

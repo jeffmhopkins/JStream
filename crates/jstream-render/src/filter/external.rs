@@ -45,6 +45,10 @@ impl Pass for External {
         self.params = self.filter.uniforms(settings);
     }
 
+    fn timed(&self) -> Option<&str> {
+        Some(self.filter.label())
+    }
+
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,
@@ -146,5 +150,61 @@ mod tests {
             uniforms: 16,
         });
         assert!(result.is_ok(), "{result:?}");
+    }
+
+    /// #349: an effect pack's filter is timed on the GPU, under its kind, where the
+    /// device has timestamp queries; a built-in filter is not.
+    #[test]
+    fn an_external_filter_s_gpu_time_comes_back_under_its_kind() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        // lavapipe, which CI's Linux jobs draw on, has timestamp queries.
+        let lavapipe = opened.compositor.adapter_description().contains("llvmpipe");
+        let timed = opened.compositor.time_passes();
+        assert!(!lavapipe || timed);
+        if !timed {
+            return;
+        }
+        // Enough work per pixel that the time is well above zero.
+        let wgsl = "@fragment fn fs(in: VsOut) -> @location(0) vec4<f32> {
+            var c = src(in.uv);
+            for (var i = 0; i < 2000; i++) { c = c * 0.999 + vec4<f32>(0.0001); }
+            return c;
+        }";
+        let input = image(&opened, 64, &[[255, 0, 0, 255]; 64 * 64]);
+        let mut filter = VideoFilter::external(
+            "test/fake",
+            Arc::new(Fake { wgsl, uniforms: 16 }),
+            &Settings::default(),
+        );
+        let mut builtin = crate::filter::testing::filter("sharpen", serde_json::json!({}));
+        let clock = FilterClock::default();
+        opened
+            .compositor
+            .apply_filter(&mut filter, &input, clock)
+            .expect("drawn");
+        opened
+            .compositor
+            .apply_filter(&mut builtin, &input, clock)
+            .expect("drawn");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        let mut times = Vec::new();
+        while times.is_empty() && std::time::Instant::now() < deadline {
+            let _ = opened
+                .compositor
+                .device()
+                .poll(wgpu::PollType::wait_indefinitely());
+            opened
+                .compositor
+                .gpu_times(|kind, took| times.push((kind.to_owned(), took)));
+        }
+        assert_eq!(times.len(), 1, "{times:?}");
+        assert_eq!(times[0].0, "test/fake");
+        assert!(times[0].1 > std::time::Duration::ZERO, "{times:?}");
+        // Each time comes back once.
+        opened
+            .compositor
+            .gpu_times(|kind, _| panic!("{kind} came back twice"));
     }
 }

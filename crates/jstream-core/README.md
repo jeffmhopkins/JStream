@@ -324,7 +324,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   output's own thread muxes FLV and publishes it, or muxes MP4 and records it
   ([ARCH › Threads](../../docs/ARCHITECTURE.md#threading)). A virtual camera's
   thread converts and publishes the frames the render thread sends it through a tap
-  (`runtime/vcam.rs`).
+  (`runtime/vcam.rs`). The render thread's GPU-time guard quarantines an effect-pack
+  kind whose pass runs too long (`runtime/pass_guard.rs`, #349; see *Runtime*).
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
@@ -471,7 +472,9 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   readback, riding out 20 composite errors in a row with no fallback, and failing at
   once when the context's device is lost, on a software device that stands in for the
   platform's (`src/tests/gpu_capture.rs`; the last three skip without
-  `TEXTURE_FORMAT_NV12`), a page's
+  `TEXTURE_FORMAT_NV12`), an effect-pack filter that runs too long on the GPU being
+  quarantined with no device loss (the same file; it skips on a GPU without timestamp
+  queries), a page's
   GPU frame drawing only on its own context in
   `snapshot.rs`, the same capture output on WGC and
   the DX12 device of a real Windows machine, with `capture.targets` there naming a
@@ -1417,7 +1420,12 @@ so a copy of that pack under another ID draws them (only the blamed one stays of
 for the kind and its pack and for every entry whose digests the kind draws, run before
 the collection lock is taken. The engine then
 sends `gpu.device_lost` with the cause, the blamed and quarantined kinds, and whether
-it is recovering. The GPU-time guard of #349 is not built.
+it is recovering. A kind whose pass runs too long on the GPU (the guard in
+[Runtime](#runtime)) is blamed and quarantined the same way, alone (`blame_slow`), and
+the engine sends `gpu.effect_slow` with the kind, its time, the limit and the kinds
+quarantined. A report of a kind already quarantined, drawn again before the quarantine
+reached the render thread, is dropped: it is no second blame, so it can't take the
+pack.
 
 **Page API** (`LiveSources::feed_pages`, ADR-0102 decisions 4 to 7). After every plan
 (where the engine also syncs source sizes), after `studio.set_preview`, after a
@@ -3494,7 +3502,10 @@ render loop ends.
 one event, not a run of errors. `gpu_draw` turns a draw that failed on a lost device
 (`Compositor::lost`) into `DrawError::Lost`, as it does a tick that skips a mix's
 composite on a full readback ring while the device is lost, since a lost device's maps
-may never finish (DX12) and no draw would fail. Then the render thread starts the same
+may never finish (DX12) and no draw would fail. It also starts each draw with
+`Compositor::lost_already`, which reads what wgpu's callback reported without polling: on
+lavapipe a destroyed device's submits can go quietly and its maps fail at once, so no
+draw fails and the frames stop with no loss counted (#1370). Then the render thread starts the same
 switch at once, without counting to 10. On the context, it is the fallback above, so
 the captures move to the CPU path. On the render thread's own device, it is a new
 device (`open(None)` again, hardware adapter first), and the captures stay where they
@@ -3516,6 +3527,19 @@ render thread does none of it. It doesn't adopt the new device until the engine 
 handled the loss (`LossHandled`, set once the snapshot is published, or when the loss
 is dropped unhandled), and adopts that snapshot first, so a shader that hangs at once
 isn't drawn again.
+
+The GPU-time guard (#349, `runtime/pass_guard.rs`) turns a pack kind off before it
+hangs the device. The program stage's meter carries a `PassGuard`
+(`DrawMeter::guard_passes`; a preview's doesn't), and while it does, the draw asks its
+compositor to time each pack kind's pass with timestamp queries
+(`Compositor::time_passes`, where the GPU has them). At the start of each tick it hands
+the guard the times that came back, a tick or two late and without waiting
+(`Compositor::gpu_times`). A kind whose longest pass in a tick ran over half the frame
+budget in 30 ticks running (a tick within the limit starts the count again, one with
+no time back for it leaves it) goes to `jstream-device-losses` as `GpuEvent::Slow`,
+beside the losses (`GpuEvent::Lost`). The engine quarantines it there, as above, and
+sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. A GPU
+without timestamp queries times nothing, and only a device loss guards it.
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
