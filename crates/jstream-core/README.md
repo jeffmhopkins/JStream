@@ -2232,9 +2232,12 @@ A JPEG or PNG stream gets a picture queue instead of an encoder session
 (`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read
 back into it, at most two waiting (one beyond is dropped without a copy), and its
 `jstream-preview-send` thread encodes and sends a picture when it differs from the last
-one sent, a keyframe was asked for, or 2 s passed, and only while the stream's queue
-has room, timed from the stream's first picture. Once that thread ends (the stream
-closed), the render thread lets go of the queue. Source and draft streams, an engine
+one sent, a keyframe was asked for (the request is that thread's to take, never the
+hub's), or 2 s passed, and only while the stream's queue has room, timed from the
+stream's first picture. The hub doesn't wait for that thread when it closes the stream:
+it sees the close within its 100 ms wait, sends nothing more and ends, and the render
+thread then lets go of the queue. A JPEG or PNG stream the stage can't take is drawn by
+the hub from then on, with one warning. Source and draft streams, an engine
 without backends, and a stage that can't be had yet still draw on the hub's compositor
 as described above, and the hub captures a scene's displays only while it draws a stream
 of that scene itself.

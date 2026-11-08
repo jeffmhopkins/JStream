@@ -1180,3 +1180,49 @@ fn the_program_stage_draws_jpeg_and_png_streams() {
     drop(ticking);
     pump.join().expect("pump");
 }
+
+/// A keyframe asked of a JPEG stream on the program stage brings a fresh picture of an
+/// unchanged program at once, not at the next 2 s keyframe: the request is the stream's
+/// sender's to take, not the hub's.
+#[test]
+fn a_staged_picture_stream_answers_a_keyframe_request_at_once() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    act(&control, subscribe(7, Some(30), vec![PreviewCodec::Jpeg])).expect("subscribed");
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            // A frame every 150 ms, so the preview thread passes (every 33 ms) between
+            // two: a pass that took the request would leave the next picture waiting
+            // for the 2 s keyframe.
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(150));
+            }
+        })
+    };
+    let mut first = frame(&mut frames);
+    assert_eq!(first.header.codec, Some(PreviewCodec::Jpeg));
+    // Until the picture holds still: nothing new for a while.
+    while let Next::Frame(later) = next(&mut frames, Duration::from_millis(500)) {
+        first = later;
+    }
+    let asked = Instant::now();
+    engine.ask_preview_keyframes();
+    let again = match next(&mut frames, Duration::from_millis(1_000)) {
+        Next::Frame(again) => again,
+        other => panic!("no picture for the keyframe request: {other:?}"),
+    };
+    assert!(asked.elapsed() < KEYFRAME_EVERY / 2);
+    assert!(again.header.keyframe && !again.header.end);
+    assert!(again.header.pts_us > first.header.pts_us);
+    drop(ticking);
+    pump.join().expect("pump");
+}

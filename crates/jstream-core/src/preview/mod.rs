@@ -534,6 +534,9 @@ struct Work {
     slots: u64,
     /// The session the program stage feeds, while it draws this stream.
     staged: Option<Staged>,
+    /// The stage couldn't take this JPEG or PNG stream: the hub draws it from now on,
+    /// rather than ask again on every pass.
+    unstaged: bool,
 }
 
 /// An H.264 stream's encoder session, its input and its packets.
@@ -561,6 +564,7 @@ impl Work {
             frames: 0,
             slots: 0,
             staged: None,
+            unstaged: false,
         }
     }
 }
@@ -757,7 +761,11 @@ impl Drop for Staged {
         self.closing.store(true, Ordering::Release);
         // The session finishes, the render thread lets go of its input, and the
         // sender's subscription ends.
-        self.session.take();
+        // A picture stream's sender (no session) sees `closing` within its wait and
+        // ends by itself; joining it would hold the hub up for that wait.
+        if self.session.take().is_none() {
+            return;
+        }
         if let Some(sender) = self.sender.take()
             && sender.join().is_err()
         {
@@ -847,6 +855,9 @@ fn send_pictures(
             }
             _ => Err("encoding the JPEG failed".to_owned()),
         };
+        if closing.load(Ordering::Acquire) {
+            return;
+        }
         let rev = Rev(rev.load(Ordering::Acquire));
         match payload {
             Ok(payload) => {
@@ -879,6 +890,7 @@ fn stageable(stream: &PreviewStream, work: Option<&Work>, can_stage: bool) -> bo
     can_stage
         && stream.source_id.is_none()
         && stream.draft.is_none()
+        && work.is_none_or(|work| !work.unstaged)
         && match work.map_or(stream.codec, |work| work.codec) {
             PreviewCodec::H264 => stream.codecs.is_some(),
             _ => true,
@@ -917,11 +929,12 @@ fn serve_staged(
             Staged::open_pictures(stream, work.codec, size, stage, rev)?
         });
     }
-    if stream.keyframe.swap(false, Ordering::AcqRel)
-        && let Some(session) = work
-            .staged
-            .as_ref()
-            .and_then(|staged| staged.session.as_ref())
+    // A picture stream's request is its sender's to take (`send_pictures`).
+    if let Some(session) = work
+        .staged
+        .as_ref()
+        .and_then(|staged| staged.session.as_ref())
+        && stream.keyframe.swap(false, Ordering::AcqRel)
     {
         session.request_keyframe();
     }
@@ -966,6 +979,18 @@ impl PreviewHub {
     pub(crate) fn clear_stage(&self) {
         if let Some(capture) = lock(&self.inner.state).capture.as_mut() {
             capture.stage = None;
+        }
+    }
+
+    /// Asks every open stream for a keyframe, as a channel that lost a frame does.
+    #[cfg(test)]
+    pub(crate) fn ask_keyframes(&self) {
+        for stream in lock(&self.inner.state)
+            .streams
+            .iter()
+            .filter_map(Weak::upgrade)
+        {
+            stream.keyframe.store(true, Ordering::Release);
         }
     }
 
@@ -1212,6 +1237,10 @@ fn run(
                         let period = Duration::from_secs(1) / stream.settings.fps;
                         wake_at = wake_at.min(now + period);
                         continue;
+                    }
+                    Err(reason) if work.codec != PreviewCodec::H264 => {
+                        tracing::warn!(channel = stream.channel, error = %reason, "the preview thread draws this stream: the program stage couldn't take it");
+                        work.unstaged = true;
                     }
                     Err(reason) if stream.settings.codecs.contains(&PreviewCodec::Jpeg) => {
                         tracing::warn!(channel = stream.channel, error = %reason, "preview falls back to JPEG");

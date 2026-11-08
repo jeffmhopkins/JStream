@@ -1137,6 +1137,12 @@ impl Engine {
         self
     }
 
+    /// Asks every preview stream for a keyframe, as a channel that lost a frame does.
+    #[cfg(test)]
+    pub(crate) fn ask_preview_keyframes(&self) {
+        self.shared.previews.ask_keyframes();
+    }
+
     /// Replaces how the preview thread draws, for tests that watch what it is given.
     #[cfg(test)]
     #[must_use]
