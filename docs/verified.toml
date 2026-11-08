@@ -204,7 +204,7 @@ stamp = { hash = "b3:38e986c9266d0712", by = "agent:readme-scrub", note = "gpu/m
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:f85e8bdfbe257857", by = "agent:claude-00lbbl", note = "The model paragraph now says a model in a 3D scene may be lit by the scene's lights (ADR-0137: kinds, 8 shading lights, f64 placement); the bench only gained lights: None." }
+stamp = { hash = "b3:10c89f94d6fb1336", by = "agent:claude-00lbbl", note = "Re-read against the slot-counting and finiteness change in model/mod.rs: still up to 8 shading lights placed in f64; holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:966e2d969aa36c4a", by = "agent:claude-00lbbl", note = "The model paragraph now says a model in a 3D scene may be lit by the scene's lights (ADR-0137: kinds, 8 shading lights, f64 placement); the bench only gained lights: None." }
@@ -447,13 +447,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:7c0aae01cb8c5380", by = "agent:sharpen-small-insets", note = "Added that 2D items drawn small (over 1.15 texels per pixel) sample the source's mip chain; render README step 2 matches" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:e5747cf04e94e30b", by = "agent:claude-00lbbl", note = "The model paragraph now says a model in a 3D scene may be lit by the scene's lights (ADR-0137: kinds, 8 shading lights, f64 placement); the bench only gained lights: None." }
+stamp = { hash = "b3:936a839553fb3d5d", by = "agent:claude-00lbbl", note = "Re-read against the slot-counting and finiteness change in model/mod.rs: still up to 8 shading lights placed in f64; holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:b86202693226d7d7", by = "agent:claude-00lbbl", note = "The model paragraph now says a model in a 3D scene may be lit by the scene's lights (ADR-0137: kinds, 8 shading lights, f64 placement); the bench only gained lights: None." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:bddea878c688d192", by = "agent:claude-00lbbl", note = "The model paragraph now says a model in a 3D scene may be lit by the scene's lights (ADR-0137: kinds, 8 shading lights, f64 placement); the bench only gained lights: None." }
+stamp = { hash = "b3:1c5a30403a5ff01d", by = "agent:claude-00lbbl", note = "Re-read against the slot-counting and finiteness change in model/mod.rs: still up to 8 shading lights placed in f64; holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7d51827caac086b7", by = "agent:sharpen-small-insets", note = "Added that 2D items drawn small (over 1.15 texels per pixel) sample the source's mip chain; render README step 2 matches" }
@@ -4266,7 +4266,7 @@ stamp = { hash = "b3:83fd3bbd406c7796", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to youtube.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:31fb47b768d398a9", by = "agent:claude-00lbbl", note = "ModelDraw lists the optional scene lights, and a Scene lights paragraph states SceneLight, the f64 view transform, ambient sum, the 8-light pack, falloff and cone, and the fallbacks, matching model/mod.rs and model.wgsl." }
+stamp = { hash = "b3:9bb8881b645cf3b7", by = "agent:claude-00lbbl", note = "Scene lights paragraph now says every non-ambient light takes a slot in the caller's pre-sort stacking order, lit or not, non-finite ones light nothing, and the caller logs drops (ADR-0137 as amended in #1400; review N1-N4)." }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -4509,13 +4509,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:7c0aae01cb8c5380", by = "agent:sharpen-small-insets", note = "Mips step 2 rewritten for 2D items past MINIFIED 1.15 and the half-size (skip 1) chain; resource table keys chains by crop and starting level; 2D minification goldens and their lavapipe numbers added; open question on mips for 2D moved to a small-sources note (#1139)" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:e5747cf04e94e30b", by = "agent:claude-00lbbl", note = "ModelDraw lists the optional scene lights, and a Scene lights paragraph states SceneLight, the f64 view transform, ambient sum, the 8-light pack, falloff and cone, and the fallbacks, matching model/mod.rs and model.wgsl." }
+stamp = { hash = "b3:936a839553fb3d5d", by = "agent:claude-00lbbl", note = "Scene lights paragraph now says every non-ambient light takes a slot in the caller's pre-sort stacking order, lit or not, non-finite ones light nothing, and the caller logs drops (ADR-0137 as amended in #1400; review N1-N4)." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:b86202693226d7d7", by = "agent:claude-00lbbl", note = "ModelDraw lists the optional scene lights, and a Scene lights paragraph states SceneLight, the f64 view transform, ambient sum, the 8-light pack, falloff and cone, and the fallbacks, matching model/mod.rs and model.wgsl." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:bddea878c688d192", by = "agent:claude-00lbbl", note = "ModelDraw lists the optional scene lights, and a Scene lights paragraph states SceneLight, the f64 view transform, ambient sum, the 8-light pack, falloff and cone, and the fallbacks, matching model/mod.rs and model.wgsl." }
+stamp = { hash = "b3:1c5a30403a5ff01d", by = "agent:claude-00lbbl", note = "Scene lights paragraph now says every non-ambient light takes a slot in the caller's pre-sort stacking order, lit or not, non-finite ones light nothing, and the caller logs drops (ADR-0137 as amended in #1400; review N1-N4)." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7d51827caac086b7", by = "agent:sharpen-small-insets", note = "Mips step 2 rewritten for 2D items past MINIFIED 1.15 and the half-size (skip 1) chain; resource table keys chains by crop and starting level; 2D minification goldens and their lavapipe numbers added; open question on mips for 2D moved to a small-sources note (#1139)" }
@@ -4737,7 +4737,7 @@ stamp = { hash = "b3:a4fdee2216af9c7a", by = "agent:shader-source", note = "Prog
 stamp = { hash = "b3:2fa8664ebac90711", by = "agent:claude-3d-cameras", note = "This PR (ADR-0094) only adds camera: None and depth_run: 0 to filter/testing.rs's Item literal: filters draw as before, and nothing this section describes changes." }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:f96996e14dd9a745", by = "agent:claude-00lbbl", note = "Re-read against scene lights in the model draw: still the compositor and its passes; purpose holds." }
+stamp = { hash = "b3:91e28848befe4bc3", by = "agent:claude-00lbbl", note = "Reworded the model bullet: scene lights are for a scene-lit model (review N4); the rest holds against the slot-counting change." }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:547465583e80c85e", by = "agent:claude", note = "This PR (#694) changes no render code: the platform SubmitLock bullet now names Linux's portal capture copies as another submitter and both render submits that hold the lock (the composite's and Nv12Converter::submit's into an encode target), dropping the wave's '(the Linux backend's capture copies and NV12 submits don't take it yet, #694)', and ARCH's GPU-path sentence now says render holds the context's SubmitLock through the composite's and the NV12 conversion's submits, and that Linux's PipeWire capture copies take it beside the browser source's copies. Render's Purpose already says the compositor holds the queue's SubmitLock from the first stage through the submit and Nv12Converter::submit holds the compositor's (convert/mod.rs, #672), which is what both deps now say. Holds. | merge: Merged wave/m3-4 at 9d192c50 (201b994f) into this PR (#694), built by hand: m3-4's tree with #694's own Linux change re-applied. The branch last merged wave/m3-3 at 23641826 (#687) and carried a cherry-pick of #672's SubmitLock (b7705da3); #672 reached the wave through wave/m1-4's landing (#810), synced in by #820, so the wave's version stands (Nv12Converter::submit holding the compositor's lock) and this PR's Nv12Converter::for_compositor, its own-lock converter and the pipeline.rs change are dropped as superseded. Since 23641826 the wave gained the rest of wave/m3-3 (landed as #786: #767's main sync with wave/m1-3's landing #754, #593, #629 and others), synced in by #789, then #612, #603, #617, #610, #685, #689, #634, #799, #488, #820 (main through #810: #672, #781, #712, #718), #573 and #807. Into platform GPU frames the merge brought #754's transitions wording (through #789) and #672's SubmitLock bullet with its #694 clause (through #820). Into ARCH GPU pipeline it brought, through #789, wave/m1-3's landing (#754: flips in the placement, the CPU-path alpha, the chain runtime's apply_filter_into, device loss (#349), ADR-0052 transitions and the privacy blur) and #629's 0.34 3D acceptance (via #786); through #820, #781's image extent (ADR-0073) and #672's SubmitLock sentence. #573 and #807 touch none of these inputs. The wave entry this replaces recorded, kept here: [platform GPU frames and ARCH gpu-pipeline, wave/m1-4's main merge (via #810 and #820)] Merged main at 5693733 (wave/m3-3 landed, #786) into wave/m1-4. wave/m1-4: #781's extent, #672's submit lock, #712/#718. Main: X1's 3D draw, mips and chains (#622/#624/#643/#687/#629). The merge places the shape at the extent and builds a 3D chain from the crop mapped to texels (Region::in_texels, with a test). Holds." }
@@ -4995,13 +4995,13 @@ stamp = { hash = "b3:923686b398d0595c", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:7c0aae01cb8c5380", by = "agent:sharpen-small-insets", note = "2D minified items now sample a mip chain (compositor/place/mips/image, new tests/minified.rs); purpose, scene model and crate boundaries unchanged" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:e5747cf04e94e30b", by = "agent:claude-00lbbl", note = "Re-read against scene lights in the model draw: still the compositor and its passes; purpose holds." }
+stamp = { hash = "b3:936a839553fb3d5d", by = "agent:claude-00lbbl", note = "Reworded the model bullet: scene lights are for a scene-lit model (review N4); the rest holds against the slot-counting change." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:b86202693226d7d7", by = "agent:claude-00lbbl", note = "Re-read against scene lights in the model draw: still the compositor and its passes; purpose holds." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:bddea878c688d192", by = "agent:claude-00lbbl", note = "Re-read against scene lights in the model draw: still the compositor and its passes; purpose holds." }
+stamp = { hash = "b3:1c5a30403a5ff01d", by = "agent:claude-00lbbl", note = "Reworded the model bullet: scene lights are for a scene-lit model (review N4); the rest holds against the slot-counting change." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:7d51827caac086b7", by = "agent:sharpen-small-insets", note = "2D minified items now sample a mip chain (compositor/place/mips/image, new tests/minified.rs); purpose, scene model and crate boundaries unchanged" }
@@ -5031,7 +5031,7 @@ stamp = { hash = "b3:8a1615286e8d9f96", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:950ada971dc31a24", by = "agent:claude-motion", note = "Edited the Transitions bullet: settings_blend and blend_settings (ADR-0127), numbers linearly and rounded only for the int parameters the caller names, colours per channel, other values switching halfway, k clamped to [0, 1]" }
 
 ["CRATE-jstream-render#testing"."body"]
-stamp = { hash = "b3:1ac5dd7a77ffd019", by = "agent:claude-00lbbl", note = "Added the seven ADR-0137 light goldens (point side, colour, range, spot and directional, ambient sum, limit and zero intensity, no camera or unlit), as model/tests.rs runs them." }
+stamp = { hash = "b3:94fab260b2d1c247", by = "agent:claude-00lbbl", note = "The limit golden now checks a ninth light stays off behind eight at intensity 0, ambient lights take no slot, and non-finite position, intensity or range light nothing." }
 
 ["CRATE-jstream-render#testing"."dep:docs/RULES.md#R-TEST-003"]
 stamp = { hash = "b3:56dea7b43ab3b19d" }

@@ -44,7 +44,7 @@ and calls this crate.
 - A **3D model** ([ADR-0107](../../docs/adr/0107-3d-models.md)) is not an item of its
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
-  item's geometry, the scene's camera, the lighting, and in a 3D scene optionally the
+  item's geometry, the scene's camera, the lighting, and for a scene-lit model the
   scene's lights, [ADR-0137](../../docs/adr/0137-scene-lights-and-depth-aware-scene-filters.md))
   into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
@@ -602,9 +602,12 @@ rig is replaced by the scene's lights. `SceneLight` holds a light in the scene's
 (position and aim, `f64`), and the draw takes each into the viewing frame through
 `CameraView::in_view` and `direction_in_view`, so only light positions relative to the
 camera reach the GPU as `f32`. Ambient lights sum into one linear colour that scales the
-environment terms; the first `MAX_SCENE_LIGHTS` (8) other lights with intensity above 0
-are packed into the frame uniform, four `vec4` each, and any after them are dropped, as
-is a spot or directional light with no aim. `scene_light` in `model.wgsl` fades a point
+environment terms. The first `MAX_SCENE_LIGHTS` (8) other lights in the order given (the
+caller's stacking order, before any depth sort) each take a slot, lit or not, so a light
+fading to intensity 0 never lets a ninth on; any after them are dropped, and the caller
+logs that. A slotted light is packed into the frame uniform, four `vec4` each, unless
+its intensity isn't above 0, a value is non-finite, or a spot or directional light has
+no aim. A caller passes lights only for a model its source lights by the scene. `scene_light` in `model.wgsl` fades a point
 or spot light by `(1 − (d / range)²)²` (none at range 0) and a spot light by a
 `smoothstep` across the outer `softness` of its cone (a hard edge at softness 0), and
 shades each with the studio key light's `light`. Without a camera, or unlit, the lights
@@ -1080,8 +1083,9 @@ black, and no light at all leaves it black; a red light tints it red; a point li
 its range lights nothing and inside it is dimmer than one that never fades; a spot
 light with a 20° cone lights the middle of a plane and not a point 60 px off it, a
 directional light lights the whole plane, and one aimed away lights none of it; two
-ambient lights of 1 light a sphere as one of 2 does; a ninth light is ignored behind
-eight that light, and lights at intensity 0 don't count toward the eight; and without a
+ambient lights of 1 light a sphere as one of 2 does; a ninth light stays off behind
+eight at intensity 0, while eight ambient lights take no slot from it; a light with a
+non-finite position, intensity or range lights nothing; and without a
 camera, or unlit, lights change nothing.
 
 **3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a

@@ -789,23 +789,45 @@ fn golden_model_ambient_lights_add_up() {
 }
 
 /// ADR-0137 decision 3: only the first [`MAX_SCENE_LIGHTS`] lights shade a model, and a
-/// light at zero intensity (an item faded out) counts for nothing.
+/// light at zero intensity (an item faded out) still takes its slot, so the ninth stays
+/// off while one of the first eight fades. Ambient lights take no slot, and a light with
+/// a non-finite value lights nothing.
 #[test]
 fn golden_model_lights_past_the_limit_are_ignored() {
     let Some(mut opened) = open() else {
         return;
     };
     let off = point_light([400.0, 50.0, 100.0], Color::WHITE, 0.0);
-    let dim = point_light([-400.0, 50.0, 100.0], Color::WHITE, 0.0001);
     let on = point_light([400.0, 50.0, 100.0], Color::WHITE, 3.0);
-    let mut lights = vec![dim; MAX_SCENE_LIGHTS];
-    lights.push(on);
-    let shot = lit_sphere(&mut opened.compositor, &lights);
-    assert!(luma(rgb(&shot, 110, 50)) < 10, "{:?}", rgb(&shot, 110, 50));
-    let mut lights = vec![off; MAX_SCENE_LIGHTS];
-    lights.push(on);
-    let shot = lit_sphere(&mut opened.compositor, &lights);
-    assert!(luma(rgb(&shot, 110, 50)) > 150, "{:?}", rgb(&shot, 110, 50));
+    for first in [off, ambient(0.0)] {
+        let mut lights = vec![first; MAX_SCENE_LIGHTS];
+        lights.push(on);
+        let shot = lit_sphere(&mut opened.compositor, &lights);
+        let lit = luma(rgb(&shot, 110, 50));
+        if first.kind == LightKind::Ambient {
+            assert!(lit > 150, "ambient lights take no slot: {lit}");
+        } else {
+            assert!(lit < 10, "the ninth stays off: {lit}");
+        }
+    }
+    let broken = [
+        SceneLight {
+            position: [f64::NAN, 50.0, 100.0],
+            ..on
+        },
+        SceneLight {
+            intensity: f32::INFINITY,
+            ..on
+        },
+        SceneLight {
+            range_px: f32::NAN,
+            ..on
+        },
+    ];
+    for light in broken {
+        let shot = lit_sphere(&mut opened.compositor, &[light]);
+        assert_near(rgb(&shot, 110, 50), [0, 0, 0], (110, 50));
+    }
 }
 
 /// ADR-0137 decision 3: lights belong to a 3D scene. Without a camera, and for an unlit
