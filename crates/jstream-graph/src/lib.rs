@@ -31,6 +31,7 @@ mod touched;
 mod transition;
 
 pub use apply::Applied;
+pub use filter::Upgraded;
 pub use model::{
     Bus, Chains, Encoder, Filter, Folder, Graph, Item, Label, MAX_BUSES, MAX_CANVAS_EDGE,
     MAX_CHAIN_FILTERS, MotionList, Output, Overrides, Placement, Preset, Scene, Source, State,

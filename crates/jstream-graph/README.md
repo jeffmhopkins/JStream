@@ -582,6 +582,18 @@ the engine's; this crate does no I/O.
   to the file's, so revisions keep increasing across restarts. A source, filter or preset whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
+  Once the engine describes a missing kind, or a changed version of
+  a kind, `Graph::upgrade_filters` (`filter.rs`, #1353) upgrades every filter of it, on
+  any chain or keyframe override: settings stored by an older version (the one the
+  filter records, else the one described before) go through the caller's migration (an
+  effect pack's renames), and a parameter they lack takes its default; every other
+  value stays, an undeclared one included (ADR-0025 keeps unknown data). Settings of the
+  kind's own version are left alone, and a newer version's are kept, the filter recording
+  that version so a save writes it as their `kind_version`. `Graph::without_kinds`
+  records each removed kind's version on its filters the same way, so the kind coming
+  back newer moves them. An upgrade that changes settings is a revision with no inverse,
+  and returns each changed filter as the `filter.set_settings` of the keys that changed
+  (a renamed-away ID as `null`), with their `Touched` for the engine's undo history.
 - **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s
   own messages quote the offending value, so a parse error keeps only a missing field's
   name, a fixed reason, and the line and column of a syntax error.
