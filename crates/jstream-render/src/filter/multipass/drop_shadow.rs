@@ -9,7 +9,7 @@ use jstream_protocol::{KindDescriptor, Settings};
 
 use super::bounds::Insets;
 use super::gauss::{self, Edge};
-use super::premultiplied;
+use super::{premultiplied, within};
 use crate::error::RenderError;
 use crate::filter::params::{Read, Uniforms, color, filter, float};
 use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
@@ -117,6 +117,15 @@ fn read(settings: &Settings) -> Under {
         radius: read.f32("blur", 8.0),
         strength: 1.0,
     }
+}
+
+/// The offset on the farther axis plus the blur: as far as the shadow reaches past the
+/// shape's edge.
+pub(super) fn outset(settings: &Settings) -> f32 {
+    let under = read(settings);
+    let (x, y) = under.offset;
+    let max = MAX_OFFSET as f32;
+    within(x.abs(), max).max(within(y.abs(), max)) + within(under.radius, MAX_BLUR as f32)
 }
 
 impl Pass for DropShadow {

@@ -16,7 +16,7 @@
 //!
 //! # Behaviour
 //!
-//! **The pipe** (`wire.rs`, `link.rs`, built everywhere and tested over in-memory pipes):
+//! The pipe (`wire.rs` and this module, built everywhere and tested over in-memory pipes):
 //! length-prefixed messages of at most 256 KiB (room for a page opened with 128 KiB of
 //! HTML and 64 KiB of CSS); a malformed or oversized one ends the link. The engine
 //! opens a page and waits up to 10 s for the helper to confirm it, sets its CSS, reloads

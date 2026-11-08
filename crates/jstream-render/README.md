@@ -662,12 +662,15 @@ defaults pass its descriptor, and that they build its pass.
 [core › Design](../jstream-core/README.md#design)) keeps a `VideoFilter` per enabled
 filter of a source's video chain and runs them in order before placement, of a
 scene's over its composite, of an item's effects over its box, in a layer
-grown by their summed `max_outset_px` at the first effect that declares one
-([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md)), and of the master
+grown by their summed outsets at the first effect that draws past its input
+([ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md), ADR-0125), and of the master
 stage's and an output's over the mix an output draws
 ([ADR-0080](../../docs/adr/0080-program-master-and-output-chains-v2.md)), each into a
 cached layer with `apply_filter_into`. `video_filter_descriptors()` is how its
-`kind.list` gets these kinds.
+`kind.list` gets these kinds, and `video_filter_outset(kind, settings)` how far a
+drop shadow, outline, glow or bloom draws past its input at its settings, never more
+than its `max_outset_px` (ADR-0136); core sizes an item's layer by it. It doesn't
+measure a `border` yet, which takes its declared 129 px.
 
 **The harness.**
 
@@ -919,8 +922,9 @@ glow is cut away whole; on a shape with transparent margins (a keyed camera, a l
 they show inside them. A drop shadow and a glow still blur the shape in a scratch
 frame grown by the blur radius, so the blur fades out instead of stopping at the
 frame's edge. An effect that hangs outside a placement is an item effect, whose layer
-grows by the chain's summed `max_outset_px` where the first kind that declares one
-runs ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).
+grows by the chain's summed outsets at its settings (`video_filter_outset`) where the
+first effect that draws past its input runs
+([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).
 `VideoFilter::set_pad(px)` does it: `output_size` grows the input by `px` on every side
 before the pass's own, and `apply_filter_into` first draws the input centred into a
 scratch layer that size, transparent around it, then runs the pass over that. Each of

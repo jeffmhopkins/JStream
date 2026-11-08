@@ -23,26 +23,7 @@
 //! - `ProAudioThread::register` registers the calling thread with MMCSS "Pro Audio"
 //!   until the guard drops, as the WASAPI threads do. It is best effort, and the guard
 //!   isn't `Send`.
-//! - `WindowsPluginHosts` is the `PluginHosts` backend. It runs `PLUGIN_HOST_EXE`
-//!   (`jstream-plugin-host.exe`, beside the engine's executable, or another path through
-//!   `with_exe`). Every host goes in one job object that kills its processes when the
-//!   engine's handle closes (and suppresses the crash dialog), so no host outlives the
-//!   engine. A host starts with a cleared environment that keeps only the system and
-//!   user-folder variables (`KEPT_ENV`), so it never sees the engine's keys, tokens or
-//!   configuration, and its stderr is discarded. `start` creates an unnamed block,
-//!   initialised with the request's configuration, starts `run <file> <plugin-id>`,
-//!   duplicates the block's handle into the new process and sends its value as the
-//!   first control message (`Block`), before `Start`. It keeps the stdin and stdout
-//!   pipes as the control channel; a thread decodes stdout into messages and stops on a
-//!   frame that doesn't decode. The host's block is an `EngineBlock`, so the mixer's miss
-//!   counts stay in the engine's memory, where the host can't reset them. Dropping a host kills it. `scan` runs `scan <file>` and kills the
-//!   host after its answer, or after 20 s. `search_paths` is CLAP's order on Windows:
-//!   `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and
-//!   `%LOCALAPPDATA%\Programs\Common\CLAP`, keeping the ones that exist, without
-//!   repeats.
-//! - **Not yet:** a test that starts a real host process (CI's Windows job builds the
-//!   launcher and tests `search_paths` only), and keeping the plugin from inheriting handles other threads make
-//!   inheritable while it starts.
+//! - The host processes are `WindowsPluginHosts`'s (`plugin_hosts.rs`).
 
 use jstream_platform::PlatformError;
 use jstream_plugin_proto::Shared;

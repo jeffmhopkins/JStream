@@ -4,7 +4,7 @@
 //!
 //! # Behaviour
 //!
-//! **Frames on Linux** (`helper/shm.rs`): each software paint is converted to straight
+//! Each software paint is converted to straight
 //! RGBA8 and written into the next free of the page's three slot files (mode 0600) in the
 //! engine's folder, with the same release and skip rules; the page's files are removed
 //! when its browser closes. CEF failing to start reports that it needs `libcef.so` beside
