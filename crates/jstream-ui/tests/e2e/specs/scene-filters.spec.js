@@ -111,11 +111,28 @@ test('the Scene properties dialog shows the scene\'s chain and adds to it', asyn
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(add).toBeHidden();
   await expect(videoRows(dialog).locator('.filter-name')).toHaveText(['Sharpen']);
+  // The new filter's settings take the right side; the Properties entry brings the
+  // scene's own back.
+  await expect(dialog.getByRole('group', { name: 'Sharpen settings' })).toBeVisible();
+  await expect(dialog.locator('.modal-footer').getByRole('button', { name: 'Defaults' })).toBeHidden();
+  await dialog.getByRole('button', { name: 'Properties', exact: true }).click();
+  await expect(dialog.getByRole('group', { name: 'Sharpen settings' })).toBeHidden();
+  await expect(dialog.locator('.props-name input')).toHaveValue('Intro');
 
-  // It applied at once: Cancel keeps it, and the panel shows it on Intro.
+  // It applied at once, but Cancel puts it back.
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
   await sceneRow(page, 'Intro').click({ button: 'right' });
   await menu(page).getByRole('menuitem', { name: 'Edit filters…' }).click();
+  await expect(panel(page)).toContainText('No video filters.');
+
+  // OK keeps what was added.
+  await sceneRow(page, 'Intro').click({ button: 'right' });
+  await menu(page).getByRole('menuitem', { name: 'Properties…' }).click();
+  await dialog.getByRole('button', { name: '+ Add filter…' }).click();
+  await add.getByRole('button', { name: 'Add filter' }).click();
+  await expect(videoRows(dialog).locator('.filter-name')).toHaveText(['Sharpen']);
+  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog).toBeHidden();
   await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen']);
 });
