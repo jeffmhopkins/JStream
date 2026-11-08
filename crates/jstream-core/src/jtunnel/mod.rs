@@ -10,6 +10,17 @@
 //! did not subscribe to, or that isn't a JTunnel packet it accepts. It never announces
 //! itself and never sends audio or MIDI.
 //!
+//! **Finding senders** (ADR-0123 §3). Every 10 s the thread asks the LAN for JTunnel
+//! senders: an mDNS PTR query for `_jtunnel._udp.local` sent to mDNS's group
+//! (224.0.0.251:5353) from the receive socket, so it is a legacy unicast query (RFC
+//! 6762 §6.7) and each sender answers that socket directly. No socket joins the group
+//! or binds port 5353. An answer from a LAN address's port 5353 goes to a
+//! [`Directory`]: a sender is listed when it answers, dropped on its goodbye, and
+//! forgotten 35 s after it last answered, at most [`MAX_LISTED`] at a time. Listing a
+//! sender trusts it with nothing: only an accepted sender is subscribed to, and
+//! `jtunnel.senders` reports the list. Each change to it is sent on the host's
+//! `changed` channel, which the engine turns into `jtunnel.senders_changed`.
+//!
 //! Each accepted sender has a [`Playout`] (its jitter buffer, sequence tracking and
 //! clock estimate, from `jstream-jtunnel`). The thread pushes each frame in as it
 //! arrives and pops each one when it is due, handing its samples to the mixer input of
@@ -32,6 +43,7 @@ use std::time::{Duration, Instant};
 
 use crate::lan::is_lan;
 use jstream_jtunnel::Playout;
+use jstream_jtunnel::dnssd::{self, Directory};
 use jstream_jtunnel::wire::{self, Codec, Packet};
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, Rounding, SampleFormat, Timebase};
 use jstream_platform::{
@@ -49,6 +61,24 @@ const MIN_WAIT: Duration = Duration::from_micros(500);
 pub const MAX_SENDERS: usize = 32;
 /// Opens and closes waiting for the thread.
 const COMMANDS: usize = 64;
+/// How often the LAN is asked for senders: three times in the 35 s a listed sender
+/// lasts unheard.
+const QUERY_EVERY: Duration = Duration::from_secs(10);
+/// How often senders not heard lately are forgotten.
+const EXPIRE_EVERY: Duration = Duration::from_secs(1);
+/// The most senders listed at a time, so a host on the LAN that answers with many names
+/// can't grow the list without bound.
+pub const MAX_LISTED: usize = 64;
+/// mDNS's group and port, where the thread sends its queries.
+pub const MDNS: SocketAddr = SocketAddr::new(
+    IpAddr::V4(Ipv4Addr::new(
+        dnssd::MDNS_GROUP[0],
+        dnssd::MDNS_GROUP[1],
+        dnssd::MDNS_GROUP[2],
+        dnssd::MDNS_GROUP[3],
+    )),
+    dnssd::MDNS_PORT,
+);
 
 /// A sender the person accepted on this machine: its tunnel name, and the address and
 /// port it sends from.
@@ -139,6 +169,9 @@ pub struct JtunnelSetup {
     /// The address the receive socket binds: any IPv4 interface on a port the system
     /// picks, unless the host names one.
     pub bind: SocketAddr,
+    /// Where it asks for senders, [`MDNS`] unless the host names another (a test's
+    /// responder); `None` asks nobody. Answers are read from this port.
+    pub discover: Option<SocketAddr>,
 }
 
 impl JtunnelSetup {
@@ -170,6 +203,7 @@ impl JtunnelSetup {
         Ok(Self {
             accepted,
             bind: SocketAddr::new(IpAddr::V4(Ipv4Addr::UNSPECIFIED), 0),
+            discover: Some(MDNS),
         })
     }
 }
@@ -181,7 +215,7 @@ pub struct JtunnelStats {
     pub outside_lan: u64,
     /// Datagrams from a LAN address it didn't subscribe to.
     pub unaccepted: u64,
-    /// Datagrams that aren't a JTunnel packet it accepts.
+    /// Datagrams that aren't a JTunnel packet it accepts, or an mDNS answer it can read.
     pub malformed: u64,
     /// Audio packets in a codec it can't decode yet (Opus).
     pub unsupported: u64,
@@ -273,6 +307,7 @@ enum Command {
 /// The running receiver. Dropping it stops the thread, which says bye to every sender.
 pub(crate) struct Receiver {
     senders: Arc<[Sender]>,
+    directory: Arc<Mutex<Directory>>,
     counters: Arc<JtunnelCounters>,
     commands: SyncSender<Command>,
     next_id: AtomicU64,
@@ -292,6 +327,8 @@ impl std::fmt::Debug for Receiver {
 
 impl Receiver {
     /// Binds the receive socket and starts the thread, stamping arrivals with `clock`.
+    /// Each change to the senders heard is sent on `changed`, without waiting: one
+    /// message stands for any number of changes not yet taken.
     ///
     /// # Errors
     /// The socket could not be bound or set up, or the thread could not start.
@@ -299,6 +336,7 @@ impl Receiver {
         setup: &JtunnelSetup,
         clock: Arc<dyn MediaClock>,
         midi: Option<Arc<MidiInputs>>,
+        changed: Option<SyncSender<()>>,
     ) -> io::Result<Self> {
         let socket = UdpSocket::bind(setup.bind)?;
         socket.set_read_timeout(Some(MAX_WAIT))?;
@@ -314,6 +352,7 @@ impl Receiver {
             })
             .collect();
         let counters = Arc::new(JtunnelCounters::default());
+        let directory = Arc::new(Mutex::new(Directory::new()));
         let stop = Arc::new(AtomicBool::new(false));
         let (commands, inbox) = sync_channel(COMMANDS);
         let thread = {
@@ -323,6 +362,9 @@ impl Receiver {
                 counters: Arc::clone(&counters),
                 clock,
                 inbox,
+                directory: Arc::clone(&directory),
+                discover: setup.discover,
+                changed,
                 stop: Arc::clone(&stop),
                 streams: senders
                     .iter()
@@ -335,6 +377,7 @@ impl Receiver {
         };
         Ok(Self {
             senders,
+            directory,
             counters,
             commands,
             next_id: AtomicU64::new(1),
@@ -399,6 +442,30 @@ impl Receiver {
             unsupported: stats.unsupported,
             midi: stats.midi,
         }
+    }
+
+    /// The senders heard on the LAN, for `jtunnel.senders`: ordered by name, then
+    /// address, each with whether this machine accepts it.
+    pub(crate) fn heard(&self) -> Vec<jstream_protocol::JtunnelSenderInfo> {
+        let heard = self
+            .directory
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .senders();
+        heard
+            .into_iter()
+            .map(|sender| {
+                let address = SocketAddr::V4(sender.address);
+                jstream_protocol::JtunnelSenderInfo {
+                    accepted: self
+                        .senders
+                        .iter()
+                        .any(|s| s.accepted.name == sender.name && same(s.accepted.addr, address)),
+                    remote_name: sender.name,
+                    address: address.to_string(),
+                }
+            })
+            .collect()
     }
 
     fn sender(&self, name: &str) -> Result<usize, String> {
@@ -555,6 +622,9 @@ struct Run {
     counters: Arc<JtunnelCounters>,
     clock: Arc<dyn MediaClock>,
     inbox: Inbox<Command>,
+    directory: Arc<Mutex<Directory>>,
+    discover: Option<SocketAddr>,
+    changed: Option<SyncSender<()>>,
     stop: Arc<AtomicBool>,
     streams: Vec<Stream>,
 }
@@ -565,12 +635,22 @@ impl Run {
         let mut datagram = [0_u8; wire::MAX_PACKET_BYTES + 1];
         let mut samples = [0.0_f32; wire::MAX_FRAME_SAMPLES as usize * wire::CHANNELS as usize];
         let mut next_subscribe = Instant::now();
+        let mut next_query = Instant::now();
+        let mut next_expire = Instant::now() + EXPIRE_EVERY;
         while !self.stop.load(Ordering::Acquire) {
             if Instant::now() >= next_subscribe {
                 self.send_all(wire::write_subscribe);
                 next_subscribe += SUBSCRIBE_EVERY;
                 // After a stall, the next keepalive goes out now and then on time.
                 next_subscribe = next_subscribe.max(Instant::now());
+            }
+            if Instant::now() >= next_query {
+                self.query();
+                next_query = Instant::now() + QUERY_EVERY;
+            }
+            if Instant::now() >= next_expire {
+                self.expire();
+                next_expire = Instant::now() + EXPIRE_EVERY;
             }
             self.commands();
             let _ = self.socket.set_read_timeout(Some(self.wait()));
@@ -598,6 +678,95 @@ impl Run {
                     reason: "the JTunnel receiver stopped".into(),
                 });
             }
+        }
+    }
+
+    /// Asks the LAN for JTunnel senders, from the receive socket.
+    fn query(&self) {
+        let Some(to) = self.discover else {
+            return;
+        };
+        let mut out = [0_u8; 64];
+        if let Some(len) = dnssd::write_query(&mut out) {
+            // A network with no route to the group fails here; the next query tries
+            // again.
+            let _ = self.socket.send_to(&out[..len], to);
+        }
+    }
+
+    /// The listed senders as the list's clock counts: milliseconds of media time.
+    fn now_ms(&self) -> u64 {
+        self.now_ns() / 1_000_000
+    }
+
+    /// Forgets the senders not heard lately, and says so if any went.
+    fn expire(&self) {
+        let now = self.now_ms();
+        let mut directory = self
+            .directory
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let before = directory.len();
+        directory.expire(now);
+        let gone = directory.len() != before;
+        drop(directory);
+        if gone {
+            self.changed();
+        }
+    }
+
+    /// Tells the host the senders heard changed, without waiting.
+    fn changed(&self) {
+        if let Some(changed) = &self.changed {
+            // Full means a change is already waiting to be taken; that one covers this.
+            let _ = changed.try_send(());
+        }
+    }
+
+    /// Takes an mDNS answer from `from`'s address: the senders it announces join the
+    /// list, or leave it on a goodbye.
+    fn discovered(&self, datagram: &[u8], from: Ipv4Addr) {
+        let Ok(announcements) = dnssd::parse_announcements(datagram) else {
+            self.counters.malformed.fetch_add(1, Ordering::Relaxed);
+            return;
+        };
+        if announcements.is_empty() {
+            return;
+        }
+        let now = self.now_ms();
+        let mut directory = self
+            .directory
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner);
+        let before = directory.senders();
+        let room = MAX_LISTED.saturating_sub(directory.len());
+        // A full list still takes refreshes and goodbyes of the senders on it.
+        let mut fresh = 0;
+        let taken: Vec<_> = announcements
+            .into_iter()
+            .filter(|a| {
+                let known = before.iter().any(|s| {
+                    s.address.port() == a.port
+                        && *s.address.ip() == from
+                        && s.name.eq_ignore_ascii_case(&a.name)
+                });
+                if known || a.ttl == 0 {
+                    return true;
+                }
+                fresh += 1;
+                fresh <= room
+            })
+            .collect();
+        directory.observe(from, &taken, now);
+        let after = directory.senders();
+        drop(directory);
+        let moved = before.len() != after.len()
+            || before
+                .iter()
+                .zip(&after)
+                .any(|(a, b)| a.name != b.name || a.address != b.address);
+        if moved {
+            self.changed();
         }
     }
 
@@ -672,6 +841,13 @@ impl Run {
             .iter()
             .position(|s| same(s.accepted.addr, from))
         else {
+            if let Some(discover) = self.discover
+                && from.port() == discover.port()
+                && let Some(ip) = ipv4(from.ip())
+            {
+                self.discovered(datagram, ip);
+                return;
+            }
             counters.unaccepted.fetch_add(1, Ordering::Relaxed);
             return;
         };
@@ -758,6 +934,14 @@ impl Run {
             }
             self.senders[index].seen.publish(stream, now);
         }
+    }
+}
+
+/// `ip` as IPv4, whether or not it came mapped into IPv6.
+fn ipv4(ip: IpAddr) -> Option<Ipv4Addr> {
+    match ip {
+        IpAddr::V4(v4) => Some(v4),
+        IpAddr::V6(v6) => v6.to_ipv4_mapped(),
     }
 }
 

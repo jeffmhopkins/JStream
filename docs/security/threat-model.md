@@ -687,8 +687,10 @@ somewhere it shouldn't.
   the daemon's `--jtunnel-accept name@address:port`, each a LAN address. Off, no socket
   is open.
 - It sends only subscribe and bye packets, only to accepted senders' addresses, which
-  must be loopback, private IPv4 or link-local. It never announces itself and never
-  sends audio or MIDI.
+  must be loopback, private IPv4 or link-local, and every 10 s one mDNS PTR query for
+  `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
+  socket (a legacy unicast query, so senders answer that socket; no socket joins the
+  group or binds port 5353). It never announces itself and never sends audio or MIDI.
 - It drops and counts every datagram from outside those ranges, from an address it
   didn't subscribe to, longer than a packet may be, or that `jstream-jtunnel`'s parser
   refuses (fuzzed on its own). The socket is IPv4: an accepted sender's address is IPv4
@@ -698,6 +700,12 @@ somewhere it shouldn't.
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
   name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
   doesn't trigger bindings (ADR-0142 §2).
+- An mDNS answer from a LAN address's port 5353 only lists a sender in
+  `jtunnel.senders` (its name as `remote_name`, text from the LAN): listing trusts it
+  with nothing, since only accepted senders are subscribed to and only their datagrams
+  are taken. The list holds at most 64 senders, each forgotten 35 s after it last
+  answered, so answers can't grow it without bound; an answer it can't read is counted
+  as malformed. Plugins can't read the list.
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
 - PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) pass the same
@@ -712,7 +720,10 @@ same network who already targets this machine. The check is of the source addres
 datagram claims, and the socket is bound to every IPv4 interface: a host beyond the LAN
 that can deliver a datagram with a spoofed private source, and guesses an accepted
 sender's address and port, gets past it. Binding only the interface that routes to the
-accepted senders would narrow that, and is still to come.
+accepted senders would narrow that, and is still to come. A host on the LAN can also
+answer the query with made-up senders, or say goodbye for a real one, which changes only
+what the list shows; a person accepts a sender by name and address, so a made-up one is
+accepted only if they pick it.
 
 <a id="gaps"></a>
 ## Known gaps

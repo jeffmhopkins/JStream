@@ -233,6 +233,14 @@ pub enum Query {
     /// cameras, which is the default (ADR-0123 §1).
     #[serde(rename = "ptz.list")]
     PtzList,
+    /// Lists the JTunnel senders heard on the LAN (0.114, ADR-0123 §3): each sender that
+    /// answered the receiver's mDNS query for `_jtunnel._udp.local` in the last 35 s,
+    /// ordered by name, then address, with whether this machine accepts it. Runtime
+    /// state, so no `rev`. `on` is false, and the list empty, while the receiver is off,
+    /// which is the default (ADR-0123 §1). `jtunnel.senders_changed` says when the list
+    /// changes.
+    #[serde(rename = "jtunnel.senders")]
+    JtunnelSenders,
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
     /// in the OS's font folders that parses, as a family and style to show and the
     /// absolute path an `asset` setting names it by. Runtime state, so no `rev`. The
@@ -442,6 +450,7 @@ impl Query {
             Query::LabelMembers { .. } => "label.members",
             Query::CaptureTargets => "capture.targets",
             Query::PtzList => "ptz.list",
+            Query::JtunnelSenders => "jtunnel.senders",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
@@ -777,6 +786,14 @@ pub enum QueryResult {
         /// The cameras, in the order the host listed them.
         cameras: Vec<crate::ptz::PtzCameraInfo>,
     },
+    /// The result of `jtunnel.senders`.
+    #[serde(rename = "jtunnel.senders")]
+    JtunnelSenders {
+        /// Whether the JTunnel receiver runs, and so whether it asks the LAN for senders.
+        on: bool,
+        /// The senders heard, ordered by name, then address.
+        senders: Vec<crate::JtunnelSenderInfo>,
+    },
     /// The result of `font.list`.
     #[serde(rename = "font.list")]
     FontList {
@@ -916,6 +933,7 @@ impl QueryResult {
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::PtzList { .. } => "ptz.list",
+            QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",

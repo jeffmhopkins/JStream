@@ -191,11 +191,99 @@ fn setup(name: &str, sender: &FakeSender) -> JtunnelSetup {
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
+    // Tests ask no network for senders; the discovery test names its own responder.
+    setup.discover = None;
     setup
 }
 
+/// An mDNS answer naming the JTunnel sender `name` on `port`, as one SRV record (all
+/// `parse_announcements` needs); a `ttl` of 0 is its goodbye.
+fn answer(name: &str, port: u16, ttl: u32) -> Vec<u8> {
+    let mut m = vec![0, 0, 0x84, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+    m.push(u8::try_from(name.len()).expect("a short name"));
+    m.extend_from_slice(name.as_bytes());
+    for label in dnssd::SERVICE.split('.') {
+        m.push(u8::try_from(label.len()).expect("a label"));
+        m.extend_from_slice(label.as_bytes());
+    }
+    m.push(0);
+    m.extend_from_slice(&33_u16.to_be_bytes()); // SRV
+    m.extend_from_slice(&0x8001_u16.to_be_bytes()); // IN, cache flush
+    m.extend_from_slice(&ttl.to_be_bytes());
+    let host = b"\x07jtunnel\x05local\x00";
+    m.extend_from_slice(&u16::try_from(6 + host.len()).expect("short").to_be_bytes());
+    m.extend_from_slice(&[0, 0, 0, 0]);
+    m.extend_from_slice(&port.to_be_bytes());
+    m.extend_from_slice(host);
+    m
+}
+
+/// ADR-0123 §3: the receiver asks for senders from its own socket (a legacy unicast
+/// query), lists those that answer with whether they are accepted, drops one on its
+/// goodbye, says when the list changed, and keeps the list bounded.
+#[test]
+fn senders_that_answer_the_query_are_listed_and_trusted_with_nothing() {
+    let sender = FakeSender::new();
+    let responder = FakeSender::new();
+    let mut setup = setup("Bitwig", &sender);
+    setup.discover = Some(responder.addr());
+    let (changed, heard) = sync_channel(1);
+    let receiver = Receiver::start(&setup, Arc::new(Clock(Instant::now())), None, Some(changed))
+        .expect("a receiver");
+    // The first query goes out at once, from the receive socket.
+    let (query, from) = responder.next();
+    assert_eq!(from, receiver.local_addr());
+    assert_eq!(
+        dnssd::parse_announcements(&query),
+        Ok(Vec::new()),
+        "a query, not an answer"
+    );
+    let send = |datagram: &[u8]| {
+        responder
+            .socket
+            .send_to(datagram, receiver.local_addr())
+            .expect("sent");
+    };
+    // The accepted sender announces the port it sends from; another isn't accepted.
+    send(&answer("Bitwig", sender.addr().port(), 30));
+    send(&answer("Laptop", 9000, 30));
+    assert!(
+        heard.recv_timeout(Duration::from_secs(5)).is_ok(),
+        "the list changed"
+    );
+    assert!(eventually(|| receiver.heard().len() == 2));
+    let heard_now = receiver.heard();
+    assert_eq!(heard_now[0].remote_name, "Bitwig");
+    assert_eq!(heard_now[0].address, sender.addr().to_string());
+    assert!(heard_now[0].accepted);
+    assert_eq!(heard_now[1].remote_name, "Laptop");
+    assert_eq!(heard_now[1].address, "127.0.0.1:9000");
+    assert!(!heard_now[1].accepted, "listed, never subscribed to");
+    // The goodbye takes it off; a broken answer is counted.
+    send(&answer("Laptop", 9000, 0));
+    send(&[0, 0, 0x84, 0, 0, 0, 0, 1]);
+    assert!(eventually(|| receiver.heard().len() == 1));
+    assert!(eventually(|| receiver.stats().malformed == 1));
+    assert_eq!(
+        receiver.stats().unaccepted,
+        0,
+        "answers are not unaccepted datagrams"
+    );
+    // Many names from one host fill the list only to its bound.
+    for n in 0..MAX_LISTED + 10 {
+        send(&answer(
+            &format!("s{n}"),
+            1000 + u16::try_from(n).expect("a port"),
+            30,
+        ));
+    }
+    assert!(eventually(|| receiver.heard().len() == MAX_LISTED));
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(receiver.heard().len(), MAX_LISTED);
+}
+
 fn start(setup: &JtunnelSetup) -> Receiver {
-    Receiver::start(setup, Arc::new(Clock(Instant::now())), None).expect("a receiver")
+    Receiver::start(setup, Arc::new(Clock(Instant::now())), None, None).expect("a receiver")
 }
 
 /// Waits up to 5 s for `check`.
@@ -422,6 +510,7 @@ fn a_senders_midi_feeds_its_midi_input_without_a_source() {
         &setup("Keys", &sender),
         Arc::new(Clock(started)),
         Some(Arc::clone(&midi)),
+        None,
     )
     .expect("a receiver");
     let (_, to) = sender.next();

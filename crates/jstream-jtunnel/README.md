@@ -58,7 +58,8 @@ Contents:
 - `dnssd`: the mDNS PTR query for `_jtunnel._udp.local`, `parse_announcements` for the
   SRV and TXT records senders answer with (DNS name compression followed with a bound),
   and `Directory`, the list of senders seen, refreshed by announcements, removed by a
-  goodbye and forgotten 35 s after it was last heard.
+  goodbye and forgotten 35 s after it was last heard, with `len` and `is_empty` so a
+  caller can bound it.
 
 `tests/no_alloc.rs` checks that parsing a packet, walking its events, decoding PCM,
 joining SysEx, tracking sequence numbers and playing frames out allocate nothing.

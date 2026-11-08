@@ -390,6 +390,11 @@ pub enum Event {
         /// How it ended.
         outcome: crate::ApprovalOutcome,
     },
+    /// The JTunnel senders `jtunnel.senders` lists changed (0.114, ADR-0123 §3): one was
+    /// heard for the first time, said goodbye, or went unheard for 35 s. Runtime state,
+    /// so no `rev`. A client that shows them reads `jtunnel.senders` again.
+    #[serde(rename = "jtunnel.senders_changed")]
+    JtunnelSendersChanged {},
     /// An event this version of the protocol doesn't know. Never sent; produced only when
     /// parsing an event from a newer server.
     #[serde(other)]
@@ -425,6 +430,7 @@ impl Event {
             Event::KindsChanged { .. } => Some("kinds.changed"),
             Event::AgentApprovalRequested { .. } => Some("agent.approval_requested"),
             Event::AgentApprovalResolved { .. } => Some("agent.approval_resolved"),
+            Event::JtunnelSendersChanged {} => Some("jtunnel.senders_changed"),
             Event::Unknown => None,
         }
     }

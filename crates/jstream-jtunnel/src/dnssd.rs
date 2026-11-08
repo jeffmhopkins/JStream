@@ -301,6 +301,18 @@ impl Directory {
             .retain(|s| now_ms.saturating_sub(s.last_seen_ms) <= FORGET_AFTER_MS);
     }
 
+    /// How many senders it lists.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.senders.len()
+    }
+
+    /// Whether it lists none.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.senders.is_empty()
+    }
+
     /// The senders, sorted by name, then address.
     #[must_use]
     pub fn senders(&self) -> Vec<Sender> {

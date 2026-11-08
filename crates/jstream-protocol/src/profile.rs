@@ -75,6 +75,21 @@ pub struct ProfileInfo {
     pub network: Option<NetworkProfile>,
 }
 
+/// A JTunnel sender heard on the LAN (`jtunnel.senders`, 0.114, ADR-0123 §3): it
+/// answered the receiver's mDNS query. Listing it trusts it with nothing.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct JtunnelSenderInfo {
+    /// Its tunnel name, as it announces it: text from the LAN, so `remote_` (ADR-0059).
+    /// A host that accepts it accepts this name.
+    pub remote_name: String,
+    /// The address and port it sends from, as `192.168.1.5:9000`: where its answer came
+    /// from, with the port its announcement names.
+    pub address: String,
+    /// Whether this machine accepts it: a sender the host accepts has this name and this
+    /// address and port.
+    pub accepted: bool,
+}
+
 /// The JTunnel receiver ([`ProfileInfo::network`], ADR-0122, ADR-0123). Unlike the rest
 /// of the profile, its counts run from when the receiver started, not over the window.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
