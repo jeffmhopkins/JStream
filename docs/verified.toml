@@ -510,7 +510,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:09879d6f277ae766", by = "agent:claude", note = "edited: a device's name in capture.targets is untrusted text, as a window's | kept from the merged side: Re-read it. The tool snapshot includes the longer canvas.set_frame_rate description. The section does not name a frame rate." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:df235c114cd4a134", by = "agent:claude", note = "Re-read against the design.rs wording change; the MCP section doesn't detail rename guidance, still holds" }
+stamp = { hash = "b3:eb6a300a0a282c6a", by = "agent:claude", note = "Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2769,7 +2769,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:df235c114cd4a134", by = "agent:claude", note = "Re-read against the design.rs wording change (renames keep earlier entries pointed at the newest ID); the custom-shader bullet still describes the @renamed line, version bump and renames correctly" }
+stamp = { hash = "b3:eb6a300a0a282c6a", by = "agent:claude", note = "Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -2802,7 +2802,7 @@ stamp = { hash = "b3:d3eeb18e517f4d4c", by = "agent:grok", note = "Re-read the s
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:df235c114cd4a134", by = "agent:claude", note = "Re-read against the design.rs wording change (renames keep earlier entries pointed at the newest ID); the purpose section names no rename detail, still holds" }
+stamp = { hash = "b3:eb6a300a0a282c6a", by = "agent:claude", note = "Re-read against the design.rs rename guidance (r1 N5): keep earlier renames entries pointed at the newest ID, and a shader source's values don't follow renames yet (#1412); nothing in this section contradicts it" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }

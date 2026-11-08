@@ -81,8 +81,8 @@ Give a new pack ID `custom-<word>` (not one `pack.list` has) one effect `shader`
 setting, add a `// @renamed <old> <new>` line, raise the effect's `version` by one and \
 add `renames = { <old> = \"<new>\" }`, keeping earlier entries with each pointed at \
 the newest ID. When the new version loads, the engine moves every existing filter's \
-value to the new ID. \
-A generated picture works the same way as a shader source a person can edit from its \
+value to the new ID; a shader source's values don't follow renames yet (#1412). \
+A generated picture is written the same way as a shader source a person can edit from its \
 Properties (Edit shader…): one `[[source]]` `shader` with `width`, `height` and one \
 `[[source.pass]]` `previous` drawing `shader.wgsl`, whose `fs` returns the picture. \
 Its `// @size <w>x<h>` line sets the default size, `// @feedback` adds `previous` to \
