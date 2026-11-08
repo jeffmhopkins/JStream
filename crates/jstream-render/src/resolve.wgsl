@@ -14,13 +14,12 @@ fn vs(@builtin(vertex_index) index: u32) -> @builtin(position) vec4<f32> {
 }
 
 @group(0) @binding(0) var src: texture_2d<f32>;
+@group(0) @binding(1) var nearest: sampler;
 
 @fragment
 fn fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
-    let c = textureLoad(src, vec2<i32>(pos.xy), 0);
-    var rgb = vec3<f32>(0.0);
-    if (c.a > 0.0) {
-        rgb = c.rgb / c.a;
-    }
-    return vec4<f32>(rgb, c.a);
+    // Sampled at the texel's centre with a nearest sampler: the same value a load
+    // gives, and on a software renderer (llvmpipe) much less work (#1449).
+    let c = textureSampleLevel(src, nearest, pos.xy / vec2<f32>(textureDimensions(src)), 0.0);
+    return vec4<f32>(select(vec3<f32>(0.0), c.rgb / c.a, c.a > 0.0), c.a);
 }
