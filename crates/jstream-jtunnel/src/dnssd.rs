@@ -88,7 +88,8 @@ pub struct Announcement {
 }
 
 struct Rr {
-    name: Vec<Vec<u8>>,
+    /// Where its name starts in the message.
+    name_at: usize,
     kind: u16,
     ttl: u32,
     rdata_at: usize,
@@ -100,15 +101,19 @@ fn be16(msg: &[u8], at: usize) -> Result<u16, DnsError> {
     Ok(u16::from_be_bytes([b[0], b[1]]))
 }
 
-/// Reads the name at `at`, following compression pointers; gives its labels and where
-/// the name ends in the message.
-fn read_name(msg: &[u8], mut at: usize) -> Result<(Vec<Vec<u8>>, usize), DnsError> {
-    let mut labels = Vec::new();
+/// Walks the name at `at`, following compression pointers, handing each label to
+/// `label` in order, and gives where the name ends in the message. It allocates
+/// nothing, so a hostile datagram costs at most [`MAX_LABELS`] steps a name.
+fn walk_name<'m>(
+    msg: &'m [u8],
+    mut at: usize,
+    mut label: impl FnMut(&'m [u8]),
+) -> Result<usize, DnsError> {
     let mut end = None;
     for _ in 0..MAX_LABELS {
         let len = *msg.get(at).ok_or(DnsError::Truncated)?;
         match len {
-            0 => return Ok((labels, end.unwrap_or(at + 1))),
+            0 => return Ok(end.unwrap_or(at + 1)),
             0xC0..=0xFF => {
                 let low = *msg.get(at + 1).ok_or(DnsError::Truncated)?;
                 end.get_or_insert(at + 2);
@@ -116,10 +121,10 @@ fn read_name(msg: &[u8], mut at: usize) -> Result<(Vec<Vec<u8>>, usize), DnsErro
             }
             0x40..=0xBF => return Err(DnsError::BadName),
             _ => {
-                let label = msg
+                let bytes = msg
                     .get(at + 1..at + 1 + usize::from(len))
                     .ok_or(DnsError::Truncated)?;
-                labels.push(label.to_vec());
+                label(bytes);
                 at += 1 + usize::from(len);
             }
         }
@@ -127,17 +132,17 @@ fn read_name(msg: &[u8], mut at: usize) -> Result<(Vec<Vec<u8>>, usize), DnsErro
     Err(DnsError::BadName)
 }
 
-fn records(msg: &[u8]) -> Result<Vec<Rr>, DnsError> {
+/// Hands each SRV and TXT record of `msg` to `each`, in order, allocating nothing.
+fn records(msg: &[u8], mut each: impl FnMut(&Rr)) -> Result<(), DnsError> {
     let questions = be16(msg, 4)?;
     let total = u32::from(be16(msg, 6)?) + u32::from(be16(msg, 8)?) + u32::from(be16(msg, 10)?);
     let mut at = 12;
     for _ in 0..questions {
-        let (_, end) = read_name(msg, at)?;
-        at = end + 4;
+        at = walk_name(msg, at, |_| {})? + 4;
     }
-    let mut out = Vec::new();
     for _ in 0..total {
-        let (name, end) = read_name(msg, at)?;
+        let name_at = at;
+        let end = walk_name(msg, at, |_| {})?;
         let kind = be16(msg, end)?;
         let ttl_bytes = msg.get(end + 4..end + 8).ok_or(DnsError::Truncated)?;
         let ttl = u32::from_be_bytes([ttl_bytes[0], ttl_bytes[1], ttl_bytes[2], ttl_bytes[3]]);
@@ -146,38 +151,59 @@ fn records(msg: &[u8]) -> Result<Vec<Rr>, DnsError> {
         if rdata_at + rdata_len > msg.len() {
             return Err(DnsError::Truncated);
         }
-        out.push(Rr {
-            name,
-            kind,
-            ttl,
-            rdata_at,
-            rdata_len,
-        });
+        if matches!(kind, TYPE_SRV | TYPE_TXT) {
+            each(&Rr {
+                name_at,
+                kind,
+                ttl,
+                rdata_at,
+                rdata_len,
+            });
+        }
         at = rdata_at + rdata_len;
     }
-    Ok(out)
+    Ok(())
 }
 
-/// The tunnel name of an instance name `<name>._jtunnel._udp.local`, compared without
-/// regard to ASCII case. A name with dots in it is several labels, joined back with
-/// dots, as JTunnel reads them.
-fn tunnel_name(labels: &[Vec<u8>]) -> Option<String> {
-    let service: Vec<&str> = SERVICE.split('.').collect();
-    if labels.len() <= service.len() {
+/// The most labels an instance name and the service's take: a tunnel name of at most
+/// [`MAX_TUNNEL_NAME`] bytes has at most half as many labels, plus one, and the service
+/// three.
+const MAX_INSTANCE_LABELS: usize = MAX_TUNNEL_NAME / 2 + 1 + 3;
+
+/// The tunnel name of the instance name at `at`, `<name>._jtunnel._udp.local`, compared
+/// without regard to ASCII case. A name with dots in it is several labels, joined back
+/// with dots, as JTunnel reads them. The labels are compared where they lie; only a name
+/// that matches is copied.
+fn tunnel_name(msg: &[u8], at: usize) -> Option<String> {
+    let mut spans: [&[u8]; MAX_INSTANCE_LABELS] = [&[]; MAX_INSTANCE_LABELS];
+    let mut count = 0;
+    let mut too_many = false;
+    walk_name(msg, at, |label| {
+        if count < MAX_INSTANCE_LABELS {
+            spans[count] = label;
+            count += 1;
+        } else {
+            too_many = true;
+        }
+    })
+    .ok()?;
+    let service_labels = SERVICE.split('.').count();
+    if too_many || count <= service_labels {
         return None;
     }
-    let (instance, tail) = labels.split_at(labels.len() - service.len());
+    let (instance, tail) = spans[..count].split_at(count - service_labels);
     if !tail
         .iter()
-        .zip(&service)
+        .zip(SERVICE.split('.'))
         .all(|(l, s)| l.eq_ignore_ascii_case(s.as_bytes()))
     {
         return None;
     }
-    let joined = instance.join(&b'.');
-    if joined.is_empty() || joined.len() > MAX_TUNNEL_NAME {
+    let joined_len = instance.iter().map(|l| l.len()).sum::<usize>() + instance.len() - 1;
+    if joined_len > MAX_TUNNEL_NAME {
         return None;
     }
+    let joined = instance.join(&b'.');
     String::from_utf8(joined).ok()
 }
 
@@ -188,12 +214,13 @@ fn tunnel_name(labels: &[Vec<u8>]) -> Option<String> {
 ///
 /// A [`DnsError`] for a datagram that isn't a well-formed DNS message.
 pub fn parse_announcements(datagram: &[u8]) -> Result<Vec<Announcement>, DnsError> {
-    let rrs = records(datagram)?;
+    // Only a record that names a JTunnel instance allocates (its name, once copied), so
+    // a datagram about other services, or one that repeats a long name, costs none.
     let mut srv: Vec<(String, u16, u32)> = Vec::new();
     let mut txt: BTreeMap<String, (Option<u64>, Option<u64>)> = BTreeMap::new();
-    for rr in &rrs {
-        let Some(name) = tunnel_name(&rr.name) else {
-            continue;
+    records(datagram, |rr| {
+        let Some(name) = tunnel_name(datagram, rr.name_at) else {
+            return;
         };
         let rdata = &datagram[rr.rdata_at..rr.rdata_at + rr.rdata_len];
         match rr.kind {
@@ -221,7 +248,7 @@ pub fn parse_announcements(datagram: &[u8]) -> Result<Vec<Announcement>, DnsErro
             }
             _ => {}
         }
-    }
+    })?;
     Ok(srv
         .into_iter()
         .map(|(name, port, ttl)| {
@@ -299,6 +326,18 @@ impl Directory {
     pub fn expire(&mut self, now_ms: u64) {
         self.senders
             .retain(|s| now_ms.saturating_sub(s.last_seen_ms) <= FORGET_AFTER_MS);
+    }
+
+    /// How many senders it lists.
+    #[must_use]
+    pub fn len(&self) -> usize {
+        self.senders.len()
+    }
+
+    /// Whether it lists none.
+    #[must_use]
+    pub fn is_empty(&self) -> bool {
+        self.senders.is_empty()
     }
 
     /// The senders, sorted by name, then address.

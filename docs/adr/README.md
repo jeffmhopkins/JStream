@@ -156,6 +156,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0141](0141-desktop-app-on-linux.md) | The desktop app on Linux: Tauri on WebKitGTK, behind a feature | accepted | maintainer |  |
 | [ADR-0142](0142-feeding-the-midi-sources-and-their-beat.md) | The engine feeds the MIDI sources on the media clock, with each input's tempo | accepted | agent |  |
 | [ADR-0143](0143-scene-lights-and-depth-aware-scene-filters.md) | Scene lights and depth-aware scene filters | accepted | agent |  |
+| [ADR-0144](0144-the-desktop-app-on-macos.md) | The desktop app on macOS, as an unsigned app bundle | accepted | maintainer |  |
 | [ADR-0145](0145-the-quality-probe-reads-back-the-compositor.md) | The quality probe compares the compositor's readback with the decoded stream | accepted | agent |  |
 | [ADR-0146](0146-ptz-cameras-shots-and-actions.md) | PTZ cameras: per-machine heads, ptz actions, and shots that scenes and keyframes fire | accepted | agent |  |
 | [ADR-0147](0147-midi-tempo-and-state-for-pages.md) | The engine's tempo as shared values, and page grants for the tempo and one MIDI input | accepted | agent |  |

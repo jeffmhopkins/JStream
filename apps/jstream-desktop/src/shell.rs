@@ -8,9 +8,11 @@
 //!   ([`projector`]): a window of the app's own, under the same rules and with the same
 //!   script, full screen when the page asks for it. A link to one of the project's own
 //!   pages on GitHub, or Cisco's OpenH264 licence ([`links`]), opens in the
-//!   system browser instead (through Explorer on Windows, `xdg-open` on Linux). Any
+//!   system browser instead (through Explorer on Windows, `open` on macOS, `xdg-open` on
+//!   Linux). Any
 //!   other is refused.
-//! - It runs on WebView2 on Windows and WebKitGTK on Linux (the `webkitgtk` feature).
+//! - It runs on WebView2 on Windows, WKWebView on macOS and WebKitGTK on Linux (the
+//!   `webkitgtk` feature).
 //! - The page gets two Tauri commands, `pick_path` ([`crate::pick`]) and `set_network`
 //!   ([`crate::network`]), and no other. The UI calls them through the bootstrap
 //!   global's `browse` and `allowNetwork`, and talks to the engine only over the
@@ -91,7 +93,9 @@ fn open_in_browser(url: &Url) {
     let opener = std::env::var_os("SystemRoot")
         .map(|root| std::path::Path::new(&root).join("explorer.exe"))
         .unwrap_or_else(|| "explorer.exe".into());
-    #[cfg(not(windows))]
+    #[cfg(target_os = "macos")]
+    let opener = std::path::PathBuf::from("/usr/bin/open");
+    #[cfg(not(any(windows, target_os = "macos")))]
     let opener = std::path::PathBuf::from("xdg-open");
     match std::process::Command::new(opener).arg(url.as_str()).spawn() {
         // Waited for on a thread of its own, so the opener doesn't linger as a zombie

@@ -1426,6 +1426,11 @@ impl State {
                 rev: self.collection.rev,
                 video_mixes: self.collection.video_mix_infos(),
             },
+            // The mock runs no JTunnel receiver (ADR-0123 §1: off by default).
+            Query::JtunnelSenders => QueryResult::JtunnelSenders {
+                on: false,
+                senders: Vec::new(),
+            },
             Query::PtzList => QueryResult::PtzList {
                 cameras: Vec::new(),
             },

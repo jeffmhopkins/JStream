@@ -26,7 +26,11 @@ use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
-#[cfg(any(windows, all(target_os = "linux", target_pointer_width = "64")))]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 use {
     jstream_core::{LivePublish, OpenPublish, PublishError},
     jstream_crash::Redacting,
@@ -77,7 +81,7 @@ pub struct Host {
     mcp_url: Option<String>,
     /// The network listener's addresses and certificate fingerprint, with [`Network`].
     network: Option<(Vec<String>, String)>,
-    /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows and on X11.
+    /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows, macOS and X11.
     hotkeys: Option<JoinHandle<()>>,
 }
 
@@ -150,7 +154,7 @@ impl Host {
         // The UI settings are still kept, so the window shows the workspace the daemon's
         // browsers do.
         config.ui_settings_file = ui_settings;
-        #[cfg(any(windows, target_os = "linux"))]
+        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
         let listening = Arc::clone(&engine);
         let connector: Connector = Arc::new(move || Box::new(engine.connect()));
         let server: Server = runtime
@@ -175,9 +179,9 @@ impl Host {
             );
             (urls, fingerprint.to_owned())
         });
-        #[cfg(any(windows, target_os = "linux"))]
+        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
         let hotkeys = global_hotkeys(&runtime, &listening, server.ui_settings());
-        #[cfg(not(any(windows, target_os = "linux")))]
+        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
         let hotkeys = None;
         if let (Some(agents), Some(mcp_url)) = (agents, &mcp_url) {
             tracing::info!(
@@ -266,7 +270,7 @@ impl Host {
 /// OS listener ([`hotkey_listener`]) and a session on `engine` that keeps it in step with
 /// the bindings and the `hotkeys.global` UI setting. `None`, logged, when the listener
 /// can't start: the page still hears hotkeys while it has the focus.
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 fn global_hotkeys(
     runtime: &Runtime,
     engine: &Arc<Engine>,
@@ -304,7 +308,7 @@ fn global_hotkeys(
 }
 
 /// What a global hotkey listener calls with each chord pressed.
-#[cfg(any(windows, target_os = "linux"))]
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
 type OnPress = Box<dyn Fn(&str) + Send>;
 
 /// Windows' listener: `RegisterHotKey` on its own thread, and a low-level mouse hook there
@@ -325,6 +329,29 @@ fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registra
 
     GlobalHotkeys::start(on_press)
         .map(|listener| Arc::new(Windows(listener)) as Arc<dyn crate::hotkeys::Registrar>)
+        .map_err(|error| error.to_string())
+}
+
+/// macOS's listener: Carbon hotkeys on the main thread, and a Quartz event tap on its own
+/// thread while a wheel chord is set. The tap needs the Accessibility permission, asked
+/// for at the first wheel chord; without it wheel chords are heard only while JStream has
+/// the focus, and `set` says so.
+#[cfg(target_os = "macos")]
+fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
+    use jstream_platform_macos::GlobalHotkeys;
+
+    struct Macos(GlobalHotkeys);
+    impl crate::hotkeys::Registrar for Macos {
+        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
+            self.0.set(chords)
+        }
+        fn hears_wheel(&self) -> bool {
+            true
+        }
+    }
+
+    GlobalHotkeys::start(on_press)
+        .map(|listener| Arc::new(Macos(listener)) as Arc<dyn crate::hotkeys::Registrar>)
         .map_err(|error| error.to_string())
 }
 
@@ -376,7 +403,9 @@ fn new_token() -> anyhow::Result<String> {
 /// it also opens browser sources' pages, keeping CEF's cache and log under `data`
 /// (`browser::backend`). On 64-bit Linux it is live the same way on the Linux backends
 /// (`linux_backends`), with stream keys in the Secret Service, else its `0600` file
-/// (ADR-0071), and no virtual camera. Elsewhere there are no backends yet. Either way it
+/// (ADR-0071), and no virtual camera. On macOS it is live the same way on the backends the
+/// daemon uses there (`macos_backends`), with stream keys in the Keychain and no virtual
+/// camera. Elsewhere there are no backends yet. Either way it
 /// watches the effect packs in `data`'s `effects` folder (`Engine::watch_effect_packs`)
 /// and starts the engine's stats heartbeat, and where it is live each `stats.tick`
 /// carries the process's CPU time.
@@ -384,7 +413,8 @@ fn new_token() -> anyhow::Result<String> {
 /// # Errors
 /// When the collection file can't be read, loaded or created, and where it is live when
 /// a backend can't be created (the QPC clock on Windows; on Linux neither PipeWire nor
-/// ALSA, or no config folder for the key store).
+/// ALSA, or no config folder for the key store; on macOS the Mach clock, or a release
+/// below the floor).
 pub fn engine(
     collection: &Path,
     data: &Path,
@@ -413,7 +443,18 @@ pub fn engine(
         let _ = vcam;
         handled(live(engine, linux_backends(data)?, linux_keys()?, secrets))
     };
-    #[cfg(not(any(windows, all(target_os = "linux", target_pointer_width = "64"))))]
+    #[cfg(target_os = "macos")]
+    let engine = {
+        // No virtual camera on macOS yet (ADR-0063 §13), so `--no-vcam` changes nothing.
+        let _ = vcam;
+        let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_macos::MacosKeychain);
+        handled(live(engine, macos_backends()?, keys, secrets))
+    };
+    #[cfg(not(any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", target_pointer_width = "64")
+    )))]
     let engine = {
         let _ = (vcam, secrets);
         Arc::new(engine)
@@ -424,11 +465,15 @@ pub fn engine(
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     engine.set_process_cpu(Arc::new(jstream_platform_linux::LinuxProcessCpu));
+    #[cfg(target_os = "macos")]
+    engine.set_process_cpu(Arc::new(jstream_platform_macos::MacosProcessCpu));
     // `profile.get`'s threads (ADR-0103).
     #[cfg(windows)]
     engine.set_thread_cpu(Arc::new(jstream_platform_windows::WindowsThreadCpu));
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     engine.set_thread_cpu(Arc::new(jstream_platform_linux::LinuxThreadCpu));
+    #[cfg(target_os = "macos")]
+    engine.set_thread_cpu(Arc::new(jstream_platform_macos::MacosThreadCpu));
     // The render and mixer threads' MMCSS tasks (ADR-0117 §8).
     #[cfg(windows)]
     engine.set_thread_priority(Arc::new(jstream_platform_windows::WindowsThreadPriority));
@@ -529,12 +574,16 @@ fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
 }
 
 /// Makes `engine` live on `backends`, with `keys` (Credential Manager on Windows, the
-/// Secret Service or its fallback file on Linux) behind [`Redacting`], registering each
+/// Secret Service or its fallback file on Linux, the Keychain on macOS) behind [`Redacting`], registering each
 /// with `secrets`, and a publish opener that connects RTMP(S). The opener holds the
 /// engine weakly, so [`handled`] gives it the engine once it is shared, and the engine
 /// still drops when the server lets go of it. The same wiring as the daemon's
 /// `live::live` (apps/jstream-daemon/src/live.rs), whose tests cover the opener.
-#[cfg(any(windows, all(target_os = "linux", target_pointer_width = "64")))]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 fn live(
     engine: Engine,
     backends: Backends,
@@ -554,7 +603,11 @@ fn live(
 
 /// A live engine whose publish opener doesn't have it yet: [`handled`] shares it and
 /// hands the opener its weak handle.
-#[cfg(any(windows, all(target_os = "linux", target_pointer_width = "64")))]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 struct Live {
     engine: Engine,
     handle: Arc<OnceLock<Weak<Engine>>>,
@@ -572,12 +625,44 @@ impl Live {
 }
 
 /// Shares `live`'s engine and gives its opener the handle.
-#[cfg(any(windows, all(target_os = "linux", target_pointer_width = "64")))]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 fn handled(live: Live) -> Arc<Engine> {
     let engine = Arc::new(live.engine);
     // The cell is new, so this is its only value.
     let _ = live.handle.set(Arc::downgrade(&engine));
     engine
+}
+
+/// The macOS backends, as the daemon creates them (its `macos_backends`): the Mach
+/// clock, ScreenCaptureKit capture, AVFoundation webcams and media files, Core Audio,
+/// VideoToolbox and AudioToolbox codecs, and the engine's own GPU device until the Metal
+/// interop (`NoGpuInterop`). There is no virtual camera. Creating them opens no device:
+/// capture, webcams and audio check the release floor, and ask for their permissions
+/// only when a pipeline first uses them.
+#[cfg(target_os = "macos")]
+fn macos_backends() -> anyhow::Result<Backends> {
+    use jstream_platform_macos::{
+        AvFoundationVideoDevices, AvMediaDecoders, CoreAudioIo, MachClock, NoGpuInterop,
+        ScreenCaptureKitCapture, VideoToolboxCodecs,
+    };
+    Ok(Backends {
+        clock: Arc::new(MachClock::new().context("could not open the Mach media clock")?),
+        capture: Arc::new(
+            ScreenCaptureKitCapture::new().context("could not open ScreenCaptureKit capture")?,
+        ),
+        video_devices: Arc::new(
+            AvFoundationVideoDevices::new().context("could not open AVFoundation webcams")?,
+        ),
+        audio: Arc::new(CoreAudioIo::new().context("could not open Core Audio")?),
+        codecs: Arc::new(VideoToolboxCodecs::new()),
+        gpu: Arc::new(NoGpuInterop),
+        media: Arc::new(AvMediaDecoders::new()),
+        vcam: None,
+    })
 }
 
 /// The Linux backends (ADR-0060), as the daemon builds them (its `serve.rs`): ScreenCast
@@ -670,7 +755,11 @@ fn startup_collection(
 
 /// On each `output.start`: the output's server URL from the collection, its key from
 /// `keys`, then `connect_rtmp`. No reason carries the key (R-SEC-001).
-#[cfg(any(windows, all(target_os = "linux", target_pointer_width = "64")))]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) -> OpenPublish {
     Arc::new(move |output_id: &OutputId| {
         let engine = engine

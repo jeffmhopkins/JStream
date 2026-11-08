@@ -384,6 +384,8 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   then one webcam, "Mock webcam", whose ID is `MOCK_DEVICE`, with a 1080p30 MJPEG and a
   720p60 NV12 format and two controls, `brightness` (0 to 255, no auto) and `exposure`
   (-11 to -2, auto on); a `camera_controls` setting is stored and sets nothing;
+- `jtunnel.senders`, answered `on: false` with no senders: the mock runs no JTunnel
+  receiver, so it never sends `jtunnel.senders_changed`;
 - `font.list`, answered with `MOCK_FONTS`, two made-up fonts of one family ("Mock Sans"
   Bold and Regular) whose files don't exist;
 - `source.sizes`, answered with every source and no size, since the mock makes no

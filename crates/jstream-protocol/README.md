@@ -159,7 +159,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
@@ -250,8 +250,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
-  `KindsCause`, 0.107), and `agent.approval_requested` and `agent.approval_resolved`
-  (0.108).
+  `KindsCause`, 0.107), `agent.approval_requested` and `agent.approval_resolved`
+  (0.108), and `jtunnel.senders_changed` (0.114).
 - **Plugins** (`plugin.rs`, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)): `PluginClass` (`read`,
   `edit`, `live`, `outputs`), `PLUGIN_SCOPES`, the table that places every command in
   one class or under "never", with `plugin_scope` and `plugin_classes` (a call's
@@ -333,7 +333,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.113 because `profile.get` reports the JTunnel receiver's
+`PROTOCOL_VERSION` is 0.114 because the JTunnel receiver finds senders on the LAN:
+the query `jtunnel.senders` (`JtunnelSenderInfo`) and the event
+`jtunnel.senders_changed` (ADR-0123 §3, #1223, a number the release queue set); 0.113
+because `profile.get` reports the JTunnel receiver's
 senders: `network` (`NetworkProfile`, `NetworkInputProfile`, #1223, a number the release
 queue set); 0.112 because the engine keeps a MIDI clock's tempo as the
 shared values `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar`, which it sets
@@ -1604,6 +1607,14 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `ptz.list`: the PTZ cameras this machine controls, each with its address, transport,
   whether it answered lately, its last pose and error, and its counters
   ([PTZ cameras](#ptz)); empty when the host listed none.
+- `jtunnel.senders` (0.114, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
+  §3): whether the JTunnel receiver is `on`, and the senders that answered its mDNS
+  query in the last 35 s, ordered by name, then address, each a `JtunnelSenderInfo`:
+  `remote_name`, the tunnel name it announces (text from the LAN, so `remote_`), its
+  `address` and port, and whether this machine has it `accepted` (that name at that
+  address). Listing a sender trusts it with nothing. `on` false and no senders while
+  the receiver is off, the default. Runtime state, so no `rev`. A plugin can't read it
+  (the person's LAN addresses).
 - `font.list`: the fonts installed on the engine's machine ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)), ordered by
   family, then style, then path, each a `FontInfo`: `remote_family` and
   `remote_style` from the font's name table (the font maker's text, so `remote_`), and
@@ -2152,6 +2163,10 @@ After `welcome`, the server pushes every event to every client.
   nothing) or `effect_packs` (a pack added, changed or removed, or an effect quarantined
   or re-enabled). Runtime state, so no `rev`: a client that keeps the kinds reads
   `kind.list` again, and one that misses it sees the change on its next read.
+- `jtunnel.senders_changed {}` (0.114, ADR-0123 §3) says the senders `jtunnel.senders`
+  lists changed: one answered for the first time, said goodbye, or went unheard for
+  35 s. A sender answering again sends nothing. Runtime state, so no `rev`: a client
+  that shows them reads `jtunnel.senders` again.
 
 <a id="youtube"></a>
 ## YouTube
@@ -2229,7 +2244,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
-  physical camera), creating, deleting and retargeting outputs, their encoders and stream
+  physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated

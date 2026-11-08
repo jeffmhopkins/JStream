@@ -51,7 +51,8 @@ jobs:
         run: |
           bash -n scripts/mac/install.sh
           bash -n scripts/mac/jstream.sh
-          shellcheck --severity=warning scripts/mac/install.sh scripts/mac/jstream.sh
+          bash -n scripts/mac/bundle-app.sh
+          shellcheck --severity=warning scripts/mac/install.sh scripts/mac/jstream.sh scripts/mac/bundle-app.sh
       # scripts/install-tools.txt pins the same trunk, wasm-bindgen and binaryen releases as
       # the UI builds in ci.yml and after-review.yml, and its wasm-bindgen matches Cargo.lock.
       - name: Pins match CI and Cargo.lock

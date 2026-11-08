@@ -266,7 +266,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   JTunnel receiver after the backends (arrivals are stamped on the media clock), on one
   UDP socket on any interface and a port the system picks, and logs that port and the
   senders at `info`. A sender's address can't be outside loopback, private IPv4 and
-  link-local, and the receiver drops everything not from an accepted sender
+  link-local, and the receiver drops everything not from an accepted sender, but for
+  the answers to its mDNS query, which only list senders in `jtunnel.senders`
   ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
   A sender is accepted per machine, on the command line, never from the collection.
 - **PTZ cameras** (`--ptz-camera`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)).
