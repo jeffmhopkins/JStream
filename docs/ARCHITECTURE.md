@@ -516,6 +516,7 @@ every mix runs at the base rate divided by an integer.
 | Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio" on Windows. |
 | Render | Composites every mix on each base-rate tick; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
+| Readback (`jstream-readback`, one per program stage's render thread) | Copies each mapped readback buffer out as tightly packed RGBA8 and hands it back to the render thread, which swaps it in, so the render thread copies no pixels ([ADR-0117](adr/0117-real-time-video-thread-model.md) §4) | Not real-time: it only copies and unmaps. A buffer is reused once its copy is back. Ends with the render thread's compositor. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Preview (one per engine, while any preview stream is open) | For an H.264 stream of the program, holds the program stage (opening it with no output) and hands it the stream's encoder, which the render thread feeds with the program at the stream's size; a sender thread per such stream forwards its packets ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a scene, a source, JPEG or PNG) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
@@ -525,7 +526,8 @@ every mix runs at the base rate divided by an integer.
 in steps under #1221): the render thread only composites and submits, never touching
 pixels on the CPU or waiting for the GPU; sources hand it GPU-ready frames through frame
 slots from their own threads, so a new frame no longer re-plans; read-back consumers are
-served by a `jstream-readback` thread from a ring of staging buffers; the engine shares
+served by a `jstream-readback` thread from a ring of staging buffers (built, as RGBA8;
+NV12 readback is #1433); the engine shares
 one GPU context; and the program stage runs while anything consumes it (a preview stream,
 a projector, an output or a virtual camera), compositing the program and every monitored
 scene, so the preview thread encodes and sends frames the render thread drew instead of
