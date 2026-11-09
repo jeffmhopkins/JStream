@@ -3458,12 +3458,13 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let seen = Arc::clone(&seen);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
-                    seen.lock()
-                        .unwrap_or_else(std::sync::PoisonError::into_inner)
-                        .push(shot.program().cloned());
-                    inner(shot, live, captures, frames, at, meter)
-                });
+                let draw: DrawFn =
+                    Box::new(move |shot, scenes, live, captures, frames, at, meter| {
+                        seen.lock()
+                            .unwrap_or_else(std::sync::PoisonError::into_inner)
+                            .push(shot.program().cloned());
+                        inner(shot, scenes, live, captures, frames, at, meter)
+                    });
                 Ok(draw)
             })
         };
@@ -4077,10 +4078,11 @@ mod cpu_pipeline {
             Arc::new(move |context: Option<&jstream_platform::GpuContext>| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
-                    assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, live, captures, frames, at, meter)
-                });
+                let draw: DrawFn =
+                    Box::new(move |shot, scenes, live, captures, frames, at, meter| {
+                        assert!(!armed.load(Ordering::Acquire), "compositor blew up");
+                        inner(shot, scenes, live, captures, frames, at, meter)
+                    });
                 Ok(draw)
             })
         };
@@ -5736,10 +5738,11 @@ mod cpu_pipeline {
             Arc::new(move |context| {
                 let armed = Arc::clone(&armed);
                 let mut inner = (cpu_draw())(context)?;
-                let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
-                    assert!(!armed.load(Ordering::Acquire), "compositor blew up");
-                    inner(shot, live, captures, frames, at, meter)
-                });
+                let draw: DrawFn =
+                    Box::new(move |shot, scenes, live, captures, frames, at, meter| {
+                        assert!(!armed.load(Ordering::Acquire), "compositor blew up");
+                        inner(shot, scenes, live, captures, frames, at, meter)
+                    });
                 Ok(draw)
             })
         };
@@ -5984,7 +5987,7 @@ mod cpu_pipeline {
     /// the camera got the composite, swizzled to BGRA.
     fn solid(rgba: [u8; 4]) -> OpenDraw {
         Arc::new(move |_| {
-            let draw: DrawFn = Box::new(move |_, _, _, frames, at, _| {
+            let draw: DrawFn = Box::new(move |_, _, _, _, frames, at, _| {
                 for frame in frames.iter_mut().filter(|frame| frame.due) {
                     frame.out.clear();
                     for _ in 0..frame.size.width() as usize * frame.size.height() as usize {

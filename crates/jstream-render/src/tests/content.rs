@@ -341,3 +341,49 @@ fn a_filter_keeps_the_bound_only_when_it_can() {
     let pixels = read(&mut opened, &blurred);
     assert!(pixels.rgba().iter().all(|&byte| byte == 0));
 }
+
+/// A shadow's or a glow's blur runs in a frame grown around the output by its radius,
+/// so its bound is moved into that frame (`Bound::placed`). Unmoved, the bound would
+/// land up to the radius short of the blurred shape on the side of a frame far from its
+/// origin: a strong glow of a small square near the right edge of a wide frame shows
+/// that tail.
+#[test]
+fn a_glow_bounds_its_blur_in_its_grown_frame() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let square = solid(&opened.compositor, 4, 4, [255, 0, 0, 255]);
+    let items = [item(
+        &square,
+        at([1000.0, 30.0], [1.0, 1.0], 0.0),
+        Crop::NONE,
+        1.0,
+    )];
+    let layer = opened.compositor.layer(1024, 64).expect("layer");
+    opened
+        .compositor
+        .render_into(
+            &Scene {
+                canvas: FrameSize::new(1024, 64).expect("invariant: non-zero"),
+                background: Color::TRANSPARENT,
+                items: &items,
+            },
+            &layer,
+        )
+        .expect("render into the layer");
+    let content = layer.content().expect("bounded");
+    let make = || {
+        filter(
+            "glow",
+            json!({ "color": "#ffffff", "radius": 16.0, "strength": 8.0 }),
+        )
+    };
+    let bounded = filtered(&mut opened, &mut make(), &layer);
+    assert!(bounded.content().is_some(), "a glow keeps the bound");
+    let bounded = read(&mut opened, &bounded);
+    layer.set_content(None);
+    let whole = filtered(&mut opened, &mut make(), &layer);
+    let whole = read(&mut opened, &whole);
+    layer.set_content(Some(content));
+    same("glow", &bounded, &whole);
+}

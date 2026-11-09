@@ -2950,6 +2950,15 @@ impl<'a> View<'a> {
         }
     }
 
+    /// A monitored scene's own snapshot, as a preview stream of it shows it: before any
+    /// output stage, drawn by the program stage's render thread (ADR-0117 §6).
+    pub(crate) fn monitored() -> Self {
+        Self {
+            program: true,
+            ..Self::default()
+        }
+    }
+
     /// `mix` before the master stage.
     #[cfg(test)]
     pub(crate) fn mix(mix: Option<&'a VideoMixId>) -> Self {
@@ -5334,6 +5343,7 @@ fn draw_model(
             geometry,
             camera,
             lighting: shown.lighting,
+            lights: None,
         },
         layer,
     )
