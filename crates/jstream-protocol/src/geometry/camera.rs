@@ -312,6 +312,29 @@ impl CameraView {
         (x.is_finite() && y.is_finite()).then_some((x as f32, y as f32))
     }
 
+    /// A point of the scene's space in the viewing frame a [`super::Solid`] seen through
+    /// this camera uses: x right and y down on the canvas, z toward the viewer, with the
+    /// viewer at `z =` [`Self::focal_px`]. Composed in `f64` relative to the camera, so a
+    /// far camera loses no precision near itself; what scene lights are placed by
+    /// (ADR-0143 decision 3).
+    pub fn in_view(&self, point: [f64; 3]) -> [f64; 3] {
+        let rel = sub(point, self.position);
+        [
+            dot(rel, self.right),
+            dot(rel, self.down),
+            self.focal - dot(rel, self.forward),
+        ]
+    }
+
+    /// A direction of the scene's space in the viewing frame of [`Self::in_view`].
+    pub fn direction_in_view(&self, direction: [f64; 3]) -> [f64; 3] {
+        [
+            dot(direction, self.right),
+            dot(direction, self.down),
+            -dot(direction, self.forward),
+        ]
+    }
+
     /// Where a point of the scene's space lands on the canvas, or
     /// [`Placed::BehindViewer`] when it is not in front of the near plane.
     pub fn place(&self, point: Vec3) -> Placed {
