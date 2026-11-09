@@ -3556,8 +3556,10 @@ and fail the output as they would on the CPU path. The context itself stays unti
 render loop ends.
 
 **A lost device** (#349; a driver reset after a hang, Windows' TDR, a removed GPU) is
-one event, not a run of errors. `gpu_draw` turns a draw that failed on a lost device
-(`Compositor::lost`) into `DrawError::Lost`, as it does a tick that skips a mix's
+one event, not a run of errors. `gpu_draw` asks `Compositor::lost` at the start of
+every tick, since calls on a destroyed device can all succeed and a tick that waited
+for one to fail could draw on it for good (#1457), and turns a draw that failed on a
+lost device into `DrawError::Lost`, as it does a tick that skips a mix's
 composite on a full readback ring while the device is lost, since a lost device's maps
 may never finish (DX12) and no draw would fail. Then the render thread starts the same
 switch at once, without counting to 10. On the context, it is the fallback above, so

@@ -1635,6 +1635,12 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             if let Some(hook) = &hook {
                 hook(&compositor);
             }
+            // A lost device is left at once, even when nothing on it fails: calls on a
+            // destroyed device can all succeed, so a tick that waited for an error could
+            // draw on it for good (#1457).
+            if let Some(why) = compositor.lost() {
+                return Err(DrawError::Lost(why));
+            }
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
             // this tick claims its layers without drawing, so they aren't retired and

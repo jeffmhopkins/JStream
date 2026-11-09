@@ -1783,7 +1783,9 @@ pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeom
 
 /// A lost device (#349) is reported by `lost`, and drawing on it fails instead of
 /// panicking, so the caller can open a new compositor. `destroy` stands in for a driver
-/// reset: wgpu reports both through the same device-lost callback.
+/// reset: wgpu reports both through the same device-lost callback. It is called on the
+/// device itself, not through `Compositor::destroy_device`, so that the callback is what
+/// records the loss; no ring is copying, so nothing is read after the buffers are freed.
 #[test]
 fn a_lost_device_is_reported_and_fails_without_a_panic() {
     let Some(mut opened) = open() else {
