@@ -55,6 +55,8 @@ jstream-server = { workspace = true, features = ["tls"] }
 # The update check's one GET of GitHub's releases list (R-DEP-006: rustls with ring).
 rustls.workspace = true
 rustls-native-certs.workspace = true
+# The JTunnel setting's file and the page's `setJtunnel` argument (ADR-0123).
+serde.workspace = true
 # Reads the global hotkeys' off switch, a UI setting (ADR-0084).
 serde_json.workspace = true
 # The runtime the server runs on; `sync` for its shutdown signal, `time` to bound it,

@@ -63,29 +63,86 @@ pub enum Scenario {
     /// Two scenes of layered, moving work: an animated backdrop, shapes blended over it
     /// with transparency, a nested scene, a 3D-tilted item and a running timer.
     Layered,
+    /// Two scenes of 48 small 2D items each, animated backdrops and timers drawn at a
+    /// tenth of the canvas: each one rebuilds its mip chain whenever its source changes.
+    Small2d,
+    /// A looping media file (`--media`), full canvas and then smaller over a colour.
+    Media,
+    /// An animated browser page the bench writes, full canvas and then smaller.
+    Browser,
+    /// The primary display's capture, full canvas and then smaller.
+    Display,
+    /// The first webcam, full canvas and then smaller.
+    Webcam,
 }
 
 impl Scenario {
-    /// Every scenario, in the order `--scenario all` runs them.
-    pub const ALL: [Scenario; 2] = [Scenario::Basic, Scenario::Layered];
+    /// Every scenario, in order.
+    pub const EVERY: [Scenario; 7] = [
+        Scenario::Basic,
+        Scenario::Layered,
+        Scenario::Small2d,
+        Scenario::Media,
+        Scenario::Browser,
+        Scenario::Display,
+        Scenario::Webcam,
+    ];
+
+    /// What `--scenario all`, the default, runs: every scenario but the two that capture
+    /// the machine's screen and camera, which run only when named. One the machine can't
+    /// build is skipped with its reason.
+    pub const ALL: [Scenario; 5] = [
+        Scenario::Basic,
+        Scenario::Layered,
+        Scenario::Small2d,
+        Scenario::Media,
+        Scenario::Browser,
+    ];
 
     /// Its name on the command line and in the report.
     pub fn name(self) -> &'static str {
         match self {
             Scenario::Basic => "basic",
             Scenario::Layered => "layered",
+            Scenario::Small2d => "small_2d",
+            Scenario::Media => "media",
+            Scenario::Browser => "browser",
+            Scenario::Display => "display",
+            Scenario::Webcam => "webcam",
         }
     }
 
-    /// The scenario a name selects, `all` for every one.
-    pub fn parse(name: &str) -> Option<Vec<Scenario>> {
-        match name {
-            "all" => Some(Scenario::ALL.to_vec()),
-            _ => Scenario::ALL
-                .into_iter()
-                .find(|scenario| scenario.name() == name)
-                .map(|scenario| vec![scenario]),
+    /// The source kind it shows that not every engine has, if any.
+    fn needs_kind(self) -> Option<&'static str> {
+        match self {
+            Scenario::Basic | Scenario::Layered | Scenario::Small2d => None,
+            Scenario::Media => Some("media"),
+            Scenario::Browser => Some("browser"),
+            Scenario::Display => Some("display"),
+            Scenario::Webcam => Some("webcam"),
         }
+    }
+
+    /// The scenarios a comma-separated list of names selects, `all` standing for
+    /// [`Scenario::ALL`], each once, in the order given.
+    pub fn parse(names: &str) -> Option<Vec<Scenario>> {
+        let mut out: Vec<Scenario> = Vec::new();
+        for name in names.split(',') {
+            let picked = match name {
+                "all" => Scenario::ALL.to_vec(),
+                _ => vec![
+                    Scenario::EVERY
+                        .into_iter()
+                        .find(|scenario| scenario.name() == name)?,
+                ],
+            };
+            for scenario in picked {
+                if !out.contains(&scenario) {
+                    out.push(scenario);
+                }
+            }
+        }
+        Some(out)
     }
 }
 
@@ -104,6 +161,8 @@ pub struct BenchOptions {
     pub out: String,
     /// A JSON file of gate limits to use instead of the defaults.
     pub gates: Option<String>,
+    /// The file the `media` scenario loops, on the engine's machine.
+    pub media: Option<String>,
 }
 
 /// The limits a run must stay within. Every count is over the measured window, from the
@@ -309,6 +368,9 @@ pub struct Run {
     pub switches: Vec<Switch>,
     /// `profile.get` over the window, read before the recording stopped.
     pub profile: ProfileInfo,
+    /// The views (client, label) a client opened or reloaded during the run: listed, but
+    /// not gated.
+    pub views_opened_during: Vec<(String, String)>,
     /// Every gate's verdict.
     pub checks: Vec<Check>,
     /// Whether every gate passed.
@@ -324,8 +386,20 @@ pub struct Report {
     pub gates: Gates,
     /// Each scenario's run.
     pub runs: Vec<Run>,
+    /// The scenarios the machine couldn't build, and why. They pass.
+    pub skipped: Vec<Skipped>,
     /// Whether every run passed.
     pub pass: bool,
+}
+
+/// A scenario the bench didn't run.
+#[derive(Clone, Debug, PartialEq, Serialize)]
+pub struct Skipped {
+    /// The scenario.
+    pub scenario: Scenario,
+    /// Why: the engine has no such source kind, `--media` names no file, or its source
+    /// showed no picture in time.
+    pub reason: String,
 }
 
 /// Runs the bench on `control` and writes its summary to `out`. Returns whether every
@@ -347,23 +421,52 @@ pub fn run(
     let dir = std::path::absolute(&dir)?;
     let canvas = canvas(control)?;
     let program = program_scene(control)?;
+    let kinds = kinds(control);
+    let inputs = Inputs {
+        media: options.media.clone(),
+        page: dir.join(PAGE_FILE),
+    };
+    if options.scenarios.contains(&Scenario::Browser) {
+        std::fs::write(&inputs.page, PAGE)?;
+    }
     let mut runs = Vec::new();
+    let mut skipped = Vec::new();
     for &scenario in &options.scenarios {
+        let plan = match (scenario.needs_kind(), &kinds) {
+            (Some(_), None) => Err("the engine's source kinds couldn't be read".to_owned()),
+            (Some(kind), Some(kinds)) if !kinds.iter().any(|k| k == kind) => {
+                Err(format!("the engine has no `{kind}` source kind"))
+            }
+            _ => Plan::new(scenario, canvas, &inputs),
+        };
+        let plan = match plan {
+            Ok(plan) => plan,
+            Err(reason) => {
+                writeln!(out, "bench: {} skipped: {reason}", scenario.name())?;
+                skipped.push(Skipped { scenario, reason });
+                continue;
+            }
+        };
         writeln!(out, "bench: {} for {}s", scenario.name(), options.seconds)?;
-        let plan = Plan::new(scenario, canvas);
         let measured = plan
             .create(control)
             .and_then(|()| measure(control, &plan, options, &dir));
         // Removed whatever happened, and the program put back where it was.
         plan.remove(control, program.as_ref());
-        let measured = measured?;
-        runs.push(judge(scenario, measured, &gates));
+        match measured? {
+            Ok(measured) => runs.push(judge(scenario, measured, &gates)),
+            Err(reason) => {
+                writeln!(out, "bench: {} skipped: {reason}", scenario.name())?;
+                skipped.push(Skipped { scenario, reason });
+            }
+        }
     }
     let pass = runs.iter().all(|run| run.pass);
     let report = Report {
         cli: env!("CARGO_PKG_VERSION"),
         gates,
         runs,
+        skipped,
         pass,
     };
     let summary = summary(&report);
@@ -375,6 +478,49 @@ pub fn run(
     out.write_all(summary.as_bytes())?;
     writeln!(out, "report: {}", dir.join("report.json").display())?;
     Ok(pass)
+}
+
+/// The page the `browser` scenario shows, written to the output directory.
+const PAGE_FILE: &str = "bench-page.html";
+/// Something that changes every frame: a rotating gradient and a counter.
+const PAGE: &str = r##"<!doctype html>
+<html><head><meta charset="utf-8"><style>
+html,body{margin:0;height:100%;background:#102030;overflow:hidden}
+.spin{position:absolute;left:50%;top:50%;width:60vmin;height:60vmin;margin:-30vmin;
+border-radius:50%;background:conic-gradient(#f06040,#40f080,#4080f0,#f06040);
+animation:spin 2s linear infinite}
+@keyframes spin{to{transform:rotate(1turn)}}
+#n{position:absolute;left:4vw;bottom:4vh;font:bold 10vmin sans-serif;color:#fff}
+</style></head><body><div class="spin"></div><div id="n">0</div>
+<script>let n=0;(function f(){document.getElementById("n").textContent=++n;requestAnimationFrame(f)})();</script>
+</body></html>
+"##;
+/// How long a capture, media or browser source may take to show a picture once the
+/// recording runs before its scenario is skipped.
+const FRAME_TIMEOUT: Duration = Duration::from_secs(if cfg!(test) { 1 } else { 10 });
+
+/// What a scenario may need from outside the engine.
+struct Inputs {
+    /// `--media`.
+    media: Option<String>,
+    /// The browser page, written to the output directory.
+    page: PathBuf,
+}
+
+/// The kinds the engine lists, or `None` when `kind.list` failed or listed nothing (an
+/// engine always has built-in kinds), which skips every scenario that needs one.
+fn kinds(control: &dyn Control) -> Option<Vec<String>> {
+    match query(control, Query::KindList) {
+        Ok(QueryResult::KindList { kinds }) if !kinds.is_empty() => {
+            Some(kinds.into_iter().map(|k| k.kind_id).collect())
+        }
+        _ => None,
+    }
+}
+
+/// A file reference the engine resolves as it is: `path` is absolute.
+fn absolute_file(path: &str) -> Value {
+    json!({"type": "asset", "root": "absolute", "path": path})
 }
 
 /// The canvas size from `state.get`.
@@ -432,11 +578,22 @@ struct Plan {
     sources: Vec<SourceId>,
     /// The sources among `sources` that show a nested scene.
     scene_sources: Vec<SourceId>,
+    /// The sources that must show a picture for the run to mean anything: a capture, a
+    /// media file or a page. A scenario whose one doesn't is skipped.
+    needs_frames: Vec<SourceId>,
     output: OutputId,
 }
 
 impl Plan {
-    fn new(scenario: Scenario, (width, height): (u32, u32)) -> Plan {
+    /// The plan for `scenario` on a canvas `width` by `height`.
+    ///
+    /// # Errors
+    /// Why it can't run here: `media` without `--media`.
+    fn new(
+        scenario: Scenario,
+        (width, height): (u32, u32),
+        inputs: &Inputs,
+    ) -> Result<Plan, String> {
         let prefix = format!("bench_{}_{}", scenario.name(), std::process::id());
         let mut plan = Plan {
             scenario,
@@ -447,6 +604,7 @@ impl Plan {
             created_scenes: Vec::new(),
             sources: Vec::new(),
             scene_sources: Vec::new(),
+            needs_frames: Vec::new(),
         };
         let (w, h) = (width as f32, height as f32);
         let full = (w * 0.5, h * 0.5, w, h, 0.0);
@@ -527,8 +685,95 @@ impl Plan {
                     );
                 }
             }
+            Scenario::Small2d => {
+                // 8 animated backdrops and 8 timers, shared by both scenes, each placed
+                // three times a scene in an 8 by 6 grid of cells a tenth of the canvas.
+                let pool: Vec<SourceId> = (0..8)
+                    .flat_map(|k| {
+                        let hue = ["#a03030", "#30a030", "#3030a0", "#a0a030"][k % 4];
+                        [
+                            plan.source(&format!("bd{k}"), "backdrop", json!({"color": hue})),
+                            plan.source(&format!("tm{k}"), "timer", json!({})),
+                        ]
+                    })
+                    .collect();
+                for n in 1..=2 {
+                    let scene = plan.scene(&format!("a{n}"), true);
+                    let bg = plan.source(&format!("bg{n}"), "color", json!({"color": "#101418ff"}));
+                    plan.item(&scene, &bg, full, None, None);
+                    for cell in 0..48usize {
+                        let (col, row) = ((cell % 8) as f32, (cell / 8) as f32);
+                        let source = pool[(cell + n) % pool.len()].clone();
+                        plan.item(
+                            &scene,
+                            &source,
+                            (
+                                w * (col + 0.5) / 8.0,
+                                h * (row + 0.5) / 6.0,
+                                w * 0.1,
+                                h * 0.1,
+                                if n == 2 { 10.0 } else { 0.0 },
+                            ),
+                            None,
+                            None,
+                        );
+                    }
+                }
+            }
+            Scenario::Media | Scenario::Browser | Scenario::Display | Scenario::Webcam => {
+                let (kind, settings) = match scenario {
+                    Scenario::Media => {
+                        let file = inputs
+                            .media
+                            .as_deref()
+                            .ok_or_else(|| "no `--media <file>` to loop".to_owned())?;
+                        ("media", json!({"file": absolute_file(file), "loop": true}))
+                    }
+                    Scenario::Browser => (
+                        "browser",
+                        json!({
+                            "file": absolute_file(&inputs.page.display().to_string()),
+                            "width": width,
+                            "height": height,
+                        }),
+                    ),
+                    Scenario::Display => ("display", json!({})),
+                    _ => ("webcam", json!({})),
+                };
+                let shown = plan.source("shown", kind, settings);
+                plan.needs_frames.push(shown.clone());
+                // Full canvas, then smaller and turned over a colour: the switch between
+                // them redraws the source at another size.
+                let one = plan.scene("a1", true);
+                plan.item(&one, &shown, full, None, None);
+                let timer = plan.source("timer", "timer", json!({}));
+                plan.item(
+                    &one,
+                    &timer,
+                    (w * 0.8, h * 0.9, w * 0.3, h * 0.1, 0.0),
+                    None,
+                    None,
+                );
+                let two = plan.scene("a2", true);
+                let bg = plan.source("bg", "color", json!({"color": "#203a5cff"}));
+                plan.item(&two, &bg, full, None, None);
+                plan.item(
+                    &two,
+                    &shown,
+                    (w * 0.4, h * 0.45, w * 0.55, h * 0.55, -6.0),
+                    None,
+                    None,
+                );
+                plan.item(
+                    &two,
+                    &timer,
+                    (w * 0.8, h * 0.9, w * 0.3, h * 0.1, 0.0),
+                    None,
+                    None,
+                );
+            }
         }
-        plan
+        Ok(plan)
     }
 
     fn id(&self, name: &str) -> String {
@@ -709,6 +954,8 @@ struct Measured {
     ticks: u64,
     switches: Vec<Switch>,
     profile: ProfileInfo,
+    /// Each view (client, label) reported as the window opened.
+    views_at_start: Vec<(String, String)>,
 }
 
 /// What one `stats.tick` said: the drop totals and the recording's stats.
@@ -749,12 +996,14 @@ fn drain(events: &mut EventStream) -> Vec<Event> {
 
 /// Starts the recording, waits for its first frame, then switches on the beat for the
 /// run's length, reading the stats as they come.
+/// Runs `plan` and measures it. The inner `Err` is why it was skipped: a source it needs
+/// showed no picture within [`FRAME_TIMEOUT`] of the recording's start.
 fn measure(
     control: &dyn Control,
     plan: &Plan,
     options: &BenchOptions,
     dir: &Path,
-) -> Result<Measured, CliError> {
+) -> Result<Result<Measured, String>, CliError> {
     let path = dir.join(format!("bench-{}.mp4", plan.scenario.name()));
     batch(
         control,
@@ -785,7 +1034,7 @@ fn measure(
     )?;
     // The window opens on the first tick with a frame recorded.
     let started = Instant::now();
-    let first = loop {
+    let mut first = loop {
         if let Some(tick) = drain(&mut events)
             .iter()
             .filter_map(|event| Tick::read(event, &plan.output))
@@ -801,6 +1050,43 @@ fn measure(
         }
         thread::sleep(Duration::from_millis(50));
     };
+    // A capture, media file or page that shows nothing makes the run meaningless.
+    if let Some(blank) = wait_for_frames(control, &plan.needs_frames)? {
+        return Ok(Err(format!(
+            "its source `{blank}` showed no picture within {}s",
+            FRAME_TIMEOUT.as_secs()
+        )));
+    }
+    // The views the clients had open as the window opens: only those are gated, so a
+    // page opened or reloaded during the run is listed but doesn't fail it (its first
+    // "Starting…" is no regression).
+    let views_at_start = match query(
+        control,
+        Query::ProfileGet {
+            seconds: Some(MIN_SECONDS),
+            top: Some(0),
+        },
+    ) {
+        Ok(QueryResult::ProfileGet { profile }) => profile
+            .views
+            .into_iter()
+            .map(|view| (view.client, view.view))
+            .collect(),
+        _ => Vec::new(),
+    };
+    // Waiting for the sources' first pictures took up to FRAME_TIMEOUT: the baseline is
+    // the latest tick since, so the window's deltas leave out the sources' start.
+    if let Some(latest) = drain(&mut events)
+        .iter()
+        .filter_map(|event| Tick::read(event, &plan.output))
+        .next_back()
+    {
+        let recording = latest.recording.or_else(|| first.recording.take());
+        first = Tick {
+            recording,
+            ..latest
+        };
+    }
     let window = Instant::now();
     let length = Duration::from_secs(options.seconds.into());
     let beat = Duration::from_millis(options.switch_ms.max(500).into());
@@ -828,7 +1114,14 @@ fn measure(
         if Instant::now() >= next_switch && plan.scenes.len() > 1 {
             let scene = plan.scenes[target % plan.scenes.len()].clone();
             target += 1;
-            let mut switched = switch(control, &scene, options, dir, window, switches.len());
+            let mut switched = switch(
+                control,
+                &scene,
+                options,
+                dir,
+                window,
+                (plan.scenario, switches.len()),
+            );
             match probe(control, &plan.output) {
                 Ok(probe) => switched.probe = Some(probe),
                 Err(error) => switched.probe_error = Some(error.to_string()),
@@ -856,24 +1149,52 @@ fn measure(
         QueryResult::ProfileGet { profile } => profile,
         _ => ProfileInfo::default(),
     };
-    Ok(Measured {
+    Ok(Ok(Measured {
         first,
         last,
         ticks,
         switches,
         profile,
-    })
+        views_at_start,
+    }))
+}
+
+/// The first of `sources` with no picture once [`FRAME_TIMEOUT`] has passed, if any.
+fn wait_for_frames(
+    control: &dyn Control,
+    sources: &[SourceId],
+) -> Result<Option<SourceId>, CliError> {
+    if sources.is_empty() {
+        return Ok(None);
+    }
+    let started = Instant::now();
+    loop {
+        let sized: Vec<SourceId> = match query(control, Query::SourceSizes)? {
+            QueryResult::SourceSizes { sources } => sources
+                .into_iter()
+                .filter(|source| source.size.is_some())
+                .map(|source| source.source_id)
+                .collect(),
+            _ => Vec::new(),
+        };
+        let blank = sources.iter().find(|source| !sized.contains(source));
+        match blank {
+            None => return Ok(None),
+            Some(blank) if started.elapsed() >= FRAME_TIMEOUT => return Ok(Some(blank.clone())),
+            Some(_) => thread::sleep(Duration::from_millis(100)),
+        }
+    }
 }
 
 /// Switches to `scene` with the run's transition, keeping its frame sheet as
-/// `switch-<n>.png` in `dir`.
+/// `<scenario>-switch-<n>.png` in `dir`.
 fn switch(
     control: &dyn Control,
     scene: &SceneId,
     options: &BenchOptions,
     dir: &Path,
     window: Instant,
-    n: usize,
+    (scenario, n): (Scenario, usize),
 ) -> Switch {
     let at_ms = u64::try_from(window.elapsed().as_millis()).unwrap_or(u64::MAX);
     let watched = action(
@@ -885,7 +1206,7 @@ fn switch(
         },
     );
     let saved = watched.and_then(|result| match result {
-        Some(ActionResult::SceneSwitchAndWatch { sheet }) => save_sheet(&sheet, dir, n),
+        Some(ActionResult::SceneSwitchAndWatch { sheet }) => save_sheet(&sheet, dir, scenario, n),
         _ => Err(CliError::Bench("no frame sheet came back".into())),
     });
     match saved {
@@ -942,10 +1263,15 @@ fn worst_probe(switches: &[Switch]) -> (f64, f64) {
         })
 }
 
-fn save_sheet(sheet: &FrameSheet, dir: &Path, n: usize) -> Result<String, CliError> {
+fn save_sheet(
+    sheet: &FrameSheet,
+    dir: &Path,
+    scenario: Scenario,
+    n: usize,
+) -> Result<String, CliError> {
     let png = decode_base64(&sheet.png)
         .ok_or_else(|| CliError::Bench("the frame sheet's PNG is not base64".into()))?;
-    let file = format!("switch-{n}.png");
+    let file = format!("{}-switch-{n}.png", scenario.name());
     std::fs::write(dir.join(&file), png)?;
     Ok(file)
 }
@@ -991,6 +1317,7 @@ fn judge(scenario: Scenario, measured: Measured, gates: &Gates) -> Run {
         ticks,
         switches,
         profile,
+        views_at_start,
     } = measured;
     let drops = delta(&first.drops, &last.drops);
     let recording = recording(first.recording.as_ref(), last.recording.as_ref());
@@ -1029,6 +1356,11 @@ fn judge(scenario: Scenario, measured: Measured, gates: &Gates) -> Run {
     let views = profile
         .views
         .iter()
+        .filter(|view| {
+            views_at_start
+                .iter()
+                .any(|(client, label)| *client == view.client && *label == view.view)
+        })
         .fold(ViewCounts::default(), |sum, view| ViewCounts {
             received: sum.received.saturating_add(view.counts.received),
             shown: sum.shown.saturating_add(view.counts.shown),
@@ -1143,6 +1475,12 @@ fn judge(scenario: Scenario, measured: Measured, gates: &Gates) -> Run {
         Check::at_least("probe_psnr_y", probe_psnr_y, gates.min_probe_psnr_y),
         Check::at_least("probe_ssim_y", probe_ssim_y, gates.min_probe_ssim_y),
     ];
+    let views_opened_during = profile
+        .views
+        .iter()
+        .map(|view| (view.client.clone(), view.view.clone()))
+        .filter(|key| !views_at_start.contains(key))
+        .collect();
     let pass = checks.iter().all(|check| check.pass);
     Run {
         scenario,
@@ -1152,6 +1490,7 @@ fn judge(scenario: Scenario, measured: Measured, gates: &Gates) -> Run {
         recording,
         switches,
         profile,
+        views_opened_during,
         checks,
         pass,
     }
@@ -1233,6 +1572,13 @@ pub fn summary(report: &Report) -> String {
                     c.placeholders,
                     c.reopens,
                 );
+                if run
+                    .views_opened_during
+                    .iter()
+                    .any(|(client, label)| *client == view.client && *label == view.view)
+                {
+                    text.push_str("It opened during the run, so its gates don't apply.\n");
+                }
             }
             text.push('\n');
         }
@@ -1265,6 +1611,14 @@ pub fn summary(report: &Report) -> String {
             }
         }
         text.push('\n');
+    }
+    for skipped in &report.skipped {
+        let _ = writeln!(
+            text,
+            "## {} (skipped)\n\n{}.\n",
+            skipped.scenario.name(),
+            skipped.reason
+        );
     }
     text
 }
@@ -1317,12 +1671,13 @@ mod tests {
             switches: vec![Switch {
                 scene: "a".into(),
                 at_ms: 4000,
-                sheet: Some("switch-0.png".into()),
+                sheet: Some("basic-switch-0.png".into()),
                 error: None,
                 probe: Some(probed(&[(42.0, 0.99), (41.0, 0.985)])),
                 probe_error: None,
             }],
             profile,
+            views_at_start: vec![("jstream-ui".into(), "canvas".into())],
         }
     }
 
@@ -1382,6 +1737,7 @@ mod tests {
             cli: "test",
             gates: Gates::default(),
             runs: vec![judged],
+            skipped: Vec::new(),
             pass: false,
         });
         assert!(text.contains("no quality probe (no decoder)"), "{text}");
@@ -1453,6 +1809,7 @@ mod tests {
             cli: "test",
             gates: Gates::default(),
             runs: vec![run],
+            skipped: Vec::new(),
             pass: false,
         });
         assert!(text.starts_with("# jstream bench: FAIL"), "{text}");
@@ -1517,12 +1874,54 @@ mod tests {
             cli: "test",
             gates: Gates::default(),
             runs: vec![run],
+            skipped: Vec::new(),
             pass: false,
         });
         assert!(
             text.contains("View `canvas` of `jstream-ui`: 600 frames received"),
             "{text}"
         );
+    }
+
+    /// Review N1 on #1336: a view a client opened during the run is listed but not
+    /// gated, so its first "Starting…" doesn't fail the bench.
+    #[test]
+    fn a_view_opened_during_the_run_is_listed_not_gated() {
+        let tick = Tick {
+            drops: DropCounts::default(),
+            recording: Some(stats(0, 0, 0, 0)),
+        };
+        let last = Tick {
+            drops: DropCounts::default(),
+            recording: Some(stats(600, 10_000, 1, 0)),
+        };
+        let mut info = profile(1000.0 / 60.0, 600, 0);
+        info.views = vec![
+            serde_json::from_value(json!({
+                "client": "jstream-ui",
+                "view": "projector#3:program",
+                "counts": {"received": 20, "shown": 20, "placeholders": 1},
+            }))
+            .expect("a view"),
+        ];
+        let run = judge(
+            Scenario::Basic,
+            measured(tick, last, info),
+            &Gates::default(),
+        );
+        assert!(run.pass, "{:?}", run.checks);
+        assert_eq!(
+            run.views_opened_during,
+            [("jstream-ui".to_owned(), "projector#3:program".to_owned())]
+        );
+        let text = summary(&Report {
+            cli: "test",
+            gates: Gates::default(),
+            runs: vec![run],
+            skipped: Vec::new(),
+            pass: true,
+        });
+        assert!(text.contains("It opened during the run"), "{text}");
     }
 
     #[test]
@@ -1579,6 +1978,14 @@ mod tests {
             preset: DEFAULT_PRESET.into(),
             out: dir.display().to_string(),
             gates: None,
+            media: None,
+        }
+    }
+
+    fn inputs() -> Inputs {
+        Inputs {
+            media: Some("/clips/loop.mp4".into()),
+            page: PathBuf::from("/out/bench-page.html"),
         }
     }
 
@@ -1597,7 +2004,9 @@ mod tests {
             .map(|scenario| {
                 ticking(
                     &engine,
-                    Plan::new(scenario, FALLBACK_CANVAS).output,
+                    Plan::new(scenario, FALLBACK_CANVAS, &inputs())
+                        .expect("a plan")
+                        .output,
                     stop.clone(),
                 )
             })
@@ -1614,13 +2023,23 @@ mod tests {
         assert!(!pass.expect("the bench ran"), "{out}");
         assert!(out.contains("## basic (fail)"), "{out}");
         assert!(out.contains("## layered (fail)"), "{out}");
+        assert!(out.contains("## small_2d (fail)"), "{out}");
+        // The mock lists no kinds, so what needs one is skipped.
+        assert!(
+            out.contains("## media (skipped)\n\nthe engine's source kinds couldn't be read."),
+            "{out}"
+        );
+        assert!(out.contains("## browser (skipped)"), "{out}");
+        // The captures run only when named.
+        assert!(!out.contains("webcam") && !out.contains("display"), "{out}");
         assert!(out.contains("| encode_frames | 0 | <= 0 | pass |"), "{out}");
         assert!(out.contains("| failed_switches |"), "{out}");
         let report: Value = serde_json::from_str(
             &std::fs::read_to_string(dir.join("report.json")).expect("report.json"),
         )
         .expect("a JSON report");
-        assert_eq!(report["runs"].as_array().map(Vec::len), Some(2));
+        assert_eq!(report["runs"].as_array().map(Vec::len), Some(3));
+        assert_eq!(report["skipped"].as_array().map(Vec::len), Some(2));
         assert!(
             report["runs"][0]["recording"]["frames"].as_u64() > Some(0),
             "{report}"
@@ -1661,8 +2080,8 @@ mod tests {
 
     #[test]
     fn each_scenario_names_its_scenes_sources_and_items_under_its_own_prefix() {
-        for scenario in Scenario::ALL {
-            let plan = Plan::new(scenario, (1920, 1080));
+        for scenario in Scenario::EVERY {
+            let plan = Plan::new(scenario, (1920, 1080), &inputs()).expect("a plan");
             assert_eq!(
                 plan.scenes.len(),
                 2,
@@ -1684,7 +2103,25 @@ mod tests {
             }
         }
         assert_eq!(Scenario::parse("all"), Some(Scenario::ALL.to_vec()));
+        assert!(!Scenario::ALL.contains(&Scenario::Display));
+        assert!(!Scenario::ALL.contains(&Scenario::Webcam));
+        assert_eq!(
+            Scenario::parse("webcam,all,basic").map(|s| s.len()),
+            Some(6),
+            "named captures join `all`, each once"
+        );
+        assert_eq!(Scenario::parse("basic,tv"), None);
         assert_eq!(Scenario::parse("layered"), Some(vec![Scenario::Layered]));
-        assert_eq!(Scenario::parse("webcam"), None);
+        assert_eq!(Scenario::parse("small_2d"), Some(vec![Scenario::Small2d]));
+        assert_eq!(Scenario::parse("tv"), None);
+        // Only `media` needs an input, and says so without one.
+        let none = Inputs {
+            media: None,
+            page: PathBuf::from("/out/bench-page.html"),
+        };
+        assert_eq!(
+            Plan::new(Scenario::Media, (1920, 1080), &none).err(),
+            Some("no `--media <file>` to loop".to_owned())
+        );
     }
 }

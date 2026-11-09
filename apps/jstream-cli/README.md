@@ -289,23 +289,40 @@ for example:
 connects to and judges the run, so a change to the render, encode or output path can be
 measured the same way on every machine (#1220).
 
-- **Scenarios** use only built-in sources that need no hardware, so every run draws the
-  same thing. `basic` is two scenes, each a solid colour and a running timer. `layered`
-  is two scenes of an animated backdrop, three shapes blended over it with transparency,
-  a nested scene tilted in 3D and a timer. `--scenario all` (the default) runs both, one
-  after the other. Every ID the bench creates starts `bench_<scenario>_<pid>_`.
+- **Scenarios.** Three use only built-in sources that need no hardware, so every run
+  draws the same thing. `basic` is two scenes, each a solid colour and a running timer.
+  `layered` is two scenes of an animated backdrop, three shapes blended over it with
+  transparency, a nested scene tilted in 3D and a timer. `small_2d` is two scenes of 48
+  small items each (a tenth of the canvas, in an 8 by 6 grid), drawn from 8 animated
+  backdrops and 8 timers, so each item rebuilds its mip chain whenever its source
+  changes. Four show one outside source, full canvas in the first scene and smaller,
+  turned, over a colour in the second
+  ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)): `media`
+  loops the file `--media <file>` names (on the engine's machine), `browser` shows an
+  animated page the bench writes to `<dir>/bench-page.html`, `display` the primary
+  display and `webcam` the first webcam. Each of the four is skipped, with its reason in
+  the summary and the report, when the engine lists no such source kind, when `media`
+  has no `--media`, or when its source shows no picture within 10 seconds of the
+  recording's start (no display, no camera, no browser runtime). A skipped scenario
+  passes. `--scenario` takes a comma-separated list of names. `all`, the default, runs
+  every scenario except `display` and `webcam`, in that order. Those two capture the
+  machine's screen and camera into the recording and the frame sheets, so they run only
+  when named, as in `--scenario all,display,webcam`. Every ID the bench creates starts `bench_<scenario>_<pid>_`.
 - **A run** creates its scenes and sources in one batch, puts the first scene on program
   with a cut, and starts an MP4 recording of the program to
   `<dir>/bench-<scenario>.mp4`. The measured window opens on the first `stats.tick` with
-  a recorded frame (within 20 seconds, or the run fails) and lasts `--seconds` (5 to 60,
-  default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
+  a recorded frame (within 20 seconds, or the run fails), or for a scenario with an
+  outside source once that source shows a picture, counting from the latest tick then,
+  and lasts `--seconds` (5 to 60, default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
   switches to the other scene with `scene.switch_and_watch` and the `--preset`
-  transition (default `fade`), saving the frame sheet as `<dir>/switch-<n>.png`, then
+  transition (default `fade`), saving the frame sheet as `<dir>/<scenario>-switch-<n>.png`, then
   probes the recording's stream with `quality.probe` (three frames, protocol 0.110,
   [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). At the
   end it waits for one more `stats.tick`, reads `profile.get` over the window, then
   stops and deletes the recording, puts back the scene that was on program, and deletes
   what it created. It cleans up after a failure too.
+- **Kinds.** A scenario that needs a source kind is skipped when `kind.list` fails or
+  lists nothing.
 - **Gates.** Every count is over the window, except two that only make the gates
   stricter: the recording's own dropped frames and packets are its run's totals, so
   they include its start before the first recorded frame, and `profile.get` covers the
@@ -320,10 +337,12 @@ measured the same way on every machine (#1220).
   (`mixer`), and a client view's placeholder, blank, skipped frame or decode error
   (`views`; a view's reopens are listed, not gated, since a scene switch reopens the
   canvas's stream). The view gates read what the clients connected to the engine
-  reported, such as the desktop app's canvas and projectors; with none, they pass, and
-  the summary says no client reported a view. The probe gates fail a switch whose probe
-  the engine couldn't take (the summary says why), and the worst frame of every probe
-  under 35 dB luma PSNR or 0.95 luma SSIM. `--gates
+  reported, such as the desktop app's canvas and projectors, and only the views already
+  reported as the window opens: one a client opens or reloads during the run is listed,
+  marked as opened during the run, and not gated, since its first "Starting…" is no
+  regression. With no view, they pass, and the summary says no client reported a view. The probe
+  gates fail a switch whose probe the engine couldn't take (the summary says why), and
+  the worst frame of every probe under 35 dB luma PSNR or 0.95 luma SSIM. `--gates
   <file>` reads a JSON object that overrides the limits it names: the counts
   `capture_frames`, `audio_frames`, `render_ticks`, `encode_frames`, `encode_blocks`,
   `output_packets`, `recording_dropped_frames`, `recording_dropped_packets`,
@@ -346,9 +365,7 @@ measured the same way on every machine (#1220).
   (not a Windows `\\?\` one, which the engine refuses). So the engine must be able to
   write there: it runs on the same machine, or the path is one both share. Otherwise
   its recording fails to start and the run exits 5.
-- **Not yet:** media, browser, display and webcam scenarios; per-output and preview
-  stream stats in `profile.get`; the clients' received frame rate; a probe of a preview
-  stream; a CI job (#1220).
+- **Not yet:** a probe of a preview stream (#1220).
 
 **Exit codes.** Provisional until the maintainer confirms the scheme
 ([open question 4](#design)); after that, a released code keeps its meaning.
@@ -438,7 +455,8 @@ depends_on = ["crates/jstream-control/README.md#design"]
   their own edits, so the protocol's `item.add` doc tells them to send the same
   geometry.
 - **The bench is a client like the rest.** It measures only what the protocol reports
-  (`stats.tick`, `profile.get`, `scene.switch_and_watch`), so it runs against any engine
+  (`stats.tick`, `profile.get`, `scene.switch_and_watch`, `quality.probe`, and
+  `kind.list` for which scenarios can run), so it runs against any engine
   the CLI can reach that can write to `--out`, and needs no engine code. It reads events between its calls by
   polling the stream with a no-op waker, which never blocks, and decodes the frame
   sheets' base64 PNG by hand rather than adding a crate for it. Its tests run it on the

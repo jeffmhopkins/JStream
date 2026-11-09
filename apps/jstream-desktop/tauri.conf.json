@@ -8,7 +8,7 @@
     "withGlobalTauri": false,
     "security": {
       "csp": null,
-      "capabilities": ["browse", "network"]
+      "capabilities": ["browse", "network", "jtunnel"]
     }
   },
   "bundle": {
