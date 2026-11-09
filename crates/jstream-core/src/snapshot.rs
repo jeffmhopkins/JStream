@@ -5343,6 +5343,7 @@ fn draw_model(
             geometry,
             camera,
             lighting: shown.lighting,
+            lights: None,
         },
         layer,
     )
