@@ -7,7 +7,7 @@ use jstream_media::model::shapes::Shape;
 use jstream_media::model::{AlphaMode, Material, Model, ModelTexture, TextureColor, TextureRef};
 use jstream_protocol::{Canvas, Finite32, ItemGeometry, SceneCamera, Size, Vec2, Vec3};
 
-use super::{Lighting, ModelDraw};
+use super::{LightKind, Lighting, MAX_SCENE_LIGHTS, ModelDraw, SceneLight};
 use crate::tests::open;
 use crate::{Color, Compositor, Crop, Item, Placement, Scene, Snapshot};
 
@@ -73,6 +73,18 @@ fn draw(
     camera: Option<SceneCamera>,
     lighting: Lighting,
 ) -> Snapshot {
+    draw_lit(compositor, model, geometry, camera, lighting, None)
+}
+
+/// [`draw`], lit by `lights` (ADR-0143 decision 3).
+fn draw_lit(
+    compositor: &mut Compositor,
+    model: &Model,
+    geometry: ItemGeometry,
+    camera: Option<SceneCamera>,
+    lighting: Lighting,
+    lights: Option<&[SceneLight]>,
+) -> Snapshot {
     let uploaded = compositor.upload_model(model).expect("the model uploads");
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
     compositor
@@ -82,6 +94,7 @@ fn draw(
                 geometry,
                 camera,
                 lighting,
+                lights,
             },
             &layer,
         )
@@ -415,6 +428,7 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     geometry,
                     camera: Some(camera),
                     lighting: Lighting::Unlit,
+                    lights: None,
                 },
                 &layer,
             )
@@ -452,6 +466,7 @@ fn a_model_from_another_compositor_is_refused() {
             geometry: boxed(80.0, 50.0, 40.0),
             camera: None,
             lighting: Lighting::Studio,
+            lights: None,
         },
         &layer,
     );
@@ -547,6 +562,7 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     geometry: boxed(w as f32 / 2.0, h as f32 / 2.0, 30.0),
                     camera: None,
                     lighting: Lighting::Unlit,
+                    lights: None,
                 },
                 &layer,
             )
@@ -578,4 +594,277 @@ fn a_primitive_past_the_buffer_limit_is_refused() {
         opened.compositor.upload_model(&sphere),
         Err(crate::RenderError::Invalid { what: "model", .. })
     ));
+}
+
+/// A grey, rough sphere filling an 80 px box in the middle of the canvas.
+fn grey_sphere() -> Model {
+    Shape::Sphere
+        .model(Material {
+            base_color: [0.5, 0.5, 0.5, 1.0],
+            roughness: 0.8,
+            ..Material::default()
+        })
+        .expect("the sphere builds")
+}
+
+fn luma(p: [u8; 3]) -> u32 {
+    u32::from(p[0]) + u32::from(p[1]) + u32::from(p[2])
+}
+
+fn point_light(position: [f64; 3], color: Color, intensity: f32) -> SceneLight {
+    SceneLight {
+        kind: LightKind::Point,
+        position,
+        aim: [0.0, 0.0, -1.0],
+        color,
+        intensity,
+        range_px: 0.0,
+        cone_deg: 45.0,
+        softness: 0.2,
+    }
+}
+
+fn ambient(intensity: f32) -> SceneLight {
+    SceneLight {
+        kind: LightKind::Ambient,
+        intensity,
+        ..point_light([0.0; 3], Color::WHITE, 1.0)
+    }
+}
+
+/// Draws the grey sphere through the framing camera, so it lands on its 2D box, lit by
+/// `lights`.
+fn lit_sphere(compositor: &mut Compositor, lights: &[SceneLight]) -> Snapshot {
+    draw_lit(
+        compositor,
+        &grey_sphere(),
+        boxed(80.0, 50.0, 80.0),
+        Some(SceneCamera::framing(canvas())),
+        Lighting::Studio,
+        Some(lights),
+    )
+}
+
+/// ADR-0143 decision 3: scene lights replace the studio rig. A point light to the right
+/// and in front lights the sphere's right side and leaves its left side dark; with no
+/// light at all, a sphere that emits nothing is black.
+#[test]
+fn golden_model_a_point_light_lights_the_side_that_faces_it() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let light = point_light([400.0, 50.0, 100.0], Color::WHITE, 3.0);
+    let shot = lit_sphere(&mut opened.compositor, &[light]);
+    let right = luma(rgb(&shot, 110, 50));
+    let left = luma(rgb(&shot, 50, 50));
+    assert!(right > 150, "the lit side reads {right}");
+    assert!(left < 10, "the far side reads {left}");
+    let dark = lit_sphere(&mut opened.compositor, &[]);
+    assert_near(rgb(&dark, 80, 50), [0, 0, 0], (80, 50));
+    assert_near(rgb(&dark, 110, 50), [0, 0, 0], (110, 50));
+}
+
+/// ADR-0143 decision 3: a light's colour tints what it lights.
+#[test]
+fn golden_model_a_light_colour_tints_the_model() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let red = point_light([80.0, 50.0, 400.0], Color::rgb(1.0, 0.0, 0.0), 3.0);
+    let shot = lit_sphere(&mut opened.compositor, &[red]);
+    let [r, g, b] = rgb(&shot, 80, 50);
+    assert!(r > 120 && g < 8 && b < 8, "{:?}", [r, g, b]);
+}
+
+/// ADR-0143 decision 3: past its range a point light lights nothing, and inside it the
+/// light fades with distance.
+#[test]
+fn golden_model_a_point_light_fades_to_nothing_at_its_range() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let at = [80.0, 50.0, 400.0];
+    let far = lit_sphere(
+        &mut opened.compositor,
+        &[SceneLight {
+            range_px: 200.0,
+            ..point_light(at, Color::WHITE, 3.0)
+        }],
+    );
+    assert_near(rgb(&far, 80, 50), [0, 0, 0], (80, 50));
+    let near = lit_sphere(
+        &mut opened.compositor,
+        &[SceneLight {
+            range_px: 800.0,
+            ..point_light(at, Color::WHITE, 3.0)
+        }],
+    );
+    let unfaded = lit_sphere(
+        &mut opened.compositor,
+        &[point_light(at, Color::WHITE, 3.0)],
+    );
+    let (near, unfaded) = (luma(rgb(&near, 80, 50)), luma(rgb(&unfaded, 80, 50)));
+    assert!(near > 30 && near + 30 < unfaded, "{near} against {unfaded}");
+}
+
+/// ADR-0143 decision 3: a spot light lights what is inside its cone and not what is
+/// outside it, and a directional light lights from its aim.
+#[test]
+fn golden_model_a_spot_light_lights_only_inside_its_cone() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let plane = Shape::Plane
+        .model(Material {
+            base_color: [0.6, 0.6, 0.6, 1.0],
+            roughness: 1.0,
+            double_sided: true,
+            ..Material::default()
+        })
+        .expect("the plane builds");
+    let mut wide = boxed(80.0, 50.0, 100.0);
+    wide.size = Size::try_new(160.0, 100.0).expect("positive");
+    wide.fit_mode = jstream_protocol::FitMode::Stretch;
+    let spot = SceneLight {
+        kind: LightKind::Spot,
+        aim: [0.0, 0.0, -1.0],
+        cone_deg: 20.0,
+        softness: 0.0,
+        ..point_light([80.0, 50.0, 200.0], Color::WHITE, 3.0)
+    };
+    let camera = Some(SceneCamera::framing(canvas()));
+    let shot = draw_lit(
+        &mut opened.compositor,
+        &plane,
+        wide,
+        camera,
+        Lighting::Studio,
+        Some(&[spot]),
+    );
+    // tan(10°) · 200 ≈ 35 px: the middle is lit, a point 60 px off it is not.
+    assert!(luma(rgb(&shot, 80, 50)) > 150, "{:?}", rgb(&shot, 80, 50));
+    assert_near(rgb(&shot, 140, 50), [0, 0, 0], (140, 50));
+    let sun = SceneLight {
+        kind: LightKind::Directional,
+        aim: [0.0, 0.0, -1.0],
+        ..point_light([0.0; 3], Color::WHITE, 3.0)
+    };
+    let shot = draw_lit(
+        &mut opened.compositor,
+        &plane,
+        wide,
+        camera,
+        Lighting::Studio,
+        Some(&[sun]),
+    );
+    assert!(luma(rgb(&shot, 140, 50)) > 150, "{:?}", rgb(&shot, 140, 50));
+    let away = SceneLight {
+        aim: [0.0, 0.0, 1.0],
+        ..sun
+    };
+    let shot = draw_lit(
+        &mut opened.compositor,
+        &plane,
+        wide,
+        camera,
+        Lighting::Studio,
+        Some(&[away]),
+    );
+    assert_near(rgb(&shot, 140, 50), [0, 0, 0], (140, 50));
+}
+
+/// ADR-0143 decision 3: ambient lights add up and scale the environment light, with no
+/// direction of their own.
+#[test]
+fn golden_model_ambient_lights_add_up() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let one = lit_sphere(&mut opened.compositor, &[ambient(1.0)]);
+    let two = lit_sphere(&mut opened.compositor, &[ambient(1.0), ambient(1.0)]);
+    let doubled = lit_sphere(&mut opened.compositor, &[ambient(2.0)]);
+    assert!(luma(rgb(&one, 80, 50)) > 30, "{:?}", rgb(&one, 80, 50));
+    assert!(luma(rgb(&two, 80, 50)) > luma(rgb(&one, 80, 50)) + 20);
+    assert_near(rgb(&two, 80, 50), rgb(&doubled, 80, 50), (80, 50));
+}
+
+/// ADR-0143 decision 3: only the first [`MAX_SCENE_LIGHTS`] lights shade a model, and a
+/// light at zero intensity (an item faded out) still takes its slot, so the ninth stays
+/// off while one of the first eight fades. Ambient lights take no slot, and a light with
+/// a non-finite value lights nothing.
+#[test]
+fn golden_model_lights_past_the_limit_are_ignored() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let off = point_light([400.0, 50.0, 100.0], Color::WHITE, 0.0);
+    let on = point_light([400.0, 50.0, 100.0], Color::WHITE, 3.0);
+    for first in [off, ambient(0.0)] {
+        let mut lights = vec![first; MAX_SCENE_LIGHTS];
+        lights.push(on);
+        let shot = lit_sphere(&mut opened.compositor, &lights);
+        let lit = luma(rgb(&shot, 110, 50));
+        if first.kind == LightKind::Ambient {
+            assert!(lit > 150, "ambient lights take no slot: {lit}");
+        } else {
+            assert!(lit < 10, "the ninth stays off: {lit}");
+        }
+    }
+    let broken = [
+        SceneLight {
+            position: [f64::NAN, 50.0, 100.0],
+            ..on
+        },
+        SceneLight {
+            intensity: f32::INFINITY,
+            ..on
+        },
+        SceneLight {
+            range_px: f32::NAN,
+            ..on
+        },
+    ];
+    for light in broken {
+        let shot = lit_sphere(&mut opened.compositor, &[light]);
+        assert_near(rgb(&shot, 110, 50), [0, 0, 0], (110, 50));
+    }
+}
+
+/// ADR-0143 decision 3: lights belong to a 3D scene. Without a camera, and for an unlit
+/// model, they are ignored.
+#[test]
+fn golden_model_lights_are_ignored_without_a_camera_or_unlit() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let lights = [point_light([400.0, 50.0, 100.0], Color::WHITE, 3.0)];
+    for lighting in [Lighting::Studio, Lighting::Unlit] {
+        let plain = draw(
+            &mut opened.compositor,
+            &grey_sphere(),
+            geometry,
+            None,
+            lighting,
+        );
+        let with = draw_lit(
+            &mut opened.compositor,
+            &grey_sphere(),
+            geometry,
+            None,
+            lighting,
+            Some(&lights),
+        );
+        assert_eq!(rgb(&plain, 65, 35), rgb(&with, 65, 35), "{lighting:?}");
+    }
+    let camera = Some(SceneCamera::framing(canvas()));
+    let unlit = draw_lit(
+        &mut opened.compositor,
+        &grey_sphere(),
+        geometry,
+        camera,
+        Lighting::Unlit,
+        Some(&lights),
+    );
+    assert_near(rgb(&unlit, 50, 50), [188, 188, 188], (50, 50));
 }
