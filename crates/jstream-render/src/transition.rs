@@ -458,6 +458,7 @@ fn lerp_geometry(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> ItemGeometry {
         fit_mode: if later { b.fit_mode } else { a.fit_mode },
         flip_h: if later { b.flip_h } else { a.flip_h },
         flip_v: if later { b.flip_v } else { a.flip_v },
+        billboard: if later { b.billboard } else { a.billboard },
         rotation_deg: angle(a.rotation_deg, b.rotation_deg),
         tilt_deg: angle(a.tilt_deg, b.tilt_deg),
         turn_deg: angle(a.turn_deg, b.turn_deg),

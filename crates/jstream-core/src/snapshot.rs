@@ -31,9 +31,9 @@ use jstream_media::model::Lighting;
 use jstream_media::{FrameSize, MediaTime, PixelFormat, Rounding, VideoFrame};
 use jstream_platform::{ContextKey, GpuFrame};
 use jstream_protocol::{
-    BlendMode, Blending, CallResult, Canvas, ChainCost, Crop as ProtocolCrop, Edit, FilterChain,
-    Glide, ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError, QueryResult,
-    Rev, SceneCamera, SceneId, SceneRole, Settings, SourceId, SourceKind, VideoMixId,
+    BlendMode, Blending, CallResult, CameraView, Canvas, ChainCost, Crop as ProtocolCrop, Edit,
+    FilterChain, Glide, ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError,
+    QueryResult, Rev, SceneCamera, SceneId, SceneRole, Settings, SourceId, SourceKind, VideoMixId,
 };
 use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
 use jstream_render::{
@@ -5627,9 +5627,10 @@ fn draw_model(
     // decision 3); in a 2D scene it is studio-lit.
     let mut lights = std::mem::take(&mut chains.lights);
     lights.clear();
-    let lit = shown.lighting == Lighting::Scene && camera.is_some();
-    if lit {
-        scene_lights(shot, scene_id, at, live, &mut lights);
+    let view = camera.and_then(|camera| camera.view(shot.canvas).ok());
+    let lit = shown.lighting == Lighting::Scene && view.is_some();
+    if let (true, Some(view)) = (lit, view.as_ref()) {
+        scene_lights(shot, scene_id, (at, view), live, &mut lights);
         let shading = lights
             .iter()
             .filter(|light| light.kind != jstream_render::LightKind::Ambient)
@@ -5708,11 +5709,12 @@ fn note_light(
 /// each `light` item at the centre of its box and shining out of its back, with its
 /// live values and motion applied, at its kind's intensity times its opacity. A light
 /// that isn't placed by a box (a filled or canvas placement) has no position, and is
-/// left out.
+/// left out. A billboard light turns to face the camera `view` (ADR-0151 decision 2),
+/// so it shines away from it.
 fn scene_lights(
     shot: &Shot,
     id: &SceneId,
-    at: MediaTime,
+    (at, view): (MediaTime, &CameraView),
     live: &LiveParams,
     lights: &mut Vec<jstream_render::SceneLight>,
 ) {
@@ -5739,7 +5741,7 @@ fn scene_lights(
         let Placement::Geometry(geometry) = placement else {
             continue;
         };
-        let (position, aim) = geometry.light_pose();
+        let (position, aim) = geometry.light_pose_seen(view);
         let [r, g, b] = light.color;
         lights.push(jstream_render::SceneLight {
             kind: match light.kind {
