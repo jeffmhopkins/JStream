@@ -1,5 +1,6 @@
-// Volumetric fog (ADR-0151 decision 6). `aux` is the scene's view depth, the input's
-// size: red holds 1 / w = f / D, 0 where nothing was drawn. Work is in the viewing frame
+// Volumetric fog (ADR-0151 decision 6), drawn with the shader-source prelude for its
+// four textures: the picture, the scene's view depth (the input's size: red holds
+// 1 / w = f / D, 0 where nothing was drawn) and two shadow maps. Work is in the viewing frame
 // a scene-lit model uses (x right, y down, z toward the viewer, the viewer at z = f): the
 // point at distance D along the view through pixel q is ((q - c) D / f, D, f - D) with
 // c the principal point, and the scene's space is position + right x + down y +
@@ -12,12 +13,13 @@
 // it, times 1 + noise (2 n - 1) for value noise n of two octaves drifting by `wind`
 // (already in noise features, wrapped). Its light is the fog colour plus `scattering`
 // times each scene light reaching the point (as a model receives it, with falloff and
-// cone) times a Henyey-Greenstein phase of g = 0.4 relative to an even one. Each step
+// cone, and where it casts shadows only if its map sees the point) times a Henyey-Greenstein phase of g = 0.4 relative to an even one. Each step
 // adds its light times (1 - exp(-sigma ds)) times what the fog lets through before it,
 // and the picture is multiplied by what it lets through to the end. The fog's alpha
 // scales both. Pixels nearer than `start` are unchanged.
 
 const MAX_LIGHTS: u32 = 8u;
+const MAX_SHADOWS: u32 = 2u;
 const PI: f32 = 3.14159265;
 
 struct Light {
@@ -29,6 +31,16 @@ struct Light {
     color: vec4<f32>,
     // x: cosine of the cone's half angle, y: of the half angle where its fade starts.
     cone: vec4<f32>,
+}
+
+// A shadow map's view, as `model.wgsl`'s `Shadow`: the light's position (w: the light
+// slot it shadows, negative when unused) and axes in the viewing frame, its focal
+// length (right.w) and its principal point (down.w).
+struct Shadow {
+    at: vec4<f32>,
+    right: vec4<f32>,
+    down: vec4<f32>,
+    forward: vec4<f32>,
 }
 
 struct Params {
@@ -50,9 +62,58 @@ struct Params {
     steps: u32,
     light_count: u32,
     lights: array<Light, MAX_LIGHTS>,
+    shadows: array<Shadow, MAX_SHADOWS>,
 }
 
-@group(0) @binding(4) var<uniform> p: Params;
+@group(0) @binding(3) var<uniform> p: Params;
+@group(0) @binding(4) var input_tex: texture_2d<f32>;
+@group(0) @binding(5) var depth_tex: texture_2d<f32>;
+@group(0) @binding(6) var shadow0: texture_2d<f32>;
+@group(0) @binding(7) var shadow1: texture_2d<f32>;
+
+// The 1 / w shadow map `s` holds at `px`, 0 (nothing) outside it.
+fn shadow_texel(s: u32, px: vec2<i32>) -> f32 {
+    var size: vec2<u32>;
+    if s == 0u {
+        size = textureDimensions(shadow0);
+    } else {
+        size = textureDimensions(shadow1);
+    }
+    if any(px < vec2<i32>(0)) || any(px >= vec2<i32>(size)) {
+        return 0.0;
+    }
+    if s == 0u {
+        return textureLoad(shadow0, px, 0).r;
+    }
+    return textureLoad(shadow1, px, 0).r;
+}
+
+// Whether light slot `light` reaches `q`: 1 unless a map of its own holds something
+// nearer to the light there (by a small bias). One tap: the steps' jitter softens it.
+fn reaches(light: u32, q: vec3<f32>) -> f32 {
+    for (var s = 0u; s < MAX_SHADOWS; s++) {
+        let sh = p.shadows[s];
+        if sh.at.w < 0.0 || u32(sh.at.w) != light {
+            continue;
+        }
+        let focal = sh.right.w;
+        let rel = q - sh.at.xyz;
+        let d = dot(rel, sh.forward.xyz);
+        if d <= 0.0 || focal <= 0.0 {
+            return 1.0;
+        }
+        let at = vec2<f32>(dot(rel, sh.right.xyz), dot(rel, sh.down.xyz)) * focal / d
+            + vec2<f32>(sh.down.w);
+        let stored = shadow_texel(s, vec2<i32>(floor(at)));
+        return select(0.0, 1.0, stored <= focal / d * 1.002);
+    }
+    return 1.0;
+}
+
+// The picture, premultiplied linear.
+fn picture(uv: vec2<f32>) -> vec4<f32> {
+    return to_premul_linear(textureSampleLevel(input_tex, lin, uv, 0.0), input_alpha(0u));
+}
 
 fn hash3(c: vec3<i32>) -> f32 {
     let w = vec3<u32>(c & vec3<i32>(255));
@@ -135,14 +196,14 @@ fn in_light(source: Light, q: vec3<f32>, to_eye: vec3<f32>) -> vec3<f32> {
 
 @fragment
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
-    let c = src(in.uv);
+    let c = picture(in.uv);
     let focal = p.position.w;
     if focal <= 0.0 || p.steps == 0u {
         return c;
     }
-    let max_px = vec2<i32>(frame.aux_size) - vec2<i32>(1);
+    let max_px = vec2<i32>(textureDimensions(depth_tex)) - vec2<i32>(1);
     let px = clamp(vec2<i32>(in.pos.xy), vec2<i32>(0), max_px);
-    let inverse_w = textureLoad(aux_tex, px, 0).r;
+    let inverse_w = textureLoad(depth_tex, px, 0).r;
     let start = p.view.z;
     var end = p.view.w;
     if inverse_w > 0.0 {
@@ -174,7 +235,10 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         }
         var here = fog;
         for (var l = 0u; l < min(p.light_count, MAX_LIGHTS); l = l + 1u) {
-            here = here + p.density.w * in_light(p.lights[l], q, to_eye);
+            let lit = reaches(l, q);
+            if lit > 0.0 {
+                here = here + p.density.w * lit * in_light(p.lights[l], q, to_eye);
+            }
         }
         let kept = exp(-sigma * ds);
         light = light + here * (1.0 - kept) * through;

@@ -4424,7 +4424,7 @@ source: crates/jstream-core/src/kinds.rs
         "alpha": true,
         "default": "#c8ccd2ff",
         "label": "Color",
-        "description": "Fog with height that drifts and is lit by the scene's lights: a spot light through it shows its beam. It works in a scene's filters when the scene has a camera, best first in the chain; anywhere else it changes nothing. The fog's own colour, the light it scatters from everywhere; its alpha thins it.",
+        "description": "Fog with height that drifts and is lit by the scene's lights: a spot light through it shows its beam, and what stands in the beam of a light that casts shadows cuts a shaft of shadow through it. It works in a scene's filters when the scene has a camera, best first in the chain; anywhere else it changes nothing. The fog's own colour, the light it scatters from everywhere; its alpha thins it.",
         "live": true
       },
       {

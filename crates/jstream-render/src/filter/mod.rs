@@ -22,7 +22,9 @@ mod program;
 pub(crate) mod testing;
 
 pub use assets::{Lut, LutError, lut_image};
-pub use depth::{ViewDepth, descriptors as depth_descriptors, reads_depth};
+pub use depth::{
+    DepthShadow, ViewDepth, descriptors as depth_descriptors, reads_depth, reads_shadows,
+};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
 pub(crate) use pass::{Blend, Bound, Ctx, Draw, Pass, Runtime, Scratch, Shader};

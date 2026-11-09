@@ -3250,6 +3250,9 @@ struct Pass {
     /// composite whose chain has a filter that reads it (ADR-0143 decision 4); `None`
     /// for every other pass, which draws no depth.
     view_depth: Option<GpuKey>,
+    /// Whether its chain also reads the scene's shadow maps (ADR-0151 decision 6), so
+    /// the pass draws them when no model that receives them has.
+    reads_shadows: bool,
 }
 
 /// The committed cameras a pass resolves its camera from (ADR-0094 §6), so that live
@@ -3530,6 +3533,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
             camera: None,
             layers,
             view_depth: None,
+            reads_shadows: false,
         }];
     }
     let mut passes = Vec::new();
@@ -3791,13 +3795,12 @@ fn visit_into(
         });
     }
     path.remove(id);
+    let chain = shot.chains.get(&ChainOwner::Scene(id.clone()));
     let view_depth = (matches!(key, GpuKey::Composite(_))
         && shot.cameras.contains_key(id)
-        && shot
-            .chains
-            .get(&ChainOwner::Scene(id.clone()))
-            .is_some_and(Chain::reads_depth))
+        && chain.is_some_and(Chain::reads_depth))
     .then(|| GpuKey::ViewDepth(id.clone()));
+    let reads_shadows = view_depth.is_some() && chain.is_some_and(Chain::reads_shadows);
     passes.pass(Pass {
         scene: id.clone(),
         depth,
@@ -3806,6 +3809,7 @@ fn visit_into(
         camera: shot.cameras.get(id).cloned(),
         layers,
         view_depth,
+        reads_shadows,
     });
 }
 
@@ -5505,7 +5509,28 @@ fn run_chains(
                     lights.clear();
                     shadowed.clear();
                     scene_lights(shot, &pass.scene, at, live, (&mut lights, &mut shadowed));
-                    chains.drew_depth(cache, &pass.scene, depth, (view, &lights));
+                    // Its shadow maps, for a filter that reads them, unless a model
+                    // that receives them drew them this run (ADR-0151 decision 6).
+                    let reads_shadows = pass.reads_shadows;
+                    if reads_shadows
+                        && !shadowed.is_empty()
+                        && chains.shadows_of(&pass.scene).is_none()
+                    {
+                        let maps = draw_shadows(
+                            compositor,
+                            (&mut *cache, &mut *chains),
+                            (shot, at),
+                            &pass.scene,
+                            (&lights, &shadowed),
+                            (live, captures),
+                        )
+                        .unwrap_or_else(|error| {
+                            tracing::debug!(scene = %pass.scene, %error, "shadow maps not drawn this frame");
+                            Vec::new()
+                        });
+                        chains.drew_shadows(&pass.scene, maps);
+                    }
+                    chains.drew_depth(cache, &pass.scene, depth, (view, &lights), reads_shadows);
                     chains.lights = lights;
                     chains.shadowed = shadowed;
                 }
