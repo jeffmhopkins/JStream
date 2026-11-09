@@ -50,7 +50,7 @@ The forces:
 
 It is agent tier ([R-GOV-005](../RULES.md#R-GOV-005)): the maintainer asked for the
 features, and they change no licence, security or privacy posture, compatibility promise
-or spending. On the wire they add two optional item fields (one minor protocol version)
+or spending. On the wire they add two optional item fields (each a minor protocol version)
 and settings and filter kinds that `kind.describe` lists. It extends ADR-0094,
 ADR-0107 and ADR-0143 and contradicts none of their decisions.
 
@@ -66,7 +66,7 @@ ADR-0107 and ADR-0143 and contradicts none of their decisions.
 - the shadow maps of the lights that cast shadows (decision 3).
 
 The engine draws only the parts some filter of the chain reads: the depth for every
-depth-aware kind, the shadow maps only when a filter or a model needs them, and the
+depth-aware kind, the shadow maps only when a filter, a model or a lit card (decision 10) needs them, and the
 reflection (decision 4) only for `floor_reflection`. Anywhere else (a 2D scene, a source,
 item, master or output chain) a depth-aware filter has no scene view and passes its input
 through, as ADR-0143 decision 5 says.
@@ -96,14 +96,16 @@ scene it changes nothing. It is a minor protocol version.
   along its aim fitted to the bounds of the scene's casters for a directional light: a
   narrow perspective view from far back, which stands in for an orthographic one so both
   kinds share the view depth's encoding. A billboarded item faces the light in its map. It is
-  drawn once a frame, only while a `scene`-lit model or a filter reads it.
+  drawn once a frame, only while a `scene`-lit model, a `lit` card or a filter reads it.
 - **Casters** are the scene's models and its cards seen through the camera: a model's
   triangles, and a card's box where its alpha is at least one half, as the view depth
   draws them. A model's `casts_shadows` setting (default `true`) leaves it out.
-- **Receivers** are `scene`-lit models, with `receives_shadows` (default `true`). A
-  shadowed light's contribution to a fragment is scaled by its visibility, filtered over
-  a disc whose size `shadow_softness` sets. Cards are not lit (ADR-0143 decision 3), so
-  they don't receive shadows; a floor that shows shadows is a `scene`-lit plane model.
+- **Receivers** are `scene`-lit models, with `receives_shadows` (default `true`), and
+  `lit` cards, with `surface.shadows` (default `true`, decision 10). A shadowed light's
+  contribution to a fragment is scaled by its visibility, filtered over a disc whose size
+  `shadow_softness` sets. An unlit card, as every card is by default (ADR-0143 decision
+  3), receives none; a floor that shows shadows is a `lit` card or a `scene`-lit plane
+  model.
 - A light's shadows follow everything that moves it, as its light does.
 
 **4. Floor reflections.** `floor_reflection` is a depth-aware filter kind that mirrors the
@@ -250,11 +252,12 @@ on the wire when absent, which today's cards behave as:
 
 - A `lit` card in a 3D scene is shaded as a flat glTF quad would be: its picture is the
   base colour, with the scene's lights, environment and shadows, and `emissive` adds its
-  picture back unlit, so a screen still glows in a dark set. In a 2D scene, or with no
-  lights, an unlit card is drawn as today.
+  picture back unlit, so a screen still glows in a dark set. An environment light alone
+  lights it, as it lights a model (decision 9). A `lit` card in a 2D scene, or in a 3D
+  scene with no light of any type, is drawn as an unlit card is.
 - `back = hide` draws nothing where the camera sees the back of the card, in any scene.
 - A keyframe scene keys `surface` with the item's other values; Moves glide its numbers.
-- Both fields are in the same minor protocol version as `billboard`.
+- `surface` is a minor protocol version, as `billboard` is.
 
 **11. Cost and quality.** Each new pass draws only when read (decisions 1 and 3). The
 render benchmarks gain a shadowed lit model, a reflected floor, occlusion, volumetric fog
