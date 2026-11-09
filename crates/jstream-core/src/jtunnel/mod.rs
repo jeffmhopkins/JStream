@@ -174,7 +174,7 @@ pub struct JtunnelSetup {
     /// The address the receive socket binds: any IPv4 interface on a port the system
     /// picks, unless the host names one.
     pub bind: SocketAddr,
-    /// Where it asks for senders, [`MDNS`] unless the host names another (a test's
+    /// Where it asks for senders, the mDNS group (`MDNS`) unless the host names another (a test's
     /// responder); `None` asks nobody. Answers are read from this port.
     pub discover: Option<SocketAddr>,
 }

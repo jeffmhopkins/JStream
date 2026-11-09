@@ -3,7 +3,7 @@
 //!
 //! - **The prompt** ([`AgentPrompt`], in the shell): while an agent waits for an answer
 //!   (`agent.approval_requested`, or `agent.approved`'s `pending` when the page opens),
-//!   a dialog says "<client name> wants to control JStream" and how it connects, with
+//!   a dialog says "\<client name\> wants to control JStream" and how it connects, with
 //!   Allow once, Always allow and Deny (`agent.approve`). Several wait in turn, oldest
 //!   first. `agent.approval_resolved` closes one answered anywhere, or timed out. Escape
 //!   and the × leave it waiting; it times out on its own.
