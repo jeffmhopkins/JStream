@@ -16,8 +16,8 @@
 //! which the host sets through the context's [`ChatFeature`]), `timer` (a countdown,
 //! stopwatch or clock, drawn as text in a box of one size), and `display`, `window`
 //! and `webcam` (a webcam or capture card), which say what the platform captures
-//! ([`CaptureSpec`]). `midi_keyboard`, `midi_piano_roll`, `midi_pads` and `midi_cc`
-//! (ADR-0137) draw a MIDI input's notes and controllers, and `midi_beat` its clock's
+//! ([`CaptureSpec`]). `midi_keyboard`, `midi_piano_roll`, `midi_pads`, `midi_particles`
+//! and `midi_cc` (ADR-0137) draw a MIDI input's notes and controllers, and `midi_beat` its clock's
 //! beat, from the [`MidiInputs`] in [`Context::midi`]. The audio-only kinds (`audio_input`, `desktop_audio`, `network_audio` and
 //! `app_audio`) make no frames: the engine records the [`AudioTarget`] their settings
 //! name. `jstream-core` drives sources from its `jstream-sources` thread

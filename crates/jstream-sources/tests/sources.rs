@@ -99,6 +99,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "midi_cc",
             "midi_keyboard",
             "midi_pads",
+            "midi_particles",
             "midi_piano_roll",
             "model",
             "network_audio",

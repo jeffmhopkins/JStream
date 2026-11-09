@@ -258,7 +258,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   that frame, as a `Still` that reads the file again once its pixels are let go of; an
   animation keeps every frame.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
-- `midi_keyboard`, `midi_piano_roll`, `midi_pads` and `midi_cc`
+- `midi_keyboard`, `midi_piano_roll`, `midi_pads`, `midi_particles` and `midi_cc`
   ([ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)): a MIDI input's state,
   drawn on the CPU `width` by `height`. `input` names the input (empty: every input) and
   `channel` the channel (1 to 16, 0 for every one). A change of size or `input` restarts
@@ -270,12 +270,21 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   after its note-on left the log from the left edge. The pads are a `rows` by `columns`
   grid from `first_key` (the bottom-left pad, 36 by default, on channel 10), each lit by
   its key while held and fading over `decay_ms` after its last note-on, so a short drum
-  hit shows. The meters draw a bar for each controller in `controllers` (a
+  hit shows. The particles (#1224) burst each note-on from `low_key` to `high_key`
+  (21 to 108 by default) into `particles` squares (1 to 64), starting at its key's lane
+  across the width, a third of the way up. They fly out up to `spread` pixels and slow
+  as they go, `size` pixels wide; a softer note's go less far, are smaller and dimmer.
+  A burst stays while its note is held and fades over `decay_ms` after its note-off
+  (or a retrigger). Like the roll, it is rebuilt each frame from the log, and each
+  particle's direction and reach come from the note's time and key alone, so a burst is
+  the same every frame and the kind keeps nothing between frames. A held burst that has
+  flown out stops moving, so the source settles. The meters draw a bar for each controller in `controllers` (a
   comma-separated list, at most 16) and, with `pitch_bend`, one more from the middle.
   Each paints at 30 fps through a `Painter` from a pool of four frames, as the scope
   sources do, and settles on one frame, polled every 250 ms, while its input has no new
   message and nothing it draws is moving. Tests push synthetic messages and read the
   pixels: velocity, channel and input filtering, the fade, the scroll, the lost note-on,
+  a burst at its key that fades after its note-off,
   settling, live and restarting changes, and every setting refused.
 - `midi_beat` ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §4): a row
   of `beats_per_bar` cells (1 to 16, default 4) for the bar its `input`'s MIDI clock is

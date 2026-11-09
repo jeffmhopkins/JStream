@@ -1,8 +1,8 @@
 //! The MIDI the visualization sources draw (ADR-0137): [`MidiState`], a lock-free record
 //! of one input's held keys, controllers and recent notes, [`MidiInputs`], the lookup
 //! that finds a source's input (one by name, or every input at once), and the source
-//! machinery the `midi_keyboard`, `midi_piano_roll`, `midi_pads` and `midi_cc` kinds
-//! share.
+//! machinery the `midi_keyboard`, `midi_piano_roll`, `midi_pads`, `midi_particles` and
+//! `midi_cc` kinds share.
 //!
 //! Whoever reads MIDI (an input's thread) calls [`MidiInputs::push`] with each message
 //! and its time on the media clock. A source reads the state when its [`Painter`] draws
@@ -14,7 +14,7 @@
 mod kinds;
 mod tempo;
 
-pub(crate) use kinds::{BeatKind, CcKind, KeyboardKind, PadsKind, PianoRollKind};
+pub(crate) use kinds::{BeatKind, CcKind, KeyboardKind, PadsKind, ParticlesKind, PianoRollKind};
 pub use tempo::{CLOCK_TIMEOUT_MS, MidiFeed, TempoReading};
 
 use crate::color::{parse_color, rgba_frame};
