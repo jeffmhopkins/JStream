@@ -26,6 +26,7 @@ mod sources;
 mod timelines;
 mod transitions;
 mod values;
+mod warm_scenes;
 #[cfg(all(windows, feature = "hw-tests"))]
 mod windows_gpu;
 mod youtube;

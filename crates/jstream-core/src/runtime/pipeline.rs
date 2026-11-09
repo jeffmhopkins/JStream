@@ -1826,35 +1826,42 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
     })
 }
 
-/// The captures the render thread runs: the program's, and those of the monitored scenes
-/// it draws, rebuilt only when the program's snapshot, the scenes' or the scenes drawn
-/// change.
+/// The captures the render thread runs: the program's, those of the monitored scenes it
+/// draws, and the warm scenes' (ADR-0117 §7), rebuilt only when the program's snapshot,
+/// the scenes', the warm captures or the scenes drawn change.
 #[derive(Default)]
 struct Watched {
-    /// The program's generation and the scenes' map `wanted` was read from.
-    of: Option<(u64, usize)>,
+    /// The program's generation, and the scenes' map and warm captures `wanted` was read
+    /// from.
+    of: Option<(u64, usize, usize)>,
     /// The monitored scenes drawn, which `wanted` holds the captures of.
     scenes: Vec<SceneId>,
     wanted: BTreeSet<CaptureKey>,
 }
 
 impl Watched {
-    /// The captures to run for `program` and the monitored scenes of `mixes`, from
-    /// `scenes`. What it replaces goes to `free` (R-RT-003).
+    /// The captures to run for `program`, the monitored scenes of `mixes`, from
+    /// `scenes`, and the warm scenes, `warm`. What it replaces goes to `free`
+    /// (R-RT-003).
     fn of<'a>(
         &'a mut self,
         program: &'a RenderSnapshot,
         scenes: &SceneShots,
+        warm: &BTreeSet<CaptureKey>,
         mixes: &[MixFrame],
         free: impl FnOnce(Garbage),
     ) -> &'a BTreeSet<CaptureKey> {
         let drawn = || mixes.iter().filter_map(|frame| frame.scene.as_ref());
-        if drawn().next().is_none() {
+        if drawn().next().is_none() && warm.is_empty() {
             // Forgotten, so a later scenes' map at a reused address isn't taken for it.
             self.of = None;
             return program.shot().captures();
         }
-        let key = (program.generation(), std::ptr::from_ref(scenes) as usize);
+        let key = (
+            program.generation(),
+            std::ptr::from_ref(scenes) as usize,
+            std::ptr::from_ref(warm) as usize,
+        );
         if self.of != Some(key) || !self.scenes.iter().eq(drawn()) {
             let wanted = program
                 .shot()
@@ -1865,6 +1872,7 @@ impl Watched {
                         .filter_map(|scene| scenes.get(scene))
                         .flat_map(|scene| scene.shot().captures()),
                 )
+                .chain(warm)
                 .cloned()
                 .collect();
             let wanted = std::mem::replace(&mut self.wanted, wanted);
@@ -3713,10 +3721,12 @@ fn render_loop(job: RenderJob) {
                 let scenes = reader.scenes();
                 let shot = snapshot.shot();
                 // The shot's captures cover every mix's passes, so a display or window
-                // only a video mix shows is started too; so do the monitored scenes'.
-                let wanted = watched.of(snapshot, scenes, &frames.mixes, |garbage| {
-                    collector.free(garbage);
-                });
+                // only a video mix shows is started too; so do the monitored scenes',
+                // and the warm scenes' stay running, so showing one starts nothing.
+                let wanted =
+                    watched.of(snapshot, scenes, reader.warm(), &frames.mixes, |garbage| {
+                        collector.free(garbage);
+                    });
                 captures.tick(wanted, now);
                 // Every mix this tick reads the same audio levels.
                 follower.follow(shot.audio(), due);
@@ -5917,5 +5927,45 @@ mod tests {
         assert_eq!(output.recv(Duration::ZERO).expect("room again").pts, at(9));
         drop(output);
         assert!(!input.push(size, at(10), &[10; 8]), "the reader has gone");
+    }
+
+    /// ADR-0117 §7: the warm scenes' captures run beside the program's, and the set is
+    /// rebuilt only when the published warm captures change.
+    #[test]
+    fn the_warm_scenes_captures_are_wanted_with_the_programs() {
+        use super::Watched;
+        use crate::runtime::render::{RenderSnapshot, SceneShots};
+        use crate::snapshot::CaptureKey;
+        use jstream_protocol::SourceId;
+        use jstream_sources::CaptureSpec;
+        use std::collections::BTreeSet;
+
+        let program = RenderSnapshot::following(None, Shot::default());
+        let scenes = SceneShots::new();
+        let none = Arc::new(BTreeSet::new());
+        let mut watched = Watched::default();
+        let mut freed = 0;
+        let wanted = watched
+            .of(&program, &scenes, &none, &[], |_| freed += 1)
+            .clone();
+        assert_eq!(&wanted, program.shot().captures(), "only the program's");
+
+        let webcam = CaptureKey::for_source(
+            CaptureSpec::Device(None, Default::default()),
+            SourceId::new("cam"),
+        );
+        let warm = Arc::new(BTreeSet::from([webcam.clone()]));
+        let wanted = watched
+            .of(&program, &scenes, &warm, &[], |_| freed += 1)
+            .clone();
+        assert!(wanted.contains(&webcam), "the warm webcam is wanted");
+        assert!(wanted.is_superset(program.shot().captures()));
+        watched.of(&program, &scenes, &warm, &[], |_| freed += 1);
+        assert_eq!(freed, 1, "built once for the same warm captures");
+
+        let wanted = watched
+            .of(&program, &scenes, &none, &[], |_| freed += 1)
+            .clone();
+        assert_eq!(&wanted, program.shot().captures(), "no longer warm");
     }
 }
