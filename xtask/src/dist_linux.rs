@@ -112,7 +112,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     let browser = target.join("dist-linux-browser");
     browser_linux::build_release(root, &target, &browser)?;
     let version = deb_version(
-        env!("CARGO_PKG_VERSION"),
+        &workspace_version(root)?,
         revision.unwrap_or_else(|| describe(root)).as_str(),
     );
     let stage = out.join(format!("{PACKAGE}_{version}_{arch}"));
@@ -143,6 +143,22 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
         eprintln!("wrote {}", image.display());
     }
     Ok(true)
+}
+
+/// The release version the apps take, `[workspace.package]`'s (xtask's own is 0.0.0).
+fn workspace_version(root: &Path) -> Result<String> {
+    let manifest = root.join("Cargo.toml");
+    let text =
+        fs::read_to_string(&manifest).with_context(|| format!("reading {}", manifest.display()))?;
+    version_of(&text)
+        .with_context(|| format!("{} has no [workspace.package] version", manifest.display()))
+}
+
+/// `[workspace.package]`'s version in a workspace manifest.
+fn version_of(manifest: &str) -> Option<String> {
+    let table = manifest.parse::<toml::Table>().ok()?;
+    let version = table.get("workspace")?.get("package")?.get("version")?;
+    version.as_str().map(str::to_owned)
 }
 
 /// `path`, from the working directory if it's relative: linuxdeploy runs with its own.
@@ -355,14 +371,14 @@ fn size_kib(dir: &Path) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{control, deb_arch, deb_version, desktop_entry};
+    use super::{control, deb_arch, deb_version, desktop_entry, version_of, workspace_version};
+    use std::path::Path;
     // The package test runs on Linux only, so its imports are Linux's too.
     #[cfg(target_os = "linux")]
     use {
         super::{BINARIES, LIB_DIR, lay_out, pack},
         std::fs,
         std::os::unix::fs::PermissionsExt as _,
-        std::path::Path,
         std::process::Command,
     };
 
@@ -459,6 +475,18 @@ mod tests {
             );
         }
         let _ = fs::remove_dir_all(&scratch);
+    }
+
+    #[test]
+    fn the_version_is_the_workspace_s() {
+        let manifest =
+            "[workspace]\nmembers = []\n\n[workspace.package]\nversion = \"0.1.0-alpha.5\"\n";
+        assert_eq!(version_of(manifest).as_deref(), Some("0.1.0-alpha.5"));
+        assert_eq!(version_of("[package]\nversion = \"0.0.0\"\n"), None);
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("the workspace root");
+        assert_ne!(workspace_version(root).expect("the workspace's"), "0.0.0");
     }
 
     #[test]

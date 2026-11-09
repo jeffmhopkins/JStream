@@ -1699,7 +1699,7 @@ Foundation, Direct3D 12).
   setuid root, links to
   them in `/usr/bin`, an application-menu entry and the icon as `dev.jstream.desktop`,
   and the licences. `dpkg-deb --root-owner-group` packs it as
-  `jstream_<version>_<arch>.deb` in `target/dist-linux`: the version is the crate's with
+  `jstream_<version>_<arch>.deb` in `target/dist-linux`: the version is the workspace's (the apps') with
   a pre-release sorting before its release (`0.1.0~alpha.4`) and `+<--revision or git
   describe>`. It depends on the distribution's WebKitGTK 4.1 and GTK 3 and the libraries
   CEF links (NSS, ATK, CUPS, the X extensions, GBM, ALSA; with the `t64` names as
