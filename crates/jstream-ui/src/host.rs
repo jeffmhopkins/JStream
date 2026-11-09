@@ -120,6 +120,16 @@ pub fn desktop_network() -> Option<bool> {
         .as_bool()
 }
 
+/// Whether the desktop app said, at its start, that wheel chords are heard only while
+/// its window has the focus (macOS without the Accessibility permission). `false` in a
+/// browser, and from an app that doesn't say.
+pub fn desktop_wheel_focus_only() -> bool {
+    global()
+        .and_then(|global| Reflect::get(&global, &JsValue::from_str("wheelFocusOnly")).ok())
+        .and_then(|value| value.as_bool())
+        == Some(true)
+}
+
 /// Whether the desktop app's network listener opened at start: `false` when the
 /// setting was on but its port was taken, and when the setting was off.
 pub fn desktop_network_open() -> bool {

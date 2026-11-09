@@ -321,6 +321,20 @@ impl WheelChords {
     }
 }
 
+/// Whether wheel chords would be heard only while JStream has the focus, because the
+/// app doesn't have the Accessibility permission the wheel tap needs. Checks without
+/// asking (`CGPreflightPostEventAccess`); always `false` off macOS.
+pub fn wheel_needs_accessibility() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        !objc2_core_graphics::CGPreflightPostEventAccess()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
 /// Why a wheel chord isn't heard while the Accessibility permission is missing.
 pub const NEEDS_ACCESSIBILITY: &str = "wheel chords need the Accessibility permission \
     (System Settings > Privacy & Security > Accessibility); until JStream has it, they are \

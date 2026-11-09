@@ -243,7 +243,10 @@ folder, and its log `logs\cef.log`.
   and save panels. Global hotkeys' keys need no permission; a wheel chord, bound while a
   follow camera is live, asks for the Accessibility permission the first time, and until
   it is granted in System Settings › Privacy & Security › Accessibility wheel chords are
-  heard only while JStream has the focus (the log says so).
+  heard only while JStream has the focus. The log says so, and so does each wheel
+  chord's chip in the Inspector, from the page global's `wheelFocusOnly`, which the app
+  sets at start when `jstream_platform_macos::wheel_needs_accessibility` (a check that
+  doesn't ask) finds the permission missing.
 - **Elsewhere**, and on Linux without `webkitgtk`, the binary prints that it has no
   window there, how to build one on Linux, and to use the daemon, and exits 1.
 
@@ -379,7 +382,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   (not Windows). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the data
   folder, `network`, whether "Allow devices on my network" was on at start,
-  `networkOpen`, whether its listener then opened, and two functions. `browse` calls the app's command `pick_path` and resolves to the
+  `networkOpen`, whether its listener then opened, `wheelFocusOnly`, whether wheel
+  chords were heard only while the window had the focus (macOS without Accessibility),
+  and two functions. `browse` calls the app's command `pick_path` and resolves to the
   filesystem path the person picked, or null if they cancelled or the dialog failed.
   `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was
   saved, false when the command fails too (see *Network access*).

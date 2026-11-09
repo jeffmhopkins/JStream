@@ -52,6 +52,17 @@ pub fn of_event(event: &leptos::ev::KeyboardEvent) -> Option<Chord> {
     )
 }
 
+/// What a bound wheel chord's chip says when the desktop app hears wheel chords only
+/// while its window has the focus ([`crate::host::desktop_wheel_focus_only`]): macOS
+/// asks for the Accessibility permission before an app may watch the wheel elsewhere.
+pub const WHEEL_FOCUS_ONLY: &str = "Heard only while JStream has the focus. To hear it in other apps, allow JStream in System Settings › Privacy & Security › Accessibility, then restart JStream.";
+
+/// The note for `chord`'s chip, if it has one: [`WHEEL_FOCUS_ONLY`] for a wheel chord
+/// when `focus_only`.
+pub fn chord_note(chord: &Chord, focus_only: bool) -> Option<&'static str> {
+    (focus_only && chord.is_wheel()).then_some(WHEEL_FOCUS_ONLY)
+}
+
 /// How far the wheel turns for one notch, by `WheelEvent.deltaMode`: in pixels, 120 as
 /// Chromium reports a notch on Linux at every devicePixelRatio (measured, #1346) and
 /// near the 100 it reports on Windows; 3 lines in browsers that report lines; one page.
@@ -441,6 +452,15 @@ mod tests {
         );
         assert_eq!(notches.turn(0.0, 0), 0);
         assert_eq!(notches.turn(f64::NAN, 0), 0);
+    }
+
+    #[test]
+    fn only_a_wheel_chord_is_noted_and_only_when_the_app_says_so() {
+        let wheel = Chord::new("Ctrl+WheelUp");
+        let key = Chord::new("Ctrl+KeyZ");
+        assert_eq!(chord_note(&wheel, true), Some(WHEEL_FOCUS_ONLY));
+        assert_eq!(chord_note(&wheel, false), None);
+        assert_eq!(chord_note(&key, true), None);
     }
 
     #[test]
