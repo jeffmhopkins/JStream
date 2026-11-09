@@ -70,6 +70,20 @@ pub fn presets(kind_id: &str) -> Vec<Preset> {
                 }),
             ),
         ],
+        "scanlines" => vec![
+            preset("Monitor", json!({"strength": 0.25, "spacing": 3.0})),
+            preset(
+                "CRT",
+                json!({
+                    "strength": 0.45, "spacing": 4.0, "speed": 12.0, "rgb_offset": 1.5,
+                    "grain": 0.08, "flicker": 0.15
+                }),
+            ),
+            preset(
+                "Film grain",
+                json!({"strength": 0.0, "grain": 0.3, "flicker": 0.1}),
+            ),
+        ],
         _ => Vec::new(),
     }
 }
@@ -128,6 +142,8 @@ mod tests {
         assert_eq!(names, ["Subtle", "Cinematic", "Spotlight"]);
         let names: Vec<_> = presets("border").iter().map(|p| p.name).collect();
         assert_eq!(names, ["Card", "Neon", "Broadcast frame"]);
+        let names: Vec<_> = presets("scanlines").iter().map(|p| p.name).collect();
+        assert_eq!(names, ["Monitor", "CRT", "Film grain"]);
         assert!(presets("blur").is_empty());
     }
 

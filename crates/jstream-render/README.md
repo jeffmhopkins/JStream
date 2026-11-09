@@ -902,6 +902,18 @@ premultiplied linear light on the way out.
   looping axis, so a ticker's last item doesn't run into its first: the offset wraps
   to the image plus the gap, and the shader reads transparent in the gap. A new speed
   jumps to where that speed puts the picture at the current time.
+- `scanlines` (#1406): the CRT and monitor-screen look. `strength` (0..1, default
+  0.35) is how far each line darkens, in linear light; `spacing` (1..64 px, default 3)
+  the line period and `thickness` (0..1, default 0.5) the share of it the line takes,
+  each output row darkened by how much of it the line covers. `speed` (px/s, either
+  way) rolls the lines, the offset clock seconds times speed in `f64` wrapped to the
+  spacing, as `scroll`'s is. `rgb_offset` (0..16 px) reads red that far left and blue
+  that far right, a colour fringe, kept inside the pixel's coverage. `grain` (0..1)
+  adds per-pixel noise seeded from the clock's step (60 a second), scaled by alpha,
+  and `flicker` (0..1) dims the whole picture by up to half of it times a SplitMix64
+  draw for the step, so two machines draw the same frame at the same time. All
+  default to off but the lines. Coverage is kept. The UI offers it with presets
+  (Monitor, CRT, Film grain).
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
   (0..1, default 0.5), `color` (with alpha, default opaque black), `shape` (`frame`, the
   default, an ellipse that follows the frame's aspect, or `round`, a circle), `blend`
