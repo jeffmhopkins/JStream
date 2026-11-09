@@ -1707,7 +1707,7 @@ stamp = { hash = "b3:75aee3fbe1e44960", by = "agent:claude", note = "merge: New 
 stamp = { hash = "b3:a433f0a5f3f485ad", by = "agent:claude", note = "pipeline gains NV12 readback (Readbacks.nv12/planes, MixFrame planar flags), preview H.264 keeps RGBA input, StreamClock shares last_pts; the module list still holds" }
 
 ["CRATE-jstream-core#contents-media"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:76149bc81c2ee6a4", by = "agent:claude", note = "pipeline gains NV12 readback (Readbacks.nv12/planes, MixFrame planar flags), preview H.264 keeps RGBA input, StreamClock shares last_pts; the module list still holds" }
+stamp = { hash = "b3:79192eedecc0fde0", by = "agent:claude", note = "review B1: TapInput::push now skips an NV12 frame for a session opened in RGBA8 (the preview's H.264) as it does for picture streams; the module list is unchanged" }
 
 ["CRATE-jstream-core#contents-media"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:8fda6faa58701c2b", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -2016,7 +2016,7 @@ stamp = { hash = "b3:063edb3f5f8ecd42", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:b7dbe1b3935b3df8", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to outputs.rs, youtube.rs, runtime/pipeline.rs, runtime/publish.rs, runtime/sink.rs, runtime/vcam.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#outputs, matching what it relies on" }
 
 ["CRATE-jstream-core#outputs"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:76149bc81c2ee6a4", by = "agent:claude", note = "program stage description now says the readback is NV12 when every consumer is an NV12 session, else RGBA8" }
+stamp = { hash = "b3:79192eedecc0fde0", by = "agent:claude", note = "review B1: TapInput::push now skips an NV12 frame for a session opened in RGBA8 (the preview's H.264) as it does for picture streams; the program stage text (NV12 only when every consumer is an NV12 session) still holds" }
 
 ["CRATE-jstream-core#outputs"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:8fda6faa58701c2b", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to outputs.rs, youtube.rs, runtime/pipeline.rs, runtime/publish.rs, runtime/sink.rs, runtime/vcam.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#outputs, matching what it relies on" }
@@ -2094,7 +2094,7 @@ stamp = { hash = "b3:75aee3fbe1e44960", by = "agent:lane-a", note = "S1 (#1194):
 stamp = { hash = "b3:a433f0a5f3f485ad", by = "agent:claude", note = "readback paragraph: a mix is converted to NV12 and read back when all consumers are NV12 sessions, nothing is held and the size is even; RGBA8 otherwise, with the session converting" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/pipeline.rs"]
-stamp = { hash = "b3:76149bc81c2ee6a4", by = "agent:claude", note = "readback paragraph: a mix is converted to NV12 and read back when all consumers are NV12 sessions, nothing is held and the size is even; RGBA8 otherwise, with the session converting" }
+stamp = { hash = "b3:79192eedecc0fde0", by = "agent:claude", note = "review B1: TapInput::push now skips an NV12 frame for a session opened in RGBA8 (the preview's H.264) as it does for picture streams; the readback paragraph already says a frame in one format is not handed to a consumer that needs the other, now true for RGBA8 sessions" }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/publish.rs"]
 stamp = { hash = "b3:8fda6faa58701c2b", by = "agent:a5c0c5084d9af49ea", note = "#562: output.status gains cleartext (protocol 0.37), by jstream-protocol's OutputKind::sends_key_in_cleartext / rtmp_url_sends_key_in_cleartext (plain rtmp:// to a non-loopback host). connect_rtmp's paragraph now names jstream_protocol::rtmp_url_sends_key_in_cleartext, the rule output.status reports as cleartext, and still logs the host only, never the path; matches publish.rs. | merge: merged wave/m1-4 at 7d24529. Changed input: publish.rs: #753 (main, reached wave/m1-3 in its sync #761) says LivePublish::send_tag drops tags while the link is down, and that a link reported Reconnecting while up but not yet stable still sends. It is a doc comment on behaviour Design describes (the 30 s window after a quick re-drop); the Runtime text says nothing it contradicts; holds." }

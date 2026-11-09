@@ -2995,10 +2995,12 @@ impl From<VideoInput> for TapInput {
 
 impl TapInput {
     /// Pushes the frame `pixels` of `size`, stamped `pts`: NV12 when `planar`, else
-    /// RGBA8. A picture stream takes only RGBA8, so it skips an NV12 frame, one left
-    /// from before it was attached. `false` once its reader has gone.
+    /// RGBA8. A picture stream and a session opened for RGBA8 (the preview's H.264)
+    /// take only RGBA8, so they skip an NV12 frame, one left from before they were
+    /// attached. `false` once its reader has gone.
     fn push(&self, size: FrameSize, pts: MediaTime, pixels: &[u8], planar: bool) -> bool {
         match self {
+            Self::Session(input) if planar && input.format() != PixelFormat::Nv12 => true,
             Self::Session(input) => push_frame(input, size, pts, pixels, planar),
             Self::Pictures(_) if planar => true,
             Self::Pictures(pictures) => pictures.push(size, pts, pixels),
@@ -5341,6 +5343,40 @@ mod tests {
                 .frame_rate,
             30.0
         );
+    }
+
+    /// A session opened for RGBA8, as the preview's H.264 is, skips an NV12 frame: one
+    /// shown before it joined a mix read back as NV12. It takes the next RGBA8 frame.
+    #[test]
+    fn a_session_opened_for_rgba_skips_an_nv12_frame() {
+        let size = FrameSize::new(4, 2).expect("size");
+        let feed = Feed {
+            mix: None,
+            size,
+            divisor: 1,
+            owner: None,
+            scene: None,
+        };
+        let config = super::VideoEncoderConfig {
+            input_format: PixelFormat::Rgba8,
+            ..video_config(&feed, &EncoderProfile::DEFAULT, FRAME_DEN).expect("config")
+        };
+        let session = super::VideoSession::open(
+            &jstream_platform::fake::FakeCodecs,
+            config,
+            super::SessionOptions::default(),
+        )
+        .expect("fake session");
+        let tap = super::TapInput::Session(session.input());
+        let nv12 = vec![0u8; 4 * 2 * 3 / 2];
+        assert!(tap.push(size, us(0), &nv12, true), "skipped, not closed");
+        assert_eq!(session.stats().received, 0, "the NV12 frame was skipped");
+        let rgba = vec![255u8; 4 * 2 * 4];
+        assert!(tap.push(size, us(33_333), &rgba, false));
+        assert_eq!(session.stats().received, 1, "the RGBA8 frame was taken");
+        session
+            .finish()
+            .expect("the encoder took every frame it was given");
     }
 
     /// Sessions with the same feed share one drawn mix; a mix whose sessions are gone
