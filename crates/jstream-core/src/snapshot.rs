@@ -2311,13 +2311,17 @@ impl<'a> Planner<'a, '_> {
 
     /// Whether every one of `visuals`, the 2D side of a Move into or out of 3D, draws the
     /// same through the framing camera as in 2D (ADR-0128): flat, with no tilt, turn or
-    /// depth. A tilted item's own perspective projects about its own centre, the camera
-    /// about the canvas's, so even at the framing camera's focal length an item off the
-    /// centre would jump.
+    /// depth, and not a billboard. A tilted item's own perspective projects about its own
+    /// centre, the camera about the canvas's, so even at the framing camera's focal
+    /// length an item off the centre would jump; and a billboard, flat in 2D, turns to
+    /// face any camera (ADR-0151 decision 2).
     fn framed_alike(visuals: &[Visual]) -> bool {
         visuals.iter().all(|visual| {
             let g = &visual.at.geometry;
-            g.tilt_deg.get() == 0.0 && g.turn_deg.get() == 0.0 && g.depth_px.get() == 0.0
+            g.tilt_deg.get() == 0.0
+                && g.turn_deg.get() == 0.0
+                && g.depth_px.get() == 0.0
+                && !g.billboard
         })
     }
 

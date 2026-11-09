@@ -1345,7 +1345,7 @@ other is with no blur, [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md))
 a 2D one moves too ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)):
 `Planner::track_cameras` takes the canvas's framing camera for the 2D end, which draws
 it as 2D does, unless `Planner::transition` finds an item on the 2D side that the
-framing camera would draw differently (tilted, turned or pushed in depth,
+framing camera would draw differently (tilted, turned, pushed in depth or a billboard,
 `framed_alike`), in which case it plans a Fade of the same duration, its sides planned
 again unflattened as a Fade's are; the engine no longer fades such a switch up front. A Fade
 keeps each side's own camera on its items. A keyframe of a 2D scene may have a camera
