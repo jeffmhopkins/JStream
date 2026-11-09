@@ -9,7 +9,7 @@ use crate::blend::{self, BlendPipelines, Layouts, Steps};
 use crate::color::{self, premultiplied_linear};
 use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
-use crate::gpu::{Gpu, OpenOptions};
+use crate::gpu::{Faults, Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
@@ -335,7 +335,7 @@ impl Compositor {
         let output = targets.output.clone();
         let waiting = std::time::Instant::now();
         let pixels = match readback_buffer {
-            Some(buffer) => Some(map_snapshot(&self.gpu.device, buffer, width, height)?),
+            Some(buffer) => Some(map_snapshot(&self.gpu, buffer, width, height)?),
             None => None,
         };
         self.readback_wait = waiting.elapsed();
@@ -816,6 +816,22 @@ impl Compositor {
             let _ = self.gpu.device.poll(wgpu::PollType::Poll);
         }
         self.gpu.faults.lost.get().cloned()
+    }
+
+    /// Destroys the device, as a driver reset would lose it: tests that stand in for a
+    /// loss, and a host that gives a device up on purpose, call this and never
+    /// `wgpu::Device::destroy` itself. The loss is recorded first ([`Self::lost`] says
+    /// `destroyed`), once no thread is reading one of the device's mapped buffers, such
+    /// as a readback's copier: the next poll of a destroyed device frees its buffers, so
+    /// a read still under way would read freed memory.
+    pub fn destroy_device(&self) {
+        self.gpu.faults.mark_lost("destroyed".to_owned());
+        self.gpu.device.destroy();
+    }
+
+    /// How this compositor's device has failed, shared with every compositor on it.
+    pub(crate) fn faults(&self) -> &Arc<Faults> {
+        &self.gpu.faults
     }
 
     /// The first uncaptured wgpu error on this compositor's device since the last call:
@@ -1679,7 +1695,7 @@ pub(crate) fn padded_row_bytes(width: u32) -> u32 {
 }
 
 fn map_snapshot(
-    device: &wgpu::Device,
+    gpu: &Gpu,
     buffer: wgpu::Buffer,
     width: u32,
     height: u32,
@@ -1690,7 +1706,7 @@ fn map_snapshot(
         .map_async(wgpu::MapMode::Read, move |result| {
             let _ = send.send(result);
         });
-    device
+    gpu.device
         .poll(wgpu::PollType::wait_indefinitely())
         .map_err(|e| RenderError::Readback {
             detail: e.to_string(),
@@ -1703,17 +1719,16 @@ fn map_snapshot(
             detail: e.to_string(),
         })?;
     let stride = padded_row_bytes(width) as usize;
-    let snapshot = {
-        let view = buffer
-            .slice(..)
-            .get_mapped_range()
-            .map_err(|e| RenderError::Readback {
-                detail: e.to_string(),
-            })?;
-        Snapshot::from_padded(width, height, &view, stride)
-    };
+    let snapshot = gpu
+        .faults
+        .read_mapped(&buffer, |view| {
+            Snapshot::from_padded(width, height, view, stride)
+        })
+        .ok_or_else(|| RenderError::Readback {
+            detail: "the readback buffer can't be read: the device was lost".into(),
+        });
     buffer.unmap();
-    Ok(snapshot)
+    snapshot
 }
 
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {

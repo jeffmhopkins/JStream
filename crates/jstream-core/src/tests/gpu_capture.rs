@@ -1082,7 +1082,7 @@ fn losing_draw(lose: usize, after: u32, opens: Arc<Mutex<Vec<bool>>>) -> OpenDra
         let drawn = AtomicU64::new(0);
         let hook: DrawHook = Arc::new(move |compositor: &Compositor| {
             if opened <= lose && drawn.fetch_add(1, Ordering::Relaxed) + 1 == u64::from(after) {
-                compositor.device().destroy();
+                compositor.destroy_device();
                 let _ = compositor.device().poll(wgpu::PollType::Wait {
                     submission_index: None,
                     timeout: Some(Duration::from_secs(5)),

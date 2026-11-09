@@ -211,6 +211,13 @@ and calls this crate.
   the first error instead (`Compositor::take_error`, logged as
   `uncaptured wgpu error` before a loss), and `render` fails with
   `RenderError::Uncaptured` when one is pending, before any readback.
+  The next poll of a lost device, on any thread, frees every buffer made on it, mapped
+  ones too, so a read of a mapped buffer (a ring's copier, a snapshot on the shared
+  context) holds a per-device lock and reads nothing once the device is lost, and
+  recording the loss waits for the reads under way (#1454). The device-lost callback
+  records it before wgpu frees anything; a deliberate loss goes through
+  `Compositor::destroy_device`, which records it and then destroys the device, never
+  `wgpu::Device::destroy` alone, whose callback comes only after the buffers are freed.
   `Nv12Converter::bind` returns `RenderError::Uncaptured` too when its parameter
   buffer can't be mapped, as on a lost device, where wgpu's `create_buffer_init`
   would panic. `render` empties
@@ -429,7 +436,8 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    hands it the buffers that have mapped and takes back the frames it has copied, each
    swapped into the caller's buffer, whose old one is reused for a later copy, so the
    caller's thread copies no pixels and a steady size allocates nothing. A buffer stays
-   busy until its copy is back, a call or two after its map finished. The source buffer of the ingest pass
+   busy until its copy is back, a call or two after its map finished. A copy on a lost
+   device reads nothing and hands nothing back (see the lost device above). The source buffer of the ingest pass
    is held to one storage binding (`max_storage_buffer_binding_size`) as well as one
    buffer: a larger frame is `TooLarge` before any buffer is made for it.
 
@@ -1327,7 +1335,8 @@ size without the plan), and a key held small given a whole upload of a frame the
 size is made again, not refilled; without
 `draw_uploads_small`, or under 256 × 256 texels, it stays whole. A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
-`destroyed`, a render fails, an NV12 bind returns `Uncaptured`
+`destroyed`; a device destroyed while the copier reads 4K frames from it frees nothing
+under the copy (`readback.rs`); a render fails, an NV12 bind returns `Uncaptured`
 (`convert/tests.rs`), and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
 validation error before any loss fails the next render as `Uncaptured`, and the
 render after it draws. Without
