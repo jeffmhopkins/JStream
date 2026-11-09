@@ -176,7 +176,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
-| 1 | A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video | ⏳ planned: measured, then decided in an ADR; no further preview fix is built until it lands | #1221 | #1235, #1236 |
+| 1 | A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video | ⏳ planned: measured, then decided in an ADR; no further preview fix is built until it lands | #1221 | #1235, #1236, #1462, #1463, #1464 |
 | 1 | jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality | 🧪 merged, Windows run pending: each Windows run opens with it, and a fail blocks the release | #1220, #1140 | #1260, #1315, #1336, #1339 |
 | 1 | A seamless, full-quality preview: no placeholder, blank or stall on a scene switch, an effectively lossless local preview, and no dropped frames in the preview, stream or recording | ⏳ planned: #1205's placeholder was fixed in alpha.4.1 (#1233); the bench checks the whole bar | #1205, #1217 |  |
 | 1 | Animated sources plan once a frame, and a small still image costs what it draws | ⏳ planned | #1138, #1139 |  |

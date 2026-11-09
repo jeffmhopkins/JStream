@@ -10,13 +10,34 @@
 // above and to the left, a fill from the right, and a vertical gradient for ambient light
 // and reflections. Back faces are discarded unless the material is double-sided, where
 // they are lit from their own side; `frame.mirrored` swaps which face is the front.
+//
+// With scene lights (ADR-0143 decision 3) the rig is replaced by the scene's point, spot
+// and directional lights, placed in the same viewing frame on the CPU, and the
+// environment is scaled by the scene's ambient light.
+
+const MAX_LIGHTS: u32 = 8u;
+
+struct Light {
+    // xyz: position in the viewing frame; w: kind (0 point, 1 spot, 2 directional).
+    at: vec4<f32>,
+    // xyz: the unit direction it shines; w: range (0 never fades).
+    aim: vec4<f32>,
+    // rgb: linear radiance (colour times intensity).
+    color: vec4<f32>,
+    // x: cosine of the cone's half angle, y: of the half angle where its fade starts.
+    cone: vec4<f32>,
+}
 
 struct Frame {
     clip: mat4x4<f32>,
     view: mat4x4<f32>,
     normal: mat3x3<f32>,
-    // x: perspective distance (0 for none), y: mirrored (0 or 1), z: unlit (0 or 1).
+    // x: perspective distance (0 for none), y: mirrored (0 or 1), z: unlit (0 or 1),
+    // w: scene lights (0 or 1).
     params: vec4<f32>,
+    // rgb: the scene's ambient light; w: how many of `lights` are set.
+    ambient: vec4<f32>,
+    lights: array<Light, MAX_LIGHTS>,
 }
 
 struct Material {
@@ -110,6 +131,41 @@ fn light(n: vec3<f32>, v: vec3<f32>, l: vec3<f32>, strength: f32, diffuse: vec3<
     return (kd + spec) * strength * n_dot_l;
 }
 
+// One scene light's reflected radiance at `seen` (ADR-0143 decision 3): a point or spot
+// light fades as (1 - (d / range)^2)^2 to nothing at its range, a spot light also over
+// the outer part of its cone, and a directional light arrives along its aim unfaded.
+fn scene_light(source: Light, seen: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffuse: vec3<f32>, f0: vec3<f32>, roughness: f32) -> vec3<f32> {
+    var l = -source.aim.xyz;
+    var strength = 1.0;
+    if source.at.w < 1.5 {
+        let to_light = source.at.xyz - seen;
+        let d = length(to_light);
+        if d <= 1e-4 {
+            return vec3<f32>(0.0);
+        }
+        l = to_light / d;
+        let range = source.aim.w;
+        if range > 0.0 {
+            let x = clamp(1.0 - (d / range) * (d / range), 0.0, 1.0);
+            strength = x * x;
+        }
+        if source.at.w > 0.5 {
+            let along = dot(-l, source.aim.xyz);
+            let outer = source.cone.x;
+            let inner = source.cone.y;
+            if inner - outer > 1e-5 {
+                strength *= smoothstep(outer, inner, along);
+            } else {
+                strength *= select(0.0, 1.0, along >= outer);
+            }
+        }
+    }
+    if strength <= 0.0 {
+        return vec3<f32>(0.0);
+    }
+    return light(n, v, l, strength, diffuse, f0, roughness) * source.color.rgb;
+}
+
 // Karis's analytic fit of the split-sum environment BRDF.
 fn env_brdf(f0: vec3<f32>, roughness: f32, n_dot_v: f32) -> vec3<f32> {
     let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
@@ -173,15 +229,47 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         }
         let diffuse = base.rgb * (1.0 - metallic);
         let f0 = mix(vec3<f32>(0.04), base.rgb, metallic);
-        var lit = light(n, v, normalize(vec3<f32>(-0.45, -0.65, 0.62)), 2.6, diffuse, f0, roughness);
-        lit += light(n, v, normalize(vec3<f32>(0.75, -0.1, 0.65)), 0.7, diffuse, f0, roughness);
+        var lit = vec3<f32>(0.0);
+        var ambient = vec3<f32>(1.0);
+        if frame.params.w > 0.5 {
+            ambient = frame.ambient.rgb;
+            let count = min(u32(frame.ambient.w), MAX_LIGHTS);
+            for (var i = 0u; i < count; i++) {
+                lit += scene_light(frame.lights[i], in.seen, n, v, diffuse, f0, roughness);
+            }
+        } else {
+            lit += light(n, v, normalize(vec3<f32>(-0.45, -0.65, 0.62)), 2.6, diffuse, f0, roughness);
+            lit += light(n, v, normalize(vec3<f32>(0.75, -0.1, 0.65)), 0.7, diffuse, f0, roughness);
+        }
         let n_dot_v = max(dot(n, v), 1e-4);
         let r = reflect(-v, n);
         // The gradient is smooth, so a rough reflection samples it nearer the normal.
         let blurred = normalize(mix(r, n, roughness * roughness));
-        lit += diffuse * environment(n) + environment(blurred) * env_brdf(f0, roughness, n_dot_v);
+        lit += ambient * (diffuse * environment(n) + environment(blurred) * env_brdf(f0, roughness, n_dot_v));
         let occlusion = mix(1.0, textureSample(occlusion_tex, tex_sampler, in.uv).r, material.surface.w);
         color = lit * occlusion + emitted;
     }
     return vec4<f32>(color * base.a, base.a);
+}
+
+// The model's view depth (ADR-0143 decision 4): red holds 1 / w, the viewer's distance
+// over the fragment's along the viewing axis, where the material's alpha is at least one
+// half. The pipeline keeps the larger value, so the nearest thing wins. Only a model seen
+// with perspective (a camera) is drawn here.
+@fragment
+fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
+    let base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
+    let mode = material.flags.x;
+    var alpha = 1.0;
+    if mode > 1.5 {
+        alpha = base.a;
+    } else if mode > 0.5 && base.a < material.flags.y {
+        alpha = 0.0;
+    }
+    let p = frame.params.x;
+    let w = (p - in.seen.z) / max(p, 1e-6);
+    if alpha < 0.5 || p <= 0.0 || w <= 0.0 {
+        discard;
+    }
+    return vec4<f32>(1.0 / w, 0.0, 0.0, 1.0);
 }

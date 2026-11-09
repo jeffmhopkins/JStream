@@ -10,6 +10,7 @@
 
 mod aspect;
 mod assets;
+mod depth;
 mod external;
 mod multipass;
 pub(crate) use multipass::pad;
@@ -21,6 +22,7 @@ mod program;
 pub(crate) mod testing;
 
 pub use assets::{Lut, LutError, lut_image};
+pub use depth::{ViewDepth, descriptors as depth_descriptors, reads_depth};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
 pub(crate) use pass::{Blend, Bound, Ctx, Draw, Pass, Runtime, Scratch, Shader};
@@ -72,6 +74,7 @@ fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
         .or_else(|| aspect::build(kind_id, settings))
         .or_else(|| multipass::build(kind_id, settings))
         .or_else(|| assets::build(kind_id, settings))
+        .or_else(|| depth::build(kind_id, settings))
 }
 
 /// One built-in video filter with its settings read, ready to draw. It keeps whatever
@@ -183,6 +186,20 @@ impl VideoFilter {
     /// kinds ignore it. The image must come from the compositor that draws the filter.
     pub fn set_reference(&mut self, image: Option<std::sync::Arc<crate::Image>>) {
         self.pass.set_reference(image);
+    }
+
+    /// Whether it reads a scene's view depth ([`reads_depth`] of its kind), so the engine
+    /// draws one for the scene chain that holds it (ADR-0143 decision 4).
+    pub fn reads_depth(&self) -> bool {
+        reads_depth(&self.kind)
+    }
+
+    /// Hands a depth-aware filter its scene's view depth for the next frame, or `None`
+    /// where there is none (a 2D scene, a chain that isn't a scene's): it then passes its
+    /// input through (ADR-0143 decision 5). The image must come from the compositor that
+    /// draws the filter. Other kinds ignore it.
+    pub fn set_depth(&mut self, depth: Option<ViewDepth>) {
+        self.pass.set_depth(depth);
     }
 
     /// Its pass and the pool its scratch layers come from, to draw it.

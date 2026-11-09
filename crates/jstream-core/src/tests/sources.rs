@@ -989,6 +989,89 @@ fn a_media_file_plays_on_the_clock_and_restarts_when_shown_again() {
     let _ = fs::remove_dir_all(dir);
 }
 
+/// ADR-0117 §7: a `restart_on_show` file on a warm scene no mix draws is held at its
+/// start with its first frame decoded, so the switch to its scene shows that frame in
+/// its very first plan, with no wait for a seek, and it plays on from there.
+#[test]
+fn a_warm_scenes_media_file_is_held_at_its_start() {
+    let dir = temp_dir("media-warm");
+    fs::write(dir.join("clip.mp4"), b"fake").expect("the file");
+    let media = FakeMediaDecoders::new();
+    media.add(
+        dir.join("clip.mp4").canonicalize().expect("the file"),
+        FakeClip {
+            size: FrameSize::new(4, 2).expect("a size"),
+            frame_period: Timebase::new(1, 10).expect("a time base"),
+            frames: 10,
+            key_every: 1,
+            audio: None,
+        },
+    );
+    let engine = Engine::new()
+        .with_collection_file(dir.join("scenes.json"))
+        .expect("collection file");
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    engine.set_source_media(Arc::new(media));
+    let control = connected(&engine);
+    let file = Reference::Asset {
+        root: AssetRoot::Collection,
+        path: "clip.mp4".into(),
+    };
+    let video = settings(&[
+        ("file", file.to_value()),
+        ("loop", json!(false)),
+        ("speed", json!(1.0)),
+        ("restart_on_show", json!(true)),
+    ]);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            create("b"),
+            source("video", "media", video),
+            add("b", "i1", "video"),
+        ]),
+    )
+    .expect("created");
+    let switch = |scene| {
+        super::block_on(control.call(super::switch_call(scene))).expect("switched");
+    };
+    switch("b");
+    clock.advance(450);
+    assert!(plays(&engine, 4), "on program, frame 4 at 450 ms");
+
+    // b, shown last, is warm: no mix draws it, so the file goes to its start and
+    // holds its first frame there.
+    switch("a");
+    let painted = |want: u32| {
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while std::time::Instant::now() < deadline {
+            if engine.painted_pixel("video") == Some(FakeClip::pixel(want)) {
+                return true;
+            }
+            // The thread polls on the source clock for the seek's first frame.
+            clock.advance(5);
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        false
+    };
+    assert!(painted(0), "warm, it holds its first frame");
+    clock.advance(300);
+    engine.replan();
+    assert!(painted(0), "and stays there while held");
+
+    switch("b");
+    assert_eq!(
+        shown(&engine, "video"),
+        Some(FakeClip::pixel(0)),
+        "the switch's own plan shows the first frame"
+    );
+    clock.advance(100);
+    assert!(plays(&engine, 1), "and it plays on from there");
+    let _ = fs::remove_dir_all(dir);
+}
+
 /// #1172: a `source.restart` cue on a late tick starts the file at the cue's time, so
 /// 200 ms later the picture is that far in, not back at the first frame.
 #[test]
@@ -1951,7 +2034,9 @@ fn a_restart_on_show_page_reloads_each_time_the_program_shows_it_again() {
         // The fade's plan when it is due to end, as the engine wakes for it.
         clock.advance(400);
         engine.replan();
-        assert!(page.hidden(), "off program after the fade, switch {n}");
+        // Off program, though a, the scene shown last, is warm: the page keeps
+        // painting, but no plan of the program reaches it (ADR-0117 §7).
+        assert!(!page.hidden(), "warm after the fade, switch {n}");
         clock.advance(600);
         switch("a");
         assert_eq!(page.reloads(), before + n, "switch {n} shows it again");

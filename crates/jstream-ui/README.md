@@ -487,7 +487,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
   platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
-  with a cube icon), plus the kinds of placed sources it didn't report, which can be
+  with a cube icon, and its `light` after it with the sparkle icon, placed at 64 × 64),
+  plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
@@ -859,9 +860,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`EffectsSpaceCheck`) sends `item.set_effects_space`
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
   after the item is placed. It isn't shown under a keyframe's effects, since the space
-  belongs to the item in every scene. The Add filter dialog lists the vignette, bloom and border
+  belongs to the item in every scene. The Add filter dialog lists the vignette, scanlines, bloom and border
   under Style. A kind with presets (`filter_presets.rs`: the vignette's Subtle, Cinematic
-  and Spotlight, the border's Card, Neon and Broadcast frame) has a Preset select above its form in the Filters window, which sets the
+  and Spotlight, the border's Card, Neon and Broadcast frame, the scanlines' Monitor, CRT
+  and Film grain) has a Preset select above its form in the Filters window, which sets the
   preset's values and every other setting back to its default in one `filter.set_settings`.
 - **The shell** is the header bar over the workspace. When the desktop app's launch
   check finds a newer release, a dismissable notice sits under the header (`updates.rs`).

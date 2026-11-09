@@ -83,6 +83,10 @@ impl Pass for Glow {
         self.0 = read(settings);
     }
 
+    fn reach(&self) -> Option<f32> {
+        Some(self.0.reach())
+    }
+
     fn encode(
         &mut self,
         ctx: &mut Ctx<'_>,

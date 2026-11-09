@@ -388,6 +388,16 @@ impl Nv12Planes {
         &self.uv
     }
 
+    /// Luma width in pixels.
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    /// Luma height in pixels.
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
     /// Copies both planes back as one tightly packed NV12 buffer: `width * height` Y
     /// bytes, then `width * height / 2` interleaved Cb, Cr bytes. This waits on the GPU,
     /// so it is the CPU fallback and test path, not the encode tick's.

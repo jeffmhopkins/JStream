@@ -71,6 +71,10 @@ impl Under {
         // The shape alone, in a frame `pad` larger on each side so its blur fits.
         let pad = Insets::even(self.radius);
         let shape_size = pad.grow(input.width(), input.height());
+        // The blurred shape spans a frame grown around the output's, so a bound moves
+        // into it for that pass (#1070).
+        let outer = ctx.bound;
+        ctx.bound = outer.map(|bound| bound.placed((pad.left, pad.top), shape_size));
         let blurred = gauss::blur(
             ctx,
             input,
@@ -78,7 +82,9 @@ impl Under {
             shape_size,
             pad.origin(),
             Edge::Transparent,
-        )?;
+        );
+        ctx.bound = outer;
+        let blurred = blurred?;
         // The output is the input's frame (ADR-0065 §5), so the blurred shape's frame sits
         // `pad` up and left of it, moved by the offset.
         let params = Uniforms::new()
@@ -98,6 +104,17 @@ impl Under {
             params: &params,
             target: output,
         })
+    }
+}
+
+impl Under {
+    /// How far the shadow reaches past the shape: its offset, then the blur's span plus
+    /// a working texel each for its downsample and read back, as a blur's.
+    pub(super) fn reach(&self) -> f32 {
+        let plan = gauss::plan(self.radius);
+        let max = MAX_OFFSET as f32;
+        let offset = within(self.offset.0.abs(), max).max(within(self.offset.1.abs(), max));
+        offset + ((plan.taps + 2) * plan.scale) as f32
     }
 }
 
@@ -131,6 +148,10 @@ pub(super) fn outset(settings: &Settings) -> f32 {
 impl Pass for DropShadow {
     fn update(&mut self, settings: &Settings) {
         self.0 = read(settings);
+    }
+
+    fn reach(&self) -> Option<f32> {
+        Some(self.0.reach())
     }
 
     fn encode(
