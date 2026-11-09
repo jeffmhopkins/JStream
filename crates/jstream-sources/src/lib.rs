@@ -38,6 +38,7 @@ mod describe;
 mod error;
 mod fonts;
 mod image;
+mod light;
 mod media;
 mod model;
 mod page_api;
@@ -60,6 +61,7 @@ pub use image::{StillImage, decode_still};
 /// The browser engine seam `browser` sources open their pages through, which the host
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;
+pub use light::{LightType, ShownLight};
 pub use media::MediaAudio;
 pub use model::ModelKind;
 pub use page_api::{BusLevels, PageView};

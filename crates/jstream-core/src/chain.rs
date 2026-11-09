@@ -579,6 +579,11 @@ pub(crate) struct Chains {
     /// The models drawn since the chains last began a frame: one no frame drew is let
     /// go when the next begins.
     models_used: BTreeSet<SourceId>,
+    /// The lights of the scene a model is drawn in this frame (ADR-0143 decision 3),
+    /// kept to reuse its allocation.
+    pub(crate) lights: Vec<jstream_render::SceneLight>,
+    /// The scenes whose lights past the limit have been logged, so each logs once.
+    pub(crate) lights_warned: BTreeSet<jstream_protocol::SceneId>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -2629,6 +2634,141 @@ mod tests {
             ",
             "effects run over the model's layer: the canvas's ellipse, cut to the model",
         );
+    }
+
+    /// The centre pixel of `graph` with `cam` a white `scene`-lit plane (ADR-0143
+    /// decision 3) and `logo` the light `light`, or `None` without an adapter.
+    fn lit_centre(graph: &Graph, light: jstream_sources::ShownLight) -> Option<[u8; 4]> {
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("plane"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        let source = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(source.model());
+        let lamp = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_light(Some(light));
+        let shot = snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::Frame(
+                    if id.as_str() == "cam" {
+                        stand_in.clone()
+                    } else {
+                        lamp.clone()
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let mut compositor = gpu()?;
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let pixels = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&shot, &LiveParams::default()),
+            &[(32, 18)],
+        );
+        Some(pixels[0])
+    }
+
+    /// ADR-0143 decisions 2 and 3: a `scene`-lit model in a 3D scene is lit by the light
+    /// items placed there, where their items put them and as bright as their opacity
+    /// lets them be; with none it is dark, and in a 2D scene it is studio-lit.
+    #[test]
+    fn a_scene_lit_model_is_lit_by_the_lights_its_scene_places() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        let lamp = |depth: f32| {
+            let mut geometry = jstream_protocol::ItemGeometry::try_new(
+                jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+                jstream_protocol::Size::try_new(8.0, 8.0).expect("positive"),
+            )
+            .expect("valid");
+            geometry.depth_px = jstream_protocol::Finite32::new(depth).expect("finite");
+            Edit::ItemSetGeometry {
+                scene_id: None,
+                item_id: ItemId::new("logo"),
+                geometry,
+            }
+        };
+        let light = |kind| jstream_sources::ShownLight {
+            kind,
+            color: [1.0; 3],
+            intensity: 2.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+        };
+        let point = light(jstream_sources::LightType::Point);
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        // In a 2D scene the plane is studio-lit, whatever lights are placed.
+        apply(&mut graph, vec![lamp(-200.0)]);
+        let Some(flat) = lit_centre(&graph, point) else {
+            return;
+        };
+        assert!(luma(flat) > 60, "studio-lit in a 2D scene: {flat:?}");
+        apply(
+            &mut graph,
+            vec![Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(jstream_protocol::SceneCamera::framing(
+                    jstream_protocol::Canvas {
+                        width: CANVAS.0,
+                        height: CANVAS.1,
+                    },
+                )),
+            }],
+        );
+        // Behind the plane, a point light lights only its back, which isn't drawn.
+        let behind = lit_centre(&graph, point).expect("an adapter");
+        assert!(luma(behind) < 6, "lit from behind: {behind:?}");
+        // In front of it, the same light lights its face.
+        apply(&mut graph, vec![lamp(200.0)]);
+        let front = lit_centre(&graph, point).expect("an adapter");
+        assert!(luma(front) > 150, "lit from the front: {front:?}");
+        // The item's opacity scales the light: at 0 it is off.
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetOpacity {
+                item_id: ItemId::new("logo"),
+                scene_id: None,
+                opacity: jstream_protocol::Finite32::new(0.0).expect("finite"),
+            }],
+        );
+        let off = lit_centre(&graph, point).expect("an adapter");
+        assert!(luma(off) < 6, "a light at opacity 0 is off: {off:?}");
+        // An ambient light lights it from everywhere, wherever its item is.
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetOpacity {
+                    item_id: ItemId::new("logo"),
+                    scene_id: None,
+                    opacity: jstream_protocol::Finite32::new(1.0).expect("finite"),
+                },
+                lamp(-200.0),
+            ],
+        );
+        let ambient =
+            lit_centre(&graph, light(jstream_sources::LightType::Ambient)).expect("an adapter");
+        assert!(luma(ambient) > 30, "ambient light: {ambient:?}");
     }
 
     /// In a 3D scene a model is seen through the scene's camera (ADR-0107 decision 6): a

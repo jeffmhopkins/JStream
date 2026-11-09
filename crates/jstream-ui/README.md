@@ -409,7 +409,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
   platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
-  with a cube icon), plus the kinds of placed sources it didn't report, which can be
+  with a cube icon, and its `light` after it with the sparkle icon, placed at 64 × 64),
+  plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and

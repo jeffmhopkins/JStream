@@ -277,6 +277,8 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   depth-of-field blur at a distance along its view
   ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and whose `in_view` and
   `direction_in_view` take scene points and directions into a model's viewing frame.
+  `ItemGeometry::light_pose` is where a light its item places sits and shines: the
+  box's centre at its `depth_px`, and its back normal.
   `drawn_polygon_seen`, `unplace_seen`,
   `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
   item by its geometry in the scene's space through the camera (`w = D / f`, the same
@@ -2346,7 +2348,10 @@ function in this crate so the compositor and the UI share one implementation.
   drags an item to. `CameraView::in_view` and `direction_in_view` take a point or a
   direction of the scene's space into the viewing frame a `Solid` seen through the
   camera uses, relative to the camera in `f64`: where the renderer places scene lights
-  ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)).
+  ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)). `ItemGeometry::light_pose` gives a light's place
+  and aim in the scene's space from the item that places it: the centre of its box at
+  its `depth_px`, and its back normal, `[0, 0, -1]` (away from the viewer) unturned and
+  turned by its rotations as a placed model's back is.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio
   inside the box, centred, and the rest stays transparent. `fill` is the smallest such

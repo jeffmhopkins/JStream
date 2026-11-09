@@ -84,6 +84,14 @@ fn rotate(geometry: ItemGeometry, [x, y, z]: [f64; 3]) -> [f64; 3] {
 }
 
 impl ItemGeometry {
+    /// Where a light this item places is, and where it shines, in the scene's space
+    /// (ADR-0143 decision 2): the centre of its box at its `depth_px`, and its back
+    /// normal, out of the back of the box into the scene, turned by its rotations. An
+    /// unturned item's light shines away from the viewer (`[0, 0, -1]`).
+    pub fn light_pose(self) -> ([f64; 3], [f64; 3]) {
+        (item_origin(self), rotate(self, [0.0, 0.0, -1.0]))
+    }
+
     /// The model with `bounds` placed by this item and seen through `view` (a 3D scene),
     /// or by the item's own viewer without one (ADR-0107 decision 3).
     ///
