@@ -89,7 +89,10 @@ Contents ([Design](#design) explains the choices):
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
   same-origin opener's for a projector window), if the page runs there,
-  `desktop_vcam()`, what that global says about the virtual camera, `browse`,
+  `desktop_vcam()`, what that global says about the virtual camera,
+  `desktop_wheel_focus_only()`, whether the app hears wheel chords only while it has
+  the focus (macOS without Accessibility, Wayland, or no hotkey listener), `on_macos()`,
+  which picks the wording of a wheel chord's "focus only" note, `browse`,
   which calls the global's `browse` to open a native dialog, and `desktop_network()`
   and `allow_network`, which read and save the app's "Allow devices on my network",
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from

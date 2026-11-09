@@ -52,15 +52,24 @@ pub fn of_event(event: &leptos::ev::KeyboardEvent) -> Option<Chord> {
     )
 }
 
-/// What a bound wheel chord's chip says when the desktop app hears wheel chords only
-/// while its window has the focus ([`crate::host::desktop_wheel_focus_only`]): macOS
-/// asks for the Accessibility permission before an app may watch the wheel elsewhere.
+/// What a bound wheel chord's chip says on macOS when the desktop app hears wheel chords
+/// only while its window has the focus ([`crate::host::desktop_wheel_focus_only`]):
+/// macOS asks for the Accessibility permission before an app may watch the wheel
+/// elsewhere.
 pub const WHEEL_FOCUS_ONLY: &str = "Heard only while JStream has the focus. To hear it in other apps, allow JStream in System Settings › Privacy & Security › Accessibility, then restart JStream.";
 
-/// The note for `chord`'s chip, if it has one: [`WHEEL_FOCUS_ONLY`] for a wheel chord
-/// when `focus_only`.
-pub fn chord_note(chord: &Chord, focus_only: bool) -> Option<&'static str> {
-    (focus_only && chord.is_wheel()).then_some(WHEEL_FOCUS_ONLY)
+/// What it says elsewhere: on Wayland, whose GlobalShortcuts portal takes keys but not
+/// the wheel, or when no hotkey listener started.
+pub const WHEEL_FOCUS_ONLY_HERE: &str = "Heard only while JStream has the focus: on this desktop, apps can't hear the wheel elsewhere. To zoom from another app, bind keys.";
+
+/// The note for `chord`'s chip, if it has one: for a wheel chord when `focus_only`,
+/// [`WHEEL_FOCUS_ONLY`] on macOS (`macos`) and [`WHEEL_FOCUS_ONLY_HERE`] elsewhere.
+pub fn chord_note(chord: &Chord, focus_only: bool, macos: bool) -> Option<&'static str> {
+    (focus_only && chord.is_wheel()).then_some(if macos {
+        WHEEL_FOCUS_ONLY
+    } else {
+        WHEEL_FOCUS_ONLY_HERE
+    })
 }
 
 /// How far the wheel turns for one notch, by `WheelEvent.deltaMode`: in pixels, 120 as
@@ -458,9 +467,10 @@ mod tests {
     fn only_a_wheel_chord_is_noted_and_only_when_the_app_says_so() {
         let wheel = Chord::new("Ctrl+WheelUp");
         let key = Chord::new("Ctrl+KeyZ");
-        assert_eq!(chord_note(&wheel, true), Some(WHEEL_FOCUS_ONLY));
-        assert_eq!(chord_note(&wheel, false), None);
-        assert_eq!(chord_note(&key, true), None);
+        assert_eq!(chord_note(&wheel, true, true), Some(WHEEL_FOCUS_ONLY));
+        assert_eq!(chord_note(&wheel, true, false), Some(WHEEL_FOCUS_ONLY_HERE));
+        assert_eq!(chord_note(&wheel, false, true), None);
+        assert_eq!(chord_note(&key, true, false), None);
     }
 
     #[test]

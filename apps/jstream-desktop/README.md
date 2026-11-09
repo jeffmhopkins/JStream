@@ -46,7 +46,7 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), the setting and
   its accepted senders in the data folder's `jtunnel.json`, starting the engine's
   JTunnel receiver from it, and `set_jtunnel`, the command that saves it.
-- **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows, macOS and an X11 session): hears the bound
+- **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows, macOS, X11 and Wayland): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
 - **UI scheme** (`ui.rs`): serves the UI bundle from a folder to the webview, or the
@@ -353,7 +353,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   only finds senders, `jtunnel.senders`, protocol 0.114), and a refused setting or a
   socket that can't be bound is logged and the app runs without the receiver. Off, no
   JTunnel socket is open.
-- **Hotkeys while another app has the focus.** On Windows, macOS and Linux under X11 the host hears the
+- **Hotkeys while another app has the focus.** On Windows, macOS and Linux the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
   `hotkeys.rs` opens its own session on the engine (`jstream-desktop hotkeys` in the
@@ -388,12 +388,20 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   swallows a turn only when its modifiers are exactly a registered chord's, in its
   direction, and counts one press per notch of 120 (`WHEEL_DELTA`; a Mac mouse's line is
   a notch, a trackpad's points count 120 a notch), adding up a high-resolution wheel's
-  parts; any other turn passes on. On
-  a Wayland session the Linux listener doesn't start (Wayland has no grab; its
-  GlobalShortcuts portal isn't wired yet). The X11 listener runs in the Linux window
-  (`webkitgtk`), and the log says when a listener started. The Wayland portal isn't
-  built yet, and the Hotkeys list doesn't yet say when wheel chords are heard only with
-  the focus (the log does).
+  parts; any other turn passes on. Wayland has no grab, so on a Wayland
+  session the host asks the compositor through the GlobalShortcuts portal instead
+  (`jstream_platform_linux::PortalHotkeys`): each set of chords opens a new portal
+  session and binds one shortcut per chord, its id the chord and its preferred trigger
+  the same chord in the shortcuts format (`CTRL+SHIFT+a`). The desktop shows its own
+  confirmation and may let the person pick other keys; whatever they pick, an
+  activation names the chord, which runs its binding. Only the portal's own bus
+  connection is heard. Declined, or on a desktop without the interface, the hotkeys
+  are heard only while JStream has the focus, and the log says so. Wheel chords can't
+  be shortcuts, so on Wayland they are heard only while the page has the focus
+  (`Host::global_wheel` is false). The page is told when wheel chords are focus-only
+  (`wheelFocusOnly`: macOS without Accessibility, or no listener that hears the wheel,
+  Wayland's included), and the Hotkeys list marks each wheel chord "focus only". The
+  listeners run in the Linux window (`webkitgtk`), and the log says when one started.
 - **The UI is read at run time.** The app registers its own URL scheme, `jstream`, and
   serves the bundle's files from a folder on each request, so the binary embeds nothing
   and the build doesn't need the bundle. WebView2 gives the scheme the origin
@@ -419,7 +427,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   outputs panel); the engine still decides. It also carries `collection`, the data
   folder, `network`, whether "Allow devices on my network" was on at start,
   `networkOpen`, whether its listener then opened, `wheelFocusOnly`, whether wheel
-  chords were heard only while the window had the focus (macOS without Accessibility),
+  chords were heard only while the window had the focus (macOS without Accessibility,
+  Wayland, or no listener that hears the wheel),
   and two functions. `browse` calls the app's command `pick_path` and resolves to the
   filesystem path the person picked, or null if they cancelled or the dialog failed.
   `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was

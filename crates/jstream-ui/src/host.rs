@@ -99,6 +99,16 @@ pub fn same_engine(desktop_url: &str, session_url: &str) -> bool {
     !desktop_url.is_empty() && desktop_url == session_url
 }
 
+/// Whether the page runs on macOS, by its user agent: a focus-only wheel chord's note
+/// names macOS's Accessibility permission only there.
+pub fn on_macos() -> bool {
+    Reflect::get(&JsValue::from(window()), &JsValue::from_str("navigator"))
+        .ok()
+        .and_then(|navigator| Reflect::get(&navigator, &JsValue::from_str("userAgent")).ok())
+        .and_then(|agent| agent.as_string())
+        .is_some_and(|agent| agent.contains("Macintosh"))
+}
+
 /// What the desktop app says about its virtual camera (the global's `vcam`), if the
 /// page runs in it: `registered`, `not_registered`, `outdated` or `off`.
 pub fn desktop_vcam() -> Option<String> {
@@ -121,8 +131,9 @@ pub fn desktop_network() -> Option<bool> {
 }
 
 /// Whether the desktop app said, at its start, that wheel chords are heard only while
-/// its window has the focus (macOS without the Accessibility permission). `false` in a
-/// browser, and from an app that doesn't say.
+/// its window has the focus: macOS without the Accessibility permission, Wayland (whose
+/// GlobalShortcuts portal takes keys, not the wheel), or no hotkey listener. `false` in
+/// a browser, and from an app that doesn't say.
 pub fn desktop_wheel_focus_only() -> bool {
     global()
         .and_then(|global| Reflect::get(&global, &JsValue::from_str("wheelFocusOnly")).ok())
