@@ -90,9 +90,9 @@ note = "measured, then decided in an ADR; no further preview fix is built until 
 release = "alpha.5"
 title = "jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality"
 priority = 1
-status = "planned"
+status = "hardware"
 issues = [1220, 1140]
-prs = [1260, 1315]
+prs = [1260, 1315, 1336, 1339]
 note = "each Windows run opens with it, and a fail blocks the release"
 
 [[target]]
