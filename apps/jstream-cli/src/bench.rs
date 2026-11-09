@@ -1034,7 +1034,7 @@ fn measure(
     )?;
     // The window opens on the first tick with a frame recorded.
     let started = Instant::now();
-    let first = loop {
+    let mut first = loop {
         if let Some(tick) = drain(&mut events)
             .iter()
             .filter_map(|event| Tick::read(event, &plan.output))
@@ -1074,6 +1074,19 @@ fn measure(
             .collect(),
         _ => Vec::new(),
     };
+    // Waiting for the sources' first pictures took up to FRAME_TIMEOUT: the baseline is
+    // the latest tick since, so the window's deltas leave out the sources' start.
+    if let Some(latest) = drain(&mut events)
+        .iter()
+        .filter_map(|event| Tick::read(event, &plan.output))
+        .next_back()
+    {
+        let recording = latest.recording.or_else(|| first.recording.take());
+        first = Tick {
+            recording,
+            ..latest
+        };
+    }
     let window = Instant::now();
     let length = Duration::from_secs(options.seconds.into());
     let beat = Duration::from_millis(options.switch_ms.max(500).into());

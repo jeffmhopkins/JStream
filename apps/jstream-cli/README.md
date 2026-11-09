@@ -311,8 +311,9 @@ measured the same way on every machine (#1220).
 - **A run** creates its scenes and sources in one batch, puts the first scene on program
   with a cut, and starts an MP4 recording of the program to
   `<dir>/bench-<scenario>.mp4`. The measured window opens on the first `stats.tick` with
-  a recorded frame (within 20 seconds, or the run fails) and lasts `--seconds` (5 to 60,
-  default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
+  a recorded frame (within 20 seconds, or the run fails), or for a scenario with an
+  outside source once that source shows a picture, counting from the latest tick then,
+  and lasts `--seconds` (5 to 60, default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
   switches to the other scene with `scene.switch_and_watch` and the `--preset`
   transition (default `fade`), saving the frame sheet as `<dir>/<scenario>-switch-<n>.png`, then
   probes the recording's stream with `quality.probe` (three frames, protocol 0.110,
