@@ -885,7 +885,7 @@ fn program_scene_golden() {
         run_on(&engine, &["--json", "--mock", "studio", "get"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"studio.get","#,
-            r#""program_scene":"brb","preview_scene":"main"}}}"#,
+            r#""program_scene":"brb","preview_scene":"main","warm_scenes":3}}}"#,
             "\n"
         ))
     );
