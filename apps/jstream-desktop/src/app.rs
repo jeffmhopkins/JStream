@@ -206,10 +206,6 @@ pub fn start(
     }
 }
 
-/// "Allow devices on my network", when the person turned it on: the network listener's
-/// configuration, and the paired devices' file, both beside the data folder's token
-/// file as the daemon keeps them. A certificate that can't be used is logged, and the
-/// app starts without network access.
 /// Whether wheel chords are heard only while the window has the focus: on macOS until
 /// the app has the Accessibility permission (ADR-0144 §2), which it checks without
 /// asking. Elsewhere the OS needs no permission for them.
@@ -224,6 +220,10 @@ fn wheel_focus_only() -> bool {
     }
 }
 
+/// "Allow devices on my network", when the person turned it on: the network listener's
+/// configuration, and the paired devices' file, both beside the data folder's token
+/// file as the daemon keeps them. A certificate that can't be used is logged, and the
+/// app starts without network access.
 fn network_access(data: &Path) -> Option<host::Network> {
     if !network::allowed(&network::setting_file(data)) {
         return None;

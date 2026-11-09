@@ -2487,7 +2487,7 @@ stamp = { hash = "b3:b240d32317cce49a", by = "agent:mac-desktop", note = "Re-rea
 stamp = { hash = "b3:e24d9e7516312d41", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read Design against #327. build.rs no longer keeps the DLL list inline: it include!s media_foundation.rs (new, the same four DLLs mfplat/mf/mfreadwrite/mfsensorgroup, with rerun-if-changed) and still passes /DELAYLOAD per DLL plus delayimp.lib to bins with MSVC. New tests/delay_load.rs (media_foundation_is_delay_loaded) includes the same file and checks jstream.exe's delay-import and import tables with the daemon's PE reader; the failures bullet now says so and what it cannot catch (an unlisted import), and the Windows-only bullet now excludes that test from Linux CI. Vcam, scheme, bootstrap, CEF and token bullets unchanged" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:fbad21e1f3164902", by = "agent:claude", note = "Edited the global's field list to add wheelFocusOnly (macOS without Accessibility); checked bootstrap::script's Page fields and the test match." }
+stamp = { hash = "b3:cc9679d3b7ab15b0", by = "agent:claude", note = "app.rs only moves network_access's doc comment back above network_access (it had landed on wheel_focus_only in #1450); no behaviour change, the section holds." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:ee2842b840cf5fe5", by = "agent:claude", note = "Edited the global's field list to add wheelFocusOnly (macOS without Accessibility); checked bootstrap::script's Page fields and the test match." }
@@ -2544,7 +2544,7 @@ stamp = { hash = "b3:e0e2451d5b181b3c", by = "agent:mac-desktop", note = "Re-rea
 stamp = { hash = "b3:eaa5df84ce41e8df", by = "agent:browser-linux", note = "ARCH crate-map/apps change is the helper row (Linux executable) and the daemon's cef on Linux; the desktop app stays Windows-only and its browser text (bootstrap exe and DLL) still holds." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:fbad21e1f3164902", by = "agent:claude", note = "app.rs now computes wheel_focus_only and bootstrap.rs takes a Page struct carrying it; the purpose (one native window over the engine, per OS) still holds." }
+stamp = { hash = "b3:cc9679d3b7ab15b0", by = "agent:claude", note = "app.rs only moves network_access's doc comment back above network_access (it had landed on wheel_focus_only in #1450); no behaviour change, the section holds." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/bootstrap.rs"]
 stamp = { hash = "b3:ee2842b840cf5fe5", by = "agent:claude", note = "app.rs now computes wheel_focus_only and bootstrap.rs takes a Page struct carrying it; the purpose (one native window over the engine, per OS) still holds." }
@@ -2598,7 +2598,7 @@ stamp = { hash = "b3:76b78b05a8b00249", by = "agent:claude", note = "Edited the 
 stamp = { hash = "b3:4608ccda7bacb697", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). Usage: the webkitgtk feature comment now says CI's desktop-linux job turns it on; the macOS build and bundle-app.sh text still holds. | merge: The merge brought #1419's squash into wave/alpha5 (the same Linux window code this branch already carried) and the wave's other landings; this branch's macOS additions are re-applied unchanged, so the section still holds. | kept from the merged side: Re-read: the Linux build (libwebkit2gtk-4.1-dev, --features webkitgtk), Linux's data folder, key store, no vcam or browser sources, Browse via the portal, and main.rs's no-window message without the feature. r1: the Cargo.toml feature comment no longer names a dist-linux command that doesn't exist yet; usage is unchanged" }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/app.rs"]
-stamp = { hash = "b3:fbad21e1f3164902", by = "agent:claude", note = "Edited the macOS bullet: the Inspector's wheel chord chip now says focus-only, from wheelFocusOnly, set at start from wheel_needs_accessibility." }
+stamp = { hash = "b3:cc9679d3b7ab15b0", by = "agent:claude", note = "app.rs only moves network_access's doc comment back above network_access (it had landed on wheel_focus_only in #1450); no behaviour change, the section holds." }
 
 ["CRATE-jstream-desktop#usage"."file:apps/jstream-desktop/src/logs.rs"]
 stamp = { hash = "b3:cc576af06e07c96f", by = "agent:a2656", note = "Earlier note on body, kept: The data-folder (portable marker, USB stick) citation moved to ADR-0066, which restates it; the virtual camera usage text describes today's registration, which #561 will change | #780 (body and logs.rs): the Logs bullet says the log file is replaced at each start by a new, user-only file: a protected DACL for SYSTEM and the user on Windows, mode 0600 on Unix in a folder created 0700 (an existing folder keeps its mode, as logs.rs's create_dir leaves it; review N1); its cap, RUST_LOG filter and folder are unchanged" }
