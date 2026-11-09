@@ -1013,7 +1013,10 @@ fn draw_burst(style: ParticlesStyle, burst: Burst, now_ms: u64, canvas: &mut Can
     color[3] = (f32::from(color[3]) * fade).round() as u8;
     let seed = burst.on_ms << 7 | u64::from(burst.key);
     for i in 0..style.count {
-        let jitter = noise(seed.wrapping_mul(u64::from(style.count)) + u64::from(i));
+        let jitter = noise(
+            seed.wrapping_mul(u64::from(style.count))
+                .wrapping_add(u64::from(i)),
+        );
         let angle = i as f32 * GOLDEN_ANGLE + noise(seed) * std::f32::consts::TAU;
         let reach = style.spread * strength * (0.4 + 0.6 * jitter) * out;
         let (x, y) = (x0 + angle.cos() * reach, y0 - angle.sin() * reach);
