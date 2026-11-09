@@ -931,6 +931,12 @@ impl Default for Shot {
 }
 
 impl Shot {
+    /// Whether the shot draws on the engine's MIDI clock (ADR-0148).
+    #[cfg(test)]
+    pub(crate) fn follows_tempo(&self) -> bool {
+        self.tempo.is_some()
+    }
+
     /// The song's position at `at`, in quarter notes since its start, from the engine's
     /// MIDI clock (ADR-0148): 0 without one.
     fn beat_at(&self, at: MediaTime) -> f64 {

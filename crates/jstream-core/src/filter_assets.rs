@@ -92,6 +92,12 @@ impl FilterAssets {
         Self::default()
     }
 
+    /// These assets with `images` as the loaded assets, and all else they hold kept.
+    #[must_use]
+    pub(crate) fn with_images(self, images: HashMap<AssetKey, Arc<FilterAsset>>) -> Self {
+        Self { images, ..self }
+    }
+
     /// These assets with `effects` as the loaded pack effects.
     #[must_use]
     pub(crate) fn with_effects(self, effects: PackEffects) -> Self {

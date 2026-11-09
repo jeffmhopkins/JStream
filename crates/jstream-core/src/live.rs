@@ -661,23 +661,16 @@ impl LiveSources {
         })
     }
 
-    /// Rebuilds what plans read from the loaded assets, keeping the pack effects and
-    /// shader sources.
+    /// Rebuilds what plans read from the loaded assets, keeping everything else they
+    /// read: the pack effects and shader sources, the audio scopes and the MIDI inputs
+    /// (#1453 review B1).
     fn share_assets(&mut self) {
-        let effects = self.loaded.effects().clone();
-        let sources = self.loaded.sources().clone();
-        let heard = Arc::clone(self.loaded.heard());
-        let motion_heard = Arc::clone(self.loaded.motion_heard());
-        self.loaded = Arc::new(
-            self.assets
-                .iter()
-                .filter_map(|(key, entry)| Some((key.clone(), Arc::clone(entry.loaded.as_ref()?))))
-                .collect::<FilterAssets>()
-                .with_effects(effects)
-                .with_sources(sources)
-                .with_heard(heard)
-                .with_motion_heard(motion_heard),
-        );
+        let images = self
+            .assets
+            .iter()
+            .filter_map(|(key, entry)| Some((key.clone(), Arc::clone(entry.loaded.as_ref()?))))
+            .collect();
+        self.loaded = Arc::new((*self.loaded).clone().with_images(images));
     }
 
     /// Hands plans the effect packs' effects and shader sources as now loaded
