@@ -585,6 +585,12 @@ and the geometry wire surface ([Item geometry](#geometry)), 0.10 the `history` c
 edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick` and 0.5
 `video.snapshot`.
 
+A bump rewrites the paragraph's opening line, `` `PROTOCOL_VERSION` is 0.N because `` and
+its own reason, and keeps the reason before it as the next clause. The test
+`the_readme_opens_on_the_current_version` holds that line to the number, so two PRs that
+take the same number conflict in git and the second to land takes the next one
+([waves › Protocol versions](../../docs/runbooks/waves.md#protocol)).
+
 <a id="contents-schema"></a>
 ## Contents: schema and parity fixture
 <!-- @section

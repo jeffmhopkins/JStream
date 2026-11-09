@@ -121,27 +121,30 @@ depends_on = ["docs/adr/0055-wave-branches.md#consequences"]
 -->
 
 Every PR that bumps `PROTOCOL_VERSION` goes into the earliest open wave, so bumps reach
-`main` in the order they were assigned. Two PRs that set the same `minor` merge without a
-conflict, so the wave owner hands out the numbers one at a time:
+`main` in the order they land. Nobody hands out numbers: git serializes them.
 
-1. **A number goes to the first ready bump.** A bump is ready when it is out of draft, its
-   review gate has passed, and everything it waits on (an ADR, a PR below it) has merged
-   into the wave. The owner keeps the order in the queue, but a PR that isn't ready doesn't
-   hold up the ones behind it. It gets the next free number once it is ready.
-2. **One bump holds the next number at a time.** That PR sets `minor` to the next number,
-   along with every doc and schema snapshot that names it, and turns on auto-merge. Every
-   other bump, ready or not, keeps the placeholder it was built with and auto-merge off.
-   It sets its real number once, in the same push that merges the wave in, when the one
-   before it has merged and it becomes the holder. Setting the number is a push, so the
-   review gate runs one more round on it ([Without churn](#churn)).
-3. **The holder comes first.** When another PR lands in the wave and the holder conflicts,
-   the holder's thread merges the wave in before anything else it is doing. The owner
-   watches the holder and tells its thread what conflicts, and how to resolve them, as soon
-   as it is dirty. `docs merge-main` resolves stamp conflicts and conflicts inside
-   `@generated` blocks such as the README's progress table, so these merges are usually
-   automatic.
+1. **A bump takes the next number itself**: one more than its wave's when it is built. It
+   sets `minor`, every doc and schema snapshot that names it, and the opening line of
+   the protocol README's [version paragraph](../../crates/jstream-protocol/README.md#versions),
+   which reads `` `PROTOCOL_VERSION` is 0.N because `` followed by this bump's reason. The
+   test `the_readme_opens_on_the_current_version` holds that line to the number. It goes
+   out of draft and turns on auto-merge like any other PR, without waiting on another
+   bump.
+2. **The first to land keeps the number.** Two bumps that took the same number each
+   rewrote that one line with a different reason, so once one lands the other conflicts
+   and GitHub won't merge it. Its thread merges the wave in
+   (`cargo xtask docs merge-main --from wave/<name>`), keeps the landed bump's reason as
+   the next clause of the paragraph, and takes the next number everywhere its own change
+   named the old one, all in one push. That push starts a review round
+   ([Without churn](#churn)).
+3. **A conflicting bump comes first.** Its thread merges the wave in before anything else
+   it is doing. The owner watches the wave's open bumps and tells a thread as soon as its
+   bump conflicts. `docs merge-main` resolves stamp conflicts and conflicts inside
+   `@generated` blocks such as the README's progress table, so the rest of these merges
+   is usually automatic.
 
-If the wave is cut first, the queue continues in the next wave.
+If the wave is cut first, an open bump moves to the next wave and takes the number after
+the cut wave's.
 
 <a id="churn"></a>
 ## Merging main without churn
@@ -155,12 +158,12 @@ passed head starts a new review round, so a merge of `main` costs at least a ful
 nothing. The same holds for a PR into a wave.
 
 - **Merge `main` only when it is needed** (a PR into a wave merges its wave): the PR
-  conflicts (GitHub then runs no CI on it), it has just become the protocol holder or it
-  holds the number and conflicts ([Protocol versions](#protocol)), or it needs code that
-  has just landed. Not after every change to `main`, and not to make a PR look fresh while
+  conflicts (GitHub then runs no CI on it), including a protocol bump whose number another
+  bump took first ([Protocol versions](#protocol)), or it needs code that has just
+  landed. Not after every change to `main`, and not to make a PR look fresh while
   it waits for review.
-- **One push per round.** Answer every finding, merge `main` if it is needed, set the
-  protocol number if it is now the holder, and verify every stale section, then push once.
+- **One push per round.** Answer every finding, merge `main` if it is needed, take the
+  next protocol number if another bump took this one, and verify every stale section, then push once.
   Don't push again while a review round or CI is running on the head unless that round has
   failed.
 - **Batch the ledger.** Run `docs verify` for every stale section before the push, never
