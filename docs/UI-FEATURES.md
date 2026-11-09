@@ -34,7 +34,8 @@ real UI shows the engine's real state instead.
 - Each area's section covers the UI files that implement it, so a PR that changes them
   makes the section stale in `cargo xtask docs check`. Re-read the rows against the
   change, update each row's status and notes, then verify the section. The
-  [Summary](#summary) depends on every area, so it goes stale with them: update its counts.
+  [Summary](#summary) table is generated from the areas' `Status` columns: run
+  `cargo xtask docs generate`, never edit its counts by hand.
 - A new UI file joins the `covers` of the area it implements.
 - Statuses:
   - ✅ **built**: the real UI does what the spec says.
@@ -49,9 +50,9 @@ real UI shows the engine's real state instead.
 <a id="summary"></a>
 ## Summary
 <!-- @section
-depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#docking", "docs/UI-FEATURES.md#canvas", "docs/UI-FEATURES.md#menus", "docs/UI-FEATURES.md#dialogs", "docs/UI-FEATURES.md#scenes", "docs/UI-FEATURES.md#objects", "docs/UI-FEATURES.md#inspector", "docs/UI-FEATURES.md#transform", "docs/UI-FEATURES.md#filters", "docs/UI-FEATURES.md#mixer", "docs/UI-FEATURES.md#outputs", "docs/UI-FEATURES.md#transitions", "docs/UI-FEATURES.md#live-panels", "docs/UI-FEATURES.md#keyboard"]
 -->
 
+<!-- @generated begin ui-summary -->
 | Area | Rows | ✅ | 🟡 | ⬜ | 🔒 | ⏸ |
 |---|---|---|---|---|---|---|
 | [Theme and shared controls](#theme) | 8 | 8 | 0 | 0 | 0 | 0 |
@@ -68,9 +69,10 @@ depends_on = ["docs/UI-FEATURES.md#theme", "docs/UI-FEATURES.md#header", "docs/U
 | [Mixer](#mixer) | 7 | 6 | 0 | 0 | 0 | 1 |
 | [Outputs](#outputs) | 4 | 3 | 0 | 0 | 1 | 0 |
 | [Transitions](#transitions) | 6 | 6 | 0 | 0 | 0 | 0 |
-| [Stream stats, live chat, agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
+| [Stream stats, live chat and agent activity](#live-panels) | 4 | 1 | 1 | 0 | 2 | 0 |
 | [Keyboard](#keyboard) | 7 | 6 | 0 | 0 | 0 | 1 |
 | **Total** | **139** | **126** | **4** | **0** | **5** | **4** |
+<!-- @generated end ui-summary -->
 
 [Beyond the prototype](#beyond) lists what the real UI has that the prototype doesn't, and
 must keep. [Delivery plan](#plan) gives the order the ⬜ rows land in.
