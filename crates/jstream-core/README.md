@@ -1591,9 +1591,12 @@ model into it with `Compositor::draw_model`: posed by the item's geometry with i
 values and motion applied, seen through its scene's camera with the camera's live value,
 motion and follow applied as the scene's pass resolves them, and lit as the source says.
 A `scene`-lit model in a 3D scene is lit by its scene's lights
-([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)): `scene_lights` walks the scene's items in stacking
-order and takes each that shows a `light` source (a frame with a `ShownLight`, which
-`Frame::with_light` gives a light source's transparent pixel), with its live values and
+([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)): planning records, in
+`Shot::lights`, each item of a scene that shows a `light` source (a frame with a
+`ShownLight`, which `Frame::with_light` gives a light source's transparent pixel), in
+stacking order, whether it copies the scene whole or plans it as a transition's end, so a
+model stays lit through a switch (`a_scene_lit_model_stays_lit_through_a_transition`).
+`scene_lights` takes each of them with its live values and
 motion applied, at the centre of its box and shining out of its back
 (`ItemGeometry::light_pose`), at its intensity times its opacity. The renderer lights the
 model with the first 8 point, spot and directional ones and every ambient one; a scene

@@ -93,6 +93,7 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "desktop_audio",
             "display",
             "image",
+            "light",
             "media",
             "model",
             "shape",

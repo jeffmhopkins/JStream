@@ -2639,6 +2639,15 @@ mod tests {
     /// The centre pixel of `graph` with `cam` a white `scene`-lit plane (ADR-0143
     /// decision 3) and `logo` the light `light`, or `None` without an adapter.
     fn lit_centre(graph: &Graph, light: jstream_sources::ShownLight) -> Option<[u8; 4]> {
+        lit_centre_in(graph, light, None)
+    }
+
+    /// [`lit_centre`] with `running` under way at its start.
+    fn lit_centre_in(
+        graph: &Graph,
+        light: jstream_sources::ShownLight,
+        running: Option<&crate::transition::Running>,
+    ) -> Option<[u8; 4]> {
         use jstream_sources::SourceKind as _;
         let kind = jstream_sources::ModelKind::new();
         let mut settings: jstream_protocol::Settings = kind
@@ -2662,7 +2671,7 @@ mod tests {
         let shot = snapshot::plan_with(
             graph,
             Some(&SceneId::new("main")),
-            None,
+            running.map(|running| (running, running.start)),
             &mut |id| {
                 Some(Look::Frame(
                     if id.as_str() == "cam" {
@@ -2769,6 +2778,73 @@ mod tests {
         let ambient =
             lit_centre(&graph, light(jstream_sources::LightType::Ambient)).expect("an adapter");
         assert!(luma(ambient) > 30, "ambient light: {ambient:?}");
+    }
+
+    /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition
+    /// switches to that scene too, not only once it has landed.
+    #[test]
+    fn a_scene_lit_model_stays_lit_through_a_transition() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        let main = SceneId::new("main");
+        let mut geometry = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(8.0, 8.0).expect("positive"),
+        )
+        .expect("valid");
+        geometry.depth_px = jstream_protocol::Finite32::new(200.0).expect("finite");
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: main.clone(),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+            ],
+        );
+        let light = jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Point,
+            color: [1.0; 3],
+            intensity: 2.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+        };
+        let running = crate::transition::Running {
+            from: crate::transition::From::Scene(main.clone()),
+            to: main.clone(),
+            start: MediaTime::zero(Timebase::MILLIS),
+            run: crate::transition::Run {
+                preset_id: jstream_protocol::TransitionPresetId::new("fade"),
+                pairs: true,
+                duration_ms: 500,
+                easing: jstream_protocol::Easing::Linear,
+                unmatched: jstream_protocol::TransitionEffect::None,
+                stagger_ms: 0,
+                stinger: None,
+            },
+            by_item: true,
+            from_camera: crate::transition::camera_of(&graph, &main),
+        };
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let Some(landed) = lit_centre(&graph, light) else {
+            return;
+        };
+        let switching = lit_centre_in(&graph, light, Some(&running)).expect("an adapter");
+        assert!(luma(landed) > 150, "lit once landed: {landed:?}");
+        assert!(
+            luma(switching) > 150,
+            "lit while switching: {switching:?} (landed {landed:?})"
+        );
     }
 
     /// In a 3D scene a model is seen through the scene's camera (ADR-0107 decision 6): a

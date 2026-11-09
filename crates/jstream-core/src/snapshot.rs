@@ -367,6 +367,22 @@ pub(crate) enum SourceRef {
     Boxed(SceneId, ItemId),
 }
 
+/// A light item a scene places (ADR-0143), as planning found it: with or without a
+/// transition running, so a scene-lit model is lit through a switch too.
+#[derive(Clone, Debug, PartialEq)]
+struct Lit {
+    /// The item that places the light.
+    item: ItemId,
+    /// The keyframe it is drawn through, as [`Placed::through`].
+    through: Option<Through>,
+    /// The `light` source it places.
+    source: SourceId,
+    placement: Placement,
+    crop: Crop,
+    opacity: f32,
+    motion: TrackMotion,
+}
+
 #[derive(Debug, PartialEq)]
 struct Placed {
     /// The item, whose live values (ADR-0032) override `placement` and `crop`.
@@ -636,6 +652,9 @@ pub(crate) struct Shot {
     /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
+    /// The light items each scene places, bottom first (ADR-0143), whether it was copied
+    /// whole or planned as a transition's end. A scene placing none isn't here.
+    lights: BTreeMap<SceneId, Vec<Lit>>,
     /// The background each copied scene has, by scene, straight sRGB (ADR-0089 §4): a
     /// keyframe scene's is its parent's, and a group, or a group's view, has none. A
     /// scene without one isn't here, and is transparent.
@@ -897,6 +916,7 @@ impl Default for Shot {
             canvas: Canvas::default(),
             program: None,
             scenes: BTreeMap::new(),
+            lights: BTreeMap::new(),
             backgrounds: BTreeMap::new(),
             cameras: BTreeMap::new(),
             frames: BTreeMap::new(),
@@ -1394,6 +1414,7 @@ impl PartialEq for Shot {
             && self.program == other.program
             && self.mixes == other.mixes
             && self.scenes == other.scenes
+            && self.lights == other.lights
             && self.backgrounds == other.backgrounds
             && self.cameras == other.cameras
             && self.frames == other.frames
@@ -2684,6 +2705,8 @@ impl<'a> Planner<'a, '_> {
                     | None => continue,
                 },
             };
+            let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
+            note_light(out, id, item, through.as_ref(), &image);
             let Some(geometry) = endpoint_geometry(item, size, canvas) else {
                 continue;
             };
@@ -2765,9 +2788,11 @@ impl<'a> Planner<'a, '_> {
                     },
                 };
                 let effects = self.boxed(id, item, &source, out);
+                let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
+                note_light(out, id, item, through.as_ref(), &source);
                 placed.push(Placed {
                     item: item.id().clone(),
-                    through: keyframe.and_then(|keyframe| Through::of(keyframe, item.id())),
+                    through,
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
@@ -5360,6 +5385,7 @@ fn draw_model(
             .filter(|light| light.kind != jstream_render::LightKind::Ambient)
             .count();
         if shading > jstream_render::MAX_SCENE_LIGHTS
+            && !chains.lights_warned.contains(scene_id)
             && chains.lights_warned.insert(scene_id.clone())
         {
             tracing::warn!(
@@ -5398,6 +5424,41 @@ fn draw_model(
 /// live values and motion applied, at its kind's intensity times its opacity. A light
 /// that isn't placed by a box (a filled or canvas placement) has no position, and is
 /// left out.
+/// Records `item` of scene `id` in `out`'s lights when what it shows, `source`, is a
+/// `light` source's frame, once per item however often the scene is planned.
+fn note_light(
+    out: &mut Shot,
+    id: &SceneId,
+    item: &GraphItem,
+    through: Option<&Through>,
+    source: &SourceRef,
+) {
+    let SourceRef::Frame(source) = source else {
+        return;
+    };
+    if out
+        .frames
+        .get(source)
+        .and_then(|frame| frame.light)
+        .is_none()
+    {
+        return;
+    }
+    let lights = out.lights.entry(id.clone()).or_default();
+    if lights.iter().any(|lit| &lit.item == item.id()) {
+        return;
+    }
+    lights.push(Lit {
+        item: item.id().clone(),
+        through: through.cloned(),
+        source: source.clone(),
+        placement: placement(item.placement()),
+        crop: crop(item.crop()),
+        opacity: item.opacity().get(),
+        motion: TrackMotion::same(item.id().clone(), motion::of(item)),
+    });
+}
+
 fn scene_lights(
     shot: &Shot,
     id: &SceneId,
@@ -5405,14 +5466,15 @@ fn scene_lights(
     live: &LiveParams,
     lights: &mut Vec<jstream_render::SceneLight>,
 ) {
-    let Some(placed) = shot.scenes.get(id) else {
+    let Some(placed) = shot.lights.get(id) else {
         return;
     };
     for placed in placed {
-        let SourceRef::Frame(source) = &placed.source else {
-            continue;
-        };
-        let Some(light) = shot.frames.get(source).and_then(|frame| frame.light) else {
+        let Some(light) = shot
+            .frames
+            .get(&placed.source)
+            .and_then(|frame| frame.light)
+        else {
             continue;
         };
         let (placement, crop) = live.apply_to(
