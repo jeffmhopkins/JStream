@@ -510,13 +510,13 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:85d54a15149cd6c4", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
+stamp = { hash = "b3:94992237790f687b", by = "agent:claude", note = "Re-read after cargo fmt reflowed the new shader-source line and test; nothing the section says changed." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:233f1885a21efbb0", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:68e66d15bdf86b79", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
+stamp = { hash = "b3:0416fdb1b968c21c", by = "agent:claude", note = "Re-read after cargo fmt reflowed the new shader-source line and test; nothing the section says changed." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Added one sentence on nested layers drawn only over their content box (#1070); the rest of the section re-read against the compositor, image and place changes." }
@@ -4893,13 +4893,13 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:85d54a15149cd6c4", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
+stamp = { hash = "b3:94992237790f687b", by = "agent:claude", note = "Re-read after cargo fmt reflowed the new shader-source line and test; nothing the section says changed." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:233f1885a21efbb0", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:68e66d15bdf86b79", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
+stamp = { hash = "b3:0416fdb1b968c21c", by = "agent:claude", note = "Re-read after cargo fmt reflowed the new shader-source line and test; nothing the section says changed." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Added the #1070 paragraph under render_into: content bounds from transparent-background composites, invalidated by the change count and apply_filter_into, and Shape::trim_to for 2D normal/additive/screen without a chain. Rest of the pipeline steps re-read against the diff." }
@@ -5514,13 +5514,13 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:85d54a15149cd6c4", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
+stamp = { hash = "b3:94992237790f687b", by = "agent:claude", note = "Re-read after cargo fmt reflowed the new shader-source line and test; nothing the section says changed." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/model.wgsl"]
 stamp = { hash = "b3:233f1885a21efbb0", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:68e66d15bdf86b79", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
+stamp = { hash = "b3:0416fdb1b968c21c", by = "agent:claude", note = "Re-read after cargo fmt reflowed the new shader-source line and test; nothing the section says changed." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Re-read against the content trim: a nested scene is still a layer the caller composites; nothing here about one scene changed." }
