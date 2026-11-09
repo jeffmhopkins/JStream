@@ -23,7 +23,7 @@ const HELPER: &str = "jstream-browser-helper";
 const LIBCEF: &str = "libcef.so";
 
 /// Chromium's setuid sandbox helper, for machines where user namespaces are off.
-const CHROME_SANDBOX: &str = "chrome-sandbox";
+pub(crate) const CHROME_SANDBOX: &str = "chrome-sandbox";
 
 /// The files at the top of CEF's distribution folder that only building needs.
 const CEF_BUILD_ONLY: &[&str] = &["archive.json", "CMakeLists.txt"];
@@ -65,6 +65,16 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
         to.display()
     );
     Ok(true)
+}
+
+/// Builds the release helper and lays the `browser` folder out at `to`, replacing what is
+/// there: what `cargo xtask dist-linux` puts in the package.
+pub(crate) fn build_release(root: &Path, target: &Path, to: &Path) -> Result<()> {
+    let cef = build(root, true)?;
+    if to.exists() {
+        fs::remove_dir_all(to).with_context(|| format!("removing {}", to.display()))?;
+    }
+    stage(&cef, &target.join("release").join(HELPER), to)
 }
 
 /// Builds the helper executable with CEF, and returns CEF's distribution folder.

@@ -284,8 +284,10 @@ jobs:
         run: bash .github/after-review-status.sh
 
   # The Linux desktop app's .deb (ADR-0141 decision 5): `cargo xtask dist-linux` with the
-  # release UI from `dist-ui`, the release binaries built with the `webkitgtk` window,
-  # packed by `dpkg-deb` (ARCH › Packaging). Uploaded as is, so the download is the .deb a
+  # release UI from `dist-ui`, the release binaries built with the `webkitgtk` window and
+  # `cef` browser sources, and the browser helper's folder (CEF downloaded by its build,
+  # ADR-0095), packed by `dpkg-deb` (ARCH › Packaging). The step fails unless
+  # `chrome-sandbox` is packed setuid root. Uploaded as is, so the download is the .deb a
   # user installs. Not required (R-GIT-003).
   dist-linux:
     needs: dist-ui
@@ -317,7 +319,12 @@ jobs:
         run: |
           set -euo pipefail
           cargo xtask dist-linux --ui-dir ui-dist --out dist --revision "${SHA::10}"
-          for deb in dist/*.deb; do dpkg-deb --info "$deb"; dpkg-deb --contents "$deb"; done
+          for deb in dist/*.deb; do
+            dpkg-deb --info "$deb"
+            dpkg-deb --contents "$deb"
+            dpkg-deb --contents "$deb" \
+              | grep -E '^-rwsr-xr-x root/root .* \./usr/lib/jstream/browser/chrome-sandbox$'
+          done
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           path: dist/*.deb
