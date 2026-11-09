@@ -885,8 +885,8 @@ impl TrackCameras {
 
 impl Transitioning {
     /// The background shown under its tracks at `at`: the scene it leaves's, mixed
-    /// toward the shown scene's as the transition runs.
-    fn background(&self, at: MediaTime) -> Color {
+    /// toward the shown scene's in the project's `blending` space as the transition runs.
+    fn background(&self, at: MediaTime, blending: Blending) -> Color {
         let (from, to) = self.backgrounds;
         if from == to || self.end_ms <= 0.0 {
             return to;
@@ -894,7 +894,7 @@ impl Transitioning {
         match transition::elapsed_ms(self.start, at) / self.end_ms {
             t if t >= 1.0 => to,
             t if t <= 0.0 => from,
-            t => from.mix(to, t),
+            t => from.mix(to, t, blending),
         }
     }
 }
@@ -5196,7 +5196,7 @@ pub(crate) fn compose_metered(
                     at,
                     (live, captures),
                 );
-                transition.background(at)
+                transition.background(at, shot.blending)
             }
             (Some(root), None) => {
                 fill_items(
@@ -5213,7 +5213,7 @@ pub(crate) fn compose_metered(
                 Color::TRANSPARENT
             }
         }
-        .over_black();
+        .over_black(shot.blending);
         match &stage {
             Some(stage) => {
                 compositor.render_into(&scene(canvas, clear, &items), image(&stage.mixed)?)?;
@@ -6698,11 +6698,22 @@ pub(crate) mod tests {
             end_ms: 1000.0,
         };
         let at = |ms: i64| MediaTime::new(ms, Timebase::new(1, 1000).expect("valid"));
-        assert_eq!(fading.background(zero()), Color::BLACK);
-        assert_eq!(fading.background(at(1000)), Color::rgb(1.0, 0.0, 0.0));
-        let middle = fading.background(at(500));
+        for blending in jstream_protocol::Blending::ALL {
+            assert_eq!(fading.background(zero(), blending), Color::BLACK);
+            assert_eq!(
+                fading.background(at(1000), blending),
+                Color::rgb(1.0, 0.0, 0.0)
+            );
+        }
+        // Halfway, more than half the encoded value in linear light, half browser-style.
+        let middle = fading.background(at(500), jstream_protocol::Blending::Linear);
         assert!(
             middle.r > 0.5 && middle.r < 1.0 && middle.a == 1.0,
+            "{middle:?}"
+        );
+        let middle = fading.background(at(500), jstream_protocol::Blending::Srgb);
+        assert!(
+            (middle.r - 0.5).abs() < 1e-4 && middle.a == 1.0,
             "{middle:?}"
         );
     }
@@ -7091,7 +7102,8 @@ pub(crate) mod tests {
 
     /// A scene's background fills its canvas under its items wherever it is drawn
     /// (ADR-0024 §4): the nested `a`'s red fills the quarter it is placed at, over the
-    /// program's blue. A background with alpha shows over black where a mix shows it.
+    /// program's blue. A background with alpha shows over black where a mix shows it,
+    /// darkened in the blending space.
     #[test]
     fn a_scene_draws_its_background_nested_or_not() {
         use jstream_render::Color;
@@ -7111,14 +7123,21 @@ pub(crate) mod tests {
         for (x, y) in [(650, 10), (10, 370), (1270, 710)] {
             assert_eq!(at(&rgba, x, y), [0, 0, 255, 255], "({x}, {y})");
         }
-        // Half blue over black is 0.5 in linear light, sRGB 188.
+        // Half blue over black is 0.5 in linear light, sRGB 188, and half the encoded
+        // value browser-style, sRGB 128 (ADR-0126).
         shot.backgrounds
             .insert(SceneId::new("program"), Color { a: 0.5, ..blue });
         shot.passes = schedule(&shot, &SceneId::new("program"));
-        let Some(rgba) = snap(&shot) else { return };
-        let [r, g, b, a] = at(&rgba, 1000, 600);
-        assert_eq!((r, g, a), (0, 0, 255));
-        assert!(b.abs_diff(188) <= 1, "{b}");
+        for (blending, want) in [
+            (jstream_protocol::Blending::Linear, 188),
+            (jstream_protocol::Blending::Srgb, 128),
+        ] {
+            shot.blending = blending;
+            let Some(rgba) = snap(&shot) else { return };
+            let [r, g, b, a] = at(&rgba, 1000, 600);
+            assert_eq!((r, g, a), (0, 0, 255), "{blending:?}");
+            assert!(b.abs_diff(want) <= 1, "{blending:?}: {b}");
+        }
     }
 
     /// An item's opacity multiplies its alpha, and the result blends in the collection's

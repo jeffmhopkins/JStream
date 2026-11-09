@@ -1477,7 +1477,8 @@ keyframe scene's is its parent's, and a group has none), so a nested scene witho
 draws nothing and the scene under it shows through; the program scene's pass clears to
 its background over opaque black (`Color::over_black`). While a transition runs, its
 tracks are drawn over the two scenes' backgrounds mixed by the time since it started
-(`Transitioning::background`). A scene placed more than once at the same depth is composited once.
+(`Transitioning::background`). Both blend in the project's blending space, as the
+composite does (ADR-0126). A scene placed more than once at the same depth is composited once.
 Depth is bounded: the program scene is depth 0, and a scene source more than 8
 levels below it draws nothing (logged at `debug`). A scene with a scene filter
 (ADR-0065) is composited once per frame at depth 0 wherever it shows, so the count

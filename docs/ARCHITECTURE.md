@@ -1297,7 +1297,7 @@ such a layer, as an item's effects, shades only that box grown by how far it rea
 keeps the box for what reads it next. The caller walks the
 nesting, bounded in depth, and clears each scene's pass to its background (transparent
 without one), and the root of a mix to that background over black, fading from one
-scene's to the other's in linear light while a transition runs (`Color::over_black`,
+scene's to the other's in the project's blending space while a transition runs (`Color::over_black`,
 `Color::mix`; [ADR-0089](adr/0089-scene-options-and-nested-audio.md) §4). `ResourceCache` keeps a compositor's uploads and layers from
 frame to frame, keyed by the caller's IDs, and hands an image back for freeing only
 after the GPU has finished the last frame that used it (see

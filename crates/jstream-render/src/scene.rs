@@ -1,7 +1,7 @@
 //! The snapshot the engine hands the compositor: one canvas, a clear colour, a stack of items.
 
 use jstream_media::FrameSize;
-use jstream_protocol::BlendMode;
+use jstream_protocol::{BlendMode, Blending};
 
 use crate::image::Image;
 
@@ -58,28 +58,30 @@ impl Color {
         }
     }
 
-    /// The opaque colour this one shows over black, blended in linear light as the
-    /// compositor blends: a scene background where a video mix shows it (ADR-0024 §4).
-    pub fn over_black(self) -> Self {
-        let [r, g, b, _] = crate::color::premultiplied_linear(self);
-        crate::color::from_premultiplied_linear([r, g, b, 1.0])
+    /// The opaque colour this one shows over black, blended in the project's `blending`
+    /// space as the compositor blends: a scene background where a video mix shows it
+    /// (ADR-0024 §4, ADR-0126).
+    pub fn over_black(self, blending: Blending) -> Self {
+        let [r, g, b, _] = crate::color::premultiplied_in(self, blending);
+        crate::color::from_premultiplied_in([r, g, b, 1.0], blending)
     }
 
     /// The colour `t` of the way from `self` to `other`, `t` clamped to `0..=1`, mixed
-    /// premultiplied in linear light, as a cross-fade of the two would show.
-    pub fn mix(self, other: Self, t: f32) -> Self {
+    /// premultiplied in the project's `blending` space, as a cross-fade of the two would
+    /// show (ADR-0126).
+    pub fn mix(self, other: Self, t: f32, blending: Blending) -> Self {
         let t = if t.is_finite() {
             t.clamp(0.0, 1.0)
         } else {
             1.0
         };
-        let from = crate::color::premultiplied_linear(self);
-        let to = crate::color::premultiplied_linear(other);
+        let from = crate::color::premultiplied_in(self, blending);
+        let to = crate::color::premultiplied_in(other, blending);
         let mut out = [0.0; 4];
         for (o, (f, t2)) in out.iter_mut().zip(from.iter().zip(to)) {
             *o = f + (t2 - f) * t;
         }
-        crate::color::from_premultiplied_linear(out)
+        crate::color::from_premultiplied_in(out, blending)
     }
 }
 
