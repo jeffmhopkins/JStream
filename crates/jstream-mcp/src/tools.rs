@@ -1096,6 +1096,7 @@ mod tests {
                 "describe_api",
                 "events",
                 "font",
+                "jtunnel",
                 "kind",
                 "profile",
                 "quality",

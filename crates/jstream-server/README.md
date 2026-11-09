@@ -69,9 +69,9 @@ Contents (a first cut; [Design](#design) explains the choices):
   unless `ServerConfig::pairing` is off, and the agent approval calls, and holds a
   `hello` for approval
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
-- **Listener** (`listener.rs`): accepts TCP connections, closes one accepted while
-  `max_tcp_connections` are open, and drops one that hasn't sent an accepted upgrade
-  request in time.
+- **Listener** (`listener.rs`): accepts TCP connections with Nagle's algorithm off,
+  closes one accepted while `max_tcp_connections` are open, and drops one that hasn't
+  sent an accepted upgrade request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
   ([R-SEC-002](../../docs/RULES.md#R-SEC-002)), the device cookie among them, and the
   limit on how many failed credentials are logged.
@@ -209,7 +209,11 @@ for it is logged at `warn` (`too many open connections`), and later ones are not
 a connection is accepted again. The header-read timeout is there since hyper's own isn't
 reachable through `axum::serve`: until the upgrade handler accepts a request, every read
 and write fails once the deadline has passed. So it also drops a connection that sends
-no request, asks for another path, or stays open after a refusal.
+no request, asks for another path, or stays open after a refusal. The listener also turns
+off Nagle's algorithm (`TCP_NODELAY`) on every connection it accepts, on the loopback
+port and the network listener alike: replies are small writes, often several in a row,
+and with Nagle on, each after the first waited for the client's delayed ACK (about 40 ms
+on Linux).
 The WebSocket cap (`max_connections`) is checked after the `Host`, `Origin` and token
 checks, so a refused upgrade learns nothing about how many sessions are open, and a
 refusal costs no session. The TCP cap is checked at accept, before any request is read. The listener

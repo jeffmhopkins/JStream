@@ -79,8 +79,9 @@ pub(crate) struct Faults {
 /// taken, which `render` does each frame.
 ///
 /// wgpu keeps one callback and one handler per device. The compositor is the only code
-/// that sets them, on its own device and on the platform's context (the program stage
-/// opens one compositor on it), so the context's loss is seen here too.
+/// that sets them: on its own device, and once per platform context, whose compositors
+/// (the program stage, the preview, snapshots: ADR-0117 §5) share that watch
+/// ([`GpuContext::watch`]), so each of them sees the context's loss.
 fn watch(device: &wgpu::Device) -> Arc<Faults> {
     let faults = Arc::new(Faults::default());
     let cell = Arc::clone(&faults);
@@ -109,6 +110,29 @@ fn watch(device: &wgpu::Device) -> Arc<Faults> {
         }
     }));
     faults
+}
+
+/// The watch every compositor on `ctx` shares, installed by the first
+/// ([`GpuContext::watch`]).
+fn context_faults(ctx: &GpuContext) -> Arc<Faults> {
+    match ctx.watch(|| watch(ctx.device())) {
+        Some(faults) => Arc::clone(&*faults),
+        // Only jstream-render installs a context's watch, so this doesn't happen; a
+        // watch of its own still sees errors, if not every compositor's.
+        None => watch(ctx.device()),
+    }
+}
+
+/// Why `ctx`'s device was lost, as its compositors' shared watch saw it (polling the
+/// device once, without waiting), or `None` while it is usable. The watch is installed
+/// here if no compositor has been opened on the context yet. The engine asks this before
+/// lending a context it opened earlier again (ADR-0117 §5).
+pub fn context_lost(ctx: &GpuContext) -> Option<String> {
+    let faults = ctx.watch(|| watch(ctx.device()))?;
+    if faults.lost.get().is_none() {
+        let _ = ctx.device().poll(wgpu::PollType::Poll);
+    }
+    faults.lost.get().cloned()
 }
 
 /// Whether any wgpu backend offers an adapter, hardware or software, without opening a
@@ -176,7 +200,8 @@ impl Gpu {
 
     pub(crate) fn from_context(ctx: &GpuContext) -> Self {
         let adapter = ctx.adapter().clone();
-        let mut gpu = Self::bundle(adapter, ctx.device().clone(), ctx.queue().clone());
+        let faults = context_faults(ctx);
+        let mut gpu = Self::with_faults(adapter, ctx.device().clone(), ctx.queue().clone(), faults);
         gpu.context = Some(ctx.key());
         gpu.submit = ctx.submit_lock().clone();
         gpu.log_open("platform context");
@@ -202,8 +227,17 @@ impl Gpu {
     }
 
     fn bundle(adapter: wgpu::Adapter, device: wgpu::Device, queue: wgpu::Queue) -> Self {
-        let limits = device.limits();
         let faults = watch(&device);
+        Self::with_faults(adapter, device, queue, faults)
+    }
+
+    fn with_faults(
+        adapter: wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        faults: Arc<Faults>,
+    ) -> Self {
+        let limits = device.limits();
         Self {
             device,
             queue,

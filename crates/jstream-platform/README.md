@@ -304,8 +304,9 @@ Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene, or a
 transition between two, on that device when the engine has one, sampling capture frames there, and the frames a
-browser source's page paints on it, and opens its own (hardware adapter first, the
-software one as the fallback) when it does not. It has the NV12 pass that can render
+browser source's page paints on it (the engine opens it once and lends it to every
+compositor and to the browser engine, ADR-0117 §5), and opens its own (hardware adapter
+first, the software one as the fallback) when it does not. It has the NV12 pass that can render
 into an encode target's plane views (`Nv12Converter`). Windows' video encoders take
 encode targets on the context they reached through `Codecs::on_context`, and the
 engine's render thread converts each video mix's composite into the next of that mix's
@@ -352,6 +353,13 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
     - `jstream-render` uses this device when the engine has one, so capture, render and
       encode share one adapter. With no interop it opens its own, hardware adapter first
       with the software one as the fallback.
+    - `GpuContext` is `Clone`: clones are the same context (device, `ContextKey`,
+      `SubmitLock` and platform state), which the engine opens once and lends to every
+      compositor and to the browser engine
+      ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5). The platform's
+      state drops with the last clone. `GpuContext::watch` keeps one value for the
+      device that every clone shares, made by the first caller: `jstream-render`'s
+      device-loss watch, since wgpu keeps one lost callback per device.
     - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
       allocation), so the engine can tell whether a texture is on the context a
       compositor runs on. wgpu's own `Device` equality is per instance and can't.

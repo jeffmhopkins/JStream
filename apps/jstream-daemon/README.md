@@ -266,7 +266,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   JTunnel receiver after the backends (arrivals are stamped on the media clock), on one
   UDP socket on any interface and a port the system picks, and logs that port and the
   senders at `info`. A sender's address can't be outside loopback, private IPv4 and
-  link-local, and the receiver drops everything not from an accepted sender
+  link-local, and the receiver drops everything not from an accepted sender, but for
+  the answers to its mDNS query, which only list senders in `jtunnel.senders`
   ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
   A sender is accepted per machine, on the command line, never from the collection.
 - **PTZ cameras** (`--ptz-camera`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)).
@@ -628,9 +629,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`Engine::with_browser`), so `browser` sources open their pages
   ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). It does
   so after `with_backends`, through a clone of the live engine (clones share its
-  sources), so pages start on the media clock. First
-  it opens a GPU device on the media adapter with the backends' `GpuInterop::open_device`
-  and hands it over with `use_device`, so a page's first paint already lands on it. CEF
+  sources), so pages start on the media clock. The engine hands the backend its one GPU
+  context, on the media adapter, with `use_device` before any page opens, so a page's
+  first paint already lands on the device every compositor draws on
+  ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5). CEF
   runs only in the sandboxed browser helper, which the backend starts with the first
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and

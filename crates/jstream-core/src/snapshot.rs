@@ -48,8 +48,9 @@ use crate::follow::{CameraMotion, CameraMoves, FollowPlan};
 use crate::frames::{self, Sheet};
 use crate::lock;
 use crate::motion::{self, TrackMotion};
+use crate::preview::PreviewCapture;
 use crate::profile::{DrawMeter, Phase};
-use crate::runtime::RenderSnapshot;
+use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
@@ -130,6 +131,9 @@ enum Pixels {
     /// A live source's frame slot (ADR-0117 §3): each draw uploads what it holds then,
     /// by that frame's own version, so a new frame of the same size needs no plan.
     Slot(Arc<crate::slot::FrameSlot>),
+    /// A live source's still image (#1139): its pixels are held only while a draw
+    /// needs them ([`crate::still`]), and each compositor uploads them once.
+    Still(Arc<crate::still::ShownStill>),
 }
 
 impl PartialEq for Frame {
@@ -219,6 +223,19 @@ impl Frame {
         }
     }
 
+    /// A live source's still image, at its size ([`crate::still`]).
+    pub(crate) fn from_still(still: Arc<crate::still::ShownStill>, version: u64) -> Self {
+        let size = still.size();
+        Self {
+            width: size.width(),
+            height: size.height(),
+            extent: [size.width(), size.height()],
+            pixels: Pixels::Still(still),
+            version,
+            model: None,
+        }
+    }
+
     /// The size it is placed at, which `source.sizes` reports (ADR-0073).
     pub(crate) fn extent(&self) -> Option<FrameSize> {
         FrameSize::new(self.extent[0], self.extent[1]).ok()
@@ -268,8 +285,9 @@ impl Frame {
                 .plane(0)
                 .and_then(|plane| plane.data().get(..len))
                 .unwrap_or_default(),
-            // Read through the slot at a draw ([`compose`]); none to borrow here.
-            Pixels::Gpu { .. } | Pixels::Slot(_) => &[],
+            // Read through the slot or the still at a draw ([`compose`]); none to
+            // borrow here.
+            Pixels::Gpu { .. } | Pixels::Slot(_) | Pixels::Still(_) => &[],
         }
     }
 
@@ -285,6 +303,10 @@ impl Frame {
         match &self.pixels {
             // What a draw would upload now.
             Pixels::Slot(slot) => slot.latest().rgba().to_vec(),
+            Pixels::Still(still) => still
+                .read()
+                .map(|frame| crate::slot::rgba(&frame).to_vec())
+                .unwrap_or_default(),
             _ => self.rgba().to_vec(),
         }
     }
@@ -3082,6 +3104,9 @@ pub(crate) struct View<'a> {
     /// What the shot's frame slots held when a frame sheet's picture was taken, drawn in
     /// place of what they hold now ([`Shot::pin`]). `None` draws what they hold now.
     pub(crate) pinned: Option<&'a Pinned>,
+    /// Whether the program stage's render thread draws it: a still image's pixels are
+    /// read only if they are held then, never decoded again there ([`crate::still`]).
+    pub(crate) program: bool,
 }
 
 impl<'a> View<'a> {
@@ -3092,6 +3117,7 @@ impl<'a> View<'a> {
             stage: true,
             owner,
             pinned: None,
+            program: true,
         }
     }
 
@@ -4049,13 +4075,32 @@ enum Work {
 }
 
 /// The `jstream-snapshot` thread, started on the first `video.snapshot`. It owns the
-/// compositor. Dropping this closes the queue and joins the thread.
-#[derive(Default)]
+/// compositor, opened on the engine's GPU context when there is one (ADR-0117 §5), so it
+/// draws the browser pages and GPU captures painted on it. Dropping this closes the queue
+/// and joins the thread.
 pub(crate) struct SnapshotWorker {
     queue: Mutex<Option<(Sender<Job>, JoinHandle<()>)>>,
+    gpu: Arc<SharedGpu>,
+    /// The engine's capture backends, once it has them, which the thread captures the
+    /// displays, windows and video devices a snapshot shows with (#1184).
+    capture: Arc<Mutex<Option<PreviewCapture>>>,
 }
 
 impl SnapshotWorker {
+    /// A worker whose compositor opens on `gpu`'s context.
+    pub(crate) fn new(gpu: Arc<SharedGpu>) -> Self {
+        Self {
+            queue: Mutex::default(),
+            gpu,
+            capture: Arc::default(),
+        }
+    }
+
+    /// Gives the thread the engine's capture backends, from its next job on.
+    pub(crate) fn set_capture(&self, capture: PreviewCapture) {
+        *lock(&self.capture) = Some(capture);
+    }
+
     /// Queues `snapshot` with the live values `live` applied, as it is at `at`, answering
     /// with `rev`. The returned future resolves when the thread has drawn it.
     pub(crate) fn request(
@@ -4089,9 +4134,11 @@ impl SnapshotWorker {
         let mut queue = lock(&self.queue);
         if queue.is_none() {
             let (tx, rx) = mpsc::channel();
+            let gpu = Arc::clone(&self.gpu);
+            let capture = Arc::clone(&self.capture);
             match thread::Builder::new()
                 .name("jstream-snapshot".into())
-                .spawn(move || worker(rx))
+                .spawn(move || worker(&rx, &gpu, &capture))
             {
                 Ok(handle) => *queue = Some((tx, handle)),
                 Err(err) => {
@@ -4133,12 +4180,30 @@ type Gpu = (Compositor, ResourceCache<GpuKey>, Chains);
 
 /// Serves snapshot jobs in order until the queue closes. A panic while drawing is
 /// caught per job: that job answers `internal` and the compositor is reopened next time.
-fn worker(jobs: Receiver<Job>) {
+fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<PreviewCapture>>) {
     let mut gpu: Option<Gpu> = None;
     let mut backoff = OpenBackoff::default();
-    for Job { work, reply } in jobs {
+    let mut captures = SnapshotCaptures::default();
+    loop {
+        let Job { work, reply } = match jobs.recv_timeout(CAPTURE_IDLE) {
+            Ok(job) => job,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // No snapshot for a while: the captures stop until the next one.
+                captures.stop();
+                continue;
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+        let shown = captures.prepare(&work, capture);
+        // A compositor whose device is gone draws nothing again: it reopens, on the
+        // engine's context as it is now.
+        if let Some((compositor, ..)) = &gpu
+            && compositor.lost().is_some()
+        {
+            gpu = None;
+        }
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
-            let (compositor, cache, chains) = open(&mut gpu, &mut backoff)?;
+            let (compositor, cache, chains) = open(&mut gpu, &mut backoff, shared)?;
             match &work {
                 Work::Picture {
                     snapshot,
@@ -4152,9 +4217,10 @@ fn worker(jobs: Receiver<Job>) {
                     *at,
                     compositor,
                     (cache, chains),
+                    shown,
                 )
                 .map(|result| CallResult::Query { result }),
-                Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains)),
+                Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains), shown),
             }
         }));
         let result = result.unwrap_or_else(|_| {
@@ -4167,19 +4233,105 @@ fn worker(jobs: Receiver<Job>) {
     }
 }
 
+/// How long the snapshot thread keeps its captures after its last job: an agent taking
+/// snapshots one after another doesn't wait for each capture to start again.
+const CAPTURE_IDLE: Duration = Duration::from_secs(10);
+
+/// How long a snapshot waits for the captures it shows to deliver a first frame, or fail
+/// to start. One still starting after that draws as nothing.
+const CAPTURE_WAIT: Duration = Duration::from_millis(1500);
+
+/// How often the wait for captures looks at them again.
+const CAPTURE_POLL: Duration = Duration::from_millis(10);
+
+/// The displays, windows and video devices the snapshot thread captures for the
+/// snapshots it draws (#1184), on a `jstream-capture` thread of its own on the CPU path,
+/// as the preview hub does: it can't read the program stage's captures, and a snapshot
+/// draws with no stage running too. Started by the first snapshot that shows one, and
+/// stopped after [`CAPTURE_IDLE`] without a job.
+#[derive(Default)]
+struct SnapshotCaptures {
+    running: Option<RenderCaptures>,
+}
+
+impl SnapshotCaptures {
+    /// Starts what `work` shows and stops the rest, then waits until each has a frame or
+    /// has failed, for at most [`CAPTURE_WAIT`]. Returns the captures to draw with:
+    /// none when it shows none or the engine has no capture backends.
+    fn prepare(&mut self, work: &Work, capture: &Mutex<Option<PreviewCapture>>) -> &dyn Captures {
+        let (wanted, now) = match work {
+            Work::Picture { snapshot, at, .. } => (snapshot.shot().captures().clone(), *at),
+            Work::Sheet(sheet) => (
+                sheet
+                    .samples
+                    .iter()
+                    .flat_map(|sample| sample.snapshot.shot().captures())
+                    .cloned()
+                    .collect(),
+                sheet.start,
+            ),
+        };
+        if wanted.is_empty() {
+            return &NoCaptures;
+        }
+        if self.running.is_none() {
+            let Some(capture) = lock(capture).clone() else {
+                return &NoCaptures;
+            };
+            match capture.spawn() {
+                Ok(running) => self.running = Some(running),
+                Err(err) => {
+                    tracing::warn!(error = %err, "snapshots capture nothing");
+                    return &NoCaptures;
+                }
+            }
+        }
+        let Some(running) = self.running.as_mut() else {
+            return &NoCaptures;
+        };
+        let by = Instant::now() + CAPTURE_WAIT;
+        running.tick(&wanted, now);
+        while !running.settled(&wanted) && Instant::now() < by {
+            thread::sleep(CAPTURE_POLL);
+            running.tick(&wanted, now);
+        }
+        if !running.settled(&wanted) {
+            tracing::info!(
+                waited_ms = CAPTURE_WAIT.as_millis(),
+                "a capture the snapshot shows had no frame yet; it draws as nothing"
+            );
+        }
+        running
+    }
+
+    /// Stops every capture.
+    fn stop(&mut self) {
+        self.running = None;
+    }
+}
+
+/// The snapshot compositor, opened now if there is none: on the engine's GPU context
+/// when it has one, else on a device of its own, hardware first.
 fn open<'a>(
     gpu: &'a mut Option<Gpu>,
     backoff: &mut OpenBackoff,
+    shared: &SharedGpu,
 ) -> Result<&'a mut Gpu, ProtocolError> {
     if gpu.is_none() {
         let now = Instant::now();
         if let Some(error) = backoff.cached(now) {
             return Err(error);
         }
-        match Compositor::open(OpenOptions::hardware()) {
+        let context = shared.context();
+        let opened = match &context {
+            Some(context) => Ok(Compositor::on_context(context)),
+            None => Compositor::open(OpenOptions::hardware()),
+        };
+        match opened {
             Ok(compositor) => {
                 tracing::info!(
                     adapter = %compositor.adapter_description(),
+                    shared = context.is_some(),
                     "snapshot compositor opened"
                 );
                 backoff.opened();
@@ -4283,8 +4435,9 @@ fn draw(
     at: MediaTime,
     compositor: &mut Compositor,
     caches: (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Result<QueryResult, ProtocolError> {
-    let (full_w, full_h, rgba) = render((shot, None), live, at, compositor, caches)?;
+    let (full_w, full_h, rgba) = render((shot, None), live, at, compositor, caches, captures)?;
     let (width, height) = fit(full_w, full_h);
     let rgba = scale_down(full_w, full_h, &rgba, width, height);
     let png =
@@ -4303,6 +4456,7 @@ fn draw_sheet(
     sheet: &Sheet,
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Answer {
     let mut layout = None;
     let mut tiles = Vec::with_capacity(sheet.samples.len());
@@ -4313,6 +4467,7 @@ fn draw_sheet(
             sample.at,
             compositor,
             (&mut *cache, &mut *chains),
+            captures,
         )?;
         let count = u32::try_from(sheet.samples.len()).unwrap_or(u32::MAX);
         let layout = *layout.get_or_insert_with(|| frames::Layout::new(count, (width, height)));
@@ -4341,6 +4496,7 @@ fn render(
     at: MediaTime,
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Result<(u32, u32, Vec<u8>), ProtocolError> {
     cache.begin_frame();
     let output = compose(
@@ -4352,7 +4508,7 @@ fn render(
             ..View::default()
         },
         live,
-        &NoCaptures,
+        captures,
         DrawAt::read(shot.canvas().map_err(from_render)?),
     );
     drop(cache.end_frame(compositor));
@@ -4681,6 +4837,55 @@ fn planned_need(
     })
 }
 
+/// Uploads a still image's frame for `key`, held at the size its items draw it when
+/// `drawn` gives their planned need (as [`ResourceCache::upload_drawn`] holds one).
+/// Its pixels are read only if the cache needs them: on the program stage's render
+/// thread (`program`) only if they are held, asking for them when they aren't (the
+/// texture held already is drawn meanwhile), and saying once the cache has what it
+/// needs so they can be let go of; elsewhere they are decoded again if need be
+/// ([`crate::still`]).
+fn upload_still(
+    compositor: &Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    (key, frame, still): (&GpuKey, &Frame, &crate::still::ShownStill),
+    program: bool,
+    drawn: Option<f32>,
+) -> Result<(), RenderError> {
+    let mut asked = false;
+    let rgba = || {
+        asked = true;
+        if program { still.held() } else { still.read() }.map(Packed)
+    };
+    let size = (frame.width, frame.height);
+    let uploaded = match drawn {
+        Some(planned) => cache
+            .upload_drawn_if_needed(compositor, key, frame.version, size, planned, rgba)?
+            .is_some(),
+        None => cache
+            .upload_if_needed(compositor, key, frame.version, size, rgba)?
+            .is_some(),
+    };
+    if program {
+        // Kept while no mix draws it, so showing it again needs no pixels.
+        cache.keep_while(key, still.alive());
+        if uploaded {
+            still.uploaded();
+        } else if asked {
+            still.want();
+        }
+    }
+    Ok(())
+}
+
+/// A still's packed pixels, as an upload reads them.
+struct Packed(Arc<VideoFrame>);
+
+impl AsRef<[u8]> for Packed {
+    fn as_ref(&self) -> &[u8] {
+        crate::slot::rgba(&self.0)
+    }
+}
+
 /// [`compose`], timing each unit of the work into `meter` (ADR-0103): each source's
 /// upload, each capture, each video chain (an item's with its box), each nested pass and
 /// the composite, and the phases they make up. The readback's wait counts toward the
@@ -4770,6 +4975,19 @@ pub(crate) fn compose_metered(
                     if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
                         cache.set_extent(key, extent);
                     }
+                }
+            }
+            Pixels::Still(still) => {
+                upload_still(
+                    compositor,
+                    cache,
+                    (key, frame, still),
+                    view.program,
+                    shot.drawn_only(key, frame)
+                        .then(|| planned_need(&mut planned, shot, source, frame)),
+                )?;
+                if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                    cache.set_extent(key, extent);
                 }
             }
             Pixels::Copied(_) | Pixels::Video(_) => {
@@ -6696,6 +6914,7 @@ pub(crate) mod tests {
             zero(),
             &mut compositor,
             (&mut cache, &mut Chains::default()),
+            &super::NoCaptures,
         )
         .expect("draw");
         let QueryResult::VideoSnapshot { png, .. } = result else {
@@ -7417,6 +7636,130 @@ pub(crate) mod tests {
             },
         );
         assert!(!drawn.drawn_only(&key, &frame), "a chain reads its texels");
+    }
+
+    /// A still image's pixels are let go of once the program stage has uploaded them,
+    /// and its cache keeps the upload while nothing draws it, so a cut back shows it at
+    /// once. A new upload there waits for the stills thread to decode them again; any
+    /// other compositor decodes them itself (#1139).
+    #[test]
+    fn a_still_is_drawn_from_its_upload_after_its_pixels_go() {
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let size = FrameSize::new(64, 36).expect("invariant: non-zero");
+        let pixels = |value: [u8; 4]| {
+            let info = jstream_media::VideoFrameInfo {
+                size: FrameSize::new(512, 512).expect("invariant: non-zero"),
+                format: jstream_media::PixelFormat::Rgba8,
+                color: jstream_media::ColorInfo::default(),
+                pts: zero(),
+            };
+            let rgba = std::iter::repeat_n(value, 512 * 512).flatten().collect();
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 512 * 4)])
+                .expect("invariant: a packed frame")
+        };
+        let loads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = Arc::clone(&loads);
+        let still = Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels(GREEN)),
+            "still.png".into(),
+            move || {
+                counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(pixels(GREEN))
+            },
+        ));
+        let stills = crate::still::Stills::default();
+        let shown = stills.show(still);
+        let mut planned = shot(vec![(
+            "program",
+            vec![
+                fill("red"),
+                placed(SourceRef::Frame(SourceId::new("still")), FULL),
+            ],
+        )]);
+        planned.frames.insert(
+            SourceId::new("still"),
+            Frame::from_still(Arc::clone(&shown), 3),
+        );
+        let key = GpuKey::Frame(SourceId::new("still"));
+        planned.uploads.push((key.clone(), SourceId::new("still")));
+        let away = shot(vec![("program", vec![fill("red")])]);
+        let draw_shot = |compositor: &mut Compositor,
+                         cache: &mut ResourceCache<GpuKey>,
+                         shot: &Shot,
+                         program| {
+            cache.begin_frame();
+            let output = compose(
+                compositor,
+                (cache, &mut Chains::default()),
+                (shot, zero()),
+                View {
+                    program,
+                    ..View::default()
+                },
+                &LiveParams::default(),
+                &Every(None),
+                super::DrawAt::read(size),
+            )
+            .expect("compose");
+            drop(cache.end_frame(compositor));
+            output.pixels().expect("invariant: read back").pixel(32, 18)
+        };
+        let draw = |compositor: &mut Compositor, cache: &mut ResourceCache<GpuKey>, program| {
+            draw_shot(compositor, cache, &planned, program)
+        };
+        let wait = |done: &dyn Fn() -> bool| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !done() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            done()
+        };
+
+        let mut program = ResourceCache::new();
+        program.draw_uploads_small(true);
+        assert_eq!(draw(&mut compositor, &mut program, true), Some(GREEN));
+        assert!(wait(&|| shown.held().is_none()), "let go of once uploaded");
+        assert_eq!(
+            draw(&mut compositor, &mut program, true),
+            Some(GREEN),
+            "from its upload"
+        );
+
+        // Cut away and back: the program stage's cache kept the upload, so it is drawn
+        // at once, with no decode.
+        for _ in 0..3 {
+            assert_eq!(
+                draw_shot(&mut compositor, &mut program, &away, true),
+                Some(RED)
+            );
+        }
+        assert!(program.get(&key).is_some(), "kept while nothing draws it");
+        assert_eq!(
+            draw(&mut compositor, &mut program, true),
+            Some(GREEN),
+            "at once"
+        );
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 0);
+
+        // A cache with no upload of it (a new program stage): nothing to draw yet.
+        let mut fresh = ResourceCache::new();
+        assert_eq!(draw(&mut compositor, &mut fresh, true), Some(RED));
+        assert!(fresh.get(&key).is_none(), "nothing uploaded");
+        assert!(
+            wait(&|| shown.held().is_some()),
+            "decoded again for the draw"
+        );
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(draw(&mut compositor, &mut fresh, true), Some(GREEN));
+        assert!(wait(&|| shown.held().is_none()));
+
+        // `video.snapshot`'s compositor reads it itself.
+        let mut snapshot = ResourceCache::new();
+        assert_eq!(draw(&mut compositor, &mut snapshot, false), Some(GREEN));
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 2);
     }
 
     /// A shot measures how much each frame it draws is enlarged, against the frame's

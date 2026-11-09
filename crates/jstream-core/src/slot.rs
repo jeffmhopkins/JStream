@@ -171,7 +171,7 @@ impl std::fmt::Debug for FrameSlot {
 }
 
 /// Whether `frame` is `Rgba8` with rows packed one after another, as an upload reads it.
-fn packed(frame: &VideoFrame) -> bool {
+pub(crate) fn packed(frame: &VideoFrame) -> bool {
     let info = frame.info();
     let row = info.size.width() as usize * 4;
     let len = row * info.size.height() as usize;
@@ -182,7 +182,7 @@ fn packed(frame: &VideoFrame) -> bool {
 }
 
 /// The packed bytes of `frame`, as [`FrameSlot`] keeps it: `width * height * 4`.
-fn rgba(frame: &VideoFrame) -> &[u8] {
+pub(crate) fn rgba(frame: &VideoFrame) -> &[u8] {
     let size = frame.info().size;
     let len = size.width() as usize * size.height() as usize * 4;
     frame

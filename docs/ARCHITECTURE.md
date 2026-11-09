@@ -493,8 +493,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25) and controller bindings (protocol 0.96,
   schema version 9), as the organisation bullet above describes.
-  Not yet: settings migrations between kind versions (a source saved at another
-  version is refused on load), the `YouTube` kind, a virtual
+  Not yet: settings migrations between kind versions for built-in kinds (a source or
+  preset saved at another version is refused on load; a source or filter of an effect
+  pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
+  `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys`, `bindings` and `transitions`. The collection file saves everything built so far,
@@ -524,6 +526,7 @@ every mix runs at the base rate divided by an integer.
 | Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio" on Windows. |
 | Render | Composites every mix on each base-rate tick; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
+| Readback (`jstream-readback`, one per program stage's render thread) | Copies each mapped readback buffer out as tightly packed RGBA8 and hands it back to the render thread, which swaps it in, so the render thread copies no pixels ([ADR-0117](adr/0117-real-time-video-thread-model.md) §4) | Not real-time: it only copies and unmaps. A buffer is reused once its copy is back. Ends with the render thread's compositor. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Preview (one per engine, while any preview stream is open) | For an H.264 stream of the program, holds the program stage (opening it with no output) and hands it the stream's encoder, which the render thread feeds with the program at the stream's size; a sender thread per such stream forwards its packets ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a scene, a source, JPEG or PNG) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
@@ -533,7 +536,8 @@ every mix runs at the base rate divided by an integer.
 in steps under #1221): the render thread only composites and submits, never touching
 pixels on the CPU or waiting for the GPU; sources hand it GPU-ready frames through frame
 slots from their own threads, so a new frame no longer re-plans; read-back consumers are
-served by a `jstream-readback` thread from a ring of staging buffers; the engine shares
+served by a `jstream-readback` thread from a ring of staging buffers (built, as RGBA8;
+NV12 readback is #1433); the engine shares
 one GPU context; and the program stage runs while anything consumes it (a preview stream,
 a projector, an output or a virtual camera), compositing the program and every monitored
 scene, so the preview thread encodes and sends frames the render thread drew instead of
@@ -976,6 +980,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   the clients' views did with their preview pictures, as they report it with
   `preview.report` (0.103, [ADR-0132](adr/0132-bench-gates-views-and-quality-probe.md)),
   and each JTunnel sender's latency, buffer, drift and drops (0.113, #1223);
+  `jtunnel.senders` (0.114, [ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md) §3) →
+  the JTunnel senders that answered the receiver's mDNS query, with whether each is
+  accepted, and `jtunnel.senders_changed` when that list changes;
   `quality.probe` (0.110, [ADR-0145](adr/0145-the-quality-probe-reads-back-the-compositor.md))
   → PSNR and SSIM of a running output's next few encoded frames, decoded by the
   platform, against the frames its encoder was given;
@@ -1188,8 +1195,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   panel. Undo is per client, so an agent can never undo the user's work.
 - **Design guidance:** the server instructions end with how to build graphics that look
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
-  countdown and grouping recipes, fitting boxes to text, a custom shader the UI's
-  shader editor opens, animating with keyframe
+  countdown and grouping recipes, fitting boxes to text, a custom shader or shader
+  source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette), borders
@@ -1282,7 +1289,12 @@ first (D3D12 first on Windows); the software adapter is the fallback, so a machi
 no GPU still runs. A nested scene is composited into an `Rgba16Float` layer that stays
 on the GPU
 and is placed in its parent: `render_image` makes a new one, and `render_into` redraws
-a layer the caller keeps, so a frame allocates no texture for it. The caller walks the
+a layer the caller keeps, so a frame allocates no texture for it. A layer drawn over a
+transparent background remembers the box its items could reach, and its parent draws
+only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
+group of a few small items doesn't shade the whole canvas twice. A blur or a mask over
+such a layer, as an item's effects, shades only that box grown by how far it reaches, and
+keeps the box for what reads it next. The caller walks the
 nesting, bounded in depth, and clears each scene's pass to its background (transparent
 without one), and the root of a mix to that background over black, fading from one
 scene's to the other's in linear light while a transition runs (`Color::over_black`,
@@ -1291,7 +1303,11 @@ frame to frame, keyed by the caller's IDs, and hands an image back for freeing o
 after the GPU has finished the last frame that used it (see
 [Threads › State to RT threads](#threading)). The program stage's and the preview's caches hold
 a source's frame that only items draw at the size those items draw it, not the frame's
-(#1139), so a 1080p still in a small box keeps a small texture. On the GPU path the engine's render
+(#1139), so a 1080p still in a small box keeps a small texture, and a still image keeps
+no decoded copy once the program stage has uploaded it: the `jstream-stills` thread lets
+go of it then and decodes the file again when a draw needs it, so a render tick never
+decodes, and the program stage's cache keeps the still's texture while no mix draws it,
+so a cut back to it is drawn at once (`jstream-core`'s `still`). On the GPU path the engine's render
 thread composites on the platform's `GpuContext`, and capture moves onto it through
 `Capture::on_context`: each captured texture is imported once into the cache and
 sampled with no CPU copy, its alpha read as 1 as on the CPU path, the frame's fence hold is staged on each submit that reads it
@@ -1344,7 +1360,12 @@ treats a lost device as one event: it opens the compositor on a new device at on
 the render thread with the fallback's deadline, and the output repeats its last frame
 meanwhile and stays up. On the platform's context that is step 6's fallback, so capture
 moves to CPU frames. On a device of its own it is a new device, the hardware adapter
-first again. Encoders on the CPU path take the readback, so they don't reopen. A session
+first again. The platform's context is the engine's one context, lent to every
+compositor and to the browser engine
+([ADR-0117](adr/0117-real-time-video-thread-model.md) §5): once it is lost the engine
+opens a new one for the next holder that asks and hands it to the browser engine, while
+the stage that saw the loss stays on its own device until it stops. Encoders on the CPU
+path take the readback, so they don't reopen. A session
 that takes the context's encode targets (step 4) rules out leaving the context, so a lost
 context device fails its outputs at once instead
 ([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass
@@ -1551,12 +1572,17 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source, filter and transition preset records its kind's descriptor
   version, migrated on load like the collection
-  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
-  migrations, a source, filter or preset saved at another version is refused on load.
-  A filter whose kind the engine doesn't describe (a pack that isn't installed, or a
-  CLAP plugin before the scan that runs after the load) loads with its settings and
-  version verbatim and is saved back as it was; the engine bypasses it until its kind
-  appears.
+  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). A source, filter or preset
+  saved at another version of a kind the engine describes at load is refused.
+  A source or filter whose kind the engine doesn't describe (a pack that isn't
+  installed or not loaded yet, since the packs load after the collection, or a CLAP
+  plugin before the scan that runs after the load) loads with its settings and version
+  verbatim and is saved back as it was; the engine bypasses it until its kind appears.
+  When an effect pack's kind appears or changes, its sources' and filters' settings
+  move through the pack's renames from the version they were saved by (#1353, #1412).
+  A source or filter keeps the version its settings were stored by, and that is what a
+  save writes: one of a removed kind, or one a downgraded pack can't read, keeps the
+  older or newer version until a pack of that version moves it.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
   `filters` and an item's `effects`, each omitted while empty; the migration from 1
