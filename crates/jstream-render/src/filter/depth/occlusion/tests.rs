@@ -66,10 +66,7 @@ fn depth(opened: &Opened, at: impl Fn(u32) -> f32) -> ViewDepth {
         .collect();
     let image = image::upload_unit_f16(&opened.compositor.maker(), W, H, &texels)
         .expect("the depth uploads");
-    ViewDepth {
-        image: Arc::new(image),
-        focal_px: 1000.0,
-    }
+    ViewDepth::new(Arc::new(image), 1000.0)
 }
 
 fn luma(shot: &Snapshot, x: u32, y: u32) -> u8 {

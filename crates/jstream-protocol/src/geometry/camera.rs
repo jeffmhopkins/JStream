@@ -252,6 +252,24 @@ impl CameraView {
         self.focal as f32
     }
 
+    /// Where the camera is, in the scene's space (ADR-0151 decision 1).
+    pub fn position(&self) -> [f64; 3] {
+        self.position
+    }
+
+    /// The camera's unit right, down and forward axes in the scene's space: a canvas
+    /// pixel `(x, y)` at distance `D` along `forward` is at
+    /// `position + right · (x − cx) D / f + down · (y − cy) D / f + forward · D`, with
+    /// `(cx, cy)` the [`Self::principal`] point and `f` the [`Self::focal_px`].
+    pub fn axes(&self) -> [[f64; 3]; 3] {
+        [self.right, self.down, self.forward]
+    }
+
+    /// The canvas point the camera's axis passes through, in canvas pixels.
+    pub fn principal(&self) -> [f32; 2] {
+        self.principal
+    }
+
     /// Whether the scene's items draw far to near ([`SceneCamera::depth_sort`]).
     pub fn depth_sort(&self) -> bool {
         self.depth_sort

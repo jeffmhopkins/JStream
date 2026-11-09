@@ -308,7 +308,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   a geometry ([Item geometry](#geometry)). `geometry/camera.rs` holds the scene camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)): `Vec3`, `SceneCamera` with
   `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
-  and `CameraView`, the camera seen on one canvas, whose `blur_at` is the camera's
+  and `CameraView`, the camera seen on one canvas (its `position`, unit `axes` right,
+  down and forward, and `principal` point, which turn a pixel and its distance back into
+  a point of the scene, ADR-0151 decision 1), whose `blur_at` is the camera's
   depth-of-field blur at a distance along its view
   ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and whose `in_view` and
   `direction_in_view` take scene points and directions into a model's viewing frame.

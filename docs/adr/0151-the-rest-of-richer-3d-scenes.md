@@ -147,13 +147,13 @@ height, moves, and is lit by the scene's lights:
 |---|---|---|
 | `color` | The fog's own colour (light it scatters from everywhere), sRGB with alpha | light grey |
 | `density` | Fog per 1000 px at the base height | 0.5 |
-| `base_y_px` | The height where fog is densest, in canvas pixels | the canvas height |
+| `base_y_px` | The height where fog is densest, in canvas pixels (a kind's default is fixed, so the bottom of a 1080p canvas) | 1080 |
 | `falloff_px` | Height above the base over which density halves; 0 makes it even | 400 |
 | `start_px` | Distance from the camera where fog begins | 0 |
 | `max_px` | How far a ray marches where nothing is drawn | 8000 |
 | `noise` | How much moving noise varies the density, 0 to 1 | 0.3 |
 | `noise_scale_px` | The size of the noise's features | 300 |
-| `wind_px` | How far the noise drifts per second, x, y and depth | 20, 0, 0 |
+| `wind_x_px`, `wind_y_px`, `wind_z_px` | How far the noise drifts per second, right, down and toward the viewer (three numbers, as settings have no vector type) | 20, 0, 0 |
 | `scattering` | How strongly scene lights light the fog, 0 to 8 | 1 |
 | `quality` | `low` (24 steps), `medium` (48) or `high` (96) | `medium` |
 
@@ -166,7 +166,7 @@ height, moves, and is lit by the scene's lights:
   through the fog draws a light shaft.
 - The result is laid over the picture as depth fog is: the in-scattered light plus the
   picture times the transmittance.
-- The noise moves with the animation clock, the same on every machine; a still `wind_px`
+- The noise moves with the animation clock, the same on every machine; a wind
   of zero makes it still.
 
 **7. Model animation.** The `model` kind plays a glTF file's animations:
