@@ -415,7 +415,6 @@ fn three_d(c: &mut Criterion) {
         ("depth_fog", "depth_fog_1080p_camera"),
         ("ambient_occlusion", "ambient_occlusion_1080p_camera"),
         ("volumetric_fog", "volumetric_fog_1080p_camera"),
-        ("volumetric_fog", "volumetric_fog_1080p_camera"),
     ] {
         depth_filter(&mut compositor, (&images, camera), id, group_name, c);
     }

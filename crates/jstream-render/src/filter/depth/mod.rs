@@ -12,6 +12,7 @@
 
 mod fog;
 mod occlusion;
+mod reflection;
 mod volumetric;
 
 use std::sync::Arc;
@@ -42,6 +43,22 @@ pub struct ViewDepth {
     /// The shadow maps of the lights that cast shadows (ADR-0151 decision 3), for the
     /// kinds that [`reads_shadows`]: at most [`crate::MAX_SHADOW_MAPS`] are read.
     pub shadows: Arc<[DepthShadow]>,
+    /// The scene drawn mirrored in its floor, for the kinds that
+    /// [`reflection_floor`] names a floor for; `None` when none was drawn.
+    pub reflection: Option<DepthReflection>,
+}
+
+/// A scene drawn through its camera mirrored in the plane `y = floor_y` (ADR-0151
+/// decision 4), as a right-handed camera, so its x runs the other way about the
+/// principal point: the picture and its view depth, both the scene's canvas size.
+#[derive(Clone, Debug)]
+pub struct DepthReflection {
+    /// The mirrored picture.
+    pub image: Image,
+    /// Its view depth, `1 / w` through the mirrored camera.
+    pub depth: Image,
+    /// The floor's height, in the scene's space (y down).
+    pub floor_y: f32,
 }
 
 /// One light's shadow map as a depth-aware filter reads it: what
@@ -66,6 +83,7 @@ impl ViewDepth {
             view: None,
             lights: Arc::from([]),
             shadows: Arc::from([]),
+            reflection: None,
         }
     }
 }
@@ -75,6 +93,7 @@ pub fn descriptors() -> Vec<KindDescriptor> {
     vec![
         occlusion::descriptor(),
         fog::descriptor(),
+        reflection::descriptor(),
         volumetric::descriptor(),
     ]
 }
@@ -85,6 +104,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
         fog::KIND => Some(Box::new(fog::DepthFog::new(settings))),
         occlusion::KIND => Some(Box::new(occlusion::AmbientOcclusion::new(settings))),
         volumetric::KIND => Some(Box::new(volumetric::VolumetricFog::new(settings))),
+        reflection::KIND => Some(Box::new(reflection::FloorReflection::new(settings))),
         _ => None,
     }
 }
@@ -92,7 +112,20 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
 /// Whether a filter of `kind_id` reads a scene's view depth, so the engine draws it for
 /// a scene chain that holds one (ADR-0143 decision 4).
 pub fn reads_depth(kind_id: &str) -> bool {
-    [fog::KIND, occlusion::KIND, volumetric::KIND].contains(&kind_id)
+    [
+        fog::KIND,
+        occlusion::KIND,
+        reflection::KIND,
+        volumetric::KIND,
+    ]
+    .contains(&kind_id)
+}
+
+/// The floor a filter of `kind_id` with `settings` mirrors its scene in, so the engine
+/// draws the scene mirrored there for a scene chain that holds one (ADR-0151 decision
+/// 4); `None` for every other kind.
+pub fn reflection_floor(kind_id: &str, settings: &Settings) -> Option<f32> {
+    (kind_id == reflection::KIND).then(|| reflection::floor(settings))
 }
 
 /// Whether a filter of `kind_id` also reads its scene's shadow maps, so the engine draws
@@ -111,7 +144,15 @@ mod tests {
     fn every_depth_kind_reads_depth_and_builds() {
         let kinds = super::descriptors();
         let ids: Vec<_> = kinds.iter().map(|kind| kind.kind_id.as_str()).collect();
-        assert_eq!(ids, ["ambient_occlusion", "depth_fog", "volumetric_fog"]);
+        assert_eq!(
+            ids,
+            [
+                "ambient_occlusion",
+                "depth_fog",
+                "floor_reflection",
+                "volumetric_fog"
+            ]
+        );
         for id in ids {
             assert!(super::reads_depth(id), "{id}");
             assert!(super::build(id, &Settings::default()).is_some(), "{id}");
@@ -119,5 +160,11 @@ mod tests {
         assert!(!super::reads_depth("blur"));
         assert!(super::reads_shadows("volumetric_fog"));
         assert!(!super::reads_shadows("depth_fog"));
+        let floor = super::reflection_floor("floor_reflection", &Settings::default());
+        assert_eq!(floor, Some(super::reflection::DEFAULT_FLOOR));
+        assert_eq!(
+            super::reflection_floor("depth_fog", &Settings::default()),
+            None
+        );
     }
 }

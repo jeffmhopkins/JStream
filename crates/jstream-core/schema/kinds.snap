@@ -1779,6 +1779,59 @@ source: crates/jstream-core/src/kinds.rs
     "max_outset_px": 300
   },
   {
+    "kind_id": "floor_reflection",
+    "category": "video_filter",
+    "name": "Floor reflection",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "floor_y_px",
+        "type": "float",
+        "min": -100000.0,
+        "max": 100000.0,
+        "unit": "px",
+        "default": 1080.0,
+        "label": "Floor height",
+        "description": "Mirrors the scene in a level floor, over whatever the scene draws on it: a plane model or a card lying flat. It works in a scene's filters when the scene has a camera; anywhere else it changes nothing. The floor's height, in canvas pixels (y down): 1080 is the bottom of a 1080p canvas.",
+        "live": true
+      },
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Strength",
+        "description": "How much of the reflection shows.",
+        "live": true
+      },
+      {
+        "id": "fade_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 100000.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Fade",
+        "description": "Height above the floor over which a reflected thing fades out; 0 never fades.",
+        "live": true
+      },
+      {
+        "id": "blur_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Blur",
+        "description": "Blurs the reflection, for a rough floor.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "follow_pointer",
     "category": "video_filter",
     "name": "Follow pointer",

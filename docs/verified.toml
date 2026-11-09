@@ -204,10 +204,10 @@ stamp = { hash = "b3:64dbb25a25fcaabd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:3f50a8d789f5ce90", by = "agent:claude", note = "Its scene-filter depth sentence still holds; the fog's use of shadow maps is a filter detail in the render README." }
+stamp = { hash = "b3:2ad7c9829dc2f805", by = "agent:claude", note = "Its scene-filter depth sentence still holds; floor_reflection is a filter detail in the render README." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
-stamp = { hash = "b3:7603c67e0d3724a0", by = "agent:claude", note = "Added that a spot or directional light may cast shadows, up to 2 a scene, through a 2048² map drawn from the light once a frame; checked against render model/mod.rs and core snapshot.rs." }
+stamp = { hash = "b3:e933ee31532d6229", by = "agent:claude", note = "Its scene-filter depth sentence still holds; floor_reflection is a filter detail in the render README." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/schema/kinds.snap"]
 stamp = { hash = "b3:60467948351c8444", by = "agent:lane-d", note = "FilterClock gains beat, the border kind gains speed_unit and lap_beats, and kinds.snap changes with them; the GPU pipeline section names neither and still holds | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: A new built-in filter kind runs as one more single-pass draw on the existing chain; the pipeline is unchanged" }
@@ -282,7 +282,7 @@ stamp = { hash = "b3:db90872d33fb2d76", by = "agent:claude-00lbbl", note = "Re-r
 stamp = { hash = "b3:732f1461f82c8888", by = "agent:claude", note = "Added that a spot or directional light may cast shadows, up to 2 a scene, through a 2048² map drawn from the light once a frame; checked against render model/mod.rs and core snapshot.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/mod.rs"]
-stamp = { hash = "b3:da4f1f8bab5f3b06", by = "agent:claude", note = "Its scene-filter depth sentence still holds; the fog's use of shadow maps is a filter detail in the render README." }
+stamp = { hash = "b3:f3103563825b98f7", by = "agent:claude", note = "Its scene-filter depth sentence still holds; floor_reflection is a filter detail in the render README." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/occlusion.rs"]
 stamp = { hash = "b3:ff91416586d1a362", by = "agent:claude", note = "the depth-aware filter paragraph still holds with depth_fog first; ambient occlusion reads the same view depth" }
@@ -295,6 +295,15 @@ stamp = { hash = "b3:aed7e0bebd5f33f6", by = "agent:claude", note = "the depth-a
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/occlusion/tests.rs"]
 stamp = { hash = "b3:5861173b1e36265a", by = "agent:claude", note = "the depth-aware filter paragraph still holds; volumetric fog reads the same depth plus the camera view" }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/reflection.rs"]
+stamp = { hash = "b3:61637f01fe004609", by = "agent:claude", note = "Its scene-filter depth sentence still holds; floor_reflection is a filter detail in the render README." }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/reflection/floor.wgsl"]
+stamp = { hash = "b3:c3871eab81fbddb8", by = "agent:claude", note = "Its scene-filter depth sentence still holds; floor_reflection is a filter detail in the render README." }
+
+["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/reflection/tests.rs"]
+stamp = { hash = "b3:6bb943b14276985d", by = "agent:claude", note = "Its scene-filter depth sentence still holds; floor_reflection is a filter detail in the render README." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/depth/volumetric.rs"]
 stamp = { hash = "b3:0517cbf720f5655a", by = "agent:claude", note = "Its scene-filter depth sentence still holds; the fog's use of shadow maps is a filter detail in the render README." }
@@ -309,7 +318,7 @@ stamp = { hash = "b3:4efe2a3190ba13e5", by = "agent:claude", note = "Its scene-f
 stamp = { hash = "b3:a4cbbf08e13f9ced", by = "agent:alpha5-security", note = "Re-read the device-loss paragraph: replaced 'GPU-time guard not built' with the guard (render's timer.rs brackets pack passes with timestamps; core quarantines a kind over half the budget for 30 frames, gpu.effect_slow 0.102), its limits (preview unguarded, no timestamp queries means loss-only), and the unrun forced TDR." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:518e2d7e377565bb", by = "agent:claude", note = "Its scene-filter depth sentence still holds; the fog's use of shadow maps is a filter detail in the render README." }
+stamp = { hash = "b3:c8c830baf2b8c8cb", by = "agent:claude", note = "Its scene-filter depth sentence still holds; floor_reflection is a filter detail in the render README." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/area.rs"]
 stamp = { hash = "b3:8da5fea008ef24f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds (render multipass/*) and their README text. drop_shadow, outline (outside) and glow grow the output, which the section's filter sentence (one premultiplied image into one of the filter's output_size; chain runtime not built) covers; holds" }
@@ -477,7 +486,7 @@ stamp = { hash = "b3:8035317e18344f44", by = "agent:claude", note = "This branch
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "This branch: the program stage's and preview's caches hold a frame only items draw at its drawn size, floored at the plan over every mix (#1139). The upload is still converted by the ingest compute pass to premultiplied linear Rgba16Float, which can now also write a smaller texture as a box mean of the frame's texels; cache retirement after the fence is unchanged. The section's one added sentence holds." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:466bc5ba22322a87", by = "agent:claude", note = "Its scene-filter depth sentence still holds; the fog's use of shadow maps is a filter detail in the render README." }
+stamp = { hash = "b3:7eb2e277f5351ef7", by = "agent:claude", note = "Its scene-filter depth sentence still holds; floor_reflection is a filter detail in the render README." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -1908,7 +1917,7 @@ stamp = { hash = "b3:11ab863d21527e02", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:b58782b6bf8c3db2", by = "agent:claude", note = "The engine's GPU-byte limit for warm scenes (ADR-0150): WarmCaptures plans each warm scene's captures and sources, and trim estimates each source as one RGBA8 frame (stored frame, live size, last seen, else canvas), counted once and not for a source a mix looked at (LiveSources::reached), leaving cold the first scene past the limit and every one after, never Preview. Studio keeps gpu_mib, warm_file keeps it, profile.get copies WarmCaptures::report under the collection lock. Re-read against that" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:bbeef127a59b6fa6", by = "agent:claude", note = "snapshot.rs: a pass marks reads_shadows and draws the scene's shadow maps for its fog; the contents bullet holds at its level." }
+stamp = { hash = "b3:e6b307f9c94fa77c", by = "agent:claude", note = "snapshot.rs gains draw_reflection, mirrored_camera and the Reflection keys; the contents bullet holds at its level." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/transition.rs"]
 stamp = { hash = "b3:34f209c09ae51711", by = "agent:claude", note = "This PR: snapshot.rs's planner looks up the keyframe's overrides for a switch into it and passes them to transition::plan, a group's children planned with none. The merge brought #1261, #1281 and #1302, plus #1316's framing-camera fade, which the lookup now sits after. The sources contents list holds. | kept from the merged side: merge: snapshot.rs and transition.rs gained #1261, #1281 (bloom, glow and shadow bounds) and #1302 (a Move blends effect settings); the sources contents list names neither this PR's framing-camera planning nor those, and still holds. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section. | merge: Main's #1261 (model items drawn through the scene camera) and #1302 (Moves blend effect values) changed live.rs, snapshot.rs and transition.rs; the moved bullets still describe them, the details are in Snapshots." }
@@ -2241,7 +2250,7 @@ stamp = { hash = "b3:5701f7cb5f0a502c", by = "agent:claude", note = "added that 
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:aa5e4cecfda9155e", by = "agent:claude", note = "Added the paragraph on Chain::reads_shadows, Pass::reads_shadows, the pass drawing maps when no model did, and drew_depth handing ViewDepth::shadows, checked by volumetric_fog_gets_the_shadow_maps_of_its_scene." }
+stamp = { hash = "b3:92fea2c5b6dce371", by = "agent:claude", note = "Added the floor reflection paragraph: Chain::reflection_floor, Pass::reflection, draw_reflection with re-drawn models and the mirrored depth, drew_depth handing ViewDepth::reflection; tests a_camera_mirrors_in_the_floor and a_floor_reflection_gets_its_scene_mirrored_in_its_floor." }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2253,7 +2262,7 @@ stamp = { hash = "b3:5ab5708e8811c4a7", by = "agent:lane-d", note = "#1230: item
 stamp = { hash = "b3:25f2f3b47ccb9f93", by = "agent:claude", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds | merge: #1375 brought in JTunnel senders received into network_audio sources; it touches this section's inputs alongside this branch's change without contradicting it, and wave/alpha5 verified its text for #1375 | kept from the merged side: audio_sources.rs gains the Network want and the receiver slot in Wanted; nothing about snapshots or kinds' building changed." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/chain.rs"]
-stamp = { hash = "b3:1dc06caf9c3203bb", by = "agent:claude", note = "Added the paragraph on Chain::reads_shadows, Pass::reads_shadows, the pass drawing maps when no model did, and drew_depth handing ViewDepth::shadows, checked by volumetric_fog_gets_the_shadow_maps_of_its_scene." }
+stamp = { hash = "b3:fcf65392ab1f16ae", by = "agent:claude", note = "Added the floor reflection paragraph: Chain::reflection_floor, Pass::reflection, draw_reflection with re-drawn models and the mirrored depth, drew_depth handing ViewDepth::reflection; tests a_camera_mirrors_in_the_floor and a_floor_reflection_gets_its_scene_mirrored_in_its_floor." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/effect_packs.rs"]
 stamp = { hash = "b3:2dea51e38948ab0c", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Extended the upgrade paragraph to shader sources (Migration, ShaderSource::migrate, live sync after) and said a shader source loads before its pack verbatim; checked against effect_packs.rs, engine.rs and the new test; dropped the not-yet line for sources. | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Replaced 'not migrated yet' with the upgrade: older-version settings through Effect::migrate, fitted to the kind, newer ones kept, one revision with state.changed from client engine, saved, logged in undo history; checked against install_effects and Graph::upgrade_filters." }
@@ -2277,7 +2286,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:bbeef127a59b6fa6", by = "agent:claude", note = "Added the paragraph on Chain::reads_shadows, Pass::reads_shadows, the pass drawing maps when no model did, and drew_depth handing ViewDepth::shadows, checked by volumetric_fog_gets_the_shadow_maps_of_its_scene." }
+stamp = { hash = "b3:e6b307f9c94fa77c", by = "agent:claude", note = "Added the floor reflection paragraph: Chain::reflection_floor, Pass::reflection, draw_reflection with re-drawn models and the mirrored depth, drew_depth handing ViewDepth::reflection; tests a_camera_mirrors_in_the_floor and a_floor_reflection_gets_its_scene_mirrored_in_its_floor." }
 
 ["CRATE-jstream-core#timelines"."body"]
 stamp = { hash = "b3:2d341c6156859b72", by = "agent:claude", note = "This PR: the body's paragraph on timeline labels, checked at timeline.labels and sorted. Merge: #1267's late-tick fixes in timelines.rs and tests/timelines.rs (#1261, #1267, #1269, #1281, #1283, #1284, #1293, #1299, #1302, #1316 and #1319). On re-reading, both match the code. | kept from the merged side: Re-read against #1253: added the sentence that a round sends each looped/ended in time order with its cues, after those due at or before the pass boundary, and drops it when such a cue stopped or restarted that run (send_timeline_step); the rest (rounds, skipped fires, cue_at, seek, removal) holds." }
@@ -2367,7 +2376,7 @@ stamp = { hash = "b3:01ad296c6270687e", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:048747410023f472", by = "agent:claude", note = "core outputs now says the program readback can be NV12; the daemon's design text doesn't describe the readback, still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:aa5e4cecfda9155e", by = "agent:claude", note = "core snapshots now also draw shadow maps for volumetric fog's pass; nothing the daemon describes changes." }
+stamp = { hash = "b3:92fea2c5b6dce371", by = "agent:claude", note = "core snapshots gained the mirrored draw for floor_reflection; nothing the daemon describes changes." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note = "depends_on now names the core sections this design links to (#design for one engine and a session per connection, #snapshots for live sources, #outputs for the placeholder outputs, #wasm-plugins, #logging, #audit-log) instead of the whole old core #design, which is split into topic sections; re-read those passages against them; holds | merge: #1126 changes only core #wasm-plugins' Disabling bullet (save before the event); the daemon's saved-plugin passage still holds; the other core deps are unchanged by the merge" }
@@ -2670,7 +2679,7 @@ stamp = { hash = "b3:73a68442487580f1", by = "agent:jtunnel-desktop", note = "Ad
 stamp = { hash = "b3:d9b91e488d8d9030", by = "agent:shader-source", note = "Hot reload paragraph now names PackWatcher::mark_stale (forces the next poll to reload a folder a host replaced), load_pack (a poll's caught load on LOAD_THREAD, for checking a staged pack) and manifest_pack_id (the manifest's pack ID without shader validation), the three additions in pack.rs, watch.rs and lib.rs for ADR-0097." }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:188e1740c571d1e8", by = "agent:claude", note = "render filters gained only the volumetric fog's shadow reading; effects' purpose is unaffected." }
+stamp = { hash = "b3:e86b253091102c83", by = "agent:claude", note = "render filters gained floor_reflection, a depth-aware kind; effects' purpose is unaffected." }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -4641,7 +4650,7 @@ stamp = { hash = "b3:db90872d33fb2d76", by = "agent:claude-00lbbl", note = "Re-r
 stamp = { hash = "b3:732f1461f82c8888", by = "agent:claude", note = "Shadows paragraph checked against model/mod.rs and model.wgsl: shadow_view packing, the two frame bindings, normal offset, 12 disc taps, 0.2% bias, outside the map lit; test golden_model_a_shadow_map_shadows_a_scene_lit_model." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/mod.rs"]
-stamp = { hash = "b3:da4f1f8bab5f3b06", by = "agent:claude", note = "Design holds: the fog now draws through Ctx::draw_program for four textures, documented under Filters; model shadow packing unchanged." }
+stamp = { hash = "b3:f3103563825b98f7", by = "agent:claude", note = "Design holds; floor_reflection draws like the fog, through draw_program, documented under Filters." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/occlusion.rs"]
 stamp = { hash = "b3:ff91416586d1a362", by = "agent:claude", note = "a second depth kind, two draws through a scratch layer as other multipass kinds do; the design holds" }
@@ -4654,6 +4663,15 @@ stamp = { hash = "b3:aed7e0bebd5f33f6", by = "agent:claude", note = "a second de
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/occlusion/tests.rs"]
 stamp = { hash = "b3:5861173b1e36265a", by = "agent:claude", note = "SceneLighting is shared with the fog shader; one draw per frame, the design holds" }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/reflection.rs"]
+stamp = { hash = "b3:61637f01fe004609", by = "agent:claude", note = "Design holds; floor_reflection draws like the fog, through draw_program, documented under Filters." }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/reflection/floor.wgsl"]
+stamp = { hash = "b3:c3871eab81fbddb8", by = "agent:claude", note = "Design holds; floor_reflection draws like the fog, through draw_program, documented under Filters." }
+
+["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/reflection/tests.rs"]
+stamp = { hash = "b3:6bb943b14276985d", by = "agent:claude", note = "Design holds; floor_reflection draws like the fog, through draw_program, documented under Filters." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/depth/volumetric.rs"]
 stamp = { hash = "b3:0517cbf720f5655a", by = "agent:claude", note = "Design holds: the fog now draws through Ctx::draw_program for four textures, documented under Filters; model shadow packing unchanged." }
@@ -4668,7 +4686,7 @@ stamp = { hash = "b3:4efe2a3190ba13e5", by = "agent:claude", note = "Design hold
 stamp = { hash = "b3:a4cbbf08e13f9ced", by = "agent:alpha5-security", note = "Re-read Device selection: the device asks for TIMESTAMP_QUERY when the adapter has it and no other optional feature (added); compositor, external and program passes' timing is under Filters." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:518e2d7e377565bb", by = "agent:claude", note = "Design holds: the fog now draws through Ctx::draw_program for four textures, documented under Filters; model shadow packing unchanged." }
+stamp = { hash = "b3:c8c830baf2b8c8cb", by = "agent:claude", note = "Design holds; floor_reflection draws like the fog, through draw_program, documented under Filters." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/area.rs"]
 stamp = { hash = "b3:8da5fea008ef24f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds and the resources-table row for the video delay's held frames (its VideoFilter keeps them, reused as the ring turns, dropped on a size change or a 0 delay), checked against video_delay.rs. Multi-pass draws use Ctx::scratch per call with no new thread or I/O; apply_filter still has no steady-path caller until V0; holds" }
@@ -4836,7 +4854,7 @@ stamp = { hash = "b3:8035317e18344f44", by = "agent:claude", note = "Passes step
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "Passes step 1 now describes upload_rgba8_into's smaller texture (box mean in premultiplied linear, rewrite into the same texture, Image::full); the ResourceCache paragraph describes upload_drawn's record_draw measurement, planned first size, power-of-two scale with quarter headroom, 1/16 floor, 256x256 floor and hysteresis, with the lavapipe numbers measured for this change; the resource table still holds." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:466bc5ba22322a87", by = "agent:claude", note = "Design holds: the fog now draws through Ctx::draw_program for four textures, documented under Filters; model shadow packing unchanged." }
+stamp = { hash = "b3:7eb2e277f5351ef7", by = "agent:claude", note = "Design holds; floor_reflection draws like the fog, through draw_program, documented under Filters." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -4890,7 +4908,7 @@ stamp = { hash = "b3:950ada971dc31a24", by = "agent:claude-motion", note = "blen
 stamp = { hash = "b3:06836e5d0f85ce41", by = "agent:claude", note = "Composite step 3 now says a re-drawn transparent layer with known content is loaded and wiped over that content (Wipe, #1449) instead of cleared whole; matches record_composite's Start::Wipe path in render_into and render()'s unchanged clear." }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:188e1740c571d1e8", by = "agent:claude", note = "volumetric_fog entry now covers ViewDepth::shadows, the draw_program path with four textures, and the one-tap shadow test per step; test a_shadow_map_cuts_the_light_through_the_fog." }
+stamp = { hash = "b3:e86b253091102c83", by = "agent:claude", note = "Added the floor_reflection entry, checked against reflection.rs and floor.wgsl: settings, footprint, mirrored x, the mirrored depth for height and fade, the blur disc; test the_floor_takes_the_reflection_of_what_is_above_it." }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
@@ -4938,7 +4956,7 @@ stamp = { hash = "b3:db90872d33fb2d76", by = "agent:claude-00lbbl", note = "Re-r
 stamp = { hash = "b3:732f1461f82c8888", by = "agent:claude", note = "fog/tests.rs only gains the empty ModelDraw shadows field; filter docs unchanged." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/mod.rs"]
-stamp = { hash = "b3:da4f1f8bab5f3b06", by = "agent:claude", note = "volumetric_fog entry now covers ViewDepth::shadows, the draw_program path with four textures, and the one-tap shadow test per step; test a_shadow_map_cuts_the_light_through_the_fog." }
+stamp = { hash = "b3:f3103563825b98f7", by = "agent:claude", note = "Added the floor_reflection entry, checked against reflection.rs and floor.wgsl: settings, footprint, mirrored x, the mirrored depth for height and fade, the blur disc; test the_floor_takes_the_reflection_of_what_is_above_it." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/occlusion.rs"]
 stamp = { hash = "b3:ff91416586d1a362", by = "agent:claude", note = "added the ambient_occlusion bullet: settings, the sample and apply passes, the 4x4 tile blur and pass-through cases" }
@@ -4951,6 +4969,15 @@ stamp = { hash = "b3:aed7e0bebd5f33f6", by = "agent:claude", note = "added the a
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/occlusion/tests.rs"]
 stamp = { hash = "b3:5861173b1e36265a", by = "agent:claude", note = "the depth-aware paragraph describes the scene view, and the volumetric_fog bullet its settings, march, noise drift and lighting" }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/reflection.rs"]
+stamp = { hash = "b3:61637f01fe004609", by = "agent:claude", note = "Added the floor_reflection entry, checked against reflection.rs and floor.wgsl: settings, footprint, mirrored x, the mirrored depth for height and fade, the blur disc; test the_floor_takes_the_reflection_of_what_is_above_it." }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/reflection/floor.wgsl"]
+stamp = { hash = "b3:c3871eab81fbddb8", by = "agent:claude", note = "Added the floor_reflection entry, checked against reflection.rs and floor.wgsl: settings, footprint, mirrored x, the mirrored depth for height and fade, the blur disc; test the_floor_takes_the_reflection_of_what_is_above_it." }
+
+["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/reflection/tests.rs"]
+stamp = { hash = "b3:6bb943b14276985d", by = "agent:claude", note = "Added the floor_reflection entry, checked against reflection.rs and floor.wgsl: settings, footprint, mirrored x, the mirrored depth for height and fade, the blur disc; test the_floor_takes_the_reflection_of_what_is_above_it." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/depth/volumetric.rs"]
 stamp = { hash = "b3:0517cbf720f5655a", by = "agent:claude", note = "volumetric_fog entry now covers ViewDepth::shadows, the draw_program path with four textures, and the one-tap shadow test per step; test a_shadow_map_cuts_the_light_through_the_fog." }
@@ -4965,7 +4992,7 @@ stamp = { hash = "b3:4efe2a3190ba13e5", by = "agent:claude", note = "volumetric_
 stamp = { hash = "b3:a4cbbf08e13f9ced", by = "agent:alpha5-security", note = "Re-read: added 'GPU time of pack passes': time_passes, Pass::timed (kind ID, built-ins None), two timestamp compute passes per application, 32 slots, gpu_times without waiting and without allocating, and the lavapipe test." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:518e2d7e377565bb", by = "agent:claude", note = "volumetric_fog entry now covers ViewDepth::shadows, the draw_program path with four textures, and the one-tap shadow test per step; test a_shadow_map_cuts_the_light_through_the_fog." }
+stamp = { hash = "b3:c8c830baf2b8c8cb", by = "agent:claude", note = "Added the floor_reflection entry, checked against reflection.rs and floor.wgsl: settings, footprint, mirrored x, the mirrored depth for height and fade, the blur disc; test the_floor_takes_the_reflection_of_what_is_above_it." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/area.rs"]
 stamp = { hash = "b3:8da5fea008ef24f4", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
@@ -5214,7 +5241,7 @@ stamp = { hash = "b3:db90872d33fb2d76", by = "agent:claude-00lbbl", note = "Re-r
 stamp = { hash = "b3:732f1461f82c8888", by = "agent:claude", note = "Purpose lists models lit by scene lights and their shadow maps (ADR-0151); ModelDraw::shadows and the exported MAX_SHADOW_MAPS, SHADOW_MAP_PX and ShadowMap match lib.rs." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/mod.rs"]
-stamp = { hash = "b3:da4f1f8bab5f3b06", by = "agent:claude", note = "Purpose still holds: ViewDepth gains shadows (DepthShadow), reads_shadows exported as video_filter_reads_shadows; shadow_view became pub(crate)." }
+stamp = { hash = "b3:f3103563825b98f7", by = "agent:claude", note = "Purpose holds: a new depth-aware kind and ViewDepth::reflection (DepthReflection), exported with video_filter_reflection_floor; the bench only lost a duplicated fog group." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/occlusion.rs"]
 stamp = { hash = "b3:ff91416586d1a362", by = "agent:claude", note = "depth/mod.rs registers ambient_occlusion in depth/occlusion.rs; the purpose holds" }
@@ -5227,6 +5254,15 @@ stamp = { hash = "b3:aed7e0bebd5f33f6", by = "agent:claude", note = "depth/mod.r
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/occlusion/tests.rs"]
 stamp = { hash = "b3:5861173b1e36265a", by = "agent:claude", note = "ViewDepth carries the scene view and volumetric_fog is a third depth kind; the purpose holds" }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/reflection.rs"]
+stamp = { hash = "b3:61637f01fe004609", by = "agent:claude", note = "Purpose holds: a new depth-aware kind and ViewDepth::reflection (DepthReflection), exported with video_filter_reflection_floor; the bench only lost a duplicated fog group." }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/reflection/floor.wgsl"]
+stamp = { hash = "b3:c3871eab81fbddb8", by = "agent:claude", note = "Purpose holds: a new depth-aware kind and ViewDepth::reflection (DepthReflection), exported with video_filter_reflection_floor; the bench only lost a duplicated fog group." }
+
+["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/reflection/tests.rs"]
+stamp = { hash = "b3:6bb943b14276985d", by = "agent:claude", note = "Purpose holds: a new depth-aware kind and ViewDepth::reflection (DepthReflection), exported with video_filter_reflection_floor; the bench only lost a duplicated fog group." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/depth/volumetric.rs"]
 stamp = { hash = "b3:0517cbf720f5655a", by = "agent:claude", note = "Purpose still holds: ViewDepth gains shadows (DepthShadow), reads_shadows exported as video_filter_reads_shadows; shadow_view became pub(crate)." }
@@ -5241,7 +5277,7 @@ stamp = { hash = "b3:4efe2a3190ba13e5", by = "agent:claude", note = "Purpose sti
 stamp = { hash = "b3:a4cbbf08e13f9ced", by = "agent:alpha5-security", note = "Re-read after ARCH gpu-pipeline's guard paragraph: the crate's purpose (compositor, filters, device) covers timing pack passes; holds." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/mod.rs"]
-stamp = { hash = "b3:518e2d7e377565bb", by = "agent:claude", note = "Purpose still holds: ViewDepth gains shadows (DepthShadow), reads_shadows exported as video_filter_reads_shadows; shadow_view became pub(crate)." }
+stamp = { hash = "b3:c8c830baf2b8c8cb", by = "agent:claude", note = "Purpose holds: a new depth-aware kind and ViewDepth::reflection (DepthReflection), exported with video_filter_reflection_floor; the bench only lost a duplicated fog group." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/area.rs"]
 stamp = { hash = "b3:8da5fea008ef24f4", by = "agent:claude@session_011WVSyj9Zba1rqVXBaZJbud", note = "This PR adds the multi-pass kinds (multipass/*.rs and *.wgsl: blur, pixelate, drop_shadow, outline, glow, video_delay, with area, bounds and gauss helpers) and registers them. Purpose refers filters to Filters and the chain runtime to V0, and states none of these; holds" }
@@ -5409,7 +5445,7 @@ stamp = { hash = "b3:8035317e18344f44", by = "agent:claude", note = "Added uploa
 stamp = { hash = "b3:2f7b6aff23c8f25c", by = "agent:claude", note = "Added upload_drawn/draw_uploads_small to the ResourceCache bullet; the rest (uploads premultiplied Rgba16Float, extents, imports) still holds since a drawn-small upload is still Rgba16Float premultiplied linear, placed at its frame's extent." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/lib.rs"]
-stamp = { hash = "b3:466bc5ba22322a87", by = "agent:claude", note = "Purpose still holds: ViewDepth gains shadows (DepthShadow), reads_shadows exported as video_filter_reads_shadows; shadow_view became pub(crate)." }
+stamp = { hash = "b3:7eb2e277f5351ef7", by = "agent:claude", note = "Purpose holds: a new depth-aware kind and ViewDepth::reflection (DepthReflection), exported with video_filter_reflection_floor; the bench only lost a duplicated fog group." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/mip.wgsl"]
 stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
@@ -6024,7 +6060,7 @@ stamp = { hash = "b3:2db221a6045a18ed", by = "agent:claude", note = "N1-N5 follo
 stamp = { hash = "b3:57241f6a72463fc9", by = "agent:lane-d", note = "re-read after merging main's #1296 border, #1279 Outputs panel, #1351 Save as pack and #1372 with the wave's Follow pointer and MIDI UI; filters.rs KNOWN is 26 kinds (border plus follow pointer), and the text still matches | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Edited: Add filter lists the border with vignette and bloom, and the presets include the border's Card, Neon and Broadcast frame; matches filters.rs and filter_presets.rs | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: the preset select and the vignette's Subtle, Cinematic and Spotlight hold; only their strength values changed to linear ones | kept from the merged side: Add filter dialog list and the presets sentence now name scanlines and Monitor, CRT and Film grain" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:fd76db4b7960de68", by = "agent:claude", note = "one more KNOWN entry; the design holds" }
+stamp = { hash = "b3:68c3c6616889c360", by = "agent:claude", note = "The filter picker's known list gains Floor reflection under Style; the design text names no depth kinds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:991ccfb8a3fdc393", by = "agent:claude", note = "merge: The desktop global's fields are #1450's (wheelFocusOnly), with no globalWheel. | kept from the merged side: Edited the desktop global's list to add wheelFocusOnly; checked host.rs reads it, and the chip note's class and style.css rule." }
@@ -6243,7 +6279,7 @@ stamp = { hash = "b3:2db221a6045a18ed", by = "agent:claude", note = "N1-N5 follo
 stamp = { hash = "b3:57241f6a72463fc9", by = "agent:lane-d", note = "re-read after merging main's #1296 border, #1279 Outputs panel, #1351 Save as pack and #1372 with the wave's Follow pointer and MIDI UI; filters.rs KNOWN is 26 kinds (border plus follow pointer), and the text still matches | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: filter_presets.rs gains the border's presets and filters.rs its KNOWN entry; the contents list holds | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: the panel list is unchanged by the presets' new values | kept from the merged side: filters.rs lists scanlines under Style and filter_presets.rs adds its three presets; purpose unchanged" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:fd76db4b7960de68", by = "agent:claude", note = "the catalogue gains Volumetric fog; the purpose holds" }
+stamp = { hash = "b3:68c3c6616889c360", by = "agent:claude", note = "filters.rs KNOWN gains floor_reflection (31 kinds); purpose unaffected." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/inspector.rs"]
 stamp = { hash = "b3:991ccfb8a3fdc393", by = "agent:claude", note = "merge: Merged #1450 (wheelFocusOnly, the Hotkeys list's focus-only chip, the macOS listener). Kept wheelFocusOnly and dropped this branch's globalWheel: app.rs sets it from the macOS permission or !Host::global_wheel; the Follow pointer note is gone since its Zoom rows are Hotkeys rows. Host detection now lists desktop_wheel_focus_only() and on_macos(); chord_note picks the macOS or the bind-keys wording. | kept from the merged side: host.rs gains desktop_wheel_focus_only, hotkeys.rs chord_note, the Inspector a chip note; the crate's purpose is unchanged." }
@@ -7728,7 +7764,7 @@ stamp = { hash = "b3:9bbb001fcee138c7", by = "agent:claude", note = "FL-12 now s
 stamp = { hash = "b3:57241f6a72463fc9", by = "agent:lane-d", note = "merged rows: FL-11 presets now include main's #1296 border presets, FL-12 shader editor, FL-13 the wave's Follow pointer; IDs unique and DL-03/Beyond links point to FL-13 | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold. Hand-resolved: FL-10 keeps the wave's gpu.effect_slow; FL-11 takes main's scanlines presets (#1406) | kept from the merged side: Edited FL-11: the border's Card, Neon and Broadcast frame presets; matches filter_presets.rs | merge: the merge brought #1281's squash and main's #1289/#1331/#1340 in; a 3-way against #1281's last branch head reproduces this PR's own diff exactly, so the border text sits on main's | kept from the merged side: Re-read: FL-11 names the vignette's three presets, whose values changed to linear strengths but whose names and behaviour hold | merge: Resolved by hand: FL-11 (this PR's presets) and FL-12 (#1289's custom shader) both kept; covers now lists filters.rs, filter_presets.rs and custom_shader.rs | kept from the merged side: FL-11 now lists the scanlines' Monitor, CRT and Film grain presets (#1406), matching filter_presets.rs" }
 
 ["UI-FEATURES#filters"."file:crates/jstream-ui/src/panels/filters.rs"]
-stamp = { hash = "b3:fd76db4b7960de68", by = "agent:claude", note = "the catalogue gains Volumetric fog in Style; the filters rows don't list kinds one by one" }
+stamp = { hash = "b3:68c3c6616889c360", by = "agent:claude", note = "The picker gains Floor reflection under Style; this section lists no depth kinds by name." }
 
 ["UI-FEATURES#header"."body"]
 stamp = { hash = "b3:29f7bfa4e6f0c8cd", by = "agent:claude", note = """Settings › General gains "Warm scenes' GPU memory" (warm.rs, ADR-0150): No limit and 512 MB to 16 GB, sent with the count as studio.set_warm's gpu_mib, hidden from an engine older than 0.117; the store's empty studio.get carries warm_gpu_mib: None""" }

@@ -360,6 +360,18 @@ impl Chain {
         })
     }
 
+    /// The floor the first of its filters that mirrors its scene mirrors it in (ADR-0151
+    /// decision 4), so the scene's composite draws the scene mirrored there for it.
+    pub(crate) fn reflection_floor(&self) -> Option<f32> {
+        self.filters.iter().find_map(|filter| {
+            (filter.effect.is_none() && filter.program.is_none())
+                .then(|| {
+                    jstream_render::video_filter_reflection_floor(&filter.kind, &filter.settings)
+                })
+                .flatten()
+        })
+    }
+
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
     /// sum of what each draws past its input at its settings (ADR-0136), each filter
     /// taking the largest of its own settings' outset and that of each of `also`'s
@@ -910,7 +922,15 @@ impl Chains {
         key: &GpuKey,
         (view, lights): (jstream_protocol::CameraView, &[jstream_render::SceneLight]),
         shadows: bool,
+        reflection: Option<(&GpuKey, &GpuKey, f32)>,
     ) {
+        let reflection = reflection.and_then(|(image, depth, floor_y)| {
+            Some(jstream_render::DepthReflection {
+                image: cache.get(image)?.clone(),
+                depth: cache.get(depth)?.clone(),
+                floor_y,
+            })
+        });
         let (Some(ran), Some(layer)) = (self.ran, cache.get(key)) else {
             return;
         };
@@ -955,12 +975,14 @@ impl Chains {
             if !same(&depth.shadows) {
                 depth.shadows = owned(cache);
             }
+            depth.reflection = reflection;
             return;
         }
         let fresh = jstream_render::ViewDepth {
             view: Some(view),
             lights: Arc::from(lights),
             shadows: owned(cache),
+            reflection,
             ..jstream_render::ViewDepth::new(Arc::new(layer.clone()), focal_px)
         };
         if let Some((_, old)) = self.depths.insert(scene.clone(), (ran, fresh)) {
@@ -3263,6 +3285,76 @@ mod tests {
         apply(&mut graph, vec![hide("logo")]);
         let dark = centre(&graph).expect("an adapter");
         assert!(luma(dark) < 6, "no light, no glow: {dark:?}");
+    }
+
+    /// ADR-0151 decision 4: a scene whose chain holds a floor reflection hands it the
+    /// scene drawn mirrored in the filter's floor, with that picture's depth; a 2D scene
+    /// hands it none.
+    #[test]
+    fn a_floor_reflection_gets_its_scene_mirrored_in_its_floor() {
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        let mirror = Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("main"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("mirror"),
+            kind: "floor_reflection".into(),
+            settings: [("floor_y_px", serde_json::json!(30.0))]
+                .into_iter()
+                .collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        apply(&mut graph, vec![mirror]);
+        let white = Frame::new(16, 9, &[255; 4].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
+        let mirrored = |graph: &Graph| {
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |_| Some(Look::Frame(white.clone(), None)),
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 18)],
+            );
+            Some(
+                chains
+                    .depths
+                    .get(&SceneId::new("main"))
+                    .and_then(|(_, depth)| depth.reflection.as_ref())
+                    .map(|r| (r.floor_y, r.image.width(), r.depth.height())),
+            )
+        };
+        let Some(flat) = mirrored(&graph) else {
+            return;
+        };
+        assert_eq!(flat, None, "a 2D scene draws no reflection");
+        apply(
+            &mut graph,
+            vec![Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(jstream_protocol::SceneCamera::framing(canvas)),
+            }],
+        );
+        assert_eq!(
+            mirrored(&graph).expect("an adapter"),
+            Some((30.0, CANVAS.0, CANVAS.1)),
+            "the scene mirrored in the floor reaches the filter"
+        );
     }
 
     /// ADR-0151 decision 6: a scene whose chain holds volumetric fog hands it the shadow
