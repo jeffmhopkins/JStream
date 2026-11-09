@@ -503,7 +503,8 @@ not remove them; they move into the prototype's look.
   ([ADR-0104](adr/0104-network-listener-over-tls.md)), saved by the app and applied at
   its next start, then "Receive from JTunnel senders" and the accepted senders
   ([ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md), `jtunnel.rs`), saved the same
-  way. It is the
+  way, with the senders heard on the network, each accepted only after a confirmation.
+  It is the
   Settings dialog's Devices page ([HD-01](#header)), which says no device can pair where
   the server pairs nothing.
 - Asking before a new agent connects

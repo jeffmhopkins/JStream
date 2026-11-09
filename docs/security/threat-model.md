@@ -684,8 +684,10 @@ somewhere it shouldn't.
 
 **Controls on main** ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md)):
 - The JTunnel receiver is off unless the host turns it on with the senders it accepts:
-  the daemon's `--jtunnel-accept name@address:port`, each a LAN address. Off, no socket
-  is open.
+  the daemon's `--jtunnel-accept name@address:port`, each a LAN address, or the desktop
+  app's "Receive from JTunnel senders", saved only by the app's own command (never a
+  protocol call), where a sender heard on the network is added only after the person
+  confirms it by name and address. Off, no socket is open.
 - It sends only subscribe and bye packets, only to accepted senders' addresses, which
   must be loopback, private IPv4 or link-local, and every 10 s one mDNS PTR query for
   `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
@@ -698,7 +700,8 @@ somewhere it shouldn't.
   address and port, since datagrams are told apart by where they come from.
   Parsing and playout allocate nothing, nor does reading an mDNS answer about anything
   but a JTunnel instance, however its records repeat a long name (only a JTunnel
-  instance's name is copied, once it matches); a sender's audio goes only to the
+  instance's name is copied, once it matches; a message declaring more than 32 records
+  is refused unread, so one costs at most a few thousand steps); a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
   name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
   doesn't trigger bindings (ADR-0142 §2).

@@ -93,7 +93,7 @@ fn receiving_a_packet_does_not_allocate() {
 }
 
 /// Review B1 on #1447: an mDNS answer about anything but a JTunnel instance, however
-/// many records repeat however long a name, is read without allocating, so a LAN host's
+/// its records (at most 32) repeat however long a name, is read without allocating, so a LAN host's
 /// datagram to the receive socket costs the playout thread no allocations.
 #[test]
 fn an_mdns_answer_about_other_names_does_not_allocate() {
@@ -110,7 +110,8 @@ fn an_mdns_answer_about_other_names_does_not_allocate() {
     };
     srv(&mut m);
     let mut records = 1_u16;
-    while m.len() + 18 <= 1472 {
+    // As many records as a message may declare (32); one more is refused unread.
+    while records < 32 {
         m.extend_from_slice(&[0xC0 | (name_at >> 8) as u8, name_at as u8]);
         srv(&mut m);
         records += 1;
@@ -120,4 +121,9 @@ fn an_mdns_answer_about_other_names_does_not_allocate() {
     let parsed = assert_no_alloc(|| parse_announcements(&m).map(|a| a.len()));
     assert_eq!(parsed, Ok(0));
     assert_eq!(violation_count(), before, "parsing allocated");
+    m[6..8].copy_from_slice(&(records + 1).to_be_bytes());
+    assert_eq!(
+        parse_announcements(&m),
+        Err(jstream_jtunnel::dnssd::DnsError::TooManyRecords)
+    );
 }

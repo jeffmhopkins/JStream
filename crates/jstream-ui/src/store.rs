@@ -686,6 +686,9 @@ pub struct Studio {
     /// Bumped when an output's stream key was set or cleared, which no event reports, so
     /// the header re-reads the outputs Go Live may start.
     pub keys_changed: RwSignal<u64>,
+    /// Bumped by each `jtunnel.senders_changed` (0.114), so the JTunnel setting re-reads
+    /// the senders heard on the LAN.
+    pub jtunnel_changed: RwSignal<u64>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
     /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
@@ -714,6 +717,7 @@ impl Studio {
             problem: RwSignal::new(None),
             toast: RwSignal::new(None),
             keys_changed: RwSignal::new(0),
+            jtunnel_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
             studio_seq: StoredValue::new(0),
             next_id: StoredValue::new(0),
@@ -858,6 +862,8 @@ impl Studio {
             } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
             // A CLAP scan or an effect pack changed the kinds (0.107), perhaps from
             // another client.
+            // The JTunnel senders heard on the LAN changed (0.114).
+            Event::JtunnelSendersChanged {} => self.jtunnel_changed.update(|n| *n += 1),
             Event::KindsChanged { .. } => {
                 let studio = *self;
                 let session = session.clone();
