@@ -112,7 +112,12 @@ fn an_mcp_agent_drives_the_engine_in_process() {
     assert!(!failed, "{studio}");
     assert_eq!(
         body["result"]["result"],
-        json!({"type": "studio.get", "program_scene": "scn_1", "preview_scene": "scn_1"})
+        json!({
+            "type": "studio.get",
+            "program_scene": "scn_1",
+            "preview_scene": "scn_1",
+            "warm_scenes": 3
+        })
     );
     let switched = call_tool(
         &server,

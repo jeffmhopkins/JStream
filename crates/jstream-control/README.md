@@ -363,7 +363,9 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `stopped`). `MockEngine::emit` injects any other event;
 - the program and preview scenes with the engine's rules
   ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)): `scene.switch`
-  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `item.show`,
+  and `studio.set_preview` (`not_found` for a missing scene, no `rev`), `studio.set_warm`
+  (`invalid_argument` past `MAX_WARM_SCENES`; it only keeps the number for `studio.get`,
+  since the mock runs no sources), `item.show`,
   `item.hide` and `item.toggle` as the engine applies them (the `item.set_visible`, a
   `rev` and `state.changed`, logged for undo conflicts but no undo step, with no effect
   to play, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)), `item.trigger_motion`

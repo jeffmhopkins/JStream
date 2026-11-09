@@ -118,11 +118,13 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// again, as a switch to a scene with `restart_on_show` restarts it), the keyframe a
 /// placed scene is drawn through (ADR-0116: another `scene.set_keyframe` puts it back,
 /// and nothing stores it), a preview stream (which MCP can't receive anyway), and a
-/// view's report (ADR-0132: it only replaces the session's own counts). A tool whose actions are all here
+/// view's report (ADR-0132: it only replaces the session's own counts), and the warm
+/// budget (ADR-0117 §7: it changes how many scenes stay ready, never what is shown, and
+/// another `studio.set_warm` puts it back). A tool whose actions are all here
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
 /// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 16] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 17] = [
     "audio.reset_loudness",
     "item.hide",
     "item.show",
@@ -139,6 +141,7 @@ pub(crate) const REVERSIBLE_ACTIONS: [&str; 16] = [
     "scene.zoom_camera",
     "source.restart",
     "studio.set_preview",
+    "studio.set_warm",
 ];
 
 /// The edits the `batch` tool refuses, because undo can't fully take them back: each can

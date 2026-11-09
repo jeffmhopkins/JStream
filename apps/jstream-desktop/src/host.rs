@@ -735,7 +735,12 @@ fn startup_collection(
     audit: &Arc<dyn AuditSink>,
 ) -> anyhow::Result<Engine> {
     let recent = data.join(jstream_platform::paths::RECENT_COLLECTIONS_FILE);
-    let engine = || Engine::new().with_audit(Arc::clone(audit));
+    let warm = data.join(jstream_platform::paths::WARM_SCENES_FILE);
+    let engine = || {
+        Engine::new()
+            .with_audit(Arc::clone(audit))
+            .with_warm_file(&warm)
+    };
     if let Some(last) = jstream_core::recent_collections(&recent).into_iter().next()
         && last.is_file()
     {

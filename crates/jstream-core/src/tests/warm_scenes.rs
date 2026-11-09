@@ -1,11 +1,15 @@
 //! Warm scenes (ADR-0117 §7): the captures of the Preview scene and of the scenes most
 //! recently on program are published for the render thread to keep running beside the
 //! program's, and their other sources never rest, so showing one of them starts nothing.
+//! `studio.set_warm` bounds how many there are, and the host's file keeps the number.
 
 use super::{add, batch, block_on, connected, create, edits, webcam};
 use crate::Engine;
 use jstream_control::Control;
-use jstream_protocol::{Action, Call, Edit, SceneId, SourceId, SourceKind};
+use jstream_protocol::{
+    Action, Call, CallResult, DEFAULT_WARM_SCENES, Edit, MAX_WARM_SCENES, ProtocolError, Query,
+    QueryResult, SceneId, SourceId, SourceKind,
+};
 use jstream_sources::{CaptureSpec, DeviceFormatWant};
 use serde_json::json;
 use std::collections::BTreeSet;
@@ -180,4 +184,80 @@ fn a_warm_scenes_sources_never_rest() {
         Some(false),
         "the scene shown last stays warm"
     );
+}
+
+fn warm_scenes(control: &dyn Control) -> Option<u32> {
+    let response = block_on(control.call(Call::Query {
+        query: Query::StudioGet,
+    }))
+    .expect("studio.get answers");
+    match response.result {
+        CallResult::Query {
+            result: QueryResult::StudioGet { warm_scenes, .. },
+        } => warm_scenes,
+        other => panic!("studio.get answered {other:?}"),
+    }
+}
+
+#[test]
+fn the_warm_budget_drops_the_recent_scenes_and_is_kept_in_its_file() {
+    let dir = std::env::temp_dir().join(format!("jstream-warm-budget-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).expect("a temp dir");
+    let file = dir.join("warm-scenes.json");
+    let _ = std::fs::remove_file(&file);
+
+    let engine = Engine::new().with_cpu_compositor().with_warm_file(&file);
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    assert_eq!(warm_scenes(&control), Some(DEFAULT_WARM_SCENES));
+    let scenes = vec![
+        create("main"),
+        create("b"),
+        screen(),
+        add("b", "shown", "screen"),
+    ];
+    batch(&control, edits(scenes)).expect("scenes");
+    assert!(engine.settle_sources(), "the capture sources were built");
+    let warm = || hub.load_warm().len();
+
+    switch(&control, "b");
+    switch(&control, "main");
+    assert_eq!(warm(), 1, "b was shown last, so it is warm");
+
+    act(&control, Action::StudioSetWarm { scenes: 0 });
+    assert_eq!(warm_scenes(&control), Some(0));
+    assert_eq!(warm(), 0, "no recent scene is warm at 0");
+
+    preview(&control, "b");
+    assert_eq!(warm(), 1, "the Preview scene is warm even at 0");
+
+    let refused = block_on(control.call(Call::Action {
+        action: Action::StudioSetWarm {
+            scenes: MAX_WARM_SCENES + 1,
+        },
+    }))
+    .expect_err("past the most");
+    assert!(
+        matches!(
+            refused.protocol(),
+            Some(ProtocolError::InvalidArgument { field, .. }) if field == "scenes"
+        ),
+        "{refused:?}"
+    );
+    assert_eq!(
+        warm_scenes(&control),
+        Some(0),
+        "a refused budget changes nothing"
+    );
+
+    act(&control, Action::StudioSetWarm { scenes: 5 });
+    drop(control);
+    drop(engine);
+    let again = Engine::new().with_warm_file(&file);
+    assert_eq!(
+        warm_scenes(&connected(&again)),
+        Some(5),
+        "the next engine reads the budget back"
+    );
+    std::fs::remove_dir_all(&dir).expect("cleaned up");
 }

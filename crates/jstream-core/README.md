@@ -998,7 +998,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
-  and `studio.set_preview` (see *Program scene* below), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
+  and `studio.set_preview` (see *Program scene* below), `studio.set_warm`, answered before
+  the collection lock (see *Program scene*), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
   or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
   `values.set` (see [Shared values](#shared-values)), `scene.zoom_camera`
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md) §4: no `rev` and
@@ -1251,8 +1252,17 @@ missing scene; setting the scene already there emits nothing), the first scene g
 preview when it is created, and a deleted preview scene gives way to the first scene
 left. A switch never moves it, and nothing draws it until E2's preview mix does. The
 studio also names the **warm scenes** (ADR-0117 §7, `Studio::warm`): the Preview scene,
-then the scenes most recently on program, at most `WARM_SCENES` (3) of them and never
-the program scene. A deleted scene is forgotten. Their captures stay running (see
+then the scenes most recently on program, never the program scene, at most the warm
+budget in all. The Preview scene is warm even past the budget, so a budget of 0 keeps
+only it. A deleted scene is forgotten. The budget is `studio.set_warm`'s (0 to
+`MAX_WARM_SCENES`, `DEFAULT_WARM_SCENES` until set, `invalid_argument` past it), an
+application setting: it changes no `rev` and emits nothing, a newly opened collection's
+studio keeps it (`Studio::fresh`), and `studio.get` reports it. The engine answers it
+before taking the collection lock (`Engine::warm_call`): it sets the budget, republishes
+the warm scenes, and, with the collection lock released, saves the number in the file
+the host named with `Engine::with_warm_file` (`warm_file.rs`, `warm-scenes.json` in the
+data folder for the desktop app and the daemon), which the next start reads back. A
+file that can't be read or holds too many is logged and read as none. Their captures stay running (see
 *Preview streams*), and their other sources never rest (`LiveSources::set_warm`), so a
 page they show stays loaded and painting, and a `restart_on_show` media file waits at
 its start with its first frame decoded.
@@ -2577,8 +2587,9 @@ is looked at again): a `restart_on_show` media file goes to its start and holds 
 first frame, which the sources' thread takes once decoded, so the switch to its scene
 shows that frame in its first plan and plays on with no seek. A preview that looks at
 a cued source first lets it play on from there (`Source::uncue`). A warm scene is not
-composited unless it is monitored; the pin, the hotkey-bound scenes and the budget wait
-for Application Settings (#1207).
+composited unless it is monitored. The set is also published after `studio.set_warm`
+changes the budget. The pin and the hotkey-bound scenes are still to come, and so is
+the budget's estimate of GPU bytes.
 
 A JPEG or PNG stream gets a picture queue instead of an encoder session
 (`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read
@@ -3538,6 +3549,10 @@ collection lock only to serialize, and writes with it released. An effect-pack u
 that moved filters through their renames (#1353) saves once the collection lock is
 released, while the packs' lock is still held, so the packs' lock comes before the
 file's; a save never takes the packs' lock.
+The warm budget's file lock (`Shared::warm_file`) comes before the collection lock:
+`studio.set_warm` holds it, takes the collection lock only to set the budget and
+republish the warm scenes, and writes `warm-scenes.json` with it released, so two sets
+land on disk in order; nothing takes it under another engine lock.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit

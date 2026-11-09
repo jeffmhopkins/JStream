@@ -191,6 +191,10 @@ folder, and its log `logs\cef.log`.
   the data folder, the file the daemon keeps it in too, so the window and a browser of
   the daemon show the same layout
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
+- **The warm scenes** budget (Settings › General › Warm scenes, `studio.set_warm`,
+  ADR-0117 §7) is kept by the engine in `warm-scenes.json` in the data folder
+  (`Engine::with_warm_file`, in `startup_collection`), the file the daemon names too, so
+  it holds whatever project opens.
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start by a
   new, user-only file (a protected DACL for SYSTEM and the user on Windows, mode `0600`
   on Unix, in a folder created `0700`, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to

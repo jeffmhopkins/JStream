@@ -83,7 +83,7 @@ title = "A thread model that uses more cores: CPU frame work off the render thre
 priority = 1
 status = "planned"
 issues = [1221]
-prs = [1235, 1236, 1462, 1463, 1464]
+prs = [1235, 1236, 1462, 1463, 1464, 1470]
 note = "measured, then decided in an ADR; no further preview fix is built until it lands"
 
 [[target]]
