@@ -525,3 +525,35 @@ fn in_view_matches_a_model_placed_at_the_point() {
         assert!((moved[axis] - point[axis] - direction[axis]).abs() < 1e-6);
     }
 }
+
+/// ADR-0143 decision 2: a light sits at its item's centre and shines out of the back of
+/// its box: away from the viewer unturned, and along a placed model's back axis when
+/// turned.
+#[test]
+fn a_light_sits_at_its_items_centre_and_shines_out_of_its_back() {
+    let (at, aim) = item(700.0, 400.0, -250.0, 0.0, 0.0, 0.0).light_pose();
+    assert_eq!(at, [700.0, 400.0, -250.0]);
+    assert_eq!(aim, [0.0, 0.0, -1.0]);
+    // A quarter turn about y points it along the box's own back.
+    let (_, side) = item(0.0, 0.0, 0.0, 0.0, 90.0, 0.0).light_pose();
+    assert!((side[0] + 1.0).abs() < 1e-9 && side[1].abs() < 1e-9 && side[2].abs() < 1e-9);
+    let seen = view(camera(
+        vec3(300.0, -200.0, 1800.0),
+        vec3(900.0, 600.0, -400.0),
+        50.0,
+        12.0,
+    ));
+    let geometry = item(700.0, 400.0, -250.0, 20.0, 35.0, 10.0);
+    let (_, aim) = geometry.light_pose();
+    let bounds = crate::geometry::SolidBounds {
+        min: [-1.0, -1.0, -1.0],
+        max: [1.0, 1.0, 1.0],
+    };
+    let solid = geometry.solid(bounds, Some(&seen)).expect("a solid");
+    let (back, origin) = (solid.in_view([0.0, 0.0, -1.0]), solid.in_view([0.0; 3]));
+    let axis = [0, 1, 2].map(|i| back[i] - origin[i]);
+    let shines = seen.direction_in_view(aim);
+    let length = |v: [f64; 3]| v.iter().map(|c| c * c).sum::<f64>().sqrt();
+    let cos = (0..3).map(|i| axis[i] * shines[i]).sum::<f64>() / (length(axis) * length(shines));
+    assert!((cos - 1.0).abs() < 1e-9, "{axis:?} against {shines:?}");
+}
