@@ -8,7 +8,7 @@
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` and `timer` kinds, how to
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
-//! light by role, use the light and framing filters (bloom, glow, vignette) and
+//! light by role, use the light and framing filters (bloom, glow, vignette, scanlines) and
 //! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
 //! set with a scene camera (ADR-0094) and its depth of field (ADR-0108), which
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
@@ -81,8 +81,8 @@ Give a new pack ID `custom-<word>` (not one `pack.list` has) one effect `shader`
 setting, add a `// @renamed <old> <new>` line, raise the effect's `version` by one and \
 add `renames = { <old> = \"<new>\" }`, keeping earlier entries with each pointed at \
 the newest ID. When the new version loads, the engine moves every existing filter's \
-value to the new ID; a shader source's values don't follow renames yet (#1412). \
-A generated picture is written the same way as a shader source a person can edit from its \
+value to the new ID. \
+A generated picture works the same way, renames included, as a shader source a person can edit from its \
 Properties (Edit shader…): one `[[source]]` `shader` with `width`, `height` and one \
 `[[source.pass]]` `previous` drawing `shader.wgsl`, whose `fs` returns the picture. \
 Its `// @size <w>x<h>` line sets the default size, `// @feedback` adds `previous` to \
@@ -127,6 +127,12 @@ item effects, `glow`, `drop_shadow` and `outline` draw past the item's box. A \
 looks half as bright at the edge near 0.8. Its looks: subtle (`strength` 0.55, `radius` \
 0.5, `softness` 0.7), cinematic (0.85, 0.3, 0.7) and spotlight (1, 0.15, 0.45, \
 `shape` `round`). \
+Screens and old footage: `scanlines` darkens lines every `spacing` px (`strength`, \
+`thickness`), rolls them at `speed` px/s, splits red from blue by `rgb_offset` px, and \
+adds `grain` and `flicker` that change every frame on the engine's clock. Its looks: \
+monitor (`strength` 0.25, `spacing` 3), CRT (0.45, 4, `speed` 12, `rgb_offset` 1.5, \
+`grain` 0.08, `flicker` 0.15) and film grain (`strength` 0, `grain` 0.3, `flicker` \
+0.1); use it on a monitor's screen item or a whole overlay instead of a page. \
 Borders: one `border` item effect frames an item: `radius` (or `corners` `each` with \
 `radius_top_left` and the rest) rounds it and, with `clip` on, the picture with it; \
 `width` and `color` stroke inside the edge, `outer_width`, `outer_gap` and \

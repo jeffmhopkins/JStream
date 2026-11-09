@@ -8,6 +8,7 @@ use crate::capture::CaptureKind;
 use crate::chat::ChatKind;
 use crate::color::ColorKind;
 use crate::image::ImageKind;
+use crate::light::LightKind;
 use crate::media::MediaKind;
 use crate::model::ModelKind;
 use crate::scope::{SpectrumKind, WaveformKind};
@@ -45,6 +46,7 @@ impl Registry {
         add(Box::new(CaptureKind::window()));
         add(Box::new(CaptureKind::webcam()));
         add(Box::new(ImageKind::new()));
+        add(Box::new(LightKind::new()));
         add(Box::new(MediaKind::new()));
         add(Box::<ModelKind>::default());
         add(Box::new(ShapeKind::new()));

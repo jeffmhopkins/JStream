@@ -1943,7 +1943,9 @@ fn a_restart_on_show_page_reloads_each_time_the_program_shows_it_again() {
         // The fade's plan when it is due to end, as the engine wakes for it.
         clock.advance(400);
         engine.replan();
-        assert!(page.hidden(), "off program after the fade, switch {n}");
+        // Off program, though a, the scene shown last, is warm: the page keeps
+        // painting, but no plan of the program reaches it (ADR-0117 §7).
+        assert!(!page.hidden(), "warm after the fade, switch {n}");
         clock.advance(600);
         switch("a");
         assert_eq!(page.reloads(), before + n, "switch {n} shows it again");
@@ -2027,4 +2029,66 @@ fn a_page_painted_on_the_cpu_needs_no_plan() {
         assert_eq!(shown(&engine, "page"), Some(rgba), "the new paint");
     }
     assert_eq!(engine.plans(), plans, "and never re-planned for it");
+}
+
+/// A page with an `fps` of 0 paints at the program's frame rate, and opens again at a
+/// new one; a page with its own `fps` keeps it (#1405).
+#[test]
+fn a_page_at_fps_0_follows_the_programs_frame_rate() {
+    use jstream_browser::fake::FakeBrowser;
+
+    let browser = FakeBrowser::new();
+    let engine = Engine::new().with_browser(browser.clone());
+    let control = connected(&engine);
+    let page = |id: &str, fps: u32| {
+        source(
+            id,
+            "browser",
+            settings(&[
+                ("url", json!(format!("https://example.com/{id}"))),
+                ("width", json!(2)),
+                ("height", json!(1)),
+                ("fps", json!(fps)),
+            ]),
+        )
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            page("follows", 0),
+            page("own", 24),
+            add("a", "i1", "follows"),
+            add("a", "i2", "own"),
+        ]),
+    )
+    .expect("created");
+    // The fps of the newest open page at each URL.
+    let open_fps = |id: &str| -> Option<u32> {
+        let url = format!("https://example.com/{id}");
+        browser
+            .pages()
+            .iter()
+            .rev()
+            .find(|p| !p.is_closed() && format!("{:?}", p.spec().location).contains(&url))
+            .map(|p| p.spec().fps)
+    };
+    let wait_for = |id: &str, fps: u32| {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while open_fps(id) != Some(fps) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(open_fps(id), Some(fps), "{id}");
+    };
+    wait_for("follows", 30);
+    wait_for("own", 24);
+    let opened = browser.pages().len();
+    batch(&control, edits(vec![Edit::CanvasSetFrameRate { fps: 60 }])).expect("frame rate");
+    wait_for("follows", 60);
+    wait_for("own", 24);
+    assert_eq!(
+        browser.pages().len(),
+        opened + 1,
+        "only the following page opened again"
+    );
 }

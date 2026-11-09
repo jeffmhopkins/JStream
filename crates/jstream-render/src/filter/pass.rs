@@ -18,6 +18,8 @@ use crate::error::RenderError;
 use crate::filter::FilterClock;
 use crate::gpu::Gpu;
 use crate::image::{self, Image, LAYER_FORMAT, Maker, Owner};
+use crate::mips::Region;
+use crate::wipe::{self, Wipe};
 
 /// The WGSL every filter shader starts with: the vertex stage, the bindings and the colour
 /// helpers. Effect packs validate against it.
@@ -58,6 +60,12 @@ pub(crate) trait Pass: Send {
         let _ = (slot, image);
     }
 
+    /// Hands a depth-aware filter its scene's view depth (ADR-0143 decision 5), or takes
+    /// it away with `None`. Other kinds ignore it.
+    fn set_depth(&mut self, depth: Option<super::ViewDepth>) {
+        let _ = depth;
+    }
+
     /// Hands a shader source its audio levels for the next frame. Other kinds ignore it.
     fn set_audio(&mut self, audio: super::ProgramAudio) {
         let _ = audio;
@@ -73,6 +81,22 @@ pub(crate) trait Pass: Send {
     /// Starts a shader source over: its time and frame count from 0 and its feedback
     /// transparent, as when it is shown again. Other kinds ignore it.
     fn restart(&mut self) {}
+
+    /// How far, in input pixels, what this filter draws can reach past its input's
+    /// non-transparent texels, for a kind that draws transparent everywhere farther from
+    /// them, keeps its input's size, and draws each pass over the whole frame at that
+    /// pass's own scale (#1070). An input whose content is known
+    /// ([`Image::content`]) then has every pass drawn only over that content grown by
+    /// this ([`Bound`]). `None`, the default, for a kind that can draw anywhere: one that
+    /// holds frames, moves its input, draws a picture of its own or reshapes the frame.
+    /// Nothing checks the promise, and a wrong one cuts what the kind draws, so a kind
+    /// that gives one joins `a_filter_over_a_bounded_layer_draws_only_near_its_content`
+    /// (`src/tests/content.rs`), which draws it bounded and whole and compares the two.
+    /// A pass that draws into a frame placed differently from its output's (a shadow's
+    /// grown shape) moves the bound into it first ([`Bound::placed`]).
+    fn reach(&self) -> Option<f32> {
+        None
+    }
 
     /// Records the filter into `ctx`: read `input`, fill all of `output`, a layer of
     /// [`Self::output_size`]. Multi-pass filters draw into [`Ctx::scratch`] images first,
@@ -591,6 +615,61 @@ pub(crate) struct Ctx<'a> {
     pub(crate) holds: &'a mut Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     /// The drawing filter's intermediate layers.
     pub(crate) scratch: &'a mut Scratch,
+    /// Where in the output frame the filter can draw anything, when its input's content
+    /// and its [`Pass::reach`] say so: every draw is cut to it, at its target's scale.
+    pub(crate) bound: Option<Bound>,
+    /// Writes transparent over part of a target, in place of clearing all of it (#1449).
+    pub(crate) wipe: &'a Wipe,
+    /// What this submit's draws leave in each image they draw into, as
+    /// [`Image::content`] says it (`None` where they can leave anything): set on the
+    /// images once the submit is made, since a recording that fails changes none.
+    pub(crate) written: Vec<(Image, Option<Region>)>,
+}
+
+/// The output pixels a bounded filter can draw into: `[x0, y0, x1, y1]` of a frame of
+/// `frame` pixels (#1070).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Bound {
+    pub rect: [u32; 4],
+    pub frame: (u32, u32),
+}
+
+impl Bound {
+    /// The same pixels in a frame of `frame` pixels whose `origin` is the output's
+    /// top-left: a pass's scratch frame grown around the output (a shadow's shape).
+    pub(crate) fn placed(self, origin: (u32, u32), frame: (u32, u32)) -> Self {
+        let [x0, y0, x1, y1] = self.rect;
+        let (x, y) = origin;
+        Self {
+            rect: [
+                (x0 + x).min(frame.0),
+                (y0 + y).min(frame.1),
+                (x1 + x).min(frame.0),
+                (y1 + y).min(frame.1),
+            ],
+            frame,
+        }
+    }
+
+    /// Texels of a target of `width` by `height` that can hold what the frame's `rect`
+    /// does: scaled to the target, which spans the frame at its own scale, and grown by
+    /// two texels for a target rounded up from it and for a filtered read. `None` when
+    /// none can.
+    fn in_target(self, width: u32, height: u32) -> Option<[u32; 4]> {
+        const MARGIN: f32 = 2.0;
+        let scale = |value: u32, frame: u32, side: u32| value as f32 * side as f32 / frame as f32;
+        let [x0, y0, x1, y1] = self.rect;
+        let (fw, fh) = (self.frame.0.max(1), self.frame.1.max(1));
+        let low = |value: f32| (value - MARGIN).floor().max(0.0) as u32;
+        let high = |value: f32, side: u32| ((value + MARGIN).ceil() as u32).min(side);
+        let rect = [
+            low(scale(x0, fw, width)),
+            low(scale(y0, fh, height)),
+            high(scale(x1, fw, width), width),
+            high(scale(y1, fh, height), height),
+        ];
+        (x1 > x0 && y1 > y0 && rect[2] > rect[0] && rect[3] > rect[1]).then_some(rect)
+    }
 }
 
 impl Ctx<'_> {
@@ -622,7 +701,28 @@ impl Ctx<'_> {
         image::layer(&self.maker, width, height)
     }
 
-    /// Records clearing `target`, a layer, to transparent.
+    /// Where `image` can be other than transparent once the draws recorded so far run.
+    fn prior(&self, image: &Image) -> Option<Region> {
+        self.written
+            .iter()
+            .rev()
+            .find(|(written, _)| written.texture() == image.texture())
+            .map_or_else(|| image.content(), |(_, region)| *region)
+    }
+
+    /// Records that, once this submit runs, `image` is transparent outside `region`.
+    fn wrote(&mut self, image: &Image, region: Option<Region>) {
+        match self
+            .written
+            .iter_mut()
+            .find(|(written, _)| written.texture() == image.texture())
+        {
+            Some(slot) => slot.1 = region,
+            None => self.written.push((image.clone(), region)),
+        }
+    }
+
+    /// Records clearing `target`, a layer, to transparent; nothing when it already is.
     pub(crate) fn clear(&mut self, target: &Image) -> Result<(), RenderError> {
         let Some(view) = target.target() else {
             return Err(RenderError::Invalid {
@@ -630,6 +730,9 @@ impl Ctx<'_> {
                 detail: "the target is not a layer".into(),
             });
         };
+        if self.prior(target).is_some_and(wipe::is_empty) {
+            return Ok(());
+        }
         drop(self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-clear"),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
@@ -646,6 +749,7 @@ impl Ctx<'_> {
             occlusion_query_set: None,
             multiview_mask: None,
         }));
+        self.wrote(target, Some(wipe::EMPTY));
         Ok(())
     }
 
@@ -715,10 +819,43 @@ impl Ctx<'_> {
             frame_buffer,
             params_buffer,
         );
-        let load = match shader.blend {
-            Blend::Replace => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-            Blend::Over => wgpu::LoadOp::Load,
+        // A bounded filter draws only where it can draw anything; the clear covers the rest.
+        let cut = self
+            .bound
+            .map(|bound| bound.in_target(draw.target.width(), draw.target.height()));
+        // A target known transparent outside a region is loaded, not cleared: a draw that
+        // replaces all of that region needs nothing more, and one that doesn't first
+        // makes it transparent (#1449).
+        let prior = self.prior(draw.target);
+        let clear = wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT);
+        let (load, wipe, after) = match (shader.blend, cut) {
+            (Blend::Replace, None) => (clear, None, None),
+            (Blend::Replace, Some(None)) => match prior {
+                Some(prior) if wipe::is_empty(prior) => (wgpu::LoadOp::Load, None, Some(prior)),
+                _ => (clear, None, Some(wipe::EMPTY)),
+            },
+            (Blend::Replace, Some(Some(rect))) => match prior {
+                Some(prior) => (
+                    wgpu::LoadOp::Load,
+                    (!wipe::within(prior, rect)).then_some(prior),
+                    Some(wipe::region(rect)),
+                ),
+                None => (clear, None, Some(wipe::region(rect))),
+            },
+            (Blend::Over, None) => (wgpu::LoadOp::Load, None, None),
+            (Blend::Over, Some(None)) => (wgpu::LoadOp::Load, None, prior),
+            (Blend::Over, Some(Some(rect))) => (
+                wgpu::LoadOp::Load,
+                None,
+                prior.map(|prior| wipe::union(prior, wipe::region(rect))),
+            ),
         };
+        self.wrote(draw.target, after);
+        // Nothing to draw into a target that needs no clear.
+        if matches!(cut, Some(None)) && matches!(load, wgpu::LoadOp::Load) {
+            return Ok(());
+        }
+        let size = (draw.target.width(), draw.target.height());
         let pipeline = self.runtime.pipeline(&self.gpu.device, shader)?;
         let mut pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(shader.label),
@@ -736,6 +873,15 @@ impl Ctx<'_> {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        if let Some(region) = wipe {
+            self.wipe.record(&mut pass, region, size);
+        }
+        match cut {
+            // Nothing to draw: the pass only clears.
+            Some(None) => return Ok(()),
+            Some(Some([x0, y0, x1, y1])) => pass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0),
+            None => {}
+        }
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..3, 0..1);
@@ -770,6 +916,8 @@ impl Ctx<'_> {
                 ),
             });
         }
+        // A program can draw anything anywhere in its target.
+        self.wrote(target, None);
         for input in inputs {
             self.hold(input);
         }
@@ -921,4 +1069,33 @@ fn bind_group(
             },
         ],
     })
+}
+
+#[cfg(test)]
+mod bound_tests {
+    use super::Bound;
+
+    /// A bound moved into a frame grown around its own keeps the same pixels, shifted
+    /// by the origin and clipped to the new frame; mapped into a target of that frame,
+    /// it covers them with the margin.
+    #[test]
+    fn a_placed_bound_keeps_its_pixels_in_the_grown_frame() {
+        let bound = Bound {
+            rect: [10, 20, 30, 40],
+            frame: (100, 50),
+        };
+        let placed = bound.placed((8, 8), (116, 66));
+        assert_eq!(placed.rect, [18, 28, 38, 48]);
+        assert_eq!(placed.frame, (116, 66));
+        // Clipped to the frame it moves into.
+        assert_eq!(bound.placed((90, 30), (110, 60)).rect, [100, 50, 110, 60]);
+        // At a quarter scale, with two texels of margin on each side.
+        assert_eq!(placed.in_target(29, 17), Some([2, 5, 12, 15]));
+        // Nothing to draw.
+        let empty = Bound {
+            rect: [0; 4],
+            frame: (100, 50),
+        };
+        assert_eq!(empty.in_target(100, 50), None);
+    }
 }

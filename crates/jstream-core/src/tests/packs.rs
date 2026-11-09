@@ -233,6 +233,49 @@ fn a_reload_moves_live_filters_through_the_renames() {
     );
 }
 
+/// An undo step that re-adds a filter deleted before its pack's renames answers
+/// `undo_conflict`, as the other steps the upgrade invalidates do (#1418, ADR-0032):
+/// its settings still hold the old IDs, which the new version refuses.
+#[test]
+fn undoing_a_delete_from_before_the_renames_is_an_undo_conflict() {
+    let temp = Temp::new("renames-delete");
+    let path = temp.0.join("scenes.json");
+    let engine = Engine::new()
+        .with_collection_file(&path)
+        .expect("collection file");
+    engine.watch_effect_packs(temp.0.join("effects"));
+    let control = connected(&engine);
+    write(&control, MUL).expect("written");
+    tinted(&control);
+    super::batch(
+        &control,
+        Batch {
+            edits: vec![Edit::FilterRemove {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("bg"),
+                },
+                filter_id: FilterId::new("tint"),
+            }],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("the filter is deleted");
+    let before = engine.rev();
+
+    // No filter of the kind is left to move, but the new version is still a revision.
+    write_renamed(&control);
+    assert_eq!(engine.rev(), before.next().expect("rev"), "one revision");
+
+    let undo = block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo))));
+    assert_eq!(
+        undo.err().as_ref().and_then(super::code),
+        Some("undo_conflict")
+    );
+    assert!(saved_filter(&path).is_null(), "the filter stays deleted");
+}
+
 /// A filter loaded from the collection file before its pack keeps its settings as the
 /// file has them, and they follow the renames from the recorded version once the pack
 /// loads (#1353).
@@ -266,4 +309,124 @@ fn a_loaded_filter_follows_the_renames_once_its_pack_loads() {
         filter["settings"],
         serde_json::json!({ "colour": "#ff0000" })
     );
+}
+
+/// A `wave` pack with one shader source, `wave/w`, at `version`, whose one float
+/// setting is called `setting`; `renames` is its manifest's `renames` line, if any.
+fn wave_pack(dir: &std::path::Path, version: u32, setting: &str, renames: &str) {
+    std::fs::create_dir_all(dir).expect("pack dir");
+    let manifest = format!(
+        "[pack]\nid = \"wave\"\nname = \"Wave\"\n\n[[source]]\nid = \"w\"\nname = \"Wave\"\n\
+         version = {version}\nwidth = 16\nheight = 16\n{renames}\n\n[[source.param]]\n\
+         id = \"{setting}\"\nlabel = \"Level\"\ntype = \"float\"\ndefault = 1.0\n\n\
+         [[source.pass]]\nid = \"w\"\nshader = \"w.wgsl\"\ninputs = []\n"
+    );
+    let shader = format!(
+        "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {{\n    return vec4<f32>(vec3<f32>(p.{setting}), 1.0);\n}}\n"
+    );
+    std::fs::write(dir.join("effect.toml"), manifest).expect("manifest");
+    std::fs::write(dir.join("w.wgsl"), shader).expect("shader");
+}
+
+/// The source `s` as the collection file at `path` holds it.
+fn saved_source(path: &std::path::Path) -> serde_json::Value {
+    let saved: serde_json::Value =
+        serde_json::from_str(&std::fs::read_to_string(path).expect("read")).expect("json");
+    saved["sources"]
+        .as_array()
+        .expect("sources")
+        .iter()
+        .find(|s| s["id"] == "s")
+        .expect("s")
+        .clone()
+}
+
+/// A collection holding a shader source loads while the source's pack isn't loaded
+/// yet, keeping the source as the file has it; once the pack loads, its settings follow
+/// the renames from the version the file recorded, and a later reload's renames move
+/// them again (#1412).
+#[test]
+fn a_shader_source_loads_before_its_pack_and_follows_its_renames() {
+    let temp = Temp::new("renames-source");
+    let path = temp.0.join("scenes.json");
+    let effects = temp.0.join("effects");
+    let pack = effects.join("wave");
+    wave_pack(&pack, 1, "level", "");
+    {
+        let engine = Engine::new()
+            .with_collection_file(&path)
+            .expect("collection file");
+        engine.watch_effect_packs(&effects);
+        let control = connected(&engine);
+        super::batch(
+            &control,
+            Batch {
+                edits: vec![Edit::SourceCreate {
+                    source_id: SourceId::new("s"),
+                    name: "s".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "wave/w".into(),
+                    },
+                    settings: [("level", serde_json::json!(0.25))].into_iter().collect(),
+                    duplicated_from: None,
+                }],
+                expected_rev: None,
+                idempotency_key: None,
+                ends_gesture: None,
+            },
+        )
+        .expect("a shader source");
+    }
+    assert_eq!(saved_source(&path)["kind_version"], 1);
+    wave_pack(&pack, 2, "gain", "renames = { level = \"gain\" }");
+
+    // The daemon and the desktop app open the collection before they watch the packs.
+    let engine = Engine::new()
+        .with_collection_file(&path)
+        .expect("the collection loads with its pack missing");
+    let loaded = engine.rev();
+    engine.watch_effect_packs(&effects);
+    assert_eq!(engine.rev(), loaded.next().expect("rev"), "one revision");
+    let source = saved_source(&path);
+    assert_eq!(source["kind_version"], 2);
+    assert_eq!(source["settings"]["gain"], 0.25);
+    assert!(source["settings"].get("level").is_none(), "{source}");
+
+    // A reload that renames it again moves it again.
+    let control = connected(&engine);
+    let files = [
+        (
+            "effect.toml",
+            std::fs::read_to_string(pack.join("effect.toml")).expect("read"),
+        ),
+        (
+            "w.wgsl",
+            std::fs::read_to_string(pack.join("w.wgsl")).expect("read"),
+        ),
+    ]
+    .into_iter()
+    .map(|(path, text)| PackFile {
+        path: path.into(),
+        content: PackContent::Text(
+            text.replace("version = 2", "version = 3")
+                .replace(
+                    "renames = { level = \"gain\" }",
+                    "renames = { level = \"amount\", gain = \"amount\" }",
+                )
+                .replace("id = \"gain\"", "id = \"amount\"")
+                .replace("p.gain", "p.amount"),
+        ),
+    })
+    .collect();
+    block_on(control.call(Call::Action {
+        action: Action::PackWrite {
+            pack: "wave".into(),
+            files,
+        },
+    }))
+    .expect("the pack is rewritten");
+    let source = saved_source(&path);
+    assert_eq!(source["kind_version"], 3);
+    assert_eq!(source["settings"]["amount"], 0.25);
+    assert!(source["settings"].get("gain").is_none(), "{source}");
 }

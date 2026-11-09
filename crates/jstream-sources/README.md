@@ -65,6 +65,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `model()` (default `None`) is a `ShownModel` for a source that is a 3D model: the
   `Model` the engine draws in 3D where an item places it, with its `Lighting`
   ([ADR-0107](../../docs/adr/0107-3d-models.md)). Only the `model` kind has one.
+  `light()` (default `None`) is a `ShownLight` for the `light` kind: its `LightType`,
+  colour, intensity, range, cone and softness, which the engine places where an item
+  places the source ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)).
   `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
   captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
   (`true`, the default, for a webcam and every other source). Its frames come from the
@@ -257,11 +260,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   name the same file (once percent-decoded) share one read, and all buffers together, a
   `.glb`'s binary chunk included, hold at most 512 MiB. Images decode as the `image` kind decodes them, within the same
   `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
-  `double_sided` (the last three for a shape only) and `lighting` (`studio` or
-  `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
+  `double_sided` (the last three for a shape only) and `lighting` (`studio`, `unlit`,
+  or `scene`, lit by the `light` sources of its 3D scene) are live. Its frame is a transparent stand-in at the model's bounds, the
   longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
   `Source::model` hands the engine the model, which an item draws in the stand-in's
   place (`jstream-core`'s README).
+- `light` ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)): `LightKind`, a light for the `scene`-lit models of a 3D
+  scene. `type` (`point`, `spot`, `directional` or `ambient`), `color`, `intensity` (0
+  to 64), `range_px` (0 never fades), `cone_deg` (1 to 170) and `softness` (0 to 1, the
+  last two shown for a spot only) are all live. Its frame is one transparent pixel: it
+  draws nothing, and `Source::light` hands the engine its settings, which the item that
+  places it gives a position, an aim and a strength (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -447,7 +456,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
   `http://` or `https://`), the page itself as `html` (at most 128 KiB, its CSS and
   scripts inline; it wins over the URL when it isn't blank), or the `file` asset
-  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
+  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 0 to 60; the default 0 follows the program's base rate, `Context.frame_rate`, and the engine opens such a page again when that rate changes, #1405) through
   `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
   background transparent) is the one live setting: `update` replaces the page's custom
@@ -639,7 +648,9 @@ features off.
 distance transform, the glTF loader (`model/gltf/tests.rs`: GLB and `.gltf` files built
 by the test, node transforms and mirroring, materials and textures, refused extensions,
 URLs and overflowing accessors, attributes of another length and VEC3 tangents, a fanning hierarchy with full or empty primitives, an accessor or unindexed primitive past the caps, the texture cap before decoding, one read for a file many buffers name or spell differently, and the cap on all buffers together with a `.glb`'s chunk, and file URIs that would leave the model's folder) and the `model` kind (`model/tests.rs`: shapes, live
-looks, the stand-in's size, buffers read beside a file and not outside its root), reading an audio target from settings and taking a YouTube video
+looks, the stand-in's size, buffers read beside a file and not outside its root), the
+`light` kind (`light/tests.rs`: its defaults, every setting changed live, bad values
+refused), reading an audio target from settings and taking a YouTube video
 ID from an ID or link (`youtube_chat.rs`), and in `source.rs` the
 asset checks refuse a file swapped in from outside the root (Unix) and a junction or
 symbolic link inside the root that leads outside it (Windows, both when the path is

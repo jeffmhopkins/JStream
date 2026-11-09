@@ -176,7 +176,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
-| 1 | A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video | ⏳ planned: measured, then decided in an ADR; no further preview fix is built until it lands | #1221 | #1235, #1236 |
+| 1 | A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video | ⏳ planned: measured, then decided in an ADR; no further preview fix is built until it lands | #1221 | #1235, #1236, #1462, #1463 |
 | 1 | jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality | ⏳ planned: each Windows run opens with it, and a fail blocks the release | #1220, #1140 | #1260, #1315 |
 | 1 | A seamless, full-quality preview: no placeholder, blank or stall on a scene switch, an effectively lossless local preview, and no dropped frames in the preview, stream or recording | ⏳ planned: #1205's placeholder was fixed in alpha.4.1 (#1233); the bench checks the whole bar | #1205, #1217 |  |
 | 1 | Animated sources plan once a frame, and a small still image costs what it draws | ⏳ planned | #1138, #1139 |  |
@@ -184,7 +184,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 | 3 | An Application Settings dialog: plugin management, Check for updates, a CLAP plugins page, project video settings, and one set of blend modes | ⏳ planned: #1210's check and the launch setting are in #1249; plugins, the CLAP page, project video settings and blend modes are still open | #1207, #1210, #1212, #1192, #1230 | #1249 |
 | 4 | Save and load projects: File › New, Open, Save As and Open recent | ⏳ planned | #1218 |  |
 | 5 | A UI scrub of every panel, dialog and window, with a decluttered Inspector and Properties and Filters in one dialog | ⏳ planned: #1279 and #1373 redesign the Outputs panel (#1206); #1219, #1198, #1202 and #1204 remain | #1219, #1198, #1202, #1204, #1206 | #1279, #1373, #1389 |
-|  | Snapshots and frame sheets draw browser pages and screen captures on Windows | ⏳ planned | #1184, #1194, #1215 |  |
+|  | Snapshots and frame sheets draw browser pages and screen captures on Windows | ⏳ planned | #1184, #1194, #1215 | #1264 |
 |  | Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus | ⏳ planned: #1251 lays out the 3D camera section (#1214); #1225, #1216 and #1188 remain | #1225, #1216, #1214, #1188 | #1251 |
 |  | Looping media files play without a gap at the wrap | ⏳ planned | #445 |  |
 |  | Small fixes: the Cut preset cuts, and the alpha.4 run's small MCP findings | ⏳ planned | #1209, #1189 | #1240, #1245, #1255, #1257 |

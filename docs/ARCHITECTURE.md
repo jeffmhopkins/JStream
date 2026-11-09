@@ -485,9 +485,10 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   its filter chains are saved with it.
   Folders (a tree), labels, scenes' and sources' organisation metadata (protocol 0.31),
   and hotkey bindings (protocol 0.25), as the organisation bullet above describes.
-  Not yet: settings migrations between kind versions for sources and presets (a source
-  saved at another version is refused on load; a filter of an effect pack's kind follows
-  the effect's renames when its new version loads, #1353), the `YouTube` kind, a virtual
+  Not yet: settings migrations between kind versions for built-in kinds (a source or
+  preset saved at another version is refused on load; a source or filter of an effect
+  pack's kind follows the pack's renames when its new version loads, #1353, #1412), the
+  `YouTube` kind, a virtual
   camera's video mix (it always shows the program), and everything outside `sources`,
   `scenes`, `outputs`, `encoders`, `video_mixes`, `audio`, `folders`, `labels`,
   `hotkeys` and `transitions`. The collection file saves everything built so far,
@@ -516,21 +517,25 @@ every mix runs at the base rate divided by an integer.
 | Control (tokio) | Commands, server, MCP, YouTube API, network outputs | May allocate and await. Talks to RT threads only through lock-free channels. |
 | Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio" on Windows. |
-| Render | Composites every mix on each base-rate tick; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
+| Render | Composites every mix on each base-rate tick, then the monitored scenes preview streams show; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. A monitored scene not begun within the tick's period is skipped and counted, so the program never waits for one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
+| Readback (`jstream-readback`, one per program stage's render thread) | Copies each mapped readback buffer out as tightly packed RGBA8, or NV12 for a mix only NV12 encoders take, and hands it back to the render thread, which swaps it in, so the render thread copies no pixels ([ADR-0117](adr/0117-real-time-video-thread-model.md) §4) | Not real-time: it only copies and unmaps. A buffer is reused once its copy is back. Ends with the render thread's compositor. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
-| Preview (one per engine, while any preview stream is open) | For an H.264 stream of the program, holds the program stage (opening it with no output) and hands it the stream's encoder, which the render thread feeds with the program at the stream's size; a sender thread per such stream forwards its packets ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a scene, a source, JPEG or PNG) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
+| Preview (one per engine, while any preview stream is open) | For a stream of the program or of a scene, holds the program stage (opening it with no output) and hands it the stream's H.264 encoder, or a JPEG or PNG stream's picture queue, which the render thread feeds with the program, or the scene as a monitored scene, at the stream's size; a sender thread per such stream forwards its packets, or encodes and sends its pictures ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a source, a draft, or any stream of an engine without backends) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while it runs (while any output or H.264 preview stream of the program holds it), fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while it runs (while any output or program or scene preview stream holds it), fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers, a closed picture queue, replaced monitored-scene snapshots), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
 **Target video model** ([ADR-0117](adr/0117-real-time-video-thread-model.md), being built
 in steps under #1221): the render thread only composites and submits, never touching
 pixels on the CPU or waiting for the GPU; sources hand it GPU-ready frames through frame
 slots from their own threads, so a new frame no longer re-plans; read-back consumers are
-served by a `jstream-readback` thread from a ring of staging buffers; the engine shares
+served by a `jstream-readback` thread from a ring of staging buffers (built, in NV12
+when only encoders take a mix, else RGBA8); the engine shares
 one GPU context; and the program stage runs while anything consumes it (a preview stream,
 a projector, an output or a virtual camera), compositing the program and every monitored
 scene, so the preview thread encodes and sends frames the render thread drew instead of
-compositing its own. A small `jstream-work-*` pool takes CPU work with no thread of its
+compositing its own (built for the program's and the scenes' streams; source and draft
+streams still draw on the preview thread, and JPEG and PNG encode on each stream's
+sender thread until the pool exists). A small `jstream-work-*` pool takes CPU work with no thread of its
 own. The table above is the model as built; each step edits it as it lands.
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
@@ -1128,7 +1133,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
-  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette), borders
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
   and how to stack them, layering light, masks and reflections, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
@@ -1197,10 +1202,17 @@ edge softened to match, with no extra pass or target. A 3D model's layer isn't b
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
-under a studio rig fixed to the camera, or unlit; the layer is then placed flat
+under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
+lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,
+spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in
+`f64`); the layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
-jitter, and the GPU's own near clip is ADR-0050's near plane.
+jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
+([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)
+gets the scene's view depth: one more draw of its cards, and of its models' own
+triangles, into a half-float canvas layer holding `1 / w` of the nearest thing, the
+larger value winning, drawn only for such a filter.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
 light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
@@ -1218,7 +1230,10 @@ and is placed in its parent: `render_image` makes a new one, and `render_into` r
 a layer the caller keeps, so a frame allocates no texture for it. A layer drawn over a
 transparent background remembers the box its items could reach, and its parent draws
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
-group of a few small items doesn't shade the whole canvas twice. The caller walks the
+group of a few small items doesn't shade the whole canvas twice. A blur, a mask, a shadow or a glow over
+such a layer, as an item's effects, shades only that box grown by how far it reaches, and
+keeps the box for what reads it next. A layer or filter target drawn again is made
+transparent over that box rather than cleared whole (#1449). The caller walks the
 nesting, bounded in depth, and clears each scene's pass to its background (transparent
 without one), and the root of a mix to that background over black, fading from one
 scene's to the other's in linear light while a transition runs (`Color::over_black`,
@@ -1260,7 +1275,9 @@ that mix's ring of the platform's encode targets, which it is pushed as a GPU fr
 its own submit that stages the target's fence and hands it back in `PRESENT`. Sessions
 on the CPU path and the virtual cameras still get their mix read back, through a ring
 of map-read buffers the render thread collects without waiting for the GPU (§4 of the
-ADR), and a mix none of them is fed is not read back. Built-in video filters are kinds with
+ADR): converted to NV12 on the GPU first when only encoder sessions opened in NV12 take
+the mix, so the readback is half the bytes and no CPU conversion follows, and RGBA8
+otherwise. A mix none of them is fed is not read back. Built-in video filters are kinds with
 descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));
@@ -1279,12 +1296,27 @@ crate draws them through the filter harness), and the output path below.
 **Device loss** (#349). A GPU hang that Windows resets (TDR), a driver reset or a removed
 GPU takes the device with it, and with it everything made on it. The compositor watches
 its device, its own or the context's, for the loss (`Compositor::lost`), and keeps the
-invalid-resource errors that follow from panicking the render thread. The render thread
-treats a lost device as one event: it opens the compositor on a new device at once, off
+invalid-resource errors that follow from panicking the render thread. The next poll of a
+lost device, on any thread, frees every buffer made on it, so recording the loss waits
+for any read of a mapped buffer under way (the `jstream-readback` copier's), and a read
+after it reads nothing (#1454). On a driver's loss wgpu marks the device invalid just
+before its callback records the loss, so a poll on another thread in between, while a
+copy under way finishes, can still free the buffer under it; a deliberate loss
+(`Compositor::destroy_device`) records it first and has no such gap (#1457). The render thread
+asks for the loss at the start of every tick, since calls on a destroyed device can all
+succeed, and treats a lost device as one event: it opens the compositor on a new device at once, off
 the render thread with the fallback's deadline, and the output repeats its last frame
 meanwhile and stays up. On the platform's context that is step 6's fallback, so capture
 moves to CPU frames. On a device of its own it is a new device, the hardware adapter
-first again. Encoders on the CPU path take the readback, so they don't reopen. A session
+first again. The platform's context is the engine's one context, lent to every
+compositor and to the browser engine
+([ADR-0117](adr/0117-real-time-video-thread-model.md) §5): once it is lost the engine
+opens a new one for the next holder that asks and hands it to the browser engine, while
+the stage that saw the loss stays on its own device until it stops. The preview's and
+the snapshot thread's compositors on it collect their own errors in wgpu error scopes,
+so an error one of them raises fails only its own call, not the stage's next frame
+(#1268). Encoders on the CPU
+path take the readback, so they don't reopen. A session
 that takes the context's encode targets (step 4) rules out leaving the context, so a lost
 context device fails its outputs at once instead
 ([jstream-core › Runtime](../crates/jstream-core/README.md#runtime)); the NV12 pass
@@ -1458,14 +1490,17 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source, filter and transition preset records its kind's descriptor
   version, migrated on load like the collection
-  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). Until kinds ship settings
-  migrations, a source, filter or preset saved at another version is refused on load.
-  A filter whose kind the engine doesn't describe (a pack that isn't installed, or a
-  CLAP plugin before the scan that runs after the load) loads with its settings and
-  version verbatim and is saved back as it was; the engine bypasses it until its kind
-  appears. A filter keeps the version its settings were stored by, and that is what a
+  ([ADR-0025](adr/0025-typed-settings-kind-descriptors.md)). A source, filter or preset
+  saved at another version of a kind the engine describes at load is refused.
+  A source or filter whose kind the engine doesn't describe (a pack that isn't
+  installed or not loaded yet, since the packs load after the collection, or a CLAP
+  plugin before the scan that runs after the load) loads with its settings and version
+  verbatim and is saved back as it was; the engine bypasses it until its kind appears.
+  When an effect pack's kind appears or changes, its sources' and filters' settings
+  move through the pack's renames from the version they were saved by (#1353, #1412).
+  A source or filter keeps the version its settings were stored by, and that is what a
   save writes: one of a removed kind, or one a downgraded pack can't read, keeps the
-  older or newer version until a pack of that version moves it (#1353).
+  older or newer version until a pack of that version moves it.
   A placement's `opacity` and `blend` are written only when they differ from 1 and
   `normal`, a geometry's `flip_h` and `flip_v` only when true, a disabled filter's `enabled` only when false. Schema version 2 adds a scene's
   `filters` and an item's `effects`, each omitted while empty; the migration from 1

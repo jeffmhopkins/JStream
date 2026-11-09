@@ -32,7 +32,7 @@ use crate::profile::{DrawMeter, Profiler};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputEncode, OutputStats, Pending, PipelineEvent, Program, Release, RenderHub, RenderSnapshot,
-    Running, SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch,
+    Running, SharedGpu, SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch,
     launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
@@ -103,6 +103,10 @@ pub struct Engine {
 struct Shared {
     state: Mutex<State>,
     snapshots: SnapshotWorker,
+    /// The engine's one GPU context (ADR-0117 §5), lent to the program stage, the preview
+    /// hub, the snapshot thread and the browser engine. Its locks are its own, never
+    /// taken under the collection lock.
+    gpu: Arc<SharedGpu>,
     /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
     sheets: AtomicUsize,
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
@@ -180,6 +184,7 @@ impl WeakEngine {
 impl Default for Engine {
     fn default() -> Self {
         let audio_scopes = Arc::new(AudioScopes::new());
+        let gpu = Arc::new(SharedGpu::default());
         Self {
             shared: Arc::new_cyclic(|shared: &Weak<Shared>| {
                 let mut state = State::default();
@@ -191,7 +196,8 @@ impl Default for Engine {
                 let profile = Profiler::new(frame_budget(), state.live.meters());
                 Shared {
                     state: Mutex::new(state),
-                    snapshots: SnapshotWorker::default(),
+                    snapshots: SnapshotWorker::new(Arc::clone(&gpu)),
+                    gpu,
                     sheets: AtomicUsize::new(0),
                     keys: Mutex::new(None),
                     audit: Audit::default(),
@@ -675,6 +681,20 @@ impl Engine {
         // A webcam or capture card opens once, shared by the program stage's capture of
         // it and the preview's.
         backends.video_devices = Arc::new(SharedVideoDevices::new(backends.video_devices));
+        // One GPU context for the whole engine (ADR-0117 §5): every stage, the preview
+        // and snapshots open on it, and the browser engine paints on it.
+        self.shared.gpu.set_interop(backends.gpu);
+        backends.gpu = Arc::clone(&self.shared.gpu) as Arc<dyn jstream_platform::GpuInterop>;
+        // A context that replaces a lost one goes to the browser engine, whichever
+        // holder saw the loss.
+        {
+            let shared = Arc::downgrade(&self.shared);
+            self.shared.gpu.on_replaced(Arc::new(move |context| {
+                if let Some(shared) = shared.upgrade() {
+                    set_gpu(&shared, Some(context));
+                }
+            }));
+        }
         let host = self.host();
         // The preview draws the program on the program stage, which it opens when no
         // output has (ADR-0117 §6), and captures what scenes and drafts show itself. The
@@ -697,13 +717,21 @@ impl Engine {
                 .preview_stage()
             })
         };
-        self.shared.previews.set_capture(PreviewCapture {
+        let capture = PreviewCapture {
             capture: Arc::clone(&backends.capture),
             devices: Arc::clone(&backends.video_devices),
             codecs: Arc::clone(&backends.codecs),
             clock: backends.clock.timebase(),
             stage: Some(stage),
+            gpu: Arc::clone(&self.shared.gpu),
+        };
+        // Snapshots capture what they show the same way as the preview, on their own
+        // thread (#1184). The stage opener is the preview's alone.
+        self.shared.snapshots.set_capture(PreviewCapture {
+            stage: None,
+            ..capture.clone()
         });
+        self.shared.previews.set_capture(capture);
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
         *lock(&host.vcam) = vcam;
@@ -714,15 +742,18 @@ impl Engine {
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
     /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
     /// that no backend is set; giving one builds the ones already there again.
-    /// The host also hands the backend a GPU device (`use_device`), one it opens on the
-    /// media adapter itself, for paints before a program stage; while a stage runs the
-    /// engine lends the backend the stage's own context instead (`use_gpu`).
+    /// The engine hands the backend its GPU context (`use_device`), the one every stage,
+    /// the preview and snapshots draw on (ADR-0117 §5), so call this after
+    /// [`with_backends`](Self::with_backends). Pages paint on it from their first frame
+    /// and move only when a lost context is replaced.
     #[must_use]
     pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
+        // Opened before the collection lock: opening a device can take a while.
+        let context = self.shared.gpu.context();
         {
             let mut state = lock(&self.shared.state);
             let state = &mut *state;
-            state.live.set_browser(browser);
+            state.live.set_browser(browser, context.as_ref());
             state.live.sync(state.graph.state());
         }
         self
@@ -1015,12 +1046,19 @@ impl Engine {
     }
 
     /// Lets live sources that paint on the GPU (`browser`) paint on `context`, the
-    /// program stage's platform GPU context, and re-plans the program mix. The returned
-    /// call takes the context away again; the stage makes it before it stops.
+    /// program stage's platform GPU context, and re-plans the program mix. That is the
+    /// engine's own context (ADR-0117 §5), which they already paint on, so nothing moves.
+    /// The returned call hands them the engine's context as it is then: the same one
+    /// when the stage stops, a new one when the stage left a lost context, or none. The
+    /// stage makes it before it stops.
     pub(crate) fn use_gpu(&self, context: &GpuContext) -> Box<dyn FnOnce() + Send + Sync> {
         set_gpu(&self.shared, Some(context));
         let shared = Arc::clone(&self.shared);
-        Box::new(move || set_gpu(&shared, None))
+        Box::new(move || {
+            // Opened before the collection lock, which `set_gpu` takes.
+            let context = shared.gpu.context();
+            set_gpu(&shared, context.as_ref());
+        })
     }
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
@@ -1079,6 +1117,12 @@ impl Engine {
     pub(crate) fn without_preview_stage(self) -> Self {
         self.shared.previews.clear_stage();
         self
+    }
+
+    /// Asks every preview stream for a keyframe, as a channel that lost a frame does.
+    #[cfg(test)]
+    pub(crate) fn ask_preview_keyframes(&self) {
+        self.shared.previews.ask_keyframes();
     }
 
     /// Replaces how the preview thread draws, for tests that watch what it is given.
@@ -2672,6 +2716,15 @@ impl Engine {
         lock(&self.shared.state).live.meters().plans()
     }
 
+    /// Whether `source_id`'s live instance rests because no mix draws it (#1071), for
+    /// tests; `None` while it has none.
+    #[cfg(test)]
+    pub(crate) fn resting(&self, source_id: &str) -> Option<bool> {
+        lock(&self.shared.state)
+            .live
+            .resting(&SourceId::new(source_id))
+    }
+
     /// How many times the live sources painted `source_id` (ADR-0103's meters), for
     /// tests.
     #[cfg(test)]
@@ -3320,6 +3373,94 @@ fn command_name(call: &Call) -> &'static str {
     }
 }
 
+/// The captures and sources of the scenes the studio keeps warm (ADR-0117 §7), planned
+/// again only when the collection's revision, its placed keyframes (which are no
+/// revision, ADR-0118), the warm scenes or a running source changed: a plan of the
+/// program mix, which may run every frame, rarely has to plan them.
+#[derive(Default)]
+struct WarmCaptures {
+    /// What `captures` and `sources` were planned at.
+    of: Option<WarmKey>,
+    captures: Arc<BTreeSet<CaptureKey>>,
+    /// Every source the warm scenes draw, which the live sources keep from resting.
+    sources: BTreeSet<SourceId>,
+}
+
+/// The revision, the warm scenes, the live sources' installs and the placed keyframes
+/// [`WarmCaptures`] planned at.
+type WarmKey = (Rev, Vec<SceneId>, u64, BTreeMap<SceneId, SceneId>);
+
+impl WarmCaptures {
+    /// The captures of `scenes` in `graph`, as the running sources of `live` capture
+    /// them, and the sources they draw, planned again when what they depend on changed.
+    /// Only the captures are looked up, so the plan reaches no source and makes none
+    /// shown or heard (ADR-0028); the sources it asks for are noted.
+    fn update(
+        &mut self,
+        graph: &Graph,
+        scenes: Vec<SceneId>,
+        live: &LiveSources,
+        assets: &crate::filter_assets::FilterAssets,
+    ) -> &Arc<BTreeSet<CaptureKey>> {
+        if self
+            .of
+            .as_ref()
+            .is_some_and(|(rev, warm, installs, placed)| {
+                *rev == graph.rev()
+                    && *warm == scenes
+                    && *installs == live.installs()
+                    && placed == graph.placed_keyframes()
+            })
+        {
+            return &self.captures;
+        }
+        let key = (
+            graph.rev(),
+            scenes,
+            live.installs(),
+            graph.placed_keyframes().clone(),
+        );
+        let mut captures = BTreeSet::new();
+        let mut sources = BTreeSet::new();
+        for scene_id in &key.1 {
+            if graph.state().scene(scene_id).is_none() {
+                continue;
+            }
+            let planning = snapshot::plan_scene(
+                graph,
+                scene_id,
+                &mut |id| {
+                    sources.insert(id.clone());
+                    live.capture_key(id).map(Look::Capture)
+                },
+                assets,
+            );
+            // A scene that draws nothing asks for the primary display, which only an
+            // output without a program scene shows.
+            let primary = CaptureKey::primary();
+            captures.extend(
+                planning
+                    .shot
+                    .captures()
+                    .iter()
+                    .filter(|capture| **capture != primary)
+                    .cloned(),
+            );
+        }
+        if *self.captures != captures {
+            self.captures = Arc::new(captures);
+        }
+        self.sources = sources;
+        self.of = Some(key);
+        &self.captures
+    }
+
+    /// The sources the warm scenes draw, as last planned.
+    fn sources(&self) -> &BTreeSet<SourceId> {
+        &self.sources
+    }
+}
+
 /// Everything the engine knows.
 #[derive(Default)]
 struct State {
@@ -3372,6 +3513,9 @@ struct State {
     /// The copy of the collection each previewed source is planned on, kept while the
     /// collection's revision holds (#969 N2).
     source_copies: snapshot::SourceCopies,
+    /// The warm scenes' captures (ADR-0117 §7), which the render thread keeps running
+    /// beside the program's.
+    warm: WarmCaptures,
     /// When each item the program mix draws was first drawn: the origin of its motion
     /// modifiers' `shown` clock (ADR-0099).
     shown_since: crate::motion::ShownSince,
@@ -4349,6 +4493,7 @@ impl State {
             }
             Action::StudioSetPreview { scene_id } => {
                 if self.studio.set_preview(self.graph.state(), &scene_id)? {
+                    self.publish_warm();
                     self.emit_studio(client_id, request_id, None, wake);
                     self.feed_pages();
                 }
@@ -4927,6 +5072,21 @@ impl State {
         end_ms
     }
 
+    /// Publishes the warm scenes' captures and sources (ADR-0117 §7) after the warm scenes changed
+    /// with no plan of the program mix, as a new Preview scene does.
+    fn publish_warm(&mut self) {
+        let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
+        let assets = self.live.filter_assets();
+        let warm = self
+            .warm
+            .update(graph, self.studio.warm(), &self.live, &assets);
+        self.render.publish_warm(warm);
+        self.live.set_warm(self.warm.sources());
+        // A source that left the warm scenes rests now if nothing drew it in the
+        // latest plans, as it would after one.
+        self.live.rest_undrawn();
+    }
+
     /// One plan of [`Self::publish_render`].
     fn publish_render_once(&mut self) -> Option<f32> {
         let started = Instant::now();
@@ -4945,6 +5105,7 @@ impl State {
             shown_since,
             fired,
             shared,
+            warm,
             ..
         } = self;
         // Drawn with the open gestures' source settings (ADR-0091); its revision is the
@@ -5010,6 +5171,12 @@ impl State {
         if !same {
             *scene_shots = Arc::new(shots);
         }
+        // The program stage draws the scenes it is asked to as extra mixes (ADR-0117 §6).
+        render.publish_scenes(scene_shots);
+        // And keeps the warm scenes' captures running, so showing one starts nothing;
+        // their other sources keep producing too.
+        render.publish_warm(warm.update(graph, studio.warm(), live, &assets));
+        live.set_warm(warm.sources());
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
         let previewed: BTreeSet<SourceId> = previews
@@ -5427,18 +5594,34 @@ impl Shared {
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
-            // Filters of a changed kind follow its renames (#1353, ADR-0025): a filter
-            // loaded before its pack, or one a reload raised the version of.
+            // Sources and filters of a changed kind follow its renames (#1353, #1412,
+            // ADR-0025): one loaded before its pack, or one a reload raised the version of. A new
+            // version is logged even when nothing moved, so an undo step still holding a
+            // deleted filter's or source's old settings conflicts with it (#1418).
             let migrations = &update.migrations;
-            let upgraded = state.graph.upgrade_filters(&before, &|kind, stored, from| {
+            let upgraded = state.graph.upgrade_kinds(&before, &|kind, stored, from| {
                 migrations.get(kind)?.migrate(stored, from)
             });
             if let Some(upgraded) = upgraded {
-                tracing::info!(
-                    rev = %upgraded.rev,
-                    filters = upgraded.set.len(),
-                    "filters' stored settings moved to their effect's current version"
-                );
+                if !upgraded.set.is_empty() {
+                    tracing::info!(
+                        rev = %upgraded.rev,
+                        changed = upgraded.set.len(),
+                        "stored settings moved to their pack kind's current version"
+                    );
+                }
+                // A shader source's new settings (its size among them) reach its live
+                // source as after any batch.
+                if upgraded
+                    .set
+                    .iter()
+                    .any(|edit| matches!(edit, Edit::SourceSetSettings { .. }))
+                {
+                    let state = &mut *state;
+                    state.refresh_shown();
+                    let drawn = state.shown.as_ref().unwrap_or(&state.graph);
+                    state.live.sync(drawn.state());
+                }
                 state.history.record_engine(upgraded.rev, upgraded.touched);
                 state.subscribers.emit(
                     &Event::StateChanged {
