@@ -6005,7 +6005,7 @@ impl State {
         let assets = self.live.filter_assets();
         let warm = self
             .warm
-            .update(graph, self.studio.warm(), &self.live, &assets);
+            .update(graph, self.studio.warm(graph.state()), &self.live, &assets);
         self.render.publish_warm(warm);
         self.live.set_warm(self.warm.sources());
         // A source that left the warm scenes rests now if nothing drew it in the
@@ -6101,7 +6101,7 @@ impl State {
         render.publish_scenes(scene_shots);
         // And keeps the warm scenes' captures running, so showing one starts nothing;
         // their other sources keep producing too.
-        render.publish_warm(warm.update(graph, studio.warm(), live, &assets));
+        render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets));
         live.set_warm(warm.sources());
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();

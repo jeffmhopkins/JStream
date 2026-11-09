@@ -69,10 +69,13 @@ const V12: &str = include_str!("fixtures/v12.json");
 /// modifier on `i4` that drives its `edge` effect's `width` (ADR-0138). It must keep loading as version 1 must.
 const V13: &str = include_str!("fixtures/v13.json");
 
-/// A collection file at schema version 14, the current one: version 13 with PTZ shots
-/// on scene `a` and its keyframe scene `k` (ADR-0146). The same rule applies once
-/// version 15 exists.
+/// A collection file at schema version 14: version 13 with PTZ shots on scene `a` and
+/// its keyframe scene `k` (ADR-0146). It must keep loading as version 1 must.
 const V14: &str = include_str!("fixtures/v14.json");
+
+/// A collection file at schema version 15, the current one: version 14 with scene `b`
+/// kept warm (ADR-0117 §7). The same rule applies once version 16 exists.
+const V15: &str = include_str!("fixtures/v15.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -665,9 +668,49 @@ fn v14_graph() -> Graph {
     graph
 }
 
+/// [`v14_graph`] with scene `b` kept warm (ADR-0117 §7).
+fn v15_graph() -> Graph {
+    let mut graph = v14_graph();
+    let b = SceneId::new("b");
+    let mut options = graph
+        .state()
+        .scene(&b)
+        .map(|scene| scene.options().clone())
+        .unwrap_or_default();
+    options.keep_warm = true;
+    let applied = graph.apply(
+        &[Edit::SceneSetOptions {
+            scene_id: b,
+            options,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v14_graph().to_collection_json(), V14);
+    assert_eq!(v15_graph().to_collection_json(), V15);
+}
+
+#[test]
+fn the_v15_fixture_loads_exactly() {
+    let expected = v15_graph();
+    let loaded = load(V15);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(13)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Versions before 15 keep no scene warm, so a scene's `keep_warm` there is refused.
+#[test]
+fn an_older_file_refuses_keep_warm() {
+    let mut value: Value = serde_json::from_str(V14).unwrap_or_default();
+    value["scenes"][0]["keep_warm"] = json!(true);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 14, .. })
+    ));
 }
 
 #[test]
@@ -2245,6 +2288,7 @@ fn folders_labels_and_metadata_round_trip() {
                 options: SceneOptions {
                     include_audio: false,
                     background: Some("#0f111580".into()),
+                    keep_warm: false,
                 },
             },
             Edit::SourceSetMeta {

@@ -108,7 +108,7 @@ pub fn WarmScenesSetting() -> impl IntoView {
                     }).collect_view()}
                 </select>
                 <span class="settings-check-note">
-                    "How many scenes besides the one on program stay ready: their videos, pages and cameras keep running, so showing one starts nothing. The Preview scene is always one of them, then the scenes shown most recently. More scenes use more memory and CPU. 3 until you change it."
+                    "How many scenes besides the one on program stay ready: their videos, pages and cameras keep running, so showing one starts nothing. The Preview scene is always one of them, then the scenes set to Keep warm, then those a hotkey switches to, then the scenes shown most recently. More scenes use more memory and CPU. 3 until you change it."
                 </span>
             </label>
         </Show>

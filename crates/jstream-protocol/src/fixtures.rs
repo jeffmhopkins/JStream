@@ -463,6 +463,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             options: SceneOptions {
                 include_audio: false,
                 background: Some("#0f1115".into()),
+                keep_warm: true,
             },
         },
         Edit::SceneSetCamera {
@@ -2677,6 +2678,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     options: SceneOptions {
                         include_audio: false,
                         background: Some("#0f1115".into()),
+                        keep_warm: true,
                     },
                     camera: None,
                 },

@@ -161,4 +161,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0146](0146-ptz-cameras-shots-and-actions.md) | PTZ cameras: per-machine heads, ptz actions, and shots that scenes and keyframes fire | accepted | agent |  |
 | [ADR-0147](0147-midi-tempo-and-state-for-pages.md) | The engine's tempo as shared values, and page grants for the tempo and one MIDI input | accepted | agent |  |
 | [ADR-0148](0148-a-borders-speed-in-beats.md) | A border's speed in beats, from the engine's MIDI clock | accepted | agent |  |
+| [ADR-0149](0149-where-warm-scenes-are-pinned.md) | Where a warm scene is pinned, and which scenes count as bound | accepted | agent |  |
 <!-- @generated end adr-index -->
