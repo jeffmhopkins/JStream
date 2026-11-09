@@ -15299,7 +15299,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "boolean"
         },
         "gpu_bytes": {
-          "description": "The GPU bytes its sources are estimated to hold beyond those of the program and\nof the warm scenes before it: each source's frame as RGBA8, counted once.",
+          "description": "The GPU bytes its sources are estimated to hold beyond what a mix draws anyway\nand what the warm scenes kept before it hold: each source's frame as RGBA8,\ncounted once. For a cold scene, what keeping it warm would add.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
