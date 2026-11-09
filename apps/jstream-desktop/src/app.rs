@@ -203,7 +203,7 @@ pub fn start(
             collection: collection.as_ref(),
             network: network::allowed(&network::setting_file(data)),
             network_open: host.network().is_some(),
-            wheel_focus_only: wheel_focus_only(),
+            wheel_focus_only: wheel_focus_only() || !host.global_wheel(),
             jtunnel: &jtunnel::read(&jtunnel::setting_file(data)),
         },
     );
@@ -216,9 +216,10 @@ pub fn start(
     }
 }
 
-/// Whether wheel chords are heard only while the window has the focus: on macOS until
-/// the app has the Accessibility permission (ADR-0144 §2), which it checks without
-/// asking. Elsewhere the OS needs no permission for them.
+/// Whether macOS keeps wheel chords to the window with the focus: until the app has the
+/// Accessibility permission (ADR-0144 §2), which it checks without asking. Elsewhere the
+/// OS needs no permission for them. The page's `wheelFocusOnly` is this, or no listener
+/// that hears the wheel ([`host::Host::global_wheel`]: none started, or Wayland's portal).
 fn wheel_focus_only() -> bool {
     #[cfg(target_os = "macos")]
     {

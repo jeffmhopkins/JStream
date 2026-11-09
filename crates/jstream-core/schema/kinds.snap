@@ -2579,6 +2579,141 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "midi_particles",
+    "category": "source",
+    "name": "MIDI note particles",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The input it draws: a MIDI port's or JTunnel sender's name. Empty draws every input at once.",
+        "live": false
+      },
+      {
+        "id": "channel",
+        "type": "int",
+        "min": 0,
+        "max": 16,
+        "step": 1,
+        "default": 0,
+        "label": "Channel",
+        "description": "The MIDI channel it draws, 1 to 16, as a device's panel shows it; 0 draws every channel.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 960,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 360,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "low_key",
+        "type": "int",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 21,
+        "label": "Lowest key",
+        "description": "The lowest key drawn: 21 is a piano's lowest A, 60 middle C.",
+        "live": true
+      },
+      {
+        "id": "high_key",
+        "type": "int",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 108,
+        "label": "Highest key",
+        "live": true
+      },
+      {
+        "id": "particles",
+        "type": "int",
+        "min": 1,
+        "max": 64,
+        "step": 1,
+        "default": 16,
+        "label": "Particles a note",
+        "description": "How many particles each note-on bursts into.",
+        "live": true
+      },
+      {
+        "id": "spread",
+        "type": "int",
+        "min": 4,
+        "max": 2000,
+        "step": 1,
+        "default": 120,
+        "label": "Spread",
+        "description": "How far a full-velocity note's particles fly from where it starts, in pixels; a softer note's go less far.",
+        "live": true
+      },
+      {
+        "id": "size",
+        "type": "int",
+        "min": 1,
+        "max": 64,
+        "step": 1,
+        "default": 6,
+        "label": "Particle size",
+        "description": "A full-velocity note's particle size in pixels; a softer note's are smaller.",
+        "live": true
+      },
+      {
+        "id": "decay_ms",
+        "type": "int",
+        "min": 0,
+        "max": 5000,
+        "step": 1,
+        "default": 800,
+        "label": "Decay",
+        "description": "How long a note's particles fade after its note-off, in milliseconds. They stay while the note is held.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ff4fd8ff",
+        "label": "Particle",
+        "description": "A particle's colour, brighter the harder its note was struck.",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "midi_piano_roll",
     "category": "source",
     "name": "MIDI piano roll",

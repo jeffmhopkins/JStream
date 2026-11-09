@@ -99,7 +99,7 @@ JStream/
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
 ├── design/                 # UI design references (prototype source); not normative
-├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
+├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), dist-linux (the Linux .deb), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
@@ -157,7 +157,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 3 | `jstream-browser` | Browser sources' engine ([ADR-0021](adr/0021-browser-source.md), [ADR-0046](adr/0046-browser-crate-and-helper.md), [ADR-0048](adr/0048-sandboxed-browser-helper.md)): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows and Linux, feature `cef`), which drives the sandboxed browser helper over named pipes or a socket pair and copies its shared-texture frames onto the engine's device on Windows, or reads its software paints as CPU frames on Linux ([ADR-0095](adr/0095-browser-helper-on-linux.md)); and the CEF code the helper runs (feature `helper`) | **yes** |
 | 3 | `jstream-plugin-wasm` | wasmtime host for automation plugins ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): calls the API through `Control`, limited to a per-plugin list of granted commands (empty by default) or to what that `Control` allows, with refusals as ABI statuses or `forbidden`; fuel, wall-time and memory limits; no WASI | no |
 | 4 | `jstream-server` | axum HTTP/WebSocket over `dyn Control`; token and Origin checks; serves UI assets; serves MCP's streamable-HTTP transport on the control port behind the same checks | no |
-| 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0140](adr/0140-source-types-and-decoding-scope-v3.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); MIDI keyboard, piano roll, drum pads and controller meters ([ADR-0137](adr/0137-midi-visualization-sources.md)); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
+| 4 | `jstream-sources` | `Source` trait plus built-ins ([ADR-0140](adr/0140-source-types-and-decoding-scope-v3.md)): display, window, video capture device, image, color, text, browser, audio input, desktop audio, application audio, scene (M1b); media file, audio waveform, audio spectrum (M2); YouTube chat message ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)) (M3); MIDI keyboard, piano roll, drum pads, note particles and controller meters ([ADR-0137](adr/0137-midi-visualization-sources.md)); Spout2 receiver (later). Uses platform traits; backends are injected. Images and fonts use pure-Rust crates. | no |
 | 4 | `jstream-outputs` | RTMP(S) publish client with reconnect, and the recording file sink. Uses `mux`. Planned: the `Output` trait, and use of `encode` and platform traits. The virtual-camera output runs in `jstream-core`'s runtime. | no |
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; draws items' motion modifiers each frame through `jstream-anim` (ADR-0099); CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); WGSL effect-pack video filter kinds from a watched folder, drawn through `jstream-effects` (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)); drives the PTZ heads the host lists over `jstream-visca` ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md)) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
@@ -1639,8 +1639,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 <a id="packaging"></a>
 ## Packaging
 <!-- @section
-covers = ["xtask/src/dist.rs", "xtask/src/browser_linux.rs", ".cargo/config.toml"]
-depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md", "docs/adr/0095-browser-helper-on-linux.md"]
+covers = ["xtask/src/dist.rs", "xtask/src/dist_linux.rs", "xtask/src/browser_linux.rs", ".cargo/config.toml"]
+depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0141-desktop-app-on-linux.md"]
 -->
 
 Windows ships as a **portable zip**: unzip and run `jstream.exe`, with no installer and no
@@ -1689,7 +1689,23 @@ Foundation, Direct3D 12).
   review passes ([ADR-0054](adr/0054-platform-ci-after-review.md)). The helper's
   package also has the Linux helper's executable, so `dist` builds the DLL alone
   (`--lib`).
-- **The Linux browser helper:** Linux has no package yet (ADR-0060), but its hosts find
+- **The Linux `.deb`:** the desktop app on Linux ships as a Debian package
+  ([ADR-0141](adr/0141-desktop-app-on-linux.md) decision 5), built in CI and not yet
+  published or signed. `cargo xtask dist-linux`, on Linux, builds the web UI for release
+  (or takes `--ui-dir`), builds `jstream` (with its `webkitgtk` window), `jstream-daemon`
+  and `jstream-cli` for release, and lays them out under `/usr/lib/jstream` with the UI
+  in `ui` beside them (where `jstream` looks: its exe path resolves the link), links to
+  them in `/usr/bin`, an application-menu entry and the icon as `dev.jstream.desktop`,
+  and the licences. `dpkg-deb --root-owner-group` packs it as
+  `jstream_<version>_<arch>.deb` in `target/dist-linux`: the version is the crate's with
+  a pre-release sorting before its release (`0.1.0~alpha.4`) and `+<--revision or git
+  describe>`. It depends on the distribution's WebKitGTK 4.1 and GTK 3, and recommends
+  xdg-desktop-portal, PipeWire and Mesa's Vulkan drivers. State stays in
+  `$XDG_DATA_HOME/jstream`. It has no browser helper yet, and no AppImage. The
+  `dist-linux` job in `after-review.yml` builds it with the `dist-ui` job's release UI,
+  names it after the commit tested, lists its control fields and files, and uploads it
+  as is.
+- **The Linux browser helper:** the `.deb` doesn't carry it yet, but its hosts find
   the helper the same way, in a `browser` folder beside them
   ([ADR-0095](adr/0095-browser-helper-on-linux.md)). `cargo xtask browser-linux`, on
   Linux, builds the helper executable with its `cef` feature (which downloads the pinned
