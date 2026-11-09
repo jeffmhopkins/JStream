@@ -454,7 +454,8 @@ depends_on = ["crates/jstream-control/README.md#design"]
   their own edits, so the protocol's `item.add` doc tells them to send the same
   geometry.
 - **The bench is a client like the rest.** It measures only what the protocol reports
-  (`stats.tick`, `profile.get`, `scene.switch_and_watch`), so it runs against any engine
+  (`stats.tick`, `profile.get`, `scene.switch_and_watch`, `quality.probe`, and
+  `kind.list` for which scenarios can run), so it runs against any engine
   the CLI can reach that can write to `--out`, and needs no engine code. It reads events between its calls by
   polling the stream with a no-op waker, which never blocks, and decodes the frame
   sheets' base64 PNG by hand rather than adding a crate for it. Its tests run it on the
