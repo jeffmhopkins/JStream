@@ -493,3 +493,67 @@ fn the_blur_follows_the_thin_lens() {
     c.blur_px = finite(0.0);
     assert_eq!(view(c).focus(), None, "no blur");
 }
+
+/// ADR-0143 decision 3: a scene point taken into the viewing frame lands where a model
+/// placed there does, and a direction is the difference of two points.
+#[test]
+fn in_view_matches_a_model_placed_at_the_point() {
+    let seen = view(camera(
+        vec3(300.0, -200.0, 1800.0),
+        vec3(900.0, 600.0, -400.0),
+        50.0,
+        12.0,
+    ));
+    let geometry = item(700.0, 400.0, -250.0, 20.0, 35.0, 10.0);
+    let bounds = crate::geometry::SolidBounds {
+        min: [-1.0, -1.0, -1.0],
+        max: [1.0, 1.0, 1.0],
+    };
+    let solid = geometry.solid(bounds, Some(&seen)).expect("a solid");
+    let model = solid.in_view([0.0, 0.0, 0.0]);
+    let point = seen.in_view([700.0, 400.0, -250.0]);
+    for axis in 0..3 {
+        assert!(
+            (model[axis] - point[axis]).abs() < 1e-6,
+            "{model:?} against {point:?}"
+        );
+    }
+    let step = [3.0, -7.0, 11.0];
+    let moved = seen.in_view([703.0, 393.0, -239.0]);
+    let direction = seen.direction_in_view(step);
+    for axis in 0..3 {
+        assert!((moved[axis] - point[axis] - direction[axis]).abs() < 1e-6);
+    }
+}
+
+/// ADR-0143 decision 2: a light sits at its item's centre and shines out of the back of
+/// its box: away from the viewer unturned, and along a placed model's back axis when
+/// turned.
+#[test]
+fn a_light_sits_at_its_items_centre_and_shines_out_of_its_back() {
+    let (at, aim) = item(700.0, 400.0, -250.0, 0.0, 0.0, 0.0).light_pose();
+    assert_eq!(at, [700.0, 400.0, -250.0]);
+    assert_eq!(aim, [0.0, 0.0, -1.0]);
+    // A quarter turn about y points it along the box's own back.
+    let (_, side) = item(0.0, 0.0, 0.0, 0.0, 90.0, 0.0).light_pose();
+    assert!((side[0] + 1.0).abs() < 1e-9 && side[1].abs() < 1e-9 && side[2].abs() < 1e-9);
+    let seen = view(camera(
+        vec3(300.0, -200.0, 1800.0),
+        vec3(900.0, 600.0, -400.0),
+        50.0,
+        12.0,
+    ));
+    let geometry = item(700.0, 400.0, -250.0, 20.0, 35.0, 10.0);
+    let (_, aim) = geometry.light_pose();
+    let bounds = crate::geometry::SolidBounds {
+        min: [-1.0, -1.0, -1.0],
+        max: [1.0, 1.0, 1.0],
+    };
+    let solid = geometry.solid(bounds, Some(&seen)).expect("a solid");
+    let (back, origin) = (solid.in_view([0.0, 0.0, -1.0]), solid.in_view([0.0; 3]));
+    let axis = [0, 1, 2].map(|i| back[i] - origin[i]);
+    let shines = seen.direction_in_view(aim);
+    let length = |v: [f64; 3]| v.iter().map(|c| c * c).sum::<f64>().sqrt();
+    let cos = (0..3).map(|i| axis[i] * shines[i]).sum::<f64>() / (length(axis) * length(shines));
+    assert!((cos - 1.0).abs() < 1e-9, "{axis:?} against {shines:?}");
+}

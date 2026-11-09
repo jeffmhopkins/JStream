@@ -230,10 +230,10 @@ mod tests {
         }));
         let first = gpu.context().expect("context");
         // Two compositors share the context's watch, so the first one's sees the loss
-        // even though the second was opened last.
+        // even though the second was opened last, and lost it.
         let stage = Compositor::on_context(&first);
         let snapshots = Compositor::on_context(&first);
-        first.device().destroy();
+        snapshots.destroy_device();
         assert!(stage.lost().is_some(), "the first compositor sees the loss");
         assert!(snapshots.lost().is_some());
         let second = gpu.context().expect("a new context");

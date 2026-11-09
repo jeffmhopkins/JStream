@@ -203,6 +203,26 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     return item(in);
 }
 
+// A scene's view depth (ADR-0143 decision 4): red holds 1 / w, which is f / D for a
+// fragment D along the viewing axis, where the item's alpha with its opacity and its
+// sharp edge coverage is at least one half, and nothing elsewhere. The pipeline keeps the
+// larger value, so the nearest item wins in any order. Depth of field doesn't blur it.
+@fragment
+fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
+    let uv = clamp(in.uv, in.uv_bounds.xy, in.uv_bounds.zw);
+    let colour = decode(textureSample(tex, samp, uv), in.mode);
+    let at = in.clip.xy;
+    let d = min(
+        min(min(edge(in.e0, at), edge(in.e1, at)), min(edge(in.e2, at), edge(in.e3, at))),
+        edge(in.e4, at),
+    );
+    let alpha = colour.a * min(in.opacity, 1.0) * clamp(d + 0.5, 0.0, 1.0);
+    if alpha < 0.5 || in.depth_w <= 0.0 {
+        discard;
+    }
+    return vec4<f32>(1.0 / in.depth_w, 0.0, 0.0, 1.0);
+}
+
 // The modes that read the backdrop. It is bound only to their pipelines.
 @group(1) @binding(0) var backdrop: texture_2d<f32>;
 

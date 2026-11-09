@@ -12,8 +12,10 @@ use crate::{Color, Crop, Image, Item, Placement, Scene, Snapshot};
 /// `kind_id`'s settings: its descriptor's defaults, overlaid with `overrides` (a JSON
 /// object), so a test names only what it changes. Panics on an unknown kind.
 pub(crate) fn settings(kind_id: &str, overrides: Value) -> Settings {
+    // Depth-aware kinds aren't listed yet (`filter::depth`), but are built and tested.
     let kind = descriptors()
         .into_iter()
+        .chain(super::depth::descriptors())
         .find(|k| k.kind_id == kind_id)
         .unwrap_or_else(|| panic!("{kind_id} is not a built-in video filter kind"));
     let mut settings: Settings = Settings(
