@@ -16,6 +16,7 @@
 //! The render thread reads it after the snapshot on every tick, so a live value is drawn
 //! from the next tick with no new snapshot.
 
+use std::collections::{BTreeMap, BTreeSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering, fence};
 use std::sync::mpsc::{self, Receiver, Sender};
@@ -24,13 +25,19 @@ use std::thread::{self, JoinHandle};
 use arc_swap::ArcSwap;
 use jstream_encode::{AudioInput, VideoInput};
 use jstream_platform::GpuFrame;
+use jstream_protocol::SceneId;
 use jstream_render::Reclaimed;
 
 use crate::audio::{MonitorRoute, ScopeTap};
 use crate::profile::DrawerTotals;
 use crate::runtime::pipeline::VideoTap;
 use crate::runtime::vcam::VcamTap;
-use crate::snapshot::{LiveParams, Shot};
+use crate::snapshot::{CaptureKey, LiveParams, Shot};
+
+/// What each monitored scene draws (ADR-0117 §6): the scenes a preview stream shows,
+/// planned after the program, which the program stage's render thread draws as extra
+/// mixes.
+pub(crate) type SceneShots = BTreeMap<SceneId, Arc<RenderSnapshot>>;
 
 /// The reader slot's value while no render thread is adopting snapshots: the thread is
 /// stopped, or never ran. A gesture waits on nothing while it is set.
@@ -49,7 +56,6 @@ pub(crate) struct RenderSnapshot {
 
 impl RenderSnapshot {
     /// The render generation it was published with, counting from 1.
-    #[cfg(test)]
     pub(crate) fn generation(&self) -> u64 {
         self.generation
     }
@@ -79,6 +85,8 @@ pub(crate) struct RenderHub {
     current: ArcSwap<RenderSnapshot>,
     /// The parameter channel: the live values every reader applies to the snapshot.
     live: ArcSwap<LiveParams>,
+    /// The monitored scenes' snapshots, published with each plan that changes them.
+    scenes: ArcSwap<SceneShots>,
     /// The generation the render thread adopted last, or [`STOPPED`] / [`STARTING`].
     adopted: AtomicU64,
     /// Ticks the render thread has composited since the engine started, across every
@@ -94,6 +102,7 @@ impl Default for RenderHub {
                 shot: Shot::default(),
             }),
             live: ArcSwap::from_pointee(LiveParams::default()),
+            scenes: ArcSwap::from_pointee(SceneShots::new()),
             adopted: AtomicU64::new(STOPPED),
             drawn: AtomicU64::new(0),
         }
@@ -142,6 +151,14 @@ impl RenderHub {
         }
     }
 
+    /// Publishes the monitored scenes' snapshots, unless they are the ones published.
+    /// Called with the collection lock held, like [`publish`](Self::publish).
+    pub(crate) fn publish_scenes(&self, scenes: &Arc<SceneShots>) {
+        if !Arc::ptr_eq(&self.scenes.load(), scenes) {
+            self.scenes.store(Arc::clone(scenes));
+        }
+    }
+
     /// The live values on the parameter channel, for a reader that is not a real-time
     /// thread.
     pub(crate) fn load_live(&self) -> Arc<LiveParams> {
@@ -171,6 +188,8 @@ pub(crate) struct RenderReader {
     held: Option<Arc<RenderSnapshot>>,
     /// The live values it read last, loaded after `held`.
     live: Option<Arc<LiveParams>>,
+    /// The monitored scenes' snapshots it read last, loaded with `held`.
+    scenes: Option<Arc<SceneShots>>,
     collector: Collector,
 }
 
@@ -180,6 +199,7 @@ impl RenderReader {
             hub,
             held: None,
             live: None,
+            scenes: None,
             collector,
         }
     }
@@ -224,6 +244,14 @@ impl RenderReader {
         if fresh && let Some(old) = self.live.replace(arc_swap::Guard::into_inner(live)) {
             self.collector.free(Garbage::Live(old));
         }
+        let scenes = self.hub.scenes.load();
+        let fresh = !self
+            .scenes
+            .as_ref()
+            .is_some_and(|held| Arc::ptr_eq(held, &scenes));
+        if fresh && let Some(old) = self.scenes.replace(arc_swap::Guard::into_inner(scenes)) {
+            self.collector.free(Garbage::Scenes(old));
+        }
         self.held
             .as_deref()
             .expect("invariant: the first adopt always stores a snapshot")
@@ -240,6 +268,13 @@ impl RenderReader {
             .as_deref()
             .expect("invariant: adopt always stores live values");
         (snapshot, live)
+    }
+
+    /// The monitored scenes' snapshots the last [`adopt`](Self::adopt) read.
+    pub(crate) fn scenes(&self) -> &SceneShots {
+        self.scenes
+            .as_deref()
+            .expect("invariant: adopt always stores the scenes")
     }
 
     /// Counts one composited tick in the hub's [`drawn`](RenderHub::drawn): one
@@ -263,6 +298,9 @@ impl RenderReader {
         if let Some(live) = self.live.take() {
             self.collector.free(Garbage::Live(live));
         }
+        if let Some(scenes) = self.scenes.take() {
+            self.collector.free(Garbage::Scenes(scenes));
+        }
     }
 }
 
@@ -278,6 +316,11 @@ pub(crate) enum Garbage {
     Snapshot(Arc<RenderSnapshot>),
     /// Live values the render thread replaced, for the same reason.
     Live(Arc<LiveParams>),
+    /// The monitored scenes' snapshots the render thread replaced, for the same reason.
+    Scenes(Arc<SceneShots>),
+    /// The captures the render thread started for the program and the monitored scenes,
+    /// replaced when they change, with the scenes they were read from.
+    Wanted(BTreeSet<CaptureKey>, Vec<SceneId>),
     /// GPU images whose last frame the GPU has finished.
     Images(Reclaimed),
     /// A finished encoder session's video input, let go of by the render thread. Once
@@ -349,6 +392,8 @@ fn collect(rx: Receiver<Garbage>) {
         match garbage {
             Garbage::Snapshot(snapshot) => drop(snapshot),
             Garbage::Live(live) => drop(live),
+            Garbage::Scenes(scenes) => drop(scenes),
+            Garbage::Wanted(wanted, scenes) => drop((wanted, scenes)),
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),
             Garbage::Audio(input) => drop(input),
