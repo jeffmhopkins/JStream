@@ -110,7 +110,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
   and its program mix asks each source for `capture`, else `frame` and `next_change`,
-  and calls `show`
+  and calls `show`, and `cue` and `uncue` for a source on a warm scene
   (see `jstream-core`'s *Live sources*).
 - `MediaAudio`: a `media` file's sound as the engine sees it. `format()` is the file's
   rate and layout, interleaved `f32`. `open(handler, clock, start)` starts a
@@ -379,7 +379,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   delay in its video times); without it the last frame stays, and turning `loop` on
   afterwards plays on. With `restart_on_show` the file starts again each time the
   program mix shows it after not showing it (`Source::show`), the first time
-  included. When the frame shown
+  included. Cued first (`Source::cue`, when it is on a warm scene no mix draws,
+  ADR-0117 §7), such a file goes to its start and holds there, its timeline still and
+  its first frame shown once decoded, with the audio from the start kept: `show` then
+  plays it from there with no seek, and `uncue` (a preview draws it meanwhile) does
+  the same without the program. When the frame shown
   falls more than a second behind the timeline (it was hidden, or the decoder can't
   keep up), the source seeks instead of decoding every frame between; a seek decodes
   from the key frame before its target and skips frames up to it (a looping file
