@@ -92,6 +92,12 @@ impl Listener for Limited {
                 continue;
             };
             self.full = false;
+            // Replies are small writes, often several in a row (a response, then its
+            // event): with Nagle's algorithm on, each after the first waited for the
+            // client's delayed ACK, about 40 ms on Linux (#1440).
+            if let Err(error) = stream.set_nodelay(true) {
+                tracing::debug!(peer = %peer, %error, "could not turn off Nagle's algorithm");
+            }
             let at = Instant::now();
             let local = stream.local_addr().unwrap_or(self.local);
             let guarded = Guarded {
@@ -273,5 +279,34 @@ impl Connected<IncomingStream<'_, Limited>> for Meta {
 impl Connected<IncomingStream<'_, crate::network::TlsLimited>> for Meta {
     fn connect_info(stream: IncomingStream<'_, crate::network::TlsLimited>) -> Self {
         stream.io().meta().clone()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// #1440: an accepted connection has Nagle's algorithm off, so a reply written
+    /// right after another doesn't wait for the client's delayed ACK.
+    #[tokio::test]
+    async fn an_accepted_connection_sends_without_delay() {
+        let inner = match TcpListener::bind("127.0.0.1:0").await {
+            Ok(inner) => inner,
+            Err(error) => panic!("bind: {error}"),
+        };
+        let mut limited = Limited::new(inner, 4, Duration::from_secs(10));
+        let addr = match limited.local_addr() {
+            Ok(addr) => addr,
+            Err(error) => panic!("local_addr: {error}"),
+        };
+        let (client, (accepted, _)) = tokio::join!(TcpStream::connect(addr), limited.accept());
+        let _client = match client {
+            Ok(client) => client,
+            Err(error) => panic!("connect: {error}"),
+        };
+        match accepted.io.nodelay() {
+            Ok(nodelay) => assert!(nodelay, "Nagle's algorithm is still on"),
+            Err(error) => panic!("nodelay: {error}"),
+        }
     }
 }

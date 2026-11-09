@@ -637,7 +637,9 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
   activity entries, and a setting renamed by a pack's new version (#1353): a live
   filter's value moves to the new ID in one revision, is saved at the new version, and
   the client's earlier batch then fails to undo with `undo_conflict`
-  (`a_reload_moves_live_filters_through_the_renames`); a filter loaded from the file
+  (`a_reload_moves_live_filters_through_the_renames`); a filter deleted before the
+  renames can't come back with its old IDs: the undo is an `undo_conflict`
+  (`undoing_a_delete_from_before_the_renames_is_an_undo_conflict`, #1418); a filter loaded from the file
   before its changed pack follows the renames from the version the file recorded once
   the pack loads (`a_loaded_filter_follows_the_renames_once_its_pack_loads`); and a
   collection holding a shader source opens before its pack loads, keeps the source as
@@ -941,7 +943,11 @@ collection lock:
   settings through its renames (#1353, [Snapshots](#snapshots)), that revision is
   logged under the client `engine` with the filters' settings as touched, and is no
   step. A client's earlier step that set those settings then conflicts with it, so its
-  undo fails with `undo_conflict` instead of writing an old ID back.
+  undo fails with `undo_conflict` instead of writing an old ID back. A new version is
+  that revision even when no filter of the kind is left to move (#1418), so an earlier
+  step that re-adds a deleted one with the old IDs, which the new version refuses, also
+  fails with `undo_conflict` (a step that no longer applies names the latest other
+  change), not `invalid_argument`.
 
 <a id="live-values"></a>
 ## Live values
@@ -1417,6 +1423,9 @@ are, and keep that version through a save. The upgrade is a revision of its own,
 client `engine` and saved, but no undo step: it is logged in the undo history, so a
 client's earlier step on those settings fails with `undo_conflict` instead of writing
 the old IDs back. A changed shader source's live source is synced, as after a batch.
+A kind's new version is that revision even when no source or filter of it is in the
+collection (sent as `state.changed` and saved like any other), so undoing a delete of
+one from before it is an `undo_conflict` too (#1418).
 A GPU device loss on the program stage (#349, [Runtime](#runtime),
 [ADR-0087](../../docs/adr/0087-effect-quarantine-after-gpu-device-loss.md)) is blamed on the pack
 kinds the frames before it drew (`Packs::blame`): each is quarantined, and a pack one
