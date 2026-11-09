@@ -1306,7 +1306,10 @@ first again. The platform's context is the engine's one context, lent to every
 compositor and to the browser engine
 ([ADR-0117](adr/0117-real-time-video-thread-model.md) §5): once it is lost the engine
 opens a new one for the next holder that asks and hands it to the browser engine, while
-the stage that saw the loss stays on its own device until it stops. Encoders on the CPU
+the stage that saw the loss stays on its own device until it stops. The preview's and
+the snapshot thread's compositors on it collect their own errors in wgpu error scopes,
+so an error one of them raises fails only its own call, not the stage's next frame
+(#1268). Encoders on the CPU
 path take the readback, so they don't reopen. A session
 that takes the context's encode targets (step 4) rules out leaving the context, so a lost
 context device fails its outputs at once instead

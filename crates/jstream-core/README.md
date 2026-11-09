@@ -3526,7 +3526,9 @@ and lends a clone of the same `GpuContext` to every stage, the preview hub's com
 the snapshot thread's and the browser engine. It opens a new one only when the one it
 lent is lost (`jstream_render::context_lost`, the watch the context's compositors
 share), and tells the engine, which hands the new one to the browser engine; a failed
-open is not kept. `browser` pages paint on it, so the render thread samples them there
+open is not kept. The preview's and the snapshot thread's compositors on it keep
+their own uncaptured wgpu errors (`keeping_own_errors`, #1268), so neither fails the
+stage's frames nor takes the stage's errors. `browser` pages paint on it, so the render thread samples them there
 too (*Live sources* in Design); the stage lends it to the live sources as it starts and
 hands them the engine's context again when it stops, and on a failed open.
 
