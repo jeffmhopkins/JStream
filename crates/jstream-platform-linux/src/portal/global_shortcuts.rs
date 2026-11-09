@@ -24,6 +24,7 @@ pub(crate) const GLOBAL_SHORTCUTS: &str = "org.freedesktop.portal.GlobalShortcut
 
 /// The application id the app registers with the portal's host registry, so a desktop
 /// that keys its grants by application (GNOME) remembers them: the Tauri identifier.
+#[cfg(target_os = "linux")]
 pub(crate) const APP_ID: &str = "dev.jstream.desktop";
 
 /// A chord (as the protocol spells it) as a preferred trigger in the shortcuts
@@ -162,6 +163,7 @@ pub(crate) fn shortcuts(chords: &[String]) -> (ChordPairs, ChordPairs) {
 
 /// The host registry's `Register` call, which names the app to the portal. Older portals
 /// lack it, which is fine: they key grants by other means.
+#[cfg(target_os = "linux")]
 pub(crate) fn register_app() -> Message {
     Message::call(
         DESTINATION,
@@ -273,6 +275,7 @@ pub(crate) fn response_results(
 /// What the Wayland listener reports to its caller, which logs it: this crate logs
 /// nothing itself.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg(target_os = "linux")]
 pub enum PortalHotkeyEvent<'a> {
     /// A shortcut was activated: its chord, as the protocol spells it.
     Pressed(&'a str),
