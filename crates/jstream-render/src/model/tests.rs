@@ -1128,3 +1128,53 @@ fn golden_model_an_environment_lights_a_model_from_its_sky() {
     assert!(top[0] > top[1] + 30, "red above: {top:?}");
     assert!(bottom[1] > bottom[0] + 30, "green below: {bottom:?}");
 }
+
+/// A panorama imported as premultiplied sRGB code values, as a GPU-painted page is, is
+/// decoded as an upload of the same colour is: a mid-grey code lights the model as dimly
+/// as the uploaded grey, not as if its code value were linear light.
+#[test]
+fn golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let grey = super::Environment {
+        sky: Color::WHITE,
+        horizon: Color::WHITE,
+        ground: Color::WHITE,
+        intensity: 1.0,
+        turn_deg: 0.0,
+        image: None,
+    };
+    let uploaded = opened
+        .compositor
+        .upload_rgba8(8, 4, &[128, 128, 128, 255].repeat(32))
+        .expect("the panorama uploads");
+    let texture = crate::tests::unorm_texture(&opened.compositor, 8, 4, [128, 128, 128, 255]);
+    let painted = opened
+        .compositor
+        .import_premultiplied(texture, None)
+        .expect("a Unorm texture imports premultiplied");
+    let lit_by = |compositor: &mut Compositor, image| {
+        let shot = sky_sphere(
+            compositor,
+            &[],
+            super::Environment {
+                image: Some(image),
+                ..grey
+            },
+        );
+        rgb(&shot, 80, 16)
+    };
+    let from_upload = lit_by(&mut opened.compositor, &uploaded);
+    let from_page = lit_by(&mut opened.compositor, &painted);
+    assert!(
+        luma(from_upload) > 10,
+        "the grey lights it: {from_upload:?}"
+    );
+    for c in 0..3 {
+        assert!(
+            from_upload[c].abs_diff(from_page[c]) <= 3,
+            "{from_upload:?} vs {from_page:?}"
+        );
+    }
+}

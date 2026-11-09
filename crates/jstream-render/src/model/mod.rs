@@ -300,7 +300,14 @@ impl ModelRuntime {
         });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-model"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("model.wgsl").into()),
+            // The filters' colour helpers, so a picture decodes as every pass decodes it.
+            source: wgpu::ShaderSource::Wgsl(
+                concat!(
+                    include_str!("../filter/colour.wgsl"),
+                    include_str!("model.wgsl")
+                )
+                .into(),
+            ),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("jstream-render-model"),

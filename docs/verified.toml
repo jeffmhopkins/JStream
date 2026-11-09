@@ -204,7 +204,7 @@ stamp = { hash = "b3:64dbb25a25fcaabd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:d518ddcace325a86", by = "agent:claude", note = "Added the environment light's sky replacing the studio gradient for scene-lit models; checked against render model.wgsl." }
+stamp = { hash = "b3:cc9630164bf47837", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:5c874d49c9170349", by = "agent:claude", note = "Added the environment light's sky replacing the studio gradient for scene-lit models; checked against render model.wgsl." }
@@ -510,13 +510,13 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:0e389e5eb2d83fd2", by = "agent:claude", note = "Added the environment light's sky replacing the studio gradient for scene-lit models; checked against render model.wgsl." }
+stamp = { hash = "b3:85d54a15149cd6c4", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:3f57196959bfecfb", by = "agent:claude", note = "Added the environment light's sky replacing the studio gradient for scene-lit models; checked against render model.wgsl." }
+stamp = { hash = "b3:233f1885a21efbb0", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:0cfcc0db0555e879", by = "agent:claude", note = "Added the environment light's sky replacing the studio gradient for scene-lit models; checked against render model.wgsl." }
+stamp = { hash = "b3:68e66d15bdf86b79", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Added one sentence on nested layers drawn only over their content box (#1070); the rest of the section re-read against the compositor, image and place changes." }
@@ -4587,7 +4587,7 @@ stamp = { hash = "b3:83fd3bbd406c7796", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to youtube.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:60342a1f739aa8a5", by = "agent:claude", note = "Added the Environment paragraph, checked against model/mod.rs (environment_values, bindings 3 and 4, has_ambient) and model.wgsl (sky_dir, panorama, sky); test golden_model_an_environment_lights_a_model_from_its_sky." }
+stamp = { hash = "b3:ad5de7568517e58e", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -4893,13 +4893,13 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:0e389e5eb2d83fd2", by = "agent:claude", note = "Added the Environment paragraph, checked against model/mod.rs (environment_values, bindings 3 and 4, has_ambient) and model.wgsl (sky_dir, panorama, sky); test golden_model_an_environment_lights_a_model_from_its_sky." }
+stamp = { hash = "b3:85d54a15149cd6c4", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:3f57196959bfecfb", by = "agent:claude", note = "Added the Environment paragraph, checked against model/mod.rs (environment_values, bindings 3 and 4, has_ambient) and model.wgsl (sky_dir, panorama, sky); test golden_model_an_environment_lights_a_model_from_its_sky." }
+stamp = { hash = "b3:233f1885a21efbb0", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:0cfcc0db0555e879", by = "agent:claude", note = "Added the Environment paragraph, checked against model/mod.rs (environment_values, bindings 3 and 4, has_ambient) and model.wgsl (sky_dir, panorama, sky); test golden_model_an_environment_lights_a_model_from_its_sky." }
+stamp = { hash = "b3:68e66d15bdf86b79", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Added the #1070 paragraph under render_into: content bounds from transparent-background composites, invalidated by the change count and apply_filter_into, and Shape::trim_to for 2D normal/additive/screen without a chain. Rest of the pipeline steps re-read against the diff." }
@@ -5514,13 +5514,13 @@ stamp = { hash = "b3:c76c1c661fc62d4a", by = "agent:sharpen-small-insets", note 
 stamp = { hash = "b3:55e2b0cf445640ef", by = "agent:sharpen-small-insets", note = "Review r1 N1-N4: level 0's per-axis read count restated as about 2^k (+ a few), stale region/sampler comments fixed, and a note that one crop can fill MAX_CHAINS; no behaviour change" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/mod.rs"]
-stamp = { hash = "b3:0e389e5eb2d83fd2", by = "agent:claude", note = "Purpose holds: ModelDraw gains environment (Environment, exported)." }
+stamp = { hash = "b3:85d54a15149cd6c4", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/model.wgsl"]
-stamp = { hash = "b3:3f57196959bfecfb", by = "agent:claude", note = "Purpose holds: ModelDraw gains environment (Environment, exported)." }
+stamp = { hash = "b3:233f1885a21efbb0", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/model/tests.rs"]
-stamp = { hash = "b3:0cfcc0db0555e879", by = "agent:claude", note = "Purpose holds: ModelDraw gains environment (Environment, exported)." }
+stamp = { hash = "b3:68e66d15bdf86b79", by = "agent:claude", note = "The model shader is now built with filter/colour.wgsl, and panorama decodes its picture with to_premul_linear for every alpha mode, premultiplied sRGB included (review round 1 B1); the design section says so and names the new golden test." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/place.rs"]
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Re-read against the content trim: a nested scene is still a layer the caller composites; nothing here about one scene changed." }
@@ -5730,7 +5730,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:b45ebd7973573c73", by = "agent:claude", note = "light entry gains the environment type, its sky_color, horizon_color, ground_color and image settings and ShownEnvironment, checked against light.rs and its test." }
+stamp = { hash = "b3:5fcf09373f734dae", by = "agent:claude", note = "The light's color description says an environment ignores it, and image's says a capture lights the sky only while an item shows it (review N1, N2); the environment paragraph adds that caveat." }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }
@@ -5790,7 +5790,7 @@ stamp = { hash = "b3:83423ce2603cbd75", by = "agent:claude", note = "Added the S
 stamp = { hash = "b3:4dc0f32161ea9311", by = "agent:claude", note = "light entry gains the environment type, its sky_color, horizon_color, ground_color and image settings and ShownEnvironment, checked against light.rs and its test." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/light.rs"]
-stamp = { hash = "b3:2e4ccf9fca1f516e", by = "agent:claude", note = "light entry gains the environment type, its sky_color, horizon_color, ground_color and image settings and ShownEnvironment, checked against light.rs and its test." }
+stamp = { hash = "b3:cc9aa34adfe6dd90", by = "agent:claude", note = "The light's color description says an environment ignores it, and image's says a capture lights the sky only while an item shows it (review N1, N2); the environment paragraph adds that caveat." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/light/tests.rs"]
 stamp = { hash = "b3:577b4f75652efce2", by = "agent:claude", note = "light entry gains the environment type, its sky_color, horizon_color, ground_color and image settings and ShownEnvironment, checked against light.rs and its test." }

@@ -152,13 +152,10 @@ fn sky_dir(dir: vec3<f32>) -> vec3<f32> {
 fn panorama(d: vec3<f32>) -> vec3<f32> {
     let u = 0.5 + atan2(d.x, -d.z) / (2.0 * PI);
     let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, 0.001, 0.999);
-    var c = textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(u, v), 0.0);
-    let mode = frame.environment.ground.w;
-    if mode > 2.5 {
-        c = vec4<f32>(c.rgb, 1.0);
-    } else if mode > 0.5 && mode < 1.5 {
-        c = vec4<f32>(c.rgb * c.a, c.a);
-    }
+    let c = to_premul_linear(
+        textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(u, v), 0.0),
+        frame.environment.ground.w,
+    );
     return c.rgb * frame.environment.down.w;
 }
 
