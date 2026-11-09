@@ -1550,7 +1550,8 @@ crate's `video_filter_reads_depth`; `depth_fog` so far) also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
 planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, then
-each model it shows at least half opaque, posed as its layer is. `Chains::drew_depth`
+each model it shows at least half opaque, posed as its layer is, whether the pass places
+the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). `Chains::drew_depth`
 keeps it with the camera's focal length, and `run_one` hands it to the chain's
 depth-aware filters for that run only; anywhere else (a 2D scene, a source, item or
 output chain) they get none and pass their input through. A scene without such a filter

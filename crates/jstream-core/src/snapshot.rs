@@ -5739,7 +5739,10 @@ fn draw_view_depth(
         if !layer.boxed.is_some_and(|boxed| boxed.model) {
             continue;
         }
-        let GpuKey::ItemBox(scene_id, item_id) = &layer.image else {
+        // A model's layer, or its effects' output over it: either is posed as the model.
+        let (GpuKey::ItemBox(scene_id, item_id)
+        | GpuKey::Filtered(ChainOwner::Item(scene_id, item_id))) = &layer.image
+        else {
             continue;
         };
         // A model under half opaque leaves the depth to what is behind it, as a card

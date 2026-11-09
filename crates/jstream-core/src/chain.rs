@@ -837,7 +837,7 @@ impl Chains {
     /// with a focal length of `focal_px`, for its chain's depth-aware filters to read
     /// (ADR-0143 decision 5). A layer remade since the last frame (the first, or one at
     /// another size) retires the one it replaces into `cache` (R-RT-003); a steady frame
-    /// allocates nothing.
+    /// makes no layer and no new handle to it.
     pub(crate) fn drew_depth(
         &mut self,
         cache: &mut ResourceCache<GpuKey>,
@@ -2987,10 +2987,19 @@ mod tests {
                 enabled: false,
             }],
         );
-        for model in [false, true] {
-            let what = if model { "model" } else { "card" };
-            let seen = drawn_points(&clear, model, &points).expect("an adapter");
-            let fogged = drawn_points(&graph, model, &points).expect("an adapter");
+        // A model whose item has effects is placed through their output, and still
+        // writes its own depth.
+        let mut affected = graph.clone();
+        apply(&mut affected, vec![item_tint("cam", "#ffffff")]);
+        let mut affected_clear = clear.clone();
+        apply(&mut affected_clear, vec![item_tint("cam", "#ffffff")]);
+        for (model, what, clear, graph) in [
+            (false, "card", &clear, &graph),
+            (true, "model", &clear, &graph),
+            (true, "model with effects", &affected_clear, &affected),
+        ] {
+            let seen = drawn_points(clear, model, &points).expect("an adapter");
+            let fogged = drawn_points(graph, model, &points).expect("an adapter");
             assert!(
                 luma(fogged[0]) + 6 >= luma(seen[0]),
                 "the near card is clear: {:?} against {:?}",
