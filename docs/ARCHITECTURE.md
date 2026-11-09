@@ -1299,8 +1299,12 @@ its device, its own or the context's, for the loss (`Compositor::lost`), and kee
 invalid-resource errors that follow from panicking the render thread. The next poll of a
 lost device, on any thread, frees every buffer made on it, so recording the loss waits
 for any read of a mapped buffer under way (the `jstream-readback` copier's), and a read
-after it reads nothing (#1454). The render thread
-treats a lost device as one event: it opens the compositor on a new device at once, off
+after it reads nothing (#1454). On a driver's loss wgpu marks the device invalid just
+before its callback records the loss, so a poll on another thread in between, while a
+copy under way finishes, can still free the buffer under it; a deliberate loss
+(`Compositor::destroy_device`) records it first and has no such gap (#1457). The render thread
+asks for the loss at the start of every tick, since calls on a destroyed device can all
+succeed, and treats a lost device as one event: it opens the compositor on a new device at once, off
 the render thread with the fallback's deadline, and the output repeats its last frame
 meanwhile and stays up. On the platform's context that is step 6's fallback, so capture
 moves to CPU frames. On a device of its own it is a new device, the hardware adapter

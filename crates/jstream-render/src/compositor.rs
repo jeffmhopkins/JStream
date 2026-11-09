@@ -1094,6 +1094,16 @@ impl Compositor {
         Errors::open(&self.gpu.device, self.own_errors)
     }
 
+    /// Runs `call` inside [`Self::errors`]'s scopes, for a call made outside this file
+    /// that creates resources on the device, such as `lut_image`'s texture.
+    pub(crate) fn scoped<T>(
+        &self,
+        call: impl FnOnce() -> Result<T, RenderError>,
+    ) -> Result<T, RenderError> {
+        let errors = self.errors();
+        errors.close(call())
+    }
+
     fn prepare(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         self.vertices.clear();
         self.draws.clear();

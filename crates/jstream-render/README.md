@@ -214,10 +214,17 @@ and calls this crate.
   The next poll of a lost device, on any thread, frees every buffer made on it, mapped
   ones too, so a read of a mapped buffer (a ring's copier, a snapshot on the shared
   context) holds a per-device lock and reads nothing once the device is lost, and
-  recording the loss waits for the reads under way (#1454). The device-lost callback
-  records it before wgpu frees anything; a deliberate loss goes through
-  `Compositor::destroy_device`, which records it and then destroys the device, never
-  `wgpu::Device::destroy` alone, whose callback comes only after the buffers are freed.
+  recording the loss waits for the reads under way (#1454). A driver's loss still leaves
+  a gap: wgpu marks the device invalid and only then calls the device-lost callback,
+  which records it, so while a copy under way finishes a poll on another thread (the
+  preview's or the snapshot thread's compositor on the shared context) can free the
+  buffer under it. Closing it would mean serialising every poll against the reads, or
+  the copier holding wgpu's own lock through `unsafe`; neither is done (#1457). A
+  deliberate loss goes through `Compositor::destroy_device`, which records it and then
+  destroys the device, so it has no gap, never `wgpu::Device::destroy` alone, whose
+  callback comes only after the buffers are freed (a test of the callback itself is the
+  one exception). A copy the loss caught leaves its buffer mapped: unmapping a lost
+  device's buffer only raises another error.
   `Nv12Converter::bind` returns `RenderError::Uncaptured` too when its parameter
   buffer can't be mapped, as on a lost device, where wgpu's `create_buffer_init`
   would panic. `render` empties
@@ -1352,7 +1359,8 @@ size is made again, not refilled; without
 `draw_uploads_small`, or under 256 × 256 texels, it stays whole. A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
 `destroyed`; a device destroyed while the copier reads 4K frames from it frees nothing
-under the copy (`readback.rs`); a render fails, an NV12 bind returns `Uncaptured`
+under the copy, and hands each frame back at most once and every buffer back
+(`readback.rs`); a render fails, an NV12 bind returns `Uncaptured`
 (`convert/tests.rs`), and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
 validation error before any loss fails the next render as `Uncaptured`, and the
 render after it draws; a compositor keeping its own errors gets its own as its

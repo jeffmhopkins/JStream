@@ -190,7 +190,12 @@ impl Copier {
                         (job.width, job.height),
                         &mut job.into,
                     );
-                    job.buffer.unmap();
+                    // A lost device's buffers are gone: unmapping one only raises an
+                    // error for the uncaptured-error handler to keep (as on the ring's
+                    // own copies below).
+                    if job.faults.lost.get().is_none() {
+                        job.buffer.unmap();
+                    }
                     let frame = copied.then_some(job.into);
                     // A ring that is gone wants nothing back.
                     let _ = job.done.send(Copied {
@@ -471,7 +476,9 @@ impl<T> ReadbackRing<T> {
                         (self.width, self.height),
                         out,
                     );
-                    slot.buffer.unmap();
+                    if compositor.faults().lost.get().is_none() {
+                        slot.buffer.unmap();
+                    }
                     handoff.spares.push(job.into);
                     if let Some((_, tag)) = slot.tag.take()
                         && copied
@@ -524,7 +531,9 @@ impl<T> ReadbackRing<T> {
                     (self.width, self.height),
                     out,
                 );
-                slot.buffer.unmap();
+                if compositor.faults().lost.get().is_none() {
+                    slot.buffer.unmap();
+                }
                 if unpacked {
                     ready(tag, out);
                     handed += 1;
@@ -741,29 +750,38 @@ mod tests {
                 .device()
                 .poll(wgpu::PollType::wait_indefinitely());
             let mut out = Vec::new();
-            ring.collect(compositor, &mut out, |_, _| {});
+            let mut tags = Vec::new();
+            ring.collect(compositor, &mut out, |tag, _| tags.push(tag));
             compositor.destroy_device();
             let _ = compositor
                 .device()
                 .poll(wgpu::PollType::wait_indefinitely());
             assert_eq!(compositor.lost().as_deref(), Some("destroyed"));
             // A copy that finished before the loss still comes back, whole and red; one
-            // the loss caught comes back as nothing. No more than were handed over.
-            let mut back = 0;
+            // the loss caught comes back as nothing. Each frame comes back at most once,
+            // and every buffer is free again once the copier has answered for it.
             for _ in 0..50 {
                 ring.collect(compositor, &mut out, |tag, rgba| {
-                    back += 1;
+                    tags.push(tag);
                     assert_eq!(rgba.len(), (width * height * 4) as usize, "frame {tag}");
                     assert!(
                         rgba.chunks_exact(4).all(|px| px == [255, 0, 0, 255]),
                         "frame {tag} came back partly copied"
                     );
                 });
+                if ring.pending() == 0 {
+                    break;
+                }
                 std::thread::sleep(std::time::Duration::from_millis(2));
             }
+            assert_eq!(ring.pending(), 0, "a buffer is still out after the loss");
+            let handed = tags.len();
+            tags.sort_unstable();
+            tags.dedup();
+            assert_eq!(tags.len(), handed, "a frame came back twice: {tags:?}");
             assert!(
-                back <= READBACK_DEPTH,
-                "{back} frames back from {READBACK_DEPTH}"
+                tags.iter().all(|tag| (*tag as usize) < READBACK_DEPTH),
+                "a frame that was never recorded came back: {tags:?}"
             );
         }
     }
