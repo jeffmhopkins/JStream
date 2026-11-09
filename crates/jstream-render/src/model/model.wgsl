@@ -46,6 +46,13 @@ struct Frame {
     lights: array<Light, MAX_LIGHTS>,
     shadows: array<Shadow, MAX_SHADOWS>,
     environment: Environment,
+    // A floor the model is cut at (ADR-0151 decision 4): a fragment whose dot(xyz, seen)
+    // + w is at or above 0 is at or below it, and isn't drawn. (0, 0, 0, -1) cuts nothing.
+    cut: vec4<f32>,
+}
+
+fn below_floor(seen: vec3<f32>) -> bool {
+    return dot(frame.cut.xyz, seen) + frame.cut.w >= 0.0;
 }
 
 // The scene's sky (ADR-0151 decision 9).
@@ -327,6 +334,9 @@ fn env_brdf(f0: vec3<f32>, roughness: f32, n_dot_v: f32) -> vec3<f32> {
 
 @fragment
 fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    if below_floor(in.seen) {
+        discard;
+    }
     let facing = front_facing != (frame.params.y > 0.5);
     let double_sided = material.flags.z > 0.5;
     if !facing && !double_sided {
@@ -423,6 +433,9 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
 // with perspective (a camera) is drawn here.
 @fragment
 fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
+    if below_floor(in.seen) {
+        discard;
+    }
     let base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
     let mode = material.flags.x;
     var alpha = 1.0;

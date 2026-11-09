@@ -3459,6 +3459,107 @@ mod tests {
         );
     }
 
+    /// ADR-0151 decision 4, end to end: a card lying flat as the floor, and a red card
+    /// standing on it, through the framing camera. The floor under the red card shows it
+    /// reflected: the mirrored pass leaves out the floor itself, which would otherwise
+    /// hide everything above it from the mirrored camera.
+    #[test]
+    fn a_floor_card_reflects_what_stands_on_it() {
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let mut graph = placed(&[
+            ("cam", (32.0, 30.0), (400.0, 400.0), 0.0),
+            ("logo", (32.0, 27.0), (24.0, 6.0), 0.0),
+        ]);
+        let mut floor = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 30.0).expect("finite"),
+            jstream_protocol::Size::try_new(400.0, 400.0).expect("positive"),
+        )
+        .expect("valid");
+        floor.fit_mode = jstream_protocol::FitMode::Stretch;
+        floor.tilt_deg = jstream_protocol::Finite32::new(90.0).expect("finite");
+        let mirror = |strength: f32| Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("main"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(format!("mirror{strength}")),
+            kind: "floor_reflection".into(),
+            settings: [
+                ("floor_y_px", serde_json::json!(30.0)),
+                ("strength", serde_json::json!(strength)),
+            ]
+            .into_iter()
+            .collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry: floor,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(canvas)),
+                },
+            ],
+        );
+        let grey =
+            Frame::new(16, 9, &[64, 64, 64, 255].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
+        let red =
+            Frame::new(16, 9, &[255, 0, 0, 255].repeat(16 * 9), 3).expect("invariant: 16x9 RGBA8");
+        let under = |graph: &Graph| {
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |id| {
+                    Some(Look::Frame(
+                        if id.as_str() == "cam" {
+                            grey.clone()
+                        } else {
+                            red.clone()
+                        },
+                        None,
+                    ))
+                },
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            Some(
+                draw_points(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (&shot, &LiveParams::default()),
+                    &[(32, 33)],
+                )[0],
+            )
+        };
+        let Some(bare) = under(&graph) else {
+            return;
+        };
+        assert!(
+            bare[0].abs_diff(bare[1]) < 8,
+            "the floor alone is grey under the card: {bare:?}"
+        );
+        apply(&mut graph, vec![mirror(1.0)]);
+        let reflected = under(&graph).expect("an adapter");
+        assert!(
+            reflected[0] > reflected[1] + 40,
+            "the red card is reflected in the floor under it: {reflected:?}"
+        );
+    }
+
     /// ADR-0151 decision 6: a scene whose chain holds volumetric fog hands it the shadow
     /// map of a spot light that casts shadows, drawn by the scene's pass when no model
     /// receives it; a light that casts none hands it no map.

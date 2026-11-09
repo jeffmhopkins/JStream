@@ -5828,6 +5828,7 @@ fn draw_model(
                 lights: lit.then_some(lights.as_slice()),
                 shadows: &maps,
                 environment,
+                floor: None,
             },
             layer,
         )),
@@ -5957,7 +5958,7 @@ fn draw_shadows(
             (shot, pass, &seen),
             key,
             (at, canvas, camera),
-            (live, Some((from, true))),
+            (live, Some((from, true, None))),
         )?;
         drawn.push(DrawnShadow {
             light,
@@ -6052,6 +6053,8 @@ fn draw_reflection(
                 lights: (shown.lighting == Lighting::Scene).then_some(lights),
                 shadows: &[],
                 environment: scene_environment((shot, &*cache), &pass.scene, at, live).0,
+                // Only what stands above the floor is reflected in it.
+                floor: Some(floor),
             },
             target,
         )?;
@@ -6074,6 +6077,16 @@ fn draw_reflection(
         let Some(_) = item.camera else {
             continue;
         };
+        // A card lying in the floor, or below it, would hide what stands on it from the
+        // mirrored camera, which looks up at the floor from under it.
+        if let Placement::Geometry(geometry) = item.placement
+            && geometry
+                .corners_in_scene()
+                .iter()
+                .all(|corner| corner[1] >= f64::from(floor) - 0.5)
+        {
+            continue;
+        }
         let image = models
             .iter()
             .find(|(shown, _)| {
@@ -6100,7 +6113,7 @@ fn draw_reflection(
         (shot, pass, &seen),
         &depth_key,
         (at, canvas, camera),
-        (live, Some((mirrored, false))),
+        (live, Some((mirrored, false, Some(floor)))),
     )?;
     Ok(Some((image_key, depth_key, floor)))
 }
@@ -6520,6 +6533,11 @@ fn layer_item<'a>(
     }
 }
 
+/// Another camera a scene's view depth is drawn through, as a shadow map or the mirrored
+/// floor pass draws it: the camera, whether only shadow casters are drawn (ADR-0151
+/// decision 3), and the floor its models are cut at (decision 4).
+type DepthFrom = (SceneCamera, bool, Option<f32>);
+
 /// Draws the view depth of `pass`, a 3D scene's composite that its chain reads depth
 /// from, into `key` (ADR-0143 decision 4): its cards as `drawn` places them, then each
 /// model it shows at least half opaque, posed as its layer is. Returns the camera's view
@@ -6534,7 +6552,7 @@ fn draw_view_depth(
     (shot, pass, drawn): (&Shot, &Pass, &Scene<'_>),
     key: &GpuKey,
     (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
-    (live, from): (&LiveParams, Option<(SceneCamera, bool)>),
+    (live, from): (&LiveParams, Option<DepthFrom>),
 ) -> Result<Option<CameraView>, RenderError> {
     let Ok(view) = camera.view(shot.canvas) else {
         return Ok(None);
@@ -6586,18 +6604,19 @@ fn draw_view_depth(
             continue;
         };
         // A shadow map leaves out a model that casts none (ADR-0151 decision 3).
-        if from.is_some_and(|(_, casters)| casters) && !shown.casts_shadows {
+        if from.is_some_and(|(_, casters, _)| casters) && !shown.casts_shadows {
             continue;
         }
         compositor.draw_model_depth(
             &jstream_render::ModelDraw {
                 model,
                 geometry,
-                camera: Some(from.map_or(camera, |(from, _)| from)),
+                camera: Some(from.map_or(camera, |(from, _, _)| from)),
                 lighting: shown.lighting,
                 lights: None,
                 shadows: &[],
                 environment: None,
+                floor: from.and_then(|(_, _, floor)| floor),
             },
             target,
         )?;

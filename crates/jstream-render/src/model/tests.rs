@@ -97,6 +97,7 @@ fn draw_lit(
                 lights,
                 shadows: &[],
                 environment: None,
+                floor: None,
             },
             &layer,
         )
@@ -433,6 +434,7 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     lights: None,
                     shadows: &[],
                     environment: None,
+                    floor: None,
                 },
                 &layer,
             )
@@ -473,6 +475,7 @@ fn a_model_from_another_compositor_is_refused() {
             lights: None,
             shadows: &[],
             environment: None,
+            floor: None,
         },
         &layer,
     );
@@ -571,6 +574,7 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     lights: None,
                     shadows: &[],
                     environment: None,
+                    floor: None,
                 },
                 &layer,
             )
@@ -952,6 +956,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                 lights: None,
                 shadows: &[],
                 environment: None,
+                floor: None,
             },
             &map,
         )
@@ -1000,6 +1005,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                     lights: Some(&lights),
                     shadows,
                     environment: None,
+                    floor: None,
                 },
                 &layer,
             )
@@ -1054,6 +1060,7 @@ fn sky_sphere(
                 lights: Some(lights),
                 shadows: &[],
                 environment: Some(environment),
+                floor: None,
             },
             &layer,
         )
@@ -1177,4 +1184,56 @@ fn golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload() {
             "{from_upload:?} vs {from_page:?}"
         );
     }
+}
+
+/// ADR-0151 decision 4: a model cut at a floor draws nothing at or below it, in its
+/// picture or its view depth, so a scene drawn mirrored in its floor shows only what
+/// stands above it. The cube spans y 30 to 70; a floor at 50 keeps its upper half.
+#[test]
+fn golden_model_a_floor_cuts_what_is_below_it() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let camera = SceneCamera::framing(canvas());
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry: boxed(80.0, 50.0, 40.0),
+        camera: Some(camera),
+        lighting: Lighting::Unlit,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: Some(50.0),
+    };
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model(&draw, &layer)
+        .expect("the model draws");
+    let items = [Item {
+        camera: Some(camera),
+        ..crate::tests::item(&layer, Placement::Layer(draw.geometry), Crop::NONE, 1.0)
+    }];
+    let shot = render(compositor, &items);
+    assert_near(rgb(&shot, 80, 40), FRONT, (80, 40));
+    assert_near(rgb(&shot, 80, 60), [0, 0, 0], (80, 60));
+    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model_depth(&draw, &depth)
+        .expect("the depth draws");
+    let read = |compositor: &mut Compositor| {
+        let items = [crate::tests::item(
+            &depth,
+            Placement::IDENTITY,
+            Crop::NONE,
+            1.0,
+        )];
+        render(compositor, &items)
+    };
+    let seen = read(compositor);
+    assert!(rgb(&seen, 80, 40)[0] > 0, "the upper half has depth");
+    assert_eq!(rgb(&seen, 80, 60)[0], 0, "the lower half has none");
 }
