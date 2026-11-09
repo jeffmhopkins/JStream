@@ -1943,7 +1943,9 @@ fn a_restart_on_show_page_reloads_each_time_the_program_shows_it_again() {
         // The fade's plan when it is due to end, as the engine wakes for it.
         clock.advance(400);
         engine.replan();
-        assert!(page.hidden(), "off program after the fade, switch {n}");
+        // Off program, though a, the scene shown last, is warm: the page keeps
+        // painting, but no plan of the program reaches it (ADR-0117 §7).
+        assert!(!page.hidden(), "warm after the fade, switch {n}");
         clock.advance(600);
         switch("a");
         assert_eq!(page.reloads(), before + n, "switch {n} shows it again");

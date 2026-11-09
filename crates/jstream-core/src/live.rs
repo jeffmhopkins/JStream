@@ -40,7 +40,7 @@
 //! painted yet asks too. Without a context the browser engine has no device and the
 //! source shows its stand-in.
 
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
@@ -95,6 +95,9 @@ pub(crate) struct LiveSources {
     /// Counts the builds installed, so what is planned from the running sources alone
     /// (the warm scenes' captures) is planned again when one changes.
     installs: u64,
+    /// The sources the warm scenes draw (ADR-0117 §7): they never rest, so showing one
+    /// finds a page loaded and painting.
+    warm: BTreeSet<SourceId>,
     worker: Arc<Worker>,
     host: Weak<dyn LiveHost>,
     /// Whether the thread has been started.
@@ -283,6 +286,7 @@ impl LiveSources {
             page_wake: None,
             tickets: 0,
             installs: 0,
+            warm: BTreeSet::new(),
             worker: Arc::new(Worker::new(
                 Arc::new(SystemClock::new()),
                 Arc::clone(&meters),
@@ -1163,13 +1167,57 @@ impl LiveSources {
     /// ([`Self::look`]).
     pub(crate) fn rest_undrawn(&mut self) {
         let plan = self.plan;
-        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+        let warm = &self.warm;
+        for running in self
+            .entries
+            .iter_mut()
+            .filter(|(id, _)| !warm.contains(*id))
+            .filter_map(|(_, e)| e.running.as_mut())
+        {
             if running.looked != plan && !running.resting {
                 running.resting = true;
                 running.drawn.store(false, Ordering::Relaxed);
                 running.source.set_drawn(false);
             }
         }
+    }
+
+    /// Keeps `sources`, which the warm scenes draw (ADR-0117 §7), from resting: one
+    /// resting now is told it is drawn again, and the thread paints it from now on. One
+    /// that leaves the set rests at the next [`rest_undrawn`](Self::rest_undrawn) if no
+    /// mix looked at it.
+    pub(crate) fn set_warm(&mut self, sources: &BTreeSet<SourceId>) {
+        if self.warm == *sources {
+            return;
+        }
+        self.warm.clone_from(sources);
+        let mut painted = false;
+        for (_, entry) in self
+            .entries
+            .iter_mut()
+            .filter(|(id, _)| sources.contains(*id))
+        {
+            let Some(running) = entry.running.as_mut() else {
+                continue;
+            };
+            if std::mem::take(&mut running.resting) {
+                running.source.set_drawn(true);
+                running.drawn.store(true, Ordering::Relaxed);
+                painted |= running.source.painter().is_some();
+            }
+        }
+        if painted {
+            let mut queue = lock(&self.worker.queue);
+            let now = queue.clock.now();
+            queue.paint_wake = crate::snapshot::earliest(queue.paint_wake, Some(now));
+            self.worker.wake.notify_all();
+        }
+    }
+
+    /// Whether `source_id`'s live instance rests, for tests.
+    #[cfg(test)]
+    pub(crate) fn resting(&self, source_id: &SourceId) -> Option<bool> {
+        Some(self.entries.get(source_id)?.running.as_ref()?.resting)
     }
 
     /// Ends a plan of the program mix: a source's sound is heard while the plan reached
