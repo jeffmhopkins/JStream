@@ -37,6 +37,7 @@ use jstream_visca::{
 use crate::lan::is_lan;
 use crate::lock;
 
+pub(crate) mod controller;
 #[cfg(test)]
 pub(crate) mod tests;
 

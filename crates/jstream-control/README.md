@@ -224,7 +224,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md));
   `scene.zoom_camera` is `not_found` for a missing scene, `invalid_argument` for steps
   outside -16 to 16 and `action_failed` without a follow camera, and otherwise changes
-  nothing the mock keeps;
+  nothing the mock keeps; `scene.drive_camera` and `scene.aim_camera`
+  ([ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md)) are checked
+  with `camera_aim_check`, then `not_found` or `action_failed` for a scene that draws
+  through no camera, and keep nothing, so `scene.camera_aim` always answers the home aim;
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
   `scene.create_variant` (refused on a keyframe scene), placement edits addressed to a
   keyframe scene, which write its override of an item in its parent's tree (its own,

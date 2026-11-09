@@ -215,6 +215,8 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes, no white space at either end) and the IPv4 LAN address and port it sends from, loopback, private or link-local. Repeatable, each name and each address and port once. A `network_audio` source naming the sender records its audio. Default: off, no JTunnel socket open. |
 | `--lan-renew` | With `--lan`: make a new key and certificate before serving, for when the machine's names or addresses changed. Every paired device then checks the new fingerprint, and a native client that pinned the old one pairs again. |
 | `--ptz-camera <spec>` | Lets this machine control a PTZ camera over VISCA ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)), repeatable: `name@address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the camera's VISCA address (1 to 7, default 1), as in `wide@192.168.1.40:52381`. The address must be on the LAN ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and names and addresses must not repeat. Default: none, so no PTZ socket is open. |
+| `--ptz-controller <spec>` | Lets a PTZ controller drive a scene camera over VISCA ([ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md)), repeatable: `address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the VISCA address it answers as (1 to 7, default 1), then `=program`, `=preview` or `=scene:<scene id>` for what it drives, as in `192.168.1.10:52381=program`. The address is the one LAN interface it listens on, never every interface (ADR-0123 §5). Needs `--ptz-controller-allow`. Default: none, so no controller socket is open. |
+| `--ptz-controller-allow <ip>` | A controller address the `--ptz-controller` endpoints answer, on the LAN, repeatable. Every other address is dropped and counted. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
@@ -280,6 +282,14 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   which names them only by name. A camera a drive left moving is sent a stop when its
   client disconnects and, best effort, when the engine shuts down; a daemon that is
   killed outright sends none.
+- **PTZ controllers** (`--ptz-controller`, `--ptz-controller-allow`,
+  [ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md)). Off unless
+  an endpoint is listed, and an endpoint needs at least one allowed controller address.
+  With one or more, the daemon opens them once the engine is built, each a thread and
+  a socket on its one LAN address and a session of its own, logs how many at `info`, and
+  keeps them until it stops serving. An endpoint answers only allowed addresses, and
+  turns a controller's VISCA into `scene.drive_camera` and `scene.aim_camera` for its
+  target ([jstream-core › PTZ controllers](../../crates/jstream-core/README.md#contents-media)).
 - **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
   in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
   browser and the desktop app show the same workspace
@@ -795,7 +805,8 @@ folder another process is using, so the daemon couldn't start pages while the ap
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
-  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--jtunnel-accept`, `--log-dir`,
+  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--ptz-controller`,
+  `--ptz-controller-allow`, `--jtunnel-accept`, `--log-dir`,
   `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` with its `tls` feature (what a host links; `tls` for `--lan`),

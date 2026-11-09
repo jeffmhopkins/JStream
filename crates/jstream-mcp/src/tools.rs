@@ -114,6 +114,7 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// picture back, though in a keyframe a hide's new override stays until
 /// `item.clear_override`), a live value and its cancel, the loudness meter's reset, a fired
 /// motion (#1107, which stills itself), a follow camera's zoom (ADR-0113: another zoom puts
+/// it back, and nothing stores it), a scene camera's live aim (ADR-0151: another aim puts
 /// it back, and nothing stores it), a source's restart (ADR-0115: a page or file starts
 /// again, as a switch to a scene with `restart_on_show` restarts it), the keyframe a
 /// placed scene is drawn through (ADR-0116: another `scene.set_keyframe` puts it back,
@@ -124,7 +125,7 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// is not `destructiveHint`. Every other action is: going live or stopping, setting or
 /// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 17] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 19] = [
     "audio.reset_loudness",
     "item.hide",
     "item.show",
@@ -135,6 +136,8 @@ pub(crate) const REVERSIBLE_ACTIONS: [&str; 17] = [
     "preview.report",
     "preview.subscribe",
     "preview.unsubscribe",
+    "scene.aim_camera",
+    "scene.drive_camera",
     "scene.set_keyframe",
     "scene.switch",
     "scene.switch_and_watch",

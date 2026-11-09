@@ -186,6 +186,34 @@ pub fn engine(
 /// filter kinds once found (ADR-0035). Each plugin file gets its own short-lived
 /// `jstream-plugin-host.exe`; the daemon serves meanwhile. The engine keeps the hosts
 /// for `plugin.clap_rescan`.
+/// Opens the PTZ controller endpoints `options` lists (ADR-0151), or none. They run
+/// until the handle is dropped.
+///
+/// # Errors
+/// When an endpoint's socket can't be opened, its port in use say.
+pub fn ptz_controllers(
+    engine: &Engine,
+    options: &Options,
+) -> anyhow::Result<Option<jstream_core::PtzControllers>> {
+    if options.ptz_controllers.is_empty() {
+        return Ok(None);
+    }
+    let setup = jstream_core::PtzControllerSetup::new(
+        options.ptz_controllers.clone(),
+        options.ptz_controller_allow.clone(),
+    )
+    .map_err(anyhow::Error::msg)?;
+    let running = engine
+        .start_ptz_controllers(&setup)
+        .map_err(|err| anyhow::anyhow!("starting PTZ controller input: {err}"))?;
+    tracing::info!(
+        endpoints = setup.controllers().len(),
+        allowed = setup.allow().len(),
+        "PTZ controller input on (ADR-0151)"
+    );
+    Ok(Some(running))
+}
+
 #[cfg(windows)]
 fn scan_clap_plugins(engine: &Arc<Engine>) {
     let hosts: Arc<dyn jstream_platform::PluginHosts> =

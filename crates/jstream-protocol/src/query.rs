@@ -241,6 +241,15 @@ pub enum Query {
     /// changes.
     #[serde(rename = "jtunnel.senders")]
     JtunnelSenders,
+    /// A scene camera's live aim now (ADR-0151, since 0.118): the pan, tilt and zoom
+    /// `scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether
+    /// one is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its
+    /// home, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.
+    #[serde(rename = "scene.camera_aim")]
+    SceneCameraAim {
+        /// The scene whose camera to read: a keyframe scene reads its family's.
+        scene_id: crate::SceneId,
+    },
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
     /// in the OS's font folders that parses, as a family and style to show and the
     /// absolute path an `asset` setting names it by. Runtime state, so no `rev`. The
@@ -451,6 +460,7 @@ impl Query {
             Query::CaptureTargets => "capture.targets",
             Query::PtzList => "ptz.list",
             Query::JtunnelSenders => "jtunnel.senders",
+            Query::SceneCameraAim { .. } => "scene.camera_aim",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
@@ -794,6 +804,13 @@ pub enum QueryResult {
         /// The cameras, in the order the host listed them.
         cameras: Vec<crate::ptz::PtzCameraInfo>,
     },
+    /// The result of `scene.camera_aim`.
+    #[serde(rename = "scene.camera_aim")]
+    SceneCameraAim {
+        /// The aim.
+        #[serde(flatten)]
+        aim: crate::camera_aim::CameraAimInfo,
+    },
     /// The result of `jtunnel.senders`.
     #[serde(rename = "jtunnel.senders")]
     JtunnelSenders {
@@ -942,6 +959,7 @@ impl QueryResult {
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
+            QueryResult::SceneCameraAim { .. } => "scene.camera_aim",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",

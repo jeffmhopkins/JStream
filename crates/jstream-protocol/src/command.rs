@@ -1834,6 +1834,48 @@ pub enum Action {
         #[serde(default = "one_step")]
         steps: i32,
     },
+    /// Drives a scene's camera (ADR-0151, since 0.118), as `ptz.drive` drives a head:
+    /// pans, tilts and zooms its live aim at signed speeds in VISCA steps until the next
+    /// drive, where 0 stops that axis and an axis left out keeps moving as it was (so a
+    /// controller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23
+    /// to 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its
+    /// limits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:
+    /// nothing is stored or undone, and the aim is the stored camera again when the
+    /// engine restarts. A drive belongs to the session that sent it: when that session
+    /// ends, the camera stops where it is. `not_found` for a scene that doesn't exist,
+    /// `action_failed` for one that draws through no camera, and `invalid_argument` for
+    /// a speed out of range. A keyframe scene drives its family's camera.
+    #[serde(rename = "scene.drive_camera")]
+    SceneDriveCamera {
+        /// The scene whose camera to drive: a keyframe scene drives its family's.
+        scene_id: SceneId,
+        /// Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        pan: Option<i8>,
+        /// Tilt speed: negative down, positive up, 0 stops. Omitted keeps the tilt.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        tilt: Option<i8>,
+        /// Zoom speed: negative wide, positive tele, 0 stops. Omitted keeps the zoom.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        zoom: Option<i8>,
+    },
+    /// Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0151, since
+    /// 0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by
+    /// default). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera
+    /// itself: its home. It stops a drive on the axes it sets. Fails as
+    /// `scene.drive_camera` does, and with `invalid_argument` for an aim
+    /// `CameraAim::problem` refuses or an empty one.
+    #[serde(rename = "scene.aim_camera")]
+    SceneAimCamera {
+        /// The scene whose camera to aim: a keyframe scene aims its family's.
+        scene_id: SceneId,
+        /// Where to aim.
+        #[serde(flatten)]
+        aim: crate::camera_aim::CameraAim,
+        /// How fast to glide there, 1 to 24. Omitted for the fastest.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speed: Option<u8>,
+    },
     /// Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),
     /// since 0.84: the one `modifier_id` names, or every one on the item when it is
     /// omitted. Each starts again from its beginning, so firing one while it runs
@@ -2217,6 +2259,8 @@ impl Action {
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
             Action::SceneZoomCamera { .. } => "scene.zoom_camera",
+            Action::SceneDriveCamera { .. } => "scene.drive_camera",
+            Action::SceneAimCamera { .. } => "scene.aim_camera",
             Action::PtzDrive { .. } => "ptz.drive",
             Action::PtzAim { .. } => "ptz.aim",
             Action::PtzHome { .. } => "ptz.home",
@@ -2271,7 +2315,10 @@ impl Action {
                 }
                 named
             }
-            Action::StudioSetPreview { scene_id } | Action::SceneZoomCamera { scene_id, .. } => {
+            Action::StudioSetPreview { scene_id }
+            | Action::SceneZoomCamera { scene_id, .. }
+            | Action::SceneDriveCamera { scene_id, .. }
+            | Action::SceneAimCamera { scene_id, .. } => {
                 vec![(EntityKind::Scene, scene_id.as_str())]
             }
             Action::ItemShow { item_id, scene_id }
@@ -2410,6 +2457,11 @@ impl Action {
                 "`ptz.drive` can't be bound: a binding fires only on press, so nothing would \
                  stop the move; bind `ptz.aim`, `ptz.recall` or `ptz.home` (ADR-0146 §3)",
             )),
+            Action::SceneDriveCamera { .. } => Some((
+                "type",
+                "`scene.drive_camera` can't be bound: a binding fires only on press, so \
+                 nothing would stop the move; bind `scene.aim_camera` (ADR-0151)",
+            )),
             Action::PluginClapRescan => Some((
                 "type",
                 "`plugin.clap_rescan` can't be bound: a person rescans the CLAP plugins \
@@ -2455,6 +2507,7 @@ impl Action {
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
             | Action::SceneZoomCamera { .. }
+            | Action::SceneAimCamera { .. }
             | Action::PtzAim { .. }
             | Action::PtzHome { .. }
             | Action::PtzRecall { .. }
@@ -2493,7 +2546,9 @@ impl Action {
     pub fn takes_steps(&self) -> bool {
         match self {
             Action::SceneZoomCamera { .. } => true,
-            Action::PtzDrive { .. }
+            Action::SceneDriveCamera { .. }
+            | Action::SceneAimCamera { .. }
+            | Action::PtzDrive { .. }
             | Action::PtzAim { .. }
             | Action::PtzHome { .. }
             | Action::PtzRecall { .. }

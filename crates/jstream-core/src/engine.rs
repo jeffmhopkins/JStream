@@ -1260,6 +1260,22 @@ impl Engine {
         Ok(())
     }
 
+    /// Opens the PTZ controller endpoints `setup` lists (ADR-0151, ADR-0123 §5): a
+    /// socket, a thread and a session for each, which turn a controller's VISCA into
+    /// `scene.drive_camera` and `scene.aim_camera` for its target's camera. They run
+    /// until the returned handle is dropped, which closes them and stops their drives.
+    /// Without a call no controller socket is open.
+    ///
+    /// # Errors
+    /// When an endpoint's socket can't be opened (its port in use, say) or its thread
+    /// can't start; nothing is left listening then.
+    pub fn start_ptz_controllers(
+        &self,
+        setup: &crate::ptz::controller::PtzControllerSetup,
+    ) -> std::io::Result<crate::ptz::controller::PtzControllers> {
+        crate::ptz::controller::start(self, setup)
+    }
+
     /// Injects platform backends. `output.start` then runs the media pipeline
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
@@ -1885,7 +1901,8 @@ impl Engine {
     /// Drops `client_id`'s undo and redo history and expires its open gestures: its
     /// session ended (ADR-0032). Each gesture's parameters show their collection values
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
-    /// gets an audit entry. A PTZ camera its drive left moving stops. What `plugin.list` showed it is forgotten too.
+    /// gets an audit entry. A PTZ camera or a scene camera's live aim its drive left moving
+    /// stops. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
         self.shared.profile.end_views(client_id);
         let mut wake = Vec::new();
@@ -1894,6 +1911,8 @@ impl Engine {
             state.history.forget(client_id);
             // A camera its drive left moving stops (ADR-0146 §3).
             state.ptz.forget_client(client_id);
+            // So does a scene camera's live aim (ADR-0151).
+            state.forget_aims(client_id);
             for gesture_id in state.gestures.of_client(client_id) {
                 state.end_gesture(
                     client_id,
@@ -4495,6 +4514,11 @@ struct State {
     /// since the engine started (ADR-0113 §4), which the render thread's follow cameras
     /// take through the parameter channel. Never stored.
     camera_zooms: BTreeMap<SceneId, i64>,
+    /// Each scene family's live aim (ADR-0151): what `scene.drive_camera` and
+    /// `scene.aim_camera` gave its camera since the engine started or the collection
+    /// was replaced, which the render thread takes through the parameter channel.
+    /// Never stored.
+    camera_aims: BTreeMap<SceneId, crate::aim::Aim>,
     /// The collection with the open gestures' source settings applied (ADR-0091), which
     /// the live sources, the audio mix and the render plan follow instead of `graph`
     /// while any is open. The clone carries the graph's switched keyframes. `None`
@@ -4909,6 +4933,7 @@ impl State {
         self.stale_keys.clear();
         self.source_copies.clear();
         self.camera_zooms.clear();
+        self.camera_aims.clear();
         self.shown_since = crate::motion::ShownSince::default();
         self.fired = crate::motion::Fired::default();
         self.studio = self.studio.fresh();
@@ -5518,6 +5543,10 @@ impl State {
             done?;
             return Ok(CallResult::action());
         }
+        if jstream_protocol::camera_aim_scene(&action).is_some() {
+            self.aim_camera(client_id, &action)?;
+            return Ok(CallResult::action());
+        }
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -5712,6 +5741,16 @@ impl State {
                 Query::PtzList => QueryResult::PtzList {
                     cameras: self.ptz.list(),
                 },
+                Query::SceneCameraAim { scene_id } => {
+                    let family = self.camera_family(scene_id)?;
+                    let now = self.live.now();
+                    QueryResult::SceneCameraAim {
+                        aim: self.camera_aims.get(&family).map_or_else(
+                            || crate::aim::Aim::default().info(now),
+                            |aim| aim.info(now),
+                        ),
+                    }
+                }
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
@@ -6516,8 +6555,75 @@ impl State {
 
     /// Publishes the gestures' live values on the render parameter channel.
     fn publish_live(&self) {
-        self.render
-            .publish_live(self.gestures.params().with_zooms(self.camera_zooms.clone()));
+        self.render.publish_live(
+            self.gestures
+                .params()
+                .with_zooms(self.camera_zooms.clone())
+                .with_aims(self.camera_aims.clone()),
+        );
+    }
+
+    /// The scene family whose camera `scene_id` draws through, for the live aim
+    /// (ADR-0151): `not_found` for a scene that doesn't exist, and `action_failed` for
+    /// one that draws through no camera (a 2D scene with no follow camera).
+    fn camera_family(&self, scene_id: &SceneId) -> Result<SceneId, ProtocolError> {
+        let state = self.graph.state();
+        let scene = state
+            .scene(scene_id)
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: scene_id.as_str().to_owned(),
+            })?;
+        let family = scene.variant_of().unwrap_or(scene.id()).clone();
+        let parent = state.scene(&family);
+        let has_camera = scene.camera().is_some()
+            || parent.is_some_and(|parent| {
+                parent.camera().is_some() || parent.camera_follow().is_some()
+            });
+        if !has_camera {
+            return Err(ProtocolError::ActionFailed {
+                reason: format!("scene `{scene_id}` draws through no camera"),
+            });
+        }
+        Ok(family)
+    }
+
+    /// `scene.drive_camera` and `scene.aim_camera` (ADR-0151): drives or aims the live
+    /// aim of `action`'s scene family's camera from now, which the render thread takes
+    /// on its next frame.
+    fn aim_camera(&mut self, client_id: &ClientId, action: &Action) -> Result<(), ProtocolError> {
+        if let Some((field, reason)) = jstream_protocol::camera_aim_check(action) {
+            return Err(ProtocolError::invalid_argument(field, reason));
+        }
+        let scene_id = jstream_protocol::camera_aim_scene(action)
+            .expect("invariant: the caller checked it is a camera aim action");
+        let family = self.camera_family(scene_id)?;
+        let now = self.live.now();
+        let aim = self.camera_aims.entry(family).or_default();
+        match action {
+            Action::SceneDriveCamera {
+                pan, tilt, zoom, ..
+            } => {
+                aim.drive(now, (*pan, *tilt, *zoom), client_id);
+            }
+            Action::SceneAimCamera { aim: to, speed, .. } => aim.aim(now, to, *speed),
+            _ => unreachable!("invariant: camera_aim_scene names only the camera aim actions"),
+        }
+        self.publish_live();
+        Ok(())
+    }
+
+    /// Stops the live aims `client_id`'s drives left moving: its session ended
+    /// (ADR-0151).
+    fn forget_aims(&mut self, client_id: &ClientId) {
+        let now = self.live.now();
+        let mut stopped = false;
+        for aim in self.camera_aims.values_mut() {
+            stopped |= aim.forget(now, client_id);
+        }
+        if stopped {
+            self.publish_live();
+        }
     }
 
     /// `scene.zoom_camera` (ADR-0113 §4): `steps` zoom steps for the follow camera of

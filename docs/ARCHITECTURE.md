@@ -779,6 +779,13 @@ The wire format, versioning, error codes and compatibility policy are designed i
   head. The edit `scene.set_ptz_shots` gives a scene a preset or pose per camera, fired
   when the scene goes on program (with the speed matched to the transition) or on
   preview (only for cameras the program's shots don't name).
+- **A scene camera's live aim** ([ADR-0151](adr/0151-a-ptz-controller-drives-scene-cameras.md),
+  protocol 0.118): the actions `scene.drive_camera` (signed speeds in VISCA steps, as
+  `ptz.drive`) and `scene.aim_camera` (pan and tilt in degrees from the stored view, a
+  zoom factor) move a scene family's camera at runtime, with no `rev` change, and the
+  query `scene.camera_aim` reads it. A PTZ controller drives them: the host's controller
+  endpoints, each on one LAN address and answering only allowlisted controllers, are
+  sessions that turn VISCA into these actions (ADR-0123 §5).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));

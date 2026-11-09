@@ -953,3 +953,66 @@ fn moves_cut_short_keep_moving_one_camera() {
     let x = one_camera(0.0).expect("3D");
     assert!(x > 925.0 && x < 1100.0, "from on the way to c: {x}");
 }
+
+/// A scene camera's live aim turns the picture the program mix draws (ADR-0151): panned
+/// 60° away, the canvas leaves the centre of the view, and aimed home again it is back.
+/// A missing software adapter skips the test, and fails it when `CI` is set.
+#[test]
+fn a_scene_cameras_live_aim_turns_the_drawn_picture() {
+    let _gpu = super::one_gpu_test_at_a_time();
+    let clock = FakeClock::new(Timebase::MICROS);
+    let engine = Engine::new();
+    engine.set_source_clock(Arc::new(clock.clone()));
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            fill("red", "#ff0000ff"),
+            Edit::ItemAdd {
+                scene_id: SceneId::new("a"),
+                item_id: jstream_protocol::ItemId::new("a1"),
+                source_id: SourceId::new("red"),
+                transform: None,
+                geometry: Some(
+                    jstream_protocol::ItemGeometry::try_new(
+                        jstream_protocol::Vec2::new(960.0, 540.0).expect("finite"),
+                        jstream_protocol::Size::try_new(600.0, 600.0).expect("size"),
+                    )
+                    .expect("geometry"),
+                ),
+                opacity: None,
+                blend: None,
+            },
+            set_camera(
+                "a",
+                Some(jstream_protocol::SceneCamera::framing(
+                    jstream_protocol::Canvas::DEFAULT,
+                )),
+            ),
+        ]),
+    )
+    .expect("built");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let aim = |pan: f32| Call::Action {
+        action: Action::SceneAimCamera {
+            scene_id: SceneId::new("a"),
+            aim: jstream_protocol::CameraAim {
+                pan_deg: jstream_protocol::Finite32::new(pan),
+                ..Default::default()
+            },
+            speed: None,
+        },
+    };
+    let Some(home) = centre(&control) else {
+        return;
+    };
+    assert_eq!(home, [0xff, 0, 0, 0xff], "the red item fills the view");
+    block_on(control.call(aim(60.0))).expect("pan away");
+    clock.advance(2_000_000);
+    let away = centre(&control).expect("drawn");
+    assert_ne!(away, home, "the canvas left the centre of the view");
+    block_on(control.call(aim(0.0))).expect("home");
+    clock.advance(2_000_000);
+    assert_eq!(centre(&control), Some(home), "back home");
+}
