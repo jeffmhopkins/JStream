@@ -200,6 +200,9 @@ struct Running {
     looked: u64,
     /// Whether it was told no mix draws it ([`Source::set_drawn`], #1071).
     resting: bool,
+    /// Whether it was cued to be shown, on a warm scene no mix drew ([`Source::cue`],
+    /// ADR-0117 §7), and not looked at since.
+    cued: bool,
     /// `!resting`, shared with the thread's [`Painted`] entry: the thread paints a
     /// painter only while some mix draws it.
     drawn: Arc<AtomicBool>,
@@ -714,6 +717,7 @@ impl LiveSources {
                 planned: plan,
                 looked: plan,
                 resting: false,
+                cued: false,
                 drawn: Arc::new(AtomicBool::new(true)),
                 shown_gpu: None,
                 extent: built.extent,
@@ -997,6 +1001,11 @@ impl LiveSources {
         let at = since(now, running.start);
         // A granted page's clock anchor, when one is due (ADR-0102 decision 4).
         running.source.page_clock(now);
+        // Cued, it plays on from where it was held, unless the program shows it again
+        // now, which plays it from there too.
+        if std::mem::take(&mut running.cued) && !(reach && running.planned + 1 < plan) {
+            running.source.uncue(at);
+        }
         if reach {
             if running.planned + 1 < plan {
                 running.source.show(at);
@@ -1165,21 +1174,44 @@ impl LiveSources {
     /// painting a scope, timer or chat source no mix draws. A source looked at again is
     /// told it is drawn, and a painter painted for now, as it is looked at
     /// ([`Self::look`]).
+    ///
+    /// A source a warm scene draws never rests (ADR-0117 §7). One no mix looked at and
+    /// the program didn't reach is cued instead ([`Source::cue`]): a media file that
+    /// restarts when shown holds its start, so the switch to its scene shows it at once.
     pub(crate) fn rest_undrawn(&mut self) {
         let plan = self.plan;
         let warm = &self.warm;
-        for running in self
-            .entries
-            .iter_mut()
-            .filter(|(id, _)| !warm.contains(*id))
-            .filter_map(|(_, e)| e.running.as_mut())
-        {
+        let mut cued = false;
+        for (id, entry) in &mut self.entries {
+            let Some(running) = entry.running.as_mut() else {
+                continue;
+            };
+            if warm.contains(id) {
+                if running.planned != plan && running.looked != plan && !running.cued {
+                    running.source.cue();
+                    running.cued = true;
+                    cued |= running.source.painter().is_some();
+                }
+                continue;
+            }
             if running.looked != plan && !running.resting {
                 running.resting = true;
                 running.drawn.store(false, Ordering::Relaxed);
                 running.source.set_drawn(false);
             }
         }
+        if cued {
+            // The thread takes a cued file's first frame as soon as it is decoded.
+            self.wake_painters();
+        }
+    }
+
+    /// Has the thread paint the painters drawn now, then as they ask.
+    fn wake_painters(&self) {
+        let mut queue = lock(&self.worker.queue);
+        let now = queue.clock.now();
+        queue.paint_wake = crate::snapshot::earliest(queue.paint_wake, Some(now));
+        self.worker.wake.notify_all();
     }
 
     /// Keeps `sources`, which the warm scenes draw (ADR-0117 §7), from resting: one
@@ -1207,11 +1239,22 @@ impl LiveSources {
             }
         }
         if painted {
-            let mut queue = lock(&self.worker.queue);
-            let now = queue.clock.now();
-            queue.paint_wake = crate::snapshot::earliest(queue.paint_wake, Some(now));
-            self.worker.wake.notify_all();
+            self.wake_painters();
         }
+    }
+
+    /// The first pixel of the frame `source_id`'s painter holds now, for tests.
+    #[cfg(test)]
+    pub(crate) fn painted_pixel(&self, source_id: &SourceId) -> Option<[u8; 4]> {
+        let painter = self
+            .entries
+            .get(source_id)?
+            .running
+            .as_ref()?
+            .source
+            .painter()?;
+        let frame = painter.frame();
+        crate::slot::rgba(&frame).get(..4)?.try_into().ok()
     }
 
     /// Whether `source_id`'s live instance rests, for tests.

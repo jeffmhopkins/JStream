@@ -1055,7 +1055,8 @@ studio also names the **warm scenes** (ADR-0117 §7, `Studio::warm`): the Previe
 then the scenes most recently on program, at most `WARM_SCENES` (3) of them and never
 the program scene. A deleted scene is forgotten. Their captures stay running (see
 *Preview streams*), and their other sources never rest (`LiveSources::set_warm`), so a
-page they show stays loaded and painting.
+page they show stays loaded and painting, and a `restart_on_show` media file waits at
+its start with its first frame decoded.
 
 **Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its
 preset (`transition::resolve`: the preset it names, else the new scene's
@@ -2051,7 +2052,7 @@ it in (the program's, a video mix's, or a scene or source preview's, all drawn i
 same re-plan): after that re-plan, one none of them looked at is told nothing draws it
 (`Source::set_drawn(false)`), and the next look at it tells it it is drawn again, before
 its frame is taken. A `browser` page rests while nothing draws it (#1071). A source a
-warm scene draws never rests (`LiveSources::set_warm`, ADR-0117 §7; see *Preview
+warm scene draws never rests, and is cued when nothing draws it (`LiveSources::set_warm`, ADR-0117 §7; see *Preview
 streams*). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
@@ -2303,10 +2304,14 @@ thread adopts it with the program's snapshot, hands the replaced one to the coll
 and adds it to the captures it runs (`Watched::of`). The same plan notes every source
 the warm scenes draw, and the live sources keep those from resting (#1071): one resting
 when its scene turns warm is told it is drawn and painted again on the sources' thread,
-and one whose scene stops being warm rests then, unless a mix drew it. A warm scene is
-not composited unless it is monitored, and a media file is not yet held at its show
-position; the pin, the hotkey-bound scenes and the budget wait for Application Settings
-(#1207).
+and one whose scene stops being warm rests then, unless a mix drew it. One that no mix
+looked at and the program didn't reach is cued instead (`Source::cue`, once until it
+is looked at again): a `restart_on_show` media file goes to its start and holds its
+first frame, which the sources' thread takes once decoded, so the switch to its scene
+shows that frame in its first plan and plays on with no seek. A preview that looks at
+a cued source first lets it play on from there (`Source::uncue`). A warm scene is not
+composited unless it is monitored; the pin, the hotkey-bound scenes and the budget wait
+for Application Settings (#1207).
 
 A JPEG or PNG stream gets a picture queue instead of an encoder session
 (`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read

@@ -170,6 +170,8 @@ impl SourceKind for MediaKind {
                 current_at: 0,
                 timing,
                 last: 0,
+                held: false,
+                fresh: false,
                 path: file_path(settings),
             }))),
         }))
@@ -348,9 +350,17 @@ struct Playhead {
     timing: Timing,
     /// The latest clock time asked about, so a speed change keeps the position.
     last: i64,
+    /// Whether it is held at the start, cued to be shown ([`Source::cue`]): the
+    /// timeline stays there until [`Self::play_from_hold`].
+    held: bool,
+    /// Whether the first frame after the hold's seek has been taken.
+    fresh: bool,
     /// The `file` setting's path, for errors.
     path: String,
 }
+
+/// The clock time a held playhead's timeline starts moving at: never.
+const HELD_CLOCK: i64 = i64::MAX;
 
 impl Playhead {
     /// The timeline position at clock time `at`, in microseconds.
@@ -364,6 +374,28 @@ impl Playhead {
         if let Some(player) = &self.player {
             player.set_timing(timing);
         }
+    }
+
+    /// Goes to the start and holds there, the first frame decoded and shown, with the
+    /// audio from the start kept for when it is heard. Already held, it stays.
+    fn hold(&mut self) {
+        if self.held {
+            return;
+        }
+        self.held = true;
+        self.fresh = false;
+        self.restart_at(HELD_CLOCK, 0);
+    }
+
+    /// Plays on from the hold's start at clock time `at`, with no seek: the frames and
+    /// audio from the start are decoded already.
+    fn play_from_hold(&mut self, at: i64) {
+        self.held = false;
+        self.set_timing(Timing {
+            clock: at,
+            timeline: 0,
+            speed: self.play.speed,
+        });
     }
 
     /// Starts the timeline again from `timeline` at clock time `at`.
@@ -397,6 +429,16 @@ impl Playhead {
             });
         }
         let mut taken = false;
+        // Held, the first frame after the seek shows whatever its time.
+        if self.held
+            && !self.fresh
+            && let Some(first) = state.queue.pop_front()
+        {
+            self.current_at = first.at;
+            self.current = first.frame;
+            self.fresh = true;
+            taken = true;
+        }
         while let Some(next) = state.queue.front().filter(|d| d.at <= position) {
             self.current_at = next.at;
             if let Some(next) = state.queue.pop_front() {
@@ -424,6 +466,10 @@ impl Playhead {
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
         let player = self.player.as_ref().filter(|_| self.video)?;
         let at = micros(at).unwrap_or(0).max(0);
+        if self.held {
+            // Nothing changes while held, once the first frame shows.
+            return (!self.fresh).then(|| MediaTime::new(at + RETRY_US, Timebase::MICROS));
+        }
         let state = player.state();
         let next = match state.queue.front() {
             Some(next) => self.timing.clock_at(next.at).max(at + 1),
@@ -480,14 +526,35 @@ impl Source for MediaSource {
 
     fn show(&mut self, at: MediaTime) {
         let mut head = self.head.lock();
+        let at = micros(at).unwrap_or(0).max(0);
+        if head.held {
+            // Cued: it is at the start already.
+            head.play_from_hold(at);
+        } else if head.play.restart_on_show && head.player.is_some() {
+            head.restart_at(at, 0);
+        }
+    }
+
+    /// With `restart_on_show`, goes to the start and holds its first frame there, so
+    /// [`show`](Source::show) plays at once (ADR-0117 §7).
+    fn cue(&mut self) {
+        let mut head = self.head.lock();
         if head.play.restart_on_show && head.player.is_some() {
-            head.restart_at(micros(at).unwrap_or(0).max(0), 0);
+            head.hold();
+        }
+    }
+
+    fn uncue(&mut self, at: MediaTime) {
+        let mut head = self.head.lock();
+        if head.held {
+            head.play_from_hold(micros(at).unwrap_or(0).max(0));
         }
     }
 
     /// Plays the file from its start (`source.restart`).
     fn restart(&mut self, at: MediaTime) {
         let mut head = self.head.lock();
+        head.held = false;
         if head.player.is_some() {
             head.restart_at(micros(at).unwrap_or(0).max(0), 0);
         }
@@ -501,7 +568,14 @@ impl Source for MediaSource {
         }
         let play = Play::from(settings)?;
         let mut head = self.head.lock();
-        if play.speed != head.play.speed {
+        if head.held {
+            // Held, the timeline stays at the start whatever the speed.
+            let timing = Timing {
+                speed: play.speed,
+                ..head.timing
+            };
+            head.set_timing(timing);
+        } else if play.speed != head.play.speed {
             // Keep the position: the new speed applies from the latest time asked about.
             let (clock, timeline) = (head.last, head.position(head.last));
             head.set_timing(Timing {
