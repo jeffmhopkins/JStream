@@ -1,12 +1,15 @@
 //! `cargo xtask dist-linux`: builds the Linux desktop app's `.deb` (ADR-0141 decision 5).
 //! It builds the web UI (or takes a built one) and the release binaries, the desktop app
-//! with its `webkitgtk` window, and lays them out as a Debian package: the programs and
-//! the UI in `/usr/lib/jstream`, links to them in `/usr/bin`, an application-menu entry
+//! with its `webkitgtk` window and both hosts with their `cef` browser sources, and lays
+//! them out as a Debian package: the programs and the UI in `/usr/lib/jstream`, the
+//! browser helper's `browser` folder beside them (`cargo xtask browser-linux`'s, with
+//! `chrome-sandbox` setuid root, ADR-0095), links in `/usr/bin`, an application-menu entry
 //! and its icon, then `dpkg-deb` packs it. The package depends on the distribution's
-//! WebKitGTK 4.1, so it installs on the Ubuntu and Debian releases that ship it. It is a
-//! CI artifact; publishing it with a release, and signing it, are later decisions.
+//! WebKitGTK 4.1 and the libraries CEF's runtime needs, so it installs on the Ubuntu and
+//! Debian releases that ship them. It is a CI artifact; publishing it with a release, and
+//! signing it, are later decisions.
 //!
-//! Docs: docs/ARCHITECTURE.md#packaging
+//! Docs: docs/ARCHITECTURE.md#packaging, docs/adr/0095-browser-helper-on-linux.md
 
 use std::fmt::Write as _;
 use std::fs;
@@ -15,13 +18,15 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
+use crate::browser_linux::{self, CHROME_SANDBOX};
 use crate::dist::{build_ui, copy, copy_dir, describe};
 
 const USAGE: &str = "usage: cargo xtask dist-linux [--ui-dir <built UI folder>] [--out <folder>] [--revision <name>]";
 
-/// The packages `cargo build` builds, and the features: the desktop app's window.
+/// The packages `cargo build` builds, and the features: the desktop app's window, and
+/// both hosts' browser sources, which start the helper in the `browser` folder.
 const PACKAGES: &[&str] = &["jstream-desktop", "jstream-daemon", "jstream-cli"];
-const FEATURES: &str = "jstream-desktop/webkitgtk";
+const FEATURES: &str = "jstream-desktop/webkitgtk,jstream-desktop/cef,jstream-daemon/cef";
 
 /// The programs the build leaves in `target/release`, each linked from `/usr/bin`.
 const BINARIES: &[&str] = &["jstream", "jstream-daemon", "jstream-cli"];
@@ -36,8 +41,19 @@ const APP_ID: &str = "dev.jstream.desktop";
 /// The package's name.
 const PACKAGE: &str = "jstream";
 
-/// The run-time libraries the window needs, as Debian and Ubuntu name them.
-const DEPENDS: &str = "libwebkit2gtk-4.1-0, libgtk-3-0";
+/// The run-time libraries the window and CEF's runtime need, as Debian and Ubuntu name
+/// them. Ubuntu 24.04 renamed some for the 64-bit `time_t` move (`t64`), which Debian 12
+/// hasn't, so each of those takes either name. CEF's are the ones the `browser-linux` CI
+/// job installs to open a page.
+const DEPENDS: &str = "libwebkit2gtk-4.1-0, libgtk-3-0, libnss3, libatk1.0-0t64 | libatk1.0-0, \
+     libatk-bridge2.0-0t64 | libatk-bridge2.0-0, libcups2t64 | libcups2, libxcomposite1, \
+     libxdamage1, libxrandr2, libgbm1, libpango-1.0-0, libcairo2, libasound2t64 | libasound2, \
+     libxkbcommon0, libdrm2";
+
+/// The mode `chrome-sandbox` is packed with: setuid, and root's through `dpkg-deb
+/// --root-owner-group`, so Chromium's sandbox works where unprivileged user namespaces
+/// are off (ADR-0095).
+const SANDBOX_MODE: u32 = 0o4755;
 
 /// Repository files copied into the package's doc folder.
 const LICENSES: &[&str] = &["LICENSE-MIT", "LICENSE-APACHE"];
@@ -80,6 +96,8 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
         );
     }
     build_binaries(root)?;
+    let browser = target.join("dist-linux-browser");
+    browser_linux::build_release(root, &target, &browser)?;
     let version = deb_version(
         env!("CARGO_PKG_VERSION"),
         revision.unwrap_or_else(|| describe(root)).as_str(),
@@ -88,7 +106,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     if stage.exists() {
         fs::remove_dir_all(&stage).with_context(|| format!("removing {}", stage.display()))?;
     }
-    lay_out(root, &target.join("release"), &ui, &stage)?;
+    lay_out(root, &target.join("release"), &ui, &browser, &stage)?;
     let deb = pack(&stage, &version, arch, &out)?;
     eprintln!("wrote {}", deb.display());
     Ok(true)
@@ -135,9 +153,9 @@ fn build_binaries(root: &Path) -> Result<()> {
     Ok(())
 }
 
-/// Lays the package's files out under `stage`, from the release binaries in `release`
-/// and the built UI in `ui`.
-fn lay_out(root: &Path, release: &Path, ui: &Path, stage: &Path) -> Result<()> {
+/// Lays the package's files out under `stage`, from the release binaries in `release`,
+/// the built UI in `ui` and the browser helper's laid-out folder `browser`.
+fn lay_out(root: &Path, release: &Path, ui: &Path, browser: &Path, stage: &Path) -> Result<()> {
     let lib = stage.join(LIB_DIR);
     let bin = stage.join("usr/bin");
     fs::create_dir_all(&lib).with_context(|| format!("creating {}", lib.display()))?;
@@ -145,10 +163,21 @@ fn lay_out(root: &Path, release: &Path, ui: &Path, stage: &Path) -> Result<()> {
     for binary in BINARIES {
         copy(&release.join(binary), &lib.join(binary))?;
         let link = bin.join(binary);
-        std::os::unix::fs::symlink(format!("../lib/jstream/{binary}"), &link)
-            .with_context(|| format!("linking {}", link.display()))?;
+        symlink(&format!("../lib/jstream/{binary}"), &link)?;
     }
     copy_dir(ui, &lib.join("ui"))?;
+    // The hosts find the helper in `browser` beside their own path, as resolved.
+    let helper = lib.join("browser");
+    copy_dir(browser, &helper)?;
+    let sandbox = helper.join(CHROME_SANDBOX);
+    if !sandbox.is_file() {
+        bail!(
+            "{} holds no {CHROME_SANDBOX}: the package needs it for machines without \
+             unprivileged user namespaces",
+            browser.display()
+        );
+    }
+    set_mode(&sandbox, SANDBOX_MODE)?;
     let doc = stage.join("usr/share/doc").join(PACKAGE);
     fs::create_dir_all(&doc).with_context(|| format!("creating {}", doc.display()))?;
     for license in LICENSES {
@@ -165,6 +194,36 @@ fn lay_out(root: &Path, release: &Path, ui: &Path, stage: &Path) -> Result<()> {
         &icons.join(format!("{APP_ID}.png")),
     )?;
     Ok(())
+}
+
+/// Links `link` to `target`.
+#[cfg(unix)]
+fn symlink(target: &str, link: &Path) -> Result<()> {
+    std::os::unix::fs::symlink(target, link).with_context(|| format!("linking {}", link.display()))
+}
+
+/// The package is only laid out on Linux; elsewhere linking fails, so xtask still builds
+/// on Windows, whose CI lints the whole workspace.
+#[cfg(not(unix))]
+fn symlink(target: &str, link: &Path) -> Result<()> {
+    bail!("can't link {} to {target}: not on Unix", link.display())
+}
+
+/// Gives `file` the Unix `mode`.
+#[cfg(unix)]
+fn set_mode(file: &Path, mode: u32) -> Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+    fs::set_permissions(file, fs::Permissions::from_mode(mode))
+        .with_context(|| format!("setting {}'s mode to {mode:o}", file.display()))
+}
+
+/// As [`symlink`], only on Unix.
+#[cfg(not(unix))]
+fn set_mode(file: &Path, mode: u32) -> Result<()> {
+    bail!(
+        "can't set {}'s mode to {mode:o}: not on Unix",
+        file.display()
+    )
 }
 
 /// The application-menu entry.
@@ -200,7 +259,8 @@ fn control(version: &str, arch: &str, installed_kib: u64) -> String {
          Description: live-streaming and compositing studio\n \
          JStream composes scenes and streams them live over RTMP(S), driven by hand\n \
          or by an AI agent over MCP. This package is the desktop app (jstream), the\n \
-         engine without a window (jstream-daemon) and its command line (jstream-cli).\n"
+         engine without a window (jstream-daemon), its command line (jstream-cli) and\n \
+         the sandboxed browser helper that browser sources run in (CEF).\n"
     );
     text
 }
@@ -259,6 +319,8 @@ fn size_kib(dir: &Path) -> Result<u64> {
 mod tests {
     use super::{BINARIES, LIB_DIR, control, deb_arch, deb_version, desktop_entry, lay_out, pack};
     use std::fs;
+    #[cfg(target_os = "linux")]
+    use std::os::unix::fs::PermissionsExt as _;
     use std::path::Path;
     use std::process::Command;
 
@@ -283,7 +345,13 @@ mod tests {
         }
         fs::write(ui.join("index.html"), b"<!doctype html>").expect("index");
         fs::write(ui.join("assets/app.js"), b"").expect("asset");
-        lay_out(root, &release, &ui, &stage).expect("laid out");
+        let browser = scratch.join("browser");
+        fs::create_dir_all(browser.join("locales")).expect("browser");
+        for file in ["jstream-browser-helper", "libcef.so", "chrome-sandbox"] {
+            fs::write(browser.join(file), b"").expect("a stand-in CEF file");
+        }
+        fs::write(browser.join("locales/en-US.pak"), b"").expect("a locale");
+        lay_out(root, &release, &ui, &browser, &stage).expect("laid out");
 
         let lib = stage.join(LIB_DIR);
         for binary in BINARIES {
@@ -296,6 +364,13 @@ mod tests {
             );
         }
         assert!(lib.join("ui/index.html").is_file());
+        assert!(lib.join("browser/jstream-browser-helper").is_file());
+        assert!(lib.join("browser/locales/en-US.pak").is_file());
+        let mode = fs::metadata(lib.join("browser/chrome-sandbox"))
+            .expect("the sandbox")
+            .permissions()
+            .mode();
+        assert_eq!(mode & 0o7777, 0o4755, "chrome-sandbox is setuid");
         assert!(lib.join("ui/assets/app.js").is_file());
         assert!(
             stage
@@ -332,6 +407,14 @@ mod tests {
                 contents.contains("root/root"),
                 "files are root's: {contents}"
             );
+            let sandbox = contents
+                .lines()
+                .find(|line| line.ends_with("/usr/lib/jstream/browser/chrome-sandbox"))
+                .expect("the sandbox is packed");
+            assert!(
+                sandbox.starts_with("-rwsr-xr-x root/root"),
+                "packed setuid root: {sandbox}"
+            );
         }
         let _ = fs::remove_dir_all(&scratch);
     }
@@ -357,9 +440,10 @@ mod tests {
     #[test]
     fn the_control_file_names_webkitgtk_and_ends_its_description() {
         let text = control("1.0.0", "amd64", 42);
-        assert!(text.contains("Depends: libwebkit2gtk-4.1-0, libgtk-3-0\n"));
+        assert!(text.contains("Depends: libwebkit2gtk-4.1-0, libgtk-3-0, libnss3, "));
+        assert!(text.contains("libasound2t64 | libasound2, libxkbcommon0, libdrm2\n"));
         assert!(text.contains("Installed-Size: 42\n"));
-        assert!(text.ends_with("(jstream-cli).\n"));
+        assert!(text.ends_with("sources run in (CEF).\n"));
         // Every continuation line of the description starts with a space.
         let description = text.split("Description:").nth(1).expect("a description");
         assert!(

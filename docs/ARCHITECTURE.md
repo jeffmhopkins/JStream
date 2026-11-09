@@ -1692,21 +1692,24 @@ Foundation, Direct3D 12).
 - **The Linux `.deb`:** the desktop app on Linux ships as a Debian package
   ([ADR-0141](adr/0141-desktop-app-on-linux.md) decision 5), built in CI and not yet
   published or signed. `cargo xtask dist-linux`, on Linux, builds the web UI for release
-  (or takes `--ui-dir`), builds `jstream` (with its `webkitgtk` window), `jstream-daemon`
-  and `jstream-cli` for release, and lays them out under `/usr/lib/jstream` with the UI
-  in `ui` beside them (where `jstream` looks: its exe path resolves the link), links to
+  (or takes `--ui-dir`), builds `jstream` (with its `webkitgtk` window and `cef`),
+  `jstream-daemon` (with `cef`) and `jstream-cli` for release, and lays them out under
+  `/usr/lib/jstream` with the UI in `ui` and the browser helper's folder in `browser`
+  beside them (where both look: the exe path resolves the link), `chrome-sandbox` in it
+  setuid root, links to
   them in `/usr/bin`, an application-menu entry and the icon as `dev.jstream.desktop`,
   and the licences. `dpkg-deb --root-owner-group` packs it as
   `jstream_<version>_<arch>.deb` in `target/dist-linux`: the version is the crate's with
   a pre-release sorting before its release (`0.1.0~alpha.4`) and `+<--revision or git
-  describe>`. It depends on the distribution's WebKitGTK 4.1 and GTK 3, and recommends
-  xdg-desktop-portal, PipeWire and Mesa's Vulkan drivers. State stays in
-  `$XDG_DATA_HOME/jstream`. It has no browser helper yet, and no AppImage. The
-  `dist-linux` job in `after-review.yml` builds it with the `dist-ui` job's release UI,
-  names it after the commit tested, lists its control fields and files, and uploads it
-  as is.
-- **The Linux browser helper:** the `.deb` doesn't carry it yet, but its hosts find
-  the helper the same way, in a `browser` folder beside them
+  describe>`. It depends on the distribution's WebKitGTK 4.1 and GTK 3 and the libraries
+  CEF links (NSS, ATK, CUPS, the X extensions, GBM, ALSA; with the `t64` names as
+  alternatives), and recommends xdg-desktop-portal, PipeWire and Mesa's Vulkan drivers.
+  State stays in `$XDG_DATA_HOME/jstream`. It has no AppImage yet. The `dist-linux` job
+  in `after-review.yml` builds it with the `dist-ui` job's release UI, names it after the
+  commit tested, lists its control fields and files, fails unless `chrome-sandbox` in it
+  is setuid root, and uploads it as is.
+- **The Linux browser helper:** its hosts find it in a `browser` folder beside them, as
+  the `.deb` installs it
   ([ADR-0095](adr/0095-browser-helper-on-linux.md)). `cargo xtask browser-linux`, on
   Linux, builds the helper executable with its `cef` feature (which downloads the pinned
   CEF; there is no wrapper to build), finds the distribution's folder from that build's
@@ -1714,7 +1717,8 @@ Foundation, Direct3D 12).
   `<--out, default target/release>/browser`: CEF's top-level runtime files but
   `archive.json`, `CMakeLists.txt` and static libraries, so `libcef.so`, its resources
   and `chrome-sandbox` among them, its `locales`, the helper and `CEF-VERSION.txt`.
-  `chrome-sandbox` is setuid root only where an install makes it so. CI's
+  `chrome-sandbox` is setuid root only where an install makes it so (`dist-linux` lays
+  out the same folder from a release build and makes it so in the `.deb`). CI's
   `browser-linux` job builds it, opens a page through it, and keeps it as an artifact.
 - **Virtual camera:** registering the COM media source is **optional**, an explicit
   step the user chooses; nothing registers it or asks for elevation on its own
