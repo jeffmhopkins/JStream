@@ -11,6 +11,7 @@
 //! could never see depth.
 
 mod fog;
+mod occlusion;
 
 use std::sync::Arc;
 
@@ -33,13 +34,14 @@ pub struct ViewDepth {
 
 /// The depth-aware filter kinds, ordered by ID.
 pub fn descriptors() -> Vec<KindDescriptor> {
-    vec![fog::descriptor()]
+    vec![occlusion::descriptor(), fog::descriptor()]
 }
 
 /// The pass for one of this group's kinds, or `None` for any other kind.
 pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
     match kind_id {
         fog::KIND => Some(Box::new(fog::DepthFog::new(settings))),
+        occlusion::KIND => Some(Box::new(occlusion::AmbientOcclusion::new(settings))),
         _ => None,
     }
 }
@@ -47,5 +49,23 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
 /// Whether a filter of `kind_id` reads a scene's view depth, so the engine draws it for
 /// a scene chain that holds one (ADR-0143 decision 4).
 pub fn reads_depth(kind_id: &str) -> bool {
-    kind_id == fog::KIND
+    [fog::KIND, occlusion::KIND].contains(&kind_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use jstream_protocol::Settings;
+
+    /// Every kind listed reads the depth, builds, and is listed in order.
+    #[test]
+    fn every_depth_kind_reads_depth_and_builds() {
+        let kinds = super::descriptors();
+        let ids: Vec<_> = kinds.iter().map(|kind| kind.kind_id.as_str()).collect();
+        assert_eq!(ids, ["ambient_occlusion", "depth_fog"]);
+        for id in ids {
+            assert!(super::reads_depth(id), "{id}");
+            assert!(super::build(id, &Settings::default()).is_some(), "{id}");
+        }
+        assert!(!super::reads_depth("blur"));
+    }
 }
