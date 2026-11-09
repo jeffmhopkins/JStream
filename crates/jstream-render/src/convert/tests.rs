@@ -450,7 +450,7 @@ fn binding_on_a_lost_device_is_an_error() {
     let texture = source(c.device(), c.queue(), w, h, &pattern(w, h));
     let converter = Nv12Converter::new(c.device());
     let planes = converter.planes(size(w, h)).expect("planes");
-    c.device().destroy();
+    c.destroy_device();
     assert!(matches!(
         converter.bind(&texture, &planes.target(), LIMITED),
         Err(RenderError::Uncaptured { .. })

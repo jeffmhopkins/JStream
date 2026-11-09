@@ -24,6 +24,7 @@ mod place;
 mod readback;
 mod scene;
 pub mod transition;
+mod wipe;
 
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
@@ -41,7 +42,7 @@ pub use gpu::{OpenOptions, adapter_available, context_lost};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
 pub use model::{GpuModel, LightKind, Lighting, MAX_SCENE_LIGHTS, ModelDraw, SceneLight};
-pub use readback::{Copier, READBACK_DEPTH, ReadbackRing};
+pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 
 #[cfg(test)]

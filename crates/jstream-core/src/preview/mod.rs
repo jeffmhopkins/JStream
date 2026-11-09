@@ -74,7 +74,7 @@ pub(crate) use draft::plan as plan_draft;
 use std::collections::{BTreeMap, BTreeSet, HashMap, VecDeque};
 use std::panic::{self, AssertUnwindSafe};
 use std::pin::Pin;
-use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI64, AtomicU64, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
@@ -187,7 +187,8 @@ pub(crate) fn gpu_draw(gpu: Option<Arc<SharedGpu>>) -> OpenPreviewDraw {
     Arc::new(move || {
         let context = gpu.as_ref().and_then(|gpu| gpu.context());
         let mut compositor = match &context {
-            Some(context) => Compositor::on_context(context),
+            // Its errors stay its own, apart from the stage's on the context (#1268).
+            Some(context) => Compositor::on_context(context).keeping_own_errors(),
             None => Compositor::open(OpenOptions::hardware()).map_err(|err| err.to_string())?,
         };
         tracing::info!(
@@ -521,6 +522,9 @@ struct Work {
     /// The H.264 session, for an H.264 stream; reopened when the picture size changes.
     h264: Option<H264>,
     started: Instant,
+    /// The last `pts_us` the stream sent, from the hub or from any stage's sender, so
+    /// its times never go back when it moves between them ([`StreamClock`]).
+    last_pts: Arc<AtomicI64>,
     /// The earliest the next picture may be drawn.
     next_at: Instant,
     last_key: Option<Instant>,
@@ -558,6 +562,7 @@ impl Work {
             codec: stream.codec,
             h264: None,
             started: now,
+            last_pts: Arc::new(AtomicI64::new(0)),
             next_at: now,
             last_key: None,
             shown: None,
@@ -688,7 +693,7 @@ impl Staged {
         size: FrameSize,
         stage: &Arc<Program>,
         rev: &Arc<AtomicU64>,
-        started: Instant,
+        clock: StreamClock,
     ) -> Result<Self, String> {
         let H264 {
             session, packets, ..
@@ -703,7 +708,7 @@ impl Staged {
             thread::Builder::new()
                 .name("jstream-preview-send".into())
                 .spawn(move || {
-                    let mut clock = StreamClock::new(started);
+                    let mut clock = clock;
                     send_packets(&stream, &packets, size, &rev, &closing, &mut clock);
                 })
                 .map_err(|err| format!("starting the preview sender: {err}"))?
@@ -726,7 +731,7 @@ impl Staged {
         size: FrameSize,
         stage: &Arc<Program>,
         rev: &Arc<AtomicU64>,
-        started: Instant,
+        clock: StreamClock,
     ) -> Result<Self, String> {
         let (input, pictures) = picture_queue();
         let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
@@ -739,7 +744,7 @@ impl Staged {
             thread::Builder::new()
                 .name("jstream-preview-send".into())
                 .spawn(move || {
-                    let mut clock = StreamClock::new(started);
+                    let mut clock = clock;
                     send_pictures(&stream, codec, &pictures, &rev, &closing, &mut clock);
                 })
                 .map_err(|err| format!("starting the preview sender: {err}"))?
@@ -786,22 +791,29 @@ impl Drop for Staged {
 /// A staged stream's picture times (`pts_us`), which go on increasing across the stages
 /// and sizes it is drawn at, as the hub's own do: the first picture a sender sends is
 /// timed by how long the stream has been open, and each later one by how far its media
-/// time is past that first one's, never going back.
+/// time is past that first one's. None goes back past the last time the stream sent,
+/// from this sender, an earlier stage's or the hub (`Work::last_pts`, shared).
 struct StreamClock {
     /// When the stream opened (the hub's `Work::started`).
     started: Instant,
     /// The first picture's media time (µs) and the time it was sent at.
     first: Option<(i64, i64)>,
-    last: i64,
+    /// The last `pts_us` the stream sent, shared with its other senders.
+    last: Arc<AtomicI64>,
 }
 
 impl StreamClock {
-    fn new(started: Instant) -> Self {
+    fn new(started: Instant, last: Arc<AtomicI64>) -> Self {
         Self {
             started,
             first: None,
-            last: 0,
+            last,
         }
+    }
+
+    /// The stream's clock for a sender opened now.
+    fn of(work: &Work) -> Self {
+        Self::new(work.started, Arc::clone(&work.last_pts))
     }
 
     /// The `pts_us` of a picture whose media time is `pts` (µs).
@@ -811,11 +823,14 @@ impl StreamClock {
             let open = started.elapsed().as_micros();
             (pts, i64::try_from(open).unwrap_or(i64::MAX))
         });
-        self.last = offset
-            .saturating_add(pts.saturating_sub(base))
-            .max(self.last);
-        self.last
+        not_back(&self.last, offset.saturating_add(pts.saturating_sub(base)))
     }
+}
+
+/// `pts_us`, or the last time sent through `last` if that is later, recorded as the
+/// last.
+fn not_back(last: &AtomicI64, pts_us: i64) -> i64 {
+    last.fetch_max(pts_us, Ordering::AcqRel).max(pts_us)
 }
 
 /// The sender thread of a [`Staged`] stream: sends each packet as it comes, timed by
@@ -963,12 +978,19 @@ fn serve_staged(
                 .codecs
                 .as_ref()
                 .ok_or("this engine has no H.264 encoder")?;
-            let staged = Staged::open(stream, codecs.as_ref(), size, stage, rev, work.started)?;
+            let staged = Staged::open(
+                stream,
+                codecs.as_ref(),
+                size,
+                stage,
+                rev,
+                StreamClock::of(work),
+            )?;
             // A new session starts on a keyframe.
             stream.keyframe.store(false, Ordering::Release);
             staged
         } else {
-            Staged::open_pictures(stream, work.codec, size, stage, rev, work.started)?
+            Staged::open_pictures(stream, work.codec, size, stage, rev, StreamClock::of(work))?
         });
     }
     // A picture stream's request is its sender's to take (`send_pictures`).
@@ -1582,8 +1604,10 @@ fn serve(
     work.frames = frames.unwrap_or_default();
     work.slots = slots;
     stream.keyframe.store(false, Ordering::Release);
-    let pts_us =
-        i64::try_from(now.saturating_duration_since(work.started).as_micros()).unwrap_or(i64::MAX);
+    let pts_us = not_back(
+        &work.last_pts,
+        i64::try_from(now.saturating_duration_since(work.started).as_micros()).unwrap_or(i64::MAX),
+    );
     if work.codec == PreviewCodec::H264
         && let Err(reason) = open_h264(stream, work, size)
     {
@@ -1761,13 +1785,16 @@ fn picture(
 
 #[cfg(test)]
 mod clock_tests {
-    use super::StreamClock;
+    use super::{StreamClock, not_back};
+    use std::sync::Arc;
+    use std::sync::atomic::AtomicI64;
     use std::time::{Duration, Instant};
 
     #[test]
     fn a_staged_streams_times_go_on_from_when_it_opened_and_never_back() {
         let opened = Instant::now() - Duration::from_secs(5);
-        let mut first = StreamClock::new(opened);
+        let last = Arc::new(AtomicI64::new(0));
+        let mut first = StreamClock::new(opened, Arc::clone(&last));
         let start = first.at(1_000);
         assert!(
             start >= 5_000_000,
@@ -1777,10 +1804,29 @@ mod clock_tests {
         assert_eq!(first.at(21_000), start + 40_000, "never back");
         // A later stage's sender, its media time starting anew, goes on from there.
         std::thread::sleep(Duration::from_millis(5));
-        let mut next = StreamClock::new(opened);
+        let mut next = StreamClock::new(opened, Arc::clone(&last));
         assert!(
             next.at(0) >= start + 5_000,
             "after the first sender's first picture"
         );
+    }
+
+    /// A stream that moves to a later stage, or back to the hub, sends no time before the
+    /// last one it sent, whichever sent it (#1437 review).
+    #[test]
+    fn a_stream_moved_to_another_sender_goes_on_from_the_last_time_sent() {
+        let opened = Instant::now();
+        let last = Arc::new(AtomicI64::new(0));
+        let mut first = StreamClock::new(opened, Arc::clone(&last));
+        let start = first.at(0);
+        // Media time running ahead of the wall clock: far past what the stream's age says.
+        let ahead = first.at(10_000_000);
+        assert_eq!(ahead, start + 10_000_000);
+        // The next stage's sender opens now, its first picture timed by the stream's age.
+        let mut next = StreamClock::new(opened, Arc::clone(&last));
+        assert_eq!(next.at(0), ahead, "not back to the stream's age");
+        // Nor does the hub, timing by the stream's age too.
+        assert_eq!(not_back(&last, 1_000), ahead);
+        assert_eq!(not_back(&last, ahead + 1), ahead + 1);
     }
 }

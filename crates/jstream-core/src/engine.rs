@@ -2707,6 +2707,15 @@ impl Engine {
         lock(&self.shared.state).live.meters().plans()
     }
 
+    /// Whether `source_id`'s live instance rests because no mix draws it (#1071), for
+    /// tests; `None` while it has none.
+    #[cfg(test)]
+    pub(crate) fn resting(&self, source_id: &str) -> Option<bool> {
+        lock(&self.shared.state)
+            .live
+            .resting(&SourceId::new(source_id))
+    }
+
     /// How many times the live sources painted `source_id` (ADR-0103's meters), for
     /// tests.
     #[cfg(test)]
@@ -3349,6 +3358,94 @@ fn command_name(call: &Call) -> &'static str {
     }
 }
 
+/// The captures and sources of the scenes the studio keeps warm (ADR-0117 §7), planned
+/// again only when the collection's revision, its placed keyframes (which are no
+/// revision, ADR-0118), the warm scenes or a running source changed: a plan of the
+/// program mix, which may run every frame, rarely has to plan them.
+#[derive(Default)]
+struct WarmCaptures {
+    /// What `captures` and `sources` were planned at.
+    of: Option<WarmKey>,
+    captures: Arc<BTreeSet<CaptureKey>>,
+    /// Every source the warm scenes draw, which the live sources keep from resting.
+    sources: BTreeSet<SourceId>,
+}
+
+/// The revision, the warm scenes, the live sources' installs and the placed keyframes
+/// [`WarmCaptures`] planned at.
+type WarmKey = (Rev, Vec<SceneId>, u64, BTreeMap<SceneId, SceneId>);
+
+impl WarmCaptures {
+    /// The captures of `scenes` in `graph`, as the running sources of `live` capture
+    /// them, and the sources they draw, planned again when what they depend on changed.
+    /// Only the captures are looked up, so the plan reaches no source and makes none
+    /// shown or heard (ADR-0028); the sources it asks for are noted.
+    fn update(
+        &mut self,
+        graph: &Graph,
+        scenes: Vec<SceneId>,
+        live: &LiveSources,
+        assets: &crate::filter_assets::FilterAssets,
+    ) -> &Arc<BTreeSet<CaptureKey>> {
+        if self
+            .of
+            .as_ref()
+            .is_some_and(|(rev, warm, installs, placed)| {
+                *rev == graph.rev()
+                    && *warm == scenes
+                    && *installs == live.installs()
+                    && placed == graph.placed_keyframes()
+            })
+        {
+            return &self.captures;
+        }
+        let key = (
+            graph.rev(),
+            scenes,
+            live.installs(),
+            graph.placed_keyframes().clone(),
+        );
+        let mut captures = BTreeSet::new();
+        let mut sources = BTreeSet::new();
+        for scene_id in &key.1 {
+            if graph.state().scene(scene_id).is_none() {
+                continue;
+            }
+            let planning = snapshot::plan_scene(
+                graph,
+                scene_id,
+                &mut |id| {
+                    sources.insert(id.clone());
+                    live.capture_key(id).map(Look::Capture)
+                },
+                assets,
+            );
+            // A scene that draws nothing asks for the primary display, which only an
+            // output without a program scene shows.
+            let primary = CaptureKey::primary();
+            captures.extend(
+                planning
+                    .shot
+                    .captures()
+                    .iter()
+                    .filter(|capture| **capture != primary)
+                    .cloned(),
+            );
+        }
+        if *self.captures != captures {
+            self.captures = Arc::new(captures);
+        }
+        self.sources = sources;
+        self.of = Some(key);
+        &self.captures
+    }
+
+    /// The sources the warm scenes draw, as last planned.
+    fn sources(&self) -> &BTreeSet<SourceId> {
+        &self.sources
+    }
+}
+
 /// Everything the engine knows.
 #[derive(Default)]
 struct State {
@@ -3401,6 +3498,9 @@ struct State {
     /// The copy of the collection each previewed source is planned on, kept while the
     /// collection's revision holds (#969 N2).
     source_copies: snapshot::SourceCopies,
+    /// The warm scenes' captures (ADR-0117 §7), which the render thread keeps running
+    /// beside the program's.
+    warm: WarmCaptures,
     /// When each item the program mix draws was first drawn: the origin of its motion
     /// modifiers' `shown` clock (ADR-0099).
     shown_since: crate::motion::ShownSince,
@@ -4374,6 +4474,7 @@ impl State {
             }
             Action::StudioSetPreview { scene_id } => {
                 if self.studio.set_preview(self.graph.state(), &scene_id)? {
+                    self.publish_warm();
                     self.emit_studio(client_id, request_id, None, wake);
                     self.feed_pages();
                 }
@@ -4950,6 +5051,21 @@ impl State {
         end_ms
     }
 
+    /// Publishes the warm scenes' captures and sources (ADR-0117 §7) after the warm scenes changed
+    /// with no plan of the program mix, as a new Preview scene does.
+    fn publish_warm(&mut self) {
+        let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
+        let assets = self.live.filter_assets();
+        let warm = self
+            .warm
+            .update(graph, self.studio.warm(), &self.live, &assets);
+        self.render.publish_warm(warm);
+        self.live.set_warm(self.warm.sources());
+        // A source that left the warm scenes rests now if nothing drew it in the
+        // latest plans, as it would after one.
+        self.live.rest_undrawn();
+    }
+
     /// One plan of [`Self::publish_render`].
     fn publish_render_once(&mut self) -> Option<f32> {
         let started = Instant::now();
@@ -4968,6 +5084,7 @@ impl State {
             shown_since,
             fired,
             shared,
+            warm,
             ..
         } = self;
         // Drawn with the open gestures' source settings (ADR-0091); its revision is the
@@ -5035,6 +5152,10 @@ impl State {
         }
         // The program stage draws the scenes it is asked to as extra mixes (ADR-0117 §6).
         render.publish_scenes(scene_shots);
+        // And keeps the warm scenes' captures running, so showing one starts nothing;
+        // their other sources keep producing too.
+        render.publish_warm(warm.update(graph, studio.warm(), live, &assets));
+        live.set_warm(warm.sources());
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
         let previewed: BTreeSet<SourceId> = previews

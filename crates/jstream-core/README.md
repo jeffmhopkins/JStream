@@ -276,7 +276,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
-  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), and the warm
+  scenes beside the program (ADR-0117 §7, see [Program scene](#program-scene)).
 - **Timelines** (`timelines.rs`,
   [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)): the timelines playing,
   studio state beside the program scene, whose cues the live ticker fires on the
@@ -312,7 +313,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   *Preview streams* in [Design](#design)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox of each
-  display, window and webcam the program mix or a video mix shows
+  display, window and webcam the program mix, a video mix or a warm scene shows
   (`runtime/captures.rs`, which starts and stops them on a `jstream-capture` thread),
   composites each video
   mix the running outputs show, on its own ticks, then each monitored scene a preview
@@ -399,7 +400,7 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
-  `src/tests/timelines.rs`, `tests/mcp.rs`,
+  `src/tests/timelines.rs`, `src/tests/warm_scenes.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -1050,7 +1051,12 @@ with its first scene on program. The program mix, on the render thread and in
 follows the same rules: `studio.set_preview` sets it (`not_found` for a
 missing scene; setting the scene already there emits nothing), the first scene goes on
 preview when it is created, and a deleted preview scene gives way to the first scene
-left. A switch never moves it, and nothing draws it until E2's preview mix does.
+left. A switch never moves it, and nothing draws it until E2's preview mix does. The
+studio also names the **warm scenes** (ADR-0117 §7, `Studio::warm`): the Preview scene,
+then the scenes most recently on program, at most `WARM_SCENES` (3) of them and never
+the program scene. A deleted scene is forgotten. Their captures stay running (see
+*Preview streams*), and their other sources never rest (`LiveSources::set_warm`), so a
+page they show stays loaded and painting.
 
 **Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its
 preset (`transition::resolve`: the preset it names, else the new scene's
@@ -2061,7 +2067,9 @@ the first time it is shown. Each source also remembers the last plan any mix loo
 it in (the program's, a video mix's, or a scene or source preview's, all drawn in the
 same re-plan): after that re-plan, one none of them looked at is told nothing draws it
 (`Source::set_drawn(false)`), and the next look at it tells it it is drawn again, before
-its frame is taken. A `browser` page rests while nothing draws it (#1071). Sources run on the media clock of the backends the host
+its frame is taken. A `browser` page rests while nothing draws it (#1071). A source a
+warm scene draws never rests (`LiveSources::set_warm`, ADR-0117 §7; see *Preview
+streams*). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
 the thread re-plans at once on the new one. `media` sources play through the injected
@@ -2302,6 +2310,21 @@ tick's period (`MixFrame::deadline`) is skipped, its layers kept, nothing pushed
 counted as a frame not read back in `render_ticks`. A scene not planned yet waits; one
 deleted ends its stream as before.
 
+The **warm scenes'** captures (ADR-0117 §7) run beside the program's, so a switch to
+one, or a transition toward it, finds its webcam open and its display already
+capturing. The engine plans them (`WarmCaptures`, with a look-up that answers only
+captures, so it reaches no source) only when the collection's `rev`, its placed
+keyframes, the warm scenes or an installed source changed, and publishes the set
+(`RenderHub::publish_warm`) after each plan and after `studio.set_preview`. The render
+thread adopts it with the program's snapshot, hands the replaced one to the collector,
+and adds it to the captures it runs (`Watched::of`). The same plan notes every source
+the warm scenes draw, and the live sources keep those from resting (#1071): one resting
+when its scene turns warm is told it is drawn and painted again on the sources' thread,
+and one whose scene stops being warm rests then, unless a mix drew it. A warm scene is
+not composited unless it is monitored, and a media file is not yet held at its show
+position; the pin, the hotkey-bound scenes and the budget wait for Application Settings
+(#1207).
+
 A JPEG or PNG stream gets a picture queue instead of an encoder session
 (`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read
 back into it, at most two waiting (one beyond is dropped without a copy), and its
@@ -2310,7 +2333,8 @@ one sent, a keyframe was asked for (the request is that thread's to take, never 
 hub's), or 2 s passed, and only while the stream's queue has room. A staged stream's
 `pts_us` go on from the hub's own across stages and sizes (`StreamClock`): its first
 picture on a stage is timed by how long the stream has been open, later ones by their
-media time past that one's, never going back. The hub doesn't wait for that thread when it closes the stream:
+media time past that one's, never back past the last time the stream sent, whether
+the hub, this stage's sender or an earlier one sent it (`Work::last_pts`, shared). The hub doesn't wait for that thread when it closes the stream:
 it sees the close within its 100 ms wait, sends nothing more and ends, and the render
 thread then lets go of the queue. A JPEG or PNG stream the stage can't take is drawn by
 the hub from then on, with one warning, until the client subscribes again. Source and draft streams, an engine
@@ -2963,7 +2987,8 @@ The render thread reads the capture mailbox of each capture the render snapshot 
 *Snapshots*) at 30 frames per second, repeats a capture's last frame when its mailbox
 is empty, and hands each mix's composite to the encoder sessions it feeds in the kind
 each takes: converted to NV12 in one of the platform's encode targets for a session on
-the GPU path, read back as RGBA8 for the others (see [Runtime](#runtime)). Without the
+the GPU path, read back for the others, in NV12 when every consumer of the mix is a
+session opened in NV12 and in RGBA8 otherwise (see [Runtime](#runtime)). Without the
 platform's GPU context it opens its compositor on a hardware adapter when the machine
 has one, and on the software adapter otherwise (`OpenOptions::hardware`): on WARP a
 720p program ran at about 10 fps (#433). It draws at the canvas size the collection has when the
@@ -3491,9 +3516,16 @@ the tick's frame is dropped for that mix's GPU sessions and counted in
 `encode_frames`, never written over a held one. The conversion (`Nv12Converter`,
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
 It pushes that target, stamped with the tick's time, to every such session. Sessions
-on the CPU path get the mix read back as RGBA8, as do JPEG and PNG preview streams'
+on the CPU path get the mix read back, as do JPEG and PNG preview streams'
 picture queues (*Preview streams*), and virtual cameras the program; a
-mix none of them is fed is not read back, and each readback is counted
+mix none of them is fed is not read back. Outputs' sessions open in NV12, so when
+every consumer of a mix is one of them (no camera, no picture queue, no session
+opened in RGBA8 such as a preview's H.264, nothing held, and an even size) the mix is
+converted by `Nv12Converter` into planes and read back as NV12 (ADR-0117 §4), and the
+CPU draw converts its frame with `rgb_to_nv12`; otherwise it is read back as RGBA8,
+which an NV12 session converts on its encode thread. A frame read back in one format
+is not handed to a consumer that needs the other, so one attached as the format
+changes waits a tick or two. Each readback is counted
 (`OutputStats::readbacks`, one per mix read back). The readback never waits for the
 GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw
 records it into the mix's `ReadbackRing` of three map-read buffers, kept with the
@@ -3543,7 +3575,9 @@ and lends a clone of the same `GpuContext` to every stage, the preview hub's com
 the snapshot thread's and the browser engine. It opens a new one only when the one it
 lent is lost (`jstream_render::context_lost`, the watch the context's compositors
 share), and tells the engine, which hands the new one to the browser engine; a failed
-open is not kept. `browser` pages paint on it, so the render thread samples them there
+open is not kept. The preview's and the snapshot thread's compositors on it keep
+their own uncaptured wgpu errors (`keeping_own_errors`, #1268), so neither fails the
+stage's frames nor takes the stage's errors. `browser` pages paint on it, so the render thread samples them there
 too (*Live sources* in Design); the stage lends it to the live sources as it starts and
 hands them the engine's context again when it stops, and on a failed open.
 
@@ -3571,8 +3605,10 @@ and fail the output as they would on the CPU path. The context itself stays unti
 render loop ends.
 
 **A lost device** (#349; a driver reset after a hang, Windows' TDR, a removed GPU) is
-one event, not a run of errors. `gpu_draw` turns a draw that failed on a lost device
-(`Compositor::lost`) into `DrawError::Lost`, as it does a tick that skips a mix's
+one event, not a run of errors. `gpu_draw` asks `Compositor::lost` at the start of
+every tick, since calls on a destroyed device can all succeed and a tick that waited
+for one to fail could draw on it for good (#1457), and turns a draw that failed on a
+lost device into `DrawError::Lost`, as it does a tick that skips a mix's
 composite on a full readback ring while the device is lost, since a lost device's maps
 may never finish (DX12) and no draw would fail. Then the render thread starts the same
 switch at once, without counting to 10. On the context, it is the fallback above, so

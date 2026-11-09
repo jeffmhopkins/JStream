@@ -214,18 +214,31 @@ and calls this crate.
   The next poll of a lost device, on any thread, frees every buffer made on it, mapped
   ones too, so a read of a mapped buffer (a ring's copier, a snapshot on the shared
   context) holds a per-device lock and reads nothing once the device is lost, and
-  recording the loss waits for the reads under way (#1454). The device-lost callback
-  records it before wgpu frees anything; a deliberate loss goes through
-  `Compositor::destroy_device`, which records it and then destroys the device, never
-  `wgpu::Device::destroy` alone, whose callback comes only after the buffers are freed.
+  recording the loss waits for the reads under way (#1454). A driver's loss still leaves
+  a gap: wgpu marks the device invalid and only then calls the device-lost callback,
+  which records it, so while a copy under way finishes a poll on another thread (the
+  preview's or the snapshot thread's compositor on the shared context) can free the
+  buffer under it. Closing it would mean serialising every poll against the reads, or
+  the copier holding wgpu's own lock through `unsafe`; neither is done (#1457). A
+  deliberate loss goes through `Compositor::destroy_device`, which records it and then
+  destroys the device, so it has no gap, never `wgpu::Device::destroy` alone, whose
+  callback comes only after the buffers are freed (a test of the callback itself is the
+  one exception). A copy the loss caught leaves its buffer mapped: unmapping a lost
+  device's buffer only raises another error.
   `Nv12Converter::bind` returns `RenderError::Uncaptured` too when its parameter
   buffer can't be mapped, as on a lost device, where wgpu's `create_buffer_init`
   would panic. `render` empties
   the slot, so an error that recurs every frame is logged once per frame until the caller
-  gives up. The handler is per device: on the shared context an error that a browser or
-  capture thread, or another compositor on the context (the preview's, a snapshot's),
-  raised is taken by whichever compositor's `render` comes next and counts against its
-  frames.
+  gives up. The handler is per device, so on the shared context an error that a
+  browser or capture thread raised is taken by whichever compositor's `render` comes
+  next and counts against its frames. A compositor that shares the context with one
+  rendering on another thread can keep its own errors instead
+  (`Compositor::keeping_own_errors`, #1268; the preview's and the snapshot thread's do):
+  each of its calls pushes wgpu's error scopes (validation, internal, out of memory) on
+  the calling thread and returns what they caught as `RenderError::Uncaptured`, and its
+  `render` no longer takes the shared slot. wgpu's scopes are per thread, so another
+  thread's errors still reach the slot, for the program stage's next `render`, and
+  neither compositor's errors fail the other's frames.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's, and so is the choice of encode target each tick. Also
@@ -357,7 +370,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    source drawn only at about its size or larger, and never in 3D, gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
-   by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
+   by alpha). A layer drawn again over a transparent background whose content is known
+   is loaded instead, and made transparent over that content alone (`Wipe`, #1449):
+   a clear writes every texel, which on a software renderer costs about 2 ms a 1080p
+   layer. Each visible item is a convex polygon drawn as a triangle fan: a 2D item
    is its quad (two triangles), a 3D item three to five vertices (up to three
    triangles). The vertex buffer holds clip-space positions, UVs, opacity, the image's
    alpha mode, ADR-0050's `w`, the item's five edge lines and its UV bounds (26
@@ -437,7 +453,12 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    swapped into the caller's buffer, whose old one is reused for a later copy, so the
    caller's thread copies no pixels and a steady size allocates nothing. A buffer stays
    busy until its copy is back, a call or two after its map finished. A copy on a lost
-   device reads nothing and hands nothing back (see the lost device above). The source buffer of the ingest pass
+   device reads nothing and hands nothing back (see the lost device above). `record_nv12`
+   records into the same ring an output converted by an `Nv12Pass` into `Nv12Planes`
+   (step 6), in the same submit: both planes are copied into one buffer, Y then CbCr,
+   each row padded, and handed back as tight NV12 (`width × height` Y bytes, then
+   `width × height / 2` of interleaved CbCr), the ring's `format()` saying which it
+   holds. A change of format is a change of size: it waits until no buffer is out. The source buffer of the ingest pass
    is held to one storage binding (`max_storage_buffer_binding_size`) as well as one
    buffer: a larger frame is `TooLarge` before any buffer is made for it.
 
@@ -804,11 +825,13 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
 
   When the input's content is known (`Image::content`: a transparent scene's layer, or
   a bounded filter's output), `apply_filter_into` grows it by the padding, the reach
-  and one pixel into a `Bound` on the output. Each `Ctx` draw still clears its whole
-  target, but shades only that bound, scaled to the target and grown by two texels:
-  one for a scratch size that was rounded up, one for a filtered read. The output keeps
-  the bound as its content, so the next filter of the chain is bounded too, and so is
-  the scene that places the result. An empty input draws nothing. Every other kind can
+  and one pixel into a `Bound` on the output. Each `Ctx` draw shades only that bound,
+  scaled to the target and grown by two texels: one for a scratch size that was
+  rounded up, one for a filtered read. A target whose content is known isn't cleared
+  whole first (#1449): it is loaded, and made transparent over that content when the
+  draw doesn't replace all of it; any other is cleared. What each draw leaves becomes
+  its target's content once the submit is made, the output's too, so the next filter
+  of the chain is bounded, and so is the scene that places the result. An empty input draws nothing. Every other kind can
   draw anywhere (a held frame, a scroll, a program, a reshaped frame, a pack effect),
   so its output's content is unknown.
 - Each `apply_filter` makes its output layer (`apply_filter_into` reuses the caller's).
@@ -1337,10 +1360,13 @@ size is made again, not refilled; without
 `draw_uploads_small`, or under 256 × 256 texels, it stays whole. A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
 `destroyed`; a device destroyed while the copier reads 4K frames from it frees nothing
-under the copy (`readback.rs`); a render fails, an NV12 bind returns `Uncaptured`
+under the copy, and hands each frame back at most once and every buffer back
+(`readback.rs`); a render fails, an NV12 bind returns `Uncaptured`
 (`convert/tests.rs`), and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
 validation error before any loss fails the next render as `Uncaptured`, and the
-render after it draws. Without
+render after it draws; a compositor keeping its own errors gets its own as its
+call's `Uncaptured`, while the other compositor on the context gets neither its
+errors nor loses its own to it. Without
 an adapter, unit tests still cover the binary16 encode
 (every value an upload can produce, within half an ulp), the premultiply order and
 the compositor identity.
