@@ -585,7 +585,7 @@ stamp = { hash = "b3:d5ae890f3fc81e25", by = "agent:claude", note = "The .deb bu
 stamp = { hash = "b3:017da9c123d7852c", by = "agent:claude", note = "New Linux .deb bullet matches dist_linux.rs: release UI or --ui-dir, the three release binaries with webkitgtk, /usr/lib/jstream with ui beside jstream, /usr/bin links, dev.jstream.desktop entry and icon, licences, dpkg-deb --root-owner-group, the version mapping, Depends/Recommends, and the after-review dist-linux job. The browser-helper bullet no longer says Linux has no package. dist.rs only made build_ui and describe pub(crate)." }
 
 ["ARCH#packaging"."file:xtask/src/dist_linux.rs"]
-stamp = { hash = "b3:45078af87fe75671", by = "agent:claude", note = "The .deb bullet now says dist-linux builds jstream and jstream-daemon with cef, lays out the browser folder in /usr/lib/jstream/browser with chrome-sandbox setuid root, adds CEF's libraries (t64 alternatives) to Depends, and the CI job checks the setuid mode; the browser-helper bullet says the .deb installs it and that dist-linux lays out the same folder from a release build; checked against dist_linux.rs, browser_linux.rs build_release and after-review.yml" }
+stamp = { hash = "b3:eba4594616c8c804", by = "agent:claude", note = "Re-read: dist_linux.rs only moves its Linux-only test imports under cfg(target_os = linux); the section's description of the .deb and its CI job is unchanged" }
 
 ["ARCH#persistence"."body"]
 stamp = { hash = "b3:262798cb2a522b06", by = "agent:claude", note = "warm-scenes.json now holds gpu_mib beside scenes (version 1, a file without it has no limit, ADR-0150); the daemon and desktop still name it the same way" }
