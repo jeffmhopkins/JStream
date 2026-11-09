@@ -141,6 +141,13 @@ pub trait Source: Send {
         None
     }
 
+    /// The light this source puts where an item places it (ADR-0143 decision 1), for
+    /// the `light` kind, whose [`frame`](Self::frame) is a transparent pixel. `None`
+    /// (the default) for every other kind.
+    fn light(&self) -> Option<crate::ShownLight> {
+        None
+    }
+
     /// The source's own audio, for kinds that produce sound as well as frames
     /// (`browser`), which the engine records into a mixer input as it records a device.
     /// `None` (the default) means the source has none. The same source returns the same

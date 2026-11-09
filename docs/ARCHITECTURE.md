@@ -1232,7 +1232,8 @@ transparent background remembers the box its items could reach, and its parent d
 only that part of it in the modes a transparent texel leaves unchanged (#1070), so a
 group of a few small items doesn't shade the whole canvas twice. A blur, a mask, a shadow or a glow over
 such a layer, as an item's effects, shades only that box grown by how far it reaches, and
-keeps the box for what reads it next. The caller walks the
+keeps the box for what reads it next. A layer or filter target drawn again is made
+transparent over that box rather than cleared whole (#1449). The caller walks the
 nesting, bounded in depth, and clears each scene's pass to its background (transparent
 without one), and the root of a mix to that background over black, fading from one
 scene's to the other's in linear light while a transition runs (`Color::over_black`,

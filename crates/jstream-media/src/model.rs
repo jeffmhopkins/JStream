@@ -215,6 +215,10 @@ pub enum Lighting {
     Studio,
     /// Base colour and emission as authored.
     Unlit,
+    /// The lights of the 3D scene it is placed in, in place of the studio rig (ADR-0143
+    /// decision 3). In a 2D scene, which has no shared space for lights, it is
+    /// [`Lighting::Studio`].
+    Scene,
 }
 
 impl Lighting {
@@ -223,12 +227,13 @@ impl Lighting {
         match self {
             Lighting::Studio => "studio",
             Lighting::Unlit => "unlit",
+            Lighting::Scene => "scene",
         }
     }
 
     /// The lighting a setting names.
     pub fn from_name(name: &str) -> Option<Self> {
-        [Lighting::Studio, Lighting::Unlit]
+        [Lighting::Studio, Lighting::Unlit, Lighting::Scene]
             .into_iter()
             .find(|lighting| lighting.name() == name)
     }

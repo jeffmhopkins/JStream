@@ -1591,8 +1591,19 @@ stand-in) always has a canvas-sized layer, effects or not. The chain phase draws
 model into it with `Compositor::draw_model`: posed by the item's geometry with its live
 values and motion applied, seen through its scene's camera with the camera's live value,
 motion and follow applied as the scene's pass resolves them, and lit as the source says.
-It passes no scene lights (`ModelDraw::lights` is `None`) until the `light` kind lands
-([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)).
+A `scene`-lit model in a 3D scene is lit by its scene's lights
+([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)): planning records, in
+`Shot::lights`, each item of a scene that shows a `light` source (a frame with a
+`ShownLight`, which `Frame::with_light` gives a light source's transparent pixel), in
+stacking order, whether it copies the scene whole or plans it as a transition's end, so a
+model stays lit through a switch (`a_scene_lit_model_stays_lit_through_a_transition`).
+`scene_lights` takes each of them with its live values and
+motion applied, at the centre of its box and shining out of its back
+(`ItemGeometry::light_pose`), at its intensity times its opacity. The renderer lights the
+model with the first 8 point, spot and directional ones and every ambient one; a scene
+with more is logged once (`Chains::lights_warned`). A light placed without a box has no
+position and is left out. In a 2D scene a `scene`-lit model is studio-lit
+(`a_scene_lit_model_is_lit_by_the_lights_its_scene_places`).
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
 Without effects the layer is shown as drawn (`GpuKey::ItemBox`); with them it is their
 input, as for canvas space, so they run over the canvas. The item is placed as

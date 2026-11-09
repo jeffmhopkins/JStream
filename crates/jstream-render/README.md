@@ -357,7 +357,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    source drawn only at about its size or larger, and never in 3D, gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
-   by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
+   by alpha). A layer drawn again over a transparent background whose content is known
+   is loaded instead, and made transparent over that content alone (`Wipe`, #1449):
+   a clear writes every texel, which on a software renderer costs about 2 ms a 1080p
+   layer. Each visible item is a convex polygon drawn as a triangle fan: a 2D item
    is its quad (two triangles), a 3D item three to five vertices (up to three
    triangles). The vertex buffer holds clip-space positions, UVs, opacity, the image's
    alpha mode, ADR-0050's `w`, the item's five edge lines and its UV bounds (26
@@ -387,8 +390,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    ties (ADR-0094 decision 4). No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
-   blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
-   alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
+   blending off. It samples the FP16 texel at its centre with a nearest sampler (the
+   value a `textureLoad` gives, at about half the cost on llvmpipe, #1449),
+   un-premultiplies (zero RGB where alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
    alpha is stored as-is. The output usage is `RENDER_ATTACHMENT | COPY_SRC |
    TEXTURE_BINDING`, so a snapshot or a later consumer can use it.
 
@@ -808,11 +812,13 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
 
   When the input's content is known (`Image::content`: a transparent scene's layer, or
   a bounded filter's output), `apply_filter_into` grows it by the padding, the reach
-  and one pixel into a `Bound` on the output. Each `Ctx` draw still clears its whole
-  target, but shades only that bound, scaled to the target and grown by two texels:
-  one for a scratch size that was rounded up, one for a filtered read. The output keeps
-  the bound as its content, so the next filter of the chain is bounded too, and so is
-  the scene that places the result. An empty input draws nothing. Every other kind can
+  and one pixel into a `Bound` on the output. Each `Ctx` draw shades only that bound,
+  scaled to the target and grown by two texels: one for a scratch size that was
+  rounded up, one for a filtered read. A target whose content is known isn't cleared
+  whole first (#1449): it is loaded, and made transparent over that content when the
+  draw doesn't replace all of it; any other is cleared. What each draw leaves becomes
+  its target's content once the submit is made, the output's too, so the next filter
+  of the chain is bounded, and so is the scene that places the result. An empty input draws nothing. Every other kind can
   draw anywhere (a held frame, a scroll, a program, a reshaped frame, a pack effect),
   so its output's content is unknown.
 - Each `apply_filter` makes its output layer (`apply_filter_into` reuses the caller's).

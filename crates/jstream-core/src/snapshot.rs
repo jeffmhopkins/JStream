@@ -40,7 +40,7 @@ use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
 };
-use jstream_sources::{CaptureSpec, ShownModel};
+use jstream_sources::{CaptureSpec, LightType, ShownLight, ShownModel};
 
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
@@ -112,6 +112,9 @@ pub(crate) struct Frame {
     /// The 3D model its source shows (ADR-0107), whose layer an item draws in place of
     /// this frame, the model's transparent stand-in.
     model: Option<ShownModel>,
+    /// The light its source puts where an item places it (ADR-0143 decision 1), for
+    /// the models of a 3D scene lit by their scene. The frame itself is transparent.
+    light: Option<ShownLight>,
 }
 
 /// A frame's tightly packed bytes, shared with whoever made them.
@@ -143,6 +146,7 @@ impl PartialEq for Frame {
             && self.height == other.height
             && self.extent == other.extent
             && model_key(self.model.as_ref()) == model_key(other.model.as_ref())
+            && self.light == other.light
     }
 }
 
@@ -175,6 +179,7 @@ impl Frame {
             pixels: Pixels::Copied(Arc::from(rgba)),
             version,
             model: None,
+            light: None,
         })
     }
 
@@ -206,6 +211,7 @@ impl Frame {
             pixels,
             version,
             model: None,
+            light: None,
         })
     }
 
@@ -220,6 +226,7 @@ impl Frame {
             pixels: Pixels::Slot(slot),
             version,
             model: None,
+            light: None,
         }
     }
 
@@ -233,6 +240,7 @@ impl Frame {
             pixels: Pixels::Still(still),
             version,
             model: None,
+            light: None,
         }
     }
 
@@ -261,6 +269,7 @@ impl Frame {
             pixels: Pixels::Gpu { frame, context },
             version,
             model: None,
+            light: None,
         }
     }
 
@@ -268,6 +277,12 @@ impl Frame {
     /// (ADR-0107).
     pub(crate) fn with_model(self, model: Option<ShownModel>) -> Self {
         Self { model, ..self }
+    }
+
+    /// The same frame as the stand-in of `light`, the light its source puts in a 3D
+    /// scene (ADR-0143).
+    pub(crate) fn with_light(self, light: Option<ShownLight>) -> Self {
+        Self { light, ..self }
     }
 
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
@@ -350,6 +365,22 @@ pub(crate) enum SourceRef {
     /// An item's box after its effects (ADR-0065), as that scene draws the item: what a
     /// transition's track shows for an item with effects.
     Boxed(SceneId, ItemId),
+}
+
+/// A light item a scene places (ADR-0143), as planning found it: with or without a
+/// transition running, so a scene-lit model is lit through a switch too.
+#[derive(Clone, Debug, PartialEq)]
+struct Lit {
+    /// The item that places the light.
+    item: ItemId,
+    /// The keyframe it is drawn through, as [`Placed::through`].
+    through: Option<Through>,
+    /// The `light` source it places.
+    source: SourceId,
+    placement: Placement,
+    crop: Crop,
+    opacity: f32,
+    motion: TrackMotion,
 }
 
 #[derive(Debug, PartialEq)]
@@ -621,6 +652,9 @@ pub(crate) struct Shot {
     /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
+    /// The light items each scene places, bottom first (ADR-0143), whether it was copied
+    /// whole or planned as a transition's end. A scene placing none isn't here.
+    lights: BTreeMap<SceneId, Vec<Lit>>,
     /// The background each copied scene has, by scene, straight sRGB (ADR-0089 §4): a
     /// keyframe scene's is its parent's, and a group, or a group's view, has none. A
     /// scene without one isn't here, and is transparent.
@@ -882,6 +916,7 @@ impl Default for Shot {
             canvas: Canvas::default(),
             program: None,
             scenes: BTreeMap::new(),
+            lights: BTreeMap::new(),
             backgrounds: BTreeMap::new(),
             cameras: BTreeMap::new(),
             frames: BTreeMap::new(),
@@ -1379,6 +1414,7 @@ impl PartialEq for Shot {
             && self.program == other.program
             && self.mixes == other.mixes
             && self.scenes == other.scenes
+            && self.lights == other.lights
             && self.backgrounds == other.backgrounds
             && self.cameras == other.cameras
             && self.frames == other.frames
@@ -2669,6 +2705,8 @@ impl<'a> Planner<'a, '_> {
                     | None => continue,
                 },
             };
+            let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
+            note_light(out, id, item, through.as_ref(), &image);
             let Some(geometry) = endpoint_geometry(item, size, canvas) else {
                 continue;
             };
@@ -2750,9 +2788,11 @@ impl<'a> Planner<'a, '_> {
                     },
                 };
                 let effects = self.boxed(id, item, &source, out);
+                let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
+                note_light(out, id, item, through.as_ref(), &source);
                 placed.push(Placed {
                     item: item.id().clone(),
-                    through: keyframe.and_then(|keyframe| Through::of(keyframe, item.id())),
+                    through,
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
@@ -5333,20 +5373,140 @@ fn draw_model(
         chains.fail_box(owner, &error);
         return Ok(());
     }
-    let (Some(model), Some(layer)) = (chains.model(source), cache.get(key)) else {
-        chains.fail(owner);
-        return Ok(());
+    // A `scene`-lit model in a 3D scene is lit by the scene's lights (ADR-0143
+    // decision 3); in a 2D scene it is studio-lit.
+    let mut lights = std::mem::take(&mut chains.lights);
+    lights.clear();
+    let lit = shown.lighting == Lighting::Scene && camera.is_some();
+    if lit {
+        scene_lights(shot, scene_id, at, live, &mut lights);
+        let shading = lights
+            .iter()
+            .filter(|light| light.kind != jstream_render::LightKind::Ambient)
+            .count();
+        if shading > jstream_render::MAX_SCENE_LIGHTS
+            && !chains.lights_warned.contains(scene_id)
+            && chains.lights_warned.insert(scene_id.clone())
+        {
+            tracing::warn!(
+                scene = %scene_id,
+                lights = shading,
+                max = jstream_render::MAX_SCENE_LIGHTS,
+                "scene has more lights than a model is lit by; the first ones in stacking order light it"
+            );
+        }
+    }
+    let drawn = match (chains.model(source), cache.get(key)) {
+        (Some(model), Some(layer)) => Some(compositor.draw_model(
+            &jstream_render::ModelDraw {
+                model,
+                geometry,
+                camera,
+                lighting: shown.lighting,
+                lights: lit.then_some(lights.as_slice()),
+            },
+            layer,
+        )),
+        _ => None,
     };
-    compositor.draw_model(
-        &jstream_render::ModelDraw {
-            model,
-            geometry,
-            camera,
-            lighting: shown.lighting,
-            lights: None,
-        },
-        layer,
-    )
+    chains.lights = lights;
+    match drawn {
+        Some(result) => result,
+        None => {
+            chains.fail(owner);
+            Ok(())
+        }
+    }
+}
+
+/// The lights scene `id` places at `at`, in its stacking order (ADR-0143 decision 2):
+/// each `light` item at the centre of its box and shining out of its back, with its
+/// live values and motion applied, at its kind's intensity times its opacity. A light
+/// that isn't placed by a box (a filled or canvas placement) has no position, and is
+/// left out.
+/// Records `item` of scene `id` in `out`'s lights when what it shows, `source`, is a
+/// `light` source's frame, once per item however often the scene is planned.
+fn note_light(
+    out: &mut Shot,
+    id: &SceneId,
+    item: &GraphItem,
+    through: Option<&Through>,
+    source: &SourceRef,
+) {
+    let SourceRef::Frame(source) = source else {
+        return;
+    };
+    if out
+        .frames
+        .get(source)
+        .and_then(|frame| frame.light)
+        .is_none()
+    {
+        return;
+    }
+    let lights = out.lights.entry(id.clone()).or_default();
+    if lights.iter().any(|lit| &lit.item == item.id()) {
+        return;
+    }
+    lights.push(Lit {
+        item: item.id().clone(),
+        through: through.cloned(),
+        source: source.clone(),
+        placement: placement(item.placement()),
+        crop: crop(item.crop()),
+        opacity: item.opacity().get(),
+        motion: TrackMotion::same(item.id().clone(), motion::of(item)),
+    });
+}
+
+fn scene_lights(
+    shot: &Shot,
+    id: &SceneId,
+    at: MediaTime,
+    live: &LiveParams,
+    lights: &mut Vec<jstream_render::SceneLight>,
+) {
+    let Some(placed) = shot.lights.get(id) else {
+        return;
+    };
+    for placed in placed {
+        let Some(light) = shot
+            .frames
+            .get(&placed.source)
+            .and_then(|frame| frame.light)
+        else {
+            continue;
+        };
+        let (placement, crop) = live.apply_to(
+            &placed.item,
+            placed.through.as_ref(),
+            placed.placement,
+            placed.crop,
+        );
+        let (item, modifiers) = &placed.motion.to;
+        let by = shot.motion_at(item, modifiers, at);
+        let (placement, _, opacity) = motion::apply(&by, placement, crop, placed.opacity);
+        let Placement::Geometry(geometry) = placement else {
+            continue;
+        };
+        let (position, aim) = geometry.light_pose();
+        let [r, g, b] = light.color;
+        lights.push(jstream_render::SceneLight {
+            kind: match light.kind {
+                LightType::Point => jstream_render::LightKind::Point,
+                LightType::Spot => jstream_render::LightKind::Spot,
+                LightType::Directional => jstream_render::LightKind::Directional,
+                LightType::Ambient => jstream_render::LightKind::Ambient,
+            },
+            position,
+            aim,
+            color: Color { r, g, b, a: 1.0 },
+            intensity: light.intensity * opacity,
+            range_px: light.range_px,
+            cone_deg: light.cone_deg,
+            softness: light.softness,
+        });
+    }
 }
 
 /// Marks the layers [`compose`] draws `view` at `output` through as used in the cache's
