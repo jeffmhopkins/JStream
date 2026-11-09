@@ -700,8 +700,8 @@ somewhere it shouldn't.
   address and port, since datagrams are told apart by where they come from.
   Parsing and playout allocate nothing, nor does reading an mDNS answer about anything
   but a JTunnel instance, however its records repeat a long name (only a JTunnel
-  instance's name is copied, once it matches; a message declaring more than 32 records
-  is refused unread, so one costs at most a few thousand steps); a sender's audio goes only to the
+  instance's name is copied, once it matches; a message declaring more than 256 records
+  is refused unread, so one costs at most a few tens of thousands of steps); a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
   name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
   doesn't trigger bindings (ADR-0142 §2).
