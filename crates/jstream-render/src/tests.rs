@@ -14,6 +14,7 @@ use crate::{
 };
 
 mod blend;
+mod content;
 mod minified;
 mod three_d;
 
@@ -1126,6 +1127,192 @@ fn the_cache_reuses_textures_by_key() {
     assert_eq!((cache.live(), cache.pending()), (2, 1));
 }
 
+/// Draws `image` once in a 512 × 512 canvas, as a `side`-pixel square or, with `three_d`,
+/// tilted, and returns the pixel at its centre.
+fn draw_square(compositor: &mut Compositor, image: &Image, side: f32, three_d: bool) -> [u8; 4] {
+    let (tilt, perspective) = if three_d {
+        (30.0, Some(800.0))
+    } else {
+        (0.0, None)
+    };
+    let geometry = three_d::geometry(
+        (256.0, 256.0),
+        (side, side),
+        0.0,
+        tilt,
+        0.0,
+        0.0,
+        perspective,
+    );
+    let items = [item(image, Placement::Geometry(geometry), Crop::NONE, 1.0)];
+    let shot = draw(compositor, 512, 512, Color::BLACK, &items);
+    shot.pixel(256, 256).expect("inside")
+}
+
+/// A 512² frame, its left half red and its right half blue.
+fn halves() -> Vec<u8> {
+    (0..512 * 512)
+        .flat_map(|i| {
+            if i % 512 < 256 {
+                [255, 0, 0, 255]
+            } else {
+                [0, 0, 255, 255]
+            }
+        })
+        .collect()
+}
+
+/// An upload only items draw is held at the size they drew it at the frame before
+/// (#1139): whole at first, a quarter each way once drawn at an eighth, the same size
+/// while it stays about that small, whole again once drawn large or in 3D. It is placed
+/// at its frame's size throughout, and looks as the whole frame does. A new entry starts
+/// at the size its placement was planned to need.
+#[test]
+fn the_cache_holds_an_upload_at_the_size_it_is_drawn() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    cache.draw_uploads_small(true);
+    let rgba = halves();
+    let frame =
+        |cache: &mut ResourceCache<&str>, compositor: &mut Compositor, version, side, three_d| {
+            cache.begin_frame();
+            let image = cache
+                .upload_drawn(compositor, &"still", version, (512, 512), &rgba, 0.0)
+                .expect("uploads")
+                .clone();
+            let centre = draw_square(compositor, &image, side, three_d);
+            drop(cache.end_frame(compositor));
+            (
+                (image.width(), image.height()),
+                image.extent(),
+                centre,
+                image.texture().clone(),
+            )
+        };
+    let (size, extent, _, _) = frame(&mut cache, compositor, 1, 64.0, false);
+    assert_eq!((size, extent), ((512, 512), (512, 512)), "whole at first");
+    let (size, extent, centre, small) = frame(&mut cache, compositor, 1, 64.0, false);
+    assert_eq!(
+        (size, extent),
+        ((128, 128), (512, 512)),
+        "a quarter once drawn at an eighth"
+    );
+    // The left half's red reaches the centre's left; the centre's own pixel is the
+    // boundary, so only its being red or blue (not black) is checked.
+    assert!(
+        centre[3] == 255 && centre[1] == 0 && centre[0] + centre[2] > 200,
+        "{centre:?}"
+    );
+    let (size, _, _, same) = frame(&mut cache, compositor, 1, 80.0, false);
+    assert_eq!(size, (128, 128), "drawn a little larger: the same upload");
+    assert!(same == small);
+    // A new version refills the small texture in place.
+    let (size, _, _, rewritten) = frame(&mut cache, compositor, 2, 80.0, false);
+    assert!(size == (128, 128) && rewritten == small);
+    let (size, _, _, _) = frame(&mut cache, compositor, 2, 400.0, false);
+    assert_eq!(size, (128, 128), "this frame still draws what it held");
+    let (size, _, _, _) = frame(&mut cache, compositor, 2, 400.0, false);
+    assert_eq!(size, (512, 512), "whole again once drawn large");
+    frame(&mut cache, compositor, 2, 64.0, false);
+    let (size, _, _, _) = frame(&mut cache, compositor, 2, 32.0, true);
+    assert_eq!(size, (128, 128), "small again");
+    let (size, _, _, _) = frame(&mut cache, compositor, 2, 32.0, true);
+    assert_eq!(size, (512, 512), "a 3D placement needs every texel");
+    // A new entry starts at what its placement was planned to need.
+    cache.begin_frame();
+    let planned = cache
+        .upload_drawn(compositor, &"planned", 1, (512, 512), &rgba, 0.1)
+        .expect("uploads");
+    assert_eq!(
+        (planned.width(), planned.height(), planned.extent()),
+        (64, 64, (512, 512))
+    );
+}
+
+/// One still shown small on every tick and large in a mix drawn only every other tick
+/// keeps its size when the caller plans for both: a tick the large mix doesn't draw must
+/// not shrink what it shows next. Without the plan the size follows the last tick's
+/// draws, so it changes. A key held small that then gets a whole upload of a frame the
+/// held size is made again, not refilled.
+#[test]
+fn the_cache_holds_a_still_for_a_mix_drawn_every_other_tick() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let rgba = halves();
+    let sizes = |compositor: &mut Compositor, planned: f32| {
+        let mut cache: ResourceCache<&str> = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        let mut sizes = Vec::new();
+        for tick in 0..6 {
+            cache.begin_frame();
+            let image = cache
+                .upload_drawn(compositor, &"still", 1, (512, 512), &rgba, planned)
+                .expect("uploads")
+                .clone();
+            draw_square(compositor, &image, 64.0, false);
+            if tick % 2 == 1 {
+                draw_square(compositor, &image, 512.0, false);
+            }
+            sizes.push(image.width());
+            drop(cache.end_frame(compositor));
+        }
+        (cache, sizes)
+    };
+    let (_, planned) = sizes(compositor, 1.0);
+    assert_eq!(
+        planned, [512; 6],
+        "planned for the large mix: whole every tick"
+    );
+    let (mut cache, unplanned) = sizes(compositor, 0.0);
+    assert!(unplanned.iter().any(|&w| w != 512), "{unplanned:?}");
+    // Held small; a whole 128² frame under the key is a new upload, not a refill.
+    cache.begin_frame();
+    let small = vec![255u8; 128 * 128 * 4];
+    let image = cache
+        .upload(compositor, &"still", 2, 128, 128, &small)
+        .expect("a new upload");
+    assert_eq!((image.width(), image.height()), (128, 128));
+}
+
+/// Without [`ResourceCache::draw_uploads_small`], and for a frame too small to be
+/// worth it, [`ResourceCache::upload_drawn`] uploads the whole frame, as
+/// [`ResourceCache::upload`] does.
+#[test]
+fn the_cache_holds_uploads_whole_unless_asked() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let rgba = halves();
+    let mut cache: ResourceCache<&str> = ResourceCache::new();
+    let mut tiny_cache: ResourceCache<&str> = ResourceCache::new();
+    tiny_cache.draw_uploads_small(true);
+    let tiny = vec![255u8; 128 * 128 * 4];
+    for _ in 0..3 {
+        cache.begin_frame();
+        let image = cache
+            .upload_drawn(compositor, &"still", 1, (512, 512), &rgba, 0.1)
+            .expect("uploads")
+            .clone();
+        draw_square(compositor, &image, 32.0, false);
+        assert_eq!((image.width(), image.height()), (512, 512));
+        drop(cache.end_frame(compositor));
+        tiny_cache.begin_frame();
+        let image = tiny_cache
+            .upload_drawn(compositor, &"tiny", 1, (128, 128), &tiny, 0.1)
+            .expect("uploads")
+            .clone();
+        draw_square(compositor, &image, 8.0, false);
+        assert_eq!((image.width(), image.height()), (128, 128));
+        drop(tiny_cache.end_frame(compositor));
+    }
+}
+
 /// An entry no frame uses is retired, and is handed back only once the GPU has
 /// finished the last frame that used it.
 #[test]
@@ -1596,7 +1783,9 @@ pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeom
 
 /// A lost device (#349) is reported by `lost`, and drawing on it fails instead of
 /// panicking, so the caller can open a new compositor. `destroy` stands in for a driver
-/// reset: wgpu reports both through the same device-lost callback.
+/// reset: wgpu reports both through the same device-lost callback. It is called on the
+/// device itself, not through `Compositor::destroy_device`, so that the callback is what
+/// records the loss; no ring is copying, so nothing is read after the buffers are freed.
 #[test]
 fn a_lost_device_is_reported_and_fails_without_a_panic() {
     let Some(mut opened) = open() else {
@@ -1838,4 +2027,72 @@ fn a_flipped_geometry_matches_its_legacy_negative_scale() {
 ";
     assert_eq!(grid(&old, 4), expected);
     assert_eq!(grid(&new, 4), expected);
+}
+
+/// Two compositors on one context, as the program stage and the preview share it: one
+/// keeps its own errors (#1268). An error its call raises comes back to that call and
+/// never fails the other's next frame, and an error raised outside it (here, on the
+/// device directly) is left for the other's `render`, not taken by its own.
+#[test]
+fn a_compositor_keeping_its_own_errors_neither_takes_nor_leaks_them() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let context = GpuContext::new(
+        opened.compositor.adapter().clone(),
+        opened.compositor.device().clone(),
+        opened.compositor.queue().clone(),
+        AdapterId {
+            luid: None,
+            vendor: 0,
+        },
+        None,
+    );
+    let mut stage = Compositor::on_context(&context);
+    let mut preview = Compositor::on_context(&context).keeping_own_errors();
+    let scene = |items| Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: Color::BLACK,
+        items,
+    };
+
+    // The preview's own error: an image whose texture is gone, placed in its frame.
+    let image = preview.upload_rgba8(2, 2, &[255; 16]).expect("an upload");
+    image.texture().destroy();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let failed = preview.render(&scene(&items), true).map(|_| ());
+    assert!(
+        matches!(failed, Err(RenderError::Uncaptured { .. })),
+        "the preview's frame fails with its own error: {failed:?}"
+    );
+    assert!(
+        stage.render(&scene(&[]), true).is_ok(),
+        "the stage's next frame doesn't take the preview's error"
+    );
+
+    // An error from outside either compositor's calls stays for the stage.
+    let _ = opened
+        .compositor
+        .device()
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("zero-sized"),
+            size: wgpu::Extent3d {
+                width: 0,
+                height: 0,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+    draw(&mut preview, 4, 3, Color::BLACK, &[]);
+    let failed = stage.render(&scene(&[]), true).map(|_| ());
+    assert!(
+        matches!(failed, Err(RenderError::Uncaptured { .. })),
+        "the stage takes the device's error: {failed:?}"
+    );
+    draw(&mut stage, 4, 3, Color::BLACK, &[]);
 }

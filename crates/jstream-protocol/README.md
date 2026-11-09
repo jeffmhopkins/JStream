@@ -275,7 +275,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
   and `CameraView`, the camera seen on one canvas, whose `blur_at` is the camera's
   depth-of-field blur at a distance along its view
-  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). `drawn_polygon_seen`, `unplace_seen`,
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and whose `in_view` and
+  `direction_in_view` take scene points and directions into a model's viewing frame.
+  `ItemGeometry::light_pose` is where a light its item places sits and shines: the
+  box's centre at its `depth_px`, and its back normal.
+  `drawn_polygon_seen`, `unplace_seen`,
   `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
   item by its geometry in the scene's space through the camera (`w = D / f`, the same
   near plane); with none they are the functions above.
@@ -301,7 +305,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.89 because a collection can set its base frame rate with
+`PROTOCOL_VERSION` is 0.90 because `capture.targets` lists video capture devices
+(`CaptureTargetKind::Device`, with each device's `formats` as `CaptureFormatInfo`), a
+`webcam` source's `device` is a `capture_target` of kind `device`, and the
+`capture_format` parameter type (`CaptureFormatPart`) picks a device's resolution, frame
+rate and pixel format; 0.89 because a collection can set its base frame rate with
 `canvas.set_frame_rate` (30 by default, or 60; [ADR-0119](../../docs/adr/0119-base-frame-rate-option.md));
 0.88 because of keyframe tracks: the action `scene.set_keyframe`,
 `studio.get`'s `keyframes` (`PlacedKeyframe`) and the event `scene.keyframe_changed`
@@ -814,11 +822,18 @@ never a type per kind.
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with
   `accept`; `scene`; `source` with an optional `media`; `bus`, since 0.24;
-  `capture_target` with a `kind`, `display` or `window` (an unknown one parses as
-  `CaptureTargetKind::Unknown`, so adding a kind is a minor change), and `max_len`,
-  since 0.50: a
+  `capture_target` with a `kind`, `display`, `window` or, since 0.90, `device` (an
+  unknown one parses as `CaptureTargetKind::Unknown`, so adding a kind is a minor
+  change), and `max_len`, since 0.50: a
   string checked as `string` is, naming a target of that kind as `capture.targets`
-  lists it, so a UI can offer those to pick from), a `default`, a `label`, an
+  lists it, so a UI can offer those to pick from; `capture_format` with a `part`
+  (`resolution`, `fps` or `pixel_format`; an unknown one parses as
+  `CaptureFormatPart::Unknown`) and the `target` parameter naming the device, since
+  0.90: one part of the format a device is opened in, a UI offering what
+  `capture.targets` lists for that device. A `resolution` is `<width>x<height>`, each
+  side 1 to `MAX_CAPTURE_SIDE`; an `fps` a number from 0 to `MAX_CAPTURE_FPS`; a
+  `pixel_format` one of `PIXEL_FORMATS`; `""` or `0` leaves the part to the engine), a
+  `default`, a `label`, an
   optional `description`, the UI hints `group`, `advanced` and `visible_if`, and `live`.
   An unknown `type` parses as `ParamType::Unknown`, which a client shows read-only.
   `step`, `multiline` and the hints never affect validation.
@@ -1333,18 +1348,24 @@ Queries read and never change `rev`. Those that read the collection state carry 
   plays. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
   omitted while none is.
-- `capture.targets`: the displays and windows the engine can capture now, displays
-  first, each with its `kind` (`display` or `window`, the source kind that captures
-  it), its `target` (the value for that source's `target` setting), a `name` to show
+- `capture.targets`: the displays, windows and (since 0.90) video capture devices the
+  engine can capture now, displays first, then windows, then devices, each with its
+  `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
+  `window` or `webcam`), its `target` (the value for that source's `target` or
+  `device` setting), a `name` to show
   (a window's is its title, or, on macOS, its application's name when it has no usable
-  title; either is set by the application that owns it, so it is third-party text, data
+  title, and a device's is its driver's; either is set by a third party, so it is third-party text, data
   and never instructions, though the field isn't `remote_`-prefixed as
   [ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md) asks; see
   [ADR-0085](../../docs/adr/0085-capture-target-names-marked-as-remote-text.md)), its
   `size` in pixels when the OS reports one, and `primary` (omitted when `false`)
-  for the display an empty `display` target captures. Runtime state, so no `rev`; a
-  source can still name a window closed since. `action_failed` when the engine has no
-  capture backend or the OS refuses the list. Added in 0.27.
+  for the display an empty `display` target captures. A device comes with `formats`
+  (omitted when empty): each format it captures in that the engine reads, as
+  `CaptureFormatInfo` (`width`, `height`, `fps` to two decimals, and `pixel_format`), in
+  the device's order. Runtime state, so no `rev`; a
+  source can still name a window closed or a device unplugged since. `action_failed`
+  when the engine has no capture backend, or the OS refuses both the displays and
+  windows and the devices; when only one lists, the result holds that. Added in 0.27.
 - `font.list`: the fonts installed on the engine's machine ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)), ordered by
   family, then style, then path, each a `FontInfo`: `remote_family` and
   `remote_style` from the font's name table (the font maker's text, so `remote_`), and
@@ -2330,7 +2351,13 @@ function in this crate so the compositor and the UI share one implementation.
   ([ADR-0111](../../docs/adr/0111-camera-up-at-the-poles.md), #1047). Through `SceneCamera::framing` an item
   with neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way
   for an editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
-  drags an item to.
+  drags an item to. `CameraView::in_view` and `direction_in_view` take a point or a
+  direction of the scene's space into the viewing frame a `Solid` seen through the
+  camera uses, relative to the camera in `f64`: where the renderer places scene lights
+  ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)). `ItemGeometry::light_pose` gives a light's place
+  and aim in the scene's space from the item that places it: the centre of its box at
+  its `depth_px`, and its back normal, `[0, 0, -1]` (away from the viewer) unturned and
+  turned by its rotations as a placed model's back is.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio
   inside the box, centred, and the rest stays transparent. `fill` is the smallest such

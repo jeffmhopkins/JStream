@@ -38,6 +38,7 @@ mod describe;
 mod error;
 mod fonts;
 mod image;
+mod light;
 mod media;
 mod model;
 mod page_api;
@@ -45,13 +46,14 @@ mod registry;
 mod scope;
 mod shape;
 mod source;
+mod still;
 mod text;
 mod timer;
 mod youtube_chat;
 
 pub use audio::AudioTarget;
 pub use browser::opens_browser;
-pub use capture::{CaptureSpec, webcam_device};
+pub use capture::{CaptureSpec, DeviceFormatWant, fps_centi, webcam_device};
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use error::SourceError;
 pub use fonts::{InstalledFont, installed_fonts, system_font_dirs};
@@ -59,6 +61,7 @@ pub use image::{StillImage, decode_still};
 /// The browser engine seam `browser` sources open their pages through, which the host
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;
+pub use light::{LightType, ShownLight};
 pub use media::MediaAudio;
 pub use model::ModelKind;
 pub use page_api::{BusLevels, PageView};
@@ -71,5 +74,6 @@ pub use source::{
     AssetRoots, Context, Limits, Painter, ShownModel, Source, SourceAudio, SourceKind,
     needs_restart,
 };
+pub use still::Still;
 pub use text::MAX_DENSITY;
 pub use youtube_chat::YOUTUBE_CHAT_CSS;

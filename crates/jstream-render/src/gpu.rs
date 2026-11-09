@@ -2,7 +2,7 @@
 //! preferred; this module is the path when interop is absent.
 
 use std::future::Future;
-use std::sync::{Arc, Mutex, OnceLock, PoisonError};
+use std::sync::{Arc, Mutex, OnceLock, PoisonError, RwLock};
 use std::task::{Context, Poll, Waker};
 
 use jstream_platform::{ContextKey, GpuContext, SubmitLock};
@@ -63,10 +63,45 @@ pub(crate) struct Gpu {
 /// What wgpu reported about a device outside any call's result.
 #[derive(Default)]
 pub(crate) struct Faults {
-    /// Why the device was lost: set once, by wgpu's device-lost callback.
+    /// Why the device was lost: set once, by wgpu's device-lost callback or by
+    /// [`crate::Compositor::destroy_device`], always through [`Self::mark_lost`].
     pub lost: OnceLock<String>,
     /// The first uncaptured error since the compositor last took it.
     pub error: Mutex<Option<String>>,
+    /// Held to read from a mapped buffer ([`Self::read_mapped`]), and taken to mark the
+    /// device lost. Once a device is lost, the next poll of it on any thread frees every
+    /// buffer made on it, mapped or not, so a read of a mapped buffer on another thread
+    /// (the `jstream-readback` copier, or a compositor on the same context) would read
+    /// freed memory. Marking the loss waits for every read under way, and a read after
+    /// it sees the loss and reads nothing.
+    mapped: RwLock<()>,
+}
+
+impl Faults {
+    /// Records why the device was lost, once every read of a mapped buffer under way has
+    /// finished. The first reason is kept.
+    pub(crate) fn mark_lost(&self, why: String) {
+        let _no_reads = self.mapped.write().unwrap_or_else(PoisonError::into_inner);
+        let _ = self.lost.set(why);
+    }
+
+    /// Runs `read` on `buffer`'s mapped bytes, or returns `None` when they can't be read:
+    /// the buffer isn't mapped, or the device is lost, so wgpu may already have freed
+    /// it. The device can't be marked lost while `read` runs.
+    pub(crate) fn read_mapped<R>(
+        &self,
+        buffer: &wgpu::Buffer,
+        read: impl FnOnce(&[u8]) -> R,
+    ) -> Option<R> {
+        // The view first, outside the lock: wgpu takes locks of its own for it, and a
+        // loss's callback waits for this lock while wgpu holds them.
+        let view = buffer.slice(..).get_mapped_range().ok()?;
+        let _reading = self.mapped.read().unwrap_or_else(PoisonError::into_inner);
+        if self.lost.get().is_some() {
+            return None;
+        }
+        Some(read(&view))
+    }
 }
 
 /// Watches `device` for a loss and for uncaptured errors, instead of wgpu's default
@@ -79,8 +114,9 @@ pub(crate) struct Faults {
 /// taken, which `render` does each frame.
 ///
 /// wgpu keeps one callback and one handler per device. The compositor is the only code
-/// that sets them, on its own device and on the platform's context (the program stage
-/// opens one compositor on it), so the context's loss is seen here too.
+/// that sets them: on its own device, and once per platform context, whose compositors
+/// (the program stage, the preview, snapshots: ADR-0117 §5) share that watch
+/// ([`GpuContext::watch`]), so each of them sees the context's loss.
 fn watch(device: &wgpu::Device) -> Arc<Faults> {
     let faults = Arc::new(Faults::default());
     let cell = Arc::clone(&faults);
@@ -95,7 +131,7 @@ fn watch(device: &wgpu::Device) -> Arc<Faults> {
             format!("{why}: {message}")
         };
         tracing::warn!(reason = %why, "the compositor's GPU device was lost");
-        let _ = cell.lost.set(why);
+        cell.mark_lost(why);
     });
     let cell = Arc::clone(&faults);
     device.on_uncaptured_error(Arc::new(move |error: wgpu::Error| {
@@ -109,6 +145,29 @@ fn watch(device: &wgpu::Device) -> Arc<Faults> {
         }
     }));
     faults
+}
+
+/// The watch every compositor on `ctx` shares, installed by the first
+/// ([`GpuContext::watch`]).
+fn context_faults(ctx: &GpuContext) -> Arc<Faults> {
+    match ctx.watch(|| watch(ctx.device())) {
+        Some(faults) => Arc::clone(&*faults),
+        // Only jstream-render installs a context's watch, so this doesn't happen; a
+        // watch of its own still sees errors, if not every compositor's.
+        None => watch(ctx.device()),
+    }
+}
+
+/// Why `ctx`'s device was lost, as its compositors' shared watch saw it (polling the
+/// device once, without waiting), or `None` while it is usable. The watch is installed
+/// here if no compositor has been opened on the context yet. The engine asks this before
+/// lending a context it opened earlier again (ADR-0117 §5).
+pub fn context_lost(ctx: &GpuContext) -> Option<String> {
+    let faults = ctx.watch(|| watch(ctx.device()))?;
+    if faults.lost.get().is_none() {
+        let _ = ctx.device().poll(wgpu::PollType::Poll);
+    }
+    faults.lost.get().cloned()
 }
 
 /// Whether any wgpu backend offers an adapter, hardware or software, without opening a
@@ -176,7 +235,8 @@ impl Gpu {
 
     pub(crate) fn from_context(ctx: &GpuContext) -> Self {
         let adapter = ctx.adapter().clone();
-        let mut gpu = Self::bundle(adapter, ctx.device().clone(), ctx.queue().clone());
+        let faults = context_faults(ctx);
+        let mut gpu = Self::with_faults(adapter, ctx.device().clone(), ctx.queue().clone(), faults);
         gpu.context = Some(ctx.key());
         gpu.submit = ctx.submit_lock().clone();
         gpu.log_open("platform context");
@@ -200,8 +260,17 @@ impl Gpu {
     }
 
     fn bundle(adapter: wgpu::Adapter, device: wgpu::Device, queue: wgpu::Queue) -> Self {
-        let limits = device.limits();
         let faults = watch(&device);
+        Self::with_faults(adapter, device, queue, faults)
+    }
+
+    fn with_faults(
+        adapter: wgpu::Adapter,
+        device: wgpu::Device,
+        queue: wgpu::Queue,
+        faults: Arc<Faults>,
+    ) -> Self {
+        let limits = device.limits();
         Self {
             device,
             queue,
@@ -286,6 +355,11 @@ fn request(instance: &wgpu::Instance, fallback: bool) -> Result<wgpu::Adapter, S
         Some(Err(e)) => Err(e.to_string()),
         None => Err("the adapter request did not finish on the native backend".into()),
     }
+}
+
+/// The error `scope` caught, popping it, as text.
+pub(crate) fn scope_error(scope: wgpu::ErrorScopeGuard) -> Option<String> {
+    ready(scope.pop()).flatten().map(|error| error.to_string())
 }
 
 /// Polls a future that native wgpu completes on the first poll. `None` when it doesn't.

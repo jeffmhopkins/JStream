@@ -24,6 +24,7 @@ mod place;
 mod readback;
 mod scene;
 pub mod transition;
+mod wipe;
 
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
@@ -33,13 +34,15 @@ pub use filter::{
     ExternalFilter, ExternalProgram, FIRST_INPUT_BINDING, FilterClock, Lut, LutError,
     MAX_PROGRAM_BYTES, PRELUDE as FILTER_PRELUDE, PROGRAM_AUDIO_BANDS, PROGRAM_MAX_INPUTS,
     PROGRAM_MAX_PASSES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio, ProgramImage,
-    ProgramInput, ProgramPass, VideoFilter, descriptors as video_filter_descriptors, lut_image,
+    ProgramInput, ProgramPass, VideoFilter, ViewDepth,
+    depth_descriptors as depth_filter_descriptors, descriptors as video_filter_descriptors,
+    lut_image, outset as video_filter_outset, reads_depth as video_filter_reads_depth,
 };
-pub use gpu::{OpenOptions, adapter_available};
+pub use gpu::{OpenOptions, adapter_available, context_lost};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
-pub use model::{GpuModel, Lighting, ModelDraw};
-pub use readback::{READBACK_DEPTH, ReadbackRing};
+pub use model::{GpuModel, LightKind, Lighting, MAX_SCENE_LIGHTS, ModelDraw, SceneLight};
+pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 
 #[cfg(test)]

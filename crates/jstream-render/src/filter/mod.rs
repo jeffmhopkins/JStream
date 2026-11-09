@@ -10,8 +10,10 @@
 
 mod aspect;
 mod assets;
+mod depth;
 mod external;
 mod multipass;
+pub(crate) use multipass::pad;
 mod pack;
 mod params;
 mod pass;
@@ -20,9 +22,10 @@ mod program;
 pub(crate) mod testing;
 
 pub use assets::{Lut, LutError, lut_image};
+pub use depth::{ViewDepth, descriptors as depth_descriptors, reads_depth};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
-pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Scratch, Shader};
+pub(crate) use pass::{Blend, Bound, Ctx, Draw, Pass, Runtime, Scratch, Shader};
 pub use program::{
     AUDIO_BANDS as PROGRAM_AUDIO_BANDS, ExternalProgram, FIRST_INPUT_BINDING,
     MAX_INPUTS as PROGRAM_MAX_INPUTS, MAX_PASSES as PROGRAM_MAX_PASSES, MAX_PROGRAM_BYTES,
@@ -49,12 +52,24 @@ pub fn descriptors() -> Vec<KindDescriptor> {
     kinds
 }
 
+/// How far a built-in filter of `kind_id` draws past each edge of its input at
+/// `settings`, px, never more than its kind's `max_outset_px` ([ADR-0136]):
+/// a drop shadow its offset plus its blur, a glow or a bloom its radius, an outline
+/// outside its width, a border its outer stroke after its gap. `None` for a kind that declares no outset, or one this crate
+/// doesn't draw; a caller then takes the declared `max_outset_px`.
+///
+/// [ADR-0136]: ../../../docs/adr/0136-an-effects-outset-follows-its-settings.md
+pub fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
+    multipass::outset(kind_id, settings).or_else(|| pack::outset(kind_id, settings))
+}
+
 /// The pass for a filter of `kind_id`, or `None` when it is not a built-in video kind.
 fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
     pack::build(kind_id, settings)
         .or_else(|| aspect::build(kind_id, settings))
         .or_else(|| multipass::build(kind_id, settings))
         .or_else(|| assets::build(kind_id, settings))
+        .or_else(|| depth::build(kind_id, settings))
 }
 
 /// One built-in video filter with its settings read, ready to draw. It keeps whatever
@@ -64,6 +79,8 @@ pub struct VideoFilter {
     kind: String,
     pass: Box<dyn Pass>,
     scratch: Scratch,
+    /// Transparent pixels the input is grown by on every side before the pass draws.
+    pad: u32,
 }
 
 impl VideoFilter {
@@ -80,6 +97,7 @@ impl VideoFilter {
             kind: kind.to_owned(),
             pass,
             scratch: Scratch::default(),
+            pad: 0,
         }
     }
 
@@ -135,9 +153,25 @@ impl VideoFilter {
     /// The size this filter draws for an input of `width` by `height`. Most filters keep
     /// the size; aspect ratio reshapes it, which changes the source's reported size for
     /// every placement. An effect that draws outside its input (a drop shadow, an outside
-    /// outline, a glow) keeps it, and what falls past the frame is cut (ADR-0065 §5).
+    /// outline, a glow) keeps it, and what falls past the frame is cut (ADR-0065 §5),
+    /// unless it is padded ([`Self::set_pad`]).
     pub fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
-        self.pass.output_size(width, height)
+        let grow = |side: u32| side.saturating_add(self.pad.saturating_mul(2));
+        self.pass.output_size(grow(width), grow(height))
+    }
+
+    /// Grows the input by `pad` transparent pixels on every side before the filter
+    /// draws, so it sees and keeps that room: 0 (the default) for none. An item's
+    /// effects pad their layer at the first effect that draws past its input, so the
+    /// ones before it frame the item's box itself (ADR-0065 §5).
+    pub fn set_pad(&mut self, pad: u32) {
+        self.pad = pad;
+        self.pass.set_pad(pad);
+    }
+
+    /// The padding [`Self::set_pad`] set.
+    pub(crate) fn pad(&self) -> u32 {
+        self.pad
     }
 
     /// Sets the image an asset or scene-reference filter reads (`apply_lut`'s table,
@@ -147,6 +181,20 @@ impl VideoFilter {
     /// kinds ignore it. The image must come from the compositor that draws the filter.
     pub fn set_reference(&mut self, image: Option<std::sync::Arc<crate::Image>>) {
         self.pass.set_reference(image);
+    }
+
+    /// Whether it reads a scene's view depth ([`reads_depth`] of its kind), so the engine
+    /// draws one for the scene chain that holds it (ADR-0143 decision 4).
+    pub fn reads_depth(&self) -> bool {
+        reads_depth(&self.kind)
+    }
+
+    /// Hands a depth-aware filter its scene's view depth for the next frame, or `None`
+    /// where there is none (a 2D scene, a chain that isn't a scene's): it then passes its
+    /// input through (ADR-0143 decision 5). The image must come from the compositor that
+    /// draws the filter. Other kinds ignore it.
+    pub fn set_depth(&mut self, depth: Option<ViewDepth>) {
+        self.pass.set_depth(depth);
     }
 
     /// Its pass and the pool its scratch layers come from, to draw it.

@@ -42,7 +42,7 @@ use super::{
 };
 use crate::audio_sources::Wanted;
 use crate::runtime::{
-    DrawError, DrawFn, DrawHook, OpenDraw, RenderHub, cpu_draw, gpu_draw, gpu_draw_with,
+    DrawError, DrawFn, DrawHook, MixFrame, OpenDraw, RenderHub, cpu_draw, gpu_draw, gpu_draw_with,
     open_capture, parts_from, start_capture,
 };
 use crate::snapshot::CaptureImage;
@@ -506,6 +506,36 @@ struct Seen {
     pixel: Option<[u8; 4]>,
 }
 
+/// The top-left pixel of the frame `frame` read back, as RGBA8: decoded from BT.709
+/// limited range when the mix was read back as NV12 (only encoders take it, ADR-0117
+/// §4), whose Y is the first byte and whose CbCr pair starts the second plane.
+fn first_pixel(frame: &MixFrame) -> Option<[u8; 4]> {
+    if !frame.out_planar {
+        return frame.out.first_chunk::<4>().copied();
+    }
+    let luma = *frame.out.first()?;
+    let chroma = frame.size.width() as usize * frame.size.height() as usize;
+    let (cb, cr) = (*frame.out.get(chroma)?, *frame.out.get(chroma + 1)?);
+    let y = 1.164_38 * (f32::from(luma) - 16.0);
+    let (cb, cr) = (f32::from(cb) - 128.0, f32::from(cr) - 128.0);
+    let channel = |v: f32| v.round().clamp(0.0, 255.0) as u8;
+    Some([
+        channel(y + 1.792_74 * cr),
+        channel(y - 0.213_25 * cb - 0.532_91 * cr),
+        channel(y + 2.112_40 * cb),
+        255,
+    ])
+}
+
+/// Whether `pixel` is [`RED`], give or take the 1 a round trip through NV12 can add to
+/// a channel.
+fn is_red(pixel: [u8; 4]) -> bool {
+    pixel
+        .iter()
+        .zip(RED)
+        .all(|(got, want)| got.abs_diff(want) <= 1)
+}
+
 /// [`gpu_draw`], recording what it was opened on and what it drew into `seen`.
 fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
     Arc::new(move |context: Option<&GpuContext>| {
@@ -514,12 +544,12 @@ fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
         seen.lock()
             .unwrap_or_else(PoisonError::into_inner)
             .on_context = Some(context.is_some());
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
-            let freed = inner(shot, live, captures, frames, at, meter)?;
+        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
+            let freed = inner(shot, scenes, live, captures, frames, at, meter)?;
             // The first mix drawn this tick; with no video mixes, the program.
             let drawn = frames.iter().find(|frame| frame.due);
-            if let Some(pixel) = drawn.and_then(|frame| frame.out.first_chunk::<4>()) {
-                seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(*pixel);
+            if let Some(pixel) = drawn.and_then(first_pixel) {
+                seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(pixel);
             }
             Ok(freed)
         });
@@ -556,7 +586,7 @@ fn an_output_composites_gpu_capture_frames() {
         thread::sleep(Duration::from_millis(20));
         let stats = engine.output_stats().expect("running");
         let pixel = seen.lock().unwrap_or_else(PoisonError::into_inner).pixel;
-        if stats.gpu_captures >= 2 && stats.readbacks >= 2 && pixel == Some(RED) {
+        if stats.gpu_captures >= 2 && stats.readbacks >= 2 && pixel.is_some_and(is_red) {
             drew_red = true;
             break;
         }
@@ -674,10 +704,11 @@ impl jstream_browser::BrowserPage for PaintedPage {
     }
 }
 
-/// On the GPU path a browser page paints on the program stage's device, and the render
-/// thread samples its texture there as premultiplied sRGB: half-transparent red over
-/// the black canvas reads back as linear red one half, not the darker red reading it
-/// as straight alpha would give. The stage takes the device away when it stops.
+/// On the GPU path a browser page paints on the engine's GPU context, which the program
+/// stage draws on (ADR-0117 §5), and the render thread samples its texture there as
+/// premultiplied sRGB: half-transparent red over the black canvas reads back as linear
+/// red one half, not the darker red reading it as straight alpha would give. The browser
+/// gets the context once, when it is set, and keeps it when the stage stops.
 #[test]
 fn a_browser_page_is_composited_from_its_gpu_frames() {
     let _gpu = one_gpu_test_at_a_time();
@@ -726,7 +757,14 @@ fn a_browser_page_is_composited_from_its_gpu_frames() {
             .lock()
             .unwrap_or_else(PoisonError::into_inner),
         [true],
-        "the browser got the stage's device"
+        "the browser got the engine's context once, which the stage drew on"
+    );
+    assert_eq!(
+        seen.lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .on_context,
+        Some(true),
+        "the compositor opened on the engine's context"
     );
 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
@@ -737,8 +775,54 @@ fn a_browser_page_is_composited_from_its_gpu_frames() {
             .given
             .lock()
             .unwrap_or_else(PoisonError::into_inner),
-        [true, false],
-        "the stage took the device away when it stopped"
+        [true],
+        "the page keeps the engine's context when the stage stops"
+    );
+}
+
+/// #1194: with no output running, `video.snapshot` draws a browser page's GPU frames,
+/// because the snapshot compositor opens on the engine's GPU context, the one the page
+/// paints on. It drew the page as nothing on a device of its own.
+#[test]
+fn a_snapshot_draws_a_browser_pages_gpu_frames() {
+    use crate::snapshot::{decode_base64, decode_png};
+    use jstream_protocol::{Query, QueryResult};
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let backends = backends(&clock, Arc::new(SoftwareGpu), GpuMode::None);
+    let browser = PaintingBrowser::default();
+    let engine = Engine::new()
+        .with_backends(backends)
+        .with_browser(Arc::new(browser.clone()));
+    let control = connected(&engine);
+    show_a_page(&control);
+
+    let half = 128.0_f32 / 255.0;
+    let red = (1.055 * half.powf(1.0 / 2.4) - 0.055) * 255.0;
+    let deadline = Instant::now() + Duration::from_secs(20);
+    let mut pixel = None;
+    while Instant::now() < deadline {
+        clock.advance(50_000);
+        let result = super::query(&control, Query::VideoSnapshot).expect("video.snapshot");
+        let QueryResult::VideoSnapshot { png, .. } = result else {
+            panic!("not a snapshot: {result:?}");
+        };
+        let (width, height, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+        let i = ((height / 2) as usize * width as usize + (width / 2) as usize) * 4;
+        let [r, g, b, a] = [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]];
+        pixel = Some([r, g, b, a]);
+        if (f32::from(r) - red).abs() <= 3.0 && g == 0 && b == 0 && a == 255 {
+            break;
+        }
+        thread::sleep(Duration::from_millis(20));
+    }
+    let got = pixel.map(|[r, g, b, a]| (f32::from(r), g, b, a));
+    assert!(
+        got.is_some_and(|(r, g, b, a)| (r - red).abs() <= 3.0 && g == 0 && b == 0 && a == 255),
+        "the snapshot did not draw the page: {pixel:?}, expected red {red:.0}"
     );
 }
 
@@ -811,7 +895,7 @@ fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
         }
         let mut inner = (gpu_draw())(context)?;
         let opens = Arc::clone(&opens);
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
+        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
             let gpu_frame = shot.captures().iter().any(|key| {
                 captures
                     .frame(key)
@@ -826,14 +910,13 @@ fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
                 }
                 _ => {}
             }
-            let freed = inner(shot, live, captures, frames, at, meter)?;
+            let freed = inner(shot, scenes, live, captures, frames, at, meter)?;
             let drawn = frames.iter().find(|frame| frame.due);
-            if !on_context && let Some(pixel) = drawn.and_then(|frame| frame.out.first_chunk::<4>())
-            {
+            if !on_context && let Some(pixel) = drawn.and_then(first_pixel) {
                 opens
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
-                    .own_pixel = Some(*pixel);
+                    .own_pixel = Some(pixel);
             }
             Ok(freed)
         });
@@ -935,11 +1018,12 @@ fn an_output_falls_back_from_the_gpu_path_mid_run() {
     }
 }
 
-/// A fallback from the GPU path takes the context away from the browser pages painting
-/// on it, while the output runs on, since the compositor can no longer sample them
-/// there (#451).
+/// A fallback from the GPU path, on a context that isn't lost, leaves the browser pages
+/// on the engine's context, while the output runs on: the preview and snapshots still
+/// draw them there (ADR-0117 §5). Before one shared context the pages lost their device
+/// (#451).
 #[test]
-fn the_gpu_fallback_takes_the_context_from_browser_pages() {
+fn a_gpu_fallback_leaves_browser_pages_on_the_engines_context() {
     let _gpu = one_gpu_test_at_a_time();
     if !have_software_gpu() {
         return;
@@ -965,16 +1049,15 @@ fn the_gpu_fallback_takes_the_context_from_browser_pages() {
             .output_stats()
             .is_some_and(|stats| stats.gpu_fallbacks == 1)
     };
-    let released = tick_until(&clock, || given() == [true, false] && fell_back());
     assert!(
-        released,
-        "the browser still has the device: {:?}, {:?}",
-        given(),
+        tick_until(&clock, fell_back),
+        "no fallback: {:?}",
         engine.output_stats()
     );
     assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    assert_eq!(given(), [true], "the pages keep the engine's context");
     block_on(control.call(output_call("yt", false))).expect("output.stop");
-    assert_eq!(given(), [true, false], "taken away once");
+    assert_eq!(given(), [true], "and keep it once the stage stops");
 }
 
 /// A fallback that cannot open the compositor on a device of its own fails the output,
@@ -1028,7 +1111,7 @@ fn losing_draw(lose: usize, after: u32, opens: Arc<Mutex<Vec<bool>>>) -> OpenDra
         let drawn = AtomicU64::new(0);
         let hook: DrawHook = Arc::new(move |compositor: &Compositor| {
             if opened <= lose && drawn.fetch_add(1, Ordering::Relaxed) + 1 == u64::from(after) {
-                compositor.device().destroy();
+                compositor.destroy_device();
                 let _ = compositor.device().poll(wgpu::PollType::Wait {
                     submission_index: None,
                     timeout: Some(Duration::from_secs(5)),
@@ -1350,12 +1433,12 @@ fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
         }
         let mut inner = (cpu_draw())(context)?;
         let mut drawn = false;
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
+        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
             if drawn {
                 return Err(DrawError::Failed("device removed".to_owned()));
             }
             drawn = true;
-            inner(shot, live, captures, frames, at, meter)
+            inner(shot, scenes, live, captures, frames, at, meter)
         });
         Ok(draw)
     })
@@ -1596,12 +1679,12 @@ fn flaky_draw(from: u64, to: u64, draws: Arc<AtomicU64>) -> OpenDraw {
     Arc::new(move |context: Option<&GpuContext>| {
         let mut inner = (gpu_draw())(context)?;
         let draws = Arc::clone(&draws);
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
+        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
             let n = draws.fetch_add(1, Ordering::Relaxed) + 1;
             if (from..=to).contains(&n) {
                 return Err(DrawError::Failed("unsupported format".to_owned()));
             }
-            inner(shot, live, captures, frames, at, meter)
+            inner(shot, scenes, live, captures, frames, at, meter)
         });
         Ok(draw)
     })
@@ -1855,4 +1938,164 @@ fn an_output_started_after_a_gpu_fallback_reads_back_and_fails_nothing() {
     block_on(control.call(output_call("rec", false))).expect("rec stop");
     block_on(control.call(output_call("yt", false))).expect("yt stop");
     let _ = std::fs::remove_dir_all(&dir);
+}
+
+/// A display that captures solid green CPU frames, in BGRA.
+struct GreenCapture {
+    clock: FakeClock,
+    size: FrameSize,
+    /// How many captures were started.
+    starts: Arc<AtomicU64>,
+}
+
+impl Capture for GreenCapture {
+    fn targets(&self) -> Result<Vec<CaptureTargetInfo>, PlatformError> {
+        FakeCapture::new(self.clock.clone(), self.size).targets()
+    }
+
+    fn start(&self, _target: &CaptureTarget) -> Result<Box<dyn CaptureStream>, PlatformError> {
+        self.starts.fetch_add(1, Ordering::Relaxed);
+        Ok(Box::new(GreenStream {
+            clock: self.clock.clone(),
+            size: self.size,
+            last: None,
+        }))
+    }
+}
+
+struct GreenStream {
+    clock: FakeClock,
+    size: FrameSize,
+    last: Option<MediaTime>,
+}
+
+impl CaptureStream for GreenStream {
+    fn latest(&mut self) -> Result<Option<VideoSurface>, PlatformError> {
+        let now = self.clock.now();
+        if self.last == Some(now) {
+            return Ok(None);
+        }
+        self.last = Some(now);
+        let (width, height) = (self.size.width() as usize, self.size.height() as usize);
+        let data = [0, 255, 0, 255].repeat(width * height);
+        let info = VideoFrameInfo {
+            size: self.size,
+            format: PixelFormat::Bgra8,
+            color: ColorInfo {
+                range: ColorRange::Full,
+                ..ColorInfo::default()
+            },
+            pts: now,
+        };
+        let frame =
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(data, width * 4)])
+                .expect("a green frame");
+        Ok(Some(VideoSurface::Cpu(frame)))
+    }
+
+    fn stats(&self) -> CaptureStats {
+        CaptureStats::default()
+    }
+}
+
+/// #1184: `video.snapshot` draws a display the program shows, with no output running:
+/// the snapshot thread captures it itself and waits for its first frame. It drew it as
+/// nothing, with no captures at all. The capture keeps running between snapshots.
+#[test]
+fn a_snapshot_draws_a_display_capture() {
+    use crate::snapshot::{decode_base64, decode_png};
+    use jstream_protocol::{Query, QueryResult};
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let starts = Arc::new(AtomicU64::new(0));
+    let mut backends = backends(&clock, Arc::new(SoftwareGpu), GpuMode::None);
+    backends.capture = Arc::new(GreenCapture {
+        clock: clock.clone(),
+        size: FrameSize::new(64, 36).expect("size"),
+        starts: Arc::clone(&starts),
+    });
+    let engine = Engine::new().with_backends(backends);
+    let control = connected(&engine);
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("main"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("screen"),
+                    name: "Screen".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "display".into(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                },
+                add("main", "item", "screen"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a scene showing the display");
+    block_on(control.call(switch_call("main"))).expect("scene.switch");
+    // The display source opens on the sources thread, and the published shot names its
+    // capture only from the plan after that: a snapshot before then draws without it,
+    // as it would any source not open yet.
+    assert!(
+        super::audio::eventually(|| {
+            let screen = SourceId::new("screen");
+            engine
+                .render_hub()
+                .load()
+                .shot()
+                .captures()
+                .iter()
+                .any(|key| key.source.as_ref() == Some(&screen))
+        }),
+        "the published shot never named the display's capture"
+    );
+
+    let green = || {
+        let result = super::query(&control, Query::VideoSnapshot).expect("video.snapshot");
+        let QueryResult::VideoSnapshot { png, .. } = result else {
+            panic!("not a snapshot: {result:?}");
+        };
+        let (width, height, rgba) = decode_png(&decode_base64(&png).expect("base64")).expect("png");
+        let count = rgba
+            .chunks_exact(4)
+            .filter(|px| px[1] > 200 && px[0] < 40 && px[2] < 40)
+            .count();
+        // What the picture holds instead, for a failure message.
+        let mut colours = std::collections::BTreeMap::<[u8; 4], usize>::new();
+        for px in rgba.chunks_exact(4) {
+            *colours.entry([px[0], px[1], px[2], px[3]]).or_default() += 1;
+        }
+        let mut colours: Vec<_> = colours.into_iter().collect();
+        colours.sort_by_key(|entry| std::cmp::Reverse(entry.1));
+        colours.truncate(6);
+        (
+            count,
+            format!(
+                "{width}x{height}, most common colours {colours:?}, {} capture start(s)",
+                starts.load(Ordering::Relaxed)
+            ),
+        )
+    };
+    // The first snapshot waits for the capture's first frame rather than drawing none.
+    let (count, seen) = green();
+    assert!(
+        count > 0,
+        "the first snapshot did not draw the display: {seen}"
+    );
+    clock.advance(50_000);
+    let (count, seen) = green();
+    assert!(
+        count > 0,
+        "the second snapshot did not draw the display: {seen}"
+    );
+    assert_eq!(starts.load(Ordering::Relaxed), 1, "started once for both");
 }

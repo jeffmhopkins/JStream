@@ -1,13 +1,15 @@
 //! `drop_shadow`: the input's alpha shape, blurred, tinted and moved, drawn under it.
 //! It draws within the input's frame: a source or scene chain's output is its input's
-//! size, so the part of the shadow past the frame is cut (ADR-0065 §5). The composite
+//! size, so the part of the shadow past the frame is cut (ADR-0065 §5). On an item, its
+//! `max_outset_px` (the largest offset plus the largest blur) gives the effects layer
+//! room past the box, so the shadow of an opaque picture shows there. The composite
 //! under the shape is shared with `glow`.
 
 use jstream_protocol::{KindDescriptor, Settings};
 
 use super::bounds::Insets;
 use super::gauss::{self, Edge};
-use super::premultiplied;
+use super::{premultiplied, within};
 use crate::error::RenderError;
 use crate::filter::params::{Read, Uniforms, color, filter, float};
 use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
@@ -24,17 +26,26 @@ const SHADOW: Shader = Shader {
 /// Black at 70 % alpha, `#000000b3`, as straight linear RGBA.
 const DEFAULT_COLOR: [f32; 4] = [0.0, 0.0, 0.0, 179.0 / 255.0];
 
+/// The largest offset on each axis and the largest blur a setting takes, px.
+const MAX_OFFSET: f64 = 200.0;
+const MAX_BLUR: f64 = 100.0;
+
 pub(super) fn descriptor() -> KindDescriptor {
-    filter(
-        KIND,
-        "Drop shadow",
-        vec![
-            color("color", "Color", true, "#000000b3"),
-            float("offset_x", "Offset X", -200.0, 200.0, 8.0, "px"),
-            float("offset_y", "Offset Y", -200.0, 200.0, 8.0, "px"),
-            float("blur", "Blur", 0.0, 100.0, 8.0, "px"),
-        ],
-    )
+    KindDescriptor {
+        // The shadow reaches at most the largest offset plus the largest blur past the
+        // shape's edge.
+        max_outset_px: Some((MAX_OFFSET + MAX_BLUR) as u32),
+        ..filter(
+            KIND,
+            "Drop shadow",
+            vec![
+                color("color", "Color", true, "#000000b3"),
+                float("offset_x", "Offset X", -MAX_OFFSET, MAX_OFFSET, 8.0, "px"),
+                float("offset_y", "Offset Y", -MAX_OFFSET, MAX_OFFSET, 8.0, "px"),
+                float("blur", "Blur", 0.0, MAX_BLUR, 8.0, "px"),
+            ],
+        )
+    }
 }
 
 /// A blurred, tinted copy of the input's shape under it.
@@ -60,6 +71,10 @@ impl Under {
         // The shape alone, in a frame `pad` larger on each side so its blur fits.
         let pad = Insets::even(self.radius);
         let shape_size = pad.grow(input.width(), input.height());
+        // The blurred shape spans a frame grown around the output's, so a bound moves
+        // into it for that pass (#1070).
+        let outer = ctx.bound;
+        ctx.bound = outer.map(|bound| bound.placed((pad.left, pad.top), shape_size));
         let blurred = gauss::blur(
             ctx,
             input,
@@ -67,7 +82,9 @@ impl Under {
             shape_size,
             pad.origin(),
             Edge::Transparent,
-        )?;
+        );
+        ctx.bound = outer;
+        let blurred = blurred?;
         // The output is the input's frame (ADR-0065 §5), so the blurred shape's frame sits
         // `pad` up and left of it, moved by the offset.
         let params = Uniforms::new()
@@ -90,6 +107,17 @@ impl Under {
     }
 }
 
+impl Under {
+    /// How far the shadow reaches past the shape: its offset, then the blur's span plus
+    /// a working texel each for its downsample and read back, as a blur's.
+    pub(super) fn reach(&self) -> f32 {
+        let plan = gauss::plan(self.radius);
+        let max = MAX_OFFSET as f32;
+        let offset = within(self.offset.0.abs(), max).max(within(self.offset.1.abs(), max));
+        offset + ((plan.taps + 2) * plan.scale) as f32
+    }
+}
+
 pub(super) struct DropShadow(Under);
 
 impl DropShadow {
@@ -108,9 +136,22 @@ fn read(settings: &Settings) -> Under {
     }
 }
 
+/// The offset on the farther axis plus the blur: as far as the shadow reaches past the
+/// shape's edge.
+pub(super) fn outset(settings: &Settings) -> f32 {
+    let under = read(settings);
+    let (x, y) = under.offset;
+    let max = MAX_OFFSET as f32;
+    within(x.abs(), max).max(within(y.abs(), max)) + within(under.radius, MAX_BLUR as f32)
+}
+
 impl Pass for DropShadow {
     fn update(&mut self, settings: &Settings) {
         self.0 = read(settings);
+    }
+
+    fn reach(&self) -> Option<f32> {
+        Some(self.0.reach())
     }
 
     fn encode(

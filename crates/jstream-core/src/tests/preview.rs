@@ -16,7 +16,7 @@ use jstream_protocol::{
     Action, Batch, BinaryFrame, Call, Edit, ItemId, PreviewCodec, PreviewDraft, ProtocolError,
     Query, QueryResult, Rev, SceneId, Settings, SourceId, SourceKind, WireError,
 };
-use jstream_sources::CaptureSpec;
+use jstream_sources::{CaptureSpec, DeviceFormatWant};
 use std::sync::{Arc, mpsc};
 use std::task::{Context, Poll, Wake, Waker};
 use std::thread;
@@ -582,7 +582,10 @@ fn the_preview_captures_what_the_program_shows() {
     until_drawn(
         &mut frames,
         &seen,
-        &[CaptureSpec::Display(None), CaptureSpec::Device(None)],
+        &[
+            CaptureSpec::Display(None),
+            CaptureSpec::Device(None, DeviceFormatWant::default()),
+        ],
     );
     assert_eq!(devices.open_streams(), 1, "the webcam opens once");
 
@@ -657,14 +660,18 @@ fn a_draft_stream_shows_a_webcam_before_it_is_a_source() {
         subscribe_draft(1, "webcam", serde_json::json!({})),
     )
     .expect("subscribed");
-    until_drawn(&mut frames, &seen, &[CaptureSpec::Device(None)]);
+    until_drawn(
+        &mut frames,
+        &seen,
+        &[CaptureSpec::Device(None, DeviceFormatWant::default())],
+    );
     assert_eq!(devices.open_streams(), 1, "the draft opened the webcam");
     assert!(
         !hub.load()
             .shot()
             .captures()
             .iter()
-            .any(|key| matches!(key.spec, CaptureSpec::Device(_))),
+            .any(|key| matches!(key.spec, CaptureSpec::Device(..))),
         "the program shows no webcam"
     );
     let after = engine.rev();
@@ -708,7 +715,10 @@ fn a_draft_shares_the_webcam_the_program_shows() {
     until_drawn(
         &mut frames,
         &seen,
-        &[CaptureSpec::Device(None), CaptureSpec::Display(None)],
+        &[
+            CaptureSpec::Device(None, DeviceFormatWant::default()),
+            CaptureSpec::Display(None),
+        ],
     );
     assert_eq!(devices.open_streams(), 1, "the webcam opens once");
 }
@@ -1023,6 +1033,196 @@ fn the_program_stage_draws_an_h264_program_stream() {
         assert!(Instant::now() < deadline, "the stage outlives the stream");
         thread::sleep(Duration::from_millis(10));
     }
+    drop(ticking);
+    pump.join().expect("pump");
+}
+
+/// A scene stream in H.264 is drawn by the program stage too (ADR-0117 §6): the stage
+/// opens for it with no output and draws the scene's own snapshot as an extra mix at
+/// the stream's size, off program, and stops once the stream goes.
+#[test]
+fn the_program_stage_draws_an_h264_scene_stream() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        // A preview thread that drew would fail the stream.
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    assert!(!engine.stage_running());
+    act(&control, subscribe_scene(2, "other")).expect("subscribed");
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(5));
+            }
+        })
+    };
+    let mut pictures = Vec::new();
+    while pictures.len() < 3 {
+        let picture = frame(&mut frames);
+        assert!(!picture.header.end, "the stream ended: {picture:?}");
+        pictures.push(picture);
+    }
+    assert!(engine.stage_running(), "the scene stream holds the stage");
+    for picture in &pictures {
+        assert_eq!(picture.header.channel, 2);
+        assert_eq!(picture.header.codec, Some(PreviewCodec::H264));
+        assert_eq!((picture.header.width, picture.header.height), (640, 360));
+    }
+    assert!(pictures[0].header.keyframe);
+    assert!(
+        pictures
+            .windows(2)
+            .all(|pair| pair[0].header.pts_us < pair[1].header.pts_us),
+        "frames out of order"
+    );
+
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 2 },
+        },
+    )
+    .expect("unsubscribed");
+    let deadline = Instant::now() + WAIT;
+    while engine.stage_running() {
+        assert!(Instant::now() < deadline, "the stage outlives the stream");
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(ticking);
+    pump.join().expect("pump");
+}
+
+/// JPEG and PNG streams of the program and of a scene are drawn by the program stage
+/// too (ADR-0117 §6): the stage reads each back, and the stream's own thread encodes
+/// it, so the preview thread draws nothing.
+#[test]
+fn the_program_stage_draws_jpeg_and_png_streams() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        // A preview thread that drew would fail the stream.
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    let jpeg_scene = Call::Action {
+        action: Action::PreviewSubscribe {
+            channel: 5,
+            max_width: None,
+            max_height: None,
+            fps: Some(30),
+            codecs: vec![PreviewCodec::Jpeg],
+            scene_id: Some(SceneId::new("other")),
+            source: None,
+            source_id: None,
+        },
+    };
+    act(&control, jpeg_scene).expect("subscribed");
+    act(&control, subscribe(6, Some(30), vec![PreviewCodec::Png])).expect("subscribed");
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(5));
+            }
+        })
+    };
+    let (mut jpeg, mut png) = (None, None);
+    while jpeg.is_none() || png.is_none() {
+        let picture = frame(&mut frames);
+        assert!(!picture.header.end, "a stream ended: {picture:?}");
+        match picture.header.channel {
+            5 => jpeg = Some(picture),
+            _ => png = Some(picture),
+        }
+    }
+    assert!(engine.stage_running(), "the streams hold the stage");
+    let jpeg = jpeg.expect("a JPEG picture");
+    assert_eq!(jpeg.header.codec, Some(PreviewCodec::Jpeg));
+    assert!(jpeg.header.keyframe);
+    assert_eq!((jpeg.header.width, jpeg.header.height), (640, 360));
+    assert_eq!(decode(&jpeg.payload), (640, 360));
+    let png = png.expect("a PNG picture");
+    assert_eq!(png.header.codec, Some(PreviewCodec::Png));
+    let decoder = png::Decoder::new(std::io::Cursor::new(&png.payload[..]));
+    let reader = decoder.read_info().expect("a PNG");
+    assert_eq!(
+        (reader.info().width, reader.info().height),
+        (u32::from(png.header.width), u32::from(png.header.height))
+    );
+
+    for channel in [5, 6] {
+        act(
+            &control,
+            Call::Action {
+                action: Action::PreviewUnsubscribe { channel },
+            },
+        )
+        .expect("unsubscribed");
+    }
+    let deadline = Instant::now() + WAIT;
+    while engine.stage_running() {
+        assert!(Instant::now() < deadline, "the stage outlives the streams");
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(ticking);
+    pump.join().expect("pump");
+}
+
+/// A keyframe asked of a JPEG stream on the program stage brings a fresh picture of an
+/// unchanged program at once, not at the next 2 s keyframe: the request is the stream's
+/// sender's to take, not the hub's.
+#[test]
+fn a_staged_picture_stream_answers_a_keyframe_request_at_once() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    act(&control, subscribe(7, Some(30), vec![PreviewCodec::Jpeg])).expect("subscribed");
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            // A frame every 150 ms, so the preview thread passes (every 33 ms) between
+            // two: a pass that took the request would leave the next picture waiting
+            // for the 2 s keyframe.
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(150));
+            }
+        })
+    };
+    let mut first = frame(&mut frames);
+    assert_eq!(first.header.codec, Some(PreviewCodec::Jpeg));
+    // Until the picture holds still: nothing new for a while.
+    while let Next::Frame(later) = next(&mut frames, Duration::from_millis(500)) {
+        first = later;
+    }
+    let asked = Instant::now();
+    engine.ask_preview_keyframes();
+    let again = match next(&mut frames, Duration::from_millis(1_000)) {
+        Next::Frame(again) => again,
+        other => panic!("no picture for the keyframe request: {other:?}"),
+    };
+    assert!(asked.elapsed() < KEYFRAME_EVERY / 2);
+    assert!(again.header.keyframe && !again.header.end);
+    assert!(again.header.pts_us > first.header.pts_us);
     drop(ticking);
     pump.join().expect("pump");
 }

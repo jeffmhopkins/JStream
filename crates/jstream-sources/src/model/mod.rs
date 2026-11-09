@@ -99,10 +99,10 @@ impl ModelKind {
                     param(
                         "lighting",
                         "Lighting",
-                        options(&[("studio", "Studio"), ("unlit", "Unlit")]),
+                        options(&[("studio", "Studio"), ("unlit", "Unlit"), ("scene", "Scene")]),
                         json!("studio"),
                     ),
-                    "Studio lights it from above and to the left of the camera; unlit shows its colours as they are.",
+                    "Studio lights it from above and to the left of the camera; unlit shows its colours as they are; scene lights it with the light sources placed in its 3D scene (studio in a 2D scene).",
                 )),
                 live(described(
                     param(
@@ -176,7 +176,7 @@ impl Look {
         let lighting = setting(settings, "lighting")?
             .as_str()
             .and_then(Lighting::from_name)
-            .ok_or_else(|| bad("lighting", "must be `studio` or `unlit`"))?;
+            .ok_or_else(|| bad("lighting", "must be `studio`, `unlit` or `scene`"))?;
         let double_sided = setting(settings, "double_sided")?
             .as_bool()
             .ok_or_else(|| bad("double_sided", "must be true or false"))?;

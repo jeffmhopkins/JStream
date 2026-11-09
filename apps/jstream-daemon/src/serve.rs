@@ -6,6 +6,14 @@
 use crate::args::Options;
 use crate::youtube;
 use anyhow::Context;
+#[cfg(any(
+    all(
+        any(windows, all(target_os = "linux", target_pointer_width = "64")),
+        feature = "cef"
+    ),
+    test
+))]
+use jstream_browser::BrowserBackend;
 use jstream_core::{AuditSink, Engine};
 use jstream_crash::Secrets;
 #[cfg(any(
@@ -20,14 +28,6 @@ use std::io;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-#[cfg(any(
-    all(
-        any(windows, all(target_os = "linux", target_pointer_width = "64")),
-        feature = "cef"
-    ),
-    test
-))]
-use {jstream_browser::BrowserBackend, jstream_platform::GpuContext};
 #[cfg(any(
     windows,
     target_os = "macos",
@@ -83,7 +83,7 @@ pub fn engine(
     let engine = {
         let backends = windows_backends()?;
         #[cfg(feature = "cef")]
-        let (gpu, clock) = (Arc::clone(&backends.gpu), Arc::clone(&backends.clock));
+        let clock = Arc::clone(&backends.clock);
         let engine = live_redacting(
             engine,
             backends,
@@ -91,10 +91,11 @@ pub fn engine(
             rtmp(),
             secrets,
         );
-        // After `with_backends`, so pages start on the media clock. Clones share the
-        // engine's sources, so this gives the browser to `engine` too.
+        // After `with_backends`, so pages start on the media clock and paint on the
+        // engine's GPU context. Clones share the engine's sources, so this gives the
+        // browser to `engine` too.
         #[cfg(feature = "cef")]
-        let _ = cef_browser(Engine::clone(&engine), Some(gpu.as_ref()), clock, options);
+        let _ = cef_browser(Engine::clone(&engine), clock, options);
         engine
     };
     #[cfg(target_os = "macos")]
@@ -114,7 +115,7 @@ pub fn engine(
         // Pages paint in software on Linux and hand the engine CPU frames, so they need
         // no device (ADR-0095).
         #[cfg(feature = "cef")]
-        let _ = cef_browser(Engine::clone(&engine), None, clock, options);
+        let _ = cef_browser(Engine::clone(&engine), clock, options);
         engine
     };
     #[cfg(not(any(
@@ -358,10 +359,9 @@ fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
     Ok(Arc::new(keys))
 }
 
-/// The CEF browser backend for `browser` sources (feature `cef`, ADR-0046), on a
-/// GPU device of the engine's media adapter, opened through the backends' `gpu` (Windows;
-/// `None` on Linux, where pages hand the engine CPU frames, ADR-0095), with pages' audio
-/// stamped on their `clock`.
+/// The CEF browser backend for `browser` sources (feature `cef`, ADR-0046), painting on
+/// the engine's GPU context, on its media adapter (ADR-0117 §5; on Linux pages hand the
+/// engine CPU frames, ADR-0095), with pages' audio stamped on their `clock`.
 ///
 /// CEF runs only in the sandboxed browser helper (ADR-0048), which starts when the first
 /// page opens: the helper (`jstream-browser-helper.exe` and its DLL on Windows,
@@ -369,8 +369,8 @@ fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
 /// beside the daemon's executable (or next to it), CEF's cache
 /// in the data directory's `cef` folder
 /// and its log in the log directory's `cef.log`. Neither a
-/// missing data directory nor a device that won't open stops the daemon: without a
-/// device, pages still play their audio and only their frames are dropped, and when the
+/// missing data directory nor a device that won't open stops the daemon: without the
+/// engine's GPU context, pages still play their audio and only their frames are dropped, and when the
 /// daemon's own path is unknown, browser sources show nothing (both are logged).
 #[cfg(all(
     any(windows, all(target_os = "linux", target_pointer_width = "64")),
@@ -378,7 +378,6 @@ fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
 ))]
 fn cef_browser(
     engine: Engine,
-    gpu: Option<&dyn jstream_platform::GpuInterop>,
     clock: Arc<dyn jstream_platform::MediaClock>,
     options: &Options,
 ) -> Engine {
@@ -402,22 +401,11 @@ fn cef_browser(
         }
     };
     config.log_file = logs.map(|dir| dir.join("cef.log"));
-    let gpu = gpu.and_then(|gpu| {
-        gpu.open_device()
-            .inspect_err(|error| {
-                tracing::warn!(%error, "no GPU device for browser pages: their frames are dropped");
-            })
-            .ok()
-    });
-    browse(
-        engine,
-        Arc::new(CefBackend::new(config, clock)),
-        gpu.as_ref(),
-    )
+    browse(engine, Arc::new(CefBackend::new(config, clock)))
 }
 
-/// Gives `engine` `browser` for its `browser` sources, delivering pages' frames on `gpu`
-/// (`BrowserBackend::use_device`): the device must come first, so the first page's first
+/// Gives `engine` `browser` for its `browser` sources. The engine hands it its GPU
+/// context first (`BrowserBackend::use_device`, ADR-0117 §5), so the first page's first
 /// paint already has it.
 #[cfg(any(
     all(
@@ -426,12 +414,7 @@ fn cef_browser(
     ),
     test
 ))]
-pub fn browse(
-    engine: Engine,
-    browser: Arc<dyn BrowserBackend>,
-    gpu: Option<&GpuContext>,
-) -> Engine {
-    browser.use_device(gpu);
+pub fn browse(engine: Engine, browser: Arc<dyn BrowserBackend>) -> Engine {
     engine.with_browser(browser)
 }
 
@@ -464,7 +447,8 @@ fn live_redacting(
 /// Binds the server on `127.0.0.1:<port>`, serving `engine` behind `token` and the
 /// devices paired in `device_file` (ADR-0044; in memory without one), keeping the UI
 /// settings in `ui_settings_file` (ADR-0084; in memory without one), with MCP's
-/// streamable-HTTP transport on, and the web UI's files from `ui_dir` when given. Each
+/// streamable-HTTP transport on, the web UI's files from `ui_dir` when given, and the
+/// network listener when `network` is given (`--lan`, ADR-0104). Each
 /// connection and each MCP session gets its own session (its own `client_id`); all of
 /// them share the engine.
 pub async fn bind(
@@ -474,6 +458,7 @@ pub async fn bind(
     device_file: Option<PathBuf>,
     ui_settings_file: Option<PathBuf>,
     ui_dir: Option<&Path>,
+    network: Option<jstream_server::NetworkConfig>,
 ) -> Result<Server, jstream_server::ServerError> {
     let connector: Connector = Arc::new(move || Box::new(engine.connect()));
     let mut config = ServerConfig::new(token);
@@ -482,6 +467,7 @@ pub async fn bind(
     config.device_file = device_file;
     config.ui_settings_file = ui_settings_file;
     config.ui_dir = ui_dir.map(Path::to_path_buf);
+    config.network = network;
     Server::bind(config, connector).await
 }
 
@@ -572,6 +558,7 @@ mod tests {
             .expect("an engine"),
             0,
             token,
+            None,
             None,
             None,
             None,
@@ -670,6 +657,7 @@ mod tests {
             None,
             None,
             None,
+            None,
         )
         .await
         .expect("binds");
@@ -684,6 +672,7 @@ mod tests {
             .expect("an engine"),
             port,
             token,
+            None,
             None,
             None,
             None,
@@ -949,7 +938,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&dir);
     }
 
-    /// `browse` hands the backend the device before the engine opens any page, and the
+    /// The engine hands the backend its device before it opens any page, and the
     /// engine opens a page for a `browser` source through it.
     #[tokio::test]
     async fn browser_sources_open_pages_through_the_backend() {
@@ -1003,7 +992,7 @@ mod tests {
         timely(control.call(page("before")))
             .await
             .expect("source.create");
-        let engine = super::browse(engine, recording.clone(), None);
+        let engine = super::browse(engine, recording.clone());
         /// Waits until `browser` has opened `count` pages.
         async fn pages(browser: &FakeBrowser, count: usize) {
             timely(async {

@@ -40,7 +40,7 @@ use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
 };
-use jstream_sources::{CaptureSpec, ShownModel};
+use jstream_sources::{CaptureSpec, LightType, ShownLight, ShownModel};
 
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
@@ -48,8 +48,9 @@ use crate::follow::{CameraMotion, CameraMoves, FollowPlan};
 use crate::frames::{self, Sheet};
 use crate::lock;
 use crate::motion::{self, TrackMotion};
+use crate::preview::PreviewCapture;
 use crate::profile::{DrawMeter, Phase};
-use crate::runtime::RenderSnapshot;
+use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
@@ -111,6 +112,9 @@ pub(crate) struct Frame {
     /// The 3D model its source shows (ADR-0107), whose layer an item draws in place of
     /// this frame, the model's transparent stand-in.
     model: Option<ShownModel>,
+    /// The light its source puts where an item places it (ADR-0143 decision 1), for
+    /// the models of a 3D scene lit by their scene. The frame itself is transparent.
+    light: Option<ShownLight>,
 }
 
 /// A frame's tightly packed bytes, shared with whoever made them.
@@ -127,6 +131,12 @@ enum Pixels {
         frame: GpuFrame,
         context: ContextKey,
     },
+    /// A live source's frame slot (ADR-0117 §3): each draw uploads what it holds then,
+    /// by that frame's own version, so a new frame of the same size needs no plan.
+    Slot(Arc<crate::slot::FrameSlot>),
+    /// A live source's still image (#1139): its pixels are held only while a draw
+    /// needs them ([`crate::still`]), and each compositor uploads them once.
+    Still(Arc<crate::still::ShownStill>),
 }
 
 impl PartialEq for Frame {
@@ -136,6 +146,7 @@ impl PartialEq for Frame {
             && self.height == other.height
             && self.extent == other.extent
             && model_key(self.model.as_ref()) == model_key(other.model.as_ref())
+            && self.light == other.light
     }
 }
 
@@ -168,6 +179,7 @@ impl Frame {
             pixels: Pixels::Copied(Arc::from(rgba)),
             version,
             model: None,
+            light: None,
         })
     }
 
@@ -199,7 +211,37 @@ impl Frame {
             pixels,
             version,
             model: None,
+            light: None,
         })
+    }
+
+    /// A live source's frame slot, at the size of the frame it holds now: each draw
+    /// shows the slot's latest frame ([`crate::slot`]).
+    pub(crate) fn from_slot(slot: Arc<crate::slot::FrameSlot>, version: u64) -> Self {
+        let size = slot.size();
+        Self {
+            width: size.width(),
+            height: size.height(),
+            extent: [size.width(), size.height()],
+            pixels: Pixels::Slot(slot),
+            version,
+            model: None,
+            light: None,
+        }
+    }
+
+    /// A live source's still image, at its size ([`crate::still`]).
+    pub(crate) fn from_still(still: Arc<crate::still::ShownStill>, version: u64) -> Self {
+        let size = still.size();
+        Self {
+            width: size.width(),
+            height: size.height(),
+            extent: [size.width(), size.height()],
+            pixels: Pixels::Still(still),
+            version,
+            model: None,
+            light: None,
+        }
     }
 
     /// The size it is placed at, which `source.sizes` reports (ADR-0073).
@@ -227,6 +269,7 @@ impl Frame {
             pixels: Pixels::Gpu { frame, context },
             version,
             model: None,
+            light: None,
         }
     }
 
@@ -234,6 +277,12 @@ impl Frame {
     /// (ADR-0107).
     pub(crate) fn with_model(self, model: Option<ShownModel>) -> Self {
         Self { model, ..self }
+    }
+
+    /// The same frame as the stand-in of `light`, the light its source puts in a 3D
+    /// scene (ADR-0143).
+    pub(crate) fn with_light(self, light: Option<ShownLight>) -> Self {
+        Self { light, ..self }
     }
 
     /// The same bytes, as the frame `set_source_frame` stored under `version`.
@@ -251,7 +300,9 @@ impl Frame {
                 .plane(0)
                 .and_then(|plane| plane.data().get(..len))
                 .unwrap_or_default(),
-            Pixels::Gpu { .. } => &[],
+            // Read through the slot or the still at a draw ([`compose`]); none to
+            // borrow here.
+            Pixels::Gpu { .. } | Pixels::Slot(_) | Pixels::Still(_) => &[],
         }
     }
 
@@ -264,13 +315,21 @@ impl Frame {
     /// Every pixel, tightly packed, for tests that compare what a source shows.
     #[cfg(test)]
     pub(crate) fn pixels(&self) -> Vec<u8> {
-        self.rgba().to_vec()
+        match &self.pixels {
+            // What a draw would upload now.
+            Pixels::Slot(slot) => slot.latest().rgba().to_vec(),
+            Pixels::Still(still) => still
+                .read()
+                .map(|frame| crate::slot::rgba(&frame).to_vec())
+                .unwrap_or_default(),
+            _ => self.rgba().to_vec(),
+        }
     }
 
     /// The first pixel, for tests that check what a source shows.
     #[cfg(test)]
     pub(crate) fn first_pixel(&self) -> Option<[u8; 4]> {
-        self.rgba().get(..4)?.try_into().ok()
+        self.pixels().get(..4)?.try_into().ok()
     }
 }
 
@@ -308,6 +367,22 @@ pub(crate) enum SourceRef {
     Boxed(SceneId, ItemId),
 }
 
+/// A light item a scene places (ADR-0143), as planning found it: with or without a
+/// transition running, so a scene-lit model is lit through a switch too.
+#[derive(Clone, Debug, PartialEq)]
+struct Lit {
+    /// The item that places the light.
+    item: ItemId,
+    /// The keyframe it is drawn through, as [`Placed::through`].
+    through: Option<Through>,
+    /// The `light` source it places.
+    source: SourceId,
+    placement: Placement,
+    crop: Crop,
+    opacity: f32,
+    motion: TrackMotion,
+}
+
 #[derive(Debug, PartialEq)]
 struct Placed {
     /// The item, whose live values (ADR-0032) override `placement` and `crop`.
@@ -340,9 +415,11 @@ type Moving = (MediaTime, Track);
 /// drawn into it scaled down uniformly (ADR-0065 §5).
 const MAX_LAYER_SIDE: u32 = 8192;
 
-/// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned plus
-/// the effects' outset on every side, in canvas pixels, scaled down to fit
-/// [`MAX_LAYER_SIDE`] when larger. A live resize draws into the same layer, scaled, until
+/// The layer an item with effects is drawn into (ADR-0065 §5): its box as planned, in
+/// canvas pixels, scaled down to fit [`MAX_LAYER_SIDE`] with the effects' outset on
+/// every side when larger. The effects grow it by the outset where the first of them
+/// that draws past its input runs (`Chain::pad_at`), and the result is placed over the
+/// box grown by the outset. A live resize draws into the same layer, scaled, until
 /// the plan is made again.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub(crate) struct Boxed {
@@ -350,7 +427,7 @@ pub(crate) struct Boxed {
     size: [f32; 2],
     /// The room the effects need beyond each edge, in canvas pixels.
     outset: f32,
-    /// The layer's size in pixels.
+    /// The size in pixels of the layer the item is drawn into: the box's.
     layer: [u32; 2],
     /// Layer pixels per canvas pixel: 1, or less for a layer scaled down to fit.
     scale: f32,
@@ -381,11 +458,30 @@ impl Boxed {
         Some(Self {
             size,
             outset,
-            layer: [side(padded[0]), side(padded[1])],
+            // The box alone: the effects grow it by the outset where the first of them
+            // that draws past its input runs (`Chain::pad_at`).
+            layer: [side(size[0]), side(size[1])],
             scale,
             input,
             canvas: false,
             model: false,
+        })
+    }
+
+    /// This box with effects that need `outset` pixels instead.
+    fn with_outset(self, outset: u32) -> Option<Self> {
+        let outset = outset as f32;
+        let padded = [self.size[0] + 2.0 * outset, self.size[1] + 2.0 * outset];
+        if !padded.iter().all(|side| side.is_finite() && *side > 0.0) {
+            return None;
+        }
+        let scale = (MAX_LAYER_SIDE as f32 / padded[0].max(padded[1])).min(1.0);
+        let side = |px: f32| ((px * scale).ceil() as u32).clamp(1, MAX_LAYER_SIDE);
+        Some(Self {
+            outset,
+            layer: [side(self.size[0]), side(self.size[1])],
+            scale,
+            ..self
         })
     }
 
@@ -556,6 +652,9 @@ pub(crate) struct Shot {
     /// The scene on program (ADR-0030). `None` when the collection has no scene.
     program: Option<SceneId>,
     scenes: BTreeMap<SceneId, Vec<Placed>>,
+    /// The light items each scene places, bottom first (ADR-0143), whether it was copied
+    /// whole or planned as a transition's end. A scene placing none isn't here.
+    lights: BTreeMap<SceneId, Vec<Lit>>,
     /// The background each copied scene has, by scene, straight sRGB (ADR-0089 §4): a
     /// keyframe scene's is its parent's, and a group, or a group's view, has none. A
     /// scene without one isn't here, and is transparent.
@@ -708,6 +807,27 @@ fn effect_blends(
     }
 }
 
+/// Grows the layer of `owner`'s item, and its chain's pad, to hold what its effects
+/// draw at the settings `from` a Move blends from as well as at their own: an effect's
+/// outset follows its settings (ADR-0136), and the blend passes through
+/// both looks.
+fn widen(shot: &mut Shot, owner: &ChainOwner, from: &[Settings]) {
+    let (Some(chain), Some(planned)) = (shot.chains.get_mut(owner), shot.boxes.get_mut(owner))
+    else {
+        return;
+    };
+    let boxed = planned.boxed;
+    let outset = chain.outset_also(Some(from));
+    if boxed.canvas || boxed.model || outset as f32 <= boxed.outset {
+        return;
+    }
+    let Some(boxed) = boxed.with_outset(outset) else {
+        return;
+    };
+    planned.boxed = boxed;
+    chain.pad = chain.pad_at_also(boxed.scale, Some(from));
+}
+
 /// The cameras a transition's tracks are seen through (ADR-0094 decision 7).
 #[derive(Clone, Copy, Debug, PartialEq)]
 struct TrackCameras {
@@ -796,6 +916,7 @@ impl Default for Shot {
             canvas: Canvas::default(),
             program: None,
             scenes: BTreeMap::new(),
+            lights: BTreeMap::new(),
             backgrounds: BTreeMap::new(),
             cameras: BTreeMap::new(),
             frames: BTreeMap::new(),
@@ -869,6 +990,33 @@ impl Shot {
     /// Whether a transition is running in this shot, so what it draws changes with time.
     pub(crate) fn transitioning(&self) -> bool {
         self.transition.is_some()
+    }
+
+    /// What the frame slots this shot draws hold now ([`crate::slot`]): it changes when
+    /// any of them takes a new frame, so a stream that skips an unchanged picture draws
+    /// one that changed only there. Zero with no slot.
+    pub(crate) fn slot_stamp(&self) -> u64 {
+        self.frames
+            .values()
+            .filter_map(|frame| match &frame.pixels {
+                Pixels::Slot(slot) => Some(slot.latest().version()),
+                _ => None,
+            })
+            .fold(0, u64::wrapping_add)
+    }
+
+    /// What each of its frame slots holds now (ADR-0117 §3): a frame sheet draws its
+    /// pictures later, and each must show the frames it was taken with.
+    pub(crate) fn pin(&self) -> Pinned {
+        Pinned(
+            self.frames
+                .iter()
+                .filter_map(|(source, frame)| match &frame.pixels {
+                    Pixels::Slot(slot) => Some((source.clone(), slot.latest())),
+                    _ => None,
+                })
+                .collect(),
+        )
     }
 
     /// Whether what this shot draws may change with time alone: a transition runs, a
@@ -1266,6 +1414,7 @@ impl PartialEq for Shot {
             && self.program == other.program
             && self.mixes == other.mixes
             && self.scenes == other.scenes
+            && self.lights == other.lights
             && self.backgrounds == other.backgrounds
             && self.cameras == other.cameras
             && self.frames == other.frames
@@ -1507,6 +1656,9 @@ fn plan_inner(
             planner.wake = earliest(planner.wake, end);
             let mut blends = Vec::new();
             effect_blends(&planned.tracks, &shot.chains, &mut blends);
+            for blend in &blends {
+                widen(&mut shot, &blend.owner, &blend.from);
+            }
             let tracks = planned
                 .tracks
                 .into_iter()
@@ -2389,7 +2541,7 @@ impl<'a> Planner<'a, '_> {
         if let Some(planned) = out.boxes.get(&owner) {
             return Some(planned.boxed);
         }
-        let chain = Chain::of_filters(
+        let mut chain = Chain::of_filters(
             &owner,
             item.effects(),
             GpuKey::ItemBox(scene.clone(), item.id().clone()),
@@ -2441,6 +2593,9 @@ impl<'a> Planner<'a, '_> {
             }),
             false => None,
         };
+        if let Some(chain) = chain.as_mut() {
+            chain.pad = (!boxed.canvas).then(|| chain.pad_at(boxed.scale)).flatten();
+        }
         out.boxes.insert(
             owner.clone(),
             ItemBox {
@@ -2550,6 +2705,8 @@ impl<'a> Planner<'a, '_> {
                     | None => continue,
                 },
             };
+            let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
+            note_light(out, id, item, through.as_ref(), &image);
             let Some(geometry) = endpoint_geometry(item, size, canvas) else {
                 continue;
             };
@@ -2631,9 +2788,11 @@ impl<'a> Planner<'a, '_> {
                     },
                 };
                 let effects = self.boxed(id, item, &source, out);
+                let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
+                note_light(out, id, item, through.as_ref(), &source);
                 placed.push(Placed {
                     item: item.id().clone(),
-                    through: keyframe.and_then(|keyframe| Through::of(keyframe, item.id())),
+                    through,
                     source,
                     placement: placement(item.placement()),
                     crop: crop(item.crop()),
@@ -2795,6 +2954,10 @@ enum ChainStep {
     Run(ChainOwner),
 }
 
+/// What a shot's frame slots held at one moment, by source ([`Shot::pin`]).
+#[derive(Debug, Default)]
+pub(crate) struct Pinned(BTreeMap<SourceId, Arc<crate::slot::Latest>>);
+
 /// What [`compose`] draws: which mix, and whether as an output gets it.
 #[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct View<'a> {
@@ -2807,6 +2970,12 @@ pub(crate) struct View<'a> {
     /// The output whose own video chain the frame runs through, for a frame drawn for
     /// that output alone.
     pub(crate) owner: Option<&'a OutputId>,
+    /// What the shot's frame slots held when a frame sheet's picture was taken, drawn in
+    /// place of what they hold now ([`Shot::pin`]). `None` draws what they hold now.
+    pub(crate) pinned: Option<&'a Pinned>,
+    /// Whether the program stage's render thread draws it: a still image's pixels are
+    /// read only if they are held then, never decoded again there ([`crate::still`]).
+    pub(crate) program: bool,
 }
 
 impl<'a> View<'a> {
@@ -2816,6 +2985,17 @@ impl<'a> View<'a> {
             mix,
             stage: true,
             owner,
+            pinned: None,
+            program: true,
+        }
+    }
+
+    /// A monitored scene's own snapshot, as a preview stream of it shows it: before any
+    /// output stage, drawn by the program stage's render thread (ADR-0117 §6).
+    pub(crate) fn monitored() -> Self {
+        Self {
+            program: true,
+            ..Self::default()
         }
     }
 
@@ -2956,6 +3136,14 @@ impl Shot {
         self.scenes.retain(|id, _| scenes.contains(id));
         self.chains.retain(|owner, _| owners.contains(owner));
         self.boxes.retain(|owner, _| owners.contains(owner));
+    }
+
+    /// Whether only items draw `frame`, uploaded under `key`: no video chain reads it
+    /// (a chain's filters work in the frame's own texels) and it stands in for no model.
+    /// Such an upload can be held at the size its items are drawn
+    /// ([`ResourceCache::upload_drawn`], #1139).
+    fn drawn_only(&self, key: &GpuKey, frame: &Frame) -> bool {
+        frame.model.is_none() && !self.chains.values().any(|chain| chain.input == *key)
     }
 
     /// How much each source whose frame a layer draws is enlarged where it is shown
@@ -3752,13 +3940,32 @@ enum Work {
 }
 
 /// The `jstream-snapshot` thread, started on the first `video.snapshot`. It owns the
-/// compositor. Dropping this closes the queue and joins the thread.
-#[derive(Default)]
+/// compositor, opened on the engine's GPU context when there is one (ADR-0117 §5), so it
+/// draws the browser pages and GPU captures painted on it. Dropping this closes the queue
+/// and joins the thread.
 pub(crate) struct SnapshotWorker {
     queue: Mutex<Option<(Sender<Job>, JoinHandle<()>)>>,
+    gpu: Arc<SharedGpu>,
+    /// The engine's capture backends, once it has them, which the thread captures the
+    /// displays, windows and video devices a snapshot shows with (#1184).
+    capture: Arc<Mutex<Option<PreviewCapture>>>,
 }
 
 impl SnapshotWorker {
+    /// A worker whose compositor opens on `gpu`'s context.
+    pub(crate) fn new(gpu: Arc<SharedGpu>) -> Self {
+        Self {
+            queue: Mutex::default(),
+            gpu,
+            capture: Arc::default(),
+        }
+    }
+
+    /// Gives the thread the engine's capture backends, from its next job on.
+    pub(crate) fn set_capture(&self, capture: PreviewCapture) {
+        *lock(&self.capture) = Some(capture);
+    }
+
     /// Queues `snapshot` with the live values `live` applied, as it is at `at`, answering
     /// with `rev`. The returned future resolves when the thread has drawn it.
     pub(crate) fn request(
@@ -3792,9 +3999,11 @@ impl SnapshotWorker {
         let mut queue = lock(&self.queue);
         if queue.is_none() {
             let (tx, rx) = mpsc::channel();
+            let gpu = Arc::clone(&self.gpu);
+            let capture = Arc::clone(&self.capture);
             match thread::Builder::new()
                 .name("jstream-snapshot".into())
-                .spawn(move || worker(rx))
+                .spawn(move || worker(&rx, &gpu, &capture))
             {
                 Ok(handle) => *queue = Some((tx, handle)),
                 Err(err) => {
@@ -3836,12 +4045,30 @@ type Gpu = (Compositor, ResourceCache<GpuKey>, Chains);
 
 /// Serves snapshot jobs in order until the queue closes. A panic while drawing is
 /// caught per job: that job answers `internal` and the compositor is reopened next time.
-fn worker(jobs: Receiver<Job>) {
+fn worker(jobs: &Receiver<Job>, shared: &SharedGpu, capture: &Mutex<Option<PreviewCapture>>) {
     let mut gpu: Option<Gpu> = None;
     let mut backoff = OpenBackoff::default();
-    for Job { work, reply } in jobs {
+    let mut captures = SnapshotCaptures::default();
+    loop {
+        let Job { work, reply } = match jobs.recv_timeout(CAPTURE_IDLE) {
+            Ok(job) => job,
+            Err(mpsc::RecvTimeoutError::Timeout) => {
+                // No snapshot for a while: the captures stop until the next one.
+                captures.stop();
+                continue;
+            }
+            Err(mpsc::RecvTimeoutError::Disconnected) => break,
+        };
+        let shown = captures.prepare(&work, capture);
+        // A compositor whose device is gone draws nothing again: it reopens, on the
+        // engine's context as it is now.
+        if let Some((compositor, ..)) = &gpu
+            && compositor.lost().is_some()
+        {
+            gpu = None;
+        }
         let result = panic::catch_unwind(AssertUnwindSafe(|| {
-            let (compositor, cache, chains) = open(&mut gpu, &mut backoff)?;
+            let (compositor, cache, chains) = open(&mut gpu, &mut backoff, shared)?;
             match &work {
                 Work::Picture {
                     snapshot,
@@ -3855,9 +4082,10 @@ fn worker(jobs: Receiver<Job>) {
                     *at,
                     compositor,
                     (cache, chains),
+                    shown,
                 )
                 .map(|result| CallResult::Query { result }),
-                Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains)),
+                Work::Sheet(sheet) => draw_sheet(sheet, compositor, (cache, chains), shown),
             }
         }));
         let result = result.unwrap_or_else(|_| {
@@ -3870,19 +4098,106 @@ fn worker(jobs: Receiver<Job>) {
     }
 }
 
+/// How long the snapshot thread keeps its captures after its last job: an agent taking
+/// snapshots one after another doesn't wait for each capture to start again.
+const CAPTURE_IDLE: Duration = Duration::from_secs(10);
+
+/// How long a snapshot waits for the captures it shows to deliver a first frame, or fail
+/// to start. One still starting after that draws as nothing.
+const CAPTURE_WAIT: Duration = Duration::from_millis(1500);
+
+/// How often the wait for captures looks at them again.
+const CAPTURE_POLL: Duration = Duration::from_millis(10);
+
+/// The displays, windows and video devices the snapshot thread captures for the
+/// snapshots it draws (#1184), on a `jstream-capture` thread of its own on the CPU path,
+/// as the preview hub does: it can't read the program stage's captures, and a snapshot
+/// draws with no stage running too. Started by the first snapshot that shows one, and
+/// stopped after [`CAPTURE_IDLE`] without a job.
+#[derive(Default)]
+struct SnapshotCaptures {
+    running: Option<RenderCaptures>,
+}
+
+impl SnapshotCaptures {
+    /// Starts what `work` shows and stops the rest, then waits until each has a frame or
+    /// has failed, for at most [`CAPTURE_WAIT`]. Returns the captures to draw with:
+    /// none when it shows none or the engine has no capture backends.
+    fn prepare(&mut self, work: &Work, capture: &Mutex<Option<PreviewCapture>>) -> &dyn Captures {
+        let (wanted, now) = match work {
+            Work::Picture { snapshot, at, .. } => (snapshot.shot().captures().clone(), *at),
+            Work::Sheet(sheet) => (
+                sheet
+                    .samples
+                    .iter()
+                    .flat_map(|sample| sample.snapshot.shot().captures())
+                    .cloned()
+                    .collect(),
+                sheet.start,
+            ),
+        };
+        if wanted.is_empty() {
+            return &NoCaptures;
+        }
+        if self.running.is_none() {
+            let Some(capture) = lock(capture).clone() else {
+                return &NoCaptures;
+            };
+            match capture.spawn() {
+                Ok(running) => self.running = Some(running),
+                Err(err) => {
+                    tracing::warn!(error = %err, "snapshots capture nothing");
+                    return &NoCaptures;
+                }
+            }
+        }
+        let Some(running) = self.running.as_mut() else {
+            return &NoCaptures;
+        };
+        let by = Instant::now() + CAPTURE_WAIT;
+        running.tick(&wanted, now);
+        while !running.settled(&wanted) && Instant::now() < by {
+            thread::sleep(CAPTURE_POLL);
+            running.tick(&wanted, now);
+        }
+        if !running.settled(&wanted) {
+            tracing::info!(
+                waited_ms = CAPTURE_WAIT.as_millis(),
+                "a capture the snapshot shows had no frame yet; it draws as nothing"
+            );
+        }
+        running
+    }
+
+    /// Stops every capture.
+    fn stop(&mut self) {
+        self.running = None;
+    }
+}
+
+/// The snapshot compositor, opened now if there is none: on the engine's GPU context
+/// when it has one, else on a device of its own, hardware first.
 fn open<'a>(
     gpu: &'a mut Option<Gpu>,
     backoff: &mut OpenBackoff,
+    shared: &SharedGpu,
 ) -> Result<&'a mut Gpu, ProtocolError> {
     if gpu.is_none() {
         let now = Instant::now();
         if let Some(error) = backoff.cached(now) {
             return Err(error);
         }
-        match Compositor::open(OpenOptions::hardware()) {
+        let context = shared.context();
+        let opened = match &context {
+            // Its errors stay its own, apart from the stage's on the context (#1268).
+            Some(context) => Ok(Compositor::on_context(context).keeping_own_errors()),
+            None => Compositor::open(OpenOptions::hardware()),
+        };
+        match opened {
             Ok(compositor) => {
                 tracing::info!(
                     adapter = %compositor.adapter_description(),
+                    shared = context.is_some(),
                     "snapshot compositor opened"
                 );
                 backoff.opened();
@@ -3986,8 +4301,9 @@ fn draw(
     at: MediaTime,
     compositor: &mut Compositor,
     caches: (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Result<QueryResult, ProtocolError> {
-    let (full_w, full_h, rgba) = render(shot, live, at, compositor, caches)?;
+    let (full_w, full_h, rgba) = render((shot, None), live, at, compositor, caches, captures)?;
     let (width, height) = fit(full_w, full_h);
     let rgba = scale_down(full_w, full_h, &rgba, width, height);
     let png =
@@ -4006,16 +4322,18 @@ fn draw_sheet(
     sheet: &Sheet,
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Answer {
     let mut layout = None;
     let mut tiles = Vec::with_capacity(sheet.samples.len());
     for sample in &sheet.samples {
         let (width, height, rgba) = render(
-            sample.snapshot.shot(),
+            (sample.snapshot.shot(), Some(&sample.pinned)),
             &sample.live,
             sample.at,
             compositor,
             (&mut *cache, &mut *chains),
+            captures,
         )?;
         let count = u32::try_from(sheet.samples.len()).unwrap_or(u32::MAX);
         let layout = *layout.get_or_insert_with(|| frames::Layout::new(count, (width, height)));
@@ -4039,20 +4357,24 @@ fn draw_sheet(
 /// height and tightly packed RGBA8. The images and filters `cache` no longer needs are
 /// dropped here, on the snapshot thread.
 fn render(
-    shot: &Shot,
+    (shot, pinned): (&Shot, Option<&Pinned>),
     live: &LiveParams,
     at: MediaTime,
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    captures: &dyn Captures,
 ) -> Result<(u32, u32, Vec<u8>), ProtocolError> {
     cache.begin_frame();
     let output = compose(
         compositor,
         (&mut *cache, &mut *chains),
         (shot, at),
-        View::default(),
+        View {
+            pinned,
+            ..View::default()
+        },
         live,
-        &NoCaptures,
+        captures,
         DrawAt::read(shot.canvas().map_err(from_render)?),
     );
     drop(cache.end_frame(compositor));
@@ -4097,7 +4419,10 @@ impl Shot {
     /// read from the chain phase's steps ([`schedule_chains`]), so it counts what each
     /// frame runs once, before any mix draws. A scene's chain is its canvas-sized
     /// composite and one layer and pass per filter; an item's effects are its box's
-    /// layer and pass and one per effect, at the sizes [`Chains`] makes them. A source's
+    /// layer and pass and one per effect, at the sizes [`Chains`] makes them, plus one
+    /// layer and pass for the copy into the grown layer where the chain is padded
+    /// (ADR-0125, [`Chain::pad_layer`]). A filter's own scratch layers (a blur's) are
+    /// not counted. A source's
     /// chain (a `scene` source's included), a scene a `scene_mask` or a `scene` source's
     /// chain reads, and the reference layer a nested scene
     /// without a chain is drawn into for an item's effects (in place of the layer it
@@ -4146,14 +4471,19 @@ impl Shot {
                 | ChainOwner::Output(_) => continue,
             };
             let sizes = chain.layer_sizes(input.0, input.1);
-            // The composite or the box, then one per filter.
+            // An item's chain padded where an effect first draws past the box copies
+            // that effect's input into a grown layer first (ADR-0125, #1285).
+            let pad = chain.pad_layer(input.0, input.1);
+            // The composite or the box, then one per filter, and the pad copy.
             let count = u32::try_from(sizes.len())
                 .unwrap_or(u32::MAX)
-                .saturating_add(1);
+                .saturating_add(1)
+                .saturating_add(u32::from(pad.is_some()));
             *layers = layers.saturating_add(count);
             *passes = passes.saturating_add(count);
             let bytes = sizes
                 .into_iter()
+                .chain(pad)
                 .map(layer_bytes)
                 .fold(layer_bytes(input), u64::saturating_add);
             cost.layer_bytes = cost.layer_bytes.saturating_add(bytes);
@@ -4247,7 +4577,7 @@ impl CaptureKey {
     /// device opens once, so every source showing it shares one capture: its key names
     /// no source.
     pub(crate) fn for_source(spec: CaptureSpec, source: SourceId) -> Self {
-        let source = (!matches!(spec, CaptureSpec::Device(_))).then_some(source);
+        let source = (!matches!(spec, CaptureSpec::Device(..))).then_some(source);
         Self {
             spec,
             source,
@@ -4357,6 +4687,71 @@ pub(crate) fn compose(
     )
 }
 
+/// What `source`'s placements need of `frame`'s resolution over every mix, due this tick
+/// or not, so a mix that only claims its layers doesn't let its upload shrink
+/// ([`ResourceCache::upload_drawn`], #1139). `scales` holds [`Shot::scales`], measured
+/// once per compose and only when a frame needs it.
+fn planned_need(
+    scales: &mut Option<BTreeMap<SourceId, f32>>,
+    shot: &Shot,
+    source: &SourceId,
+    frame: &Frame,
+) -> f32 {
+    let scales = scales.get_or_insert_with(|| shot.scales());
+    scales.get(source).map_or(0.0, |scale| {
+        scale * frame.extent[0] as f32 / frame.width.max(1) as f32
+    })
+}
+
+/// Uploads a still image's frame for `key`, held at the size its items draw it when
+/// `drawn` gives their planned need (as [`ResourceCache::upload_drawn`] holds one).
+/// Its pixels are read only if the cache needs them: on the program stage's render
+/// thread (`program`) only if they are held, asking for them when they aren't (the
+/// texture held already is drawn meanwhile), and saying once the cache has what it
+/// needs so they can be let go of; elsewhere they are decoded again if need be
+/// ([`crate::still`]).
+fn upload_still(
+    compositor: &Compositor,
+    cache: &mut ResourceCache<GpuKey>,
+    (key, frame, still): (&GpuKey, &Frame, &crate::still::ShownStill),
+    program: bool,
+    drawn: Option<f32>,
+) -> Result<(), RenderError> {
+    let mut asked = false;
+    let rgba = || {
+        asked = true;
+        if program { still.held() } else { still.read() }.map(Packed)
+    };
+    let size = (frame.width, frame.height);
+    let uploaded = match drawn {
+        Some(planned) => cache
+            .upload_drawn_if_needed(compositor, key, frame.version, size, planned, rgba)?
+            .is_some(),
+        None => cache
+            .upload_if_needed(compositor, key, frame.version, size, rgba)?
+            .is_some(),
+    };
+    if program {
+        // Kept while no mix draws it, so showing it again needs no pixels.
+        cache.keep_while(key, still.alive());
+        if uploaded {
+            still.uploaded();
+        } else if asked {
+            still.want();
+        }
+    }
+    Ok(())
+}
+
+/// A still's packed pixels, as an upload reads them.
+struct Packed(Arc<VideoFrame>);
+
+impl AsRef<[u8]> for Packed {
+    fn as_ref(&self) -> &[u8] {
+        crate::slot::rgba(&self.0)
+    }
+}
+
 /// [`compose`], timing each unit of the work into `meter` (ADR-0103): each source's
 /// upload, each capture, each video chain (an item's with its box), each nested pass and
 /// the composite, and the phases they make up. The readback's wait counts toward the
@@ -4381,6 +4776,7 @@ pub(crate) fn compose_metered(
     // A follow camera no frame has drawn for a while starts again at rest.
     chains.cameras().sweep(at);
     let uploads = Instant::now();
+    let mut planned = None;
     for (key, source) in &shot.uploads {
         let Some(frame) = shot.frames.get(source) else {
             continue;
@@ -4392,6 +4788,71 @@ pub(crate) fn compose_metered(
             Pixels::Gpu { frame, context } => {
                 if compositor.context() == Some(context) {
                     cache.import_premultiplied(compositor, key, frame)?;
+                }
+            }
+            // Held at the size its items draw it, unless something reads its texels
+            // as they are: a video chain, or a model it stands in for (#1139).
+            Pixels::Copied(_) | Pixels::Video(_) if shot.drawn_only(key, frame) => {
+                let planned = planned_need(&mut planned, shot, source, frame);
+                cache.upload_drawn(
+                    compositor,
+                    key,
+                    frame.version,
+                    (frame.width, frame.height),
+                    frame.rgba(),
+                    planned,
+                )?;
+                if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                    cache.set_extent(key, extent);
+                }
+            }
+            Pixels::Slot(slot) => {
+                // Read without a lock, and let go of here without freeing the frame:
+                // the slot's writers free what they replace (R-RT-003).
+                let latest = view
+                    .pinned
+                    .and_then(|pinned| pinned.0.get(source))
+                    .map_or_else(|| slot.latest(), Arc::clone);
+                let size = latest.frame().info().size;
+                // Only a frame of the planned size is placed as planned; one of another
+                // size waits for the plan its producer asked for.
+                if [size.width(), size.height()] == [frame.width, frame.height] {
+                    if shot.drawn_only(key, frame) {
+                        let planned = planned_need(&mut planned, shot, source, frame);
+                        cache.upload_drawn(
+                            compositor,
+                            key,
+                            latest.version(),
+                            (size.width(), size.height()),
+                            latest.rgba(),
+                            planned,
+                        )?;
+                    } else {
+                        cache.upload(
+                            compositor,
+                            key,
+                            latest.version(),
+                            size.width(),
+                            size.height(),
+                            latest.rgba(),
+                        )?;
+                    }
+                    if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                        cache.set_extent(key, extent);
+                    }
+                }
+            }
+            Pixels::Still(still) => {
+                upload_still(
+                    compositor,
+                    cache,
+                    (key, frame, still),
+                    view.program,
+                    shot.drawn_only(key, frame)
+                        .then(|| planned_need(&mut planned, shot, source, frame)),
+                )?;
+                if let Ok(extent) = FrameSize::new(frame.extent[0], frame.extent[1]) {
+                    cache.set_extent(key, extent);
                 }
             }
             Pixels::Copied(_) | Pixels::Video(_) => {
@@ -4913,19 +5374,140 @@ fn draw_model(
         chains.fail_box(owner, &error);
         return Ok(());
     }
-    let (Some(model), Some(layer)) = (chains.model(source), cache.get(key)) else {
-        chains.fail(owner);
-        return Ok(());
+    // A `scene`-lit model in a 3D scene is lit by the scene's lights (ADR-0143
+    // decision 3); in a 2D scene it is studio-lit.
+    let mut lights = std::mem::take(&mut chains.lights);
+    lights.clear();
+    let lit = shown.lighting == Lighting::Scene && camera.is_some();
+    if lit {
+        scene_lights(shot, scene_id, at, live, &mut lights);
+        let shading = lights
+            .iter()
+            .filter(|light| light.kind != jstream_render::LightKind::Ambient)
+            .count();
+        if shading > jstream_render::MAX_SCENE_LIGHTS
+            && !chains.lights_warned.contains(scene_id)
+            && chains.lights_warned.insert(scene_id.clone())
+        {
+            tracing::warn!(
+                scene = %scene_id,
+                lights = shading,
+                max = jstream_render::MAX_SCENE_LIGHTS,
+                "scene has more lights than a model is lit by; the first ones in stacking order light it"
+            );
+        }
+    }
+    let drawn = match (chains.model(source), cache.get(key)) {
+        (Some(model), Some(layer)) => Some(compositor.draw_model(
+            &jstream_render::ModelDraw {
+                model,
+                geometry,
+                camera,
+                lighting: shown.lighting,
+                lights: lit.then_some(lights.as_slice()),
+            },
+            layer,
+        )),
+        _ => None,
     };
-    compositor.draw_model(
-        &jstream_render::ModelDraw {
-            model,
-            geometry,
-            camera,
-            lighting: shown.lighting,
-        },
-        layer,
-    )
+    chains.lights = lights;
+    match drawn {
+        Some(result) => result,
+        None => {
+            chains.fail(owner);
+            Ok(())
+        }
+    }
+}
+
+/// The lights scene `id` places at `at`, in its stacking order (ADR-0143 decision 2):
+/// each `light` item at the centre of its box and shining out of its back, with its
+/// live values and motion applied, at its kind's intensity times its opacity. A light
+/// that isn't placed by a box (a filled or canvas placement) has no position, and is
+/// left out.
+/// Records `item` of scene `id` in `out`'s lights when what it shows, `source`, is a
+/// `light` source's frame, once per item however often the scene is planned.
+fn note_light(
+    out: &mut Shot,
+    id: &SceneId,
+    item: &GraphItem,
+    through: Option<&Through>,
+    source: &SourceRef,
+) {
+    let SourceRef::Frame(source) = source else {
+        return;
+    };
+    if out
+        .frames
+        .get(source)
+        .and_then(|frame| frame.light)
+        .is_none()
+    {
+        return;
+    }
+    let lights = out.lights.entry(id.clone()).or_default();
+    if lights.iter().any(|lit| &lit.item == item.id()) {
+        return;
+    }
+    lights.push(Lit {
+        item: item.id().clone(),
+        through: through.cloned(),
+        source: source.clone(),
+        placement: placement(item.placement()),
+        crop: crop(item.crop()),
+        opacity: item.opacity().get(),
+        motion: TrackMotion::same(item.id().clone(), motion::of(item)),
+    });
+}
+
+fn scene_lights(
+    shot: &Shot,
+    id: &SceneId,
+    at: MediaTime,
+    live: &LiveParams,
+    lights: &mut Vec<jstream_render::SceneLight>,
+) {
+    let Some(placed) = shot.lights.get(id) else {
+        return;
+    };
+    for placed in placed {
+        let Some(light) = shot
+            .frames
+            .get(&placed.source)
+            .and_then(|frame| frame.light)
+        else {
+            continue;
+        };
+        let (placement, crop) = live.apply_to(
+            &placed.item,
+            placed.through.as_ref(),
+            placed.placement,
+            placed.crop,
+        );
+        let (item, modifiers) = &placed.motion.to;
+        let by = shot.motion_at(item, modifiers, at);
+        let (placement, _, opacity) = motion::apply(&by, placement, crop, placed.opacity);
+        let Placement::Geometry(geometry) = placement else {
+            continue;
+        };
+        let (position, aim) = geometry.light_pose();
+        let [r, g, b] = light.color;
+        lights.push(jstream_render::SceneLight {
+            kind: match light.kind {
+                LightType::Point => jstream_render::LightKind::Point,
+                LightType::Spot => jstream_render::LightKind::Spot,
+                LightType::Directional => jstream_render::LightKind::Directional,
+                LightType::Ambient => jstream_render::LightKind::Ambient,
+            },
+            position,
+            aim,
+            color: Color { r, g, b, a: 1.0 },
+            intensity: light.intensity * opacity,
+            range_px: light.range_px,
+            cone_deg: light.cone_deg,
+            softness: light.softness,
+        });
+    }
 }
 
 /// Marks the layers [`compose`] draws `view` at `output` through as used in the cache's
@@ -5431,8 +6013,9 @@ pub(crate) mod tests {
         Frame::new(16, 9, &bytes, u64::from(rgba[1])).expect("invariant: 16x9 RGBA8")
     }
 
-    /// An item's effects layer is its box plus the outset on every side (ADR-0065 §5):
-    /// the box is drawn centred in it, flat, and the layer is placed over the box grown
+    /// An item's effects layer is its box, which the effects pad by the outset on every
+    /// side (ADR-0065 §5): the box is drawn into it, flat, and the result is placed over
+    /// the box grown
     /// in proportion, turned as the box is. A box too large for one texture is scaled
     /// down uniformly, and a legacy transform has the box its quad covers.
     #[test]
@@ -5447,10 +6030,11 @@ pub(crate) mod tests {
         placed.flip_h = true;
         placed.fit_mode = FitMode::Fill;
         let boxed = super::Boxed::new(&placed, 4, None).expect("finite");
-        assert_eq!(boxed.layer, [108, 58]);
+        // The box alone: the effects pad it by the outset as they run.
+        assert_eq!(boxed.layer, [100, 50]);
 
         let inside = boxed.inside(&placed).expect("inside");
-        assert_eq!((inside.center.x.get(), inside.center.y.get()), (54.0, 29.0));
+        assert_eq!((inside.center.x.get(), inside.center.y.get()), (50.0, 25.0));
         assert_eq!(
             (inside.size.width.get(), inside.size.height.get()),
             (100.0, 50.0)
@@ -6313,6 +6897,7 @@ pub(crate) mod tests {
             zero(),
             &mut compositor,
             (&mut cache, &mut Chains::default()),
+            &super::NoCaptures,
         )
         .expect("draw");
         let QueryResult::VideoSnapshot { png, .. } = result else {
@@ -6976,6 +7561,181 @@ pub(crate) mod tests {
         assert_ne!(out.pixel(28, 15), Some(RED), "outside it");
     }
 
+    /// A still only items draw is held at the size they draw it, on a cache that allows
+    /// it, from its first upload, and still shows its colour (#1139). One a video chain
+    /// reads, or one standing in for a model, is not.
+    #[test]
+    fn a_still_drawn_small_is_uploaded_small() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        cache.draw_uploads_small(true);
+        let size = FrameSize::new(1920, 1080).expect("invariant: non-zero");
+        let bytes: Vec<u8> = std::iter::repeat_n(GREEN, 1024 * 512).flatten().collect();
+        let big = Frame::new(1024, 512, &bytes, 3).expect("invariant: 1024x512 RGBA8");
+        // A 1024x512 frame in a 128x64 box: an eighth each way, held at a quarter.
+        let small = Placement::Geometry(jstream_protocol::ItemGeometry {
+            size: jstream_protocol::Size::try_new(128.0, 64.0).expect("positive"),
+            ..jstream_protocol::ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+        });
+        let mut drawn = shot(vec![(
+            "program",
+            vec![
+                fill("red"),
+                placed(SourceRef::Frame(SourceId::new("big")), small),
+            ],
+        )]);
+        drawn.frames.insert(SourceId::new("big"), big);
+        drawn
+            .uploads
+            .push((GpuKey::Frame(SourceId::new("big")), SourceId::new("big")));
+        let key = GpuKey::Frame(SourceId::new("big"));
+        for _ in 0..2 {
+            let out = frame_at(&mut compositor, &mut cache, &drawn, None, size);
+            assert_eq!(out.pixel(960, 540), Some(GREEN), "the still's centre");
+            let image = cache.get(&key).expect("uploaded");
+            assert_eq!(
+                (image.width(), image.height(), image.extent()),
+                (256, 128, (1024, 512))
+            );
+        }
+        let frame = drawn.frames[&SourceId::new("big")].clone();
+        assert!(drawn.drawn_only(&key, &frame));
+        drawn.chains.insert(
+            ChainOwner::Source(SourceId::new("big")),
+            Chain {
+                input: key.clone(),
+                filters: Vec::new(),
+                pad: None,
+            },
+        );
+        assert!(!drawn.drawn_only(&key, &frame), "a chain reads its texels");
+    }
+
+    /// A still image's pixels are let go of once the program stage has uploaded them,
+    /// and its cache keeps the upload while nothing draws it, so a cut back shows it at
+    /// once. A new upload there waits for the stills thread to decode them again; any
+    /// other compositor decodes them itself (#1139).
+    #[test]
+    fn a_still_is_drawn_from_its_upload_after_its_pixels_go() {
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let size = FrameSize::new(64, 36).expect("invariant: non-zero");
+        let pixels = |value: [u8; 4]| {
+            let info = jstream_media::VideoFrameInfo {
+                size: FrameSize::new(512, 512).expect("invariant: non-zero"),
+                format: jstream_media::PixelFormat::Rgba8,
+                color: jstream_media::ColorInfo::default(),
+                pts: zero(),
+            };
+            let rgba = std::iter::repeat_n(value, 512 * 512).flatten().collect();
+            jstream_media::VideoFrame::new(info, vec![jstream_media::Plane::new(rgba, 512 * 4)])
+                .expect("invariant: a packed frame")
+        };
+        let loads = Arc::new(std::sync::atomic::AtomicUsize::new(0));
+        let counted = Arc::clone(&loads);
+        let still = Arc::new(jstream_sources::Still::new(
+            Arc::new(pixels(GREEN)),
+            "still.png".into(),
+            move || {
+                counted.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+                Ok(pixels(GREEN))
+            },
+        ));
+        let stills = crate::still::Stills::default();
+        let shown = stills.show(still);
+        let mut planned = shot(vec![(
+            "program",
+            vec![
+                fill("red"),
+                placed(SourceRef::Frame(SourceId::new("still")), FULL),
+            ],
+        )]);
+        planned.frames.insert(
+            SourceId::new("still"),
+            Frame::from_still(Arc::clone(&shown), 3),
+        );
+        let key = GpuKey::Frame(SourceId::new("still"));
+        planned.uploads.push((key.clone(), SourceId::new("still")));
+        let away = shot(vec![("program", vec![fill("red")])]);
+        let draw_shot = |compositor: &mut Compositor,
+                         cache: &mut ResourceCache<GpuKey>,
+                         shot: &Shot,
+                         program| {
+            cache.begin_frame();
+            let output = compose(
+                compositor,
+                (cache, &mut Chains::default()),
+                (shot, zero()),
+                View {
+                    program,
+                    ..View::default()
+                },
+                &LiveParams::default(),
+                &Every(None),
+                super::DrawAt::read(size),
+            )
+            .expect("compose");
+            drop(cache.end_frame(compositor));
+            output.pixels().expect("invariant: read back").pixel(32, 18)
+        };
+        let draw = |compositor: &mut Compositor, cache: &mut ResourceCache<GpuKey>, program| {
+            draw_shot(compositor, cache, &planned, program)
+        };
+        let wait = |done: &dyn Fn() -> bool| {
+            let deadline = Instant::now() + Duration::from_secs(5);
+            while !done() && Instant::now() < deadline {
+                std::thread::sleep(Duration::from_millis(2));
+            }
+            done()
+        };
+
+        let mut program = ResourceCache::new();
+        program.draw_uploads_small(true);
+        assert_eq!(draw(&mut compositor, &mut program, true), Some(GREEN));
+        assert!(wait(&|| shown.held().is_none()), "let go of once uploaded");
+        assert_eq!(
+            draw(&mut compositor, &mut program, true),
+            Some(GREEN),
+            "from its upload"
+        );
+
+        // Cut away and back: the program stage's cache kept the upload, so it is drawn
+        // at once, with no decode.
+        for _ in 0..3 {
+            assert_eq!(
+                draw_shot(&mut compositor, &mut program, &away, true),
+                Some(RED)
+            );
+        }
+        assert!(program.get(&key).is_some(), "kept while nothing draws it");
+        assert_eq!(
+            draw(&mut compositor, &mut program, true),
+            Some(GREEN),
+            "at once"
+        );
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 0);
+
+        // A cache with no upload of it (a new program stage): nothing to draw yet.
+        let mut fresh = ResourceCache::new();
+        assert_eq!(draw(&mut compositor, &mut fresh, true), Some(RED));
+        assert!(fresh.get(&key).is_none(), "nothing uploaded");
+        assert!(
+            wait(&|| shown.held().is_some()),
+            "decoded again for the draw"
+        );
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert_eq!(draw(&mut compositor, &mut fresh, true), Some(GREEN));
+        assert!(wait(&|| shown.held().is_none()));
+
+        // `video.snapshot`'s compositor reads it itself.
+        let mut snapshot = ResourceCache::new();
+        assert_eq!(draw(&mut compositor, &mut snapshot, false), Some(GREEN));
+        assert_eq!(loads.load(std::sync::atomic::Ordering::Relaxed), 2);
+    }
+
     /// A shot measures how much each frame it draws is enlarged, against the frame's
     /// extent, the most of any of its items, and a chained source as 1 (ADR-0073).
     #[test]
@@ -7006,6 +7766,7 @@ pub(crate) mod tests {
             Chain {
                 input: GpuKey::Frame(SourceId::new("red")),
                 filters: Vec::new(),
+                pad: None,
             },
         );
         assert_eq!(scales(&planned)[1], (SourceId::new("red"), 1.0));

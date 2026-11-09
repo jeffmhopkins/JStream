@@ -247,6 +247,37 @@ fn video_packets_keep_order_and_pts_and_finish_drains() {
     assert_eq!(session.input().push(frame(20)), Err(PushError::Closed));
 }
 
+/// An encoder opened for NV12 takes RGBA and BGRA frames too: the session converts
+/// them on its own thread, so the platform's encoder only ever sees NV12 (ADR-0117 §4).
+#[test]
+fn an_nv12_session_converts_rgb_frames_on_its_thread() {
+    let session = VideoSession::open(&FakeCodecs, video_config(3), options(64)).unwrap();
+    let sub = session.subscribe();
+    let input = session.input();
+    for (i, format) in [PixelFormat::Rgba8, PixelFormat::Bgra8, PixelFormat::Nv12]
+        .into_iter()
+        .enumerate()
+    {
+        let rgb = VideoFrame::zeroed(VideoFrameInfo {
+            size: size(),
+            format,
+            color: ColorInfo::default(),
+            pts: MediaTime::new(i as i64, fps()),
+        })
+        .unwrap();
+        input.push(rgb.into()).unwrap();
+    }
+    let stats = session.finish().unwrap();
+    let (packets, end) = drain(&sub);
+    assert_eq!(
+        end,
+        StreamEnd::Finished,
+        "the fake encoder refuses any other format"
+    );
+    assert_eq!(packets.iter().map(index).collect::<Vec<_>>(), [0, 1, 2]);
+    assert_eq!(stats.encoded, 3);
+}
+
 /// A snapshot of a video session taken while frames flow never counts a frame encoded,
 /// refused or published (one packet per frame) that it doesn't count received, nor more
 /// keyframes than packets. The push used to count a frame received only after sending it,

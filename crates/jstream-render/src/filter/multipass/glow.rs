@@ -1,10 +1,15 @@
 //! `glow`: soft light around the shape. It is a drop shadow with no offset, a colour
-//! and a strength that scales the blurred alpha (clamped to 1), drawn under the input,
-//! within the input's frame (ADR-0065 §5).
+//! and a strength that scales the blurred alpha (clamped to 1), drawn under the input.
+//! It lights the transparent area around an alpha shape (a logo, text, a keyed camera),
+//! so on an opaque picture it shows only past the picture's edge: on an item, in the
+//! room its `max_outset_px` gives the effects layer; on a source or scene chain, whose
+//! output is the input's frame (ADR-0065 §5), not at all. `bloom` is the light that
+//! bright parts of any picture give off.
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
 
 use super::drop_shadow::Under;
+use super::within;
 use crate::error::RenderError;
 use crate::filter::params::{Read, color, filter, float};
 use crate::filter::{Ctx, Pass};
@@ -15,23 +20,39 @@ pub(super) const KIND: &str = "glow";
 /// White, straight linear RGBA.
 const DEFAULT_COLOR: [f32; 4] = [1.0; 4];
 
+/// The largest radius a setting takes, px: also the most the glow draws past an item's
+/// box.
+const MAX_RADIUS: f64 = 100.0;
+
 pub(super) fn descriptor() -> KindDescriptor {
-    filter(
-        KIND,
-        "Glow",
-        vec![
-            color("color", "Color", true, "#ffffff"),
-            float("radius", "Radius", 0.0, 100.0, 16.0, "px"),
-            ParamDescriptor {
-                description: Some(
-                    "Multiplies the glow's opacity before it is clamped, so values above \
+    KindDescriptor {
+        max_outset_px: Some(MAX_RADIUS as u32),
+        ..filter(
+            KIND,
+            "Glow",
+            vec![
+                color("color", "Color", true, "#ffffff"),
+                ParamDescriptor {
+                    description: Some(
+                        "How far the light reaches from the shape's edge. A glow lights the \
+                     transparent area around a shape, so an opaque picture shows it only \
+                     past its edge, around an item; for the light of a picture's bright \
+                     parts, use Bloom."
+                            .into(),
+                    ),
+                    ..float("radius", "Radius", 0.0, MAX_RADIUS, 16.0, "px")
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "Multiplies the glow's opacity before it is clamped, so values above \
                      1 widen its bright core."
-                        .into(),
-                ),
-                ..float("strength", "Strength", 0.0, 4.0, 1.0, "")
-            },
-        ],
-    )
+                            .into(),
+                    ),
+                    ..float("strength", "Strength", 0.0, 4.0, 1.0, "")
+                },
+            ],
+        )
+    }
 }
 
 pub(super) struct Glow(Under);
@@ -52,9 +73,18 @@ fn read(settings: &Settings) -> Under {
     }
 }
 
+/// The radius: as far as the glow reaches past the shape's edge.
+pub(super) fn outset(settings: &Settings) -> f32 {
+    within(read(settings).radius, MAX_RADIUS as f32)
+}
+
 impl Pass for Glow {
     fn update(&mut self, settings: &Settings) {
         self.0 = read(settings);
+    }
+
+    fn reach(&self) -> Option<f32> {
+        Some(self.0.reach())
     }
 
     fn encode(
@@ -102,5 +132,34 @@ mod tests {
         let out = run(&mut opened, &mut strong, &input, 0.0);
         assert!(out.pixel(4, 10).expect("inside")[3] > a(4, 10));
         near(&out, 10, 10, [0, 0, 255, 255], 0);
+    }
+
+    /// Padded, as an item's effects pad their layer (ADR-0065 §5): an opaque frame is
+    /// placed in the middle of a larger transparent one, and the glow shows around it,
+    /// where unpadded it is hidden under the frame (#1226).
+    #[test]
+    fn padded_the_glow_of_an_opaque_frame_shows_around_it() {
+        let Some(mut opened) = open() else {
+            return;
+        };
+        let input = crate::tests::solid(&opened.compositor, 8, 8, [255, 255, 255, 255]);
+        let mut glow = filter(
+            "glow",
+            json!({"color": "#0000ff", "radius": 4.0, "strength": 4.0}),
+        );
+        let out = run(&mut opened, &mut glow, &input, 0.0);
+        near(&out, 0, 0, [255, 255, 255, 255], 0);
+        glow.set_pad(6);
+        assert_eq!(glow.output_size(8, 8), (20, 20));
+        let out = run(&mut opened, &mut glow, &input, 0.0);
+        assert_eq!((out.width(), out.height()), (20, 20));
+        near(&out, 10, 10, [255, 255, 255, 255], 0);
+        near(&out, 6, 6, [255, 255, 255, 255], 0);
+        let ring = out.pixel(4, 10).expect("inside");
+        assert!(
+            ring[2] > 200 && ring[0] < 10 && ring[3] > 100,
+            "blue: {ring:?}"
+        );
+        assert!(out.pixel(0, 0).expect("inside")[3] < 40);
     }
 }

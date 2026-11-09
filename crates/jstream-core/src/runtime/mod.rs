@@ -9,6 +9,7 @@
 
 mod captures;
 mod devices;
+mod gpu;
 mod pipeline;
 mod publish;
 mod render;
@@ -19,23 +20,26 @@ pub(crate) use captures::Backends as CaptureBackends;
 #[cfg(test)]
 pub(crate) use captures::{RETRY_MS, start as start_capture};
 pub(crate) use captures::{RenderCaptures, SizeChange, spawn as spawn_captures};
+pub(crate) use captures::{format_fps, pixel_format_name, readable as readable_format};
 pub(crate) use devices::SharedVideoDevices;
+pub(crate) use gpu::SharedGpu;
 pub(crate) use pipeline::DeviceLoss;
 pub use pipeline::OutputStats;
 #[cfg(test)]
 pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture};
 #[cfg(test)]
-pub(crate) use pipeline::{DrawHook, gpu_draw_with};
+pub(crate) use pipeline::{DrawHook, MixFrame, gpu_draw_with};
 pub(crate) use pipeline::{
     EncodeKey, Encoders, Gate, MediaHost, MixKey, OpenDraw, OutputEncode, Pending, PipelineEvent,
     Program, Release, Running, StartError, cpu_draw, frame_budget, frame_period, launch,
     launch_program, launch_vcam, on_frame_grid, output_size, parts_from,
 };
+pub(crate) use pipeline::{PictureOutput, picture_queue};
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;
 pub use publish::{
     LinkState, LivePublish, OpenPublish, PublishError, RecordingPublish, RtmpPublish, connect_rtmp,
 };
-pub(crate) use render::{Collector, Garbage, RenderHub, RenderReader, RenderSnapshot};
+pub(crate) use render::{Collector, Garbage, RenderHub, RenderReader, RenderSnapshot, SceneShots};
 pub(crate) use sink::Destination;
 pub(crate) use vcam::VcamOut;

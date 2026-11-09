@@ -40,7 +40,7 @@
 //! painted yet asks too. Without a context the browser engine has no device and the
 //! source shows its stand-in.
 
-use std::collections::{BTreeMap, HashMap, HashSet, VecDeque};
+use std::collections::{BTreeMap, BTreeSet, HashMap, HashSet, VecDeque};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, Weak};
@@ -62,7 +62,9 @@ use crate::lock;
 use crate::pack_source;
 use crate::profile::SourceMeters;
 use crate::runtime::{frame_period, on_frame_grid};
+use crate::slot::{FrameSlot, Stored};
 use crate::snapshot::{CaptureKey, Frame, Look};
+use crate::still::Stills;
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
 /// thread never keeps it alive.
@@ -90,6 +92,12 @@ pub(crate) struct LiveSources {
     /// Numbers the builds, so a result installs only if nothing changed the source
     /// since it was asked for.
     tickets: u64,
+    /// Counts the builds installed, so what is planned from the running sources alone
+    /// (the warm scenes' captures) is planned again when one changes.
+    installs: u64,
+    /// The sources the warm scenes draw (ADR-0117 §7): they never rest, so showing one
+    /// finds a page loaded and painting.
+    warm: BTreeSet<SourceId>,
     worker: Arc<Worker>,
     host: Weak<dyn LiveHost>,
     /// Whether the thread has been started.
@@ -100,8 +108,8 @@ pub(crate) struct LiveSources {
     /// Whether a source's sound came, went or moved on the clock since
     /// [`take_audio`](Self::take_audio) last said.
     audio_changed: bool,
-    /// The program stage's GPU context, which the browser engine paints on, while one
-    /// runs.
+    /// The GPU context the browser engine paints on: the engine's (ADR-0117 §5), which
+    /// the program stage draws on too, or `None` when there is none.
     context: Option<ContextKey>,
     /// Every asset a video filter of the collection reads, and what loading it gave.
     assets: HashMap<AssetKey, AssetEntry>,
@@ -111,6 +119,8 @@ pub(crate) struct LiveSources {
     /// What each source's paints, builds and plans' looks cost, and the plans, for
     /// `profile.get` (ADR-0103). The thread holds it too.
     meters: Arc<SourceMeters>,
+    /// The thread that holds and lets go of shown stills' pixels (#1139).
+    stills: Stills,
 }
 
 /// One asset a video filter reads.
@@ -177,6 +187,10 @@ struct Running {
     /// instance before it that its build kept ([`Entry::anchor`]).
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
+    /// The still image it shows and the frame plans show it by, for a source whose one
+    /// frame is a [`jstream_sources::Still`]: its pixels are held only while a draw
+    /// needs them ([`crate::still`]).
+    shown_still: Option<(Arc<jstream_sources::Still>, Frame)>,
     /// The last plan that reached it, or the plan current when it was built, so the
     /// first plan to reach it after that counts as showing it again when one between
     /// didn't.
@@ -191,6 +205,9 @@ struct Running {
     drawn: Arc<AtomicBool>,
     /// The texture it showed last, for a source that paints on the GPU.
     shown_gpu: Option<(GpuFrame, Frame)>,
+    /// A painter's frame slot (ADR-0117 §3), and the frame plans show it by: the thread
+    /// stores each new frame of the same size there, with no re-plan.
+    slot: Option<(Arc<FrameSlot>, Option<Frame>)>,
     /// Its own size, which its frames are placed at, for a kind that draws them at a
     /// density ([`Source::set_density`]); `None` for the others, which are never built
     /// again for one.
@@ -268,6 +285,8 @@ impl LiveSources {
             plan_wake: None,
             page_wake: None,
             tickets: 0,
+            installs: 0,
+            warm: BTreeSet::new(),
             worker: Arc::new(Worker::new(
                 Arc::new(SystemClock::new()),
                 Arc::clone(&meters),
@@ -280,6 +299,7 @@ impl LiveSources {
             assets: HashMap::new(),
             loaded: Arc::new(FilterAssets::new()),
             meters,
+            stills: Stills::default(),
         }
     }
 
@@ -341,8 +361,19 @@ impl LiveSources {
     }
 
     /// The browser engine `browser` sources and its presets (`youtube_chat`) open their
-    /// pages in. Sources of those kinds built before have none, so they are built again.
-    pub(crate) fn set_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
+    /// pages in, painting on `context`, the engine's GPU context (ADR-0117 §5), which it is
+    /// given before any page opens. Sources of those kinds built before have none, so
+    /// they are built again.
+    pub(crate) fn set_browser(
+        &mut self,
+        browser: Arc<dyn BrowserBackend>,
+        context: Option<&GpuContext>,
+    ) {
+        browser.use_device(context);
+        self.context = context.map(GpuContext::key);
+        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            running.shown_gpu = None;
+        }
         self.ctx.browser = Some(browser);
         for entry in self
             .entries
@@ -353,11 +384,16 @@ impl LiveSources {
         }
     }
 
-    /// Gives the browser engine the program stage's GPU context to paint on, or takes
-    /// it away (`None`) when the stage stops. A browser engine set after this gets the
-    /// device from the next stage.
+    /// Gives the browser engine the GPU context to paint on: the engine's, as the browser
+    /// engine is set and again once a lost one is replaced, or `None` when there is
+    /// none. The context it already paints on is not given again, so pages keep their
+    /// frames (ADR-0117 §5).
     pub(crate) fn use_gpu(&mut self, context: Option<&GpuContext>) {
-        self.context = context.map(GpuContext::key);
+        let key = context.map(GpuContext::key);
+        if key == self.context {
+            return;
+        }
+        self.context = key;
         if let Some(browser) = &self.ctx.browser {
             browser.use_device(context);
         }
@@ -389,6 +425,20 @@ impl LiveSources {
         }
     }
 
+    /// Takes the program's base frame rate. A page that follows it (`fps` 0, #1405) is
+    /// built again at a new one, so it paints as often as the program draws.
+    fn sync_frame_rate(&mut self, fps: u32) {
+        if self.ctx.frame_rate == fps {
+            return;
+        }
+        self.ctx.frame_rate = fps;
+        for entry in self.entries.values_mut() {
+            if follows_program_rate(&entry.kind, &entry.settings) {
+                entry.settings = Settings::new();
+            }
+        }
+    }
+
     /// Brings the live sources in line with the collection's: queues a build for every
     /// source that is new or whose settings changed, and drops the ones deleted.
     ///
@@ -401,6 +451,7 @@ impl LiveSources {
             crate::audio::retain_scopes(scopes, state);
         }
         self.sync_heard(state);
+        self.sync_frame_rate(state.base_fps());
         let registry = Arc::clone(&self.registry);
         let before = self.entries.len();
         self.entries.retain(|id, _| {
@@ -647,13 +698,19 @@ impl LiveSources {
         }
         let plan = self.plan;
         self.audio_changed = true;
+        self.installs += 1;
         let running = match built.result {
             Ok(source) => Some(Running {
+                slot: source
+                    .painter()
+                    .and_then(|painter| FrameSlot::new(painter.frame()))
+                    .map(|slot| (slot, None)),
                 audio: source.sound(),
                 source,
                 ticket: built.ticket,
                 start: entry.anchor.unwrap_or_else(|| self.worker.now()),
                 shown: None,
+                shown_still: None,
                 planned: plan,
                 looked: plan,
                 resting: false,
@@ -702,10 +759,16 @@ impl LiveSources {
                     painter: r.source.painter()?,
                     start: r.start,
                     drawn: Arc::clone(&r.drawn),
+                    slot: r.slot.as_ref().map(|(slot, _)| Arc::clone(slot)),
                 })
             })
             .collect();
-        lock(&self.worker.queue).painters = painters;
+        let mut queue = lock(&self.worker.queue);
+        queue.painters = painters;
+        // Painted from now on, on the thread's own wake.
+        queue.paint_wake = Some(queue.clock.now());
+        drop(queue);
+        self.worker.wake.notify_all();
     }
 
     /// The current time on the clock sources run on.
@@ -845,6 +908,11 @@ impl LiveSources {
         self.entries.get(source_id)?.running.as_ref()?.size
     }
 
+    /// How many builds have been installed: it changes whenever a running source does.
+    pub(crate) fn installs(&self) -> u64 {
+        self.installs
+    }
+
     /// The capture the program stage runs for `source_id`, if it is a capture source
     /// that captures something, as [`look`](Self::look) names it.
     pub(crate) fn capture_key(&self, source_id: &SourceId) -> Option<CaptureKey> {
@@ -964,22 +1032,96 @@ impl LiveSources {
             }
             if jstream_sources::opens_browser(&entry.kind) {
                 // Not painted yet: the stand-in, until a re-plan finds the first paint.
-                let (frame, _) = Self::cpu_frame(source_id, running, at, now, versions)?;
+                // A page that paints on the CPU hands its paints over through its frame
+                // slot instead, with no re-plan (ADR-0117 §3).
+                let (frame, own) =
+                    Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
+                let next = if running.slot.is_some() { own } else { next };
                 return Some(Look::Frame(frame, next));
             }
         }
-        let (frame, next) = Self::cpu_frame(source_id, running, at, now, versions)?;
+        let (frame, next) = Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
         Some(Look::Frame(frame, next))
     }
 
     /// [`Self::look`]'s frame from the source's CPU frame at `at`, its own time.
+    /// A painter's frame through its slot ([`Running::slot`]): the frame plans show it
+    /// by, kept while the painter keeps its size, and a new one at a new size. `None`
+    /// for a source with no slot, or a frame the slot can't hold (not packed RGBA8),
+    /// which is shown as any other source's from then on.
+    fn slotted(
+        running: &mut Running,
+        video: &Arc<VideoFrame>,
+        versions: &mut u64,
+    ) -> Option<Frame> {
+        let Running {
+            slot: slotted,
+            extent,
+            size,
+            source,
+            ..
+        } = running;
+        let (slot, shown) = slotted.as_mut()?;
+        // The painter's frame as it is when stored, not `video`: the sources thread may
+        // have painted and stored a newer one since it was read.
+        let painter = source.painter();
+        let resized = slot.store_latest(|| {
+            painter
+                .as_ref()
+                .map_or_else(|| Arc::clone(video), |painter| painter.frame())
+        }) == Stored::Refused;
+        if resized && !slot.replace(Arc::clone(video)) {
+            *slotted = None;
+            return None;
+        }
+        match shown {
+            Some(frame) if !resized => Some(frame.clone()),
+            _ => {
+                *versions = versions.saturating_add(1);
+                let frame = Frame::from_slot(Arc::clone(slot), *versions);
+                let frame = match *extent {
+                    Some(extent) => frame.placed_at(extent),
+                    None => frame,
+                };
+                *size = Some(extent.unwrap_or(video.info().size));
+                *shown = Some(frame.clone());
+                Some(frame)
+            }
+        }
+    }
+
     fn cpu_frame(
         source_id: &SourceId,
         running: &mut Running,
-        at: MediaTime,
-        now: MediaTime,
+        (at, now): (MediaTime, MediaTime),
         versions: &mut u64,
+        stills: &Stills,
     ) -> Option<(Frame, Option<MediaTime>)> {
+        if let Some(still) = running.source.still() {
+            // Never decoded here: the stills thread holds its pixels for the draws.
+            let frame = match &running.shown_still {
+                Some((shown, frame)) if Arc::ptr_eq(shown, &still) => frame.clone(),
+                _ => {
+                    *versions = versions.saturating_add(1);
+                    let size = still.size();
+                    let shown = stills.show(Arc::clone(&still));
+                    let frame = Frame::from_still(shown, *versions);
+                    let frame = match running.extent {
+                        Some(extent) => frame.placed_at(extent),
+                        None => frame,
+                    };
+                    running.size = Some(running.extent.unwrap_or(size));
+                    running.shown_still = Some((still, frame.clone()));
+                    frame
+                }
+            };
+            return Some((
+                frame
+                    .with_model(running.source.model())
+                    .with_light(running.source.light()),
+                None,
+            ));
+        }
         let video = match running.source.frame(at) {
             Ok(video) => video,
             Err(err) => {
@@ -987,6 +1129,10 @@ impl LiveSources {
                 return None;
             }
         };
+        if let Some(frame) = Self::slotted(running, &video, versions) {
+            // The thread paints it and stores its new frames on its own wake.
+            return Some((frame, None));
+        }
         let frame = match &running.shown {
             Some((shown, frame)) if Arc::ptr_eq(shown, &video) => frame.clone(),
             _ => {
@@ -1007,7 +1153,9 @@ impl LiveSources {
             .and_then(|change| after(running.start, change, now.timebase()));
         // A model source's frame is its model's stand-in (ADR-0107): the item draws the
         // model in its place.
-        let frame = frame.with_model(running.source.model());
+        let frame = frame
+            .with_model(running.source.model())
+            .with_light(running.source.light());
         Some((frame, next))
     }
 
@@ -1019,13 +1167,57 @@ impl LiveSources {
     /// ([`Self::look`]).
     pub(crate) fn rest_undrawn(&mut self) {
         let plan = self.plan;
-        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+        let warm = &self.warm;
+        for running in self
+            .entries
+            .iter_mut()
+            .filter(|(id, _)| !warm.contains(*id))
+            .filter_map(|(_, e)| e.running.as_mut())
+        {
             if running.looked != plan && !running.resting {
                 running.resting = true;
                 running.drawn.store(false, Ordering::Relaxed);
                 running.source.set_drawn(false);
             }
         }
+    }
+
+    /// Keeps `sources`, which the warm scenes draw (ADR-0117 §7), from resting: one
+    /// resting now is told it is drawn again, and the thread paints it from now on. One
+    /// that leaves the set rests at the next [`rest_undrawn`](Self::rest_undrawn) if no
+    /// mix looked at it.
+    pub(crate) fn set_warm(&mut self, sources: &BTreeSet<SourceId>) {
+        if self.warm == *sources {
+            return;
+        }
+        self.warm.clone_from(sources);
+        let mut painted = false;
+        for (_, entry) in self
+            .entries
+            .iter_mut()
+            .filter(|(id, _)| sources.contains(*id))
+        {
+            let Some(running) = entry.running.as_mut() else {
+                continue;
+            };
+            if std::mem::take(&mut running.resting) {
+                running.source.set_drawn(true);
+                running.drawn.store(true, Ordering::Relaxed);
+                painted |= running.source.painter().is_some();
+            }
+        }
+        if painted {
+            let mut queue = lock(&self.worker.queue);
+            let now = queue.clock.now();
+            queue.paint_wake = crate::snapshot::earliest(queue.paint_wake, Some(now));
+            self.worker.wake.notify_all();
+        }
+    }
+
+    /// Whether `source_id`'s live instance rests, for tests.
+    #[cfg(test)]
+    pub(crate) fn resting(&self, source_id: &SourceId) -> Option<bool> {
+        Some(self.entries.get(source_id)?.running.as_ref()?.resting)
     }
 
     /// Ends a plan of the program mix: a source's sound is heard while the plan reached
@@ -1070,6 +1262,20 @@ impl LiveSources {
     /// animations out of phase with each other wake the thread once a frame at most.
     pub(crate) fn wake_at(&mut self, at: Option<MediaTime>, fps: u32) {
         self.plan_wake = at.map(|at| replan_time(at, fps));
+        let kicked = {
+            let mut queue = lock(&self.worker.queue);
+            queue.fps = fps;
+            // A plan may have shown a painter again that the thread stopped painting.
+            let kick = queue.paint_wake.is_none() && !queue.painters.is_empty();
+            if kick {
+                queue.paint_wake = Some(queue.clock.now());
+            }
+            kick
+        };
+        if kicked {
+            self.start();
+            self.worker.wake.notify_all();
+        }
         self.set_wake();
     }
 
@@ -1182,6 +1388,10 @@ struct Queue {
     loads: VecDeque<AssetJob>,
     /// When to re-plan next.
     wake: Option<MediaTime>,
+    /// When to paint the painters with frame slots next, which needs no plan.
+    paint_wake: Option<MediaTime>,
+    /// The collection's base frame rate, whose frame grid paints are timed to.
+    fps: u32,
     /// Builds taken but not installed yet, so `settled` waits for them too.
     building: usize,
     /// The running sources that draw their frames as they come due, with each one's
@@ -1199,6 +1409,8 @@ impl Worker {
                 jobs: VecDeque::new(),
                 loads: VecDeque::new(),
                 wake: None,
+                paint_wake: None,
+                fps: jstream_protocol::DEFAULT_BASE_FPS,
                 building: 0,
                 painters: Vec::new(),
                 clock,
@@ -1242,14 +1454,24 @@ struct Painted {
     start: MediaTime,
     /// Whether a mix drew it in the latest plans ([`Running::drawn`]).
     drawn: Arc<AtomicBool>,
+    /// Where its new frames go without a re-plan ([`Running::slot`]); `None` for a
+    /// painter whose frames aren't packed RGBA8, whose frames reach the picture only
+    /// through a re-plan.
+    slot: Option<Arc<FrameSlot>>,
 }
 
 /// What the thread does next.
 enum Next {
     Build(Job),
     Load(AssetJob),
-    /// Paint these at this time, then re-plan.
-    Replan(Vec<Painted>, MediaTime),
+    /// Paint these at this time, then re-plan if the plan is due (or a painter's frame
+    /// changed size).
+    Tick {
+        painters: Vec<Painted>,
+        now: MediaTime,
+        replan: bool,
+        fps: u32,
+    },
     Exit,
 }
 
@@ -1271,7 +1493,7 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                     queue.building += 1;
                     break Next::Load(job);
                 }
-                let Some(due) = queue.wake else {
+                let Some(due) = crate::snapshot::earliest(queue.wake, queue.paint_wake) else {
                     queue = worker
                         .wake
                         .wait(queue)
@@ -1280,8 +1502,17 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                 };
                 let now = queue.clock.now();
                 if now >= due {
-                    queue.wake = None;
-                    break Next::Replan(queue.painters.clone(), now);
+                    let replan = queue.wake.is_some_and(|wake| now >= wake);
+                    if replan {
+                        queue.wake = None;
+                    }
+                    queue.paint_wake = None;
+                    break Next::Tick {
+                        painters: queue.painters.clone(),
+                        now,
+                        replan,
+                        fps: queue.fps,
+                    };
                 }
                 let wait = until(now, due);
                 queue = worker
@@ -1293,18 +1524,43 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
         };
         match next {
             Next::Exit => return,
-            Next::Replan(painters, now) => {
-                // Drawing can take milliseconds, so it happens here, before the re-plan
+            Next::Tick {
+                painters,
+                now,
+                mut replan,
+                fps,
+            } => {
+                // Drawing can take milliseconds, so it happens here, before a re-plan
                 // takes the collection lock and asks for the painted frames.
                 // A source no mix drew in the latest plans is skipped.
+                let mut next = None;
                 for painted in painters.iter().filter(|p| p.drawn.load(Ordering::Relaxed)) {
                     let started = Instant::now();
-                    painted.painter.paint(since(now, painted.start));
+                    let at = since(now, painted.start);
+                    painted.painter.paint(at);
                     worker.meters.painted(&painted.source_id, started.elapsed());
+                    // A painter with a slot hands its new frame to the compositors there
+                    // (ADR-0117 §3); only one of a new size needs a plan to place it.
+                    let Some(slot) = &painted.slot else {
+                        continue;
+                    };
+                    replan |= slot.store_latest(|| painted.painter.frame()) == Stored::Refused;
+                    let due = painted
+                        .painter
+                        .next_change(at)
+                        .and_then(|change| after(painted.start, change, now.timebase()));
+                    next = crate::snapshot::earliest(next, due);
                 }
-                match host.upgrade() {
-                    Some(host) => host.replan(),
-                    None => return,
+                {
+                    let mut queue = lock(&worker.queue);
+                    let next = next.map(|due| replan_time(due, fps));
+                    queue.paint_wake = crate::snapshot::earliest(queue.paint_wake, next);
+                }
+                if replan {
+                    match host.upgrade() {
+                        Some(host) => host.replan(),
+                        None => return,
+                    }
                 }
             }
             Next::Load(job) => {
@@ -1376,6 +1632,10 @@ fn first_size(source: &mut dyn Source) -> Option<FrameSize> {
     if source.capture().is_some() {
         return None;
     }
+    if let Some(still) = source.still() {
+        // Its size, without taking the pixels it holds for the first plan.
+        return Some(still.size());
+    }
     let frame = source.frame(MediaTime::zero(Timebase::MILLIS)).ok()?;
     Some(frame.info().size)
 }
@@ -1431,6 +1691,12 @@ impl MediaClock for SystemClock {
 /// The settings a source of `kind` is built from, which a change to builds it again: all of
 /// them, but a pack source's stand-in is built from its size alone, as its program takes
 /// the other settings live.
+/// Whether a source of `kind` built from `settings` paints at the program's frame rate:
+/// a `browser` page with an `fps` of 0.
+fn follows_program_rate(kind: &str, settings: &Settings) -> bool {
+    kind == "browser" && settings.get("fps").and_then(serde_json::Value::as_u64) == Some(0)
+}
+
 fn built_from(kind: &str, settings: &Settings) -> Settings {
     if pack_source::is_pack_kind(kind) {
         pack_source::stand_in_settings(settings)

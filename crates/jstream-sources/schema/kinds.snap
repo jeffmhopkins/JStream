@@ -269,13 +269,13 @@ source: crates/jstream-sources/tests/kinds.rs
       {
         "id": "fps",
         "type": "int",
-        "min": 1,
+        "min": 0,
         "max": 60,
         "step": 1,
         "unit": "fps",
-        "default": 30,
+        "default": 0,
         "label": "Frame rate",
-        "description": "The most frames a second the page paints. It paints less when nothing changes.",
+        "description": "The most frames a second the page paints. It paints less when nothing changes. 0 follows the program's frame rate, so a page's animation is as smooth as the program.",
         "live": false
       },
       {
@@ -559,6 +559,105 @@ source: crates/jstream-sources/tests/kinds.rs
     ]
   },
   {
+    "kind_id": "light",
+    "category": "source",
+    "name": "Light",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "type",
+        "type": "enum",
+        "options": [
+          {
+            "value": "point",
+            "label": "Point"
+          },
+          {
+            "value": "spot",
+            "label": "Spot"
+          },
+          {
+            "value": "directional",
+            "label": "Directional"
+          },
+          {
+            "value": "ambient",
+            "label": "Ambient"
+          }
+        ],
+        "default": "point",
+        "label": "Type",
+        "description": "Point shines every way from the item's centre; spot shines out of the back of the item within its cone; directional shines out of its back from infinitely far; ambient lights everything evenly.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#ffffff",
+        "label": "Color",
+        "description": "The light's colour.",
+        "live": true
+      },
+      {
+        "id": "intensity",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Intensity",
+        "description": "How bright it is on a surface facing it, before it fades; the item's opacity scales it, so fading or hiding the item dims it.",
+        "live": true
+      },
+      {
+        "id": "range_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 1000000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Range",
+        "description": "How far a point or spot light reaches before it has faded to nothing; 0 never fades.",
+        "live": true
+      },
+      {
+        "id": "cone_deg",
+        "type": "float",
+        "min": 1.0,
+        "max": 170.0,
+        "step": 1.0,
+        "unit": "deg",
+        "default": 45.0,
+        "label": "Cone",
+        "description": "A spot light's full cone angle.",
+        "visible_if": {
+          "param": "type",
+          "equals": "spot"
+        },
+        "live": true
+      },
+      {
+        "id": "softness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.2,
+        "label": "Softness",
+        "description": "The share of a spot cone, from its edge inward, over which it fades out.",
+        "visible_if": {
+          "param": "type",
+          "equals": "spot"
+        },
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "media",
     "category": "source",
     "name": "Media file",
@@ -709,11 +808,15 @@ source: crates/jstream-sources/tests/kinds.rs
           {
             "value": "unlit",
             "label": "Unlit"
+          },
+          {
+            "value": "scene",
+            "label": "Scene"
           }
         ],
         "default": "studio",
         "label": "Lighting",
-        "description": "Studio lights it from above and to the left of the camera; unlit shows its colours as they are.",
+        "description": "Studio lights it from above and to the left of the camera; unlit shows its colours as they are; scene lights it with the light sources placed in its 3D scene (studio in a 2D scene).",
         "live": true
       },
       {
@@ -1564,12 +1667,45 @@ source: crates/jstream-sources/tests/kinds.rs
     "params": [
       {
         "id": "device",
-        "type": "string",
-        "multiline": false,
+        "type": "capture_target",
+        "kind": "device",
         "max_len": 1024,
         "default": "",
         "label": "Device",
-        "description": "The ID of the webcam or capture card, as the platform lists it. Empty captures the first device listed.",
+        "description": "The ID of the webcam or capture card, as `capture.targets` lists it. Empty captures the first device listed.",
+        "live": false
+      },
+      {
+        "id": "resolution",
+        "type": "capture_format",
+        "part": "resolution",
+        "target": "device",
+        "default": "",
+        "label": "Resolution",
+        "description": "The frame size to capture, as `<width>x<height>` (`1920x1080`), one the device lists in `capture.targets`. Empty lets the engine choose: the largest up to 1920x1080.",
+        "group": "Format",
+        "live": false
+      },
+      {
+        "id": "fps",
+        "type": "capture_format",
+        "part": "fps",
+        "target": "device",
+        "default": 0,
+        "label": "Frame rate",
+        "description": "The frames per second to capture, one the device lists for the resolution. 0 lets the engine choose: the fastest.",
+        "group": "Format",
+        "live": false
+      },
+      {
+        "id": "pixel_format",
+        "type": "capture_format",
+        "part": "pixel_format",
+        "target": "device",
+        "default": "",
+        "label": "Video format",
+        "description": "How the device sends its frames: `mjpeg` (compressed, decoded by the engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine choose: uncompressed when it can.",
+        "group": "Format",
         "live": false
       }
     ]

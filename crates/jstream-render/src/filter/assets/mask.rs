@@ -27,7 +27,7 @@ pub(super) const IMAGE_KIND: &str = "image_mask";
 pub(super) const SCENE_KIND: &str = "scene_mask";
 
 /// Image types a mask asset may be; the runtime decodes them.
-const IMAGE_TYPES: [&str; 5] = ["png", "jpg", "jpeg", "webp", "gif"];
+pub(in crate::filter) const IMAGE_TYPES: [&str; 5] = ["png", "jpg", "jpeg", "webp", "gif"];
 
 const SHADER: Shader = Shader {
     label: "assets-mask",
@@ -141,6 +141,11 @@ impl Pass for Mask {
 
     fn set_reference(&mut self, image: Option<Arc<Image>>) {
         self.reference.image = image;
+    }
+
+    /// The input times a coverage: transparent stays transparent.
+    fn reach(&self) -> Option<f32> {
+        Some(0.0)
     }
 
     fn encode(

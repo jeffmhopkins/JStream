@@ -14,6 +14,9 @@
 //! The stream runs on a `pw_thread_loop`, PipeWire's own thread, and its callbacks
 //! (format changes, buffers, frames, state changes) run there. They catch panics
 //! (R-UNSAFE-005) and only touch the stream's [`Callbacks`] and the shared state.
+//!
+//! The stream's `pointer` is the trait's `None` for now: a portal stream knows where the
+//! pointer is only from the cursor metadata, which the engine doesn't ask for yet.
 
 use std::collections::HashMap;
 use std::collections::hash_map::Entry;
