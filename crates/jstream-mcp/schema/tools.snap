@@ -580,8 +580,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Since 0.117 it also sets a limit on the GPU bytes the\nwarm scenes are estimated to hold (ADR-0150): the scenes are walked in order,\nand the first that would pass the limit is left cold with every scene after it.\nThe Preview scene is never left cold. Fails with `invalid_argument` on `scenes`\nabove [`MAX_WARM_SCENES`], or on `gpu_mib` above [`MAX_WARM_GPU_MIB`].",
                 "properties": {
+                  "gpu_mib": {
+                    "description": "The limit on the warm scenes' estimated GPU memory, in MiB (since 0.117,\nADR-0150): 0 for no limit, the default, up to [`MAX_WARM_GPU_MIB`]. Left out,\nthe limit doesn't change.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "scenes": {
                     "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
                     "format": "uint32",
@@ -7163,8 +7172,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Since 0.117 it also sets a limit on the GPU bytes the\nwarm scenes are estimated to hold (ADR-0150): the scenes are walked in order,\nand the first that would pass the limit is left cold with every scene after it.\nThe Preview scene is never left cold. Fails with `invalid_argument` on `scenes`\nabove [`MAX_WARM_SCENES`], or on `gpu_mib` above [`MAX_WARM_GPU_MIB`].",
                 "properties": {
+                  "gpu_mib": {
+                    "description": "The limit on the warm scenes' estimated GPU memory, in MiB (since 0.117,\nADR-0150): 0 for no limit, the default, up to [`MAX_WARM_GPU_MIB`]. Left out,\nthe limit doesn't change.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "scenes": {
                     "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
                     "format": "uint32",
@@ -15528,8 +15546,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Since 0.117 it also sets a limit on the GPU bytes the\nwarm scenes are estimated to hold (ADR-0150): the scenes are walked in order,\nand the first that would pass the limit is left cold with every scene after it.\nThe Preview scene is never left cold. Fails with `invalid_argument` on `scenes`\nabove [`MAX_WARM_SCENES`], or on `gpu_mib` above [`MAX_WARM_GPU_MIB`].",
                 "properties": {
+                  "gpu_mib": {
+                    "description": "The limit on the warm scenes' estimated GPU memory, in MiB (since 0.117,\nADR-0150): 0 for no limit, the default, up to [`MAX_WARM_GPU_MIB`]. Left out,\nthe limit doesn't change.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "scenes": {
                     "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
                     "format": "uint32",
@@ -24181,8 +24208,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Since 0.117 it also sets a limit on the GPU bytes the\nwarm scenes are estimated to hold (ADR-0150): the scenes are walked in order,\nand the first that would pass the limit is left cold with every scene after it.\nThe Preview scene is never left cold. Fails with `invalid_argument` on `scenes`\nabove [`MAX_WARM_SCENES`], or on `gpu_mib` above [`MAX_WARM_GPU_MIB`].",
                 "properties": {
+                  "gpu_mib": {
+                    "description": "The limit on the warm scenes' estimated GPU memory, in MiB (since 0.117,\nADR-0150): 0 for no limit, the default, up to [`MAX_WARM_GPU_MIB`]. Left out,\nthe limit doesn't change.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "scenes": {
                     "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
                     "format": "uint32",
@@ -33475,8 +33511,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Since 0.117 it also sets a limit on the GPU bytes the\nwarm scenes are estimated to hold (ADR-0150): the scenes are walked in order,\nand the first that would pass the limit is left cold with every scene after it.\nThe Preview scene is never left cold. Fails with `invalid_argument` on `scenes`\nabove [`MAX_WARM_SCENES`], or on `gpu_mib` above [`MAX_WARM_GPU_MIB`].",
                 "properties": {
+                  "gpu_mib": {
+                    "description": "The limit on the warm scenes' estimated GPU memory, in MiB (since 0.117,\nADR-0150): 0 for no limit, the default, up to [`MAX_WARM_GPU_MIB`]. Left out,\nthe limit doesn't change.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "scenes": {
                     "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
                     "format": "uint32",
@@ -34004,8 +34049,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Since 0.117 it also sets a limit on the GPU bytes the\nwarm scenes are estimated to hold (ADR-0150): the scenes are walked in order,\nand the first that would pass the limit is left cold with every scene after it.\nThe Preview scene is never left cold. Fails with `invalid_argument` on `scenes`\nabove [`MAX_WARM_SCENES`], or on `gpu_mib` above [`MAX_WARM_GPU_MIB`].",
                 "properties": {
+                  "gpu_mib": {
+                    "description": "The limit on the warm scenes' estimated GPU memory, in MiB (since 0.117,\nADR-0150): 0 for no limit, the default, up to [`MAX_WARM_GPU_MIB`]. Left out,\nthe limit doesn't change.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
                   "scenes": {
                     "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
                     "format": "uint32",

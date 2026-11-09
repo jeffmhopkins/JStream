@@ -46,6 +46,10 @@ pub const MAX_WARM_SCENES: u32 = 8;
 /// changes it.
 pub const DEFAULT_WARM_SCENES: u32 = 3;
 
+/// The largest GPU-byte limit `studio.set_warm` takes for the warm scenes, in MiB
+/// (64 GiB; ADR-0150).
+pub const MAX_WARM_GPU_MIB: u32 = 65_536;
+
 /// A change to the collection state: undoable, batchable and atomic.
 ///
 /// Serialized with an internal `type` tag holding the command name (`noun.verb`,
@@ -1675,13 +1679,21 @@ pub enum Action {
     /// program, the most recent first. An application setting, not collection state: it
     /// changes no `rev`, is never undone, emits no event, holds whatever collection is
     /// open, and is kept across restarts when the engine's host names a file for it.
-    /// `studio.get` reports it. Fails with `invalid_argument` on `scenes` above
-    /// [`MAX_WARM_SCENES`].
+    /// `studio.get` reports it. Since 0.117 it also sets a limit on the GPU bytes the
+    /// warm scenes are estimated to hold (ADR-0150): the scenes are walked in order,
+    /// and the first that would pass the limit is left cold with every scene after it.
+    /// The Preview scene is never left cold. Fails with `invalid_argument` on `scenes`
+    /// above [`MAX_WARM_SCENES`], or on `gpu_mib` above [`MAX_WARM_GPU_MIB`].
     #[serde(rename = "studio.set_warm")]
     StudioSetWarm {
         /// The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is
         /// [`DEFAULT_WARM_SCENES`].
         scenes: u32,
+        /// The limit on the warm scenes' estimated GPU memory, in MiB (since 0.117,
+        /// ADR-0150): 0 for no limit, the default, up to [`MAX_WARM_GPU_MIB`]. Left out,
+        /// the limit doesn't change.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        gpu_mib: Option<u32>,
     },
     /// Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows
     /// one: the placement's `visible` becomes `true` as `item.set_visible` would make it,

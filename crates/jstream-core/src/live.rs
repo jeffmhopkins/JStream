@@ -922,6 +922,16 @@ impl LiveSources {
         self.entries.get(source_id)?.running.as_ref()?.size
     }
 
+    /// Whether a mix (the program's, a video mix's or a preview's) looked at
+    /// `source_id`'s running instance in the latest plan: it is drawn anyway, so a warm
+    /// scene that draws it holds nothing more for it (ADR-0150).
+    pub(crate) fn reached(&self, source_id: &SourceId) -> bool {
+        self.entries
+            .get(source_id)
+            .and_then(|entry| entry.running.as_ref())
+            .is_some_and(|running| running.looked == self.plan)
+    }
+
     /// How many builds have been installed: it changes whenever a running source does.
     pub(crate) fn installs(&self) -> u64 {
         self.installs

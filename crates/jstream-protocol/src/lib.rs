@@ -64,8 +64,8 @@ pub use camera_motion::{
 pub use clap::{ClapFailed, ClapFolder, ClapFound, ClapScanInfo};
 pub use command::{
     Action, Batch, BlendMode, Blending, Command, CommandClass, Crop, DEFAULT_WARM_SCENES, Edit,
-    EffectsSpace, ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, MAX_WARM_SCENES, SceneRole,
-    SourceKind, Vec2,
+    EffectsSpace, ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, MAX_WARM_GPU_MIB, MAX_WARM_SCENES,
+    SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, CodecDownloadInfo, EncoderProfile, EncoderProfileInfo,
@@ -143,7 +143,7 @@ pub use profile::{
     DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, JtunnelSenderInfo,
     MAX_PROFILE_SECONDS, MAX_PROFILE_TOP, MixerProfile, NetworkInputProfile, NetworkProfile,
     PhaseProfile, PlanProfile, ProfileInfo, ProfileStream, ProfileUnit, SourceProfile,
-    StreamProfile, ThreadProfile, UnitProfile, ViewProfile,
+    StreamProfile, ThreadProfile, UnitProfile, ViewProfile, WarmSceneProfile,
 };
 pub use ptz::{
     MAX_PTZ_CAMERA_NAME, MAX_PTZ_PAN, MAX_PTZ_PAN_SPEED, MAX_PTZ_PRESET, MAX_PTZ_SHOTS,

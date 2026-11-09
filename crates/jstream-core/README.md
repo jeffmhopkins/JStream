@@ -496,7 +496,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   (`Engine::start_stats_heartbeat`), which ticks while no output runs (*Engine load*
   below).
 - **Profile** (`profile/`, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)):
-  `profile.get`, answered outside the collection lock. The render thread and the
+  `profile.get`, answered outside the collection lock, which it takes only at the end
+  to copy the warm scenes' estimates (`warm`, ADR-0150). The render thread and the
   preview hub's thread each time their frames with a `DrawMeter` that
   `snapshot::compose_metered` fills: each source's upload, each capture, each video
   chain (an item's with its box), each nested scene's pass and the composite, and the
@@ -1265,7 +1266,12 @@ before taking the collection lock (`Engine::warm_call`): it sets the budget, rep
 the warm scenes, and, with the collection lock released, saves the number in the file
 the host named with `Engine::with_warm_file` (`warm_file.rs`, `warm-scenes.json` in the
 data folder for the desktop app and the daemon), which the next start reads back. A
-file that can't be read or holds too many is logged and read as none. Their captures stay running (see
+file that can't be read or holds too many is logged and read as none. Since 0.117 the
+call's `gpu_mib` also sets the warm scenes' GPU-memory limit
+([ADR-0150](../../docs/adr/0150-the-warm-scenes-gpu-byte-budget.md), `Studio::gpu_mib`,
+0 for none, the default), which a call without it keeps; the studio keeps it as it
+keeps the count, `studio.get` reports it as `warm_gpu_mib`, and the file holds it
+beside the count (a file without it has no limit). Their captures stay running (see
 *Preview streams*), and their other sources never rest (`LiveSources::set_warm`), so a
 page they show stays loaded and painting, and a `restart_on_show` media file waits at
 its start with its first frame decoded.
@@ -2592,7 +2598,16 @@ shows that frame in its first plan and plays on with no seek. A preview that loo
 a cued source first lets it play on from there (`Source::uncue`). A warm scene is not
 composited unless it is monitored. The set is also published after `studio.set_warm`
 changes the budget, and after each plan when an edit kept a scene warm or bound one.
-The budget's estimate of GPU bytes is still to come.
+The GPU-memory limit (ADR-0150) is applied to what was planned on every update, since
+the sizes it reads change without a new plan (`WarmCaptures::trim`): each source a
+warm scene draws is estimated at one RGBA8 frame of its size (its stored frame's, else
+its live instance's, else the last size seen, else the canvas), counted once, and at
+nothing when a mix looked at it in the latest plan (`LiveSources::reached`). The
+scenes are walked in the warm order; the first that would take the total past the
+limit is left cold with every one after it, and the Preview scene never is. A cold
+scene's captures aren't published and its sources may rest. `profile.get`'s `warm`
+reports each scene's estimate and whether it is cold (`WarmCaptures::report`, read
+under the collection lock after the profile is built).
 
 A JPEG or PNG stream gets a picture queue instead of an encoder session
 (`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read

@@ -1621,7 +1621,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   logged and replaced on the next change
   ([ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)).
 - **Warm scenes:** `warm-scenes.json` (version 1) in the data directory, how many scenes
-  besides the program the studio keeps warm (`studio.set_warm`, ADR-0117 §7). The
+  besides the program the studio keeps warm (`studio.set_warm`, ADR-0117 §7) and, since
+  0.117, the limit on their GPU memory in MiB (`gpu_mib`, ADR-0150; 0, or missing in an
+  older file, for none). The
   desktop app and the daemon name it (`Engine::with_warm_file`); `jstream-core` reads it
   at startup and replaces it atomically after every change. A file it can't read, or
   one past the most, is logged and read as the default.

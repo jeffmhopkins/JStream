@@ -306,6 +306,11 @@ impl Frame {
         }
     }
 
+    /// Its size in pixels: what it holds on the GPU once uploaded (ADR-0150).
+    pub(crate) fn pixel_size(&self) -> [u32; 2] {
+        [self.width, self.height]
+    }
+
     /// Its size in pixels and the size it is placed at, for tests.
     #[cfg(test)]
     pub(crate) fn sizes(&self) -> ([u32; 2], [u32; 2]) {

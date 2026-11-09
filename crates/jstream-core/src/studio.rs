@@ -19,7 +19,8 @@
 //! the warm budget (`studio.set_warm`, [`DEFAULT_WARM_SCENES`] until it is set). The Preview scene is
 //! warm even past the budget, so a budget of 0 keeps only it. A running transition's
 //! destination is the program scene itself. The budget is an application setting: a
-//! new collection's studio keeps it ([`Studio::fresh`]).
+//! new collection's studio keeps it ([`Studio::fresh`]). So is its limit on the GPU bytes
+//! the warm scenes hold (ADR-0150), which the engine applies once it has planned them.
 
 use jstream_graph::State;
 use jstream_protocol::{
@@ -43,6 +44,9 @@ pub(crate) struct Studio {
     recent: Vec<SceneId>,
     /// How many scenes besides the program are kept warm, at most [`MAX_WARM_SCENES`].
     budget: usize,
+    /// The limit on the warm scenes' estimated GPU memory in MiB, 0 for none
+    /// (ADR-0150).
+    gpu_mib: u32,
 }
 
 impl Default for Studio {
@@ -53,6 +57,7 @@ impl Default for Studio {
             running: None,
             recent: Vec::new(),
             budget: DEFAULT_WARM_SCENES as usize,
+            gpu_mib: 0,
         }
     }
 }
@@ -63,6 +68,7 @@ impl Studio {
     pub(crate) fn fresh(&self) -> Studio {
         Studio {
             budget: self.budget,
+            gpu_mib: self.gpu_mib,
             ..Studio::default()
         }
     }
@@ -78,6 +84,24 @@ impl Studio {
         let budget = budget.min(RECENT);
         let changed = self.budget != budget;
         self.budget = budget;
+        changed
+    }
+
+    /// The limit on the warm scenes' estimated GPU memory in MiB, 0 for none.
+    pub(crate) fn gpu_mib(&self) -> u32 {
+        self.gpu_mib
+    }
+
+    /// The same limit in bytes, `None` for none.
+    pub(crate) fn gpu_limit(&self) -> Option<u64> {
+        (self.gpu_mib > 0).then(|| u64::from(self.gpu_mib) << 20)
+    }
+
+    /// Sets the GPU-byte limit, which the caller checked is at most
+    /// [`MAX_WARM_GPU_MIB`](jstream_protocol::MAX_WARM_GPU_MIB). `true` when it changed.
+    pub(crate) fn set_gpu_mib(&mut self, gpu_mib: u32) -> bool {
+        let changed = self.gpu_mib != gpu_mib;
+        self.gpu_mib = gpu_mib;
         changed
     }
 

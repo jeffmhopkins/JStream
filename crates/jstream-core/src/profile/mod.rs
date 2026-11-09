@@ -436,8 +436,10 @@ fn window(
             now.mixer.max_nanos,
         ),
         views: view_profiles(&now.views, base.map(|base| &base.views), since, span),
-        // The engine adds the JTunnel receiver's, which isn't sampled.
+        // The engine adds the JTunnel receiver's and the warm scenes', which aren't
+        // sampled.
         network: None,
+        warm: Vec::new(),
     }
 }
 
