@@ -493,3 +493,35 @@ fn the_blur_follows_the_thin_lens() {
     c.blur_px = finite(0.0);
     assert_eq!(view(c).focus(), None, "no blur");
 }
+
+/// ADR-0143 decision 3: a scene point taken into the viewing frame lands where a model
+/// placed there does, and a direction is the difference of two points.
+#[test]
+fn in_view_matches_a_model_placed_at_the_point() {
+    let seen = view(camera(
+        vec3(300.0, -200.0, 1800.0),
+        vec3(900.0, 600.0, -400.0),
+        50.0,
+        12.0,
+    ));
+    let geometry = item(700.0, 400.0, -250.0, 20.0, 35.0, 10.0);
+    let bounds = crate::geometry::SolidBounds {
+        min: [-1.0, -1.0, -1.0],
+        max: [1.0, 1.0, 1.0],
+    };
+    let solid = geometry.solid(bounds, Some(&seen)).expect("a solid");
+    let model = solid.in_view([0.0, 0.0, 0.0]);
+    let point = seen.in_view([700.0, 400.0, -250.0]);
+    for axis in 0..3 {
+        assert!(
+            (model[axis] - point[axis]).abs() < 1e-6,
+            "{model:?} against {point:?}"
+        );
+    }
+    let step = [3.0, -7.0, 11.0];
+    let moved = seen.in_view([703.0, 393.0, -239.0]);
+    let direction = seen.direction_in_view(step);
+    for axis in 0..3 {
+        assert!((moved[axis] - point[axis] - direction[axis]).abs() < 1e-6);
+    }
+}

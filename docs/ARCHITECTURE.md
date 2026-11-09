@@ -1201,10 +1201,17 @@ edge softened to match, with no extra pass or target. A 3D model's layer isn't b
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
-under a studio rig fixed to the camera, or unlit; the layer is then placed flat
+under a studio rig fixed to the camera, or unlit, or in a 3D scene by the scene's
+lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): point,
+spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in
+`f64`); the layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
-jitter, and the GPU's own near clip is ADR-0050's near plane.
+jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
+([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)
+gets the scene's view depth: one more draw of its cards, and of its models' own
+triangles, into a half-float canvas layer holding `1 / w` of the nearest thing, the
+larger value winning, drawn only for such a filter.
 Opacity is a straight multiplier in `[0, 1]`, and above 1, up to 4, a gain on the item's
 light: its colour is multiplied and its alpha by at most 1 (#1101). The blend is the item's mode
 ([ADR-0082](adr/0082-blend-modes-drawn.md)): fixed-function for `normal` (premultiplied
