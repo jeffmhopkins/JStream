@@ -2034,3 +2034,6 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .camera-control { display: grid; grid-template-columns: 9em minmax(0, 1fr) 5em auto; gap: 6px; align-items: center; }
 .camera-control input[type="number"] { width: 100%; }
 .camera-control-auto { display: flex; gap: 4px; align-items: center; font-size: 0.85rem; }
+.jtunnel-heard-title { margin: 6px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
+.jtunnel-confirm { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; padding: 10px; border: 1px solid var(--border); border-radius: 6px; }
+.jtunnel-confirm p { margin: 0; flex-basis: 100%; }

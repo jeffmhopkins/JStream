@@ -33,6 +33,11 @@ const CLASS_IN: u16 = 1;
 /// The most labels a name may have, and the most compression pointers followed, so a
 /// hostile packet can't loop.
 const MAX_LABELS: usize = 128;
+/// The most questions and records a message may declare. A host's answer carries a PTR,
+/// SRV and TXT record for each of its instances plus its addresses (and NSECs), so a host
+/// with many services needs dozens; the bound keeps the steps one hostile datagram costs
+/// to a few tens of thousands (each record's name walks at most `MAX_LABELS` labels).
+const MAX_RECORDS: u32 = 256;
 
 /// Why a datagram isn't a DNS message this module can read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -41,6 +46,8 @@ pub enum DnsError {
     Truncated,
     /// A name is malformed: a bad label length, or compression that loops.
     BadName,
+    /// It declares more questions and records than an answer would have.
+    TooManyRecords,
 }
 
 impl fmt::Display for DnsError {
@@ -48,6 +55,7 @@ impl fmt::Display for DnsError {
         match self {
             Self::Truncated => f.write_str("DNS message cut short"),
             Self::BadName => f.write_str("malformed DNS name"),
+            Self::TooManyRecords => f.write_str("more DNS records than an answer has"),
         }
     }
 }
@@ -136,6 +144,9 @@ fn walk_name<'m>(
 fn records(msg: &[u8], mut each: impl FnMut(&Rr)) -> Result<(), DnsError> {
     let questions = be16(msg, 4)?;
     let total = u32::from(be16(msg, 6)?) + u32::from(be16(msg, 8)?) + u32::from(be16(msg, 10)?);
+    if u32::from(questions) + total > MAX_RECORDS {
+        return Err(DnsError::TooManyRecords);
+    }
     let mut at = 12;
     for _ in 0..questions {
         at = walk_name(msg, at, |_| {})? + 4;
