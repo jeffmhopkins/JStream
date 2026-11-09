@@ -1684,8 +1684,18 @@ impl Compositor {
         height: u32,
     ) -> Result<wgpu::Buffer, RenderError> {
         let stride = u64::from(padded_row_bytes(width));
-        let size = stride
-            .checked_mul(u64::from(height))
+        self.map_read_buffer(stride.checked_mul(u64::from(height)), width, height)
+    }
+
+    /// A map-read buffer of `size` bytes for a `width` x `height` readback, `None`
+    /// being a size past `u64`.
+    pub(crate) fn map_read_buffer(
+        &self,
+        size: Option<u64>,
+        width: u32,
+        height: u32,
+    ) -> Result<wgpu::Buffer, RenderError> {
+        let size = size
             .filter(|size| *size <= self.gpu.max_buffer_size)
             .ok_or(RenderError::Readback {
                 detail: format!("the {width}x{height} readback does not fit in a buffer"),

@@ -28,7 +28,7 @@ pub use pipeline::OutputStats;
 #[cfg(test)]
 pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture};
 #[cfg(test)]
-pub(crate) use pipeline::{DrawHook, gpu_draw_with};
+pub(crate) use pipeline::{DrawHook, MixFrame, gpu_draw_with};
 pub(crate) use pipeline::{
     EncodeKey, Encoders, Gate, MediaHost, MixKey, OpenDraw, OutputEncode, Pending, PipelineEvent,
     Program, Release, Running, StartError, cpu_draw, frame_budget, frame_period, launch,

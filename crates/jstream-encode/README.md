@@ -239,6 +239,12 @@ encoder with the configuration as given (`VideoPath::Cpu`, with the reason), as
 ARCH's step 6 asks; only that encoder failing is an error. The caller logs the reason
 and pushes the matching kind of frame; the other kind fails the session.
 
+A CPU session opened in NV12 also takes RGBA8 and BGRA8 CPU frames: its encode thread
+converts each with `jstream_platform::nv12::rgb_to_nv12` (BT.709, the range the frame's
+colour info gives) before the encoder sees it, so a caller that only sometimes has
+NV12 to hand pushes either. `VideoInput::format` says which format the session was
+opened in, for a caller that can produce NV12 for the sessions that take it.
+
 Sessions pass `VideoSurface`s through untouched, so a GPU frame reaches the encoder as
 it was pushed. The encoder takes each frame and drops it once its read is queued, and
 the session drops a frame it doesn't encode (queue full, encoder busy, a finish
