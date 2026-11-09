@@ -682,7 +682,7 @@ impl Staged {
             session, packets, ..
         } = H264::open(codecs, size.width(), size.height(), stream.settings.fps)?;
         let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
-        stage.attach_preview(size, divisor, session.input());
+        stage.attach_preview(size, divisor, stream.scene.clone(), session.input());
         let closing = Arc::new(AtomicBool::new(false));
         let sender = {
             let stream = Arc::clone(stream);
@@ -767,17 +767,19 @@ fn send_packets(
     }
 }
 
-/// Whether `stream` is one the program stage draws for, given its `work` so far.
+/// Whether `stream` is one the program stage draws for, given its `work` so far: an
+/// H.264 stream of the program or of a scene (ADR-0117 §6).
 fn stageable(stream: &PreviewStream, work: Option<&Work>, can_stage: bool) -> bool {
     can_stage
-        && stream.shows_program()
+        && stream.source_id.is_none()
+        && stream.draft.is_none()
         && stream.codec == PreviewCodec::H264
         && stream.codecs.is_some()
         && work.is_none_or(|work| work.codec == PreviewCodec::H264)
 }
 
-/// Opens, or keeps, `stream`'s [`Staged`] session at its picture size of `canvas`, and
-/// passes a keyframe request on.
+/// Opens, or keeps, `stream`'s [`Staged`] session at its picture size of `canvas` (the
+/// program's, or its scene's), and passes a keyframe request on.
 fn serve_staged(
     stream: &Arc<PreviewStream>,
     work: &mut Work,
@@ -996,6 +998,7 @@ fn run(
     let mut stage: Option<Arc<Program>> = None;
     let mut stage_at = Instant::now();
     let rev_now = Arc::new(AtomicU64::new(0));
+    let no_scenes: Scenes = Arc::default();
     loop {
         let streams: Vec<Arc<PreviewStream>> = {
             let mut state = lock(&inner.state);
@@ -1045,9 +1048,13 @@ fn run(
             now,
             &mut stage_at,
         );
-        // The program's captures only while a stream the hub draws itself shows it.
+        // The program's captures only while a stream the hub draws itself shows it, and
+        // the scenes' likewise: the stage captures what it draws.
         let shows_program = streams.iter().any(|stream| {
             stream.shows_program() && !stageable(stream, works.get(&stream.id), stage.is_some())
+        });
+        let shows_scenes = streams.iter().any(|stream| {
+            stream.scene.is_some() && !stageable(stream, works.get(&stream.id), stage.is_some())
         });
         // A source's own snapshot is captured as a draft's is.
         let drafts: Vec<Arc<RenderSnapshot>> = streams
@@ -1057,7 +1064,8 @@ fn run(
                 None => stream.draft.clone(),
             })
             .collect();
-        captures.tick((shows_program.then_some(&program), &scenes, &drafts), at);
+        let hub_scenes = if shows_scenes { &scenes } else { &no_scenes };
+        captures.tick((shows_program.then_some(&program), hub_scenes, &drafts), at);
         let shown: &dyn Captures = match &captures.running {
             Some(running) => running,
             None => &NoCaptures,
@@ -1070,7 +1078,22 @@ fn run(
                 .as_ref()
                 .filter(|_| stageable(stream, Some(work), true))
             {
-                match serve_staged(stream, work, stage, program_canvas, &rev_now) {
+                let canvas = match &stream.scene {
+                    None => Some(program_canvas),
+                    Some(scene_id) => scenes.get(scene_id).map(|scene| {
+                        scene
+                            .shot()
+                            .canvas()
+                            .map_or((16, 16), |c| (c.width(), c.height()))
+                    }),
+                };
+                let Some(canvas) = canvas else {
+                    // Not planned yet: the engine re-plans once the stream is open.
+                    let period = Duration::from_secs(1) / stream.settings.fps;
+                    wake_at = wake_at.min(now + period);
+                    continue;
+                };
+                match serve_staged(stream, work, stage, canvas, &rev_now) {
                     Ok(()) => {
                         let period = Duration::from_secs(1) / stream.settings.fps;
                         wake_at = wake_at.min(now + period);

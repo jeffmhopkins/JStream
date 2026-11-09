@@ -9,13 +9,13 @@ use crate::blend::{self, BlendPipelines, Layouts, Steps};
 use crate::color::{self, premultiplied_linear};
 use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
-use crate::gpu::{Gpu, OpenOptions};
+use crate::gpu::{Faults, Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
-use crate::scene::{Output, Scene, Snapshot};
+use crate::scene::{Output, Placement, Scene, Snapshot};
 use jstream_protocol::BlendMode;
 
 /// Bytes from one vertex to the next: 29 `f32`s (position, UV, opacity, alpha mode, `w`,
@@ -422,7 +422,7 @@ impl Compositor {
         let output = targets.output.clone();
         let waiting = std::time::Instant::now();
         let pixels = match readback_buffer {
-            Some(buffer) => Some(map_snapshot(&self.gpu.device, buffer, width, height)?),
+            Some(buffer) => Some(map_snapshot(&self.gpu, buffer, width, height)?),
             None => None,
         };
         self.readback_wait = waiting.elapsed();
@@ -491,37 +491,7 @@ impl Compositor {
 
     /// [`Self::render_into`], its errors not yet collected.
     fn draw_into(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
-        let view = match target.target() {
-            Some(view) if target.owner().is(&self.owner) => view,
-            _ => {
-                return Err(RenderError::Invalid {
-                    what: "layer",
-                    detail: "the target is not a layer this compositor made".into(),
-                });
-            }
-        };
-        if target.width() != scene.canvas.width() || target.height() != scene.canvas.height() {
-            return Err(RenderError::Invalid {
-                what: "layer",
-                detail: format!(
-                    "the target is {}x{} but the canvas is {}x{}",
-                    target.width(),
-                    target.height(),
-                    scene.canvas.width(),
-                    scene.canvas.height()
-                ),
-            });
-        }
-        if let Some(index) = scene
-            .items
-            .iter()
-            .position(|item| item.image.texture() == target.texture())
-        {
-            return Err(RenderError::Invalid {
-                what: "layer",
-                detail: format!("item {index} places the layer being drawn into"),
-            });
-        }
+        let view = self.scene_target(scene, target)?;
         self.load(scene)?;
         // The submit lock is held from staging through the submit, as in `render`.
         let lock = self.gpu.submit.clone();
@@ -561,6 +531,142 @@ impl Compositor {
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
+    }
+
+    /// Draws `scene`'s view depth into `target`, a [`Self::layer`] of the canvas size,
+    /// replacing what it held (ADR-0143 decision 4): red holds `1 / w`, which is `f / D`
+    /// for the nearest thing at `D` along its camera's viewing axis, and every channel is
+    /// 0 where nothing is (infinitely far). Each card seen through a camera writes where
+    /// its alpha, with its opacity and its sharp edge, is at least one half; the larger
+    /// value wins, so draw order doesn't matter. A [`Placement::Layer`] (a model's
+    /// layer) writes nothing here: [`Self::draw_model_depth`] adds a model's own depth.
+    /// A scene with no camera has no depth, and leaves `target` all 0.
+    ///
+    /// It prepares the scene again (placement, vertices, mips) rather than reusing the
+    /// colour pass's work; recording both in one encoder is left for when the engine
+    /// draws it every frame.
+    ///
+    /// # Errors
+    /// As for [`Self::render_into`].
+    pub fn render_view_depth(
+        &mut self,
+        scene: &Scene<'_>,
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let drawn = self.draw_view_depth(scene, target);
+        errors.close(drawn)
+    }
+
+    /// [`Self::render_view_depth`], its errors not yet collected.
+    fn draw_view_depth(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
+        let view = self.scene_target(scene, target)?;
+        self.load(scene)?;
+        let lock = self.gpu.submit.clone();
+        let submitting = lock.lock();
+        self.stage_sources(scene)?;
+        let mut encoder = self
+            .gpu
+            .device
+            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                label: Some("jstream-render-view-depth"),
+            });
+        self.record_mips(&mut encoder, scene);
+        {
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-view-depth"),
+                color_attachments: &[Some(color_attachment(
+                    view,
+                    wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                ))],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_vertex_buffer(0, self.vertex_buffer.slice(..));
+            pass.set_pipeline(self.blends.depth());
+            for draw in &self.draws {
+                let item = &scene.items[draw.index];
+                if item.camera.is_none() || matches!(item.placement, Placement::Layer(_)) {
+                    continue;
+                }
+                let bind_group = match &draw.mips {
+                    Some(mips) => &mips.bind_group,
+                    None => item.image.bind_group(),
+                };
+                pass.set_bind_group(0, bind_group, &[]);
+                pass.draw(
+                    draw.first_vertex..draw.first_vertex + draw.vertex_count,
+                    0..1,
+                );
+            }
+        }
+        self.record_release(&mut encoder);
+        self.gpu.queue.submit([encoder.finish()]);
+        target.mark_changed();
+        drop(submitting);
+        self.staged.clear();
+        Ok(())
+    }
+
+    /// Adds a model's own depth to a view depth that [`Self::render_view_depth`] drew
+    /// into `target` (ADR-0143 decision 4): `1 / w` per fragment of the model where its
+    /// material's alpha is at least one half, the larger value winning. Only a model seen
+    /// through a camera has depth there; without one this draws nothing. It doesn't know
+    /// its item's visibility or opacity: the caller skips a hidden item, and one whose
+    /// opacity is under one half, as the cards' pass does.
+    ///
+    /// # Errors
+    /// As for [`Self::draw_model`].
+    pub fn draw_model_depth(
+        &mut self,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        errors.close(self.models.draw_depth(&self.gpu, &self.owner, draw, target))
+    }
+
+    /// The view of `target` when it is a layer of this compositor, of `scene`'s canvas
+    /// size, that `scene` doesn't place.
+    fn scene_target<'t>(
+        &self,
+        scene: &Scene<'_>,
+        target: &'t Image,
+    ) -> Result<&'t wgpu::TextureView, RenderError> {
+        let view = match target.target() {
+            Some(view) if target.owner().is(&self.owner) => view,
+            _ => {
+                return Err(RenderError::Invalid {
+                    what: "layer",
+                    detail: "the target is not a layer this compositor made".into(),
+                });
+            }
+        };
+        if target.width() != scene.canvas.width() || target.height() != scene.canvas.height() {
+            return Err(RenderError::Invalid {
+                what: "layer",
+                detail: format!(
+                    "the target is {}x{} but the canvas is {}x{}",
+                    target.width(),
+                    target.height(),
+                    scene.canvas.width(),
+                    scene.canvas.height()
+                ),
+            });
+        }
+        if let Some(index) = scene
+            .items
+            .iter()
+            .position(|item| item.image.texture() == target.texture())
+        {
+            return Err(RenderError::Invalid {
+                what: "layer",
+                detail: format!("item {index} places the layer being drawn into"),
+            });
+        }
+        Ok(view)
     }
 
     /// Uploads a 3D model (ADR-0107): its meshes, its textures with the mips the model
@@ -831,6 +937,22 @@ impl Compositor {
             let _ = self.gpu.device.poll(wgpu::PollType::Poll);
         }
         self.gpu.faults.lost.get().cloned()
+    }
+
+    /// Destroys the device, as a driver reset would lose it: tests that stand in for a
+    /// loss, and a host that gives a device up on purpose, call this and never
+    /// `wgpu::Device::destroy` itself. The loss is recorded first ([`Self::lost`] says
+    /// `destroyed`), once no thread is reading one of the device's mapped buffers, such
+    /// as a readback's copier: the next poll of a destroyed device frees its buffers, so
+    /// a read still under way would read freed memory.
+    pub fn destroy_device(&self) {
+        self.gpu.faults.mark_lost("destroyed".to_owned());
+        self.gpu.device.destroy();
+    }
+
+    /// How this compositor's device has failed, shared with every compositor on it.
+    pub(crate) fn faults(&self) -> &Arc<Faults> {
+        &self.gpu.faults
     }
 
     /// The first uncaptured wgpu error on this compositor's device since the last call:
@@ -1686,7 +1808,7 @@ pub(crate) fn padded_row_bytes(width: u32) -> u32 {
 }
 
 fn map_snapshot(
-    device: &wgpu::Device,
+    gpu: &Gpu,
     buffer: wgpu::Buffer,
     width: u32,
     height: u32,
@@ -1697,7 +1819,7 @@ fn map_snapshot(
         .map_async(wgpu::MapMode::Read, move |result| {
             let _ = send.send(result);
         });
-    device
+    gpu.device
         .poll(wgpu::PollType::wait_indefinitely())
         .map_err(|e| RenderError::Readback {
             detail: e.to_string(),
@@ -1710,17 +1832,16 @@ fn map_snapshot(
             detail: e.to_string(),
         })?;
     let stride = padded_row_bytes(width) as usize;
-    let snapshot = {
-        let view = buffer
-            .slice(..)
-            .get_mapped_range()
-            .map_err(|e| RenderError::Readback {
-                detail: e.to_string(),
-            })?;
-        Snapshot::from_padded(width, height, &view, stride)
-    };
+    let snapshot = gpu
+        .faults
+        .read_mapped(&buffer, |view| {
+            Snapshot::from_padded(width, height, view, stride)
+        })
+        .ok_or_else(|| RenderError::Readback {
+            detail: "the readback buffer can't be read: the device was lost".into(),
+        });
     buffer.unmap();
-    Ok(snapshot)
+    snapshot
 }
 
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {

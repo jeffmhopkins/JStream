@@ -217,12 +217,12 @@ fn filtered(opened: &mut Opened, filter: &mut VideoFilter, input: &Image) -> Ima
 fn same(kind: &str, bounded: &Snapshot, whole: &Snapshot) {
     let pixels = bounded.rgba().chunks(4).zip(whole.rgba().chunks(4));
     for (index, (a, b)) in pixels.enumerate() {
-        // A readback un-premultiplies, so a texel under half a code of alpha, which the
-        // whole draw can hold past the reach, reads back as any colour.
-        if a[3] == 0 && b[3] == 0 {
-            continue;
-        }
-        let near = a.iter().zip(b).all(|(a, b)| a.abs_diff(*b) <= 1);
+        // A readback un-premultiplies, so where alpha is a code or two the colour is
+        // noise: compare the colours as they show, times their alpha.
+        let shown =
+            |pixel: &[u8], channel: usize| f32::from(pixel[channel]) * f32::from(pixel[3]) / 255.0;
+        let near = a[3].abs_diff(b[3]) <= 1
+            && (0..3).all(|channel| (shown(a, channel) - shown(b, channel)).abs() <= 1.5);
         let (x, y) = (
             index % bounded.width() as usize,
             index / bounded.width() as usize,
@@ -234,8 +234,8 @@ fn same(kind: &str, bounded: &Snapshot, whole: &Snapshot) {
     }
 }
 
-/// A blur or a mask over a layer whose content is known draws only near it, to the same
-/// pixels as over all of it, and says where that is, so the next filter of a chain and
+/// A blur, a mask, a shadow or a glow over a layer whose content is known draws only near
+/// it, to the same pixels as over all of it, and says where that is, so the next filter of a chain and
 /// the scene placing the result are bounded too.
 #[test]
 fn a_filter_over_a_bounded_layer_draws_only_near_its_content() {
@@ -261,6 +261,18 @@ fn a_filter_over_a_bounded_layer_draws_only_near_its_content() {
             "image_mask",
             json!({ "image": {"type": "asset", "root": "app", "path": "m.png"}, "mode": "luma" }),
         ),
+        (
+            "scene_mask",
+            json!({ "scene": {"type": "scene", "scene_id": "scn_mask"}, "mode": "alpha", "invert": true }),
+        ),
+        (
+            "drop_shadow",
+            json!({ "color": "#0000ffc0", "offset_x": 6.0, "offset_y": -4.0, "blur": 5.0 }),
+        ),
+        (
+            "glow",
+            json!({ "color": "#ffff00", "radius": 10.0, "strength": 2.0 }),
+        ),
     ];
     for (kind, settings) in kinds {
         let make = || {
@@ -269,7 +281,7 @@ fn a_filter_over_a_bounded_layer_draws_only_near_its_content() {
             made
         };
         let bounded = filtered(&mut opened, &mut make(), &layer);
-        let reach = bounded.content().expect("a blur or a mask keeps the bound");
+        let reach = bounded.content().expect("a bounded kind keeps the bound");
         assert!(
             reach.width < 96 && reach.height < 96,
             "{kind}: bounded to {reach:?}"
@@ -328,4 +340,50 @@ fn a_filter_keeps_the_bound_only_when_it_can() {
     assert_eq!(blurred.content(), Some(nothing));
     let pixels = read(&mut opened, &blurred);
     assert!(pixels.rgba().iter().all(|&byte| byte == 0));
+}
+
+/// A shadow's or a glow's blur runs in a frame grown around the output by its radius,
+/// so its bound is moved into that frame (`Bound::placed`). Unmoved, the bound would
+/// land up to the radius short of the blurred shape on the side of a frame far from its
+/// origin: a strong glow of a small square near the right edge of a wide frame shows
+/// that tail.
+#[test]
+fn a_glow_bounds_its_blur_in_its_grown_frame() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let square = solid(&opened.compositor, 4, 4, [255, 0, 0, 255]);
+    let items = [item(
+        &square,
+        at([1000.0, 30.0], [1.0, 1.0], 0.0),
+        Crop::NONE,
+        1.0,
+    )];
+    let layer = opened.compositor.layer(1024, 64).expect("layer");
+    opened
+        .compositor
+        .render_into(
+            &Scene {
+                canvas: FrameSize::new(1024, 64).expect("invariant: non-zero"),
+                background: Color::TRANSPARENT,
+                items: &items,
+            },
+            &layer,
+        )
+        .expect("render into the layer");
+    let content = layer.content().expect("bounded");
+    let make = || {
+        filter(
+            "glow",
+            json!({ "color": "#ffffff", "radius": 16.0, "strength": 8.0 }),
+        )
+    };
+    let bounded = filtered(&mut opened, &mut make(), &layer);
+    assert!(bounded.content().is_some(), "a glow keeps the bound");
+    let bounded = read(&mut opened, &bounded);
+    layer.set_content(None);
+    let whole = filtered(&mut opened, &mut make(), &layer);
+    let whole = read(&mut opened, &whole);
+    layer.set_content(Some(content));
+    same("glow", &bounded, &whole);
 }

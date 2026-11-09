@@ -63,10 +63,10 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
-    ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
+    ProtocolError, RateControl as ProfileRate, SceneId, VideoCodec, VideoMixId,
 };
 use jstream_render::{
-    Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
+    Compositor, Copier, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
     RenderError, ResourceCache,
 };
 use jstream_sources::AudioScopes;
@@ -87,8 +87,9 @@ use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
 use crate::runtime::{
     Collector, Garbage, LinkState, LivePublish, OpenPublish, RenderHub, RenderReader,
+    RenderSnapshot, SceneShots,
 };
-use crate::snapshot::{self, CaptureImage, Captures, GpuKey, LiveParams, Shot, View};
+use crate::snapshot::{self, CaptureImage, CaptureKey, Captures, GpuKey, LiveParams, Shot, View};
 
 /// Numerator of a base-rate frame period. The denominator is the collection's base
 /// frame rate, 30 by default and 60 when it opts in (ADR-0119).
@@ -167,6 +168,7 @@ pub(crate) type DrawFn = Box<
     dyn Send
         + FnMut(
             &Shot,
+            &SceneShots,
             &LiveParams,
             &dyn Captures,
             &mut [MixFrame],
@@ -214,6 +216,13 @@ pub(crate) struct MixFrame {
     /// The output whose own video chain it runs through, or `None` when it is shared.
     /// It is drawn on its own even when another frame shows the same mix.
     pub(crate) owner: Option<OutputId>,
+    /// A monitored scene it shows instead of a mix, for a preview stream (ADR-0117 §6):
+    /// drawn from the scene's own snapshot, before any output stage, after every mix,
+    /// and skipped (and counted) on a tick that has already used its period.
+    pub(crate) scene: Option<SceneId>,
+    /// For a monitored scene, when this tick's period ends: one not begun by then is
+    /// skipped ([`Frames::draw`]).
+    pub(crate) deadline: Option<Instant>,
     /// Whether this tick draws it.
     pub(crate) due: bool,
     /// The first base tick it is due on again.
@@ -288,6 +297,8 @@ impl MixFrame {
             size,
             divisor,
             owner,
+            scene: None,
+            deadline: None,
             due: false,
             next: 0,
             readback: false,
@@ -321,28 +332,37 @@ pub(crate) type OpenDraw = Arc<dyn Fn(Option<&GpuContext>) -> Result<DrawFn, Str
 
 /// A CPU stand-in for [`gpu_draw`]: each due frame copies the first capture the shot
 /// places when that is an RGBA8 frame, scaled nearest-neighbour to the frame's size, or
-/// fills black, which is what the GPU path draws for a collection with no scene. It
-/// ignores the scenes and the mixes, draws only the frames that ask for the readback,
+/// fills black, which is what the GPU path draws for a collection with no scene. A
+/// monitored scene's frame reads the scene's shot instead, and draws nothing while the
+/// scene isn't planned. It ignores the mixes, draws only the frames that ask for the readback,
 /// and never writes an encode target. Tests use it to run the pipeline without a wgpu
 /// adapter
 /// ([`Engine::with_cpu_compositor`](crate::Engine::with_cpu_compositor)).
 pub(crate) fn cpu_draw() -> OpenDraw {
     Arc::new(|_: Option<&GpuContext>| {
         let draw: DrawFn = Box::new(
-            |shot: &Shot,
+            |program: &Shot,
+             scenes: &SceneShots,
              _: &LiveParams,
              captures: &dyn Captures,
              frames: &mut [MixFrame],
              at: MediaTime,
              _: &mut DrawMeter| {
-                let first = shot
-                    .captures()
-                    .first()
-                    .and_then(|spec| captures.frame(spec));
                 for frame in frames
                     .iter_mut()
                     .filter(|frame| frame.due && frame.readback)
                 {
+                    let shot = match &frame.scene {
+                        Some(scene) => match scenes.get(scene) {
+                            Some(scene) => scene.shot(),
+                            None => continue,
+                        },
+                        None => program,
+                    };
+                    let first = shot
+                        .captures()
+                        .first()
+                        .and_then(|spec| captures.frame(spec));
                     let (size, out) = (frame.size, &mut frame.out);
                     out.clear();
                     // The GPU path converts a CPU capture as it uploads it; this one
@@ -816,6 +836,7 @@ impl Program {
                 size: key.0.size.unwrap_or(self.size),
                 divisor: key.0.divisor,
                 owner: key.0.owner.clone(),
+                scene: None,
             };
             // The claim keeps the render thread on the context until it has this
             // session's tap, so a fallback can't land between the open and the attach.
@@ -930,16 +951,25 @@ impl Program {
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
     }
 
-    /// Feeds the program mix to a preview stream's encoder session (ADR-0117 §6): the
-    /// render thread draws it at `size` on its own compositor, every `divisor`th base
-    /// tick, reads it back and pushes it into `input` until the session closes. At the
-    /// stage's size it is the program's own frame, drawn once for every consumer.
-    pub(crate) fn attach_preview(&self, size: FrameSize, divisor: u32, input: VideoInput) {
+    /// Feeds the program mix, or the monitored `scene`, to a preview stream's encoder
+    /// session (ADR-0117 §6): the render thread draws it at `size` on its own
+    /// compositor, every `divisor`th base tick, reads it back and pushes it into `input`
+    /// until the session closes. At the stage's size the program is its own frame,
+    /// drawn once for every consumer; a scene is drawn once per tick for every stream of
+    /// it at that size, after the mixes, and skipped when the tick has no time left.
+    pub(crate) fn attach_preview(
+        &self,
+        size: FrameSize,
+        divisor: u32,
+        scene: Option<SceneId>,
+        input: VideoInput,
+    ) {
         let feed = Feed {
             mix: None,
             size,
             divisor: divisor.max(1),
             owner: None,
+            scene,
         };
         let tap = VideoTap {
             input,
@@ -1137,6 +1167,8 @@ struct Feed {
     divisor: u32,
     /// The output whose own chain it runs through; `None` is shared.
     owner: Option<OutputId>,
+    /// A monitored scene drawn in place of `mix`, for a preview stream (ADR-0117 §6).
+    scene: Option<SceneId>,
 }
 
 /// One video encoder session, and the master bus's audio encode once an output without
@@ -1579,8 +1611,8 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
         cache.draw_uploads_small(true);
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
-        let mut readbacks = Readbacks::default();
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
+        let mut readbacks = Readbacks::copied();
+        let draw: DrawFn = Box::new(move |program, scenes, live, captures, frames, at, meter| {
             if let Some(hook) = &hook {
                 hook(&compositor);
             }
@@ -1590,40 +1622,42 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             // reallocated when it is due again.
             cache.begin_frame();
             readbacks.retain(frames);
+            // A monitored scene not planned (deleted, or not yet) draws nothing.
+            let shot_of = |frame: &MixFrame| match &frame.scene {
+                Some(scene) => scenes.get(scene).map(|scene| scene.shot()),
+                None => Some(program),
+            };
             for frame in frames.iter().filter(|frame| !frame.due) {
+                let Some(shot) = shot_of(frame) else { continue };
                 let claimed = snapshot::claim_layers(
                     &mut compositor,
                     (&mut cache, &mut chains),
                     shot,
-                    View::output(frame.mix.as_ref(), frame.owner.as_ref()),
+                    view_of(frame),
                     frame.size,
                 );
                 claimed.map_err(|err| draw_error(&compositor, &err))?;
             }
-            for frame in frames.iter_mut().filter(|frame| frame.due) {
-                let view = View::output(frame.mix.as_ref(), frame.owner.as_ref());
-                // Read back without waiting for the GPU (ADR-0117 §4): what has mapped
-                // is collected first, freeing its buffer.
-                let mut handed: u64 = 0;
-                if frame.readback {
-                    let ring = readbacks.ring(frame);
-                    ring.collect(&compositor, &mut frame.out, |pts, _| {
-                        frame.ready = Some(pts);
-                        handed += 1;
-                    });
-                    // Every buffer still on its way: the GPU is behind. A mix only read
-                    // back skips its composite, so the queue doesn't grow, and the tick
-                    // pushes nothing; it is counted (ADR-0117 §1, R-RT-004). Its layers
-                    // are kept, as a mix not due keeps them.
-                    if ring.is_full() && frame.nv12.is_none() {
-                        // A lost device's maps may never finish (DX12), so the ring
-                        // stays full and no draw would fail to say so (#349).
-                        if let Some(why) = compositor.lost() {
-                            return Err(DrawError::Lost(why));
-                        }
-                        // This tick's collected frames, but the newest, are counted
-                        // here too, as below.
-                        frame.unread += 1 + handed.saturating_sub(1);
+            // The mixes first, then the monitored scenes: the program never waits for
+            // one (ADR-0117 §6).
+            for scenes_now in [false, true] {
+                for frame in frames
+                    .iter_mut()
+                    .filter(|frame| frame.due && frame.scene.is_some() == scenes_now)
+                {
+                    let Some(shot) = shot_of(frame) else { continue };
+                    // Field by field, so the frame's other fields stay free to write.
+                    let view = match frame.scene {
+                        Some(_) => View::monitored(),
+                        None => View::output(frame.mix.as_ref(), frame.owner.as_ref()),
+                    };
+                    // A monitored scene the tick has no time left for is skipped, its
+                    // layers kept, and counted (R-RT-004).
+                    if frame
+                        .deadline
+                        .is_some_and(|deadline| Instant::now() >= deadline)
+                    {
+                        frame.unread += 1;
                         frame.awaiting = true;
                         snapshot::claim_layers(
                             &mut compositor,
@@ -1635,46 +1669,80 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
                         .map_err(|err| draw_error(&compositor, &err))?;
                         continue;
                     }
-                }
-                let drawn = snapshot::compose_metered(
-                    &mut compositor,
-                    (&mut cache, &mut chains, &mut *meter),
-                    (shot, at),
-                    view,
-                    live,
-                    captures,
-                    // The readback is the ring's, recorded after the draw.
-                    snapshot::DrawAt {
-                        size: frame.size,
-                        readback: false,
-                    },
-                )
-                .and_then(|output| {
-                    let started = Instant::now();
+                    // Read back without waiting for the GPU (ADR-0117 §4): what has mapped
+                    // is collected first, freeing its buffer.
+                    let mut handed: u64 = 0;
                     if frame.readback {
-                        // Recorded now and collected once mapped, a tick or two on.
                         let ring = readbacks.ring(frame);
-                        if !ring.record(&compositor, &output, at)? {
-                            frame.unread += 1;
-                        }
-                        // Pushes wait for what is on its way rather than repeat.
-                        frame.awaiting = ring.pending() > 0;
                         ring.collect(&compositor, &mut frame.out, |pts, _| {
                             frame.ready = Some(pts);
                             handed += 1;
                         });
+                        // Every buffer still on its way: the GPU is behind. A mix only read
+                        // back skips its composite, so the queue doesn't grow, and the tick
+                        // pushes nothing; it is counted (ADR-0117 §1, R-RT-004). Its layers
+                        // are kept, as a mix not due keeps them.
+                        if ring.is_full() && frame.nv12.is_none() {
+                            // A lost device's maps may never finish (DX12), so the ring
+                            // stays full and no draw would fail to say so (#349).
+                            if let Some(why) = compositor.lost() {
+                                return Err(DrawError::Lost(why));
+                            }
+                            // This tick's collected frames, but the newest, are counted
+                            // here too, as below.
+                            frame.unread += 1 + handed.saturating_sub(1);
+                            frame.awaiting = true;
+                            snapshot::claim_layers(
+                                &mut compositor,
+                                (&mut cache, &mut chains),
+                                shot,
+                                view,
+                                frame.size,
+                            )
+                            .map_err(|err| draw_error(&compositor, &err))?;
+                            continue;
+                        }
                     }
-                    let converted = match &frame.nv12 {
-                        Some(target) => nv12.submit(&compositor, output.texture(), target),
-                        None => Ok(()),
-                    };
-                    meter.phase_since(Phase::Finish, started);
-                    converted
-                });
-                // Only the newest frame collected this tick goes out; the rest are
-                // counted.
-                frame.unread += handed.saturating_sub(1);
-                drawn.map_err(|err| draw_error(&compositor, &err))?;
+                    let drawn = snapshot::compose_metered(
+                        &mut compositor,
+                        (&mut cache, &mut chains, &mut *meter),
+                        (shot, at),
+                        view,
+                        live,
+                        captures,
+                        // The readback is the ring's, recorded after the draw.
+                        snapshot::DrawAt {
+                            size: frame.size,
+                            readback: false,
+                        },
+                    )
+                    .and_then(|output| {
+                        let started = Instant::now();
+                        if frame.readback {
+                            // Recorded now and collected once mapped, a tick or two on.
+                            let ring = readbacks.ring(frame);
+                            if !ring.record(&compositor, &output, at)? {
+                                frame.unread += 1;
+                            }
+                            // Pushes wait for what is on its way rather than repeat.
+                            frame.awaiting = ring.pending() > 0;
+                            ring.collect(&compositor, &mut frame.out, |pts, _| {
+                                frame.ready = Some(pts);
+                                handed += 1;
+                            });
+                        }
+                        let converted = match &frame.nv12 {
+                            Some(target) => nv12.submit(&compositor, output.texture(), target),
+                            None => Ok(()),
+                        };
+                        meter.phase_since(Phase::Finish, started);
+                        converted
+                    });
+                    // Only the newest frame collected this tick goes out; the rest are
+                    // counted.
+                    frame.unread += handed.saturating_sub(1);
+                    drawn.map_err(|err| draw_error(&compositor, &err))?;
+                }
             }
             // A failed frame skips this: what it retired waits for the next frame's
             // fence, which also covers it, so nothing is freed on this thread.
@@ -1684,11 +1752,72 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
     })
 }
 
+/// The captures the render thread runs: the program's, and those of the monitored scenes
+/// it draws, rebuilt only when the program's snapshot, the scenes' or the scenes drawn
+/// change.
+#[derive(Default)]
+struct Watched {
+    /// The program's generation and the scenes' map `wanted` was read from.
+    of: Option<(u64, usize)>,
+    /// The monitored scenes drawn, which `wanted` holds the captures of.
+    scenes: Vec<SceneId>,
+    wanted: BTreeSet<CaptureKey>,
+}
+
+impl Watched {
+    /// The captures to run for `program` and the monitored scenes of `mixes`, from
+    /// `scenes`. What it replaces goes to `free` (R-RT-003).
+    fn of<'a>(
+        &'a mut self,
+        program: &'a RenderSnapshot,
+        scenes: &SceneShots,
+        mixes: &[MixFrame],
+        free: impl FnOnce(Garbage),
+    ) -> &'a BTreeSet<CaptureKey> {
+        let drawn = || mixes.iter().filter_map(|frame| frame.scene.as_ref());
+        if drawn().next().is_none() {
+            return program.shot().captures();
+        }
+        let key = (program.generation(), std::ptr::from_ref(scenes) as usize);
+        if self.of != Some(key) || !self.scenes.iter().eq(drawn()) {
+            let wanted = program
+                .shot()
+                .captures()
+                .iter()
+                .chain(
+                    drawn()
+                        .filter_map(|scene| scenes.get(scene))
+                        .flat_map(|scene| scene.shot().captures()),
+                )
+                .cloned()
+                .collect();
+            let wanted = std::mem::replace(&mut self.wanted, wanted);
+            let drawn = std::mem::replace(&mut self.scenes, drawn().cloned().collect());
+            free(Garbage::Wanted(wanted, drawn));
+            self.of = Some(key);
+        }
+        &self.wanted
+    }
+}
+
+/// How `frame` is drawn: its mix as the outputs get it, or a monitored scene as its
+/// preview stream shows it.
+fn view_of(frame: &MixFrame) -> View<'_> {
+    match frame.scene {
+        Some(_) => View::monitored(),
+        None => View::output(frame.mix.as_ref(), frame.owner.as_ref()),
+    }
+}
+
 /// The readback rings of the mixes read back, one per mix by its feed's identity
-/// ([`Frames::add`]), kept in the draw so they go with its compositor's device.
+/// ([`Frames::add`]), kept in the draw so they go with its compositor's device. Their
+/// mapped buffers are copied out on the draw's `jstream-readback` thread, so the render
+/// thread copies no pixels (ADR-0117 §4); the thread ends with the draw.
 #[derive(Default)]
 struct Readbacks {
     rings: Vec<(ReadbackKey, ReadbackRing<MediaTime>)>,
+    /// `None` only if the OS refused the thread: the render thread copies, as before.
+    copier: Option<Copier>,
 }
 
 /// A mix's identity, as [`Frames::add`] matches feeds.
@@ -1698,6 +1827,7 @@ struct ReadbackKey {
     size: FrameSize,
     divisor: u32,
     owner: Option<OutputId>,
+    scene: Option<SceneId>,
 }
 
 impl ReadbackKey {
@@ -1706,10 +1836,24 @@ impl ReadbackKey {
             && self.size == frame.size
             && self.divisor == frame.divisor
             && self.owner == frame.owner
+            && self.scene == frame.scene
     }
 }
 
 impl Readbacks {
+    /// Rings copied out on a `jstream-readback` thread of their own.
+    fn copied() -> Self {
+        let copier = Copier::spawn()
+            .inspect_err(|err| {
+                tracing::warn!(%err, "no readback thread: the render thread copies frames");
+            })
+            .ok();
+        Self {
+            rings: Vec::new(),
+            copier,
+        }
+    }
+
     /// Drops the rings of mixes no longer drawn, or no longer read back.
     fn retain(&mut self, frames: &[MixFrame]) {
         self.rings
@@ -1726,8 +1870,13 @@ impl Readbacks {
                     size: frame.size,
                     divisor: frame.divisor,
                     owner: frame.owner.clone(),
+                    scene: frame.scene.clone(),
                 };
-                self.rings.push((key, ReadbackRing::default()));
+                let ring = match &self.copier {
+                    Some(copier) => ReadbackRing::with_copier(copier),
+                    None => ReadbackRing::default(),
+                };
+                self.rings.push((key, ring));
                 self.rings.len() - 1
             }
         };
@@ -2844,12 +2993,15 @@ impl Frames {
                 && frame.size == feed.size
                 && frame.divisor == feed.divisor
                 && frame.owner == feed.owner
+                && frame.scene == feed.scene
         });
         match found {
             Some(at) => self.targets[at].push(tap),
             None => {
-                self.mixes
-                    .push(MixFrame::new(feed.mix, feed.size, feed.divisor, feed.owner));
+                self.mixes.push(MixFrame {
+                    scene: feed.scene,
+                    ..MixFrame::new(feed.mix, feed.size, feed.divisor, feed.owner)
+                });
                 self.shown.push(Vec::new());
                 self.targets.push(vec![tap]);
                 self.encode.push(MixEncode::default());
@@ -3000,16 +3152,20 @@ impl Frames {
     /// the shown frame:
     /// its readback swapped into `shown`, and its encode target kept as the mix's
     /// `shown` one. Returns the GPU images the compositor let go of.
+    ///
+    /// A monitored scene not begun by `deadline` is skipped and counted.
     fn draw(
         &mut self,
         draw: &mut DrawFn,
-        shot: &Shot,
-        live: &LiveParams,
+        (shot, scenes, live): (&Shot, &SceneShots, &LiveParams),
         captures: &RenderCaptures,
-        at: MediaTime,
+        (at, deadline): (MediaTime, Instant),
         meter: &mut DrawMeter,
     ) -> Result<Option<Reclaimed>, DrawError> {
-        let drawn = draw(shot, live, captures, &mut self.mixes, at, meter);
+        for frame in &mut self.mixes {
+            frame.deadline = frame.scene.is_some().then_some(deadline);
+        }
+        let drawn = draw(shot, scenes, live, captures, &mut self.mixes, at, meter);
         for ((frame, shown), encode) in self
             .mixes
             .iter_mut()
@@ -3148,6 +3304,8 @@ fn render_loop(job: RenderJob) {
     let mut broken = false;
     // Audio motion modifiers' meters and envelopes (ADR-0100), followed once a tick.
     let mut follower = crate::reactive::Follower::default();
+    let mut watched = Watched::default();
+    let budget = frame_budget_at(base_fps);
     while !stop.load(Ordering::Relaxed) {
         for (feed, tap) in inputs.try_iter() {
             frames.add(feed, tap);
@@ -3269,13 +3427,25 @@ fn render_loop(job: RenderJob) {
             let tick = panic::catch_unwind(AssertUnwindSafe(|| {
                 reader.adopt();
                 let (snapshot, live) = reader.held();
+                let scenes = reader.scenes();
                 let shot = snapshot.shot();
                 // The shot's captures cover every mix's passes, so a display or window
-                // only a video mix shows is started too.
-                captures.tick(shot.captures(), now);
+                // only a video mix shows is started too; so do the monitored scenes'.
+                let wanted = watched.of(snapshot, scenes, &frames.mixes, |garbage| {
+                    collector.free(garbage);
+                });
+                captures.tick(wanted, now);
                 // Every mix this tick reads the same audio levels.
                 follower.follow(shot.audio(), due);
-                frames.draw(&mut draw, shot, live, &captures, due, &mut meter)
+                // A monitored scene not begun within the tick's period is skipped.
+                let deadline = started + budget;
+                frames.draw(
+                    &mut draw,
+                    (shot, scenes, live),
+                    &captures,
+                    (due, deadline),
+                    &mut meter,
+                )
             }));
             if !matches!(tick, Ok(Ok(_))) {
                 // A tick that failed part-way leaves its units' time uncounted.
@@ -3605,7 +3775,11 @@ impl Switch {
 /// For a camera with its own video chain, `owner` is its output, whose frame it alone
 /// is fed (ADR-0080 §2).
 fn is_program(frame: &MixFrame, size: FrameSize, owner: Option<&OutputId>) -> bool {
-    frame.mix.is_none() && frame.size == size && frame.divisor == 1 && frame.owner.as_ref() == owner
+    frame.mix.is_none()
+        && frame.scene.is_none()
+        && frame.size == size
+        && frame.divisor == 1
+        && frame.owner.as_ref() == owner
 }
 
 /// One mix's encode targets, for the sessions on the GPU path it feeds.
@@ -4420,6 +4594,7 @@ mod tests {
             size: FrameSize::new(64, 36).expect("size"),
             divisor: 1,
             owner: None,
+            scene: None,
         };
         let config = video_config(size, &EncoderProfile::DEFAULT, FRAME_DEN).expect("default");
         assert_eq!(config.rate_control, RateControl::Cbr { kbps: 8000 });
@@ -4578,6 +4753,7 @@ mod tests {
             size: FrameSize::new(64, 36).expect("size"),
             divisor: 1,
             owner: None,
+            scene: None,
         };
         let config = |codec, hardware| VideoEncoderConfig {
             codec,
@@ -4833,6 +5009,7 @@ mod tests {
             size: FrameSize::new(1280, 720).expect("size"),
             divisor: 2,
             owner: None,
+            scene: None,
         };
         let config = video_config(&feed, &EncoderProfile::DEFAULT, FRAME_DEN).expect("default");
         assert_eq!(config.size, feed.size);
@@ -4872,6 +5049,7 @@ mod tests {
             size,
             divisor,
             owner: None,
+            scene: None,
         };
         let mut frames = no_frames();
         let session = open_video(
@@ -4918,6 +5096,7 @@ mod tests {
             size: FrameSize::new(64, 36).expect("size"),
             divisor: 1,
             owner: None,
+            scene: None,
         };
         let owned = Feed {
             owner: Some(OutputId::new("rec")),
@@ -4951,6 +5130,7 @@ mod tests {
             size: FrameSize::new(2, 1).expect("size"),
             divisor: 1,
             owner: None,
+            scene: None,
         };
         let mut frames = no_frames();
         let session = open_video(
@@ -4985,6 +5165,7 @@ mod tests {
             size: FrameSize::new(2, 1).expect("size"),
             divisor: 1,
             owner: None,
+            scene: None,
         };
         let gate = Arc::new(GpuGate::default());
         let claim = gate.claim().expect("open before a fallback");
@@ -5070,6 +5251,7 @@ mod tests {
             let mut frames = [frame()];
             draw(
                 &shot,
+                &crate::runtime::SceneShots::new(),
                 &LiveParams::default(),
                 &captures,
                 &mut frames,
@@ -5100,6 +5282,7 @@ mod tests {
             size,
             divisor: 1,
             owner: None,
+            scene: None,
         };
         let session = open_video(
             &jstream_platform::fake::FakeCodecs,
@@ -5239,7 +5422,7 @@ mod tests {
         let long = Duration::from_secs(30);
         let opens: OpenDraw = Arc::new(|context: Option<&GpuContext>| {
             assert!(context.is_none(), "opened on the context");
-            let draw: DrawFn = Box::new(|_, _, _, _, _, _| Ok(None));
+            let draw: DrawFn = Box::new(|_, _, _, _, _, _, _| Ok(None));
             Ok(draw)
         });
         let released = Arc::new(AtomicBool::new(false));
@@ -5306,5 +5489,63 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// A monitored scene draws from its own snapshot after the mixes, and one the tick
+    /// has no time left for is skipped, its readback counted and nothing pushed; one
+    /// whose scene isn't planned draws nothing (ADR-0117 §6).
+    #[test]
+    fn a_monitored_scene_draws_in_time_or_is_skipped_and_counted() {
+        use crate::runtime::{RenderSnapshot, SceneShots};
+        use jstream_protocol::SceneId;
+        let Ok(mut draw) = (super::gpu_draw())(None) else {
+            return;
+        };
+        let size = FrameSize::new(16, 9).expect("size");
+        let scene = |id: &str, deadline| MixFrame {
+            due: true,
+            readback: true,
+            deadline: Some(deadline),
+            ..MixFrame {
+                scene: Some(SceneId::new(id)),
+                ..MixFrame::new(None, size, 1, None)
+            }
+        };
+        let mut scenes = SceneShots::new();
+        scenes.insert(
+            SceneId::new("planned"),
+            RenderSnapshot::following(None, Shot::default()),
+        );
+        let late = Instant::now() - Duration::from_millis(1);
+        let later = Instant::now() + Duration::from_secs(60);
+        let mut frames = [
+            scene("planned", late),
+            scene("planned", later),
+            scene("gone", later),
+        ];
+        let at = MediaTime::zero(Timebase::NANOS);
+        let mut meter = crate::profile::DrawMeter::default();
+        for _ in 0..2_000 {
+            draw(
+                &Shot::default(),
+                &scenes,
+                &LiveParams::default(),
+                &crate::snapshot::NoCaptures,
+                &mut frames,
+                at,
+                &mut meter,
+            )
+            .expect("drawn");
+            if frames[1].ready.is_some() {
+                break;
+            }
+            thread::sleep(Duration::from_millis(1));
+        }
+        assert!(frames[1].ready.is_some(), "the scene in time is read back");
+        assert_eq!(frames[1].out.len(), 16 * 9 * 4);
+        assert!(frames[0].unread > 0, "the late scene is counted");
+        assert!(frames[0].awaiting, "the late scene pushes nothing");
+        assert!(frames[0].ready.is_none() && frames[0].out.is_empty());
+        assert!(frames[2].ready.is_none() && frames[2].unread == 0);
     }
 }

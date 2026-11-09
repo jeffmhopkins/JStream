@@ -1036,3 +1036,66 @@ fn the_program_stage_draws_an_h264_program_stream() {
     drop(ticking);
     pump.join().expect("pump");
 }
+
+/// A scene stream in H.264 is drawn by the program stage too (ADR-0117 §6): the stage
+/// opens for it with no output and draws the scene's own snapshot as an extra mix at
+/// the stream's size, off program, and stops once the stream goes.
+#[test]
+fn the_program_stage_draws_an_h264_scene_stream() {
+    let clock = FakeClock::new(jstream_media::Timebase::MICROS);
+    let engine = Engine::new()
+        .with_backends(fake::backends(&clock).expect("fake backends"))
+        .with_cpu_compositor()
+        // A preview thread that drew would fail the stream.
+        .with_preview_draw(Arc::new(|| Err("the preview thread drew".to_owned())));
+    let control = connected(&engine);
+    let mut frames = control.binary();
+    batch(&control, edits(vec![create("main"), create("other")])).expect("scenes");
+    assert!(!engine.stage_running());
+    act(&control, subscribe_scene(2, "other")).expect("subscribed");
+    let ticking = Arc::new(());
+    let pump = {
+        let alive = Arc::downgrade(&ticking);
+        let clock = clock.clone();
+        thread::spawn(move || {
+            while alive.upgrade().is_some() {
+                clock.advance(33_333);
+                thread::sleep(Duration::from_millis(5));
+            }
+        })
+    };
+    let mut pictures = Vec::new();
+    while pictures.len() < 3 {
+        let picture = frame(&mut frames);
+        assert!(!picture.header.end, "the stream ended: {picture:?}");
+        pictures.push(picture);
+    }
+    assert!(engine.stage_running(), "the scene stream holds the stage");
+    for picture in &pictures {
+        assert_eq!(picture.header.channel, 2);
+        assert_eq!(picture.header.codec, Some(PreviewCodec::H264));
+        assert_eq!((picture.header.width, picture.header.height), (640, 360));
+    }
+    assert!(pictures[0].header.keyframe);
+    assert!(
+        pictures
+            .windows(2)
+            .all(|pair| pair[0].header.pts_us < pair[1].header.pts_us),
+        "frames out of order"
+    );
+
+    act(
+        &control,
+        Call::Action {
+            action: Action::PreviewUnsubscribe { channel: 2 },
+        },
+    )
+    .expect("unsubscribed");
+    let deadline = Instant::now() + WAIT;
+    while engine.stage_running() {
+        assert!(Instant::now() < deadline, "the stage outlives the stream");
+        thread::sleep(Duration::from_millis(10));
+    }
+    drop(ticking);
+    pump.join().expect("pump");
+}
