@@ -111,14 +111,18 @@ scene in a horizontal floor:
 
 | Setting | Meaning | Default |
 |---|---|---|
-| `floor_y_px` | The floor's height: the plane `y = floor_y_px` in the scene's space, in canvas pixels | the canvas height |
+| `floor_y_px` | The floor's height: the plane `y = floor_y_px` in the scene's space, in canvas pixels | 1080, the bottom of a 1080p canvas |
 | `strength` | How much of the reflection shows, 0 to 1 | 0.5 |
 | `fade_px` | Height above the floor over which a reflected thing fades out; 0 never fades | 0 |
 | `blur_px` | Blur of the reflection, for a rough floor | 0 |
 
-- For a chain holding it, the engine draws the scene's items a second time, each mirrored
-  in the plane, through the same camera, into a canvas layer, with each fragment's height
-  above the floor in its alpha-weighted second layer for the fade.
+- For a chain holding it, the engine draws the scene's items a second time, through the
+  camera mirrored in the plane, into a canvas layer, with that picture's own view depth.
+  The mirrored camera is right-handed (rolled so its down is the mirrored down), so its
+  picture runs the other way in x and the filter reads it mirrored about the principal
+  point. Models are drawn again through it, lit as they are but unshadowed. The mirror
+  keeps distances, so the mirrored depth at a floor pixel places the reflected thing on
+  the pixel's own ray, which gives its height above the floor for the fade.
 - The filter lays that reflection over the pixels whose view depth puts them on the
   plane (within a pixel's footprint at their distance), at `strength`, faded by the
   reflected thing's height, source-over in premultiplied linear light. Elsewhere,
