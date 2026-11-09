@@ -48,6 +48,19 @@ pub trait Source: Send {
         let _ = at;
     }
 
+    /// The program may show the source next (it is on a warm scene, ADR-0117 §7), and
+    /// no mix draws it now: a kind that restarts when it is shown gets ready to, so
+    /// [`show`](Self::show) starts nothing. A media file with `restart_on_show` goes to
+    /// its start and holds its first frame there. The default does nothing.
+    fn cue(&mut self) {}
+
+    /// A mix other than the program draws the source again after [`cue`](Self::cue),
+    /// at `at`: one held at its show position plays on from there, as [`show`](Self::show)
+    /// would play it, without starting it again. The default does nothing.
+    fn uncue(&mut self, at: MediaTime) {
+        let _ = at;
+    }
+
     /// Starts the source again from its beginning at `at`, on the same clock as
     /// [`frame`](Self::frame), whatever its `restart_on_show` (`source.restart`,
     /// ADR-0115): a `browser` page loads again and a `media` file plays from its start.

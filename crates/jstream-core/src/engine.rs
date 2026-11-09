@@ -2707,6 +2707,14 @@ impl Engine {
         lock(&self.shared.state).live.meters().plans()
     }
 
+    /// The first pixel of the frame `source_id`'s painter holds now, for tests.
+    #[cfg(test)]
+    pub(crate) fn painted_pixel(&self, source_id: &str) -> Option<[u8; 4]> {
+        lock(&self.shared.state)
+            .live
+            .painted_pixel(&SourceId::new(source_id))
+    }
+
     /// Whether `source_id`'s live instance rests because no mix draws it (#1071), for
     /// tests; `None` while it has none.
     #[cfg(test)]
