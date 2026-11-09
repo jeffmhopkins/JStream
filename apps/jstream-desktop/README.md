@@ -233,10 +233,13 @@ folder, and its log `logs\cef.log`.
 - **JTunnel senders.** Settings › Devices › "Receive from JTunnel senders" (off until
   turned on) and its list of accepted senders, each a tunnel name and the address and
   port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
-  in the data folder; they apply at the next start. On with at least one sender, the
-  app receives that sender's audio and MIDI as the daemon's `--jtunnel-accept` does
-  ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)). The page shows
-  why a sender was refused, and the log names the senders at start.
+  in the data folder; they apply at the next start. On, the app receives each accepted
+  sender's audio and MIDI as the daemon's `--jtunnel-accept` does
+  ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and lists the
+  senders that answer on the network, each not yet accepted with Accept…, which asks
+  before adding it (so turning it on with no sender, then restarting, is how to find
+  the first one). The page shows why a sender was refused, and the log names the
+  senders at start.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager; on Linux in the Secret Service, else a `0600`
   file, [ADR-0071](../../docs/adr/0071-linux-secret-store.md); on macOS in the login
@@ -334,16 +337,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   decisions 1 and 3). The setting is `{"on": true, "accepted": [{"name": "Bitwig",
   "address": "192.168.1.5:9000"}]}` in the data folder's `jtunnel.json`, per machine
   and never in the collection, so opening a collection never turns it on. It is written
-  user-only and replaced whole, and only once the engine would take it
+  user-only (a leftover temporary file is removed first, so it never keeps another
+  mode) and replaced whole, and only once the engine would take it
   (`AcceptedSender::new`, `JtunnelSetup::new`), so a refused sender is never saved; a
   missing, unreadable or malformed file is off. As with network access, only the person
   changes it: the page calls `setJtunnel`, which invokes the Tauri command
   `set_jtunnel`, granted to the main window by the `jtunnel` capability and to nothing
   else, never a protocol call an engine client could make. It is read once at start,
-  after the engine's backends, whose media clock stamps the arrivals: on with at least
-  one sender, the app calls `Engine::start_jtunnel`, and a refused setting or a socket
-  that can't be bound is logged and the app runs without the receiver. Off, or with no
-  sender, no JTunnel socket is open.
+  after the engine's backends, whose media clock stamps the arrivals: on, the app calls
+  `Engine::start_jtunnel` with the accepted senders (none is fine: the receiver then
+  only finds senders, `jtunnel.senders`, protocol 0.114), and a refused setting or a
+  socket that can't be bound is logged and the app runs without the receiver. Off, no
+  JTunnel socket is open.
 - **Hotkeys while another app has the focus.** On Windows, macOS and Linux under X11 the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).

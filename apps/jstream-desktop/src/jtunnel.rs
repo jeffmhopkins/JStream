@@ -9,9 +9,10 @@
 //!   engine client (an agent, a plugin or a paired device) can reach. Per machine, never
 //!   in the collection, so opening a collection never turns it on. A missing or
 //!   unreadable file means off. It takes effect when the app next starts.
-//! - **On** with at least one sender, the app starts the engine's JTunnel receiver
-//!   (`Engine::start_jtunnel`) with them, after the platform's backends, whose media
-//!   clock stamps the arrivals. Off, or with none, no JTunnel socket is open.
+//! - **On**, the app starts the engine's JTunnel receiver (`Engine::start_jtunnel`)
+//!   with the accepted senders, after the platform's backends, whose media clock stamps
+//!   the arrivals. With none accepted it still runs, so it can find senders on the LAN
+//!   (`jtunnel.senders`) for the person to accept. Off, no JTunnel socket is open.
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
@@ -47,13 +48,14 @@ pub struct Setting {
 }
 
 impl Setting {
-    /// The receiver's setup: `None` while off or with no sender.
+    /// The receiver's setup: `None` while off. On with no sender, it receives from
+    /// nobody and only finds senders on the LAN.
     ///
     /// # Errors
     /// A sender the engine refuses ([`AcceptedSender::new`], [`JtunnelSetup::new`]),
     /// named in the message.
     pub fn setup(&self) -> Result<Option<JtunnelSetup>, String> {
-        if !self.on || self.accepted.is_empty() {
+        if !self.on {
             return Ok(None);
         }
         let accepted = self
@@ -106,6 +108,13 @@ pub fn write(file: &Path, setting: &Setting) -> Result<(), String> {
     setting.setup()?;
     let text = serde_json::to_string(setting).map_err(|err| err.to_string())?;
     let temporary = file.with_extension("json.tmp");
+    // A leftover from a write that didn't finish keeps its own mode when opened again,
+    // so it goes first and the new one is created user-only (#1446 review N1).
+    match std::fs::remove_file(&temporary) {
+        Ok(()) => {}
+        Err(err) if err.kind() == std::io::ErrorKind::NotFound => {}
+        Err(err) => return Err(err.to_string()),
+    }
     crate::network::write_private(&temporary, text.as_bytes()).map_err(|err| err.to_string())?;
     std::fs::rename(&temporary, file).map_err(|err| err.to_string())
 }
@@ -205,11 +214,32 @@ mod tests {
         write(&file, &off).expect("saved");
         assert_eq!(read(&file).setup(), Ok(None));
         assert_eq!(read(&file).accepted.len(), 1);
+        // On with no sender still runs the receiver, to find senders to accept.
         let empty = Setting {
             on: true,
             accepted: Vec::new(),
         };
-        assert_eq!(empty.setup(), Ok(None));
+        assert!(
+            empty
+                .setup()
+                .expect("valid")
+                .is_some_and(|s| s.accepted.is_empty())
+        );
+        // A leftover temporary file of another mode is replaced, not reused.
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let temporary = file.with_extension("json.tmp");
+            std::fs::write(&temporary, b"{}").expect("written");
+            std::fs::set_permissions(&temporary, std::fs::Permissions::from_mode(0o644))
+                .expect("mode");
+            write(&file, &empty).expect("saved");
+            let mode = std::fs::metadata(&file)
+                .expect("there")
+                .permissions()
+                .mode();
+            assert_eq!(mode & 0o077, 0, "user-only after a leftover");
+        }
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt as _;
@@ -234,6 +264,14 @@ mod tests {
                 entry("A", "192.168.1.5:9000"),
                 entry("A", "192.168.1.6:9000"),
             ],
+            // Two senders at one address and port, a padded name, IPv6: the engine's
+            // own checks (#1444).
+            vec![
+                entry("A", "192.168.1.5:9000"),
+                entry("B", "192.168.1.5:9000"),
+            ],
+            vec![entry(" Bitwig", "192.168.1.5:9000")],
+            vec![entry("Bitwig", "[::1]:9000")],
         ] {
             let setting = Setting {
                 on: true,

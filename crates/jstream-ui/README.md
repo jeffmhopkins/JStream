@@ -248,8 +248,10 @@ Contents ([Design](#design) explains the choices):
   network" switch above it, and the calls behind them, tested natively against `MockEngine` and a
   stub that answers them as the server does.
 - **JTunnel** (`jtunnel.rs`): `JtunnelSettingView`, the desktop app's "Receive from
-  JTunnel senders" switch and accepted senders on the Devices page, and `with_sender`,
-  the add row's check, tested natively.
+  JTunnel senders" switch, accepted senders and the senders heard on the network
+  (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
+  check, and `accepts`, whether a heard sender is on the list, tested natively. The
+  store's `jtunnel_changed` counts `jtunnel.senders_changed`.
 - **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
   `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
   holds a new agent's hello (Deny, Allow once, Always allow), on
@@ -1062,6 +1064,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   never a protocol call; a refused change is undone and the app's reason shown (the
   page itself only asks for a name, an address and a name no other sender has), and
   while it differs from the setting the app started with it says to restart JStream.
+  Below them, while the engine's receiver runs, "Senders on this network" lists what
+  `jtunnel.senders` answers, read when the page opens and again on each
+  `jtunnel.senders_changed`, each sender's name (its own text, shown as text) and
+  address, with "Accepted" or Accept…. Accept… asks first, naming the sender and its
+  address and what accepting lets it do (ADR-0123 §3: the first use is explicit), and
+  only Accept in that prompt adds it, through the same save. With the receiver off it
+  says senders show while receiving is on.
   The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
   calls `device.list` when it opens and shows its controls only if that is served: a
   session with no server in front answers `unsupported`, and the Devices page then says
