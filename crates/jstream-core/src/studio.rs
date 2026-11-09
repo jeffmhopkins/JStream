@@ -14,30 +14,70 @@
 //! studio keeps it as [`Running`] until it ends, and the program mix draws it.
 //!
 //! The studio also names the scenes kept warm beside the program (ADR-0117 §7): the
-//! Preview scene, then the scenes most recently on program, at most [`WARM_SCENES`] of
-//! them. A running transition's destination is the program scene itself.
+//! Preview scene, then the scenes most recently on program, at most the warm budget
+//! (`studio.set_warm`, [`DEFAULT_WARM_SCENES`] until it is set). The Preview scene is
+//! warm even past the budget, so a budget of 0 keeps only it. A running transition's
+//! destination is the program scene itself. The budget is an application setting: a
+//! new collection's studio keeps it ([`Studio::fresh`]).
 
 use jstream_graph::State;
-use jstream_protocol::{EntityKind, ProtocolError, SceneId};
+use jstream_protocol::{DEFAULT_WARM_SCENES, EntityKind, MAX_WARM_SCENES, ProtocolError, SceneId};
 
 use crate::transition::Running;
 
-/// How many scenes besides the program the studio keeps warm. The budget and pins of
-/// ADR-0117 §7 replace it once Application Settings hold them (#1207).
-pub(crate) const WARM_SCENES: usize = 3;
+/// The most scenes the studio remembers as recently on program: as many as the largest
+/// budget can keep warm.
+const RECENT: usize = MAX_WARM_SCENES as usize;
 
 /// The studio state the engine keeps under its collection lock.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Studio {
     program: Option<SceneId>,
     preview: Option<SceneId>,
     running: Option<Running>,
     /// The scenes on program before the current one, the most recent first, never the
-    /// program scene, at most [`WARM_SCENES`].
+    /// program scene, at most [`RECENT`].
     recent: Vec<SceneId>,
+    /// How many scenes besides the program are kept warm, at most [`MAX_WARM_SCENES`].
+    budget: usize,
+}
+
+impl Default for Studio {
+    fn default() -> Self {
+        Studio {
+            program: None,
+            preview: None,
+            running: None,
+            recent: Vec::new(),
+            budget: DEFAULT_WARM_SCENES as usize,
+        }
+    }
 }
 
 impl Studio {
+    /// The studio for a newly opened collection: nothing on program or preview yet, and
+    /// this studio's warm budget, which belongs to the application.
+    pub(crate) fn fresh(&self) -> Studio {
+        Studio {
+            budget: self.budget,
+            ..Studio::default()
+        }
+    }
+
+    /// How many scenes besides the program are kept warm.
+    pub(crate) fn budget(&self) -> usize {
+        self.budget
+    }
+
+    /// Sets the warm budget, which the caller checked is at most [`MAX_WARM_SCENES`].
+    /// `true` when it changed.
+    pub(crate) fn set_budget(&mut self, budget: usize) -> bool {
+        let budget = budget.min(RECENT);
+        let changed = self.budget != budget;
+        self.budget = budget;
+        changed
+    }
+
     /// The scene on program, or `None` while the collection has no scene.
     pub(crate) fn program(&self) -> Option<&SceneId> {
         self.program.as_ref()
@@ -61,21 +101,25 @@ impl Studio {
             self.recent.insert(0, left);
         }
         self.recent.retain(|id| *id != scene_id);
-        self.recent.truncate(WARM_SCENES);
+        self.recent.truncate(RECENT);
         self.program = Some(scene_id);
         self.running = running;
     }
 
     /// The scenes kept warm beside the program, in priority order (ADR-0117 §7): the
-    /// Preview scene, then the scenes most recently on program, at most
-    /// [`WARM_SCENES`], never the program scene.
+    /// Preview scene, even past the budget, then the scenes most recently on program, at
+    /// most the budget in all, never the program scene.
     pub(crate) fn warm(&self) -> Vec<SceneId> {
-        let mut warm: Vec<SceneId> = Vec::with_capacity(WARM_SCENES);
-        for id in self.preview.iter().chain(&self.recent) {
-            if warm.len() == WARM_SCENES {
+        let mut warm: Vec<SceneId> = Vec::with_capacity(self.budget.max(1));
+        let program = self.program.as_ref();
+        if let Some(preview) = self.preview.as_ref().filter(|id| Some(*id) != program) {
+            warm.push(preview.clone());
+        }
+        for id in &self.recent {
+            if warm.len() >= self.budget {
                 break;
             }
-            if Some(id) != self.program.as_ref() && !warm.contains(id) {
+            if Some(id) != program && !warm.contains(id) {
                 warm.push(id.clone());
             }
         }
@@ -305,5 +349,46 @@ mod tests {
             vec![scene("e"), scene("c"), scene("a")],
             "a deleted scene is forgotten"
         );
+    }
+
+    #[test]
+    fn the_budget_bounds_the_recent_scenes_but_never_drops_preview() {
+        let mut graph = Graph::new();
+        let mut studio = Studio::default();
+        apply(
+            &mut graph,
+            ["a", "b", "c", "d", "e", "f"]
+                .into_iter()
+                .map(create)
+                .collect(),
+        );
+        studio.reconcile(graph.state());
+        for id in ["b", "c", "d", "e", "f"] {
+            studio.switch(scene(id), None);
+        }
+        studio
+            .set_preview(graph.state(), &scene("a"))
+            .expect("a exists");
+        assert_eq!(
+            studio.warm(),
+            vec![scene("a"), scene("e"), scene("d")],
+            "the default budget is 3"
+        );
+
+        assert!(studio.set_budget(0));
+        assert_eq!(studio.warm(), vec![scene("a")], "preview stays warm at 0");
+        assert!(!studio.set_budget(0), "the same budget changes nothing");
+
+        assert!(studio.set_budget(5));
+        assert_eq!(
+            studio.warm(),
+            vec![scene("a"), scene("e"), scene("d"), scene("c"), scene("b")],
+            "a larger budget brings back scenes shown before it was set"
+        );
+
+        let fresh = studio.fresh();
+        assert_eq!(fresh.budget(), 5, "a new collection keeps the budget");
+        assert_eq!(fresh.program(), None);
+        assert!(fresh.warm().is_empty());
     }
 }

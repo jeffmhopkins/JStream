@@ -63,8 +63,9 @@ pub use camera_motion::{
 };
 pub use clap::{ClapFailed, ClapFolder, ClapFound, ClapScanInfo};
 pub use command::{
-    Action, Batch, BlendMode, Blending, Command, CommandClass, Crop, Edit, EffectsSpace,
-    ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
+    Action, Batch, BlendMode, Blending, Command, CommandClass, Crop, DEFAULT_WARM_SCENES, Edit,
+    EffectsSpace, ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, MAX_WARM_SCENES, SceneRole,
+    SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, CodecDownloadInfo, EncoderProfile, EncoderProfileInfo,

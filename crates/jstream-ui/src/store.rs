@@ -1270,6 +1270,7 @@ mod tests {
             preview_scene: None,
             timelines: Vec::new(),
             keyframes: Vec::new(),
+            warm_scenes: None,
         };
         assert_eq!(Collection::from_result(other), None);
     }

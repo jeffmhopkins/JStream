@@ -26,6 +26,11 @@ pub const EFFECTS_DIR: &str = "effects";
 /// same workspace.
 pub const UI_SETTINGS_FILE: &str = "ui-settings.json";
 
+/// The file in the data folder that keeps how many scenes the studio keeps warm
+/// (`studio.set_warm`, ADR-0117 §7). The desktop app and the daemon both keep it there,
+/// so both keep the same number.
+pub const WARM_SCENES_FILE: &str = "warm-scenes.json";
+
 /// The file in the data folder that keeps the projects opened most recently (ADR-0121
 /// §6). Only the desktop app keeps one; the daemon opens the file it is given.
 pub const RECENT_COLLECTIONS_FILE: &str = "recent-collections.json";

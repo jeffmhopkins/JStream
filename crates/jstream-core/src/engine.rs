@@ -55,10 +55,10 @@ use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
     CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
     Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, KindsCause, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState,
-    OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream, ProtocolError, Query, QueryResult,
-    RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
-    TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
+    IdempotencyKey, KindsCause, LiveOutcome, MAX_WARM_SCENES, OutputHealth, OutputId, OutputKind,
+    OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream, ProtocolError, Query,
+    QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId,
+    SourceSize, TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -124,6 +124,10 @@ struct Shared {
     /// The projects opened most recently, once the host names their file (ADR-0121 §6).
     /// Taken after the collection file's lock, never with the collection lock.
     recent: Mutex<Option<crate::projects::Recent>>,
+    /// The warm budget's file (ADR-0117 §7), once the host names it. Taken before the
+    /// collection lock: `studio.set_warm` holds it while it sets the budget and then
+    /// writes the file with the collection lock released, so writes land in order.
+    warm_file: Mutex<Option<PathBuf>>,
     /// The open collection file's stream-key scope (ADR-0121 §5), derived from its path,
     /// or `None` without a file. Set whenever the file changes; a leaf lock, taken alone
     /// or last.
@@ -222,6 +226,7 @@ impl Default for Engine {
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
                     recent: Mutex::new(None),
+                    warm_file: Mutex::new(None),
                     key_scope: Mutex::new(None),
                     audio_scopes,
                     youtube: Mutex::new(None),
@@ -318,6 +323,52 @@ impl Engine {
         *lock(&self.shared.recent) = Some(crate::projects::Recent::load(path.into()));
         self.note_recent();
         self
+    }
+
+    /// Keeps the warm budget (`studio.set_warm`, ADR-0117 §7) in the file at `path`:
+    /// the budget it holds applies now, and every change is saved there. A file that
+    /// can't be read is logged and replaced on the next change.
+    #[must_use]
+    pub fn with_warm_file(self, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        if let Some(scenes) = crate::warm_file::load(&path) {
+            let mut state = lock(&self.shared.state);
+            if state.studio.set_budget(scenes as usize) {
+                state.publish_warm();
+            }
+        }
+        *lock(&self.shared.warm_file) = Some(path);
+        self
+    }
+
+    /// `studio.set_warm` (0.115, ADR-0117 §7), or `None` for any other call.
+    fn warm_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        let Call::Action {
+            action: Action::StudioSetWarm { scenes },
+        } = call
+        else {
+            return None;
+        };
+        let scenes = *scenes;
+        if scenes > MAX_WARM_SCENES {
+            return Some(Err(ProtocolError::invalid_argument(
+                "scenes",
+                format!("at most {MAX_WARM_SCENES} scenes are kept warm"),
+            )));
+        }
+        let file = lock(&self.shared.warm_file);
+        let changed = {
+            let mut state = lock(&self.shared.state);
+            let changed = state.studio.set_budget(scenes as usize);
+            if changed {
+                state.publish_warm();
+            }
+            changed
+        };
+        if changed && let Some(path) = file.as_ref() {
+            crate::warm_file::save(path, scenes);
+        }
+        Some(Ok(CallResult::action()))
     }
 
     /// The name the key store holds `output_id`'s stream key under in the open
@@ -784,7 +835,7 @@ impl Engine {
             state.outputs.sync(state.graph.state());
             // Program is not saved: the loaded collection's first scene goes on it, with
             // no event, as no client is connected yet (ADR-0030).
-            state.studio = Studio::default();
+            state.studio = state.studio.fresh();
             state.studio.reconcile(state.graph.state());
             // `collection` asset references are relative to the file's folder.
             state
@@ -2034,6 +2085,8 @@ impl Engine {
         } else if let Some(result) = self.pack_call(client_id, &call) {
             result
         } else if let Some(result) = self.clap_call(&call) {
+            result
+        } else if let Some(result) = self.warm_call(&call) {
             result
         } else if let Some(result) = self.collection_call(client_id, request_id, &call, previews) {
             result
@@ -4703,7 +4756,7 @@ impl State {
         self.camera_zooms.clear();
         self.shown_since = crate::motion::ShownSince::default();
         self.fired = crate::motion::Fired::default();
-        self.studio = Studio::default();
+        self.studio = self.studio.fresh();
         self.live
             .set_collection_folder(folder.map(Path::to_path_buf));
         let rev = self.graph.rev();
@@ -5429,6 +5482,13 @@ impl State {
             | Action::UiSettingsSet { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
+            // `Engine::execute` answers it before taking the collection lock, so it
+            // only gets here from a path that isn't a client's call, which can't set it.
+            other @ Action::StudioSetWarm { .. } => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
+            }
             // Built without the `wasm-plugins` feature, the engine can't run a plugin, so
             // none is ever installed. With it, `Engine::execute` answers these before
             // taking the collection lock.
@@ -5500,6 +5560,10 @@ impl State {
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
+                    warm_scenes: Some(
+                        u32::try_from(self.studio.budget())
+                            .expect("invariant: the budget is at most MAX_WARM_SCENES"),
+                    ),
                     timelines: self
                         .timelines
                         .report(crate::timelines::ns(self.live.now()), |id| {

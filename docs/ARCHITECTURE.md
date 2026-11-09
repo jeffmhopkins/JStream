@@ -1620,6 +1620,11 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   daemon name the same file, so both show the same workspace. A file it can't read is
   logged and replaced on the next change
   ([ADR-0084](adr/0084-ui-settings-kept-by-the-server.md)).
+- **Warm scenes:** `warm-scenes.json` (version 1) in the data directory, how many scenes
+  besides the program the studio keeps warm (`studio.set_warm`, ADR-0117 §7). The
+  desktop app and the daemon name it (`Engine::with_warm_file`); `jstream-core` reads it
+  at startup and replaces it atomically after every change. A file it can't read, or
+  one past the most, is logged and read as the default.
 - **App settings:** `jstream.toml` in the platform config directory.
 - **Secrets** (stream keys, OAuth tokens) are kept in the OS credential store. On
   Linux, where no Secret Service is reachable, they are kept in a `0600` `secrets` file

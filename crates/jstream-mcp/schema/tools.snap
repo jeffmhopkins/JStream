@@ -580,6 +580,26 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "properties": {
+                  "scenes": {
+                    "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "studio.set_warm",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scenes"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows\none: the placement's `visible` becomes `true` as `item.set_visible` would make it,\nwith the same `scene_id` rules and the same errors (`not_found` for an item or\nscene not in the collection, `invalid_argument` on `scene_id` for a scene whose\nplacement it can't change). It is collection state: `rev` moves on by one,\n`state.changed` follows and the collection saves it. It is an action, so it is\nnever a step of the sender's undo history (ADR-0024 §5); another client's undo that\nwould overwrite it fails with `undo_conflict`, as after a batch. Showing an item\nalready shown succeeds and changes nothing.\n\nWhen the program scene draws the item, it appears with its `appear` effect, after\nits `delay_ms` and with its easing, over the default preset's duration. `inherit`\nis the default preset's `unmatched`, or no animation when that preset is a `cut`\nor another kind without one. A source the program shows again this way restarts\nas on a scene switch: a `media` or `browser` source with `restart_on_show` starts\nfrom the beginning. A running transition continues from what is on screen.",
                 "properties": {
                   "item_id": {
@@ -7135,6 +7155,26 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "properties": {
+                  "scenes": {
+                    "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "studio.set_warm",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scenes"
                 ],
                 "type": "object"
               },
@@ -15476,6 +15516,26 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "properties": {
+                  "scenes": {
+                    "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "studio.set_warm",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scenes"
                 ],
                 "type": "object"
               },
@@ -24105,6 +24165,26 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "properties": {
+                  "scenes": {
+                    "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "studio.set_warm",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scenes"
                 ],
                 "type": "object"
               },
@@ -33343,7 +33423,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `studio` operation: set `op.type` to one of `studio.set_preview` (action), `studio.get` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `studio` operation: set `op.type` to one of `studio.set_preview` (action), `studio.set_warm` (action), `studio.get` (query). An action has side effects and is never undone; the answer only says it was accepted. A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "SceneId": {
@@ -33371,6 +33451,26 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "properties": {
+                  "scenes": {
+                    "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "studio.set_warm",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scenes"
                 ],
                 "type": "object"
               },
@@ -33880,6 +33980,26 @@ source: crates/jstream-mcp/src/tests.rs
                 "required": [
                   "type",
                   "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+                "properties": {
+                  "scenes": {
+                    "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "studio.set_warm",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scenes"
                 ],
                 "type": "object"
               },

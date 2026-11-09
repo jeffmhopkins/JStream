@@ -1488,6 +1488,7 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::StudioSetPreview {
             scene_id: SceneId::new("scn_1"),
         },
+        Action::StudioSetWarm { scenes: 2 },
         Action::SceneZoomCamera {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
@@ -2814,12 +2815,14 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 scene_id: SceneId::new("scn_panels"),
                 keyframe_id: SceneId::new("scn_panels_wide"),
             }],
+            warm_scenes: Some(3),
         },
         QueryResult::StudioGet {
             program_scene: None,
             preview_scene: None,
             timelines: Vec::new(),
             keyframes: Vec::new(),
+            warm_scenes: None,
         },
         QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {

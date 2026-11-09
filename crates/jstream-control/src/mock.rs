@@ -318,6 +318,9 @@ struct State {
     program: Option<SceneId>,
     /// The scene on preview, which follows the same rules.
     preview: Option<SceneId>,
+    /// The warm budget `studio.set_warm` set, or `None` for the default. The mock runs
+    /// no sources, so it only reports it.
+    warm_scenes: Option<u32>,
     /// The shared values `values.set` set (ADR-0102 decision 7), by name: runtime state,
     /// like the studio, and checked by the engine's rules.
     values: BTreeMap<String, SharedValue>,
@@ -1150,6 +1153,19 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            Action::StudioSetWarm { scenes } => {
+                if scenes > jstream_protocol::MAX_WARM_SCENES {
+                    return Err(ProtocolError::invalid_argument(
+                        "scenes",
+                        format!(
+                            "at most {} scenes are kept warm",
+                            jstream_protocol::MAX_WARM_SCENES
+                        ),
+                    ));
+                }
+                self.warm_scenes = Some(scenes);
+                return Ok(CallResult::action());
+            }
             Action::ValuesSet { name, value } => {
                 let set = value.map(|value| SharedValue {
                     name: name.clone(),
@@ -1417,6 +1433,10 @@ impl State {
                 preview_scene: self.preview.clone(),
                 timelines: Vec::new(),
                 keyframes: Vec::new(),
+                warm_scenes: Some(
+                    self.warm_scenes
+                        .unwrap_or(jstream_protocol::DEFAULT_WARM_SCENES),
+                ),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,

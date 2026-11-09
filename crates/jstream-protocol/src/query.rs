@@ -665,6 +665,10 @@ pub enum QueryResult {
         /// (ADR-0116, since 0.88), ordered by scene. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         keyframes: Vec<PlacedKeyframe>,
+        /// How many scenes besides the program the studio keeps warm, which
+        /// `studio.set_warm` sets (ADR-0117 §7, since 0.115). Omitted by an older server.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        warm_scenes: Option<u32>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]

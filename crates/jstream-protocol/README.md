@@ -72,6 +72,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
+  `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`),
   `scene.zoom_camera`, `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`, `ptz.store`,
   `ptz.focus`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
@@ -178,7 +179,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   since 0.91 `camera_follow` is read from its items' `follow_pointer` filters, ADR-0120)
   and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
-  are drawn through (`PlacedKeyframe`, ADR-0116), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
+  (`warm_scenes`), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
@@ -337,7 +339,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.114 because the JTunnel receiver finds senders on the LAN:
+`PROTOCOL_VERSION` is 0.115 because the studio's warm budget is a setting: the action
+`studio.set_warm` and `studio.get`'s `warm_scenes` (ADR-0117 §7, #1468); 0.114 because
+the JTunnel receiver finds senders on the LAN:
 the query `jtunnel.senders` (`JtunnelSenderInfo`) and the event
 `jtunnel.senders_changed` (ADR-0123 §3, #1223, a number the release queue set); 0.113
 because `profile.get` reports the JTunnel receiver's
@@ -1475,6 +1479,13 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
 - `studio.set_preview {scene_id}` puts a scene on preview, studio mode's next scene.
   Like a switch it changes no `rev` and is never undone; a switch leaves preview where
   it is.
+- `studio.set_warm {scenes}` (0.115, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §7)
+  sets how many scenes besides the program the studio keeps warm, 0 to
+  `MAX_WARM_SCENES` (8; `invalid_argument` on `scenes` past it), `DEFAULT_WARM_SCENES`
+  (3) until it is set. The Preview scene is warm even past it; the rest are the scenes
+  most recently on program. An application setting: no `rev`, never undone, no event,
+  whatever collection is open, and kept across restarts when the engine's host names a
+  file for it. It can't be bound to a hotkey, and no plugin is granted it.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1586,7 +1597,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   scene, its `position_ms` and its `pass` ([Timelines](#timelines)), omitted while none
   plays. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
-  omitted while none is.
+  omitted while none is. Since 0.115 `warm_scenes` is the warm budget
+  `studio.set_warm` sets.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
@@ -2250,7 +2262,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
-  previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
+  previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` (an application setting), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
   `privacy.set`, `youtube.*`, pairing and devices, `plugin.*` itself, and the
   `timeline.*` edits and actions, whose cues run actions the `edit` class can't

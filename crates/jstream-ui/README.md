@@ -237,6 +237,12 @@ Contents ([Design](#design) explains the choices):
   Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Audio
   plugins, Devices)
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
+- **Warm scenes** (`warm.rs`, ADR-0117 §7): `WarmScenesSetting`, the General page's
+  "Warm scenes" choice, from "Only the Preview scene" to `MAX_WARM_SCENES` scenes. It
+  reads the budget with `studio.get` each time the page opens and sets it with
+  `studio.set_warm`, putting the old choice back with an error if the engine refuses;
+  it hides for an engine that reports no budget. `budget`, `set_budget` and
+  `choice_label` are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
   plugins page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with
