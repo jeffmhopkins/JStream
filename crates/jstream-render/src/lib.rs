@@ -44,7 +44,7 @@ pub use gpu::{OpenOptions, adapter_available, context_lost};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
 pub use model::{
-    Environment, GpuModel, LightKind, Lighting, MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, ModelDraw,
+    CardDraw, Environment, GpuModel, LightKind, Lighting, MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, ModelDraw,
     SHADOW_MAP_PX, SceneLight, ShadowMap,
 };
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};

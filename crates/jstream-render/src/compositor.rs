@@ -13,7 +13,7 @@ use crate::gpu::{Faults, Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
-use crate::model::{GpuModel, ModelDraw, ModelRuntime};
+use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Placement, Scene, Snapshot};
 use crate::wipe::Wipe;
@@ -732,6 +732,26 @@ impl Compositor {
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
         let errors = self.errors();
         errors.close(self.models.draw(&self.gpu, &self.owner, draw, target))
+    }
+
+    /// Lights a card's picture by its 3D scene (ADR-0151 decision 10): `card.image`, the
+    /// picture flat in its box layer, shaded texel by texel where that layer sits in the
+    /// scene (its lights, their shadows and its environment, seen from its camera's side)
+    /// into `target`, a layer of the same size, replacing what it held.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when the picture or `target` is not a layer this
+    /// compositor made, when the two differ in size, or when the geometry or camera
+    /// can't be placed.
+    pub fn light_card(&mut self, card: &CardDraw<'_>, target: &Image) -> Result<(), RenderError> {
+        let errors = self.errors();
+        if (card.image.width(), card.image.height()) != (target.width(), target.height()) {
+            return errors.close(Err(RenderError::Invalid {
+                what: "layer",
+                detail: "a lit card's picture and its target differ in size".into(),
+            }));
+        }
+        errors.close(self.models.light_card(&self.gpu, &self.owner, card, target))
     }
 
     /// Refills `image`, an upload this compositor made, with new tightly packed

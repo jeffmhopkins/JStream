@@ -48,8 +48,8 @@ const FRAME_BYTES: u64 = 64
     + ENVIRONMENT_BYTES;
 /// The frame's textures: the shadow maps, then the environment's picture.
 const FRAME_TEXTURES: usize = MAX_SHADOW_MAPS + 1;
-/// Bytes of a material's uniform: four `vec4`.
-const MATERIAL_BYTES: u64 = 64;
+/// Bytes of a material's uniform: five `vec4`.
+const MATERIAL_BYTES: u64 = 80;
 
 pub use jstream_media::model::Lighting;
 
@@ -130,6 +130,38 @@ pub struct ModelDraw<'a> {
     /// The scene's environment light (ADR-0151 decision 9): the sky a model lit by its
     /// scene takes its ambient light and reflections from, in place of the studio
     /// gradient. Ignored without `lights`.
+    pub environment: Option<Environment<'a>>,
+}
+
+/// The bounds of the quad a lit card is shaded on: a unit square, flat.
+const CARD_BOUNDS: SolidBounds = SolidBounds {
+    min: [-0.5, -0.5, 0.0],
+    max: [0.5, 0.5, 0.0],
+};
+
+/// A card lit by its 3D scene (ADR-0151 decision 10): what
+/// [`crate::Compositor::light_card`] shades.
+#[derive(Clone, Copy, Debug)]
+pub struct CardDraw<'a> {
+    /// The card's picture, flat in a layer: premultiplied linear light, as every layer
+    /// is. It must have been made by the compositor that lights it.
+    pub image: &'a Image,
+    /// Where that layer sits in the scene: its box is the whole layer. Its fit mode and
+    /// flips are ignored, since the layer already holds the picture as it is placed.
+    pub geometry: ItemGeometry,
+    /// The scene's camera, which the card's shading is seen from.
+    pub camera: SceneCamera,
+    /// As a model material's roughness, 0 to 1.
+    pub roughness: f32,
+    /// As a model material's metalness, 0 to 1.
+    pub metalness: f32,
+    /// How much of its own picture it adds back unlit, 0 to 4.
+    pub emissive: f32,
+    /// The scene's lights, as a `scene`-lit model receives them.
+    pub lights: &'a [SceneLight],
+    /// The shadow maps of `lights` it receives; empty for none.
+    pub shadows: &'a [ShadowMap<'a>],
+    /// The scene's environment light.
     pub environment: Option<Environment<'a>>,
 }
 
@@ -231,6 +263,8 @@ pub(crate) struct ModelRuntime {
     depth: Option<(u32, u32, wgpu::TextureView)>,
     /// Blended primitives in the order they draw, kept to reuse the allocation.
     order: Vec<(f64, usize)>,
+    /// The quad a lit card is shaded on ([`Self::light_card`]), once made.
+    card: Option<(wgpu::Buffer, wgpu::Buffer)>,
 }
 
 impl ModelRuntime {
@@ -474,6 +508,7 @@ impl ModelRuntime {
             flat_normal,
             depth: None,
             order: Vec::new(),
+            card: None,
         }
     }
 
@@ -522,7 +557,7 @@ impl ModelRuntime {
                 AlphaMode::Mask { cutoff } => (1.0, cutoff),
                 AlphaMode::Blend => (2.0, 0.0),
             };
-            let values: [f32; 16] = [
+            let values: [f32; 20] = [
                 m.base_color[0],
                 m.base_color[1],
                 m.base_color[2],
@@ -539,6 +574,11 @@ impl ModelRuntime {
                 cutoff,
                 if m.double_sided { 1.0 } else { 0.0 },
                 if m.unlit { 1.0 } else { 0.0 },
+                // A model's textures hold straight colour, not a card's picture.
+                0.0,
+                0.0,
+                0.0,
+                0.0,
             ];
             let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("jstream-render-model-material"),
@@ -682,6 +722,189 @@ impl ModelRuntime {
         draw: &ModelDraw<'_>,
         target: &Image,
     ) -> Result<(), RenderError> {
+        self.draw_as(gpu, owner, draw, target, false)
+    }
+
+    /// Lights `card.image`, a card's picture flat in its box layer, into `target`, a
+    /// layer of the same size (ADR-0151 decision 10): each texel shaded where it sits
+    /// in the scene, as a flat glTF quad there would be, and laid back where it was.
+    pub(crate) fn light_card(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        card: &CardDraw<'_>,
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        if !card.image.owner().is(owner) {
+            return Err(RenderError::Invalid {
+                what: "image",
+                detail: "the card's picture is not one this compositor made".into(),
+            });
+        }
+        let device = &gpu.device;
+        let finite = |value: f32, low: f32, high: f32| {
+            if value.is_finite() {
+                value.clamp(low, high)
+            } else {
+                low
+            }
+        };
+        let emissive = finite(card.emissive, 0.0, 4.0);
+        let values: [f32; 20] = [
+            1.0,
+            1.0,
+            1.0,
+            1.0,
+            emissive,
+            emissive,
+            emissive,
+            0.0,
+            finite(card.metalness, 0.0, 1.0),
+            finite(card.roughness, 0.0, 1.0),
+            1.0,
+            0.0,
+            // Blended, double-sided and lit: the camera's side of it is shaded.
+            2.0,
+            0.0,
+            1.0,
+            0.0,
+            // Its picture is premultiplied linear light, and emits as itself.
+            1.0,
+            0.0,
+            0.0,
+            0.0,
+        ];
+        let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("jstream-render-card-material"),
+            contents: &f32_bytes(&values),
+            usage: wgpu::BufferUsages::UNIFORM,
+        });
+        let picture = card
+            .image
+            .texture()
+            .create_view(&wgpu::TextureViewDescriptor::default());
+        let views = [&picture, &self.white, &self.flat_normal, &self.white, &picture];
+        let mut entries = vec![
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: uniform.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::Sampler(&self.sampler),
+            },
+        ];
+        for (i, view) in views.iter().enumerate() {
+            entries.push(wgpu::BindGroupEntry {
+                binding: 2 + i as u32,
+                resource: wgpu::BindingResource::TextureView(view),
+            });
+        }
+        let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+            label: Some("jstream-render-card-material"),
+            layout: &self.material_layout,
+            entries: &entries,
+        });
+        let (vertices, indices) = self.card_quad(gpu);
+        let model = GpuModel {
+            inner: Arc::new(Uploaded {
+                owner: owner.clone(),
+                version: 0,
+                bounds: CARD_BOUNDS,
+                primitives: vec![GpuPrimitive {
+                    vertices,
+                    indices,
+                    index_count: 6,
+                    material: 0,
+                    center: [0.0; 3],
+                }],
+                materials: vec![GpuMaterial {
+                    bind,
+                    // Drawn as it is: its texels replace the cleared layer's.
+                    blended: false,
+                }],
+            }),
+        };
+        let draw = ModelDraw {
+            model: &model,
+            geometry: ItemGeometry {
+                fit_mode: jstream_protocol::FitMode::Stretch,
+                flip_h: false,
+                flip_v: false,
+                ..card.geometry
+            },
+            camera: Some(card.camera),
+            lighting: Lighting::Scene,
+            lights: Some(card.lights),
+            shadows: card.shadows,
+            environment: card.environment,
+        };
+        self.draw_as(gpu, owner, &draw, target, true)
+    }
+
+    /// The quad a card is lit on: a unit square in its own plane, facing the viewer,
+    /// made once.
+    fn card_quad(&mut self, gpu: &Gpu) -> (wgpu::Buffer, wgpu::Buffer) {
+        if let Some(quad) = &self.card {
+            return quad.clone();
+        }
+        // Top left, top right, bottom right, bottom left: clockwise on the y-down canvas.
+        let corners = [[-0.5f32, -0.5], [0.5, -0.5], [0.5, 0.5], [-0.5, 0.5]];
+        let mut bytes = Vec::with_capacity(4 * VERTEX_STRIDE as usize);
+        for [x, y] in corners {
+            let vertex = [
+                x,
+                y,
+                0.0,
+                0.0,
+                0.0,
+                1.0,
+                1.0,
+                0.0,
+                0.0,
+                1.0,
+                x + 0.5,
+                y + 0.5,
+                1.0,
+                1.0,
+                1.0,
+                1.0,
+            ];
+            bytes.extend(f32_bytes(&vertex));
+        }
+        let vertices = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("jstream-render-card-vertices"),
+                contents: &bytes,
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+        let index_bytes: Vec<u8> = [0u32, 1, 2, 0, 2, 3]
+            .iter()
+            .flat_map(|i| i.to_le_bytes())
+            .collect();
+        let indices = gpu
+            .device
+            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("jstream-render-card-indices"),
+                contents: &index_bytes,
+                usage: wgpu::BufferUsages::INDEX,
+            });
+        self.card = Some((vertices.clone(), indices.clone()));
+        (vertices, indices)
+    }
+
+    /// Draws `draw` into `target`: through its camera, or, `in_texture`, laid flat over
+    /// the target in its own texture coordinates while shaded where it sits in the
+    /// scene, its camera's side of it facing.
+    fn draw_as(
+        &mut self,
+        gpu: &Gpu,
+        owner: &Owner,
+        draw: &ModelDraw<'_>,
+        target: &Image,
+        in_texture: bool,
+    ) -> Result<(), RenderError> {
         let model = &draw.model.inner;
         if !model.owner.is(owner) {
             return Err(RenderError::Invalid {
@@ -718,7 +941,19 @@ impl ModelRuntime {
                 solid.in_view([pick(0, 0), pick(1, 1), pick(2, 2)])[2].abs()
             })
             .fold(1.0f64, f64::max);
-        let clip = solid.clip_matrix(canvas, 0.45 / reach);
+        let (clip, mirrored) = if in_texture {
+            // A model point's x and y, from -0.5 to 0.5, across the whole target; the
+            // quad winds as a front face, so the shader's mirroring picks the side.
+            let clip = [
+                [2.0, 0.0, 0.0, 0.0],
+                [0.0, -2.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.5, 1.0],
+            ];
+            (clip, !sees_front(&solid))
+        } else {
+            (solid.clip_matrix(canvas, 0.45 / reach), solid.mirrored())
+        };
         let lights = match (draw.lights, camera.as_ref()) {
             (Some(lights), Some(view)) if draw.lighting != Lighting::Unlit => {
                 Some(SceneLighting::new(lights, view))
@@ -751,7 +986,7 @@ impl ModelRuntime {
             _ => None,
         };
         let frame = frame_bytes(
-            &solid,
+            (&solid, mirrored),
             &clip,
             draw.lighting,
             lights.as_ref(),
@@ -865,7 +1100,13 @@ impl ModelRuntime {
             .map_err(placement)?;
         // With perspective the orthographic depth scale is unused.
         let clip = solid.clip_matrix(canvas, 0.0);
-        let frame = frame_bytes(&solid, &clip, Lighting::Unlit, None, (&[], None));
+        let frame = frame_bytes(
+            (&solid, solid.mirrored()),
+            &clip,
+            Lighting::Unlit,
+            None,
+            (&[], None),
+        );
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
         gpu.queue.write_buffer(&self.frame, 0, &frame);
@@ -1188,7 +1429,7 @@ fn environment_values(
 }
 
 fn frame_bytes(
-    solid: &Solid,
+    (solid, mirrored): (&Solid, bool),
     clip: &[[f32; 4]; 4],
     lighting: Lighting,
     lights: Option<&SceneLighting>,
@@ -1204,7 +1445,7 @@ fn frame_bytes(
     let perspective = solid.perspective_px().unwrap_or(0.0) as f32;
     values.extend([
         perspective,
-        if solid.mirrored() { 1.0 } else { 0.0 },
+        if mirrored { 1.0 } else { 0.0 },
         if lighting == Lighting::Unlit {
             1.0
         } else {
@@ -1237,6 +1478,19 @@ fn frame_bytes(
     values.extend(environment.copied().unwrap_or([0.0; 24]));
     values.resize((FRAME_BYTES / 4) as usize, 0.0);
     f32_bytes(&values)
+}
+
+/// Whether the viewer sees the side of `solid`'s `z = 0` plane its normal points to:
+/// the shaded normal's own side.
+fn sees_front(solid: &Solid) -> bool {
+    let normal = solid.normal_matrix();
+    let n = [0, 1, 2].map(|r| f64::from(normal[2][r]));
+    let at = solid.in_view([0.0; 3]);
+    let to_viewer = match solid.perspective_px() {
+        Some(p) => [-at[0], -at[1], p - at[2]],
+        None => [0.0, 0.0, 1.0],
+    };
+    n[0] * to_viewer[0] + n[1] * to_viewer[1] + n[2] * to_viewer[2] > 0.0
 }
 
 fn f32_bytes(values: &[f32]) -> Vec<u8> {

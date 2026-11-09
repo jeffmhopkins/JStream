@@ -299,11 +299,14 @@ impl ItemGeometry {
     /// (behind the viewer, edge-on) is drawable.
     ///
     /// # Errors
-    /// The same as [`Self::validate`], [`GeometryError::NotFinite`] when a corner or a
-    /// vertex is not finite, or [`GeometryError::TooFar`] when an input or a vertex is
-    /// past [`MAX_DRAWN_PX`].
+    /// The same as [`Self::validate`], [`GeometryError::Surface`] for a `surface` out of
+    /// range, [`GeometryError::NotFinite`] when a corner or a vertex is not finite, or
+    /// [`GeometryError::TooFar`] when an input or a vertex is past [`MAX_DRAWN_PX`].
     pub fn check_drawable(self) -> Result<(), GeometryError> {
         self.validate()?;
+        if self.surface.is_some_and(|surface| !surface.in_range()) {
+            return Err(GeometryError::Surface);
+        }
         self.project()?;
         if self.is_neutral_3d() {
             return Ok(());
