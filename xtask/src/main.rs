@@ -8,6 +8,7 @@
     reason = "xtask is a command-line tool; stderr is its UI"
 )]
 
+mod appimage;
 mod browser_linux;
 mod dist;
 mod dist_linux;

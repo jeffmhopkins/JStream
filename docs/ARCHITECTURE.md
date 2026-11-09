@@ -99,7 +99,7 @@ JStream/
 ├── tests/                  # cross-crate scenario + golden tests
 ├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
 ├── design/                 # UI design references (prototype source); not normative
-├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), dist-linux (the Linux .deb), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
+├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), dist-linux (the Linux .deb and AppImage), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
 ├── docs/
 │   ├── ARCHITECTURE.md  RULES.md  DOCS.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
@@ -1639,7 +1639,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 <a id="packaging"></a>
 ## Packaging
 <!-- @section
-covers = ["xtask/src/dist.rs", "xtask/src/dist_linux.rs", "xtask/src/browser_linux.rs", ".cargo/config.toml"]
+covers = ["xtask/src/dist.rs", "xtask/src/dist_linux.rs", "xtask/src/appimage.rs", "xtask/src/browser_linux.rs", ".cargo/config.toml"]
 depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0141-desktop-app-on-linux.md"]
 -->
 
@@ -1704,10 +1704,30 @@ Foundation, Direct3D 12).
   describe>`. It depends on the distribution's WebKitGTK 4.1 and GTK 3 and the libraries
   CEF links (NSS, ATK, CUPS, the X extensions, GBM, ALSA; with the `t64` names as
   alternatives), and recommends xdg-desktop-portal, PipeWire and Mesa's Vulkan drivers.
-  State stays in `$XDG_DATA_HOME/jstream`. It has no AppImage yet. The `dist-linux` job
-  in `after-review.yml` builds it with the `dist-ui` job's release UI, names it after the
-  commit tested, lists its control fields and files, fails unless `chrome-sandbox` in it
-  is setuid root, and uploads it as is.
+  State stays in `$XDG_DATA_HOME/jstream`. The `dist-linux` job in `after-review.yml`
+  builds it with the `dist-ui` job's release UI, names it after the commit tested, lists
+  its control fields and files, fails unless `chrome-sandbox` in it is setuid root, and
+  uploads it as is.
+- **The Linux AppImage:** the same decision's second package, for distributions the
+  `.deb` doesn't install on, also a CI artifact and unsigned. Given `--linuxdeploy` and
+  `--appimage-runtime`, `dist-linux` builds `JStream-<the .deb's version>-<arch>.AppImage`
+  from the same build: the desktop app alone (it runs the engine; the `.deb` has the
+  daemon and the CLI) in the AppDir's `usr/bin` with `ui` and `browser` beside it, and
+  [linuxdeploy](https://github.com/linuxdeploy/linuxdeploy) with its
+  [GTK plugin](https://github.com/linuxdeploy/linuxdeploy-plugin-gtk) copies in what it
+  links (WebKitGTK and GTK among it, the distribution's base libraries left to the host),
+  GTK's modules and schemas, and packs it over the
+  [type 2 runtime](https://github.com/AppImage/type2-runtime). WebKitGTK starts its web
+  and network processes from a path built into its library, so the AppDir has them at
+  that path (`usr/lib/<multiarch>/webkit2gtk-4.1`) and a copy of the library with each
+  `/usr` in it made `././`, and its `AppRun` starts `jstream` from the AppDir's `usr`,
+  where those relative paths lead, as Tauri's AppImages do. The GTK plugin's hook runs
+  GTK on X11 (XWayland under Wayland). The image can't hold a setuid file, so it has no
+  `chrome-sandbox`, and its browser sources need unprivileged user namespaces
+  ([ADR-0095](adr/0095-browser-helper-on-linux.md)); CEF's own libraries come from the
+  host. The `dist-linux` job downloads the three tools pinned and checks each one's
+  SHA-256, as `ui-e2e` does trunk, extracts the image to check its files and the patched
+  library, and uploads it as is.
 - **The Linux browser helper:** its hosts find it in a `browser` folder beside them, as
   the `.deb` installs it
   ([ADR-0095](adr/0095-browser-helper-on-linux.md)). `cargo xtask browser-linux`, on

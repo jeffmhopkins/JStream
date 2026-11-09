@@ -102,7 +102,8 @@ dumps (only a panic writes a report, as in the daemon), renewing the network
 certificate from the app (the daemon's `--lan-renew` renews the same file), and browser sources in a default build
 (the `cef` feature is off). `cargo xtask dist` builds the portable folder, and
 `cargo xtask dist-linux` the Linux `.deb`, which installs `jstream` in the application menu
-with browser sources on (it builds with `cef` and carries the browser helper)
+with browser sources on (it builds with `cef` and carries the browser helper), and, given
+linuxdeploy, an AppImage of the app
 ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)).
 
 <a id="usage"></a>
