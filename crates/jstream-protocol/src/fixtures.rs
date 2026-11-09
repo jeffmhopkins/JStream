@@ -1501,7 +1501,7 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
         },
-        // A scene camera's live aim (ADR-0151).
+        // A scene camera's live aim (ADR-0152).
         Action::SceneDriveCamera {
             scene_id: SceneId::new("scn_1"),
             pan: Some(8),

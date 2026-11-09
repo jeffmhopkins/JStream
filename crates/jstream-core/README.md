@@ -358,7 +358,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot.
 - **Live aim** (`aim.rs`,
-  [ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md)): each
+  [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)): each
   scene family's runtime pan, tilt and zoom, which `scene.drive_camera` and
   `scene.aim_camera` set and `scene.camera_aim` reads. Each axis is a value at a time
   and how it moves from there (still, a drive up to its limit, or an eased glide), so
@@ -464,7 +464,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   preview scene changes (the program's paced to the switch's duration by
   `matched_speed`; the preview's only for cameras the program's shots don't name).
 - **PTZ controllers** (`ptz/controller.rs`,
-  [ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md)): the other
+  [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)): the other
   direction, a controller driving scene cameras, off until the host calls
   `Engine::start_ptz_controllers` with its endpoints and allowlist (ADR-0123 §5). Each
   endpoint binds one LAN address (never every interface) over VISCA over IP, raw UDP or
@@ -1042,7 +1042,7 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   no undo step; it adds its steps to the family's zoom count and publishes the live
   values, and is `not_found`, `invalid_argument` or `action_failed` as the mock answers),
   `scene.drive_camera` and `scene.aim_camera`
-  ([ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md): no `rev`
+  ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md): no `rev`
   and no undo step; they move the family's live aim from now, checked as the mock checks
   them),
   `timeline.play`, `timeline.seek`, `timeline.stop` and `source.restart` (see

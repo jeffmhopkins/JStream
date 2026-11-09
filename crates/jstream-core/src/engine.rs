@@ -1260,7 +1260,7 @@ impl Engine {
         Ok(())
     }
 
-    /// Opens the PTZ controller endpoints `setup` lists (ADR-0151, ADR-0123 §5): a
+    /// Opens the PTZ controller endpoints `setup` lists (ADR-0152, ADR-0123 §5): a
     /// socket, a thread and a session for each, which turn a controller's VISCA into
     /// `scene.drive_camera` and `scene.aim_camera` for its target's camera. They run
     /// until the returned handle is dropped, which closes them and stops their drives.
@@ -1911,7 +1911,7 @@ impl Engine {
             state.history.forget(client_id);
             // A camera its drive left moving stops (ADR-0146 §3).
             state.ptz.forget_client(client_id);
-            // So does a scene camera's live aim (ADR-0151).
+            // So does a scene camera's live aim (ADR-0152).
             state.forget_aims(client_id);
             for gesture_id in state.gestures.of_client(client_id) {
                 state.end_gesture(
@@ -4514,7 +4514,7 @@ struct State {
     /// since the engine started (ADR-0113 §4), which the render thread's follow cameras
     /// take through the parameter channel. Never stored.
     camera_zooms: BTreeMap<SceneId, i64>,
-    /// Each scene family's live aim (ADR-0151): what `scene.drive_camera` and
+    /// Each scene family's live aim (ADR-0152): what `scene.drive_camera` and
     /// `scene.aim_camera` gave its camera since the engine started or the collection
     /// was replaced, which the render thread takes through the parameter channel.
     /// Never stored.
@@ -6564,7 +6564,7 @@ impl State {
     }
 
     /// The scene family whose camera `scene_id` draws through, for the live aim
-    /// (ADR-0151): `not_found` for a scene that doesn't exist, and `action_failed` for
+    /// (ADR-0152): `not_found` for a scene that doesn't exist, and `action_failed` for
     /// one that draws through no camera (a 2D scene with no follow camera).
     fn camera_family(&self, scene_id: &SceneId) -> Result<SceneId, ProtocolError> {
         let state = self.graph.state();
@@ -6588,7 +6588,7 @@ impl State {
         Ok(family)
     }
 
-    /// `scene.drive_camera` and `scene.aim_camera` (ADR-0151): drives or aims the live
+    /// `scene.drive_camera` and `scene.aim_camera` (ADR-0152): drives or aims the live
     /// aim of `action`'s scene family's camera from now, which the render thread takes
     /// on its next frame.
     fn aim_camera(&mut self, client_id: &ClientId, action: &Action) -> Result<(), ProtocolError> {
@@ -6614,7 +6614,7 @@ impl State {
     }
 
     /// Stops the live aims `client_id`'s drives left moving: its session ended
-    /// (ADR-0151).
+    /// (ADR-0152).
     fn forget_aims(&mut self, client_id: &ClientId) {
         let now = self.live.now();
         let mut stopped = false;

@@ -740,7 +740,7 @@ struct Transitioning {
     /// a Move into or out of a follow camera moves with it.
     moves: (Option<Arc<CameraMoves>>, Option<Arc<CameraMoves>>),
     /// The scene families of the scene it leaves and the one it shows, whose live aims
-    /// turn their cameras as it runs (ADR-0151); `None` for what was on screen when a
+    /// turn their cameras as it runs (ADR-0152); `None` for what was on screen when a
     /// transition was cut short.
     families: (Option<SceneId>, Option<SceneId>),
     /// The item chains whose settings a Move blends between two looks (ADR-0127).
@@ -3268,7 +3268,7 @@ struct PassCamera {
     supplied: Option<SceneCamera>,
     /// Its family's camera motion and follow camera (ADR-0113), when it has either.
     moves: Option<Arc<CameraMoves>>,
-    /// Its scene family: whose live aim turns it (ADR-0151).
+    /// Its scene family: whose live aim turns it (ADR-0152).
     family: SceneId,
 }
 
@@ -3907,7 +3907,7 @@ pub(crate) struct LiveParams {
     /// since the engine started (ADR-0113 §4), in (negative: out). A follow camera takes
     /// the steps asked for since it started.
     zooms: BTreeMap<SceneId, i64>,
-    /// Each scene family's live aim (ADR-0151): the pan, tilt and zoom
+    /// Each scene family's live aim (ADR-0152): the pan, tilt and zoom
     /// `scene.drive_camera` and `scene.aim_camera` gave its camera, drawn on top of the
     /// camera and its moves. A family without one draws its camera as it is.
     aims: BTreeMap<SceneId, crate::aim::Aim>,
@@ -4059,7 +4059,7 @@ impl LiveParams {
         self
     }
 
-    /// Whether a drive or a glide moves any scene family's live aim (ADR-0151), or did
+    /// Whether a drive or a glide moves any scene family's live aim (ADR-0152), or did
     /// last: a picture drawn through it changes with time.
     pub(crate) fn aims_move(&self) -> bool {
         self.aims.values().any(crate::aim::Aim::moves)
@@ -6054,7 +6054,7 @@ fn draw_view_depth(
 
 /// `base`, a pass's camera with its live camera applied, moved by its family's camera
 /// motion and follow camera (ADR-0113) at `at`, for a pass first shown at `shown`, and
-/// turned by its family's live aim (ADR-0151).
+/// turned by its family's live aim (ADR-0152).
 fn moved_camera(
     base: Option<SceneCamera>,
     planned: Option<&PassCamera>,

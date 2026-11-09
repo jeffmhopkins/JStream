@@ -929,7 +929,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a scene's camera (ADR-0151, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
                 "properties": {
                   "pan": {
                     "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
@@ -977,7 +977,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0151, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
                 "properties": {
                   "pan_deg": {
                     "anyOf": [
@@ -7630,7 +7630,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a scene's camera (ADR-0151, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
                 "properties": {
                   "pan": {
                     "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
@@ -7678,7 +7678,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0151, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
                 "properties": {
                   "pan_deg": {
                     "anyOf": [
@@ -16113,7 +16113,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a scene's camera (ADR-0151, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
                 "properties": {
                   "pan": {
                     "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
@@ -16161,7 +16161,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0151, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
                 "properties": {
                   "pan_deg": {
                     "anyOf": [
@@ -24884,7 +24884,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a scene's camera (ADR-0151, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
                 "properties": {
                   "pan": {
                     "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
@@ -24932,7 +24932,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0151, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
                 "properties": {
                   "pan_deg": {
                     "anyOf": [
@@ -33291,7 +33291,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a scene's camera (ADR-0151, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
                 "properties": {
                   "pan": {
                     "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
@@ -33339,7 +33339,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0151, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
                 "properties": {
                   "pan_deg": {
                     "anyOf": [
@@ -33453,7 +33453,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "A scene camera's live aim now (ADR-0151, since 0.118): the pan, tilt and zoom\n`scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether\none is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its\nhome, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.",
+                "description": "A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom\n`scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether\none is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its\nhome, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.",
                 "properties": {
                   "scene_id": {
                     "$ref": "#/$defs/SceneId",
@@ -34961,7 +34961,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Drives a scene's camera (ADR-0151, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
                 "properties": {
                   "pan": {
                     "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
@@ -35009,7 +35009,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0151, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
                 "properties": {
                   "pan_deg": {
                     "anyOf": [

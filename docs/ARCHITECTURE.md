@@ -779,7 +779,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   head. The edit `scene.set_ptz_shots` gives a scene a preset or pose per camera, fired
   when the scene goes on program (with the speed matched to the transition) or on
   preview (only for cameras the program's shots don't name).
-- **A scene camera's live aim** ([ADR-0151](adr/0151-a-ptz-controller-drives-scene-cameras.md),
+- **A scene camera's live aim** ([ADR-0152](adr/0152-a-ptz-controller-drives-scene-cameras.md),
   protocol 0.118): the actions `scene.drive_camera` (signed speeds in VISCA steps, as
   `ptz.drive`) and `scene.aim_camera` (pan and tilt in degrees from the stored view, a
   zoom factor) move a scene family's camera at runtime, with no `rev` change, and the

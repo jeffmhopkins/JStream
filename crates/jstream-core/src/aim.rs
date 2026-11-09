@@ -1,4 +1,4 @@
-//! A scene camera's live aim (ADR-0151, #1181): the pan, tilt and zoom that
+//! A scene camera's live aim (ADR-0152, #1181): the pan, tilt and zoom that
 //! `scene.drive_camera` and `scene.aim_camera` give a scene family's camera at runtime,
 //! drawn on top of the camera the scene stores and whatever moves it (ADR-0113).
 //!
@@ -187,7 +187,7 @@ pub(crate) struct Aim {
     tilt: Axis,
     zoom: Axis,
     /// The session whose drive moves it, if one does: when that session ends, the aim
-    /// stops where it is (ADR-0151, as ADR-0146 §3 for a head).
+    /// stops where it is (ADR-0152, as ADR-0146 §3 for a head).
     driver: Option<ClientId>,
 }
 

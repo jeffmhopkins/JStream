@@ -225,7 +225,7 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `scene.zoom_camera` is `not_found` for a missing scene, `invalid_argument` for steps
   outside -16 to 16 and `action_failed` without a follow camera, and otherwise changes
   nothing the mock keeps; `scene.drive_camera` and `scene.aim_camera`
-  ([ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md)) are checked
+  ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)) are checked
   with `camera_aim_check`, then `not_found` or `action_failed` for a scene that draws
   through no camera, and keep nothing, so `scene.camera_aim` always answers the home aim;
 - keyframe scenes (`mock/keyframe.rs`, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):

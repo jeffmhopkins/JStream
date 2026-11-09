@@ -241,7 +241,7 @@ pub enum Query {
     /// changes.
     #[serde(rename = "jtunnel.senders")]
     JtunnelSenders,
-    /// A scene camera's live aim now (ADR-0151, since 0.118): the pan, tilt and zoom
+    /// A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom
     /// `scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether
     /// one is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its
     /// home, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.

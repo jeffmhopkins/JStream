@@ -1,4 +1,4 @@
-//! PTZ controllers (ADR-0151, #1181): a joystick keyboard or a PTZ control app that
+//! PTZ controllers (ADR-0152, #1181): a joystick keyboard or a PTZ control app that
 //! drives JStream's scene cameras over VISCA, as it drives a head.
 //!
 //! The host lists the endpoints and the controller addresses it accepts
@@ -79,7 +79,7 @@ impl fmt::Display for PtzControllerTarget {
     }
 }
 
-/// One endpoint a controller drives (ADR-0151): where it listens, over which
+/// One endpoint a controller drives (ADR-0152): where it listens, over which
 /// transport, as which VISCA address, and what it drives.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct PtzController {
@@ -213,7 +213,7 @@ impl fmt::Display for PtzController {
 }
 
 /// The controller endpoints this machine opens and the controller addresses it accepts
-/// (ADR-0151, ADR-0123 §5), for [`Engine::start_ptz_controllers`].
+/// (ADR-0152, ADR-0123 §5), for [`Engine::start_ptz_controllers`].
 ///
 /// [`Engine::start_ptz_controllers`]: crate::Engine::start_ptz_controllers
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

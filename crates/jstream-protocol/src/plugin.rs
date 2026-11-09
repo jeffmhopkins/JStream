@@ -87,7 +87,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("capture.targets", Class(R)),
     // LAN addresses of the machine's PTZ heads (ADR-0146) are the person's.
     ("ptz.list", N),
-    // A scene camera's live aim (ADR-0151) holds no address: it's the scene's.
+    // A scene camera's live aim (ADR-0152) holds no address: it's the scene's.
     ("scene.camera_aim", Class(R)),
     // LAN addresses of the senders on the person's network (ADR-0123).
     ("jtunnel.senders", N),

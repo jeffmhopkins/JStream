@@ -1,4 +1,4 @@
-//! A scene camera's live aim (ADR-0151, #1181): the pan, tilt and zoom an operator gives
+//! A scene camera's live aim (ADR-0152, #1181): the pan, tilt and zoom an operator gives
 //! a scene's camera at runtime, as a PTZ controller drives a head, on top of the camera
 //! the scene stores and whatever moves it (ADR-0113). The aim (0, 0, 1) is the stored
 //! camera itself, which is the aim's home. `scene.drive_camera` drives it at

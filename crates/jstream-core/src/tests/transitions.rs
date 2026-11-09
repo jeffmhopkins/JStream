@@ -954,7 +954,7 @@ fn moves_cut_short_keep_moving_one_camera() {
     assert!(x > 925.0 && x < 1100.0, "from on the way to c: {x}");
 }
 
-/// A scene camera's live aim turns the picture the program mix draws (ADR-0151): panned
+/// A scene camera's live aim turns the picture the program mix draws (ADR-0152): panned
 /// 60° away, the canvas leaves the centre of the view, and aimed home again it is back.
 /// A missing software adapter skips the test, and fails it when `CI` is set.
 #[test]

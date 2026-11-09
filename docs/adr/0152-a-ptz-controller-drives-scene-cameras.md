@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0151"
+id = "ADR-0152"
 title = "A PTZ controller drives scene cameras: a live aim, its actions, and VISCA endpoints"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0151: A PTZ controller drives scene cameras: a live aim, its actions, and VISCA endpoints
+# ADR-0152: A PTZ controller drives scene cameras: a live aim, its actions, and VISCA endpoints
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

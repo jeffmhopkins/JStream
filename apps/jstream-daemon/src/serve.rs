@@ -186,7 +186,7 @@ pub fn engine(
 /// filter kinds once found (ADR-0035). Each plugin file gets its own short-lived
 /// `jstream-plugin-host.exe`; the daemon serves meanwhile. The engine keeps the hosts
 /// for `plugin.clap_rescan`.
-/// Opens the PTZ controller endpoints `options` lists (ADR-0151), or none. They run
+/// Opens the PTZ controller endpoints `options` lists (ADR-0152), or none. They run
 /// until the handle is dropped.
 ///
 /// # Errors
@@ -209,7 +209,7 @@ pub fn ptz_controllers(
     tracing::info!(
         endpoints = setup.controllers().len(),
         allowed = setup.allow().len(),
-        "PTZ controller input on (ADR-0151)"
+        "PTZ controller input on (ADR-0152)"
     );
     Ok(Some(running))
 }

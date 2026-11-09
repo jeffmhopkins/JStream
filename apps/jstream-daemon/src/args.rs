@@ -37,7 +37,7 @@ Options:
                        Off without it: no socket is open
   --ptz-controller <address:port[/transport][#n]=target>
                        let a PTZ controller drive a scene camera over VISCA
-                       (ADR-0151): listen on this one LAN address and port
+                       (ADR-0152): listen on this one LAN address and port
                        (never every interface) and drive the target, which is
                        program, preview or scene:<scene id> (repeatable). The
                        transport and #n are as for --ptz-camera; #n is the
@@ -145,7 +145,7 @@ pub struct Options {
     /// leaves PTZ control off.
     pub ptz: Vec<jstream_core::PtzCamera>,
     /// `--ptz-controller`: the PTZ controller endpoints to open, in the order given
-    /// (ADR-0151). None leaves controller input off.
+    /// (ADR-0152). None leaves controller input off.
     pub ptz_controllers: Vec<jstream_core::PtzController>,
     /// `--ptz-controller-allow`: the controller addresses the endpoints answer.
     pub ptz_controller_allow: Vec<std::net::IpAddr>,
@@ -474,7 +474,7 @@ mod tests {
         );
     }
 
-    /// ADR-0151, ADR-0123 §5: controller input is off unless `--ptz-controller` lists an
+    /// ADR-0152, ADR-0123 §5: controller input is off unless `--ptz-controller` lists an
     /// endpoint, which needs an allowlist, and each is checked as the engine checks it.
     #[test]
     fn ptz_controllers_are_opt_in_and_allowlisted() {

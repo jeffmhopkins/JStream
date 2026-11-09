@@ -1,4 +1,4 @@
-//! A VISCA controller emulator on loopback (ADR-0151): it sends what a joystick
+//! A VISCA controller emulator on loopback (ADR-0152): it sends what a joystick
 //! keyboard or a PTZ control app sends, over each transport, and reads the replies a
 //! camera would give, while the scene camera's live aim moves as the commands say.
 

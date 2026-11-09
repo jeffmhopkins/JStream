@@ -209,7 +209,7 @@ fn camera_aim(control: &dyn Control, scene: &str) -> jstream_protocol::CameraAim
     }
 }
 
-/// ADR-0151: `scene.drive_camera` and `scene.aim_camera` move a scene family's live aim,
+/// ADR-0152: `scene.drive_camera` and `scene.aim_camera` move a scene family's live aim,
 /// which reaches the render thread on the parameter channel and `scene.camera_aim`
 /// reads; a refused call moves nothing, and a drive stops when its session ends.
 #[test]

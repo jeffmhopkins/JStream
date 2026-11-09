@@ -142,7 +142,7 @@ stream key that redo doesn't put back. Deletes are undoable edits, and `scene.sw
 itself, #1107), the `preview` actions, `scene.zoom_camera`
 ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md), which another zoom
 puts back and nothing stores), `scene.drive_camera` and `scene.aim_camera`
-([ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md), which another
+([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md), which another
 aim puts back and nothing stores), `source.restart` (ADR-0115, which a switch to a scene
 that restarts on show does too), `scene.set_keyframe`
 ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md), which another switch puts back

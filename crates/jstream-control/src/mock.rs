@@ -1023,7 +1023,7 @@ impl State {
     }
 
     /// Checks that `scene_id` draws through a camera, as the engine's live aim does
-    /// (ADR-0151): `not_found` for a scene that doesn't exist, `action_failed` for one
+    /// (ADR-0152): `not_found` for a scene that doesn't exist, `action_failed` for one
     /// with no camera of its own, its parent's or a follow camera's.
     fn camera_family(&self, scene_id: &SceneId) -> Result<(), ProtocolError> {
         let si = self.collection.existing_scene(scene_id)?;
@@ -1136,7 +1136,7 @@ impl State {
                 return Ok(CallResult::action());
             }
             // The mock draws no camera, so it checks a live aim's call as the engine
-            // does and keeps nothing (ADR-0151).
+            // does and keeps nothing (ADR-0152).
             Action::SceneDriveCamera { .. } | Action::SceneAimCamera { .. } => {
                 if let Some((field, reason)) = jstream_protocol::camera_aim_check(&action) {
                     return Err(invalid(0, field, reason));
@@ -1500,7 +1500,7 @@ impl State {
             Query::PtzList => QueryResult::PtzList {
                 cameras: Vec::new(),
             },
-            // No aim is kept, so every camera is at its home (ADR-0151).
+            // No aim is kept, so every camera is at its home (ADR-0152).
             Query::SceneCameraAim { scene_id } => {
                 self.camera_family(&scene_id)?;
                 QueryResult::SceneCameraAim {

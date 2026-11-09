@@ -223,7 +223,7 @@ isn't VISCA, is dropped and counted; a reply can change only the pose and status
 `ptz.list` shows.
 
 The daemon's `--ptz-controller` and `--ptz-controller-allow` (ADR-0123 §5,
-[ADR-0151](../adr/0151-a-ptz-controller-drives-scene-cameras.md)) are the one way to
+[ADR-0152](../adr/0152-a-ptz-controller-drives-scene-cameras.md)) are the one way to
 make it listen for a PTZ controller: the protocol can't open an endpoint or change the
 allowlist. Each endpoint binds one LAN address the person gives, never every
 interface, and needs at least one allowed controller address on the LAN; a datagram or
@@ -729,7 +729,7 @@ somewhere it shouldn't.
   receives reaches the protocol.
 - PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) and PTZ
   controller endpoints and their allowlist
-  ([ADR-0151](../adr/0151-a-ptz-controller-drives-scene-cameras.md)) pass the same LAN
+  ([ADR-0152](../adr/0152-a-ptz-controller-drives-scene-cameras.md)) pass the same LAN
   check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server) for
   what they may send and receive. Unlike the JTunnel socket, a controller endpoint binds
   only the one address the person gives.

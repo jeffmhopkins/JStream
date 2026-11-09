@@ -344,7 +344,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `PROTOCOL_VERSION` is 0.118 because a scene camera has a live aim that a PTZ controller
 drives: the actions `scene.drive_camera` and `scene.aim_camera` and the query
 `scene.camera_aim` (`CameraAim`, `CameraAimInfo`,
-[ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md), #1181); 0.117 because the warm scenes have a GPU-byte budget:
+[ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md), #1181); 0.117 because the warm scenes have a GPU-byte budget:
 `studio.set_warm`'s `gpu_mib`, `studio.get`'s `warm_gpu_mib` and `profile.get`'s `warm`
 (`WarmSceneProfile`, [ADR-0150](../../docs/adr/0150-the-warm-scenes-gpu-byte-budget.md),
 #1468); 0.116 because a scene can be kept warm: `SceneOptions`'
@@ -1320,11 +1320,11 @@ are the head's own counts and speeds VISCA's steps.
 ## A scene camera's live aim
 <!-- @section
 covers = ["crates/jstream-protocol/src/camera_aim.rs"]
-depends_on = ["docs/adr/0151-a-ptz-controller-drives-scene-cameras.md"]
+depends_on = ["docs/adr/0152-a-ptz-controller-drives-scene-cameras.md"]
 -->
 
 A scene family's camera has a live aim (0.118,
-[ADR-0151](../../docs/adr/0151-a-ptz-controller-drives-scene-cameras.md)): a pan and a
+[ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)): a pan and a
 tilt in degrees from the stored camera's view and a zoom factor, which a PTZ controller
 drives as it drives a head. It is runtime state, never stored or undone; the aim
 `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera itself, its home. A keyframe
@@ -2322,7 +2322,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
-  `scene.aim_camera`, ADR-0151, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
+  `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and

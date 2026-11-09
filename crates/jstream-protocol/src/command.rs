@@ -1834,7 +1834,7 @@ pub enum Action {
         #[serde(default = "one_step")]
         steps: i32,
     },
-    /// Drives a scene's camera (ADR-0151, since 0.118), as `ptz.drive` drives a head:
+    /// Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:
     /// pans, tilts and zooms its live aim at signed speeds in VISCA steps until the next
     /// drive, where 0 stops that axis and an axis left out keeps moving as it was (so a
     /// controller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23
@@ -1859,7 +1859,7 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         zoom: Option<i8>,
     },
-    /// Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0151, since
+    /// Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since
     /// 0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by
     /// default). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera
     /// itself: its home. It stops a drive on the axes it sets. Fails as
@@ -2460,7 +2460,7 @@ impl Action {
             Action::SceneDriveCamera { .. } => Some((
                 "type",
                 "`scene.drive_camera` can't be bound: a binding fires only on press, so \
-                 nothing would stop the move; bind `scene.aim_camera` (ADR-0151)",
+                 nothing would stop the move; bind `scene.aim_camera` (ADR-0152)",
             )),
             Action::PluginClapRescan => Some((
                 "type",
