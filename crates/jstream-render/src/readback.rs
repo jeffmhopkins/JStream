@@ -11,7 +11,10 @@
 //! A ring made [`with_copier`](ReadbackRing::with_copier) leaves the copy out of the
 //! mapped buffer to a [`Copier`]'s `jstream-readback` thread (ADR-0117 §4): the drawing
 //! thread hands it each buffer once mapped and later takes back the finished frame, a
-//! buffer of its own that it swaps in, so it never touches a frame's pixels.
+//! buffer of its own that it swaps in, so it never touches a frame's pixels. A lost
+//! device's buffers are freed by the next poll of it on any thread, so the copier reads
+//! a buffer only while its device can't be marked lost, and reads nothing once it is
+//! ([`Compositor::destroy_device`]).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
@@ -19,6 +22,7 @@ use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::compositor::Compositor;
 use crate::error::RenderError;
+use crate::gpu::Faults;
 use crate::scene::Output;
 
 /// How many readbacks can be on their way at once: the frame drawn, the one the GPU is
@@ -44,6 +48,8 @@ pub struct Copier {
 /// One mapped buffer to copy out and unmap.
 struct Job {
     buffer: wgpu::Buffer,
+    /// How the buffer's device has failed: the copy holds off its loss.
+    faults: Arc<Faults>,
     width: u32,
     height: u32,
     order: u64,
@@ -78,7 +84,13 @@ impl Copier {
             .name("jstream-readback".into())
             .spawn(move || {
                 for mut job in queue {
-                    let copied = unpack(&job.buffer, job.width, job.height, &mut job.into);
+                    let copied = unpack(
+                        &job.faults,
+                        &job.buffer,
+                        job.width,
+                        job.height,
+                        &mut job.into,
+                    );
                     job.buffer.unmap();
                     let frame = copied.then_some(job.into);
                     // A ring that is gone wants nothing back.
@@ -275,6 +287,7 @@ impl<T> ReadbackRing<T> {
                 slot.state.store(COPYING, Ordering::Release);
                 let job = Job {
                     buffer: slot.buffer.clone(),
+                    faults: Arc::clone(compositor.faults()),
                     width: self.width,
                     height: self.height,
                     order,
@@ -283,7 +296,13 @@ impl<T> ReadbackRing<T> {
                 };
                 if let Err(mpsc::SendError(job)) = handoff.jobs.send(job) {
                     // The copier is gone: copied here instead, as without one.
-                    let copied = unpack(&slot.buffer, self.width, self.height, out);
+                    let copied = unpack(
+                        compositor.faults(),
+                        &slot.buffer,
+                        self.width,
+                        self.height,
+                        out,
+                    );
                     slot.buffer.unmap();
                     handoff.spares.push(job.into);
                     if let Some((_, tag)) = slot.tag.take()
@@ -330,7 +349,13 @@ impl<T> ReadbackRing<T> {
                 break;
             };
             if slot.state.load(Ordering::Acquire) == MAPPED {
-                let unpacked = unpack(&slot.buffer, self.width, self.height, out);
+                let unpacked = unpack(
+                    compositor.faults(),
+                    &slot.buffer,
+                    self.width,
+                    self.height,
+                    out,
+                );
                 slot.buffer.unmap();
                 if unpacked {
                     ready(tag, out);
@@ -354,21 +379,30 @@ impl<T> ReadbackRing<T> {
     }
 }
 
-/// Copies the mapped `buffer`'s padded rows into `out` as tightly packed RGBA8.
-fn unpack(buffer: &wgpu::Buffer, width: u32, height: u32, out: &mut Vec<u8>) -> bool {
-    let Ok(view) = buffer.slice(..).get_mapped_range() else {
-        return false;
-    };
+/// Copies the mapped `buffer`'s padded rows into `out` as tightly packed RGBA8. `false`
+/// when it can't be read, as on a lost device, whose loss waits for the copy
+/// ([`Faults::read_mapped`]).
+fn unpack(
+    faults: &Faults,
+    buffer: &wgpu::Buffer,
+    width: u32,
+    height: u32,
+    out: &mut Vec<u8>,
+) -> bool {
     let row = width as usize * 4;
     let stride = crate::compositor::padded_row_bytes(width) as usize;
     out.clear();
-    for y in 0..height as usize {
-        match view.get(y * stride..y * stride + row) {
-            Some(bytes) => out.extend_from_slice(bytes),
-            None => return false,
-        }
-    }
-    true
+    faults
+        .read_mapped(buffer, |view| {
+            for y in 0..height as usize {
+                match view.get(y * stride..y * stride + row) {
+                    Some(bytes) => out.extend_from_slice(bytes),
+                    None => return false,
+                }
+            }
+            true
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -510,5 +544,53 @@ mod tests {
             assert!(ring.record(compositor, &output, tag).expect("record"));
         }
         assert!(ring.is_full());
+    }
+
+    /// A device lost while the copier reads one of its mapped buffers frees nothing
+    /// under it: the next poll of a destroyed device frees every buffer made on it, so
+    /// before the loss waited for the copy this read freed memory on the
+    /// `jstream-readback` thread (#1454). Frames large enough that each copy takes a
+    /// while, handed over and then lost at once, a few times over.
+    #[test]
+    fn a_device_lost_while_the_copier_reads_frees_nothing_under_it() {
+        for _ in 0..8 {
+            let Some(mut opened) = open() else { return };
+            let compositor = &mut opened.compositor;
+            let copier = Copier::spawn().expect("the copier thread");
+            let mut ring = ReadbackRing::with_copier(&copier);
+            let (width, height) = (3840, 2160);
+            for tag in 0..READBACK_DEPTH as u32 {
+                let output = render(compositor, width, height, 1.0);
+                assert!(ring.record(compositor, &output, tag).expect("record"));
+            }
+            let _ = compositor
+                .device()
+                .poll(wgpu::PollType::wait_indefinitely());
+            let mut out = Vec::new();
+            ring.collect(compositor, &mut out, |_, _| {});
+            compositor.destroy_device();
+            let _ = compositor
+                .device()
+                .poll(wgpu::PollType::wait_indefinitely());
+            assert_eq!(compositor.lost().as_deref(), Some("destroyed"));
+            // A copy that finished before the loss still comes back, whole and red; one
+            // the loss caught comes back as nothing. No more than were handed over.
+            let mut back = 0;
+            for _ in 0..50 {
+                ring.collect(compositor, &mut out, |tag, rgba| {
+                    back += 1;
+                    assert_eq!(rgba.len(), (width * height * 4) as usize, "frame {tag}");
+                    assert!(
+                        rgba.chunks_exact(4).all(|px| px == [255, 0, 0, 255]),
+                        "frame {tag} came back partly copied"
+                    );
+                });
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            assert!(
+                back <= READBACK_DEPTH,
+                "{back} frames back from {READBACK_DEPTH}"
+            );
+        }
     }
 }
