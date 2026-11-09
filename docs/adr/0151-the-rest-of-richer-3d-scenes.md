@@ -1,12 +1,12 @@
 <!-- @doc
 id = "ADR-0151"
-title = "Shadows, floor reflections, ambient occlusion, volumetric fog, billboards and model animation"
+title = "Shadows, reflections, occlusion, volumetric fog, depth-aware bloom, a scene environment, lit cards, billboards and model animation"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0151: Shadows, floor reflections, ambient occlusion, volumetric fog, billboards and model animation
+# ADR-0151: Shadows, reflections, occlusion, volumetric fog, depth-aware bloom, a scene environment, lit cards, billboards and model animation
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted
@@ -17,9 +17,10 @@ tier = "agent"
 [ADR-0143](0143-scene-lights-and-depth-aware-scene-filters.md) gave 3D scenes lights
 placed by items, a per-pixel view depth, and depth-aware scene filters, starting with
 `depth_fog`. It left shadows, volumetric fog, ambient occlusion and planar reflections to
-decisions of their own. Issue #1231 also asks for items that always face the camera and
-for glTF animations played on the animation clock. The maintainer asked for all of them
-in one release.
+decisions of their own, along with depth-aware bloom, an environment for a whole scene,
+and lighting flat items. Issue #1231 also asks for items that always face the camera, a
+material override and double-sided drawing for flat items, and glTF animations played on
+the animation clock. The maintainer asked for all of it in one release.
 
 What exists to build on:
 - **The view depth** (ADR-0143 decision 4): a half-float canvas layer holding `1 / w`
@@ -49,8 +50,8 @@ The forces:
 
 It is agent tier ([R-GOV-005](../RULES.md#R-GOV-005)): the maintainer asked for the
 features, and they change no licence, security or privacy posture, compatibility promise
-or spending. On the wire they add one optional item geometry field (a minor protocol
-version) and settings and filter kinds that `kind.describe` lists. It extends ADR-0094,
+or spending. On the wire they add two optional item fields (one minor protocol version)
+and settings and filter kinds that `kind.describe` lists. It extends ADR-0094,
 ADR-0107 and ADR-0143 and contradicts none of their decisions.
 
 <a id="decision"></a>
@@ -191,12 +192,71 @@ height, moves, and is lit by the scene's lights:
 - `kind.describe` lists the file's animation names in the setting's description once
   the file loads, so a person or an agent can pick one.
 
-**8. Cost and quality.** Each new pass draws only when read (decisions 1 and 3). The
+**8. Depth-aware bloom.** `depth_bloom` is a depth-aware filter kind: bloom whose glow
+stays with what glows.
+
+| Setting | Meaning | Default |
+|---|---|---|
+| `threshold` | Linear brightness above which a pixel glows | 0.8 |
+| `strength` | How bright the glow is, 0 to 4 | 1 |
+| `radius_px` | How far the glow spreads, in canvas pixels | 24 |
+| `depth_px` | How far in front of a glowing thing a nearer one may be before the glow stops at it | 200 |
+| `far_px` | Distance past which glow fades to nothing; 0 never fades | 0 |
+
+It takes the bright parts as `bloom` does, and blurs them in a separable pass whose
+weights also fall off with the difference in distance (from the view depth) between a
+sample and the pixel it glows onto, so a glow doesn't bleed across something more than
+`depth_px` nearer. Where nothing is drawn, a glow spreads as plain bloom's does.
+
+**9. A scene environment.** The `light` kind's `type` gains `environment`: the light of
+the whole sky around a 3D scene, for `scene`-lit models' ambient light and reflections.
+
+| Setting | Meaning | Default |
+|---|---|---|
+| `sky_color` | The sky straight up, sRGB | a pale blue |
+| `horizon_color` | The sky at the horizon | white |
+| `ground_color` | Below the horizon | a dark grey |
+| `image` | A source whose picture is the sky instead, as an equirectangular panorama (an HDRI still or any live source) | none |
+
+- An environment light's item turns the sky (its `turn_deg` spins it about the vertical
+  axis), and its intensity times its opacity scales it, as with any light.
+- A `scene`-lit model's environment light (its ambient and reflections, ADR-0143
+  decision 3) comes from the scene's first environment light, sampled at the reflected
+  direction with a blur its roughness sets, in place of the studio gradient or its own
+  `reflection`. Ambient lights still scale it, and with no ambient light the environment
+  lights the model on its own.
+- One environment counts; any after the first are logged once.
+- It is not drawn behind the scene. A scene's background is its own setting
+  ([ADR-0089](0089-scene-options-and-nested-audio.md)); a sky behind the set is a card or a model that
+  shows the same source.
+
+**10. Lit cards, and their backs.** An item gains `surface`, an optional object, omitted
+on the wire when absent, which today's cards behave as:
+
+| Field | Meaning | Default |
+|---|---|---|
+| `lit` | Whether scene lights light the card in a 3D scene | `false` |
+| `roughness` | As a model material's, 0 to 1 | 1 |
+| `metalness` | As a model material's, 0 to 1 | 0 |
+| `emissive` | How much of the card's own picture shows unlit, 0 to 4 | 0 |
+| `back` | `show` the card's mirrored picture from behind, or `hide` it | `show` |
+| `shadows` | Whether a lit card receives shadows | `true` |
+
+- A `lit` card in a 3D scene is shaded as a flat glTF quad would be: its picture is the
+  base colour, with the scene's lights, environment and shadows, and `emissive` adds its
+  picture back unlit, so a screen still glows in a dark set. In a 2D scene, or with no
+  lights, an unlit card is drawn as today.
+- `back = hide` draws nothing where the camera sees the back of the card, in any scene.
+- A keyframe scene keys `surface` with the item's other values; Moves glide its numbers.
+- Both fields are in the same minor protocol version as `billboard`.
+
+**11. Cost and quality.** Each new pass draws only when read (decisions 1 and 3). The
 render benchmarks gain a shadowed lit model, a reflected floor, occlusion, volumetric fog
 at each quality and an animated skinned model, each at 1080p, and their defaults stay
-inside the frame budget on a mid-range GPU.
+inside the frame budget on a mid-range GPU. Depth-aware bloom, a lit card and a model lit
+by an environment join them.
 
-**9. Agents and people.** The new settings and kinds reach the UI's properties and the
+**12. Agents and people.** The new settings and kinds reach the UI's properties and the
 MCP tools through `kind.describe`. The design notes for building a 3D set gain lighting
 with shadows, fog and reflections, which filters go first in a scene's chain (the
 depth-aware ones), and what each costs.
@@ -207,20 +267,22 @@ depth-aware ones), and what each costs.
   - a 3D set gets grounded with shadows, occlusion and a reflective floor, gets
     atmosphere with lit, moving fog, and gets animated models, all as settings and
     filters that key, glide and bind like everything else;
-  - a camera-facing sprite or label in a 3D scene is one checkbox.
+  - a camera-facing sprite or label in a 3D scene is one checkbox;
+  - a model reflects a real sky, a glow stays on what glows, and a screen in a set is lit
+    by the set's lights and still glows.
 - **Harder:**
   - **Cost.** Shadows add up to two 2048² depth passes a frame; a reflection adds a
     second draw of the scene; occlusion and volumetric fog are full-screen passes of up
     to 16 and 96 samples a pixel. Each is drawn only when used, and measured.
   - **Approximations.** Screen-space occlusion misses what is off screen or hidden.
     Reflections are of a horizontal floor only, and a floor tilted by the camera reflects
-    correctly only because the plane is in the scene's space, not the screen's. Cards cast
-    shadows but are not lit by them. Point lights cast no shadows.
+    correctly only because the plane is in the scene's space, not the screen's. Only `lit`
+    cards are lit by lights and receive shadows. Point lights cast no shadows. The
+    environment lights models and lit cards but isn't drawn behind the scene.
   - The scene view a depth-aware filter reads is larger than ADR-0143's view depth, and
     every new kind must say which parts it reads.
-- **Not decided here:** depth-aware bloom; an environment (HDRI or gradient sky) for a
-  whole scene; lighting, material overrides or double-sided drawing for flat items; point
-  light shadows; morph targets.
+- **Not decided here:** point light shadows; morph targets; drawing the environment as
+  the scene's background.
 - **Follow-up implementation PRs**, each with golden tests against a CPU reference:
   - billboards in the protocol's geometry (decision 2);
   - ambient occlusion with the scene view's camera (decisions 1 and 5);
@@ -228,5 +290,8 @@ depth-aware ones), and what each costs.
   - shadow maps for scene lights, read by models and by volumetric fog (decision 3);
   - floor reflections (decision 4);
   - model animation, node and then skinned (decision 7);
-  - the design notes and a light marker in the canvas (decision 9, and ADR-0143
+  - depth-aware bloom (decision 8);
+  - the environment light (decision 9);
+  - lit cards and hidden backs (decision 10);
+  - the design notes and a light marker in the canvas (decision 12, and ADR-0143
     decision 7).
