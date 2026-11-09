@@ -1,0 +1,6 @@
+{
+  "identifier": "jtunnel",
+  "description": "The app's own main window may save the \"Receive from JTunnel senders\" setting and its accepted senders, which apply at the next start. No other command is granted.",
+  "windows": ["main"],
+  "permissions": ["allow-set-jtunnel"]
+}

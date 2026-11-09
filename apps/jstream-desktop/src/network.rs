@@ -64,7 +64,7 @@ pub fn set_allowed(file: &Path, allow: bool) -> std::io::Result<()> {
 
 /// Writes `bytes` to a new file only this user can read (on Unix; on Windows the data
 /// folder under the profile is already the user's).
-fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
+pub(crate) fn write_private(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     use std::io::Write as _;
     let mut options = std::fs::OpenOptions::new();
     options.write(true).create(true).truncate(true);
