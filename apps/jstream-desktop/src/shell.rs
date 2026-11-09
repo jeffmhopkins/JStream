@@ -175,22 +175,28 @@ fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
 
 /// Runs the app until its window closes: `ui` serves the pages, `script` (if the
 /// engine started) hands them the engine, `host` is stopped on exit, and
-/// `network_file` is where `set_network` saves "Allow devices on my network".
+/// `network_file` is where `set_network` saves "Allow devices on my network", and
+/// `jtunnel_file` where `set_jtunnel` saves "Receive from JTunnel senders".
 pub fn run(
     ui: Ui,
     script: Option<String>,
     host: Option<Host>,
     network_file: Option<PathBuf>,
+    jtunnel_file: Option<PathBuf>,
 ) -> anyhow::Result<()> {
     let start = start_url()?;
     let mut builder = tauri::Builder::default();
     if let Some(file) = network_file {
         builder = builder.manage(crate::network::Setting(file));
     }
+    if let Some(file) = jtunnel_file {
+        builder = builder.manage(crate::jtunnel::File(file));
+    }
     let app = builder
         .invoke_handler(tauri::generate_handler![
             crate::pick::pick_path,
-            crate::network::set_network
+            crate::network::set_network,
+            crate::jtunnel::set_jtunnel
         ])
         // Asynchronous so the update check's request to GitHub doesn't block the
         // window. File requests are answered on this call, as they were before.

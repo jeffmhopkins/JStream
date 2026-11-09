@@ -1223,6 +1223,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .pairing-fingerprint { margin: 0; overflow-wrap: anywhere; font-size: 0.8rem; }
 .device-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.4rem; width: 100%; }
 .device { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
+.jtunnel-setting { display: grid; gap: 0.6rem; margin: 14px 0; }
+.jtunnel-add { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.jtunnel-add input { flex: 1 1 10rem; width: auto; }
 .device-name { font-weight: 600; }
 .device-dates { flex: 1; color: var(--muted); font-size: 0.8rem; }
 

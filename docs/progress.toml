@@ -90,9 +90,9 @@ note = "measured, then decided in an ADR; no further preview fix is built until 
 release = "alpha.5"
 title = "jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality"
 priority = 1
-status = "planned"
+status = "hardware"
 issues = [1220, 1140]
-prs = [1260, 1315]
+prs = [1260, 1315, 1336, 1339]
 note = "each Windows run opens with it, and a fail blocks the release"
 
 [[target]]
@@ -213,7 +213,7 @@ release = "alpha.5"
 title = "MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources"
 status = "planned"
 issues = [1222, 1223, 1224]
-prs = [1272, 1273, 1299, 1374, 1375, 1415, 1427, 1428, 1444, 1447]
+prs = [1272, 1273, 1299, 1374, 1375, 1415, 1427, 1428, 1444, 1446, 1447]
 
 [[target]]
 release = "alpha.5"

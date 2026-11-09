@@ -31,14 +31,13 @@ fn main() {
         all(target_os = "linux", feature = "webkitgtk")
     ))]
     {
-        // Declares `pick_path` and `set_network` so tauri-build writes
-        // `allow-pick-path` and `allow-set-network` (the `browse` and `network`
-        // capabilities grant those and no other). Without this the Windows build rejects
+        // Declares `pick_path`, `set_network` and `set_jtunnel` so tauri-build writes
+        // `allow-pick-path`, `allow-set-network` and `allow-set-jtunnel` (the `browse`,
+        // `network` and `jtunnel` capabilities grant those and no other). Without this the Windows build rejects
         // the capabilities as unknown permissions.
-        let built =
-            tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
-                tauri_build::AppManifest::new().commands(&["pick_path", "set_network"]),
-            ));
+        let built = tauri_build::try_build(tauri_build::Attributes::new().app_manifest(
+            tauri_build::AppManifest::new().commands(&["pick_path", "set_network", "set_jtunnel"]),
+        ));
         if let Err(error) = built {
             panic!("could not build the Tauri context: {error:#}");
         }

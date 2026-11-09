@@ -5,6 +5,7 @@
 
 use crate::bootstrap;
 use crate::host::{self, Host};
+use crate::jtunnel;
 use crate::logs::LogFile;
 use crate::network;
 use crate::ui::{self, Ui};
@@ -84,6 +85,9 @@ pub struct Startup {
     /// The "Allow devices on my network" setting's file, which the window's
     /// `set_network` command writes, when the data folder is known.
     pub network_file: Option<PathBuf>,
+    /// The "Receive from JTunnel senders" setting's file, which `set_jtunnel` writes,
+    /// when the data folder is known.
+    pub jtunnel_file: Option<PathBuf>,
 }
 
 impl Startup {
@@ -94,6 +98,7 @@ impl Startup {
             script: None,
             host: None,
             network_file: None,
+            jtunnel_file: None,
         }
     }
 }
@@ -132,6 +137,9 @@ pub fn start(
             !options.no_vcam,
             secrets,
         )?;
+        // After the backends, which `host::engine` sets: arrivals are stamped on the
+        // media clock (ADR-0123 §1).
+        jtunnel::start(&engine, &jtunnel::setting_file(data));
         let agents = options.mcp.then(|| host::Agents {
             port: options.port.unwrap_or(host::MCP_PORT),
             token_file: data.join(host::TOKEN_FILE),
@@ -196,6 +204,7 @@ pub fn start(
             network: network::allowed(&network::setting_file(data)),
             network_open: host.network().is_some(),
             wheel_focus_only: wheel_focus_only() || !host.global_wheel(),
+            jtunnel: &jtunnel::read(&jtunnel::setting_file(data)),
         },
     );
     Startup {
@@ -203,6 +212,7 @@ pub fn start(
         script: Some(script),
         host: Some(host),
         network_file: Some(network::setting_file(data)),
+        jtunnel_file: Some(jtunnel::setting_file(data)),
     }
 }
 

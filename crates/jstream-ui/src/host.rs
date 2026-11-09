@@ -150,6 +150,114 @@ pub fn desktop_network_open() -> bool {
         == Some(true)
 }
 
+/// The desktop app's "Receive from JTunnel senders" setting as it was when the app
+/// started (ADR-0123 decisions 1 and 3), if the page runs in an app that has it.
+pub fn desktop_jtunnel() -> Option<JtunnelSetting> {
+    let global = global()?;
+    Reflect::get(&global, &JsValue::from_str("setJtunnel"))
+        .ok()
+        .filter(JsValue::is_function)?;
+    let value = Reflect::get(&global, &JsValue::from_str("jtunnel")).ok()?;
+    let text = leptos::web_sys::js_sys::JSON::stringify(&value)
+        .ok()?
+        .as_string()?;
+    Some(JtunnelSetting::parse(&text))
+}
+
+/// "Receive from JTunnel senders": whether it is on, and the senders this machine
+/// accepts, each a tunnel name and the address and port it sends from.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct JtunnelSetting {
+    /// Whether receiving is on.
+    pub on: bool,
+    /// The accepted senders: `(name, address)`.
+    pub accepted: Vec<(String, String)>,
+}
+
+impl JtunnelSetting {
+    /// The setting from the desktop global's JSON; what it can't read is left out.
+    pub fn parse(text: &str) -> Self {
+        let value: serde_json::Value = serde_json::from_str(text).unwrap_or_default();
+        let accepted = value
+            .get("accepted")
+            .and_then(serde_json::Value::as_array)
+            .map(|list| {
+                list.iter()
+                    .filter_map(|entry| {
+                        let name = entry.get("name")?.as_str()?;
+                        let address = entry.get("address")?.as_str()?;
+                        Some((name.to_owned(), address.to_owned()))
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        Self {
+            on: value.get("on").and_then(serde_json::Value::as_bool) == Some(true),
+            accepted,
+        }
+    }
+
+    /// The setting as the desktop app's `setJtunnel` takes it.
+    pub fn to_json(&self) -> String {
+        serde_json::json!({
+            "on": self.on,
+            "accepted": self
+                .accepted
+                .iter()
+                .map(|(name, address)| serde_json::json!({ "name": name, "address": address }))
+                .collect::<Vec<_>>(),
+        })
+        .to_string()
+    }
+}
+
+/// Asks the desktop app to save "Receive from JTunnel senders", which applies when it
+/// next starts. Resolves to `None` when it was saved, or why it wasn't.
+pub async fn set_jtunnel(setting: &JtunnelSetting) -> Option<String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        set_jtunnel_js(setting).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = setting;
+        Some("only the JStream app can save this".to_owned())
+    }
+}
+
+/// Calls `setJtunnel` on the desktop global and awaits its promise.
+#[cfg(target_arch = "wasm32")]
+async fn set_jtunnel_js(setting: &JtunnelSetting) -> Option<String> {
+    use leptos::wasm_bindgen::JsCast;
+    use leptos::web_sys::js_sys::{Function, JSON, Promise};
+
+    let failed = || Some("The setting could not be saved.".to_owned());
+    let Some(global) = global() else {
+        return failed();
+    };
+    let Some(function) = Reflect::get(&global, &JsValue::from_str("setJtunnel"))
+        .ok()
+        .and_then(|value| value.dyn_into::<Function>().ok())
+    else {
+        return failed();
+    };
+    let Ok(argument) = JSON::parse(&setting.to_json()) else {
+        return failed();
+    };
+    let Some(promise) = function
+        .call1(&global, &argument)
+        .ok()
+        .and_then(|value| value.dyn_into::<Promise>().ok())
+    else {
+        return failed();
+    };
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(value) if value.is_null() => None,
+        Ok(value) => value.as_string().or_else(failed),
+        Err(_) => failed(),
+    }
+}
+
 /// Asks the desktop app to save "Allow devices on my network", which applies when it
 /// next starts. Resolves to whether it was saved.
 pub async fn allow_network(allow: bool) -> bool {

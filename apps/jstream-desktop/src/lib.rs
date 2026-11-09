@@ -15,6 +15,7 @@ pub mod bootstrap;
 pub mod browser;
 pub mod host;
 pub mod hotkeys;
+pub mod jtunnel;
 pub mod links;
 pub mod logs;
 pub mod network;

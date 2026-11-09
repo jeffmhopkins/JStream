@@ -1376,8 +1376,9 @@ a hardware GPU.
   each scene's background ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)
   §4) as the clear of its pass. `Color::from_rgba8` reads the protocol's RGBA8,
   `Color::over_black` is what a mix shows of one with alpha, and `Color::mix` the fade
-  between two during a transition, both blended premultiplied in linear light as the
-  composite pass blends.
+  between two during a transition, both blended premultiplied in the `Blending` space
+  they are given, as the composite pass blends (ADR-0126): encoded values for `srgb`,
+  linear light for `linear`.
 - **Golden files.** When `cargo xtask golden` exists, WARP renders under
   `tests/golden/` should freeze the cases these tolerance checks and geometry grids
   cover. Until then they are the pixel oracle on both software adapters.
