@@ -304,8 +304,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   box, rotation about its centre, with the 3D fields in the formula and defaulting to
   neutral. `content` maps a cropped source with `stretch`, `fit` or `fill`, and
   `flip_h` and `flip_v` mirror it in the box. `drawn_polygon` and `unplace` are
-  ADR-0050's 3D polygon and inverse map, and `check_drawable` whether an edit may store
-  a geometry ([Item geometry](#geometry)). `geometry/camera.rs` holds the scene camera
+  ADR-0050's 3D polygon and inverse map, `corners_in_scene` the box's corners in a 3D
+  scene's space, and `check_drawable` whether an edit may store a geometry
+  ([Item geometry](#geometry)). `geometry/camera.rs` holds the scene camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)): `Vec3`, `SceneCamera` with
   `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
   and `CameraView`, the camera seen on one canvas (its `position`, unit `axes` right,

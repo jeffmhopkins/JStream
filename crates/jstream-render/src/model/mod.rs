@@ -34,15 +34,16 @@ pub const SHADOW_MAP_PX: u32 = 2048;
 /// Bytes of one shadow map's view in the frame uniform: four `vec4`.
 const SHADOW_BYTES: u64 = 64;
 /// Bytes of the frame uniform: two `mat4x4`, a `mat3x3` (three padded columns), a
-/// `vec4` of parameters, a `vec4` of ambient light, the lights and the shadow maps'
-/// views.
+/// `vec4` of parameters, a `vec4` of ambient light, the lights, the shadow maps' views
+/// and the floor's cutting plane.
 const FRAME_BYTES: u64 = 64
     + 64
     + 48
     + 16
     + 16
     + MAX_SCENE_LIGHTS as u64 * LIGHT_BYTES
-    + MAX_SHADOW_MAPS as u64 * SHADOW_BYTES;
+    + MAX_SHADOW_MAPS as u64 * SHADOW_BYTES
+    + 16;
 /// Bytes of a material's uniform: four `vec4`.
 const MATERIAL_BYTES: u64 = 64;
 
@@ -122,6 +123,11 @@ pub struct ModelDraw<'a> {
     /// [`MAX_SHADOW_MAPS`]: each light's visibility at a fragment scales its light. Only
     /// a model lit by its scene uses them; empty for one that receives no shadows.
     pub shadows: &'a [ShadowMap<'a>],
+    /// A floor the model is cut at (ADR-0151 decision 4): nothing of it at or below the
+    /// plane `y = floor` of the scene's space (y down) is drawn, or written to its view
+    /// depth, so a scene drawn mirrored in its floor shows only what stands above it.
+    /// `None` draws all of it; ignored without a `camera`.
+    pub floor: Option<f32>,
 }
 
 /// One light's shadow map (ADR-0151 decision 3): the scene's casters' view depth drawn
@@ -705,7 +711,7 @@ impl ModelRuntime {
             &clip,
             draw.lighting,
             lights.as_ref(),
-            &views[..count],
+            (&views[..count], floor_cut(draw.floor, camera.as_ref())),
         );
         let frame_bind = self.frame_bind_for(gpu, maps);
         let depth = self.depth_view(gpu, width, height);
@@ -815,7 +821,13 @@ impl ModelRuntime {
             .map_err(placement)?;
         // With perspective the orthographic depth scale is unused.
         let clip = solid.clip_matrix(canvas, 0.0);
-        let frame = frame_bytes(&solid, &clip, Lighting::Unlit, None, &[]);
+        let frame = frame_bytes(
+            &solid,
+            &clip,
+            Lighting::Unlit,
+            None,
+            (&[], floor_cut(draw.floor, Some(&camera))),
+        );
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
         gpu.queue.write_buffer(&self.frame, 0, &frame);
@@ -1071,7 +1083,7 @@ fn frame_bytes(
     clip: &[[f32; 4]; 4],
     lighting: Lighting,
     lights: Option<&SceneLighting>,
-    shadows: &[[f32; 16]],
+    (shadows, cut): (&[[f32; 16]], [f32; 4]),
 ) -> Vec<u8> {
     let mut values = Vec::with_capacity((FRAME_BYTES / 4) as usize);
     values.extend(clip.iter().flatten());
@@ -1112,8 +1124,26 @@ fn frame_bytes(
             }
         }
     }
+    // The floor's cutting plane follows the shadow maps.
+    values.extend(cut);
     values.resize((FRAME_BYTES / 4) as usize, 0.0);
     f32_bytes(&values)
+}
+
+/// How far past its floor (ADR-0151 decision 4) a viewing-frame point `s` is, as the
+/// shader reads it: `dot(xyz, s) + w`, at or above 0 at or below `y = floor` of the
+/// scene's space, less half a pixel so the floor itself is cut. A camera's frame is
+/// `s = (rel · right, rel · down, focal − rel · forward)` of `rel` from its position, so
+/// the scene's `y` of `s` is `position.y + right.y s.x + down.y s.y + forward.y (focal −
+/// s.z)`. No floor, or no camera, never cuts.
+fn floor_cut(floor: Option<f32>, view: Option<&jstream_protocol::CameraView>) -> [f32; 4] {
+    let (Some(floor), Some(view)) = (floor.filter(|floor| floor.is_finite()), view) else {
+        return [0.0, 0.0, 0.0, -1.0];
+    };
+    let [right, down, forward] = view.axes();
+    let focal = f64::from(view.focal_px());
+    let at = view.position()[1] + forward[1] * focal - f64::from(floor) + 0.5;
+    [right[1], down[1], -forward[1], at].map(|c| c as f32)
 }
 
 fn f32_bytes(values: &[f32]) -> Vec<u8> {
