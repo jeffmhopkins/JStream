@@ -187,7 +187,8 @@ pub(crate) fn gpu_draw(gpu: Option<Arc<SharedGpu>>) -> OpenPreviewDraw {
     Arc::new(move || {
         let context = gpu.as_ref().and_then(|gpu| gpu.context());
         let mut compositor = match &context {
-            Some(context) => Compositor::on_context(context),
+            // Its errors stay its own, apart from the stage's on the context (#1268).
+            Some(context) => Compositor::on_context(context).keeping_own_errors(),
             None => Compositor::open(OpenOptions::hardware()).map_err(|err| err.to_string())?,
         };
         tracing::info!(

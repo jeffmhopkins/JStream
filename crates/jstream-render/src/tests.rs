@@ -2026,3 +2026,71 @@ fn a_flipped_geometry_matches_its_legacy_negative_scale() {
     assert_eq!(grid(&old, 4), expected);
     assert_eq!(grid(&new, 4), expected);
 }
+
+/// Two compositors on one context, as the program stage and the preview share it: one
+/// keeps its own errors (#1268). An error its call raises comes back to that call and
+/// never fails the other's next frame, and an error raised outside it (here, on the
+/// device directly) is left for the other's `render`, not taken by its own.
+#[test]
+fn a_compositor_keeping_its_own_errors_neither_takes_nor_leaks_them() {
+    let Some(opened) = open() else {
+        return;
+    };
+    let context = GpuContext::new(
+        opened.compositor.adapter().clone(),
+        opened.compositor.device().clone(),
+        opened.compositor.queue().clone(),
+        AdapterId {
+            luid: None,
+            vendor: 0,
+        },
+        None,
+    );
+    let mut stage = Compositor::on_context(&context);
+    let mut preview = Compositor::on_context(&context).keeping_own_errors();
+    let scene = |items| Scene {
+        canvas: FrameSize::new(4, 3).expect("invariant: the test canvas is non-zero"),
+        background: Color::BLACK,
+        items,
+    };
+
+    // The preview's own error: an image whose texture is gone, placed in its frame.
+    let image = preview.upload_rgba8(2, 2, &[255; 16]).expect("an upload");
+    image.texture().destroy();
+    let items = [item(&image, Placement::IDENTITY, Crop::NONE, 1.0)];
+    let failed = preview.render(&scene(&items), true).map(|_| ());
+    assert!(
+        matches!(failed, Err(RenderError::Uncaptured { .. })),
+        "the preview's frame fails with its own error: {failed:?}"
+    );
+    assert!(
+        stage.render(&scene(&[]), true).is_ok(),
+        "the stage's next frame doesn't take the preview's error"
+    );
+
+    // An error from outside either compositor's calls stays for the stage.
+    let _ = opened
+        .compositor
+        .device()
+        .create_texture(&wgpu::TextureDescriptor {
+            label: Some("zero-sized"),
+            size: wgpu::Extent3d {
+                width: 0,
+                height: 0,
+                depth_or_array_layers: 1,
+            },
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING,
+            view_formats: &[],
+        });
+    draw(&mut preview, 4, 3, Color::BLACK, &[]);
+    let failed = stage.render(&scene(&[]), true).map(|_| ());
+    assert!(
+        matches!(failed, Err(RenderError::Uncaptured { .. })),
+        "the stage takes the device's error: {failed:?}"
+    );
+    draw(&mut stage, 4, 3, Color::BLACK, &[]);
+}

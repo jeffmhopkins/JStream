@@ -134,6 +134,71 @@ pub struct Compositor {
     /// The CPU frame conversion (ADR-0117 §2), built on the first upload. Behind a lock
     /// because uploads take `&self`; only the thread drawing with the compositor takes it.
     ingest: Mutex<Option<Ingest>>,
+    /// Whether each call collects its own uncaptured wgpu errors ([`Self::keeping_own_errors`])
+    /// instead of leaving them to the device's shared slot.
+    own_errors: bool,
+}
+
+/// Where a call's uncaptured wgpu errors go.
+enum Errors {
+    /// The device's handler, which keeps the first for [`Compositor::take_error`].
+    Shared,
+    /// Error scopes this thread pushed for the call, which catch every error it raises.
+    Scoped(Scopes),
+}
+
+/// The scopes of one call. Fields drop in order, so the innermost scope is popped first
+/// when a call returns early, as wgpu requires.
+struct Scopes {
+    validation: wgpu::ErrorScopeGuard,
+    internal: wgpu::ErrorScopeGuard,
+    out_of_memory: wgpu::ErrorScopeGuard,
+}
+
+impl Errors {
+    /// Opens scopes on `device` when `own`.
+    fn open(device: &wgpu::Device, own: bool) -> Self {
+        if !own {
+            return Self::Shared;
+        }
+        let out_of_memory = device.push_error_scope(wgpu::ErrorFilter::OutOfMemory);
+        let internal = device.push_error_scope(wgpu::ErrorFilter::Internal);
+        let validation = device.push_error_scope(wgpu::ErrorFilter::Validation);
+        Self::Scoped(Scopes {
+            validation,
+            internal,
+            out_of_memory,
+        })
+    }
+
+    /// Pops the scopes, innermost first: the first error any of them caught. `None` for
+    /// [`Errors::Shared`], whose errors are taken from the device's slot instead.
+    fn end(self) -> Option<String> {
+        let Self::Scoped(scopes) = self else {
+            return None;
+        };
+        let Scopes {
+            validation,
+            internal,
+            out_of_memory,
+        } = scopes;
+        let validation = crate::gpu::scope_error(validation);
+        let internal = crate::gpu::scope_error(internal);
+        let out_of_memory = crate::gpu::scope_error(out_of_memory);
+        validation.or(internal).or(out_of_memory)
+    }
+
+    /// `result`, or [`RenderError::Uncaptured`] for an error the call's scopes caught
+    /// when it succeeded. A shared-slot call's errors stay in the slot, for the next
+    /// `render`.
+    fn close<T>(self, result: Result<T, RenderError>) -> Result<T, RenderError> {
+        let caught = self.end();
+        let value = result?;
+        match caught {
+            Some(detail) => Err(RenderError::Uncaptured { detail }),
+            None => Ok(value),
+        }
+    }
 }
 
 impl Compositor {
@@ -152,6 +217,21 @@ impl Compositor {
         Self::new(Gpu::from_context(ctx))
     }
 
+    /// This compositor, with each call collecting the uncaptured wgpu errors it raises
+    /// itself (#1268): error scopes on the calling thread around the call, so they come
+    /// back as that call's [`RenderError::Uncaptured`] and never reach the device's
+    /// shared slot, and `render` no longer takes the slot. For a compositor that shares
+    /// a context with another one that renders on another thread (the preview's, the
+    /// snapshot thread's, beside the program stage's): wgpu keeps one uncaptured-error
+    /// handler per device, so without it either one's error fails the other's next
+    /// frame. wgpu's error scopes are per thread, so the other threads' errors still
+    /// reach the slot, and a loss is still seen by [`Self::lost`].
+    #[must_use]
+    pub fn keeping_own_errors(mut self) -> Self {
+        self.own_errors = true;
+        self
+    }
+
     /// Uploads tightly packed straight-alpha sRGB RGBA8.
     ///
     /// The bytes are premultiplied in linear light on the GPU and stored as
@@ -163,7 +243,8 @@ impl Compositor {
     /// `rgba` is not `width * height * 4` bytes, and [`RenderError::TooLarge`] when a
     /// side exceeds the adapter limit.
     pub fn upload_rgba8(&self, width: u32, height: u32, rgba: &[u8]) -> Result<Image, RenderError> {
-        image::upload(&self.maker(), width, height, rgba)
+        let errors = self.errors();
+        errors.close(image::upload(&self.maker(), width, height, rgba))
     }
 
     /// [`Self::upload_rgba8`] into a texture of `to` texels, smaller than the frame each
@@ -176,7 +257,8 @@ impl Compositor {
         rgba: &[u8],
         to: (u32, u32),
     ) -> Result<Image, RenderError> {
-        image::upload_into(&self.maker(), width, height, rgba, to)
+        let errors = self.errors();
+        errors.close(image::upload_into(&self.maker(), width, height, rgba, to))
     }
 
     /// Samples `texture`, which must already be on this device: 2D, one sample,
@@ -241,7 +323,8 @@ impl Compositor {
         sync: Option<Arc<dyn FrameSync>>,
         alpha: Alpha,
     ) -> Result<Image, RenderError> {
-        image::import(&self.maker(), texture, sync, alpha)
+        let errors = self.errors();
+        errors.close(image::import(&self.maker(), texture, sync, alpha))
     }
 
     /// [`Self::import`] of a [`jstream_platform::GpuFrame`], keeping its [`FrameSync`] hold.
@@ -249,7 +332,8 @@ impl Compositor {
     /// # Errors
     /// As for [`Self::import`].
     pub fn import_frame(&self, frame: &jstream_platform::GpuFrame) -> Result<Image, RenderError> {
-        image::import_frame(&self.maker(), frame)
+        let errors = self.errors();
+        errors.close(image::import_frame(&self.maker(), frame))
     }
 
     /// Composites `scene`. When `readback` is set, the output carries a CPU copy.
@@ -268,6 +352,7 @@ impl Compositor {
     /// attaches the fences to whichever submit happens next.
     pub fn render(&mut self, scene: &Scene<'_>, readback: bool) -> Result<Output, RenderError> {
         self.readback_wait = std::time::Duration::ZERO;
+        let errors = self.errors();
         self.load(scene)?;
         let width = scene.canvas.width();
         let height = scene.canvas.height();
@@ -331,8 +416,14 @@ impl Compositor {
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         // wgpu validates the commands as they are recorded and submitted, so an error in
-        // this frame has been raised by now; one from an earlier call fails this frame.
-        if let Some(detail) = self.take_error() {
+        // this frame has been raised by now. On the shared slot, one from an earlier call
+        // fails this frame too; a compositor that keeps its own errors sees only this
+        // frame's.
+        let pending = match errors {
+            Errors::Shared => self.take_error(),
+            scoped @ Errors::Scoped(..) => scoped.end(),
+        };
+        if let Some(detail) = pending {
             return Err(RenderError::Uncaptured { detail });
         }
 
@@ -387,7 +478,8 @@ impl Compositor {
     /// [`RenderError::Invalid`] for a zero dimension, [`RenderError::TooLarge`] past the
     /// adapter limit.
     pub fn layer(&self, width: u32, height: u32) -> Result<Image, RenderError> {
-        image::layer(&self.maker(), width, height)
+        let errors = self.errors();
+        errors.close(image::layer(&self.maker(), width, height))
     }
 
     /// Composites `scene` into `target`, a [`Self::layer`] of the canvas size, replacing
@@ -400,6 +492,13 @@ impl Compositor {
     /// a layer this compositor made, is not the canvas size, or is placed by `scene`
     /// itself (a layer cannot be sampled while it is drawn into).
     pub fn render_into(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let drawn = self.draw_into(scene, target);
+        errors.close(drawn)
+    }
+
+    /// [`Self::render_into`], its errors not yet collected.
+    fn draw_into(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
         let view = self.scene_target(scene, target)?;
         self.load(scene)?;
         // The submit lock is held from staging through the submit, as in `render`.
@@ -467,6 +566,13 @@ impl Compositor {
         scene: &Scene<'_>,
         target: &Image,
     ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let drawn = self.draw_view_depth(scene, target);
+        errors.close(drawn)
+    }
+
+    /// [`Self::render_view_depth`], its errors not yet collected.
+    fn draw_view_depth(&mut self, scene: &Scene<'_>, target: &Image) -> Result<(), RenderError> {
         let view = self.scene_target(scene, target)?;
         self.load(scene)?;
         let lock = self.gpu.submit.clone();
@@ -531,7 +637,8 @@ impl Compositor {
         draw: &ModelDraw<'_>,
         target: &Image,
     ) -> Result<(), RenderError> {
-        self.models.draw_depth(&self.gpu, &self.owner, draw, target)
+        let errors = self.errors();
+        errors.close(self.models.draw_depth(&self.gpu, &self.owner, draw, target))
     }
 
     /// The view of `target` when it is a layer of this compositor, of `scene`'s canvas
@@ -587,7 +694,8 @@ impl Compositor {
         &self,
         model: &jstream_media::model::Model,
     ) -> Result<GpuModel, RenderError> {
-        self.models.upload(&self.gpu, &self.owner, model)
+        let errors = self.errors();
+        errors.close(self.models.upload(&self.gpu, &self.owner, model))
     }
 
     /// Draws a model placed by an item into `target`, a [`Self::layer`] of the canvas
@@ -599,7 +707,8 @@ impl Compositor {
     /// [`RenderError::Invalid`] when the model or the layer came from another compositor
     /// or the target is not a layer, or when the placement or camera can't be drawn.
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
-        self.models.draw(&self.gpu, &self.owner, draw, target)
+        let errors = self.errors();
+        errors.close(self.models.draw(&self.gpu, &self.owner, draw, target))
     }
 
     /// Refills `image`, an upload this compositor made, with new tightly packed
@@ -610,7 +719,8 @@ impl Compositor {
     /// [`RenderError::Invalid`] when `image` is not an upload this compositor made, and
     /// [`RenderError::ImageBytes`] when `rgba` is not its `width * height * 4` bytes.
     pub fn rewrite_rgba8(&self, image: &Image, rgba: &[u8]) -> Result<(), RenderError> {
-        image::rewrite(&self.maker(), image, rgba)
+        let errors = self.errors();
+        errors.close(image::rewrite(&self.maker(), image, rgba))
     }
 
     /// Uploads a CPU video frame read as opaque: packed RGBA8 or BGRA8, or NV12 with its
@@ -622,7 +732,8 @@ impl Compositor {
     /// for planes too short for the frame or an odd-sized NV12 frame's missing chroma,
     /// and [`RenderError::TooLarge`] when a side exceeds the adapter limit.
     pub fn upload_frame(&self, frame: &jstream_media::VideoFrame) -> Result<Image, RenderError> {
-        image::upload_frame(&self.maker(), frame)
+        let errors = self.errors();
+        errors.close(image::upload_frame(&self.maker(), frame))
     }
 
     /// Refills `image`, an upload this compositor made at `frame`'s size, with `frame`
@@ -636,7 +747,8 @@ impl Compositor {
         image: &Image,
         frame: &jstream_media::VideoFrame,
     ) -> Result<(), RenderError> {
-        image::rewrite_frame(&self.maker(), image, frame)
+        let errors = self.errors();
+        errors.close(image::rewrite_frame(&self.maker(), image, frame))
     }
 
     /// Draws `filter` over `input` into a new layer of the filter's
@@ -671,6 +783,19 @@ impl Compositor {
     /// As for [`Self::apply_filter`]; also [`RenderError::Invalid`] when `output` is not
     /// a layer this compositor made, is not the filter's output size, or is `input`.
     pub fn apply_filter_into(
+        &mut self,
+        filter: &mut VideoFilter,
+        input: &Image,
+        output: &Image,
+        clock: FilterClock,
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let drawn = self.filter_into(filter, input, output, clock);
+        errors.close(drawn)
+    }
+
+    /// [`Self::apply_filter_into`], its errors not yet collected.
+    fn filter_into(
         &mut self,
         filter: &mut VideoFilter,
         input: &Image,
@@ -960,7 +1085,13 @@ impl Compositor {
             models,
             readback_wait: std::time::Duration::ZERO,
             ingest: Mutex::new(None),
+            own_errors: false,
         }
+    }
+
+    /// The scopes for one call, when this compositor keeps its own errors.
+    fn errors(&self) -> Errors {
+        Errors::open(&self.gpu.device, self.own_errors)
     }
 
     fn prepare(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {

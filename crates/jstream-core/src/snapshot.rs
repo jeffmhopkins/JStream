@@ -4189,7 +4189,8 @@ fn open<'a>(
         }
         let context = shared.context();
         let opened = match &context {
-            Some(context) => Ok(Compositor::on_context(context)),
+            // Its errors stay its own, apart from the stage's on the context (#1268).
+            Some(context) => Ok(Compositor::on_context(context).keeping_own_errors()),
             None => Compositor::open(OpenOptions::hardware()),
         };
         match opened {
