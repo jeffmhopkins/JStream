@@ -24,6 +24,7 @@ mod place;
 mod readback;
 mod scene;
 pub mod transition;
+mod wipe;
 
 pub use cache::{Reclaimed, ResourceCache};
 pub use compositor::Compositor;
