@@ -186,7 +186,13 @@ impl MidiInputs {
 fn every_midi_kind_validates_its_input_channel_and_size() {
     let registry = Registry::builtin();
     let ctx = Context::default();
-    for kind in ["midi_keyboard", "midi_piano_roll", "midi_pads", "midi_cc"] {
+    for kind in [
+        "midi_keyboard",
+        "midi_piano_roll",
+        "midi_pads",
+        "midi_particles",
+        "midi_cc",
+    ] {
         registry
             .create(kind, &settings(kind, json!({})), &ctx)
             .unwrap_or_else(|e| panic!("{kind}'s defaults: {e}"));
@@ -700,4 +706,84 @@ fn transport_alone_is_not_a_running_clock() {
     transport.push(late * MS, &Message::SongPosition { sixteenths: 8 });
     let any = inputs.any().tempo().expect("a tempo");
     assert_eq!((any.at_ms, any.clock_ms), (late, None));
+}
+
+/// The pixels of `frame` that aren't `CLEAR`, with the highest alpha among them.
+fn lit(frame: &VideoFrame) -> (usize, u8) {
+    let (w, h) = (frame.info().size.width(), frame.info().size.height());
+    let mut count = 0;
+    let mut alpha = 0;
+    for y in 0..h {
+        for x in 0..w {
+            let p = pixel(frame, x, y);
+            if p != CLEAR {
+                count += 1;
+                alpha = alpha.max(p[3]);
+            }
+        }
+    }
+    (count, alpha)
+}
+
+#[test]
+fn a_note_bursts_into_particles_at_its_pitch_and_fades_after_its_note_off() {
+    let inputs = Arc::new(MidiInputs::new());
+    // Two lanes, keys 60 and 61: 61's burst starts at x 75, two thirds of the way down.
+    let mut particles = source(
+        "midi_particles",
+        &inputs,
+        json!({"width": 100, "height": 30, "low_key": 60, "high_key": 61, "particles": 8,
+               "spread": 10, "size": 4, "decay_ms": 100, "color": "#ff0000"}),
+    );
+    assert_eq!(lit(&draw(&mut particles, ms(0))).0, 0, "nothing played");
+
+    inputs.push("", 40, &on(61, 127));
+    let frame = draw(&mut particles, ms(40));
+    assert_eq!(pixel(&frame, 75, 20), RED, "the burst starts at its key");
+    assert_eq!(pixel(&frame, 25, 20), CLEAR, "not at the other key's");
+    let held = draw(&mut particles, ms(2000));
+    let (count, alpha) = lit(&held);
+    assert!(count > 0 && alpha == 0xff, "a held note's particles stay");
+    for y in 0..30 {
+        for x in 0..50 {
+            assert_eq!(pixel(&held, x, y), CLEAR, "they stay near their key");
+        }
+    }
+
+    inputs.push("", 2000, &off(61));
+    let (count, alpha) = lit(&draw(&mut particles, ms(2050)));
+    assert!(
+        count > 0 && alpha < 0xff,
+        "half way through the decay they fade"
+    );
+    assert_eq!(
+        lit(&draw(&mut particles, ms(2100))).0,
+        0,
+        "gone once the decay has passed"
+    );
+
+    // A key outside the range bursts into nothing.
+    inputs.push("", 3000, &on(62, 127));
+    assert_eq!(lit(&draw(&mut particles, ms(3000))).0, 0, "out of range");
+}
+
+#[test]
+fn a_soft_note_s_particles_are_smaller_and_dimmer() {
+    let burst = |velocity: u8| {
+        let inputs = Arc::new(MidiInputs::new());
+        let mut particles = source(
+            "midi_particles",
+            &inputs,
+            json!({"width": 60, "height": 60, "low_key": 60, "high_key": 60, "particles": 1,
+                   "spread": 4, "size": 16, "color": "#ff0000"}),
+        );
+        inputs.push("", 40, &on(60, velocity));
+        let frame = draw(&mut particles, ms(40));
+        (lit(&frame).0, pixel(&frame, 30, 40))
+    };
+    let (loud, loud_color) = burst(127);
+    let (soft, soft_color) = burst(1);
+    assert!(soft < loud, "{soft} pixels against {loud}");
+    assert_eq!(loud_color, RED);
+    assert!(soft_color[0] < loud_color[0], "{soft_color:?}");
 }

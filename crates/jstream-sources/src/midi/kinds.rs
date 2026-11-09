@@ -1,5 +1,5 @@
 //! The MIDI visualization kinds (ADR-0137): `midi_keyboard`, `midi_piano_roll`,
-//! `midi_pads`, `midi_cc` and `midi_beat`. Each draws one input's state ([`MidiState`]) on the CPU at
+//! `midi_pads`, `midi_particles`, `midi_cc` and `midi_beat`. Each draws one input's state ([`MidiState`]) on the CPU at
 //! 30 fps, and only while something changes.
 
 use super::{
@@ -839,6 +839,254 @@ impl Draw for PianoRoll {
                     None if held > 0 => bar(canvas, key, start, now_ms, held),
                     None => {}
                 }
+            }
+        }
+        moving
+    }
+}
+
+// ---- midi_particles ------------------------------------------------------------------
+
+/// The most particles one note bursts into.
+const MAX_PARTICLES: u64 = 64;
+
+/// The time constant of a burst's slowing, in milliseconds: a particle has covered 63%
+/// of its way after this long and 99% after five times it.
+const BURST_MS: f32 = 250.0;
+
+/// The golden angle, in radians: successive particles of a burst spread evenly round it.
+const GOLDEN_ANGLE: f32 = 2.399_963;
+
+/// The `midi_particles` kind: each note-on bursts into particles, placed across the
+/// width by pitch and sized by velocity, which fade once the note is released.
+pub(crate) struct ParticlesKind(KindDescriptor);
+
+impl ParticlesKind {
+    pub(crate) fn new() -> Self {
+        let mut params = common(960, 360, 0);
+        params.extend(key_range(21, 108));
+        params.extend([
+            live(described(
+                param(
+                    "particles",
+                    "Particles a note",
+                    whole(1, MAX_PARTICLES as i64),
+                    json!(16),
+                ),
+                "How many particles each note-on bursts into.",
+            )),
+            live(described(
+                param("spread", "Spread", whole(4, 2000), json!(120)),
+                "How far a full-velocity note's particles fly from where it starts, in \
+                 pixels; a softer note's go less far.",
+            )),
+            live(described(
+                param("size", "Particle size", whole(1, 64), json!(6)),
+                "A full-velocity note's particle size in pixels; a softer note's are \
+                 smaller.",
+            )),
+            live(described(
+                param(
+                    "decay_ms",
+                    "Decay",
+                    whole(0, MAX_DECAY_MS as i64),
+                    json!(800),
+                ),
+                "How long a note's particles fade after its note-off, in milliseconds. \
+                 They stay while the note is held.",
+            )),
+            live(described(
+                param("color", "Particle", rgba(), json!("#ff4fd8ff")),
+                "A particle's colour, brighter the harder its note was struck.",
+            )),
+            live(param(
+                "background",
+                "Background",
+                rgba(),
+                json!("#00000000"),
+            )),
+        ]);
+        Self(KindDescriptor {
+            params,
+            ..kind("midi_particles", "MIDI note particles", true, false)
+        })
+    }
+}
+
+impl SourceKind for ParticlesKind {
+    fn descriptor(&self) -> &KindDescriptor {
+        &self.0
+    }
+
+    fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
+        let particles = Particles {
+            style: ParticlesStyle::read(settings)?,
+            events: Vec::with_capacity(super::LOG),
+            open: vec![None; CHANNELS * KEYS],
+        };
+        create(&self.0, settings, ctx, particles)
+    }
+}
+
+#[derive(Clone, Copy)]
+struct ParticlesStyle {
+    channel: Option<u8>,
+    low: u8,
+    high: u8,
+    count: u32,
+    spread: f32,
+    size: f32,
+    decay_ms: u64,
+    color: [u8; 4],
+    background: [u8; 4],
+}
+
+impl ParticlesStyle {
+    fn read(settings: &Settings) -> Result<Self, SourceError> {
+        let (low, high) = keys(settings)?;
+        Ok(Self {
+            channel: channel(settings)?,
+            low,
+            high,
+            count: int(settings, "particles", 1, MAX_PARTICLES)? as u32,
+            spread: int(settings, "spread", 4, 2000)? as f32,
+            size: int(settings, "size", 1, 64)? as f32,
+            decay_ms: int(settings, "decay_ms", 0, MAX_DECAY_MS)?,
+            color: color(settings, "color")?,
+            background: color(settings, "background")?,
+        })
+    }
+}
+
+/// One note's burst, as the log is walked: when it started and ended, and how hard.
+#[derive(Clone, Copy)]
+struct Burst {
+    key: u8,
+    on_ms: u64,
+    /// Its note-off, or `None` while it is held.
+    off_ms: Option<u64>,
+    velocity: u8,
+}
+
+struct Particles {
+    style: ParticlesStyle,
+    events: Vec<NoteEvent>,
+    /// Each channel's and key's note sounding as the log is walked: since when, and how
+    /// hard. Made on create.
+    open: Vec<Option<(u64, u8)>>,
+}
+
+/// A number from 0 to 1 that only `seed` picks, so a burst is the same every frame.
+fn noise(seed: u64) -> f32 {
+    let mut x = seed.wrapping_add(0x9E37_79B9_7F4A_7C15);
+    x = (x ^ (x >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+    x = (x ^ (x >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+    x ^= x >> 31;
+    (x >> 40) as f32 / (1u64 << 24) as f32
+}
+
+/// Draws `burst` at `now_ms` in `style`, and says whether it is still flying out or
+/// fading, so the next tick draws it otherwise.
+fn draw_burst(style: ParticlesStyle, burst: Burst, now_ms: u64, canvas: &mut Canvas<'_>) -> bool {
+    let fade = match burst.off_ms {
+        None => 1.0,
+        Some(_) if style.decay_ms == 0 => return false,
+        Some(off) => {
+            let since = now_ms.saturating_sub(off);
+            if since >= style.decay_ms {
+                return false;
+            }
+            1.0 - since as f32 / style.decay_ms as f32
+        }
+    };
+    let age = now_ms.saturating_sub(burst.on_ms) as f32;
+    let out = 1.0 - (-age / BURST_MS).exp();
+    let strength = 0.35 + 0.65 * f32::from(burst.velocity) / 127.0;
+    let (w, h) = (canvas.width() as f32, canvas.height() as f32);
+    // The lowest key at the left edge's lane, the highest at the right's, a third
+    // of the way up.
+    let lanes = f32::from(style.high - style.low) + 1.0;
+    let x0 = (f32::from(burst.key - style.low) + 0.5) * w / lanes;
+    let y0 = h * 2.0 / 3.0;
+    let side = (style.size * strength).max(1.0);
+    let mut color = by_velocity(style.color, burst.velocity);
+    color[3] = (f32::from(color[3]) * fade).round() as u8;
+    let seed = burst.on_ms << 7 | u64::from(burst.key);
+    for i in 0..style.count {
+        let jitter = noise(seed.wrapping_mul(u64::from(style.count)) + u64::from(i));
+        let angle = i as f32 * GOLDEN_ANGLE + noise(seed) * std::f32::consts::TAU;
+        let reach = style.spread * strength * (0.4 + 0.6 * jitter) * out;
+        let (x, y) = (x0 + angle.cos() * reach, y0 - angle.sin() * reach);
+        let (left, top) = ((x - side / 2.0).round(), (y - side / 2.0).round());
+        canvas.fill(
+            left as i64,
+            top as i64,
+            (left + side) as i64,
+            (top + side) as i64,
+            color,
+        );
+    }
+    // Still flying out until it has covered nearly all its way.
+    burst.off_ms.is_some() || age < BURST_MS * 5.0
+}
+
+impl Draw for Particles {
+    type Style = ParticlesStyle;
+
+    fn style(settings: &Settings) -> Result<ParticlesStyle, SourceError> {
+        ParticlesStyle::read(settings)
+    }
+
+    fn restyle(&mut self, style: ParticlesStyle) {
+        self.style = style;
+    }
+
+    fn draw(&mut self, state: &MidiState, now_ms: u64, canvas: &mut Canvas<'_>) -> bool {
+        let style = self.style;
+        canvas.clear(style.background);
+        state.recent(&mut self.events, super::LOG);
+        self.open.fill(None);
+        let mut moving = false;
+        let events = std::mem::take(&mut self.events);
+        for event in &events {
+            if style.channel.is_some_and(|c| c != event.channel)
+                || !(style.low..=style.high).contains(&event.key)
+            {
+                continue;
+            }
+            let slot = &mut self.open[super::index(event.channel, event.key)];
+            if let Some((on_ms, velocity)) = slot.take() {
+                // A note-off, or a note-on retriggering it: its burst starts fading.
+                let burst = Burst {
+                    key: event.key,
+                    on_ms,
+                    off_ms: Some(event.at_ms),
+                    velocity,
+                };
+                moving |= draw_burst(style, burst, now_ms, canvas);
+            }
+            if event.velocity > 0 {
+                *slot = Some((event.at_ms, event.velocity));
+            }
+        }
+        self.events = events;
+        // The notes still held, drawn last so they are on top.
+        for channel in channels(style.channel) {
+            for key in style.low..=style.high {
+                let Some((on_ms, velocity)) = self.open[super::index(channel, key)] else {
+                    continue;
+                };
+                // A note whose note-off the state has but the log lost isn't held.
+                if state.held(channel, key) == 0 {
+                    continue;
+                }
+                let burst = Burst {
+                    key,
+                    on_ms,
+                    off_ms: None,
+                    velocity,
+                };
+                moving |= draw_burst(style, burst, now_ms, canvas);
             }
         }
         moving
