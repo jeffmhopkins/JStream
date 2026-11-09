@@ -390,8 +390,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    ties (ADR-0094 decision 4). No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
-   blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
-   alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
+   blending off. It samples the FP16 texel at its centre with a nearest sampler (the
+   value a `textureLoad` gives, at about half the cost on llvmpipe, #1449),
+   un-premultiplies (zero RGB where alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
    alpha is stored as-is. The output usage is `RENDER_ATTACHMENT | COPY_SRC |
    TEXTURE_BINDING`, so a snapshot or a later consumer can use it.
 

@@ -34,6 +34,7 @@ pub(crate) use pipeline::{
     Program, Release, Running, StartError, cpu_draw, frame_budget, frame_period, launch,
     launch_program, launch_vcam, on_frame_grid, output_size, parts_from,
 };
+pub(crate) use pipeline::{PictureOutput, picture_queue};
 #[cfg(test)]
 pub(crate) use publish::tests::serve as serve_rtmp;
 pub use publish::{
