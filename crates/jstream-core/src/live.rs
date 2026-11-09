@@ -1101,7 +1101,12 @@ impl LiveSources {
                     frame
                 }
             };
-            return Some((frame.with_model(running.source.model()), None));
+            return Some((
+                frame
+                    .with_model(running.source.model())
+                    .with_light(running.source.light()),
+                None,
+            ));
         }
         let video = match running.source.frame(at) {
             Ok(video) => video,
@@ -1134,7 +1139,9 @@ impl LiveSources {
             .and_then(|change| after(running.start, change, now.timebase()));
         // A model source's frame is its model's stand-in (ADR-0107): the item draws the
         // model in its place.
-        let frame = frame.with_model(running.source.model());
+        let frame = frame
+            .with_model(running.source.model())
+            .with_light(running.source.light());
         Some((frame, next))
     }
 
