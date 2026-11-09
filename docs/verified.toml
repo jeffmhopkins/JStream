@@ -1431,7 +1431,7 @@ stamp = { hash = "b3:4f0b3f117068e82b", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:a0092f39030c74c7", by = "agent:browser-linux", note = "Added the Linux executable (src/main.rs, run_helper), its $ORIGIN rpath build.rs, the cef-gated bin and why the zip builds --lib; Windows DLL text unchanged and still true (ADR-0095)." }
 
 ["CRATE-jstream-cli#design"."body"]
-stamp = { hash = "b3:6b67c2377f4118c2", by = "agent:perf-thread", note = "The bench bullet now says the engine must be able to write to --out; open question 4 lists exit 5 as provisional" }
+stamp = { hash = "b3:6b139f7a258f08e0", by = "agent:claude-perf-suite", note = "The bench stays a protocol client; its design now names every call it uses (adding quality.probe and kind.list); scenario sources are made by its batch and cleaned up." }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:fe0a452ab2d9cc7c", by = "agent:jtunnel-discovery", note = "Re-read against the control README's new mock bullet: the CLI's design is unaffected; holds." }
