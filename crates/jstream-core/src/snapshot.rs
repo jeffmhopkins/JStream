@@ -2921,6 +2921,9 @@ pub(crate) enum GpuKey {
     /// A mix an output draws (`None` for the program of an output that names none), at
     /// the canvas size, which the output stage's chains run over (ADR-0080).
     Mixed(Option<VideoMixId>),
+    /// The view depth of a 3D scene whose video chain reads it (ADR-0143 decision 4),
+    /// drawn after its composite, at the canvas size.
+    ViewDepth(SceneId),
 }
 
 /// The depth a scene that a video filter reads (`scene_mask`) is drawn at: as a scene
@@ -3031,6 +3034,10 @@ struct Pass {
     /// The camera its scene draws through (ADR-0094), `None` for a 2D scene.
     camera: Option<PassCamera>,
     layers: Vec<Layer>,
+    /// Where its view depth is drawn ([`GpuKey::ViewDepth`]), for a 3D scene's
+    /// composite whose chain has a filter that reads it (ADR-0143 decision 4); `None`
+    /// for every other pass, which draws no depth.
+    view_depth: Option<GpuKey>,
 }
 
 /// The committed cameras a pass resolves its camera from (ADR-0094 §6), so that live
@@ -3297,6 +3304,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
             background: Color::TRANSPARENT,
             camera: None,
             layers,
+            view_depth: None,
         }];
     }
     let mut passes = Vec::new();
@@ -3558,6 +3566,13 @@ fn visit_into(
         });
     }
     path.remove(id);
+    let view_depth = (matches!(key, GpuKey::Composite(_))
+        && shot.cameras.contains_key(id)
+        && shot
+            .chains
+            .get(&ChainOwner::Scene(id.clone()))
+            .is_some_and(Chain::reads_depth))
+    .then(|| GpuKey::ViewDepth(id.clone()));
     passes.pass(Pass {
         scene: id.clone(),
         depth,
@@ -3565,6 +3580,7 @@ fn visit_into(
         background: shot.background(id),
         camera: shot.cameras.get(id).cloned(),
         layers,
+        view_depth,
     });
 }
 
@@ -5221,8 +5237,11 @@ fn run_chains(
             }
             ChainStep::Pass(pass) => {
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+                if let Some(depth) = &pass.view_depth {
+                    cache.layer(compositor, depth, canvas.width(), canvas.height())?;
+                }
                 let mut items = Vec::new();
-                fill_items(
+                let camera = fill_items(
                     &mut items,
                     (&*cache, &*chains),
                     (shot, pass),
@@ -5232,7 +5251,23 @@ fn run_chains(
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;
                 };
-                compositor.render_into(&scene(canvas, pass.background, &items), layer)?;
+                let drawn = scene(canvas, pass.background, &items);
+                compositor.render_into(&drawn, layer)?;
+                let focal_px = match (&pass.view_depth, camera) {
+                    (Some(depth), Some(camera)) => draw_view_depth(
+                        compositor,
+                        (&*cache, &*chains),
+                        (shot, pass, &drawn),
+                        depth,
+                        (at, canvas, camera),
+                        live,
+                    )?,
+                    _ => None,
+                };
+                drop(items);
+                if let (Some(depth), Some(focal_px)) = (&pass.view_depth, focal_px) {
+                    chains.drew_depth(cache, &pass.scene, depth, focal_px);
+                }
                 chains.drew_layer(&pass.key);
                 meter.pass(&pass.scene, started.elapsed());
             }
@@ -5419,11 +5454,6 @@ fn draw_model(
     }
 }
 
-/// The lights scene `id` places at `at`, in its stacking order (ADR-0143 decision 2):
-/// each `light` item at the centre of its box and shining out of its back, with its
-/// live values and motion applied, at its kind's intensity times its opacity. A light
-/// that isn't placed by a box (a filled or canvas placement) has no position, and is
-/// left out.
 /// Records `item` of scene `id` in `out`'s lights when what it shows, `source`, is a
 /// `light` source's frame, once per item however often the scene is planned.
 fn note_light(
@@ -5459,6 +5489,11 @@ fn note_light(
     });
 }
 
+/// The lights scene `id` places at `at`, in its stacking order (ADR-0143 decision 2):
+/// each `light` item at the centre of its box and shining out of its back, with its
+/// live values and motion applied, at its kind's intensity times its opacity. A light
+/// that isn't placed by a box (a filled or canvas placement) has no position, and is
+/// left out.
 fn scene_lights(
     shot: &Shot,
     id: &SceneId,
@@ -5544,6 +5579,9 @@ pub(crate) fn claim_layers(
         match step {
             ChainStep::Pass(pass) => {
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
+                if let Some(depth) = &pass.view_depth {
+                    cache.layer(compositor, depth, canvas.width(), canvas.height())?;
+                }
             }
             ChainStep::Box(owner) => {
                 if let (ChainOwner::Item(scene, item), Some(boxed)) = (owner, shot.boxes.get(owner))
@@ -5585,14 +5623,14 @@ pub(crate) fn claim_layers(
 /// Replaces `items` with the layers of `pass`, with the live values in `live` applied,
 /// and a moving layer's track sampled at `at` on a canvas of `canvas`. A layer whose
 /// image is not cached (a failed or skipped upload), or whose video chain failed this
-/// frame, draws nothing.
+/// frame, draws nothing. Returns the camera it draws them through, `None` in 2D.
 fn fill_items<'a>(
     items: &mut Vec<Item<'a>>,
     (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
     (shot, pass): (&Shot, &Pass),
     (at, canvas): (MediaTime, FrameSize),
     (live, captures): (&LiveParams, &dyn Captures),
-) {
+) -> Option<SceneCamera> {
     let size = [canvas.width() as f32, canvas.height() as f32];
     let camera = moved_camera(
         live.camera(pass),
@@ -5602,7 +5640,24 @@ fn fill_items<'a>(
         chains,
     );
     items.clear();
-    items.extend(pass.layers.iter().filter_map(|layer| {
+    items.extend(
+        pass.layers
+            .iter()
+            .filter_map(|layer| layer_item(layer, (cache, chains), shot, (at, size), live, camera)),
+    );
+    camera
+}
+
+/// The item `layer` of a pass draws at `at`, through `camera`, as [`fill_items`] says.
+fn layer_item<'a>(
+    layer: &Layer,
+    (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
+    shot: &Shot,
+    (at, size): (MediaTime, [f32; 2]),
+    live: &LiveParams,
+    camera: Option<SceneCamera>,
+) -> Option<Item<'a>> {
+    {
         if chains.failed(&layer.image) {
             return None;
         }
@@ -5654,7 +5709,82 @@ fn fill_items<'a>(
             camera,
             depth_run: 0,
         })
-    }));
+    }
+}
+
+/// Draws the view depth of `pass`, a 3D scene's composite that its chain reads depth
+/// from, into `key` (ADR-0143 decision 4): its cards as `drawn` places them, then each
+/// model it shows at least half opaque, posed as its layer is. Returns the focal length
+/// the depth is measured with, or `None` for a camera that can't be seen on the canvas.
+///
+/// # Errors
+/// What the compositor reports for drawing into the layer.
+fn draw_view_depth(
+    compositor: &mut Compositor,
+    (cache, chains): (&ResourceCache<GpuKey>, &Chains),
+    (shot, pass, drawn): (&Shot, &Pass, &Scene<'_>),
+    key: &GpuKey,
+    (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
+    live: &LiveParams,
+) -> Result<Option<f32>, RenderError> {
+    let Ok(view) = camera.view(shot.canvas) else {
+        return Ok(None);
+    };
+    let Some(target) = cache.get(key) else {
+        return Ok(None);
+    };
+    compositor.render_view_depth(drawn, target)?;
+    let size = [canvas.width() as f32, canvas.height() as f32];
+    for layer in &pass.layers {
+        if !layer.boxed.is_some_and(|boxed| boxed.model) {
+            continue;
+        }
+        let GpuKey::ItemBox(scene_id, item_id) = &layer.image else {
+            continue;
+        };
+        // A model under half opaque leaves the depth to what is behind it, as a card
+        // does; one whose layer isn't drawn this frame has none.
+        let Some(item) = layer_item(layer, (cache, chains), shot, (at, size), live, Some(camera))
+        else {
+            continue;
+        };
+        let Placement::Layer(geometry) = item.placement else {
+            continue;
+        };
+        if item.opacity < 0.5 {
+            continue;
+        }
+        let Some(source) = shot.boxes.iter().find_map(|(owner, boxed)| match owner {
+            ChainOwner::Item(scene, item) if scene == scene_id && item == item_id => {
+                match &boxed.source {
+                    SourceRef::Frame(source) => Some(source),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }) else {
+            continue;
+        };
+        let (Some(model), Some(shown)) = (
+            chains.model(source),
+            shot.frames
+                .get(source)
+                .and_then(|frame| frame.model.as_ref()),
+        ) else {
+            continue;
+        };
+        compositor.draw_model_depth(
+            &jstream_render::ModelDraw {
+                model,
+                geometry,
+                camera: Some(camera),
+                lighting: shown.lighting,
+                lights: None,
+            },
+            target,
+        )?;
+    }
+    Ok(Some(view.focal_px()))
 }
 
 /// `base`, a pass's camera with its live camera applied, moved by its family's camera

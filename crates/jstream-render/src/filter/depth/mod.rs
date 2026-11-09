@@ -6,8 +6,9 @@
 //! filter has none, and passes its input through unchanged.
 //!
 //! These kinds are built by [`build`] but not listed by [`super::descriptors`]: their
-//! own list is [`descriptors`], which the engine adds to its kinds once it produces the
-//! view depth for them, so no chain holds a depth filter that could never see depth.
+//! own list is [`descriptors`], which an engine adds to its kinds when it produces the
+//! view depth for them, as `jstream-core` does, so no chain holds a depth filter that
+//! could never see depth.
 
 mod fog;
 
