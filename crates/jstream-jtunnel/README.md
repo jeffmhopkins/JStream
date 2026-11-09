@@ -57,7 +57,7 @@ Contents:
   replaced is late, not a second restart.
 - `dnssd`: the mDNS PTR query for `_jtunnel._udp.local`, `parse_announcements` for the
   SRV and TXT records senders answer with (DNS name compression followed with a bound,
-  and a message declaring more than 32 questions and records refused unread),
+  and a message declaring more than 256 questions and records refused unread),
   and `Directory`, the list of senders seen, refreshed by announcements, removed by a
   goodbye and forgotten 35 s after it was last heard, with `len` and `is_empty` so a
   caller can bound it.

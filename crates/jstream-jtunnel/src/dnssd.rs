@@ -33,9 +33,11 @@ const CLASS_IN: u16 = 1;
 /// The most labels a name may have, and the most compression pointers followed, so a
 /// hostile packet can't loop.
 const MAX_LABELS: usize = 128;
-/// The most questions and records a message may declare. A sender's answer has a
-/// handful; the bound keeps the steps one hostile datagram costs to a few thousand.
-const MAX_RECORDS: u32 = 32;
+/// The most questions and records a message may declare. A host's answer carries a PTR,
+/// SRV and TXT record for each of its instances plus its addresses (and NSECs), so a host
+/// with many services needs dozens; the bound keeps the steps one hostile datagram costs
+/// to a few tens of thousands (each record's name walks at most `MAX_LABELS` labels).
+const MAX_RECORDS: u32 = 256;
 
 /// Why a datagram isn't a DNS message this module can read.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

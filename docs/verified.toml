@@ -2883,7 +2883,7 @@ stamp = { hash = "b3:cc236d6e6306819b", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:bc365c27a1f12a16", by = "agent:claude", note = "Edited: schema_version 9 placeholder for an override's timing, the 8 to 9 migration, and item.set_timing on load; set_timing, Prop::Timing and the preset easing check hold" }
 
 ["CRATE-jstream-jtunnel#purpose"."body"]
-stamp = { hash = "b3:564dbe56d57d5a63", by = "agent:jtunnel-accept", note = "dnssd refuses a message declaring more than 32 questions and records unread (#1447 r2's optional cap), as the dnssd bullet now says." }
+stamp = { hash = "b3:9432114ce18433eb", by = "agent:jtunnel-thread", note = "#1466 r1 N1: the dnssd bullet now says a message declaring more than 256 questions and records is refused unread, matching MAX_RECORDS in dnssd.rs" }
 
 ["CRATE-jstream-jtunnel#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-jtunnel"]
 stamp = { hash = "b3:e017fb4f88fdc9f8", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and the link and no_alloc tests: SenderClock, Playout (slew, snap, 2 s restart, replaced stream), and the tests' claims hold; main brought #1272's identical base | kept from the merged side: New crate: re-read against src (wire v2 parse/write matching JTunnel's protocol.cpp checks, trailing bytes ignored, events/raw_events, decode_pcm24, golden-bytes test from JTunnel's C++ writer, SysexAssembler, SeqTracker 64-frame window and restart rule, dnssd query/announcements/Directory 35 s forget) and tests/no_alloc.rs; ADR link is ADR-0122" }
@@ -2892,7 +2892,7 @@ stamp = { hash = "b3:e017fb4f88fdc9f8", by = "agent:r9bzj2", note = "Re-read aga
 stamp = { hash = "b3:c3c44f5fb509a86d", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and the link and no_alloc tests: SenderClock, Playout (slew, snap, 2 s restart, replaced stream), and the tests' claims hold; main brought #1272's identical base" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/dnssd.rs"]
-stamp = { hash = "b3:407771b9e997f2eb", by = "agent:jtunnel-accept", note = "dnssd refuses a message declaring more than 32 questions and records unread (#1447 r2's optional cap), as the dnssd bullet now says." }
+stamp = { hash = "b3:a6618db365c0a61c", by = "agent:jtunnel-thread", note = "#1466 r1 N1: the dnssd bullet now says a message declaring more than 256 questions and records is refused unread, matching MAX_RECORDS in dnssd.rs" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/lib.rs"]
 stamp = { hash = "b3:54b73c8a2f79b4dc", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and the link and no_alloc tests: SenderClock, Playout (slew, snap, 2 s restart, replaced stream), and the tests' claims hold; main brought #1272's identical base | kept from the merged side: New crate: re-read against src (wire v2 parse/write matching JTunnel's protocol.cpp checks, trailing bytes ignored, events/raw_events, decode_pcm24, golden-bytes test from JTunnel's C++ writer, SysexAssembler, SeqTracker 64-frame window and restart rule, dnssd query/announcements/Directory 35 s forget) and tests/no_alloc.rs; ADR link is ADR-0122" }
@@ -7242,7 +7242,7 @@ stamp = { hash = "b3:4f88d8bd0a74a2fd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:b23072c2189801ff", by = "agent:claude", note = "Edited: the Page API paragraph lists the engine's tempo as its own grant (ADR-0124 decision 7): tempo.* never reaches a page through the shared values grant, and a MIDI reading has a tempo only with it." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:12cb5110d41cf940", by = "agent:jtunnel-accept", note = "Adds the desktop setting as the second way on (app command only, a heard sender added only after confirming its name and address) and the 32-record cap on an mDNS message." }
+stamp = { hash = "b3:7c6eba0cbcc93762", by = "agent:jtunnel-thread", note = "#1466 r1 N1: the record cap is now 256, so a host bundling many services is still read; one hostile datagram's bound is restated as a few tens of thousands of steps (256 records x at most 128 labels)" }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }
