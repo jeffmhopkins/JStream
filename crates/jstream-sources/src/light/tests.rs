@@ -40,6 +40,7 @@ fn a_default_light_is_a_white_point_that_never_fades() {
             softness: 0.2,
             shadows: false,
             shadow_softness: 0.3,
+            environment: None,
         })
     );
     let frame = source
@@ -104,4 +105,40 @@ fn a_light_casts_shadows_when_asked() {
         .expect("a light");
     assert!(!light.shadows);
     assert!((light.shadow_softness - 0.3).abs() < 1e-6);
+}
+
+/// ADR-0151 decision 9: an environment light carries its sky, the defaults when its
+/// settings predate it, and the source named as its panorama; another kind has none.
+#[test]
+fn an_environment_light_carries_its_sky() {
+    let source = create(json!({"type": "environment", "sky_color": "#0000ff", "image": "hdri"}));
+    let sky = source
+        .light()
+        .and_then(|light| light.environment)
+        .expect("a sky");
+    assert_eq!(sky.sky, [0.0, 0.0, 1.0]);
+    assert_eq!(sky.horizon, [1.0; 3]);
+    assert_eq!(sky.image, Some(jstream_protocol::SourceId::new("hdri")));
+    let mut older = settings(json!({"type": "environment"}));
+    for id in ["sky_color", "horizon_color", "ground_color", "image"] {
+        older.0.remove(id);
+    }
+    let older = LightKind::new()
+        .create(&older, &Context::default())
+        .expect("a light");
+    let sky = older
+        .light()
+        .and_then(|light| light.environment)
+        .expect("a sky");
+    assert_eq!(sky.image, None);
+    assert_eq!(sky.ground, [58.0 / 255.0; 3]);
+    assert_eq!(create(json!({})).light().and_then(|l| l.environment), None);
+    assert!(
+        LightKind::new()
+            .create(
+                &settings(json!({"type": "environment", "image": 3})),
+                &Context::default()
+            )
+            .is_err()
+    );
 }

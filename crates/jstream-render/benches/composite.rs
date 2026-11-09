@@ -306,6 +306,7 @@ fn three_d(c: &mut Criterion) {
             lighting: Lighting::Studio,
             lights: None,
             shadows: &[],
+            environment: None,
         };
         group.bench_function(BenchmarkId::new("shape", shape.name()), |b| {
             b.iter(|| {
@@ -387,6 +388,7 @@ fn three_d(c: &mut Criterion) {
                         lighting: Lighting::Scene,
                         lights: None,
                         shadows: &[],
+                        environment: None,
                     },
                     &map,
                 )
@@ -400,6 +402,7 @@ fn three_d(c: &mut Criterion) {
                         lighting: Lighting::Scene,
                         lights: Some(&lights),
                         shadows: &shadows,
+                        environment: None,
                     },
                     &layer,
                 )

@@ -1275,7 +1275,9 @@ lights ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md): poin
 spot, directional and ambient, up to 8 shading lights, placed in the camera's frame in
 `f64`; a spot or directional light may cast shadows, up to 2 a scene, each through a
 2048² map of the scene's view depth drawn from the light once a frame and sampled with a
-soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md)); the layer is then placed flat
+soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
+environment light's sky, a gradient or a source's picture as a panorama, in place of the
+studio gradient); the layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth

@@ -96,6 +96,7 @@ fn draw_lit(
                 lighting,
                 lights,
                 shadows: &[],
+                environment: None,
             },
             &layer,
         )
@@ -431,6 +432,7 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     lighting: Lighting::Unlit,
                     lights: None,
                     shadows: &[],
+                    environment: None,
                 },
                 &layer,
             )
@@ -470,6 +472,7 @@ fn a_model_from_another_compositor_is_refused() {
             lighting: Lighting::Studio,
             lights: None,
             shadows: &[],
+            environment: None,
         },
         &layer,
     );
@@ -567,6 +570,7 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     lighting: Lighting::Unlit,
                     lights: None,
                     shadows: &[],
+                    environment: None,
                 },
                 &layer,
             )
@@ -947,6 +951,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                 lighting: Lighting::Scene,
                 lights: None,
                 shadows: &[],
+                environment: None,
             },
             &map,
         )
@@ -994,6 +999,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                     lighting: Lighting::Scene,
                     lights: Some(&lights),
                     shadows,
+                    environment: None,
                 },
                 &layer,
             )
@@ -1024,4 +1030,101 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
         under_card + 100 < under_lit,
         "a card's shadow darkens the wall: {under_card} against {under_lit}"
     );
+}
+
+/// Draws the grey sphere as [`lit_sphere`] does, lit by `lights` and `environment`.
+fn sky_sphere(
+    compositor: &mut Compositor,
+    lights: &[SceneLight],
+    environment: super::Environment<'_>,
+) -> Snapshot {
+    let uploaded = compositor
+        .upload_model(&grey_sphere())
+        .expect("the model uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera,
+                lighting: Lighting::Scene,
+                lights: Some(lights),
+                shadows: &[],
+                environment: Some(environment),
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    render(compositor, &items)
+}
+
+/// ADR-0151 decision 9: a scene's environment lights a scene-lit model on its own: a
+/// blue sky over a black ground lights the sphere's top blue and leaves its underside
+/// dark; a panorama red above and green below lights the top red and the bottom green;
+/// an ambient light at 0 scales the sky to nothing.
+#[test]
+fn golden_model_an_environment_lights_a_model_from_its_sky() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let black = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    let gradient = super::Environment {
+        sky: Color {
+            r: 0.0,
+            g: 0.0,
+            b: 1.0,
+            a: 1.0,
+        },
+        horizon: black,
+        ground: black,
+        intensity: 2.0,
+        turn_deg: 0.0,
+        image: None,
+    };
+    let shot = sky_sphere(&mut opened.compositor, &[], gradient);
+    let (top, bottom) = (rgb(&shot, 80, 16), rgb(&shot, 80, 86));
+    assert!(
+        top[2] > 40 && top[2] > top[0] + 30,
+        "the sky lights the top: {top:?}"
+    );
+    assert!(
+        luma(bottom) < luma(top) / 2,
+        "the ground leaves the bottom dark: {bottom:?}"
+    );
+    let dark = sky_sphere(&mut opened.compositor, &[ambient(0.0)], gradient);
+    assert!(luma(rgb(&dark, 80, 16)) < 6, "{:?}", rgb(&dark, 80, 16));
+    let mut rgba = Vec::new();
+    for y in 0..4 {
+        for _ in 0..8 {
+            rgba.extend_from_slice(if y < 2 {
+                &[255, 0, 0, 255]
+            } else {
+                &[0, 255, 0, 255]
+            });
+        }
+    }
+    let picture = opened
+        .compositor
+        .upload_rgba8(8, 4, &rgba)
+        .expect("the panorama uploads");
+    let panorama = super::Environment {
+        image: Some(&picture),
+        ..gradient
+    };
+    let shot = sky_sphere(&mut opened.compositor, &[], panorama);
+    let (top, bottom) = (rgb(&shot, 80, 16), rgb(&shot, 80, 86));
+    assert!(top[0] > top[1] + 30, "red above: {top:?}");
+    assert!(bottom[1] > bottom[0] + 30, "green below: {bottom:?}");
 }

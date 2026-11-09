@@ -2128,13 +2128,17 @@ source: crates/jstream-core/src/kinds.rs
             "label": "Directional"
           },
           {
+            "value": "environment",
+            "label": "Environment"
+          },
+          {
             "value": "ambient",
             "label": "Ambient"
           }
         ],
         "default": "point",
         "label": "Type",
-        "description": "Point shines every way from the item's centre; spot shines out of the back of the item within its cone; directional shines out of its back from infinitely far; ambient lights everything evenly.",
+        "description": "Point shines every way from the item's centre; spot shines out of the back of the item within its cone; directional shines out of its back from infinitely far; ambient lights everything evenly; environment is the sky all around the scene, which scene-lit models take their ambient light and reflections from (only the first in a scene counts), its item's turn spinning it.",
         "live": true
       },
       {
@@ -2217,6 +2221,58 @@ source: crates/jstream-core/src/kinds.rs
         "default": 0.3,
         "label": "Shadow softness",
         "description": "How soft its shadows' edges are, 0 hard.",
+        "live": true
+      },
+      {
+        "id": "sky_color",
+        "type": "color",
+        "alpha": false,
+        "default": "#9cc2e8",
+        "label": "Sky",
+        "description": "An environment's sky straight up.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "horizon_color",
+        "type": "color",
+        "alpha": false,
+        "default": "#ffffff",
+        "label": "Horizon",
+        "description": "An environment's sky at the horizon.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "ground_color",
+        "type": "color",
+        "alpha": false,
+        "default": "#3a3a3a",
+        "label": "Ground",
+        "description": "An environment's ground, below the horizon.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "image",
+        "type": "source",
+        "media": "video",
+        "default": null,
+        "label": "Image",
+        "description": "A source whose picture is the sky instead of the colours, as an equirectangular panorama: an HDRI still, or any live source.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
         "live": true
       }
     ]
