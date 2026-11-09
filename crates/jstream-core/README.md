@@ -275,7 +275,8 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
-  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)).
+  ([ADR-0030](../../docs/adr/0030-studio-state-and-scene-switching.md)), and the warm
+  scenes beside the program (ADR-0117 §7, see [Program scene](#program-scene)).
 - **Timelines** (`timelines.rs`,
   [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)): the timelines playing,
   studio state beside the program scene, whose cues the live ticker fires on the
@@ -311,7 +312,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   *Preview streams* in [Design](#design)).
 - **Runtime** (`runtime/`): the `output.start` pipeline. Every running output shares
   one program stage: the render thread reads the platform capture mailbox of each
-  display, window and webcam the program mix or a video mix shows
+  display, window and webcam the program mix, a video mix or a warm scene shows
   (`runtime/captures.rs`, which starts and stops them on a `jstream-capture` thread),
   composites each video
   mix the running outputs show, on its own ticks, then each monitored scene a preview
@@ -398,7 +399,7 @@ covers = ["crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**"
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
-  `src/tests/timelines.rs`, `tests/mcp.rs`,
+  `src/tests/timelines.rs`, `src/tests/warm_scenes.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -1049,7 +1050,11 @@ with its first scene on program. The program mix, on the render thread and in
 follows the same rules: `studio.set_preview` sets it (`not_found` for a
 missing scene; setting the scene already there emits nothing), the first scene goes on
 preview when it is created, and a deleted preview scene gives way to the first scene
-left. A switch never moves it, and nothing draws it until E2's preview mix does.
+left. A switch never moves it, and nothing draws it until E2's preview mix does. The
+studio also names the **warm scenes** (ADR-0117 §7, `Studio::warm`): the Preview scene,
+then the scenes most recently on program, at most `WARM_SCENES` (3) of them and never
+the program scene. A deleted scene is forgotten. Their captures stay running (see
+*Preview streams*).
 
 **Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its
 preset (`transition::resolve`: the preset it names, else the new scene's
@@ -2284,6 +2289,17 @@ draw after every mix, so the program never waits for one: one not begun within t
 tick's period (`MixFrame::deadline`) is skipped, its layers kept, nothing pushed, and
 counted as a frame not read back in `render_ticks`. A scene not planned yet waits; one
 deleted ends its stream as before.
+
+The **warm scenes'** captures (ADR-0117 §7) run beside the program's, so a switch to
+one, or a transition toward it, finds its webcam open and its display already
+capturing. The engine plans them (`WarmCaptures`, with a look-up that answers only
+captures, so it reaches no source) only when the collection's `rev`, its placed
+keyframes, the warm scenes or an installed source changed, and publishes the set
+(`RenderHub::publish_warm`) after each plan and after `studio.set_preview`. The render
+thread adopts it with the program's snapshot, hands the replaced one to the collector,
+and adds it to the captures it runs (`Watched::of`). A warm scene is not composited
+unless it is monitored, and its other sources are not kept warm yet; the pin, the
+hotkey-bound scenes and the budget wait for Application Settings (#1207).
 
 A JPEG or PNG stream gets a picture queue instead of an encoder session
 (`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read

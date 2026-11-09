@@ -12,11 +12,19 @@
 //!
 //! A switch puts its scene on program at once; when its preset runs a transition, the
 //! studio keeps it as [`Running`] until it ends, and the program mix draws it.
+//!
+//! The studio also names the scenes kept warm beside the program (ADR-0117 §7): the
+//! Preview scene, then the scenes most recently on program, at most [`WARM_SCENES`] of
+//! them. A running transition's destination is the program scene itself.
 
 use jstream_graph::State;
 use jstream_protocol::{EntityKind, ProtocolError, SceneId};
 
 use crate::transition::Running;
+
+/// How many scenes besides the program the studio keeps warm. The budget and pins of
+/// ADR-0117 §7 replace it once Application Settings hold them (#1207).
+pub(crate) const WARM_SCENES: usize = 3;
 
 /// The studio state the engine keeps under its collection lock.
 #[derive(Debug, Default)]
@@ -24,6 +32,9 @@ pub(crate) struct Studio {
     program: Option<SceneId>,
     preview: Option<SceneId>,
     running: Option<Running>,
+    /// The scenes on program before the current one, the most recent first, never the
+    /// program scene, at most [`WARM_SCENES`].
+    recent: Vec<SceneId>,
 }
 
 impl Studio {
@@ -45,8 +56,30 @@ impl Studio {
     /// Puts `scene_id`, which the caller checked, on program, with `running` as the
     /// transition toward it, or none for a cut.
     pub(crate) fn switch(&mut self, scene_id: SceneId, running: Option<Running>) {
+        if let Some(left) = self.program.take().filter(|left| *left != scene_id) {
+            self.recent.retain(|id| *id != left);
+            self.recent.insert(0, left);
+        }
+        self.recent.retain(|id| *id != scene_id);
+        self.recent.truncate(WARM_SCENES);
         self.program = Some(scene_id);
         self.running = running;
+    }
+
+    /// The scenes kept warm beside the program, in priority order (ADR-0117 §7): the
+    /// Preview scene, then the scenes most recently on program, at most
+    /// [`WARM_SCENES`], never the program scene.
+    pub(crate) fn warm(&self) -> Vec<SceneId> {
+        let mut warm: Vec<SceneId> = Vec::with_capacity(WARM_SCENES);
+        for id in self.preview.iter().chain(&self.recent) {
+            if warm.len() == WARM_SCENES {
+                break;
+            }
+            if Some(id) != self.program.as_ref() && !warm.contains(id) {
+                warm.push(id.clone());
+            }
+        }
+        warm
     }
 
     /// Lets the running transition go once it has ended.
@@ -73,8 +106,10 @@ impl Studio {
     /// Follows the collection after it changed. A program or preview scene the
     /// collection no longer has gives way to its first scene, and an empty one takes the
     /// first scene once there is one. A transition toward a program scene that moved is
-    /// dropped: the new one shows at once. `true` when program or preview changed.
+    /// dropped: the new one shows at once. A recent scene the collection no longer has
+    /// is forgotten. `true` when program or preview changed.
     pub(crate) fn reconcile(&mut self, collection: &State) -> bool {
+        self.recent.retain(|id| collection.scene(id).is_some());
         let first = collection.scenes().first().map(|scene| scene.id().clone());
         let mut changed = false;
         for slot in [&mut self.program, &mut self.preview] {
@@ -215,5 +250,60 @@ mod tests {
         );
         assert!(studio.reconcile(graph.state()));
         assert_eq!(studio.program(), None);
+    }
+
+    #[test]
+    fn warm_scenes_are_preview_then_the_most_recent_without_the_program() {
+        let mut graph = Graph::new();
+        let mut studio = Studio::default();
+        apply(
+            &mut graph,
+            ["a", "b", "c", "d", "e"].into_iter().map(create).collect(),
+        );
+        studio.reconcile(graph.state());
+        assert_eq!(
+            studio.warm(),
+            Vec::<SceneId>::new(),
+            "preview is the program"
+        );
+
+        studio.switch(scene("b"), None);
+        assert_eq!(
+            studio.warm(),
+            vec![scene("a")],
+            "a is preview and was shown"
+        );
+        studio.switch(scene("c"), None);
+        studio.switch(scene("b"), None);
+        assert_eq!(studio.warm(), vec![scene("a"), scene("c")]);
+        studio.switch(scene("b"), None);
+        assert_eq!(
+            studio.warm(),
+            vec![scene("a"), scene("c")],
+            "switching to the program again changes nothing"
+        );
+
+        studio
+            .set_preview(graph.state(), &scene("e"))
+            .expect("e exists");
+        studio.switch(scene("d"), None);
+        assert_eq!(
+            studio.warm(),
+            vec![scene("e"), scene("b"), scene("c")],
+            "preview first, then the most recent, capped"
+        );
+
+        apply(
+            &mut graph,
+            vec![Edit::SceneDelete {
+                scene_id: scene("b"),
+            }],
+        );
+        studio.reconcile(graph.state());
+        assert_eq!(
+            studio.warm(),
+            vec![scene("e"), scene("c"), scene("a")],
+            "a deleted scene is forgotten"
+        );
     }
 }

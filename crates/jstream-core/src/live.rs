@@ -92,6 +92,9 @@ pub(crate) struct LiveSources {
     /// Numbers the builds, so a result installs only if nothing changed the source
     /// since it was asked for.
     tickets: u64,
+    /// Counts the builds installed, so what is planned from the running sources alone
+    /// (the warm scenes' captures) is planned again when one changes.
+    installs: u64,
     worker: Arc<Worker>,
     host: Weak<dyn LiveHost>,
     /// Whether the thread has been started.
@@ -279,6 +282,7 @@ impl LiveSources {
             plan_wake: None,
             page_wake: None,
             tickets: 0,
+            installs: 0,
             worker: Arc::new(Worker::new(
                 Arc::new(SystemClock::new()),
                 Arc::clone(&meters),
@@ -690,6 +694,7 @@ impl LiveSources {
         }
         let plan = self.plan;
         self.audio_changed = true;
+        self.installs += 1;
         let running = match built.result {
             Ok(source) => Some(Running {
                 slot: source
@@ -897,6 +902,11 @@ impl LiveSources {
     /// has made a frame.
     pub(crate) fn size(&self, source_id: &SourceId) -> Option<FrameSize> {
         self.entries.get(source_id)?.running.as_ref()?.size
+    }
+
+    /// How many builds have been installed: it changes whenever a running source does.
+    pub(crate) fn installs(&self) -> u64 {
+        self.installs
     }
 
     /// The capture the program stage runs for `source_id`, if it is a capture source

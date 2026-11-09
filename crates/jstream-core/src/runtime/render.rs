@@ -87,6 +87,9 @@ pub(crate) struct RenderHub {
     live: ArcSwap<LiveParams>,
     /// The monitored scenes' snapshots, published with each plan that changes them.
     scenes: ArcSwap<SceneShots>,
+    /// The captures of the warm scenes (ADR-0117 §7), kept running beside the program's,
+    /// published when the warm scenes or what they capture change.
+    warm: ArcSwap<BTreeSet<CaptureKey>>,
     /// The generation the render thread adopted last, or [`STOPPED`] / [`STARTING`].
     adopted: AtomicU64,
     /// Ticks the render thread has composited since the engine started, across every
@@ -103,6 +106,7 @@ impl Default for RenderHub {
             }),
             live: ArcSwap::from_pointee(LiveParams::default()),
             scenes: ArcSwap::from_pointee(SceneShots::new()),
+            warm: ArcSwap::from_pointee(BTreeSet::new()),
             adopted: AtomicU64::new(STOPPED),
             drawn: AtomicU64::new(0),
         }
@@ -159,6 +163,20 @@ impl RenderHub {
         }
     }
 
+    /// Publishes the warm scenes' captures, unless they are the ones published. Called
+    /// with the collection lock held, like [`publish`](Self::publish).
+    pub(crate) fn publish_warm(&self, warm: &Arc<BTreeSet<CaptureKey>>) {
+        if !Arc::ptr_eq(&self.warm.load(), warm) {
+            self.warm.store(Arc::clone(warm));
+        }
+    }
+
+    /// The warm scenes' captures published last, for tests.
+    #[cfg(test)]
+    pub(crate) fn load_warm(&self) -> Arc<BTreeSet<CaptureKey>> {
+        self.warm.load_full()
+    }
+
     /// The live values on the parameter channel, for a reader that is not a real-time
     /// thread.
     pub(crate) fn load_live(&self) -> Arc<LiveParams> {
@@ -190,6 +208,8 @@ pub(crate) struct RenderReader {
     live: Option<Arc<LiveParams>>,
     /// The monitored scenes' snapshots it read last, loaded with `held`.
     scenes: Option<Arc<SceneShots>>,
+    /// The warm scenes' captures it read last, loaded with `held`.
+    warm: Option<Arc<BTreeSet<CaptureKey>>>,
     collector: Collector,
 }
 
@@ -200,6 +220,7 @@ impl RenderReader {
             held: None,
             live: None,
             scenes: None,
+            warm: None,
             collector,
         }
     }
@@ -252,6 +273,14 @@ impl RenderReader {
         if fresh && let Some(old) = self.scenes.replace(arc_swap::Guard::into_inner(scenes)) {
             self.collector.free(Garbage::Scenes(old));
         }
+        let warm = self.hub.warm.load();
+        let fresh = !self
+            .warm
+            .as_ref()
+            .is_some_and(|held| Arc::ptr_eq(held, &warm));
+        if fresh && let Some(old) = self.warm.replace(arc_swap::Guard::into_inner(warm)) {
+            self.collector.free(Garbage::Warm(old));
+        }
         self.held
             .as_deref()
             .expect("invariant: the first adopt always stores a snapshot")
@@ -275,6 +304,13 @@ impl RenderReader {
         self.scenes
             .as_deref()
             .expect("invariant: adopt always stores the scenes")
+    }
+
+    /// The warm scenes' captures the last [`adopt`](Self::adopt) read.
+    pub(crate) fn warm(&self) -> &BTreeSet<CaptureKey> {
+        self.warm
+            .as_deref()
+            .expect("invariant: adopt always stores the warm captures")
     }
 
     /// Counts one composited tick in the hub's [`drawn`](RenderHub::drawn): one
@@ -301,6 +337,9 @@ impl RenderReader {
         if let Some(scenes) = self.scenes.take() {
             self.collector.free(Garbage::Scenes(scenes));
         }
+        if let Some(warm) = self.warm.take() {
+            self.collector.free(Garbage::Warm(warm));
+        }
     }
 }
 
@@ -318,7 +357,10 @@ pub(crate) enum Garbage {
     Live(Arc<LiveParams>),
     /// The monitored scenes' snapshots the render thread replaced, for the same reason.
     Scenes(Arc<SceneShots>),
-    /// The captures the render thread started for the program and the monitored scenes,
+    /// The warm scenes' captures the render thread replaced, for the same reason.
+    Warm(Arc<BTreeSet<CaptureKey>>),
+    /// The captures the render thread started for the program, the monitored scenes and
+    /// the warm scenes,
     /// replaced when they change, with the scenes they were read from.
     Wanted(BTreeSet<CaptureKey>, Vec<SceneId>),
     /// GPU images whose last frame the GPU has finished.
@@ -396,6 +438,7 @@ fn collect(rx: Receiver<Garbage>) {
             Garbage::Snapshot(snapshot) => drop(snapshot),
             Garbage::Live(live) => drop(live),
             Garbage::Scenes(scenes) => drop(scenes),
+            Garbage::Warm(warm) => drop(warm),
             Garbage::Wanted(wanted, scenes) => drop((wanted, scenes)),
             Garbage::Images(images) => drop(images),
             Garbage::Video(input) => drop(input),
