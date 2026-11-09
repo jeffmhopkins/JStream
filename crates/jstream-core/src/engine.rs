@@ -5027,6 +5027,8 @@ impl State {
         if !same {
             *scene_shots = Arc::new(shots);
         }
+        // The program stage draws the scenes it is asked to as extra mixes (ADR-0117 §6).
+        render.publish_scenes(scene_shots);
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
         let previewed: BTreeSet<SourceId> = previews
