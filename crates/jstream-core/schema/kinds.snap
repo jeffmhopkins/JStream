@@ -765,6 +765,24 @@ source: crates/jstream-core/src/kinds.rs
         "live": true
       },
       {
+        "id": "speed_unit",
+        "type": "enum",
+        "options": [
+          {
+            "value": "px_s",
+            "label": "px/s"
+          },
+          {
+            "value": "beats",
+            "label": "Beats"
+          }
+        ],
+        "default": "px_s",
+        "label": "Speed in",
+        "description": "Whether the dashes and the gradient move at a speed in pixels a second, or go round the edge once every so many beats of the MIDI clock's tempo.",
+        "live": true
+      },
+      {
         "id": "speed",
         "type": "float",
         "min": -2000.0,
@@ -773,6 +791,25 @@ source: crates/jstream-core/src/kinds.rs
         "default": 0.0,
         "label": "Speed",
         "description": "Moves the dashes and the gradient around the edge. Positive is clockwise. 0 holds still.",
+        "visible_if": {
+          "param": "speed_unit",
+          "equals": "px_s"
+        },
+        "live": true
+      },
+      {
+        "id": "lap_beats",
+        "type": "float",
+        "min": -64.0,
+        "max": 64.0,
+        "unit": "beats",
+        "default": 4.0,
+        "label": "Beats per lap",
+        "description": "How many beats of the MIDI clock's tempo the dashes and the gradient take to go once round the edge, on the beat. Negative is anticlockwise. 0 holds still. They stop when the song stops, and hold still with no clock.",
+        "visible_if": {
+          "param": "speed_unit",
+          "equals": "beats"
+        },
         "live": true
       },
       {
@@ -915,13 +952,13 @@ source: crates/jstream-core/src/kinds.rs
       {
         "id": "fps",
         "type": "int",
-        "min": 1,
+        "min": 0,
         "max": 60,
         "step": 1,
         "unit": "fps",
-        "default": 30,
+        "default": 0,
         "label": "Frame rate",
-        "description": "The most frames a second the page paints. It paints less when nothing changes.",
+        "description": "The most frames a second the page paints. It paints less when nothing changes. 0 follows the program's frame rate, so a page's animation is as smooth as the program.",
         "live": false
       },
       {
@@ -1027,6 +1064,49 @@ source: crates/jstream-core/src/kinds.rs
         "group": "Page API",
         "visible_if": {
           "param": "page_api_audio",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_tempo",
+        "type": "bool",
+        "default": false,
+        "label": "Tempo",
+        "description": "Also give the page the engine's tempo: the tempo.* shared values, and the tempo in jstream.midi()'s reading (ADR-0147).",
+        "warning": "A page given the tempo can follow the song's beat and transport, and a page from the web can send that anywhere.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_midi",
+        "type": "bool",
+        "default": false,
+        "label": "MIDI",
+        "description": "Also give the page one MIDI input's held notes, controllers and latest notes, with jstream.midi() (ADR-0147); its tempo too while Tempo is on.",
+        "warning": "A page given MIDI sees every note and control on its port.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_midi_input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The MIDI input the page may read: a MIDI port's or JTunnel sender's name. Empty gives it every input at once.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api_midi",
           "equals": true
         },
         "live": false

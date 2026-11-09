@@ -2,17 +2,17 @@
 //! engine's URL and control token, and what the app knows about its virtual camera.
 //!
 //! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam, collection,
-//! network, networkOpen, globalWheel, browse, allowNetwork }` that can't be reassigned, and only on a page from the
+//! network, networkOpen, wheelFocusOnly, browse, allowNetwork }` that can't be reassigned, and only on a page from the
 //! app's own origin: the webview also refuses to navigate anywhere else (see `shell.rs`),
 //! so no other page ever sees the token. `collection` is the data folder, which
 //! `collection` asset paths are relative to. `browse` asks the app's `pick_path` command
 //! to open a native dialog and resolves to the path the person picked, or null.
+//! `wheelFocusOnly` is whether, at the start, wheel chords were heard only while JStream
+//! had the focus, because the app lacked macOS's Accessibility permission.
 //! `network` is whether "Allow devices on my network" was on when the app started,
 //! `networkOpen` whether the network listener then opened, and `allowNetwork(allow)`
 //! asks the `set_network` command to save it (`network.rs`), resolving to whether it was
 //! saved (false when the command fails too); it applies at the next start.
-//! `globalWheel` is whether wheel chords are heard while another app has the focus
-//! (false on Wayland, ADR-0112 §5), so the UI can say when they are not.
 //! `jstream-ui`'s host hook (`host.rs`) reads it and connects without the connect form.
 //! The token is the in-memory one the app made at startup, or with `--mcp` the data
 //! folder's user-only token file's; it is never written to a log (R-SEC-001).
@@ -24,40 +24,39 @@ use std::fmt::Write as _;
 /// The global the UI looks for. `jstream-ui`'s `host::DESKTOP_GLOBAL` names it too.
 pub const GLOBAL: &str = "__JSTREAM_DESKTOP__";
 
-/// What the script tells the page about the host, beside the engine.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
-pub struct Flags {
+/// What the app tells the page beside its engine's URL and token.
+#[derive(Clone, Copy, Debug)]
+pub struct Page<'a> {
+    /// The virtual camera's status ([`crate::host::VcamStatus::as_str`]).
+    pub vcam: &'a str,
+    /// The data folder, which `collection` asset paths are relative to.
+    pub collection: &'a str,
     /// The "Allow devices on my network" setting.
     pub network: bool,
     /// Whether the network listener opened.
     pub network_open: bool,
-    /// Whether wheel chords are heard while another app has the focus
-    /// ([`crate::host::Host::global_wheel`]).
-    pub global_wheel: bool,
+    /// Whether wheel chords are heard only while JStream has the focus, because the app
+    /// lacks a permission the OS asks for (macOS's Accessibility), as of the start.
+    pub wheel_focus_only: bool,
 }
 
 /// The script, for a page from `origin`, connecting to `url` with `token`. `vcam` is
 /// the virtual camera's status ([`crate::host::VcamStatus::as_str`]). `collection` is
-/// the data folder.
-pub fn script(
-    origin: &str,
-    url: &str,
-    token: &str,
-    vcam: &str,
-    collection: &str,
-    flags: Flags,
-) -> String {
-    let Flags {
+/// the data folder. `network` is the "Allow devices on my network" setting, and
+/// `network_open` whether the network listener opened.
+pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
+    let Page {
+        vcam,
+        collection,
         network,
         network_open,
-        global_wheel,
-    } = flags;
-    let bool_js = |b: bool| if b { "true" } else { "false" };
+        wheel_focus_only,
+    } = *page;
     format!(
         "if (window.location.origin === {origin}) {{\
          Object.defineProperty(window, {global}, {{\
          value: Object.freeze({{ url: {url}, token: {token}, vcam: {vcam}, collection: {collection},\
-         network: {network}, networkOpen: {network_open}, globalWheel: {global_wheel},\
+         network: {network}, networkOpen: {network_open}, wheelFocusOnly: {wheel_focus_only},\
          browse: function (request) {{\
          var internals = window.__TAURI_INTERNALS__;\
          if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(null);\
@@ -77,9 +76,9 @@ pub fn script(
         token = js_string(token),
         vcam = js_string(vcam),
         collection = js_string(collection),
-        network = bool_js(network),
-        network_open = bool_js(network_open),
-        global_wheel = bool_js(global_wheel),
+        network = if network { "true" } else { "false" },
+        network_open = if network_open { "true" } else { "false" },
+        wheel_focus_only = if wheel_focus_only { "true" } else { "false" },
     )
 }
 
@@ -108,7 +107,7 @@ fn js_string(text: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{Flags, js_string, script};
+    use super::{Page, js_string, script};
 
     #[test]
     fn the_script_defines_the_global_only_on_the_app_origin() {
@@ -116,12 +115,12 @@ mod tests {
             "http://jstream.localhost",
             "ws://127.0.0.1:4455/api/v1/ws",
             "0a1b",
-            "registered",
-            r"C:\Users\me\AppData\Roaming\JStream",
-            Flags {
+            &Page {
+                vcam: "registered",
+                collection: r"C:\Users\me\AppData\Roaming\JStream",
                 network: true,
                 network_open: false,
-                global_wheel: true,
+                wheel_focus_only: true,
             },
         );
         assert!(script.starts_with("if (window.location.origin === \"http://jstream.localhost\")"));
@@ -131,7 +130,7 @@ mod tests {
         assert!(script.contains("vcam: \"registered\""));
         assert!(script.contains(r#"collection: "C:\\Users\\me\\AppData\\Roaming\\JStream""#));
         assert!(script.contains("invoke(\"pick_path\", request)"));
-        assert!(script.contains("network: true, networkOpen: false, globalWheel: true,"));
+        assert!(script.contains("network: true, networkOpen: false, wheelFocusOnly: true,"));
         assert!(script.contains("invoke(\"set_network\", { allow: allow === true })"));
         assert!(
             script.contains("function () { return false; }"),

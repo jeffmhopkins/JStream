@@ -3,7 +3,8 @@
 //! inner stroke inside its edge and an outer stroke past it, after a gap, each with its
 //! own colour and width; a style (solid, double, dashed with its dash and gap, dotted);
 //! a fill (the colour, or a linear or conic gradient to a second colour); and a speed
-//! that moves the dashes and the gradient around the edge.
+//! that moves the dashes and the gradient around the edge, in px/s or, following the
+//! engine's MIDI tempo, in beats a lap (#1294, ADR-0148).
 //!
 //! The rectangle is the frame inset by the padding the chain gives the filter
 //! ([`super::super::VideoFilter::set_pad`]): on an item whose border is the first
@@ -20,7 +21,9 @@
 //! image mask's is; until it is there the stroke draws as without one.
 //!
 //! Time is worked out on the CPU in `f64` and handed in as distances, so the movement
-//! stays exact however long the clock runs.
+//! stays exact however long the clock runs. In beats the distance comes from the song's
+//! position ([`FilterClock::beat`]), not from a speed, so the pattern stays on the beat
+//! when the tempo changes and holds when the song stops.
 
 use std::sync::Arc;
 
@@ -30,7 +33,7 @@ use serde_json::Value;
 use crate::error::RenderError;
 use crate::filter::assets::{IMAGE_TYPES, Reference, asset_param};
 use crate::filter::params::{Read, Uniforms, boolean, choice, color, filter, float};
-use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
+use crate::filter::{Blend, Ctx, Draw, FilterClock, Pass, Shader};
 use crate::image::Image;
 
 pub(super) const KIND: &str = "border";
@@ -51,6 +54,8 @@ const MAX_RADIUS: f64 = 2000.0;
 const MAX_DASH: f64 = 400.0;
 /// The fastest the pattern travels, px/s.
 const MAX_SPEED: f64 = 2000.0;
+/// The most beats a lap round the edge can take, either way.
+const MAX_LAP_BEATS: f64 = 64.0;
 /// The largest frame image corner, image px.
 const MAX_SLICE: f64 = 1024.0;
 
@@ -161,9 +166,42 @@ pub(super) fn descriptor() -> KindDescriptor {
                     float("angle", "Gradient angle", 0.0, 360.0, 90.0, "°"),
                 ),
                 described(
-                    "Moves the dashes and the gradient around the edge. Positive is \
-                     clockwise. 0 holds still.",
-                    float("speed", "Speed", -MAX_SPEED, MAX_SPEED, 0.0, "px/s"),
+                    "Whether the dashes and the gradient move at a speed in pixels a \
+                     second, or go round the edge once every so many beats of the MIDI \
+                     clock's tempo.",
+                    choice(
+                        "speed_unit",
+                        "Speed in",
+                        &[("px_s", "px/s"), ("beats", "Beats")],
+                        "px_s",
+                    ),
+                ),
+                shown_if(
+                    "speed_unit",
+                    "px_s",
+                    described(
+                        "Moves the dashes and the gradient around the edge. Positive is \
+                         clockwise. 0 holds still.",
+                        float("speed", "Speed", -MAX_SPEED, MAX_SPEED, 0.0, "px/s"),
+                    ),
+                ),
+                shown_if(
+                    "speed_unit",
+                    "beats",
+                    described(
+                        "How many beats of the MIDI clock's tempo the dashes and the \
+                         gradient take to go once round the edge, on the beat. Negative \
+                         is anticlockwise. 0 holds still. They stop when the song stops, \
+                         and hold still with no clock.",
+                        float(
+                            "lap_beats",
+                            "Beats per lap",
+                            -MAX_LAP_BEATS,
+                            MAX_LAP_BEATS,
+                            4.0,
+                            "beats",
+                        ),
+                    ),
                 ),
                 described(
                     "A second stroke past the edge, after the outer gap. 0 is none.",
@@ -210,6 +248,9 @@ struct Look {
     /// Degrees; 0 runs left to right, 90 top to bottom.
     angle: f32,
     speed: f64,
+    /// With the speed in beats, the beats a lap takes (negative anticlockwise, 0 still);
+    /// `None` with it in px/s.
+    lap_beats: Option<f64>,
     style: u32,
     fill: u32,
     clip: bool,
@@ -252,6 +293,14 @@ fn read(settings: &Settings) -> Look {
         [radius("radius", 0.0); 4]
     };
     let speed = f64::from(read.f32("speed", 0.0));
+    let lap_beats = (read.choice("speed_unit", "px_s") == "beats").then(|| {
+        let lap = f64::from(read.f32("lap_beats", 4.0));
+        if lap.is_finite() {
+            lap.clamp(-MAX_LAP_BEATS, MAX_LAP_BEATS)
+        } else {
+            0.0
+        }
+    });
     Look {
         color: read.color_linear("color", [1.0; 4]),
         color2: read.color_linear("color2", [0.0, 0.0, 0.0, 1.0]),
@@ -268,6 +317,7 @@ fn read(settings: &Settings) -> Look {
         } else {
             0.0
         },
+        lap_beats,
         style: match read.choice("style", "solid") {
             "double" => 1,
             "dashed" => 2,
@@ -316,11 +366,17 @@ impl Border {
         }
     }
 
-    fn uniforms(&self, seconds: f64, width: u32, height: u32, framed: bool) -> Vec<u8> {
+    fn uniforms(&self, clock: FilterClock, width: u32, height: u32, framed: bool) -> Vec<u8> {
         let l = self.look;
         let pad = self.pad as f32;
         let half = [width as f32 * 0.5 - pad, height as f32 * 0.5 - pad];
-        let travelled = seconds * l.speed;
+        let perimeter = perimeter(half, l.radii);
+        // In beats, a lap of the edge every `lap_beats` beats of the song (ADR-0148).
+        let travelled = match l.lap_beats {
+            Some(lap) if lap != 0.0 => clock.beat / lap * perimeter,
+            Some(_) => 0.0,
+            None => clock.seconds * l.speed,
+        };
         // Dashes repeat every period, so only the distance within one matters; the
         // gradient goes once round the edge per perimeter travelled. Dots repeat every
         // stroke's own width and gap, so each stroke gets its own distance (#1296
@@ -335,7 +391,7 @@ impl Border {
         };
         let along = wrap(l.width);
         let outer_along = wrap(l.outer_width);
-        let turn = (travelled / perimeter(half, l.radii)).rem_euclid(1.0) as f32;
+        let turn = (travelled / perimeter).rem_euclid(1.0) as f32;
         let (sin, cos) = l.angle.to_radians().sin_cos();
         Uniforms::new()
             .vec4(premultiplied(l.color))
@@ -383,12 +439,7 @@ impl Pass for Border {
         output: &Image,
     ) -> Result<(), RenderError> {
         let aux = self.frame.get(ctx)?;
-        let params = self.uniforms(
-            ctx.clock().seconds,
-            output.width(),
-            output.height(),
-            aux.is_some(),
-        );
+        let params = self.uniforms(ctx.clock(), output.width(), output.height(), aux.is_some());
         ctx.draw(&Draw {
             shader: SHADER,
             input,
@@ -404,6 +455,7 @@ mod tests {
     use std::sync::Arc;
 
     use super::{Border, KIND, outset, perimeter, read};
+    use crate::filter::FilterClock;
     use crate::filter::testing::{filter, run, settings};
     use crate::tests::{near, open, solid};
     use serde_json::json;
@@ -446,9 +498,19 @@ mod tests {
             "each corner, the linked one ignored"
         );
         assert_eq!((l.width, l.style, l.fill, l.speed), (64.0, 3, 2, 2000.0));
+        assert_eq!(l.lap_beats, None, "px/s by default");
+        let beats = |lap: serde_json::Value| {
+            read(&settings(
+                KIND,
+                json!({"speed_unit": "beats", "lap_beats": lap}),
+            ))
+            .lap_beats
+        };
+        assert_eq!(beats(json!(-1e9)), Some(-64.0));
+        assert_eq!(beats(json!(2.5)), Some(2.5));
         assert_eq!(super::descriptor().max_outset_px, Some(129));
         let b = Border::new(&settings(KIND, json!({})));
-        assert_eq!(b.uniforms(0.0, 10, 10, false).len(), 144);
+        assert_eq!(b.uniforms(FilterClock::default(), 10, 10, false).len(), 144);
     }
 
     /// Dots repeat every stroke's own width and gap, so each stroke's distance wraps
@@ -462,7 +524,7 @@ mod tests {
                 "style": "dotted", "width": 4.0, "outer_width": 8.0, "gap": 4.0, "speed": 9.0
             }),
         ));
-        let bytes = b.uniforms(1.0, 100, 100, false);
+        let bytes = b.uniforms(seconds(1.0), 100, 100, false);
         let at = |offset: usize| {
             f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
         };
@@ -477,11 +539,58 @@ mod tests {
                 "gap": 5.0, "speed": 20.0
             }),
         ));
-        let bytes = b.uniforms(1.0, 100, 100, false);
+        let bytes = b.uniforms(seconds(1.0), 100, 100, false);
         let at = |offset: usize| {
             f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
         };
         assert_eq!((at(92), at(116)), (5.0, 5.0));
+    }
+
+    fn seconds(seconds: f64) -> FilterClock {
+        FilterClock { seconds, beat: 0.0 }
+    }
+
+    /// The `along` and `turn` uniforms at `clock`, of a dashed border over 100 px.
+    fn along_and_turn(look: serde_json::Value, clock: FilterClock) -> (f32, f32) {
+        let b = Border::new(&settings(KIND, look));
+        let bytes = b.uniforms(clock, 100, 100, false);
+        let at = |offset: usize| {
+            f32::from_le_bytes(bytes[offset..offset + 4].try_into().expect("four bytes"))
+        };
+        (at(92), at(96))
+    }
+
+    /// In beats the pattern goes once round the edge every `lap_beats` beats of the song,
+    /// whatever the time, and a lap of 0 holds still (#1294, ADR-0148).
+    #[test]
+    fn in_beats_the_pattern_laps_the_edge_on_the_beat() {
+        let look = |lap: f64| {
+            json!({
+                "style": "dashed", "dash": 10.0, "gap": 6.0,
+                "speed_unit": "beats", "lap_beats": lap, "speed": 500.0
+            })
+        };
+        let clock = |seconds: f64, beat: f64| FilterClock { seconds, beat };
+        // A 100 px square's edge is 400 px: a beat of a four-beat lap is 100 px, which is
+        // 4 px into the 16 px dash period, and a quarter turn of the gradient.
+        let (along, turn) = along_and_turn(look(4.0), clock(9.0, 1.0));
+        assert!((along - 4.0).abs() < 1e-4, "{along}");
+        assert!((turn - 0.25).abs() < 1e-6, "{turn}");
+        // The time doesn't move it, and `speed` is not read: only the beat.
+        assert_eq!(along_and_turn(look(4.0), clock(0.0, 1.0)), (along, turn));
+        // Half a lap at two beats of four; anticlockwise backs off the same distance.
+        let (_, half) = along_and_turn(look(4.0), clock(0.0, 2.0));
+        assert!((half - 0.5).abs() < 1e-6, "{half}");
+        let (_, back) = along_and_turn(look(-4.0), clock(0.0, 1.0));
+        assert!((back - 0.75).abs() < 1e-6, "{back}");
+        // A whole lap comes back to the start; 0 beats a lap holds still.
+        let (_, whole) = along_and_turn(look(4.0), clock(0.0, 8.0));
+        assert!(whole.abs() < 1e-6, "{whole}");
+        assert_eq!(along_and_turn(look(0.0), clock(3.0, 3.0)), (0.0, 0.0));
+        // In px/s the beat is not read.
+        let px = json!({"style": "dashed", "dash": 10.0, "gap": 6.0, "speed": 8.0});
+        assert_eq!(along_and_turn(px.clone(), clock(1.0, 5.0)).0, 8.0);
+        assert_eq!(along_and_turn(px, clock(1.0, 0.0)).0, 8.0);
     }
 
     #[test]

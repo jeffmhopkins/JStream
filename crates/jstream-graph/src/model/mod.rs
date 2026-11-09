@@ -73,8 +73,8 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
     Easing, EncoderProfile, EncoderProfileId, FilterChain, FilterId, Finite32, FolderId,
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
-    OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
-    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
+    OutputId, OutputKind, PlacementForm, PtzShot, Rev, SceneCamera, SceneId, SceneMeta,
+    SceneOptions, SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
     TransitionPresetId, TransitionPresetInfo, TransitionsInfo, Trigger, VideoMix as MixSpec,
     VideoMixId, builtin_transition_kinds, initial_preset,
 };
@@ -140,11 +140,18 @@ impl Graph {
 
     /// Removes the kind descriptors with these IDs: an effect pack that's gone. What the
     /// collection holds of those kinds stays, as a collection file loaded without them
-    /// keeps it.
+    /// keeps it, and each filter of them records the version it was stored by, so the
+    /// kind coming back newer moves it through its renames (ADR-0025 › Versioning a kind).
     #[must_use]
     pub fn without_kinds<'a>(mut self, ids: impl IntoIterator<Item = &'a str>) -> Self {
+        let mut removed = std::collections::BTreeMap::new();
         for id in ids {
-            self.kinds.remove(id);
+            if let Some(kind) = self.kinds.remove(id) {
+                removed.insert(id, kind.version);
+            }
+        }
+        if !removed.is_empty() {
+            crate::filter::stamp_removed(&mut self.state, &removed);
         }
         self
     }
@@ -625,6 +632,10 @@ pub struct Source {
     pub(crate) audio: Option<SourceAudio>,
     pub(crate) labels: BTreeSet<LabelId>,
     pub(crate) favourite: bool,
+    /// For a source loaded while its kind was missing (a shader source whose pack isn't
+    /// loaded yet), the kind version the file recorded, which a save keeps while the
+    /// kind is still missing.
+    pub(crate) unknown_kind_version: Option<u32>,
 }
 
 impl Source {
@@ -861,6 +872,9 @@ pub struct Scene {
     /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
     /// parent's.
     pub(crate) camera_motion: Vec<CameraMotionModifier>,
+    /// Its PTZ shots (ADR-0146 §6). On a keyframe scene, only its own, which replace
+    /// its parent's for the same cameras; [`State::effective_ptz_shots`] merges them.
+    pub(crate) ptz_shots: Vec<PtzShot>,
     /// Its timelines (ADR-0115), by ID.
     pub(crate) timelines: BTreeMap<TimelineId, TimelineInfo>,
     pub(crate) items: Vec<Item>,
@@ -925,6 +939,13 @@ impl Scene {
     /// parent's.
     pub fn camera_motion(&self) -> &[CameraMotionModifier] {
         &self.camera_motion
+    }
+
+    /// Its own PTZ shots (ADR-0146 §6), which `scene.set_ptz_shots` sets. On a keyframe
+    /// scene they replace its parent's for the same cameras;
+    /// [`State::effective_ptz_shots`] gives what the scene sends.
+    pub fn ptz_shots(&self) -> &[PtzShot] {
+        &self.ptz_shots
     }
 
     /// Its follow camera (ADR-0113, ADR-0120): the first enabled

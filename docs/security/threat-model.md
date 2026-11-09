@@ -214,6 +214,14 @@ the user's desktop session can read it while it is there. Failed tokens are not 
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
+The daemon's `--ptz-camera` (ADR-0123, [ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md))
+is the one way to make it send VISCA to a camera: the protocol can't add, change or
+remove a camera, so a client with the token, an agent or a paired device can move only
+the heads the person listed, by name. An address outside the LAN ranges is refused at
+startup, and a reply from anywhere but the camera's own address and port, or one that
+isn't VISCA, is dropped and counted; a reply can change only the pose and status
+`ptz.list` shows.
+
 **Gaps:** #546's Windows hardware pass reported the token file and the daemon's logs
 user-only with no inheritance. Still to run on hardware: the devices file after a real
 pairing, and the crash reports' DACL (#656), which hasn't run on Windows CI either. So
@@ -369,7 +377,11 @@ location removes it.
 **Built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source may opt
 its page in to a read-only `window.jstream` with the engine animation clock and the
 page's own visibility, and, per further checkbox, the program and preview scenes, named
-shared values, and one bus's levels and bands (never its samples). Each checkbox shows
+shared values, one bus's levels and bands (never its samples), the engine's tempo, and
+one MIDI input's held notes, controllers and recent note-ons (never raw bytes or SysEx,
+[ADR-0147](../adr/0147-midi-tempo-and-state-for-pages.md)). The tempo has a checkbox
+of its own, as ADR-0124 decision 7 asks: the `tempo.*` values never reach a page through
+the shared values grant, and a MIDI reading carries a tempo only with it. Each checkbox shows
 its warning beside it, and the Sources panel badges a source whose page is granted
 anything ([ADR-0124](../adr/0124-page-api-read-review.md), which also lists what no
 setting ever grants). The renderer
@@ -383,7 +395,8 @@ page has no path to the engine. A compromised renderer holds only what the sourc
 sharing its renderer were granted; each granted page gets a request context of its own,
 which should keep it alone in its renderer, not yet checked on a run. Whatever a page is
 granted, a web page can send off the machine: preview scene names matter most, and a
-microphone bus's bands, which follow the shape of speech. The engine has no studio mode to leave, so a page
+microphone bus's bands, which follow the shape of speech, and a MIDI input's notes,
+which are the performance itself. The engine has no studio mode to leave, so a page
 granted the scenes always gets the preview scene's name.
 
 <a id="files"></a>
@@ -674,22 +687,45 @@ somewhere it shouldn't.
   the daemon's `--jtunnel-accept name@address:port`, each a LAN address. Off, no socket
   is open.
 - It sends only subscribe and bye packets, only to accepted senders' addresses, which
-  must be loopback, private IPv4 or link-local. It never announces itself and never
-  sends audio or MIDI.
+  must be loopback, private IPv4 or link-local, and every 10 s one mDNS PTR query for
+  `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
+  socket (a legacy unicast query, so senders answer that socket; no socket joins the
+  group or binds port 5353). It never announces itself and never sends audio or MIDI.
 - It drops and counts every datagram from outside those ranges, from an address it
-  didn't subscribe to, or that `jstream-jtunnel`'s parser refuses (fuzzed on its own).
-  Parsing and playout allocate nothing; a sender's audio goes only to the
+  didn't subscribe to, longer than a packet may be, or that `jstream-jtunnel`'s parser
+  refuses (fuzzed on its own). The socket is IPv4: an accepted sender's address is IPv4
+  (or IPv4 mapped into IPv6, taken as itself), and no two accepted senders share an
+  address and port, since datagrams are told apart by where they come from.
+  Parsing and playout allocate nothing, nor does reading an mDNS answer about anything
+  but a JTunnel instance, however its records repeat a long name (only a JTunnel
+  instance's name is copied, once it matches); a sender's audio goes only to the
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
   name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
   doesn't trigger bindings (ADR-0142 §2).
+- An mDNS answer from a LAN address's port 5353 only lists a sender in
+  `jtunnel.senders` (its name as `remote_name`, text from the LAN): listing trusts it
+  with nothing, since only accepted senders are subscribed to and only their datagrams
+  are taken. The list holds at most 64 senders, at most 8 from one IP address, each
+  forgotten 35 s after it last answered, so answers can't grow it without bound; an answer it can't read is counted
+  as malformed. Plugins can't read the list.
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
+- PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) pass the same
+  LAN check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server)
+  for what they may send and receive.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it, or notes into what its MIDI sources draw
 (ADR-0123 §6), as with JTunnel anywhere.
 Off by default, LAN only and accepted one sender at a time bound it to someone on the
-same network who already targets this machine.
+same network who already targets this machine. The check is of the source address a
+datagram claims, and the socket is bound to every IPv4 interface: a host beyond the LAN
+that can deliver a datagram with a spoofed private source, and guesses an accepted
+sender's address and port, gets past it. Binding only the interface that routes to the
+accepted senders would narrow that, and is still to come. A host on the LAN can also
+answer the query with made-up senders, or say goodbye for a real one, which changes only
+what the list shows; a person accepts a sender by name and address, so a made-up one is
+accepted only if they pick it.
 
 <a id="gaps"></a>
 ## Known gaps

@@ -1,4 +1,4 @@
-//! Source kinds (ADR-0061, ADR-0025). A [`Registry`] holds every kind by ID: its
+//! Source kinds (ADR-0140, ADR-0025). A [`Registry`] holds every kind by ID: its
 //! [`KindDescriptor`](jstream_protocol::KindDescriptor), which the engine reports through
 //! `kind.list` and `kind.describe` and validates settings against, and how to create its
 //! sources. A [`Source`] produces video frames on request, for snapshots and tests.
@@ -26,7 +26,7 @@
 //!
 //! [`MediaDecoders`]: jstream_platform::MediaDecoders
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-sources/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0137-midi-visualization-sources.md, docs/security/threat-model.md#browser
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-sources/README.md#purpose, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0137-midi-visualization-sources.md, docs/security/threat-model.md#browser
 
 #![forbid(unsafe_code)]
 
@@ -48,6 +48,7 @@ mod registry;
 mod scope;
 mod shape;
 mod source;
+mod still;
 mod text;
 mod timer;
 mod youtube_chat;
@@ -79,5 +80,6 @@ pub use source::{
     AssetRoots, Context, Limits, Painter, ShownModel, Source, SourceAudio, SourceKind,
     needs_restart,
 };
+pub use still::Still;
 pub use text::MAX_DENSITY;
 pub use youtube_chat::YOUTUBE_CHAT_CSS;

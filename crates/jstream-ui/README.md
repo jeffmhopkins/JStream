@@ -90,8 +90,9 @@ Contents ([Design](#design) explains the choices):
   app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
   same-origin opener's for a projector window), if the page runs there,
   `desktop_vcam()`, what that global says about the virtual camera,
-  `desktop_global_wheel()`, whether the app hears wheel chords while another app has
-  the focus (false on Wayland), `browse`,
+  `desktop_wheel_focus_only()`, whether the app hears wheel chords only while it has
+  the focus (macOS without Accessibility, Wayland, or no hotkey listener), `on_macos()`,
+  which picks the wording of a wheel chord's "focus only" note, `browse`,
   which calls the global's `browse` to open a native dialog, and `desktop_network()`
   and `allow_network`, which read and save the app's "Allow devices on my network". `same_engine` says
   whether the open session is that app's own engine.
@@ -195,7 +196,7 @@ Contents ([Design](#design) explains the choices):
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
-  `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
+  `// @name` and `// @param` lines, the `effect.toml` they make (a source's too), the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
   field the panels share (`number.rs`: `NumberField`, which can sit inline with a short
   caption and without steppers, and `AxisRow`, a row of such fields under one label, as
@@ -293,7 +294,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
-  `network`, `networkOpen`, `globalWheel`, `browse` and `allowNetwork`) before the page loads,
+  `network`, `networkOpen`, `wheelFocusOnly`, `browse` and `allowNetwork`) before the
+  page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -496,7 +498,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   once the engine has accepted the batch, waiting for the collection to list the
   source, and a placement of an existing one shows in the Inspector. A `kind.list`
   that fails leaves only the placed kinds and Scene, and its error shows as any failed
-  call's does.
+  call's does. While it lists any kinds, a Shader type under Generated writes a custom
+  shader source first and opens its Properties with the shader editor (ADR-0135, under
+  Filters below), and each custom shader source's kind is listed after it.
 - **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
   A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
   and on a nested scene's item), any other single object's (Source in a window or full
@@ -568,7 +572,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
-  in a keyframe its override, ADR-0099). A scene shows its object
+  in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
+  (ADR-0138, set over the protocol or MCP) shows "Effect setting" as what it moves, and
+  picking a placement property for it drops its effect target; the section doesn't add
+  one yet). A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
@@ -797,10 +804,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   window sent and the engine refuses a batch with one such key. Cancel doesn't reach
   the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
   manifest's version by one and adds the pair to `renames` (`Declared::version`,
-  ADR-0025). The engine doesn't apply an effect's renames to stored settings yet
-  (#1353), so a filter left on the pack keeps the value under the old ID and draws the
-  new one at its default; the template says so, and asks that no `@renamed` line be
-  deleted, since each is a version.
+  ADR-0025). The engine moves every filter of the pack's kind through the renames when
+  the new version loads (#1353), so a filter left on the pack keeps its value under the
+  new ID; the template asks that no `@renamed` line be deleted, since each is a version.
   Save as pack… writes the shader under a pack ID the person types (`save_as_problem`
   checks it against `pack.list`) and moves only the filter being edited to the new
   kind (`move_to_kind`: a remove and an add in its place, one batch, its settings
@@ -809,6 +815,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   stays for any other filter of it, and the window opens the editor on the new one.
   The coloured copy is sized to the textarea's box inside its scrollbars, through
   CSSOM (the page's CSP refuses a style attribute), so the two scroll as far.
+  A shader source (ADR-0135) is written the same way: Add source's Shader type
+  (`NEW_SHADER`) calls `custom_shader::write_new` with `Mode::Source`, adds a source of
+  the new kind and opens its Properties dialog with the editor over it
+  (`PropertiesDialog::open_shader`); if the add fails, it deletes that pack again. Its
+  manifest (`source_toml`) is one `[[source]] shader` with one pass, `previous`, whose
+  inputs come from `@feedback`, `@audio` and the `scene` settings, and `@size` its
+  default size. `custom_shader::open` opens a pack as a source when its manifest has a
+  `[[source]]` table. The Properties dialog of a custom shader source has Edit shader…;
+  a source has no Save as pack….
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the
@@ -999,7 +1014,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   disabled, titled with the outputs that use it, while any does, as the engine refuses
   it then. The dialog also offers a codec the engine can download on a person's request
   (`codec.downloads`, `codec_downloads.rs`,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), over the
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), over the
   encoder editor or when nothing is picked: on Linux, Cisco's OpenH264, when it isn't
   installed and the machine has no hardware encoder for H.264 or a profile asks for
   software H.264, and the encoder form offers it under the hardware choice while the

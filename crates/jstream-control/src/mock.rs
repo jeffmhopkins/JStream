@@ -664,6 +664,8 @@ struct Scene {
     camera: Option<jstream_protocol::SceneCamera>,
     /// Its camera motion (ADR-0113); empty for a keyframe scene.
     camera_motion: Vec<jstream_protocol::CameraMotionModifier>,
+    /// Its own PTZ shots (ADR-0146), a keyframe scene's included.
+    ptz_shots: Vec<jstream_protocol::PtzShot>,
     /// Its follow camera (ADR-0113); `None` for a keyframe scene.
     camera_follow: Option<jstream_protocol::CameraFollow>,
     /// Its filters (ADR-0065), settings as given: a video chain only.
@@ -1108,6 +1110,23 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            // The mock controls no PTZ camera (ADR-0146): it checks the call as the
+            // engine does, then refuses it as an engine with none listed does.
+            Action::PtzDrive { .. }
+            | Action::PtzAim { .. }
+            | Action::PtzHome { .. }
+            | Action::PtzRecall { .. }
+            | Action::PtzStore { .. }
+            | Action::PtzFocus { .. } => {
+                if let Some((_, Some((field, reason)))) =
+                    jstream_protocol::ptz_action_check(&action)
+                {
+                    return Err(invalid(0, field, reason));
+                }
+                return Err(ProtocolError::ActionFailed {
+                    reason: "this machine controls no PTZ cameras".into(),
+                });
+            }
             // The mock draws nothing, so a fire only checks its arguments (#1107).
             Action::ItemTriggerMotion {
                 item_id,
@@ -1349,6 +1368,7 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         camera_motion: scene.camera_motion.clone(),
+                        ptz_shots: scene.ptz_shots.clone(),
                         camera_follow: scene.camera_follow.clone(),
                         timelines: Vec::new(),
                         items: self.collection.item_infos(scene),
@@ -1405,6 +1425,14 @@ impl State {
             Query::VideoMixList => QueryResult::VideoMixList {
                 rev: self.collection.rev,
                 video_mixes: self.collection.video_mix_infos(),
+            },
+            // The mock runs no JTunnel receiver (ADR-0123 §1: off by default).
+            Query::JtunnelSenders => QueryResult::JtunnelSenders {
+                on: false,
+                senders: Vec::new(),
+            },
+            Query::PtzList => QueryResult::PtzList {
+                cameras: Vec::new(),
             },
             Query::CaptureTargets => QueryResult::CaptureTargets {
                 targets: vec![
@@ -1747,6 +1775,7 @@ impl Collection {
                     options: Default::default(),
                     camera: None,
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     filters: Default::default(),
                     variant_of: None,
@@ -1882,6 +1911,12 @@ impl Collection {
                     inverse.push(Edit::SceneSetCameraMotion {
                         scene_id: scene.id.clone(),
                         motion: scene.camera_motion.clone(),
+                    });
+                }
+                if !scene.ptz_shots.is_empty() {
+                    inverse.push(Edit::SceneSetPtzShots {
+                        scene_id: scene.id.clone(),
+                        shots: scene.ptz_shots.clone(),
                     });
                 }
                 if scene.camera_follow.is_some() {

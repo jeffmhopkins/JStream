@@ -519,10 +519,11 @@ impl Server {
              disk that undo doesn't reach, on `values`, whose shared values a browser \
              source page given them may send off the machine, on `timeline`, whose \
              cues may set those values, on `collection`, whose open and new stop every \
-             output and clear every client's undo, and on `device`, \
+             output and clear every client's undo, on `ptz`, which moves physical \
+             cameras and can overwrite a camera's stored preset, and on `device`, \
              `pairing` and `ui_settings`; every other edit, a delete included, is undone with \
              `history`. `openWorldHint` is on \
-             `output`, on `source`, whose `browser` kind loads any http or https page, or \
+             `output`, on `ptz`, on `source`, whose `browser` kind loads any http or https page, or \
              HTML, it is given, and on `batch`, which carries `source` edits.\n\n{DESIGN}",
             groups.join(", ")
         )

@@ -1084,6 +1084,22 @@ pub fn page_api_grant(source: &SourceInfo, buses: &[BusInfo]) -> Option<String> 
             .map_or_else(|| bus_id.to_string(), |bus| bus.name.clone());
         kinds.push(format!("audio levels ({name})"));
     }
+    if on("page_api_tempo") {
+        kinds.push("tempo".to_owned());
+    }
+    if on("page_api_midi") {
+        let input = source
+            .settings
+            .get("page_api_midi_input")
+            .and_then(serde_json::Value::as_str)
+            .unwrap_or_default()
+            .trim();
+        kinds.push(if input.is_empty() {
+            "MIDI (every input)".to_owned()
+        } else {
+            format!("MIDI ({input})")
+        });
+    }
     Some(format!("Page API: {}", kinds.join(", ")))
 }
 
@@ -1143,6 +1159,7 @@ mod tests {
                 meta: Default::default(),
                 options: Default::default(),
                 camera_motion: Vec::new(),
+                ptz_shots: Vec::new(),
                 camera_follow: None,
                 timelines: Vec::new(),
                 items: vec![item("bottom", "cam", true), item("top", "gone", false)],
@@ -1172,6 +1189,7 @@ mod tests {
             scene_id: id.into(),
             name: id.into(),
             camera_motion: Vec::new(),
+            ptz_shots: Vec::new(),
             camera_follow: None,
             timelines: Vec::new(),
             items,
@@ -1468,11 +1486,15 @@ mod tests {
             ("page_api_values", json!("status.*")),
             ("page_api_audio", json!(true)),
             ("page_api_bus", bus),
+            ("page_api_tempo", json!(true)),
+            ("page_api_midi", json!(true)),
+            ("page_api_midi_input", json!("Keys")),
         ]);
         assert_eq!(
             page_api_grant(&all, &[mic]).as_deref(),
             Some(
-                "Page API: clock, visibility, scenes, shared values (status.*), audio levels (Mic)"
+                "Page API: clock, visibility, scenes, shared values (status.*), audio levels \
+                 (Mic), tempo, MIDI (Keys)"
             )
         );
     }

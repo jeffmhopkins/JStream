@@ -26,7 +26,7 @@ pub struct Registry {
 }
 
 impl Registry {
-    /// The built-in kinds (ADR-0061, docs/adr/0061-source-types-and-decoding-scope-v2.md).
+    /// The built-in kinds (ADR-0140, docs/adr/0140-source-types-and-decoding-scope-v3.md).
     /// `backdrop`, `browser`, `chat_message`, `color`, `image`, `media`, `shape`, `text`, `timer`, `waveform`,
     /// `spectrum`, `youtube_chat` and the MIDI kinds (`midi_keyboard`, `midi_piano_roll`,
     /// `midi_pads`, `midi_beat`, `midi_cc`) produce frames (`browser` and its `youtube_chat`

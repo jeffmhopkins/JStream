@@ -18,13 +18,14 @@ use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::icons::Icon;
 use crate::panels::add_source::type_label;
+use crate::panels::custom_shader::{self, ShaderEditor};
 use crate::panels::device_preview::{self, DevicePreview};
 use crate::panels::filters::{FilterUndo, PropertiesAndFilters, chains_of};
 use crate::panels::properties::{Form, draft_patch};
-use crate::store::{Studio, apply};
+use crate::store::{Studio, apply, query};
 use jstream_control::protocol::{
-    Action, Batch, Call, CallResult, Edit, FilterId, FilterOwner, GestureId, KindDescriptor,
-    Settings, SourceId, SourceKind,
+    Action, Batch, Call, CallResult, Edit, FilterId, FilterOwner, GestureId, KindDescriptor, Query,
+    QueryResult, Settings, SourceId, SourceKind,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -54,18 +55,27 @@ pub fn live_patch(
     patch
 }
 
-/// The dialog's state as context: the source it shows while open.
+/// The dialog's state as context: the source it shows while open, and whether a shader
+/// source's editor opens over it as it opens.
 #[derive(Clone, Copy)]
-pub struct PropertiesDialog(RwSignal<Option<SourceId>>);
+pub struct PropertiesDialog(RwSignal<Option<SourceId>>, RwSignal<bool>);
 
 impl PropertiesDialog {
     /// A closed dialog.
     pub fn new() -> PropertiesDialog {
-        PropertiesDialog(RwSignal::new(None))
+        PropertiesDialog(RwSignal::new(None), RwSignal::new(false))
     }
 
     /// Opens the dialog on `source_id`.
     pub fn open(&self, source_id: SourceId) {
+        self.1.set(false);
+        self.0.set(Some(source_id));
+    }
+
+    /// Opens the dialog on shader source `source_id` with its shader editor over it, as a
+    /// new Shader from Add source does (ADR-0135).
+    pub fn open_shader(&self, source_id: SourceId) {
+        self.1.set(true);
         self.0.set(Some(source_id));
     }
 }
@@ -106,7 +116,10 @@ pub fn SourceProperties() -> impl IntoView {
             move || {
                 if present.get() {
                     seen.set_value(true);
-                    Some(view! { <PropertiesBody source_id=source_id.clone() close=close /> })
+                    let shader = dialog.1.get_untracked();
+                    Some(view! {
+                        <PropertiesBody source_id=source_id.clone() shader=shader close=close />
+                    })
                 } else {
                     if seen.get_value() {
                         request_animation_frame(close);
@@ -121,6 +134,8 @@ pub fn SourceProperties() -> impl IntoView {
 #[component]
 fn PropertiesBody(
     source_id: SourceId,
+    /// Whether a shader source's editor opens over the dialog at once (ADR-0135).
+    shader: bool,
     close: impl Fn() + Copy + Send + Sync + 'static,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -140,7 +155,12 @@ fn PropertiesBody(
         SourceKind::Builtin { kind } => kind.clone(),
         _ => String::new(),
     };
-    let (type_name, icon) = type_label(&kind_id).unwrap_or(("Source", "image"));
+    let (type_name, icon) =
+        type_label(&kind_id).unwrap_or(if custom_shader::pack_of(&kind_id).is_some() {
+            ("Shader", "sparkle")
+        } else {
+            ("Source", "image")
+        });
     let (picture, audio) = chains_of(&source);
     // Filter edits apply at once; Cancel puts back each one the dialog sent.
     let owner = FilterOwner::Source {
@@ -305,6 +325,53 @@ fn PropertiesBody(
         }
     };
 
+    // A shader source written in the editor (ADR-0135) opens it again from here. A change
+    // writes the pack at once, as in the Filters window: Cancel doesn't undo it.
+    let shader_pack = StoredValue::new(custom_shader::pack_of(&kind_id).map(str::to_owned));
+    let editing = RwSignal::new(None::<custom_shader::Opened>);
+    let open_shader = move || {
+        let (Some(pack), Some(s)) = (shader_pack.get_value(), session.get()) else {
+            return;
+        };
+        spawn_local(async move {
+            let read = Query::PackRead {
+                pack: pack.clone(),
+                path: None,
+            };
+            let opened = match query(&s, read).await {
+                Ok(QueryResult::PackRead { files }) => custom_shader::open(&pack, &files),
+                Ok(other) => Err(format!("The engine answered `{}`.", other.name())),
+                Err(error) => Err(error.to_string()),
+            };
+            match opened {
+                Ok(opened) => _ = editing.try_set(Some(opened)),
+                Err(error) => _ = problem.try_set(Some(error)),
+            }
+        });
+    };
+    if shader {
+        open_shader();
+    }
+    let shader_button = shader_pack.get_value().map(|_| {
+        view! {
+            <button type="button" class="secondary props-shader" on:click=move |_| open_shader()>
+                "Edit shader…"
+            </button>
+        }
+    });
+    let shader_editor = move || {
+        let opened = editing.get()?;
+        let pack = shader_pack.get_value()?;
+        Some(view! {
+            <ShaderEditor
+                pack=pack
+                opened=opened
+                close=move || editing.set(None)
+                save_as=|_, _| {}
+            />
+        })
+    };
+
     // A display, window or webcam shows what the settings being edited capture, so
     // the user sees the device they pick before OK (DL-02).
     let preview = device_preview::shows(&kind_id)
@@ -372,6 +439,7 @@ fn PropertiesBody(
                     <span class="label">"Name"</span>
                     <input type="text" bind:value=name />
                 </label>
+                {shader_button}
                 {form}
                 {move || problem.get().map(|e| view! { <p class="problem">{e}</p> })}
             </PropertiesAndFilters>
@@ -388,6 +456,7 @@ fn PropertiesBody(
                 <button type="button" class="primary" data-primary on:click=ok>"OK"</button>
             </div>
         </Modal>
+        {shader_editor}
     }
     .into_any()
 }

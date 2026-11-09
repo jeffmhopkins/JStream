@@ -74,7 +74,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0058](0058-youtube-sign-in-with-a-jstream-client.md) | YouTube sign-in with JStream's own OAuth client, for people only | accepted | maintainer |  |
 | [ADR-0059](0059-mcp-annotations-and-remote-text.md) | MCP tool annotations, and third-party text marked as data | accepted | agent |  |
 | [ADR-0060](0060-linux-platform-support.md) | Linux platform support: portal and PipeWire capture, VA-API encode | accepted | maintainer |  |
-| [ADR-0061](0061-source-types-and-decoding-scope-v2.md) | Source types and decoding scope v2: Linux's software H.264 and AAC | accepted | maintainer |  |
+| [ADR-0061](0061-source-types-and-decoding-scope-v2.md) | Source types and decoding scope v2: Linux's software H.264 and AAC | superseded | maintainer | [ADR-0140](0140-source-types-and-decoding-scope-v3.md) |
 | [ADR-0062](0062-aac-lc-encoder-patent-check.md) | AAC-LC encoder patent check: may JStream ship its own encoder? | accepted | maintainer |  |
 | [ADR-0063](0063-macos-platform-support.md) | macOS platform support: ScreenCaptureKit, Core Audio taps, VideoToolbox | accepted | maintainer |  |
 | [ADR-0064](0064-nested-scene-folders.md) | Nested scene folders | accepted | agent |  |
@@ -148,8 +148,17 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0132](0132-bench-gates-views-and-quality-probe.md) | Release gates from the profile: the client's views report back, a quality probe, and the bench's gates | accepted | agent |  |
 | [ADR-0133](0133-labels-on-hotkeys-and-timelines.md) | Labels on hotkeys and timelines, and a label's members | accepted | agent |  |
 | [ADR-0134](0134-html-pages-load-from-an-origin-of-their-own.md) | A page given as HTML loads from an origin of its own | accepted | agent |  |
+| [ADR-0135](0135-a-shader-source-from-add-source.md) | A shader source is written from Add source | accepted | agent |  |
 | [ADR-0136](0136-an-effects-outset-follows-its-settings.md) | An effect's outset follows its settings | accepted | agent |  |
 | [ADR-0137](0137-midi-visualization-sources.md) | MIDI visualization sources draw a lock-free per-input state on the CPU | accepted | agent |  |
+| [ADR-0138](0138-motion-drives-effect-settings.md) | Motion modifiers drive an effect's number and colour settings | accepted | agent |  |
+| [ADR-0140](0140-source-types-and-decoding-scope-v3.md) | Source types and decoding scope v3: Linux decodes the engine's own H.264 through Cisco's OpenH264 | accepted | maintainer |  |
 | [ADR-0141](0141-desktop-app-on-linux.md) | The desktop app on Linux: Tauri on WebKitGTK, behind a feature | accepted | maintainer |  |
 | [ADR-0142](0142-feeding-the-midi-sources-and-their-beat.md) | The engine feeds the MIDI sources on the media clock, with each input's tempo | accepted | agent |  |
+| [ADR-0143](0143-scene-lights-and-depth-aware-scene-filters.md) | Scene lights and depth-aware scene filters | accepted | agent |  |
+| [ADR-0144](0144-the-desktop-app-on-macos.md) | The desktop app on macOS, as an unsigned app bundle | accepted | maintainer |  |
+| [ADR-0145](0145-the-quality-probe-reads-back-the-compositor.md) | The quality probe compares the compositor's readback with the decoded stream | accepted | agent |  |
+| [ADR-0146](0146-ptz-cameras-shots-and-actions.md) | PTZ cameras: per-machine heads, ptz actions, and shots that scenes and keyframes fire | accepted | agent |  |
+| [ADR-0147](0147-midi-tempo-and-state-for-pages.md) | The engine's tempo as shared values, and page grants for the tempo and one MIDI input | accepted | agent |  |
+| [ADR-0148](0148-a-borders-speed-in-beats.md) | A border's speed in beats, from the engine's MIDI clock | accepted | agent |  |
 <!-- @generated end adr-index -->

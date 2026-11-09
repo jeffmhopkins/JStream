@@ -384,7 +384,10 @@ fn a_source_draws_its_program_on_the_test_adapter() {
     // `speed` 2 makes `boost` a no-op: the trail's green, at the source's size.
     let mut filter = source.video_filter(&settings(&[("width", json!(16)), ("height", json!(16))]));
     let stand_in = compositor.upload_rgba8(1, 1, &[0; 4]).expect("upload");
-    let clock = jstream_render::FilterClock { seconds: 0.0 };
+    let clock = jstream_render::FilterClock {
+        seconds: 0.0,
+        beat: 0.0,
+    };
     let out = compositor
         .apply_filter(&mut filter, &stand_in, clock)
         .expect("draws");
@@ -400,4 +403,137 @@ fn a_source_draws_its_program_on_the_test_adapter() {
         .apply_filter(&mut filter, &stand_in, clock)
         .expect("draws");
     near(&read(compositor, &out), &[255, 0, 0, 255].repeat(256), 2);
+}
+
+/// What the custom shader editor writes for a shader source (ADR-0135,
+/// `jstream-ui`'s `custom_shader::source_toml` from its `SOURCE_TEMPLATE`, with
+/// `// @feedback`, `// @audio` and a `scene` setting added), as it writes it.
+const EDITOR_MANIFEST: &str = r##"# Made by the Custom shader editor from the `// @` lines of shader.wgsl.
+[pack]
+id = "custom-1"
+name = "Shader source"
+
+[[source]]
+id = "shader"
+name = "Shader source"
+version = 1
+width = 1920
+height = 1080
+audio = true
+
+[[source.param]]
+id = "sky"
+label = "Sky"
+type = "scene"
+
+[[source.param]]
+id = "speed"
+label = "Speed"
+type = "float"
+default = 1.0
+min = 0.0
+max = 4.0
+
+[[source.param]]
+id = "color_a"
+label = "Colour A"
+type = "color"
+default = "#1b3a8cff"
+alpha = true
+
+[[source.param]]
+id = "color_b"
+label = "Colour B"
+type = "color"
+default = "#ff5c8aff"
+alpha = true
+
+[[source.pass]]
+id = "previous"
+shader = "shader.wgsl"
+inputs = ["previous", "audio", "sky"]
+"##;
+
+/// The shader of [`EDITOR_MANIFEST`].
+const EDITOR_SHADER: &str = r##"// @feedback
+// @audio
+// @param sky scene "Sky"
+// @name Shader source
+// @size 1920x1080
+//
+// Each `// @param` line is one setting, read in the shader as `p.<id>`:
+//   // @param <id> float <min>..<max> = <default> "Label"
+//   // @param <id> int <min>..<max> = <default> "Label"
+//   // @param <id> bool = true "Label"            (a u32: 1 is on)
+//   // @param <id> color = #rrggbbaa "Label"      (a vec4, linear light, straight alpha)
+//   // @param <id> enum a|b|c = a "Label"         (a u32: the option's index)
+//   // @param <id> scene "Label"                  (read as <id>(uv): that scene's picture)
+// `// @size <w>x<h>` is the size it starts at (16 to 4096 px a side); Width and Height
+// change it later. `// @feedback` lets it read its own last frame as previous(uv)
+// (transparent at first), for trails. `// @audio` gives it Audio settings, and
+// audio_band(i) (64 bands, 0 to 1), audio_wave(i), sys.level, sys.peak and sys.onset.
+// Give a setting a new ID with a `// @renamed <old> <new>` line; never delete the line.
+//
+// Built in: sys.size is the picture's size in pixels, sys.time the seconds since it was
+// last shown, sys.clock the media clock's, sys.frame the frames since, and in.uv this
+// pixel, (0, 0) top left. Return premultiplied linear light.
+//
+// @param speed float 0..4 = 1 "Speed"
+// @param color_a color = #1b3a8cff "Colour A"
+// @param color_b color = #ff5c8aff "Colour B"
+
+@fragment
+fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    let t = sys.time * p.speed;
+    let wave = 0.5 + 0.5 * sin(in.uv.x * 6.2832 + t) * cos(in.uv.y * 3.1416 - t * 0.7);
+    let c = mix(p.color_a, p.color_b, wave) + previous(in.uv) * 0.5 + sky(in.uv) * audio_band(0) * sys.level;
+    return vec4<f32>(c.rgb * c.a, c.a);
+}
+"##;
+
+#[test]
+fn a_shader_source_from_the_editor_loads_and_draws() {
+    let temp = Temp::new("editor-source");
+    write(&temp.0.join("effect.toml"), EDITOR_MANIFEST);
+    write(&temp.0.join("shader.wgsl"), EDITOR_SHADER);
+    let pack = Pack::load(&temp.0, PRELUDE).expect("loads");
+    let source = pack.source("custom-1/shader").expect("the source");
+    let ids: Vec<_> = source
+        .descriptor()
+        .params
+        .iter()
+        .map(|p| p.id.as_str())
+        .collect();
+    assert_eq!(
+        ids,
+        [
+            "width",
+            "height",
+            "audio",
+            "audio_source",
+            "sky",
+            "speed",
+            "color_a",
+            "color_b"
+        ]
+    );
+    assert_eq!(source.scene_params(), ["sky"]);
+    assert!(source.hears());
+    let Some(mut opened) = compositor() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mut filter = source.video_filter(&settings(&[("width", json!(16)), ("height", json!(16))]));
+    let stand_in = compositor.upload_rgba8(1, 1, &[0; 4]).expect("upload");
+    let clock = jstream_render::FilterClock {
+        seconds: 0.0,
+        beat: 0.0,
+    };
+    let out = compositor
+        .apply_filter(&mut filter, &stand_in, clock)
+        .expect("draws");
+    assert_eq!((out.width(), out.height()), (16, 16));
+    // The bands between two opaque colours: every pixel opaque.
+    let pixels = read(compositor, &out);
+    assert!(pixels.chunks(4).all(|px| px[3] >= 250), "{pixels:?}");
 }

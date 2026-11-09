@@ -64,6 +64,7 @@ use crate::profile::SourceMeters;
 use crate::runtime::{frame_period, on_frame_grid};
 use crate::slot::{FrameSlot, Stored};
 use crate::snapshot::{CaptureKey, Frame, Look};
+use crate::still::Stills;
 
 /// What the `jstream-sources` thread calls back into: the engine, held weakly so the
 /// thread never keeps it alive.
@@ -101,8 +102,8 @@ pub(crate) struct LiveSources {
     /// Whether a source's sound came, went or moved on the clock since
     /// [`take_audio`](Self::take_audio) last said.
     audio_changed: bool,
-    /// The program stage's GPU context, which the browser engine paints on, while one
-    /// runs.
+    /// The GPU context the browser engine paints on: the engine's (ADR-0117 §5), which
+    /// the program stage draws on too, or `None` when there is none.
     context: Option<ContextKey>,
     /// Every asset a video filter of the collection reads, and what loading it gave.
     assets: HashMap<AssetKey, AssetEntry>,
@@ -112,6 +113,8 @@ pub(crate) struct LiveSources {
     /// What each source's paints, builds and plans' looks cost, and the plans, for
     /// `profile.get` (ADR-0103). The thread holds it too.
     meters: Arc<SourceMeters>,
+    /// The thread that holds and lets go of shown stills' pixels (#1139).
+    stills: Stills,
 }
 
 /// One asset a video filter reads.
@@ -178,6 +181,10 @@ struct Running {
     /// instance before it that its build kept ([`Entry::anchor`]).
     start: MediaTime,
     shown: Option<(Arc<VideoFrame>, Frame)>,
+    /// The still image it shows and the frame plans show it by, for a source whose one
+    /// frame is a [`jstream_sources::Still`]: its pixels are held only while a draw
+    /// needs them ([`crate::still`]).
+    shown_still: Option<(Arc<jstream_sources::Still>, Frame)>,
     /// The last plan that reached it, or the plan current when it was built, so the
     /// first plan to reach it after that counts as showing it again when one between
     /// didn't.
@@ -284,6 +291,7 @@ impl LiveSources {
             assets: HashMap::new(),
             loaded: Arc::new(FilterAssets::new()),
             meters,
+            stills: Stills::default(),
         }
     }
 
@@ -331,6 +339,12 @@ impl LiveSources {
     /// The MIDI inputs the `midi_*` sources draw (ADR-0137), which the JTunnel receiver
     /// feeds.
     pub(crate) fn set_midi(&mut self, midi: Arc<jstream_sources::MidiInputs>) {
+        // Their clock moves the filters that follow the tempo (ADR-0148).
+        self.loaded = Arc::new(
+            (*self.loaded)
+                .clone()
+                .with_tempo(crate::tempo::Tempo(Arc::clone(&midi))),
+        );
         self.ctx.midi = Some(midi);
     }
 
@@ -356,8 +370,19 @@ impl LiveSources {
     }
 
     /// The browser engine `browser` sources and its presets (`youtube_chat`) open their
-    /// pages in. Sources of those kinds built before have none, so they are built again.
-    pub(crate) fn set_browser(&mut self, browser: Arc<dyn BrowserBackend>) {
+    /// pages in, painting on `context`, the engine's GPU context (ADR-0117 §5), which it is
+    /// given before any page opens. Sources of those kinds built before have none, so
+    /// they are built again.
+    pub(crate) fn set_browser(
+        &mut self,
+        browser: Arc<dyn BrowserBackend>,
+        context: Option<&GpuContext>,
+    ) {
+        browser.use_device(context);
+        self.context = context.map(GpuContext::key);
+        for running in self.entries.values_mut().filter_map(|e| e.running.as_mut()) {
+            running.shown_gpu = None;
+        }
         self.ctx.browser = Some(browser);
         for entry in self
             .entries
@@ -368,11 +393,16 @@ impl LiveSources {
         }
     }
 
-    /// Gives the browser engine the program stage's GPU context to paint on, or takes
-    /// it away (`None`) when the stage stops. A browser engine set after this gets the
-    /// device from the next stage.
+    /// Gives the browser engine the GPU context to paint on: the engine's, as the browser
+    /// engine is set and again once a lost one is replaced, or `None` when there is
+    /// none. The context it already paints on is not given again, so pages keep their
+    /// frames (ADR-0117 §5).
     pub(crate) fn use_gpu(&mut self, context: Option<&GpuContext>) {
-        self.context = context.map(GpuContext::key);
+        let key = context.map(GpuContext::key);
+        if key == self.context {
+            return;
+        }
+        self.context = key;
         if let Some(browser) = &self.ctx.browser {
             browser.use_device(context);
         }
@@ -404,6 +434,20 @@ impl LiveSources {
         }
     }
 
+    /// Takes the program's base frame rate. A page that follows it (`fps` 0, #1405) is
+    /// built again at a new one, so it paints as often as the program draws.
+    fn sync_frame_rate(&mut self, fps: u32) {
+        if self.ctx.frame_rate == fps {
+            return;
+        }
+        self.ctx.frame_rate = fps;
+        for entry in self.entries.values_mut() {
+            if follows_program_rate(&entry.kind, &entry.settings) {
+                entry.settings = Settings::new();
+            }
+        }
+    }
+
     /// Brings the live sources in line with the collection's: queues a build for every
     /// source that is new or whose settings changed, and drops the ones deleted.
     ///
@@ -416,6 +460,7 @@ impl LiveSources {
             crate::audio::retain_scopes(scopes, state);
         }
         self.sync_heard(state);
+        self.sync_frame_rate(state.base_fps());
         let registry = Arc::clone(&self.registry);
         let before = self.entries.len();
         self.entries.retain(|id, _| {
@@ -616,23 +661,16 @@ impl LiveSources {
         })
     }
 
-    /// Rebuilds what plans read from the loaded assets, keeping the pack effects and
-    /// shader sources.
+    /// Rebuilds what plans read from the loaded assets, keeping everything else they
+    /// read: the pack effects and shader sources, the audio scopes and the MIDI inputs
+    /// (#1453 review B1).
     fn share_assets(&mut self) {
-        let effects = self.loaded.effects().clone();
-        let sources = self.loaded.sources().clone();
-        let heard = Arc::clone(self.loaded.heard());
-        let motion_heard = Arc::clone(self.loaded.motion_heard());
-        self.loaded = Arc::new(
-            self.assets
-                .iter()
-                .filter_map(|(key, entry)| Some((key.clone(), Arc::clone(entry.loaded.as_ref()?))))
-                .collect::<FilterAssets>()
-                .with_effects(effects)
-                .with_sources(sources)
-                .with_heard(heard)
-                .with_motion_heard(motion_heard),
-        );
+        let images = self
+            .assets
+            .iter()
+            .filter_map(|(key, entry)| Some((key.clone(), Arc::clone(entry.loaded.as_ref()?))))
+            .collect();
+        self.loaded = Arc::new((*self.loaded).clone().with_images(images));
     }
 
     /// Hands plans the effect packs' effects and shader sources as now loaded
@@ -673,6 +711,7 @@ impl LiveSources {
                 ticket: built.ticket,
                 start: entry.anchor.unwrap_or_else(|| self.worker.now()),
                 shown: None,
+                shown_still: None,
                 planned: plan,
                 looked: plan,
                 resting: false,
@@ -991,12 +1030,13 @@ impl LiveSources {
                 // Not painted yet: the stand-in, until a re-plan finds the first paint.
                 // A page that paints on the CPU hands its paints over through its frame
                 // slot instead, with no re-plan (ADR-0117 §3).
-                let (frame, own) = Self::cpu_frame(source_id, running, at, now, versions)?;
+                let (frame, own) =
+                    Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
                 let next = if running.slot.is_some() { own } else { next };
                 return Some(Look::Frame(frame, next));
             }
         }
-        let (frame, next) = Self::cpu_frame(source_id, running, at, now, versions)?;
+        let (frame, next) = Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
         Some(Look::Frame(frame, next))
     }
 
@@ -1049,10 +1089,30 @@ impl LiveSources {
     fn cpu_frame(
         source_id: &SourceId,
         running: &mut Running,
-        at: MediaTime,
-        now: MediaTime,
+        (at, now): (MediaTime, MediaTime),
         versions: &mut u64,
+        stills: &Stills,
     ) -> Option<(Frame, Option<MediaTime>)> {
+        if let Some(still) = running.source.still() {
+            // Never decoded here: the stills thread holds its pixels for the draws.
+            let frame = match &running.shown_still {
+                Some((shown, frame)) if Arc::ptr_eq(shown, &still) => frame.clone(),
+                _ => {
+                    *versions = versions.saturating_add(1);
+                    let size = still.size();
+                    let shown = stills.show(Arc::clone(&still));
+                    let frame = Frame::from_still(shown, *versions);
+                    let frame = match running.extent {
+                        Some(extent) => frame.placed_at(extent),
+                        None => frame,
+                    };
+                    running.size = Some(running.extent.unwrap_or(size));
+                    running.shown_still = Some((still, frame.clone()));
+                    frame
+                }
+            };
+            return Some((frame.with_model(running.source.model()), None));
+        }
         let video = match running.source.frame(at) {
             Ok(video) => video,
             Err(err) => {
@@ -1517,6 +1577,10 @@ fn first_size(source: &mut dyn Source) -> Option<FrameSize> {
     if source.capture().is_some() {
         return None;
     }
+    if let Some(still) = source.still() {
+        // Its size, without taking the pixels it holds for the first plan.
+        return Some(still.size());
+    }
     let frame = source.frame(MediaTime::zero(Timebase::MILLIS)).ok()?;
     Some(frame.info().size)
 }
@@ -1572,6 +1636,12 @@ impl MediaClock for SystemClock {
 /// The settings a source of `kind` is built from, which a change to builds it again: all of
 /// them, but a pack source's stand-in is built from its size alone, as its program takes
 /// the other settings live.
+/// Whether a source of `kind` built from `settings` paints at the program's frame rate:
+/// a `browser` page with an `fps` of 0.
+fn follows_program_rate(kind: &str, settings: &Settings) -> bool {
+    kind == "browser" && settings.get("fps").and_then(serde_json::Value::as_u64) == Some(0)
+}
+
 fn built_from(kind: &str, settings: &Settings) -> Settings {
     if pack_source::is_pack_kind(kind) {
         pack_source::stand_in_settings(settings)

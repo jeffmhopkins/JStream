@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 2
-summary = "ADR-0060 so far: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal and PipeWire screen capture, its DMA-BUF frames imported into the engine's Vulkan device (`LinuxGpu`), V4L2 webcams and capture cards (single- and multi-planar) paired with their microphones, PipeWire audio with ALSA as the fallback, libpipewire, libasound and libva loaded at run time with `dlopen`, the `LinuxBackends` set, VA-API H.264 encoding from CPU frames or from the Vulkan device's NV12 encode targets exported as DMA-BUFs, Cisco's OpenH264 downloaded on request as the software H.264 encoder (ADR-0061), AAC encoding through `jstream-aac` (ADR-0061, ADR-0062), stream keys and OAuth tokens in the Secret Service with a `0600` file where none is reachable (ADR-0071), the process's and its threads' CPU time, a media-file stand-in until ADR-0072's decoders, and global hotkeys grabbed on X11 through libxcb (ADR-0112)"
+summary = "ADR-0060 so far: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal and PipeWire screen capture, its DMA-BUF frames imported into the engine's Vulkan device (`LinuxGpu`), V4L2 webcams and capture cards (single- and multi-planar) paired with their microphones, PipeWire audio with ALSA as the fallback, libpipewire, libasound and libva loaded at run time with `dlopen`, the `LinuxBackends` set, VA-API H.264 encoding from CPU frames or from the Vulkan device's NV12 encode targets exported as DMA-BUFs, Cisco's OpenH264 downloaded on request as the software H.264 encoder and the decoder of the engine's own H.264 streams (ADR-0140), AAC encoding through `jstream-aac` (ADR-0140, ADR-0062), stream keys and OAuth tokens in the Secret Service with a `0600` file where none is reachable (ADR-0071), the process's and its threads' CPU time, a media-file stand-in until ADR-0072's decoders, and global hotkeys grabbed on X11 through libxcb (ADR-0112)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
@@ -27,7 +27,7 @@ undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [features]
 default = ["aac-encoder"]
-# JStream's own AAC-LC encoder (`jstream-aac`) as Linux's AAC encoder (ADR-0061, within
+# JStream's own AAC-LC encoder (`jstream-aac`) as Linux's AAC encoder (ADR-0140, within
 # ADR-0062's limits). On by default. ADR-0062's re-check clause switches the encoder off
 # in a release by taking it out of `default`: the dependency then leaves the build and
 # AAC encoding reports `Unsupported`.
@@ -38,8 +38,9 @@ aac-encoder = ["dep:jstream-aac"]
 # `cargo test -p jstream-platform-linux --features hw-tests -- --ignored`.
 hw-tests = []
 # The one test that downloads Cisco's OpenH264 binary from Cisco's server, to record or
-# re-check the pin (ADR-0061). It touches the network, so it is off by default, the test
-# is also `#[ignore]`d, and CI never turns it on (R-TEST-004). Run it by hand with
+# re-check the pin (ADR-0140). It touches the network, so it is off by default, the test
+# is also `#[ignore]`d. CI's `e2e-stream` job turns it on, the one run against the real
+# library; anywhere else, run it by hand with
 # `cargo test -p jstream-platform-linux --features openh264-download -- --ignored downloads_the_pinned`.
 openh264-download = []
 
@@ -53,7 +54,7 @@ ash.workspace = true
 libc.workspace = true
 libloading.workspace = true
 # SHA-256 for checking Cisco's OpenH264 download against its pin, and TLS for fetching it
-# from Cisco's server (ADR-0061, R-DEP-006). All three are already in the tree through
+# from Cisco's server (ADR-0140, R-DEP-006). All three are already in the tree through
 # jstream-youtube and jstream-outputs, so they add no crate.
 ring.workspace = true
 rustls.workspace = true

@@ -31,12 +31,13 @@ mod touched;
 mod transition;
 
 pub use apply::Applied;
+pub use filter::Upgraded;
 pub use model::{
     Bus, Chains, Encoder, Filter, Folder, Graph, Item, Label, MAX_BUSES, MAX_CANVAS_EDGE,
     MAX_CHAIN_FILTERS, MotionList, Output, Overrides, Placement, Preset, Scene, Source, State,
     VideoMix,
 };
-pub use motion::{anim_modifiers, camera_anim_modifiers};
+pub use motion::{anim_modifiers, camera_anim_modifiers, effect_anim_modifiers};
 pub use persist::{LoadError, SCHEMA_VERSION};
 pub use touched::Touched;
 

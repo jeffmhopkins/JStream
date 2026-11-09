@@ -1,4 +1,4 @@
-//! The platform-independent half of the media-file backend (ADR-0061, ADR-0063 §6): what
+//! The platform-independent half of the media-file backend (ADR-0140, ADR-0063 §6): what
 //! an `AVAssetReader` is asked for, for one [`MediaDecoderConfig`], and what is done to
 //! what it gives back.
 //!

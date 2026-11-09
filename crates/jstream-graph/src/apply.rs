@@ -471,6 +471,7 @@ fn apply_edit(
                 options: SceneOptions::default(),
                 camera: None,
                 camera_motion: Vec::new(),
+                ptz_shots: Vec::new(),
                 timelines: BTreeMap::new(),
                 items: Vec::new(),
                 variant_of: None,
@@ -1249,12 +1250,77 @@ fn create_source(
             audio,
             labels: BTreeSet::new(),
             favourite: false,
+            unknown_kind_version: None,
         },
     );
     audio::created(state, id);
     Ok(vec![Edit::SourceDelete {
         source_id: id.clone(),
     }])
+}
+
+/// Creates a `builtin` source whose kind this graph doesn't describe, as a collection
+/// file saved it: a shader source whose effect pack isn't loaded yet (#1412, ADR-0093).
+/// Its settings are kept verbatim and unchecked, and `kind_version` is kept for the next
+/// save, as [`crate::filter::add_unknown_kind`] keeps a filter's (ADR-0025 › Versioning a
+/// kind). A reference in them must still name something that exists, so deletes and the
+/// cycle check see a whole graph. Only a load does this: `source.create` refuses a kind
+/// it can't check.
+pub(crate) fn add_unknown_source(
+    state: &mut State,
+    edit: &Edit,
+    kind_version: Option<u32>,
+) -> Result<(), ProtocolError> {
+    let Edit::SourceCreate {
+        source_id,
+        name,
+        kind,
+        settings,
+        duplicated_from,
+    } = edit
+    else {
+        return Err(ProtocolError::Internal {
+            reason: "invariant: a load creates sources with `source.create`".into(),
+        });
+    };
+    check_id(source_id.as_str(), 0, "source_id")?;
+    check_name(name, 0)?;
+    if duplicated_from.as_ref() == Some(source_id) {
+        return Err(invalid(
+            0,
+            "duplicated_from",
+            "must not name the source itself",
+        ));
+    }
+    for (param, reference) in settings.references() {
+        if let Some(node) = deps::reference_node(&reference) {
+            let exists = match &node {
+                Node::Scene(id) => state.scene(id).is_some(),
+                Node::Source(id) => state.source(id).is_some(),
+                Node::Bus(id) => state.bus(id).is_some(),
+            };
+            if !exists {
+                return Err(invalid(
+                    0,
+                    &format!("settings.{param}"),
+                    format!("{node} doesn't exist"),
+                ));
+            }
+        }
+    }
+    create_source(
+        state,
+        source_id,
+        name,
+        kind,
+        settings.clone(),
+        duplicated_from.clone(),
+        None,
+    )?;
+    if let Some(source) = state.sources.get_mut(source_id) {
+        source.unknown_kind_version = kind_version;
+    }
+    Ok(())
 }
 
 /// Rejects placing `source_id` in scene `scene_id` (`item.add`, `item.set_source`) if

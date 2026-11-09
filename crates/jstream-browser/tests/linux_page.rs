@@ -518,6 +518,7 @@ fn a_granted_page_reads_the_engine_through_window_jstream() {
         scenes: true,
         values: true,
         levels: false,
+        midi: false,
     }));
     wait_for(&*page, [0, 0, 255]);
     page.send_data(PageData {
@@ -527,6 +528,7 @@ fn a_granted_page_reads_the_engine_through_window_jstream() {
         ),
         scenes: Some(r#"{"program":{"id":"scn_main","name":"Main"},"preview":null}"#.into()),
         levels: None,
+        midi: None,
         values: vec![("status.ok".into(), Some("true".into()))],
     });
     wait_for(&*page, [0, 255, 0]);

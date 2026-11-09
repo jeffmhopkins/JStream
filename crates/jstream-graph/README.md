@@ -70,7 +70,9 @@ protocol's types (`Overrides`).
   family's only; its follow camera, `Scene::camera_follow`, is read from its items'
   `follow_pointer` effects, ADR-0120), its `timelines` ordered by ID
   (ADR-0115), and its items in stacking order, bottom
-  first. A keyframe
+  first, and its PTZ `ptz_shots` (ADR-0146: a preset or a pose per named camera, where a
+  keyframe scene's shot for a camera replaces its parent's and
+  `State::effective_ptz_shots` reads the result). A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
   parent's at their effective values. A scene's `filters` (ADR-0065) are `Chains` whose
@@ -529,7 +531,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 12), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 14), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -572,7 +574,9 @@ by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writ
 (ADR-0124) gives a `browser` source's page API a checkbox per kind of data, and a collection's
 `bindings` (ADR-0122) are `schema_version` 9. An override's `timing` (ADR-0129), omitted
 while absent, is `schema_version` 10. Version 11 (ADR-0133) adds a hotkey binding's and a
-timeline's `labels`. Loading creates the folders top level first, then
+timeline's `labels`. Version 13 (ADR-0138) adds motion modifiers with `property`
+`effect` and their `effect` target, which drive an effect's setting. A scene's `ptz_shots` (ADR-0146), omitted
+while empty, are `schema_version` 14. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -597,7 +601,8 @@ the engine's; this crate does no I/O.
   `blending` in a version 11 file, turns its items' `normal_srgb` and `additive_srgb`
   into `normal` and `additive`, and sets `linear` when any item used another mode, the
   default `normal` included, so only a file of `_srgb` items, or of none, loads as
-  `srgb`),
+  `srgb`, and 12 to 13 refuses a version 12 modifier that drives an effect setting,
+  and 13 to 14 refuses a scene's `ptz_shots` in a version 13 file),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
@@ -622,13 +627,14 @@ the engine's; this crate does no I/O.
   and filters, then the master's filters, then each source's audio and the sends (with a
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
   such as one saved before sends existed, keeps every default master send), then each
-  scene's camera motion (once every item exists), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline, then controller bindings
+  scene's camera motion (once every item exists), then each scene's PTZ shots
+  (`scene.set_ptz_shots`), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline, then controller bindings
 (`` binding `MIDI note 36 on channel 10` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
-  `LoadError` stay small); nothing is partly loaded. The exception is a filter of an
-  unknown kind: a pack that isn't installed, or a CLAP plugin the engine hasn't
+  `LoadError` stay small); nothing is partly loaded. The exceptions are a source or a
+  filter of an unknown kind (a source's below). A filter's is a pack that isn't installed, or a CLAP plugin the engine hasn't
   scanned yet (the file loads before the scan). It is put on its chain as saved, its
   settings unchecked and its `kind_version` kept for the next save, so a build without
   the kind destroys nothing
@@ -640,6 +646,27 @@ the engine's; this crate does no I/O.
   to the file's, so revisions keep increasing across restarts. A source, filter or preset whose
   `kind_version` differs from its kind's descriptor is refused
   (`LoadError::KindVersion`) until kinds ship settings migrations.
+  Any `builtin` source whose kind is missing, not only a shader source whose pack isn't
+  loaded yet (a kind of a newer build too, #1412), is likewise created as saved
+  (`add_unknown_source`): its settings unchecked but their references to existing
+  objects, and its `kind_version` kept for the next save; `source.set_settings` on it is
+  `invalid_argument` until the kind is described.
+  Once the engine describes a missing kind, or a changed version of a kind,
+  `Graph::upgrade_kinds` (`filter.rs`, #1353, #1412) upgrades every source and every
+  filter of it, on any chain or keyframe override: settings stored by an older version
+  (the one the object records, else the one described before) go through the caller's
+  migration (an effect's or shader source's renames), and a parameter they lack takes
+  its default; every other value stays, an undeclared one included (ADR-0025 keeps
+  unknown data). Settings of the kind's own version are left alone, and a newer
+  version's are kept, the object recording that version so a save writes it as its
+  `kind_version`. `Graph::without_kinds` records each removed kind's version on its
+  sources and filters the same way, so the kind coming back newer moves them. An upgrade
+  that changes settings, or finds a kind described before now at another version, is a
+  revision with no inverse, and returns each changed object as the `source.set_settings`
+  or `filter.set_settings` of the keys that changed (a renamed-away ID as `null`; none
+  when only the version changed), with their `Touched` for the engine's undo history.
+  The version alone counts because an undo step can still re-add a deleted source or
+  filter of the kind with its old IDs (#1418).
 - **Errors** never quote a value beyond IDs, so they are safe to log. `serde_json`'s
   own messages quote the offending value, so a parse error keeps only a missing field's
   name, a fixed reason, and the line and column of a syntax error.
@@ -739,10 +766,11 @@ with two controller bindings saving exactly as `persist/fixtures/v9.json` and th
 fixture loading exactly, and a version 8 file holding `bindings` refused by its
 migration; a file whose hotkey binding
 names a missing scene refused; a clone's
-link surviving a round trip after its original is deleted; the migration runner over stand-in
+link surviving a round trip after its original is deleted; a source of an unknown kind
+loaded as saved; the migration runner over stand-in
 migrations; and refused files (versions, malformed JSON, unknown fields, dangling
 references (an output naming a missing profile or mix, and a mix naming a missing
-scene, among them), cycles, unknown kinds, a credential in a URL, a kind version mismatch, an
+scene, among them), cycles, a credential in a URL, a kind version mismatch, an
 item with both or neither placement form, an invalid geometry or canvas), and that
 no error quotes a credential-like value placed where a number, key or tag belongs.
 

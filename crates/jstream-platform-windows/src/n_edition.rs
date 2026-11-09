@@ -1,6 +1,6 @@
 //! Detects a Windows without Media Foundation, such as an N or KN edition without the
 //! Media Feature Pack, so the host fails with an error the user can act on instead of an
-//! unexplained `MFStartup` failure (ADR-0061's Consequences name this gap).
+//! unexplained `MFStartup` failure (ADR-0140's Consequences name this gap).
 //!
 //! The probe loads `mfplat.dll` from System32 and looks for `MFStartup`; when that fails,
 //! the edition (the registry's `EditionID`) picks the advice. The decision is plain data
@@ -9,7 +9,7 @@
 //! # Behaviour
 //!
 //! **`check_media_foundation`**, the Media Foundation check
-//! (ADR-0061): Windows N and
+//! (ADR-0140): Windows N and
 //! KN editions ship without Media Foundation until the user installs the Media Feature
 //! Pack, and Windows Server until it adds the Server Media Foundation feature. The check
 //! loads `mfplat.dll` from System32 only and looks for `MFStartup`. If that fails, it

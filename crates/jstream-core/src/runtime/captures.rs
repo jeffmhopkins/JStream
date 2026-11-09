@@ -576,6 +576,17 @@ impl RenderCaptures {
         self.slots = slots;
     }
 
+    /// Whether every capture in `wanted` has a frame, or has failed to start: what a
+    /// snapshot waits for before it draws them (#1184). One not asked for yet is not
+    /// settled.
+    pub(crate) fn settled(&self, wanted: &BTreeSet<CaptureKey>) -> bool {
+        wanted.iter().all(|spec| {
+            self.slots.get(spec).is_some_and(|slot| {
+                slot.frame.is_some() || matches!(slot.state, State::Failed { .. })
+            })
+        })
+    }
+
     /// Starts what `wanted` captures and isn't running, stops what it no longer
     /// captures, takes the streams the `jstream-capture` thread started, and reads every
     /// running capture's mailbox. Never waits.

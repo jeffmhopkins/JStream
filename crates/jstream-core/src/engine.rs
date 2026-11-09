@@ -33,7 +33,7 @@ use crate::profile::{DrawMeter, Profiler};
 use crate::runtime::{
     Destination, EncodeKey, Encoders, Gate, LivePublish, MediaHost, MixKey, OpenPublish,
     OutputEncode, OutputStats, Pending, PipelineEvent, Program, Release, RenderHub, RenderSnapshot,
-    Running, SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch,
+    Running, SharedGpu, SharedVideoDevices, SizeChange, StartError, VcamOut, frame_budget, launch,
     launch_program, launch_vcam, parts_from,
 };
 use crate::session::InProcessControl;
@@ -56,7 +56,7 @@ use jstream_protocol::{
     CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
     Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
     IdempotencyKey, KindsCause, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState,
-    OutputStatsInfo, PixelSize, PreviewSettings, ProtocolError, Query, QueryResult,
+    OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream, ProtocolError, Query, QueryResult,
     RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
     TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
@@ -104,8 +104,15 @@ pub struct Engine {
 struct Shared {
     state: Mutex<State>,
     snapshots: SnapshotWorker,
+    /// The engine's one GPU context (ADR-0117 §5), lent to the program stage, the preview
+    /// hub, the snapshot thread and the browser engine. Its locks are its own, never
+    /// taken under the collection lock.
+    gpu: Arc<SharedGpu>,
     /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
     sheets: AtomicUsize,
+    /// Whether the `jstream-tempo` thread has started: once per engine, however often
+    /// JTunnel starts again (ADR-0147 §1).
+    tempo: AtomicBool,
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
@@ -192,6 +199,7 @@ impl WeakEngine {
 impl Default for Engine {
     fn default() -> Self {
         let audio_scopes = Arc::new(AudioScopes::new());
+        let gpu = Arc::new(SharedGpu::default());
         Self {
             shared: Arc::new_cyclic(|shared: &Weak<Shared>| {
                 let mut state = State::default();
@@ -206,8 +214,10 @@ impl Default for Engine {
                 let profile = Profiler::new(frame_budget(), state.live.meters());
                 Shared {
                     state: Mutex::new(state),
-                    snapshots: SnapshotWorker::default(),
+                    snapshots: SnapshotWorker::new(Arc::clone(&gpu)),
+                    gpu,
                     sheets: AtomicUsize::new(0),
+                    tempo: AtomicBool::new(false),
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
@@ -802,13 +812,7 @@ impl Engine {
     /// collection lock only to serialize, and writes with only the file's lock held, so
     /// saves happen one at a time and a late one never overwrites a newer collection.
     fn save_collection(&self) {
-        let mut file = lock(&self.shared.collection_file);
-        let Some(file) = file.as_mut() else {
-            return;
-        };
-        if let Err(err) = self.save_to(file) {
-            tracing::error!(path = %file.path().display(), error = %err, "collection not saved");
-        }
+        self.shared.save_collection();
     }
 
     /// [`save_collection`](Self::save_collection) to `file`, whose lock the caller holds.
@@ -816,14 +820,7 @@ impl Engine {
     /// # Errors
     /// The file could not be written.
     fn save_to(&self, file: &mut CollectionFile) -> std::io::Result<()> {
-        let (rev, json) = {
-            let state = lock(&self.shared.state);
-            if state.graph.rev() <= file.saved() {
-                return Ok(());
-            }
-            (state.graph.rev(), state.graph.to_collection_json())
-        };
-        file.save(rev, &json)
+        self.shared.save_to(file)
     }
 
     /// `collection.open`, `collection.new`, `collection.save_as` and `collection.info`
@@ -1181,6 +1178,20 @@ impl Engine {
             .map(|pending| pending.kind.clone())
     }
 
+    /// Drives the PTZ cameras `setup` lists (ADR-0146, ADR-0123 §4): a socket and a
+    /// thread for each, which the `ptz.*` actions, `ptz.list` and the scenes' shots use.
+    /// Replaces the cameras of an earlier call, whose threads stop; an empty setup stops
+    /// them all. Without a call the engine drives no camera and opens no socket.
+    ///
+    /// # Errors
+    /// When a camera's socket can't be opened or its thread can't start; the cameras
+    /// running before are kept then.
+    pub fn start_ptz(&self, setup: &crate::ptz::PtzSetup) -> std::io::Result<()> {
+        let ptz = crate::ptz::Ptz::start(setup)?;
+        lock(&self.shared.state).ptz = ptz;
+        Ok(())
+    }
+
     /// Injects platform backends. `output.start` then runs the media pipeline
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
@@ -1220,6 +1231,20 @@ impl Engine {
                 .camera_controls
                 .set_devices(Arc::clone(&backends.video_devices), drawn.state());
         }
+        // One GPU context for the whole engine (ADR-0117 §5): every stage, the preview
+        // and snapshots open on it, and the browser engine paints on it.
+        self.shared.gpu.set_interop(backends.gpu);
+        backends.gpu = Arc::clone(&self.shared.gpu) as Arc<dyn jstream_platform::GpuInterop>;
+        // A context that replaces a lost one goes to the browser engine, whichever
+        // holder saw the loss.
+        {
+            let shared = Arc::downgrade(&self.shared);
+            self.shared.gpu.on_replaced(Arc::new(move |context| {
+                if let Some(shared) = shared.upgrade() {
+                    set_gpu(&shared, Some(context));
+                }
+            }));
+        }
         let host = self.host();
         // The preview draws the program on the program stage, which it opens when no
         // output has (ADR-0117 §6), and captures what scenes and drafts show itself. The
@@ -1242,13 +1267,21 @@ impl Engine {
                 .preview_stage()
             })
         };
-        self.shared.previews.set_capture(PreviewCapture {
+        let capture = PreviewCapture {
             capture: Arc::clone(&backends.capture),
             devices: Arc::clone(&backends.video_devices),
             codecs: Arc::clone(&backends.codecs),
             clock: backends.clock.timebase(),
             stage: Some(stage),
+            gpu: Arc::clone(&self.shared.gpu),
+        };
+        // Snapshots capture what they show the same way as the preview, on their own
+        // thread (#1184). The stage opener is the preview's alone.
+        self.shared.snapshots.set_capture(PreviewCapture {
+            stage: None,
+            ..capture.clone()
         });
+        self.shared.previews.set_capture(capture);
         let vcam = backends.vcam.take();
         host.has_vcam.store(vcam.is_some(), Ordering::Release);
         *lock(&host.vcam) = vcam;
@@ -1275,9 +1308,24 @@ impl Engine {
             let state = lock(&self.shared.state);
             (state.audio.wanted(), state.live.midi())
         };
-        let receiver = Arc::new(crate::jtunnel::Receiver::start(setup, clock, midi)?);
+        // One waiting message stands for any number of changes (`Receiver::start`).
+        let (changed, heard) = std::sync::mpsc::sync_channel(1);
+        let receiver = Arc::new(crate::jtunnel::Receiver::start(
+            setup,
+            clock,
+            midi.clone(),
+            Some(changed),
+        )?);
+        spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
         let local = receiver.local_addr();
         wanted.set_jtunnel(Some(receiver));
+        if let Some(midi) = midi
+            && !self.shared.tempo.swap(true, Ordering::Relaxed)
+            && !spawn_tempo(Arc::downgrade(&self.shared), midi)
+        {
+            // The next start tries again.
+            self.shared.tempo.store(false, Ordering::Relaxed);
+        }
         Ok(local)
     }
 
@@ -1288,18 +1336,42 @@ impl Engine {
         wanted.jtunnel_receiver().map(|receiver| receiver.stats())
     }
 
+    /// `jtunnel.senders`: the senders heard on the LAN, while the receiver is on.
+    fn jtunnel_senders(&self) -> QueryResult {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        match wanted.jtunnel_receiver() {
+            Some(receiver) => QueryResult::JtunnelSenders {
+                on: true,
+                senders: receiver.heard(),
+            },
+            None => QueryResult::JtunnelSenders {
+                on: false,
+                senders: Vec::new(),
+            },
+        }
+    }
+
+    /// `profile.get`'s `network`: the JTunnel receiver's senders, while it is on.
+    fn jtunnel_profile(&self) -> Option<jstream_protocol::NetworkProfile> {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        wanted.jtunnel_receiver().map(|receiver| receiver.profile())
+    }
+
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
     /// open their pages in (ADR-0021). Without one, such a source shows nothing and logs
     /// that no backend is set; giving one builds the ones already there again.
-    /// The host also hands the backend a GPU device (`use_device`), one it opens on the
-    /// media adapter itself, for paints before a program stage; while a stage runs the
-    /// engine lends the backend the stage's own context instead (`use_gpu`).
+    /// The engine hands the backend its GPU context (`use_device`), the one every stage,
+    /// the preview and snapshots draw on (ADR-0117 §5), so call this after
+    /// [`with_backends`](Self::with_backends). Pages paint on it from their first frame
+    /// and move only when a lost context is replaced.
     #[must_use]
     pub fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
+        // Opened before the collection lock: opening a device can take a while.
+        let context = self.shared.gpu.context();
         {
             let mut state = lock(&self.shared.state);
             let state = &mut *state;
-            state.live.set_browser(browser);
+            state.live.set_browser(browser, context.as_ref());
             state.live.sync(state.graph.state());
         }
         self
@@ -1592,12 +1664,19 @@ impl Engine {
     }
 
     /// Lets live sources that paint on the GPU (`browser`) paint on `context`, the
-    /// program stage's platform GPU context, and re-plans the program mix. The returned
-    /// call takes the context away again; the stage makes it before it stops.
+    /// program stage's platform GPU context, and re-plans the program mix. That is the
+    /// engine's own context (ADR-0117 §5), which they already paint on, so nothing moves.
+    /// The returned call hands them the engine's context as it is then: the same one
+    /// when the stage stops, a new one when the stage left a lost context, or none. The
+    /// stage makes it before it stops.
     pub(crate) fn use_gpu(&self, context: &GpuContext) -> Box<dyn FnOnce() + Send + Sync> {
         set_gpu(&self.shared, Some(context));
         let shared = Arc::clone(&self.shared);
-        Box::new(move || set_gpu(&shared, None))
+        Box::new(move || {
+            // Opened before the collection lock, which `set_gpu` takes.
+            let context = shared.gpu.context();
+            set_gpu(&shared, context.as_ref());
+        })
     }
 
     /// Emits one `stats.tick` when called: the pipeline's final tick after it stops.
@@ -1732,13 +1811,15 @@ impl Engine {
     /// Drops `client_id`'s undo and redo history and expires its open gestures: its
     /// session ended (ADR-0032). Each gesture's parameters show their collection values
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
-    /// gets an audit entry. What `plugin.list` showed it is forgotten too.
+    /// gets an audit entry. A PTZ camera its drive left moving stops. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
         self.shared.profile.end_views(client_id);
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
             let mut state = lock(&self.shared.state);
             state.history.forget(client_id);
+            // A camera its drive left moving stops (ADR-0146 §3).
+            state.ptz.forget_client(client_id);
             for gesture_id in state.gestures.of_client(client_id) {
                 state.end_gesture(
                     client_id,
@@ -1841,7 +1922,7 @@ impl Engine {
     /// sessions. Only names, IDs and error codes are logged, never a command's arguments
     /// (R-SEC-001).
     ///
-    /// Every call but `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
+    /// Every call but `video.snapshot`, `video.frames`, `quality.probe`, `scene.switch_and_watch` and
     /// `plugin.clap_rescan` runs to completion here. Those are answered from another
     /// thread and come back [`Executed::Pending`], with their span; their outcome is
     /// logged when they complete.
@@ -1879,11 +1960,18 @@ impl Engine {
             return Executed::Pending(self.clap_rescan(audit, client_id, request_id), span);
         }
         if let Call::Query {
+            query: Query::QualityProbe { stream, frames },
+        } = &call
+        {
+            drop(_entered);
+            return Executed::Pending(self.quality_probe(stream, *frames), span);
+        }
+        if let Call::Query {
             query: Query::VideoFrames { strip, scene_id },
         } = call
         {
             drop(_entered);
-            let reply = self.frame_sheet(strip, scene_id, frames::query_answer);
+            let reply = self.frame_sheet(strip, scene_id, None, frames::query_answer);
             return Executed::Pending(reply, span);
         }
         if let Call::Action {
@@ -1908,10 +1996,17 @@ impl Engine {
             };
             return match self.execute(client_id, request_id, switch, previews) {
                 Executed::Ready(result) => match *result {
-                    Ok(_) => Executed::Pending(
-                        self.frame_sheet(strip, None, frames::action_answer),
-                        span,
-                    ),
+                    Ok(_) => {
+                        #[cfg(test)]
+                        thread::sleep(Duration::from_millis(
+                            SHEET_STALL_MS.load(Ordering::Relaxed),
+                        ));
+                        let switched_at = lock(&self.shared.state).switched_at;
+                        Executed::Pending(
+                            self.frame_sheet(strip, None, switched_at, frames::action_answer),
+                            span,
+                        )
+                    }
                     Err(error) => Executed::Ready(Box::new(Err(error))),
                 },
                 pending @ Executed::Pending(..) => pending,
@@ -1968,16 +2063,23 @@ impl Engine {
         ) {
             Ok(self.font_list())
         } else if let Call::Query {
+            query: Query::JtunnelSenders,
+        } = &call
+        {
+            Ok(CallResult::Query {
+                result: self.jtunnel_senders(),
+            })
+        } else if let Call::Query {
             query: Query::ProfileGet { seconds, top },
         } = &call
         {
             // Outside the collection lock: reading the threads makes system calls.
             let cpu = self.shared.load.cpu_time();
             let inputs = drops::lock_ledger(&self.drops).input_totals();
+            let mut profile = self.shared.profile.profile(*seconds, *top, cpu, inputs);
+            profile.network = self.jtunnel_profile();
             Ok(CallResult::Query {
-                result: QueryResult::ProfileGet {
-                    profile: self.shared.profile.profile(*seconds, *top, cpu, inputs),
-                },
+                result: QueryResult::ProfileGet { profile },
             })
         } else if let Call::Action {
             action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),
@@ -2565,6 +2667,58 @@ impl Engine {
         })
     }
 
+    /// `quality.probe` (ADR-0132 §3, ADR-0145): PSNR and SSIM of a running output's
+    /// stream against the frames its encoder was given, measured on a thread of its own
+    /// ([`quality`](crate::quality)). Checks the call and finds the session under the
+    /// locks, which it lets go of before the probe starts.
+    fn quality_probe(&self, stream: &ProbeStream, frames: Option<u32>) -> SnapshotReply {
+        let job = (|| {
+            let frames = jstream_protocol::probe_frames(frames)?;
+            let ProbeStream::Output { output_id } = stream else {
+                return Err(ProtocolError::invalid_argument(
+                    "stream",
+                    "this engine probes only an output's stream",
+                ));
+            };
+            if lock(&self.shared.state)
+                .graph
+                .state()
+                .output(output_id)
+                .is_none()
+            {
+                return Err(ProtocolError::NotFound {
+                    entity: EntityKind::Output,
+                    id: output_id.to_string(),
+                });
+            }
+            let not_running = || ProtocolError::ActionFailed {
+                reason: format!("output `{output_id}` is not running, so it has no stream"),
+            };
+            let codecs = self.codecs().ok_or_else(not_running)?;
+            let host = self.media.as_ref().ok_or_else(not_running)?;
+            let gate = lock(&host.gate);
+            let encoders = gate
+                .running
+                .get(output_id)
+                .ok_or_else(not_running)?
+                .encoders()
+                .ok_or_else(|| ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` sends no video, so there is none to probe"
+                    ),
+                })?;
+            Ok(encoders.probe_job(codecs, frames))
+        })();
+        match job {
+            Ok(job) => crate::quality::start(job),
+            Err(error) => {
+                let (reply, waiting) = snapshot::reply_pair();
+                reply.send(Err(error));
+                waiting
+            }
+        }
+    }
+
     /// The codec backend, when the engine has media backends.
     fn codecs(&self) -> Option<Arc<dyn Codecs>> {
         self.media.as_ref().and_then(|host| {
@@ -3133,12 +3287,14 @@ impl Engine {
 
     /// A frame sheet (#1061): `strip`'s pictures of the program mix, or of `scene_id`'s
     /// scene alone, taken in real time from now by a `jstream-frames` thread and drawn
-    /// by the snapshot thread ([`frames`]). Its answer is `answer`'s wrapping of the
-    /// sheet, or the error that stopped it.
+    /// by the snapshot thread ([`frames`]). Each picture's `at_ms` counts from `since`
+    /// (the switch, for `scene.switch_and_watch`), else from now. Its answer is
+    /// `answer`'s wrapping of the sheet, or the error that stopped it.
     fn frame_sheet(
         &self,
         strip: FrameStrip,
         scene_id: Option<SceneId>,
+        since: Option<jstream_media::MediaTime>,
         answer: fn(FrameSheet) -> CallResult,
     ) -> SnapshotReply {
         let (reply, waiting) = snapshot::reply_pair();
@@ -3148,7 +3304,7 @@ impl Engine {
         }
         let begin = Instant::now();
         let start = match self.shared.sample(scene_id.as_ref(), None) {
-            Ok(sample) => sample.at,
+            Ok(sample) => since.unwrap_or(sample.at),
             Err(error) => {
                 reply.send(Err(error));
                 return waiting;
@@ -3344,6 +3500,12 @@ impl Engine {
 /// A frame sheet's samples, each read when it is due (`begin` plus its offset). Stops
 /// with `internal` if the engine ends, and with the read's error (a scene deleted
 /// meanwhile) if one fails.
+/// A pause between a `scene.switch_and_watch`'s switch and its sheet's start, for tests:
+/// a loaded machine's delay, made on purpose.
+#[cfg(test)]
+pub(crate) static SHEET_STALL_MS: std::sync::atomic::AtomicU64 =
+    std::sync::atomic::AtomicU64::new(0);
+
 fn take_samples(
     shared: &Weak<Shared>,
     strip: &FrameStrip,
@@ -3971,6 +4133,8 @@ struct State {
     audio: AudioSources,
     /// Each `webcam`'s camera controls, set on its device as they change (#1196).
     camera_controls: crate::camera_controls::CameraControls,
+    /// The PTZ cameras this machine drives (ADR-0146): none until the host starts them.
+    ptz: crate::ptz::Ptz,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -3996,6 +4160,10 @@ struct State {
     /// transition, a fire or a `source.restart` it starts takes as its start
     /// (ADR-0099 decision 4).
     cue_at: Option<jstream_media::MediaTime>,
+    /// When the last `scene.switch` started its transition, or `None` when it changed
+    /// nothing: what a `scene.switch_and_watch` sheet's `at_ms` counts from, so a picture
+    /// is judged by the fade's own time however long the sheet took to start.
+    switched_at: Option<jstream_media::MediaTime>,
     /// How many `stats.tick` events this engine has emitted. The next one uses this plus one.
     stats_seq: u64,
     /// Every client's open live-value gestures (ADR-0032), and the committed values the
@@ -5024,6 +5192,10 @@ impl State {
         action: Action,
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
+        if let Some(done) = self.ptz.act(client_id, &action) {
+            done?;
+            return Ok(CallResult::action());
+        }
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -5207,6 +5379,9 @@ impl State {
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
                 },
+                Query::PtzList => QueryResult::PtzList {
+                    cameras: self.ptz.list(),
+                },
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
@@ -5271,6 +5446,7 @@ impl State {
         named: Option<&TransitionPresetId>,
         wake: &mut Vec<Waker>,
     ) -> Result<(), ProtocolError> {
+        self.switched_at = None;
         studio::exists(self.graph.state(), &scene_id)?;
         let from_scene = self.studio.program().cloned();
         let (preset_id, run) =
@@ -5279,6 +5455,7 @@ impl State {
             return Ok(());
         }
         let now = self.action_now();
+        self.switched_at = Some(now);
         let running = match (run, from_scene) {
             (Some(mut run), Some(from_scene)) => {
                 let state = self.graph.state();
@@ -5521,6 +5698,13 @@ impl State {
         transition: Option<TransitionStarted>,
         wake: &mut Vec<Waker>,
     ) {
+        // The heads follow what the studio shows (ADR-0146 §7).
+        self.ptz.follow(
+            self.graph.state(),
+            self.studio.program(),
+            self.studio.preview(),
+            transition.as_ref().map_or(0, |t| t.duration_ms),
+        );
         self.subscribers.emit(
             &Event::StudioChanged {
                 program_scene: self.studio.program().cloned(),
@@ -5897,6 +6081,44 @@ impl State {
         self.feed_pages();
     }
 
+    /// Sets the `tempo.*` shared values the MIDI clock gave (ADR-0147), credited to the
+    /// client `engine`, and tells the pages and clients that read them. Returns whether
+    /// every change was set: a refused one is tried again at the next look.
+    fn publish_tempo(
+        &mut self,
+        changes: &[(&str, Option<serde_json::Value>)],
+        wake: &mut Vec<Waker>,
+    ) -> bool {
+        let mut any = false;
+        let mut all = true;
+        for (name, value) in changes {
+            match self.values.set(name, value.clone()) {
+                Ok(true) => {
+                    any = true;
+                    self.subscribers.emit(
+                        &Event::ValuesChanged {
+                            name: (*name).to_owned(),
+                            value: value.clone(),
+                            client_id: ClientId::new("engine"),
+                            request_id: None,
+                        },
+                        wake,
+                    );
+                }
+                Ok(false) => {}
+                // Only a full store refuses one; the next look tries again.
+                Err(error) => {
+                    all = false;
+                    tracing::debug!(name, %error, "a tempo value wasn't set");
+                }
+            }
+        }
+        if any {
+            self.feed_pages();
+        }
+        all
+    }
+
     /// Tells each page granted the page API what it may read now (ADR-0102): its
     /// visibility in the collection as drawn, the program and preview scenes, and the
     /// shared values. A page is sent only what changed, so this runs after every plan and
@@ -6083,10 +6305,38 @@ impl Shared {
         wake_all(wake);
     }
 
+    /// Saves the collection to its file: [`Engine::save_collection`].
+    fn save_collection(&self) {
+        let mut file = lock(&self.collection_file);
+        let Some(file) = file.as_mut() else {
+            return;
+        };
+        if let Err(err) = self.save_to(file) {
+            tracing::error!(path = %file.path().display(), error = %err, "collection not saved");
+        }
+    }
+
+    /// Saves the collection to `file`, whose lock the caller holds, unless the file
+    /// already holds this `rev` or a later one.
+    ///
+    /// # Errors
+    /// The file could not be written.
+    fn save_to(&self, file: &mut CollectionFile) -> std::io::Result<()> {
+        let (rev, json) = {
+            let state = lock(&self.state);
+            if state.graph.rev() <= file.saved() {
+                return Ok(());
+            }
+            (state.graph.rev(), state.graph.to_collection_json())
+        };
+        file.save(rev, &json)
+    }
+
     /// Applies a change to the effect packs: their kinds to `kind.list`, their effects
     /// (the quarantined ones left out) to the chains, then re-plans.
     fn install_effects(&self, update: crate::effect_packs::Update) {
         let mut wake = Vec::new();
+        let mut save = false;
         {
             let mut state = lock(&self.state);
             // Every caller installs under the packs' lock, so updates come in order; one
@@ -6103,9 +6353,59 @@ impl Shared {
             let changed = !update.removed.is_empty()
                 || !update.described.is_empty()
                 || state.quarantined != update.quarantined;
+            // The version each changed kind had, for the filters stored by it.
+            let before: BTreeMap<String, Option<u32>> = update
+                .described
+                .iter()
+                .map(|kind| {
+                    let id = kind.kind_id.clone();
+                    let version = state.graph.kind(&id).map(|k| k.version);
+                    (id, version)
+                })
+                .collect();
             state.graph = std::mem::take(&mut state.graph)
                 .without_kinds(update.removed.iter().map(String::as_str))
                 .with_kinds(update.described);
+            // Sources and filters of a changed kind follow its renames (#1353, #1412,
+            // ADR-0025): one loaded before its pack, or one a reload raised the version of. A new
+            // version is logged even when nothing moved, so an undo step still holding a
+            // deleted filter's or source's old settings conflicts with it (#1418).
+            let migrations = &update.migrations;
+            let upgraded = state.graph.upgrade_kinds(&before, &|kind, stored, from| {
+                migrations.get(kind)?.migrate(stored, from)
+            });
+            if let Some(upgraded) = upgraded {
+                if !upgraded.set.is_empty() {
+                    tracing::info!(
+                        rev = %upgraded.rev,
+                        changed = upgraded.set.len(),
+                        "stored settings moved to their pack kind's current version"
+                    );
+                }
+                // A shader source's new settings (its size among them) reach its live
+                // source as after any batch.
+                if upgraded
+                    .set
+                    .iter()
+                    .any(|edit| matches!(edit, Edit::SourceSetSettings { .. }))
+                {
+                    let state = &mut *state;
+                    state.refresh_shown();
+                    let drawn = state.shown.as_ref().unwrap_or(&state.graph);
+                    state.live.sync(drawn.state());
+                }
+                state.history.record_engine(upgraded.rev, upgraded.touched);
+                state.subscribers.emit(
+                    &Event::StateChanged {
+                        rev: upgraded.rev,
+                        client_id: ClientId::new(crate::history::ENGINE_CLIENT),
+                        request_id: None,
+                        cause: None,
+                    },
+                    &mut wake,
+                );
+                save = true;
+            }
             state.quarantined = update.quarantined;
             if changed {
                 state.subscribers.emit(
@@ -6121,6 +6421,9 @@ impl Shared {
             state.feed_pages();
         }
         wake_all(wake);
+        if save {
+            self.save_collection();
+        }
     }
 
     /// A pack kind that ran too long on the program stage's GPU (#349): quarantines it
@@ -6272,6 +6575,67 @@ impl Drop for State {
 /// How often the live ticker checks whether the render thread has caught up with a
 /// committed gesture's snapshot.
 const RELEASE_POLL: Duration = Duration::from_millis(4);
+
+/// Sends `jtunnel.senders_changed` for each change the JTunnel receiver reports on
+/// `heard`, until that receiver stops (its sender is dropped with it) or the engine goes.
+/// The receiver's thread never takes the engine's lock: this one does.
+fn spawn_jtunnel_events(shared: Weak<Shared>, heard: std::sync::mpsc::Receiver<()>) {
+    let started = thread::Builder::new()
+        .name("jstream-jtunnel-events".into())
+        .spawn(move || {
+            while heard.recv().is_ok() {
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let mut wake = Vec::new();
+                lock(&engine.state)
+                    .subscribers
+                    .emit(&Event::JtunnelSendersChanged {}, &mut wake);
+                drop(engine);
+                wake_all(wake);
+            }
+        });
+    if let Err(error) = started {
+        tracing::warn!(%error, "the JTunnel senders' events could not start; `jtunnel.senders` still answers");
+    }
+}
+
+/// Starts the `jstream-tempo` thread: it publishes the every-input MIDI tempo as the
+/// `tempo.*` shared values (ADR-0147) until the engine is gone. Returns whether it
+/// started.
+fn spawn_tempo(shared: Weak<Shared>, midi: Arc<jstream_sources::MidiInputs>) -> bool {
+    let started = thread::Builder::new()
+        .name("jstream-tempo".into())
+        .spawn(move || {
+            let mut published = crate::tempo::Published::default();
+            loop {
+                thread::sleep(crate::tempo::EVERY);
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let Some((reading, now_ms)) = crate::tempo::read(&midi) else {
+                    continue;
+                };
+                let next = published.next(reading.as_ref(), now_ms);
+                if next == published {
+                    continue;
+                }
+                let mut wake = Vec::new();
+                let all = lock(&engine.state).publish_tempo(&next.changes(&published), &mut wake);
+                drop(engine);
+                wake_all(wake);
+                // A refused value stays unpublished, so the next look tries it again; the
+                // ones set this time are then unchanged and send nothing.
+                if all {
+                    published = next;
+                }
+            }
+        });
+    if let Err(error) = &started {
+        tracing::warn!(%error, "the tempo values could not start");
+    }
+    started.is_ok()
+}
 
 /// Starts `jstream-live`, which runs [`State::live_tick`] when it is next due, until
 /// nothing is left to send or release or the engine is gone. Returns whether it

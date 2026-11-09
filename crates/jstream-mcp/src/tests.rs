@@ -237,6 +237,7 @@ fn handshake_list_and_call_round_trip() {
             "history",
             "hotkey",
             "item",
+            "jtunnel",
             "kind",
             "label",
             "live",
@@ -245,6 +246,8 @@ fn handshake_list_and_call_round_trip() {
             "pairing",
             "preview",
             "profile",
+            "ptz",
+            "quality",
             "scene",
             "send",
             "source",
@@ -439,7 +442,7 @@ fn stateless_requests_round_trip() {
 
     let listed = f.modern("tools/list", json!({}));
     assert_eq!(listed["result"]["resultType"], "complete");
-    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(38));
+    assert_eq!(listed["result"]["tools"].as_array().map(Vec::len), Some(41));
     assert!(listed["result"]["ttlMs"].as_u64().is_some());
 
     let called = f.modern(
@@ -530,6 +533,8 @@ fn instructions_carry_the_design_guidance() {
         "`video.snapshot`",
         "`jstream.levels()`",
         "`page_api_audio`",
+        "`jstream.midi()`",
+        "`page_api_midi`",
     ] {
         assert!(legacy.contains(needle), "{needle}");
     }

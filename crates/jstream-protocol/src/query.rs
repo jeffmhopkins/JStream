@@ -227,6 +227,20 @@ pub enum Query {
     /// the result holds what did.
     #[serde(rename = "capture.targets")]
     CaptureTargets,
+    /// Lists the PTZ cameras on this machine's list (ADR-0146 §4), in the order the host
+    /// gave them: each one's address, whether it answered lately, its last pose and its
+    /// last error. Runtime state, so no `rev`. Empty when the machine controls no PTZ
+    /// cameras, which is the default (ADR-0123 §1).
+    #[serde(rename = "ptz.list")]
+    PtzList,
+    /// Lists the JTunnel senders heard on the LAN (0.114, ADR-0123 §3): each sender that
+    /// answered the receiver's mDNS query for `_jtunnel._udp.local` in the last 35 s,
+    /// ordered by name, then address, with whether this machine accepts it. Runtime
+    /// state, so no `rev`. `on` is false, and the list empty, while the receiver is off,
+    /// which is the default (ADR-0123 §1). `jtunnel.senders_changed` says when the list
+    /// changes.
+    #[serde(rename = "jtunnel.senders")]
+    JtunnelSenders,
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
     /// in the OS's font folders that parses, as a family and style to show and the
     /// absolute path an `asset` setting names it by. Runtime state, so no `rev`. The
@@ -352,6 +366,25 @@ pub enum Query {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top: Option<u32>,
     },
+    /// Measures how close a stream's decoded pictures are to the frames its encoder was
+    /// given (0.110, ADR-0132 §3, ADR-0145): the engine keeps the next `frames` frames
+    /// the stream's encoder takes, from the next keyframe on, decodes the packets it
+    /// makes of them with the platform's decoder, and answers PSNR and SSIM for each.
+    /// Nothing is copied or decoded unless a probe is waiting. It waits for those frames
+    /// (a still stream still sends them, at its frame rate) and answers within about
+    /// ten seconds. Fails with `not_found` for an output that doesn't exist,
+    /// `invalid_argument` on `frames` outside 1 to 10, and `action_failed` when the
+    /// output isn't running, the platform has no decoder for its codec, or the frames
+    /// didn't arrive in time. Runtime state: the result carries no `rev`.
+    #[serde(rename = "quality.probe")]
+    QualityProbe {
+        /// The stream.
+        stream: crate::quality::ProbeStream,
+        /// The frames to compare, from 1 to 10
+        /// ([`MAX_PROBE_FRAMES`](crate::MAX_PROBE_FRAMES)). Omitted, 3.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        frames: Option<u32>,
+    },
 }
 
 /// What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a
@@ -416,6 +449,8 @@ impl Query {
             Query::DeletePlan { .. } => "delete.plan",
             Query::LabelMembers { .. } => "label.members",
             Query::CaptureTargets => "capture.targets",
+            Query::PtzList => "ptz.list",
+            Query::JtunnelSenders => "jtunnel.senders",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
@@ -429,6 +464,7 @@ impl Query {
             Query::CodecDownloads => "codec.downloads",
             Query::CollectionInfo => "collection.info",
             Query::ProfileGet { .. } => "profile.get",
+            Query::QualityProbe { .. } => "quality.probe",
         }
     }
 }
@@ -744,6 +780,20 @@ pub enum QueryResult {
         /// The displays, then the windows, in the order the OS lists them.
         targets: Vec<CaptureTargetInfo>,
     },
+    /// The result of `ptz.list`.
+    #[serde(rename = "ptz.list")]
+    PtzList {
+        /// The cameras, in the order the host listed them.
+        cameras: Vec<crate::ptz::PtzCameraInfo>,
+    },
+    /// The result of `jtunnel.senders`.
+    #[serde(rename = "jtunnel.senders")]
+    JtunnelSenders {
+        /// Whether the JTunnel receiver runs, and so whether it asks the LAN for senders.
+        on: bool,
+        /// The senders heard, ordered by name, then address.
+        senders: Vec<crate::JtunnelSenderInfo>,
+    },
     /// The result of `font.list`.
     #[serde(rename = "font.list")]
     FontList {
@@ -845,6 +895,13 @@ pub enum QueryResult {
         #[serde(flatten)]
         profile: ProfileInfo,
     },
+    /// The result of `quality.probe` (0.110). Runtime state, so it carries no `rev`.
+    #[serde(rename = "quality.probe")]
+    QualityProbe {
+        /// The measurement.
+        #[serde(flatten)]
+        probe: crate::quality::QualityProbeInfo,
+    },
 }
 
 impl QueryResult {
@@ -875,6 +932,8 @@ impl QueryResult {
             QueryResult::LabelMembers { .. } => "label.members",
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
+            QueryResult::PtzList { .. } => "ptz.list",
+            QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",
@@ -888,6 +947,7 @@ impl QueryResult {
             QueryResult::CodecDownloads { .. } => "codec.downloads",
             QueryResult::CollectionInfo { .. } => "collection.info",
             QueryResult::ProfileGet { .. } => "profile.get",
+            QueryResult::QualityProbe { .. } => "quality.probe",
         }
     }
 }
@@ -1162,6 +1222,11 @@ pub struct SceneInfo {
     /// Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub camera_motion: Vec<CameraMotionModifier>,
+    /// Its PTZ shots (ADR-0146 §6): the physical camera framings it sends when it goes
+    /// on program or preview. On a keyframe scene, only its own, which replace its
+    /// parent's for the same cameras. Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ptz_shots: Vec<crate::ptz::PtzShot>,
     /// Its follow camera (ADR-0113, since 0.85), which glides after the pointer over a capture. It
     /// belongs to the family, so a keyframe scene reports none and draws its parent's.
     /// Since 0.91 it is read from its items' effects (ADR-0120): the first enabled

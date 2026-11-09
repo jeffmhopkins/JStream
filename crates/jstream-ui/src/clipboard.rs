@@ -535,6 +535,13 @@ pub fn duplicate_scene_edits(
             motion: scene.camera_motion.clone(),
         });
     }
+    // The scene's PTZ shots (ADR-0146), which name cameras, not its items.
+    if !scene.ptz_shots.is_empty() {
+        edits.push(Edit::SceneSetPtzShots {
+            scene_id: new_id.clone(),
+            shots: scene.ptz_shots.clone(),
+        });
+    }
     let mut placed = Vec::new();
     edits.extend(place_edits(
         collection,
@@ -609,6 +616,7 @@ mod tests {
             filters: Default::default(),
             camera: None,
             camera_motion: Vec::new(),
+            ptz_shots: Vec::new(),
             camera_follow: None,
             timelines: Vec::new(),
         }
@@ -628,6 +636,7 @@ mod tests {
         jstream_protocol::MotionModifier {
             modifier_id: "sway".into(),
             property: jstream_protocol::MotionProperty::X,
+            effect: None,
             kind: jstream_protocol::MotionKind::Wiggle {
                 amplitude: Finite32::new(3.0).expect("finite"),
                 frequency_hz: Finite32::ONE,
@@ -966,8 +975,9 @@ mod tests {
         assert!(duplicate_scene_edits(&c, &"kf".into(), "k2".into(), &mut counter()).is_empty());
     }
 
-    /// ADR-0113: a duplicate keeps the camera's motion, and its follow camera, a filter on
-    /// the item it follows (ADR-0120), goes with the copy of that item.
+    /// ADR-0113: a duplicate keeps the camera's motion and its PTZ shots (ADR-0146), and
+    /// its follow camera, a filter on the item it follows (ADR-0120), goes with the copy
+    /// of that item.
     #[test]
     fn duplicating_a_scene_keeps_its_camera_moves_on_its_own_items() {
         use jstream_control::protocol::{FOLLOW_POINTER_KIND, SceneCamera};
@@ -981,7 +991,17 @@ mod tests {
             enabled: true,
         }];
         c.scenes[0].items[0].effects = vec![filter("follow-pointer", FOLLOW_POINTER_KIND)];
+        c.scenes[0].ptz_shots = vec![jstream_control::protocol::PtzShot {
+            camera: "wide".into(),
+            preset: Some(2),
+            pose: Default::default(),
+        }];
         let edits = duplicate_scene_edits(&c, &"main".into(), "copy".into(), &mut counter());
+        // ADR-0146: and its PTZ shots.
+        assert!(edits.iter().any(|e| matches!(
+            e,
+            Edit::SceneSetPtzShots { scene_id, shots } if scene_id.as_str() == "copy" && shots.len() == 1
+        )));
         let copy_of_a = edits
             .iter()
             .find_map(|e| match e {

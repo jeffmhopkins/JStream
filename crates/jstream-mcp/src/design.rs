@@ -13,7 +13,8 @@
 //! set with a scene camera (ADR-0094) and its depth of field (ADR-0108), which
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
 //! `browser` source, animated on one clock, or an audio visualiser on
-//! `jstream.levels()` (ADR-0124), and how to write a custom shader the Filters window's
+//! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
+//! `tempo.*` values (ADR-0147), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -79,8 +80,15 @@ Give a new pack ID `custom-<word>` (not one `pack.list` has) one effect `shader`
 `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>`, reads the input with \
 `src(in.uv)` (premultiplied linear) and each setting as `p.<id>`. To rename a \
 setting, add a `// @renamed <old> <new>` line, raise the effect's `version` by one and \
-add `renames = { <old> = \"<new>\" }`. The engine doesn't move saved values through \
-renames yet, so set the new ID on existing filters with `filter.set_settings`. \
+add `renames = { <old> = \"<new>\" }`, keeping earlier entries with each pointed at \
+the newest ID. When the new version loads, the engine moves every existing filter's \
+value to the new ID. \
+A generated picture works the same way, renames included, as a shader source a person can edit from its \
+Properties (Edit shader…): one `[[source]]` `shader` with `width`, `height` and one \
+`[[source.pass]]` `previous` drawing `shader.wgsl`, whose `fs` returns the picture. \
+Its `// @size <w>x<h>` line sets the default size, `// @feedback` adds `previous` to \
+the pass's inputs, `// @audio` sets `audio = true` and adds `audio`, and a \
+`// @param <id> scene \"Label\"` line is a `scene` setting, also an input. \
 Motion: animate with keyframe scenes. Build the graphic's off state as a scene (a \
 plate 10 px wide or cropped to nothing, text at opacity 0), add its on state with \
 `scene.create_variant`, override geometry, crop and opacity per item there, make a \
@@ -130,7 +138,8 @@ Borders: one `border` item effect frames an item: `radius` (or `corners` `each` 
 `width` and `color` stroke inside the edge, `outer_width`, `outer_gap` and \
 `outer_color` past it; `style` `double`, `dashed` (`dash`, `gap`) or `dotted`; `fill` \
 `linear` (`angle`) or `conic` to `color2`; `speed` (px/s) moves dashes and gradients \
-round. Its looks: card (`width` 1, `color` #ffffff33, `radius` 16), neon (`width` 3, \
+round, or with `speed_unit` `beats` they lap the edge every `lap_beats` beats of the \
+MIDI clock, on the beat (4 is a bar). Its looks: card (`width` 1, `color` #ffffff33, `radius` 16), neon (`width` 3, \
 `radius` 24, `fill` `conic` #00e5ff to #ff2bd6, `speed` 120, `outer_width` 2, \
 `outer_gap` 4, `outer_color` #00e5ff66) and broadcast frame (`width` 9, `style` \
 `double`, `color` #f4f4f2, `outer_width` 2, `outer_color` #0b2545). An ornate frame \
@@ -253,6 +262,13 @@ a source, `audio_source`) by `level`, `peak`, `onset` or a `band` (`low_hz`..`hi
 such as 40..120 for a kick), with `attack_ms` and `release_ms`, mapped from `floor_db` \
 to `ceiling_db` onto `from`..`to`. On `opacity`, `from` -0.6 and `to` 0 dims a light to \
 40% between beats. It hears only while an output runs. \
+To make an effect itself pulse (a border's `width`, a glow's `radius` or `strength`, a \
+blur's `radius`), give the item a modifier with `property` `effect` and \
+`effect: {filter_id, param}` naming one of its own effects and a number or colour \
+setting of it: any kind and clock works, its value is added to a number and kept \
+within the setting's range, or added to a colour's red, green and blue as a fraction \
+of full (0.3 lightens it), so an `audio` modifier with `from` 0 and `to` 6 on a border's `width` \
+thickens it by up to 6 px on each beat. \
 For an audio visualiser that the built-in `spectrum` and `waveform` kinds can't draw (a \
 scrolling spectrogram, a custom meter), build an HTML page on `jstream.levels()`: set the \
 `browser` source's `page_api`, `page_api_audio` and `page_api_bus` (the bus it shows, \
@@ -261,7 +277,18 @@ never a microphone bus it doesn't), and in the page listen for `levels` events, 
 each 0 to 1. A spectrogram draws each reading as one column of a canvas, shifting the \
 canvas left by a column first; on a `null` reading (no output runs, or the bus is gone) \
 it draws nothing. The page gets at most one reading per frame of its `fps`, and only \
-while an output runs. Keep continuous motion \
+while an output runs. \
+For a page that plays along with a performer (notes lighting up, a beat counter, a \
+controller-driven graphic), set the `browser` source's `page_api` and `page_api_midi`, \
+and `page_api_midi_input` to the MIDI input's name (empty for every input), and read \
+`jstream.midi()` or listen for `midi` events: `{input, tempo, notes, controllers, bend, \
+pressure, recent}`, where `tempo` is `null` or `{bpm, playing, clock, beat, at}`, `notes` \
+and `controllers` are `[channel, key or controller, value]` with channels 1 to 16, and \
+`recent` holds the last two seconds' note-ons as `[at, channel, key, velocity]`; times \
+are seconds on `jstream.clock`; `tempo` is there only while `page_api_tempo` is on too. \
+The engine also keeps `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar` as \
+shared values, which `values.list` reads and a page reads only with `page_api_tempo`, \
+never through `page_api_values`. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. \

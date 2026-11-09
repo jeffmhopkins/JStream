@@ -1550,6 +1550,76 @@ fn a_network_audio_source_records_an_accepted_jtunnel_sender_once_it_is_heard() 
     block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
 
+/// ADR-0147: an accepted sender's MIDI clock becomes the `tempo.*` shared values, which
+/// every client reads with `values.list`, credited to the client `engine`.
+#[test]
+fn a_jtunnel_senders_clock_publishes_the_tempo_values() {
+    use jstream_jtunnel::wire::{self, AudioHeader, Codec, FrameOut};
+    use jstream_protocol::{Query, QueryResult};
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let sender = jtunnel_sender();
+    let mut setup = crate::JtunnelSetup::new(vec![
+        crate::AcceptedSender::new("Keys", sender.local_addr().expect("an address"))
+            .expect("accepted"),
+    ])
+    .expect("a setup");
+    setup.bind = "127.0.0.1:0".parse().expect("an address");
+    let engine = engine(&audio, &clock);
+    engine.start_jtunnel(&setup).expect("a receiver");
+    let control = connected(&engine);
+    let mut buf = [0; 64];
+    let (_, receiver) = sender.recv_from(&mut buf).expect("a subscribe");
+    // A MIDI-only stream: start, then a clock every 240-sample frame (500 BPM at 48 kHz).
+    let start: &[u8] = &[0xFA];
+    let tick: &[u8] = &[0xF8];
+    for seq in 0..60_u16 {
+        let header = AudioHeader {
+            stream_id: 2,
+            seq: u32::from(seq),
+            sample_rate: 48_000,
+            codec: Codec::None,
+            frame_samples: 240,
+        };
+        let first = [(0_u16, start), (1, tick)];
+        let later = [(0_u16, tick)];
+        let frames = [FrameOut {
+            events: if seq == 0 { &first } else { &later },
+            audio: &[],
+        }];
+        let mut out = [0; wire::MAX_PACKET_BYTES];
+        let n = wire::write_audio(&mut out, &header, &frames).expect("a packet");
+        sender.send_to(&out[..n], receiver).expect("sent");
+        thread::sleep(Duration::from_millis(2));
+        // The media clock moves on a frame, so the frames fall due past their latency.
+        clock.advance(5_000);
+    }
+    let tempo = || match super::query(
+        &control,
+        Query::ValuesList {
+            prefix: Some("tempo".into()),
+        },
+    ) {
+        Ok(QueryResult::ValuesList { values }) => values
+            .into_iter()
+            .map(|v| (v.name, v.value))
+            .collect::<std::collections::BTreeMap<_, _>>(),
+        other => panic!("not a values list: {other:?}"),
+    };
+    assert!(
+        eventually(|| {
+            clock.advance(5_000);
+            tempo().get("tempo.playing") == Some(&json!(true))
+        }),
+        "{:?} {:?}",
+        tempo(),
+        engine.jtunnel_stats(),
+    );
+    let values = tempo();
+    assert!(values.contains_key("tempo.beat"), "{values:?}");
+    assert!(values.contains_key("tempo.bar"), "{values:?}");
+}
+
 #[test]
 fn without_jtunnel_a_network_audio_source_is_unavailable() {
     let clock = FakeClock::new(Timebase::MICROS);
@@ -1572,4 +1642,61 @@ fn without_jtunnel_a_network_audio_source_is_unavailable() {
     )));
     assert!(engine.jtunnel_stats().is_none());
     block_on(control.call(output_call("yt", false))).expect("output.stop");
+}
+
+/// ADR-0123 §3: `jtunnel.senders` answers `on: false` while the receiver is off, then
+/// lists the senders that answer its mDNS query, and `jtunnel.senders_changed` says
+/// when the list changes.
+#[test]
+fn jtunnel_senders_lists_the_senders_that_answer_and_says_when_they_change() {
+    use jstream_protocol::{Event, JtunnelSenderInfo, Query, QueryResult};
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    let mut events = control.events();
+    let senders = || match super::query(&control, Query::JtunnelSenders) {
+        Ok(QueryResult::JtunnelSenders { on, senders }) => Some((on, senders)),
+        _ => None,
+    };
+    assert_eq!(senders(), Some((false, Vec::new())), "off by default");
+    let sender = jtunnel_sender();
+    let responder = jtunnel_sender();
+    let mut setup = crate::JtunnelSetup::new(vec![
+        crate::AcceptedSender::new("Studio", sender.local_addr().expect("an address"))
+            .expect("accepted"),
+    ])
+    .expect("a setup");
+    setup.bind = "127.0.0.1:0".parse().expect("an address");
+    setup.discover = Some(responder.local_addr().expect("an address"));
+    let local = engine.start_jtunnel(&setup).expect("a receiver");
+    let mut query = [0; 64];
+    let (_, from) = responder.recv_from(&mut query).expect("a query");
+    assert_eq!(from, local);
+    // An SRV answer for "Laptop" on port 9000, from the responder's address.
+    let mut answer = vec![0, 0, 0x84, 0, 0, 0, 0, 1, 0, 0, 0, 0, 6];
+    answer.extend_from_slice(b"Laptop");
+    for label in jstream_jtunnel::dnssd::SERVICE.split('.') {
+        answer.push(u8::try_from(label.len()).expect("a label"));
+        answer.extend_from_slice(label.as_bytes());
+    }
+    answer.extend_from_slice(&[0, 0, 33, 0x80, 1, 0, 0, 0, 30, 0, 7, 0, 0, 0, 0]);
+    answer.extend_from_slice(&9000_u16.to_be_bytes());
+    answer.push(0);
+    responder.send_to(&answer, local).expect("sent");
+    assert!(eventually(|| senders().is_some_and(|(_, s)| !s.is_empty())));
+    assert_eq!(
+        senders(),
+        Some((
+            true,
+            vec![JtunnelSenderInfo {
+                remote_name: "Laptop".into(),
+                address: "127.0.0.1:9000".into(),
+                accepted: false,
+            }]
+        ))
+    );
+    assert!(eventually(|| super::drain(&mut events)
+        .iter()
+        .any(|e| matches!(e, Event::JtunnelSendersChanged {}))));
 }

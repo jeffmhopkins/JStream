@@ -387,7 +387,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Warm look) with the editor open on `warm-look`, its add carrying exactly
   `mix_amount: 0.25`. The fake kinds declare the shader's own `@param` lines, and a
   `filter.add` of a written pack with a setting its kind doesn't declare is refused, as
-  the engine refuses it.
+  the engine refuses it. Add source › Shader (ADR-0135) writes the source template as
+  `custom-1`, a `[[source]] shader` at 1920 × 1080 whose one pass, `previous`, has no
+  inputs, places the source in the scene and opens its Properties with the editor over
+  them, with no Save as pack…; `@name`, `@size 640x360` and `@feedback` reach the
+  manifest (its name, `width` and `height`, and `previous` as the pass's input); a
+  setting named `width` is refused under the text and nothing is sent; Done leaves the
+  Properties, whose Edit shader… opens the editor again on the same text; and Add source
+  then lists the written shader by its `@name` beside Shader. A fake kind is a source when
+  its manifest has a `[[source]]`.
 - **Item effects** (`effects.spec.js`): no effects section with no item selected; with
   the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
   under the source's; with Vignette (the core kind's four settings), Sharpen and Gain

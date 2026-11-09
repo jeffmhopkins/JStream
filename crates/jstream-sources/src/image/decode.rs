@@ -1,5 +1,5 @@
 //! Decoding PNG, JPEG, WebP and GIF files into straight RGBA8 frames, with pure-Rust
-//! decoders (ADR-0061, docs/adr/0061-source-types-and-decoding-scope-v2.md).
+//! decoders (ADR-0140, docs/adr/0140-source-types-and-decoding-scope-v3.md).
 //!
 //! Colour metadata (gamma, ICC profiles) is not applied and JPEG EXIF orientation is
 //! not followed yet: pixels are taken as sRGB, as stored.

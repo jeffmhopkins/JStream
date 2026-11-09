@@ -1729,12 +1729,16 @@ pub(crate) fn HotkeyRow(
     } else {
         "Press a key…"
     };
+    let focus_only = crate::host::desktop_wheel_focus_only();
+    let macos = crate::host::on_macos();
     let chip = move |chord: Chord| {
         let shown = hotkeys::label(&chord);
         let title = format!("Unbind {shown}");
+        let note = hotkeys::chord_note(&chord, focus_only, macos);
         view! {
-            <span class="hotkey-chip">
+            <span class="hotkey-chip" class:focus-only=note.is_some() title=note>
                 <kbd>{shown}</kbd>
+                {note.map(|note| view! { <span class="chip-note" aria-label=note>"focus only"</span> })}
                 <button
                     type="button"
                     class="icon-button"

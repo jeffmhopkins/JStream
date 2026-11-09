@@ -85,9 +85,15 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("bus.list", Class(R)),
     ("delete.plan", Class(R)),
     ("capture.targets", Class(R)),
+    // LAN addresses of the machine's PTZ heads (ADR-0146) are the person's.
+    ("ptz.list", N),
+    // LAN addresses of the senders on the person's network (ADR-0123).
+    ("jtunnel.senders", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),
+    // Only numbers about a stream's pictures, never the pictures (ADR-0145).
+    ("quality.probe", Class(R)),
     ("privacy.get", Class(R)),
     // The pixels of a user's capture could leak through any granted host; with no
     // filesystem grant there is nowhere safe for them.
@@ -117,6 +123,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.set_options", Class(E)),
     ("scene.set_camera", Class(E)),
     ("scene.set_camera_motion", Class(E)),
+    ("scene.set_ptz_shots", Class(E)),
     ("scene.set_camera_follow", Class(E)),
     ("scene.set_transitions", Class(E)),
     ("scene.create_variant", Class(E)),
@@ -207,6 +214,13 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // like `video.snapshot`.
     ("scene.switch_and_watch", N),
     ("scene.zoom_camera", Class(L)),
+    // They move a physical head on the LAN (ADR-0146), which no plugin scope covers.
+    ("ptz.drive", N),
+    ("ptz.aim", N),
+    ("ptz.home", N),
+    ("ptz.recall", N),
+    ("ptz.store", N),
+    ("ptz.focus", N),
     ("scene.set_keyframe", Class(L)),
     ("output.start", Class(O)),
     ("output.stop", Class(O)),

@@ -854,6 +854,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .hotkey-chip { display: inline-flex; align-items: center; gap: 2px; }
 .hotkey-chip kbd { padding: 1px 5px; border: 1px solid var(--border); border-radius: 4px; background: var(--raised); font: 11px "IBM Plex Mono", ui-monospace, monospace; }
 .hotkey-chip .icon-button { width: 18px; height: 18px; padding: 0; color: var(--dim); }
+.hotkey-chip .chip-note { font-size: 10px; color: var(--dim); white-space: nowrap; }
 .set-key { padding: 2px 8px; font-size: 11px; }
 .set-key.capturing { border-color: var(--accent); color: var(--link); }
 
@@ -975,7 +976,7 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 }
 .modal.confirm-dialog { width: 360px; }
 .confirm-body { margin: 0; padding: 16px; color: var(--text-soft); }
-/* The offer to download a codec the engine can't ship (Cisco's OpenH264, ADR-0061). */
+/* The offer to download a codec the engine can't ship (Cisco's OpenH264, ADR-0140). */
 .codec-downloads { display: grid; gap: 0.4rem; }
 .codec-downloads:empty { display: none; }
 .codec-offer {

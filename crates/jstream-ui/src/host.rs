@@ -99,15 +99,14 @@ pub fn same_engine(desktop_url: &str, session_url: &str) -> bool {
     !desktop_url.is_empty() && desktop_url == session_url
 }
 
-/// Whether the desktop app hears wheel chords while another app has the focus (the
-/// global's `globalWheel`): `Some(false)` on Wayland, or when no hotkey listener runs,
-/// so a pane offering wheel chords can say they work only while JStream has the focus.
-/// `None` outside the desktop app, or from an app that doesn't say.
-pub fn desktop_global_wheel() -> Option<bool> {
-    let global = global()?;
-    Reflect::get(&global, &JsValue::from_str("globalWheel"))
-        .ok()?
-        .as_bool()
+/// Whether the page runs on macOS, by its user agent: a focus-only wheel chord's note
+/// names macOS's Accessibility permission only there.
+pub fn on_macos() -> bool {
+    Reflect::get(&JsValue::from(window()), &JsValue::from_str("navigator"))
+        .ok()
+        .and_then(|navigator| Reflect::get(&navigator, &JsValue::from_str("userAgent")).ok())
+        .and_then(|agent| agent.as_string())
+        .is_some_and(|agent| agent.contains("Macintosh"))
 }
 
 /// What the desktop app says about its virtual camera (the global's `vcam`), if the
@@ -129,6 +128,17 @@ pub fn desktop_network() -> Option<bool> {
     Reflect::get(&global, &JsValue::from_str("network"))
         .ok()?
         .as_bool()
+}
+
+/// Whether the desktop app said, at its start, that wheel chords are heard only while
+/// its window has the focus: macOS without the Accessibility permission, Wayland (whose
+/// GlobalShortcuts portal takes keys, not the wheel), or no hotkey listener. `false` in
+/// a browser, and from an app that doesn't say.
+pub fn desktop_wheel_focus_only() -> bool {
+    global()
+        .and_then(|global| Reflect::get(&global, &JsValue::from_str("wheelFocusOnly")).ok())
+        .and_then(|value| value.as_bool())
+        == Some(true)
 }
 
 /// Whether the desktop app's network listener opened at start: `false` when the
