@@ -26,9 +26,23 @@ const VERTEX_STRIDE: u64 = jstream_media::model::VERTEX_BYTES;
 pub const MAX_SCENE_LIGHTS: usize = 8;
 /// Bytes of one light in the frame uniform: four `vec4`.
 const LIGHT_BYTES: u64 = 64;
+/// The most lights whose shadows a model receives (ADR-0151 decision 3): the first two
+/// of its scene's spot and directional lights that cast them.
+pub const MAX_SHADOW_MAPS: usize = 2;
+/// A shadow map's width and height, in pixels (ADR-0151 decision 3).
+pub const SHADOW_MAP_PX: u32 = 2048;
+/// Bytes of one shadow map's view in the frame uniform: four `vec4`.
+const SHADOW_BYTES: u64 = 64;
 /// Bytes of the frame uniform: two `mat4x4`, a `mat3x3` (three padded columns), a
-/// `vec4` of parameters, a `vec4` of ambient light, and the lights.
-const FRAME_BYTES: u64 = 64 + 64 + 48 + 16 + 16 + MAX_SCENE_LIGHTS as u64 * LIGHT_BYTES;
+/// `vec4` of parameters, a `vec4` of ambient light, the lights and the shadow maps'
+/// views.
+const FRAME_BYTES: u64 = 64
+    + 64
+    + 48
+    + 16
+    + 16
+    + MAX_SCENE_LIGHTS as u64 * LIGHT_BYTES
+    + MAX_SHADOW_MAPS as u64 * SHADOW_BYTES;
 /// Bytes of a material's uniform: four `vec4`.
 const MATERIAL_BYTES: u64 = 64;
 
@@ -104,6 +118,26 @@ pub struct ModelDraw<'a> {
     /// has them: without a `camera` they are ignored and `lighting` applies. An `unlit`
     /// model, and an unlit material, ignore them too.
     pub lights: Option<&'a [SceneLight]>,
+    /// The shadow maps of `lights` that cast shadows (ADR-0151 decision 3), at most
+    /// [`MAX_SHADOW_MAPS`]: each light's visibility at a fragment scales its light. Only
+    /// a model lit by its scene uses them; empty for one that receives no shadows.
+    pub shadows: &'a [ShadowMap<'a>],
+}
+
+/// One light's shadow map (ADR-0151 decision 3): the scene's casters' view depth drawn
+/// from the light, as [`crate::Compositor::render_view_depth`] and
+/// [`crate::Compositor::draw_model_depth`] draw it through `camera` into a square
+/// layer.
+#[derive(Clone, Copy, Debug)]
+pub struct ShadowMap<'a> {
+    /// Which of [`ModelDraw::lights`] casts it.
+    pub light: usize,
+    /// The map: red holds `1 / w` of the nearest caster seen from the light.
+    pub image: &'a Image,
+    /// The light's view: a perspective view along its aim, seen on the map's canvas.
+    pub camera: SceneCamera,
+    /// How soft the shadow's edge is, 0 (hard) to 1.
+    pub softness: f32,
 }
 
 /// What kind of light a [`SceneLight`] is (ADR-0143 decision 1).
@@ -151,6 +185,10 @@ pub struct SceneLight {
 /// target it reuses.
 pub(crate) struct ModelRuntime {
     material_layout: wgpu::BindGroupLayout,
+    frame_layout: wgpu::BindGroupLayout,
+    /// The frame bind group with the shadow maps of the last draw that had any, and
+    /// their textures, so a steady frame makes no bind group (ADR-0151 decision 3).
+    shadow_bind: Option<([Option<wgpu::Texture>; MAX_SHADOW_MAPS], wgpu::BindGroup)>,
     opaque: wgpu::RenderPipeline,
     blended: wgpu::RenderPipeline,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
@@ -170,19 +208,6 @@ pub(crate) struct ModelRuntime {
 impl ModelRuntime {
     pub(crate) fn new(gpu: &Gpu) -> Self {
         let device = &gpu.device;
-        let frame_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
-            label: Some("jstream-render-model-frame"),
-            entries: &[wgpu::BindGroupLayoutEntry {
-                binding: 0,
-                visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
-                ty: wgpu::BindingType::Buffer {
-                    ty: wgpu::BufferBindingType::Uniform,
-                    has_dynamic_offset: false,
-                    min_binding_size: wgpu::BufferSize::new(FRAME_BYTES),
-                },
-                count: None,
-            }],
-        });
         let texture_entry = |binding: u32| wgpu::BindGroupLayoutEntry {
             binding,
             visibility: wgpu::ShaderStages::FRAGMENT,
@@ -193,6 +218,24 @@ impl ModelRuntime {
             },
             count: None,
         };
+        // The frame's uniform, then the shadow maps (ADR-0151 decision 3).
+        let frame_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("jstream-render-model-frame"),
+            entries: &[
+                wgpu::BindGroupLayoutEntry {
+                    binding: 0,
+                    visibility: wgpu::ShaderStages::VERTEX_FRAGMENT,
+                    ty: wgpu::BindingType::Buffer {
+                        ty: wgpu::BufferBindingType::Uniform,
+                        has_dynamic_offset: false,
+                        min_binding_size: wgpu::BufferSize::new(FRAME_BYTES),
+                    },
+                    count: None,
+                },
+                texture_entry(1),
+                texture_entry(2),
+            ],
+        });
         let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("jstream-render-model-material"),
             entries: &[
@@ -351,14 +394,6 @@ impl ModelRuntime {
             usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             mapped_at_creation: false,
         });
-        let frame_bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
-            label: Some("jstream-render-model-frame"),
-            layout: &frame_layout,
-            entries: &[wgpu::BindGroupEntry {
-                binding: 0,
-                resource: frame.as_entire_binding(),
-            }],
-        });
         let pixel = |label: &str, rgba: [u8; 4]| {
             let texture = device.create_texture_with_data(
                 &gpu.queue,
@@ -383,8 +418,11 @@ impl ModelRuntime {
         };
         let white = pixel("jstream-render-model-white", [255; 4]);
         let flat_normal = pixel("jstream-render-model-normal", [128, 128, 255, 255]);
+        let frame_bind = frame_bind_group(device, &frame_layout, &frame, [&white, &white]);
         Self {
             material_layout,
+            frame_layout,
+            shadow_bind: None,
             opaque,
             blended,
             depth_only,
@@ -560,6 +598,40 @@ impl ModelRuntime {
         })
     }
 
+    /// The frame bind group for a draw with shadow maps `maps`: the plain one with none,
+    /// else the one kept for the same maps, made again when they change.
+    fn frame_bind_for(
+        &mut self,
+        gpu: &Gpu,
+        maps: [Option<&Image>; MAX_SHADOW_MAPS],
+    ) -> wgpu::BindGroup {
+        if maps.iter().all(Option::is_none) {
+            return self.frame_bind.clone();
+        }
+        let textures = maps.map(|map| map.map(|image| image.texture().clone()));
+        if let Some((kept, bind)) = &self.shadow_bind
+            && *kept == textures
+        {
+            return bind.clone();
+        }
+        let views = maps.map(|map| {
+            map.map(|image| {
+                image
+                    .texture()
+                    .create_view(&wgpu::TextureViewDescriptor::default())
+            })
+        });
+        let view = |n: usize| views[n].as_ref().unwrap_or(&self.white);
+        let bind = frame_bind_group(
+            &gpu.device,
+            &self.frame_layout,
+            &self.frame,
+            [view(0), view(1)],
+        );
+        self.shadow_bind = Some((textures, bind.clone()));
+        bind
+    }
+
     /// Draws `draw` into `target`, replacing what it held: transparent wherever the
     /// model isn't.
     pub(crate) fn draw(
@@ -612,7 +684,30 @@ impl ModelRuntime {
             }
             _ => None,
         };
-        let frame = frame_bytes(&solid, &clip, draw.lighting, lights.as_ref());
+        // The shadow maps of the lights that shade it, that this compositor drew.
+        let mut views = [[0.0f32; 16]; MAX_SHADOW_MAPS];
+        let mut maps: [Option<&Image>; MAX_SHADOW_MAPS] = [None; MAX_SHADOW_MAPS];
+        let mut count = 0;
+        if let (Some(lighting), Some(view)) = (lights.as_ref(), camera.as_ref()) {
+            for shadow in draw.shadows {
+                if count == MAX_SHADOW_MAPS || !shadow.image.owner().is(owner) {
+                    continue;
+                }
+                if let Some(seen) = shadow_view(shadow, lighting, view) {
+                    views[count] = seen;
+                    maps[count] = Some(shadow.image);
+                    count += 1;
+                }
+            }
+        }
+        let frame = frame_bytes(
+            &solid,
+            &clip,
+            draw.lighting,
+            lights.as_ref(),
+            &views[..count],
+        );
+        let frame_bind = self.frame_bind_for(gpu, maps);
         let depth = self.depth_view(gpu, width, height);
         // Blended primitives far to near by their centres.
         self.order.clear();
@@ -655,7 +750,7 @@ impl ModelRuntime {
                 occlusion_query_set: None,
                 multiview_mask: None,
             });
-            pass.set_bind_group(0, &self.frame_bind, &[]);
+            pass.set_bind_group(0, &frame_bind, &[]);
             let draw_one = |pass: &mut wgpu::RenderPass<'_>, p: &GpuPrimitive| {
                 let Some(material) = model.materials.get(p.material) else {
                     return;
@@ -720,7 +815,7 @@ impl ModelRuntime {
             .map_err(placement)?;
         // With perspective the orthographic depth scale is unused.
         let clip = solid.clip_matrix(canvas, 0.0);
-        let frame = frame_bytes(&solid, &clip, Lighting::Unlit, None);
+        let frame = frame_bytes(&solid, &clip, Lighting::Unlit, None, &[]);
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
         gpu.queue.write_buffer(&self.frame, 0, &frame);
@@ -805,15 +900,18 @@ pub(crate) struct SceneLighting {
     pub(crate) ambient: [f32; 3],
     /// Four `vec4` per light, as `model.wgsl`'s `Light`.
     pub(crate) lights: Vec<[f32; 16]>,
+    /// For each of `lights`, its index in the lights it was made from.
+    pub(crate) sources: Vec<usize>,
 }
 
 impl SceneLighting {
     pub(crate) fn new(lights: &[SceneLight], view: &jstream_protocol::CameraView) -> Self {
         let mut ambient = [0.0f32; 3];
         let mut packed = Vec::with_capacity(MAX_SCENE_LIGHTS);
+        let mut sources = Vec::with_capacity(MAX_SCENE_LIGHTS);
         // Slots taken by the shading lights so far, lit or not.
         let mut slots = 0;
-        for light in lights {
+        for (source, light) in lights.iter().enumerate() {
             let positive = |v: f32| v.is_finite() && v > 0.0;
             if light.kind != LightKind::Ambient {
                 // Every shading light takes one of the 8 in order, lit or not, so fading
@@ -867,6 +965,7 @@ impl SceneLighting {
             let softness = light.softness.clamp(0.0, 1.0);
             let outer = half.cos();
             let inner = (half * (1.0 - softness)).cos();
+            sources.push(source);
             packed.push([
                 at[0],
                 at[1],
@@ -889,8 +988,82 @@ impl SceneLighting {
         Self {
             ambient,
             lights: packed,
+            sources,
         }
     }
+}
+
+/// The frame bind group over `frame` and the two shadow maps' views.
+fn frame_bind_group(
+    device: &wgpu::Device,
+    layout: &wgpu::BindGroupLayout,
+    frame: &wgpu::Buffer,
+    shadows: [&wgpu::TextureView; MAX_SHADOW_MAPS],
+) -> wgpu::BindGroup {
+    device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("jstream-render-model-frame"),
+        layout,
+        entries: &[
+            wgpu::BindGroupEntry {
+                binding: 0,
+                resource: frame.as_entire_binding(),
+            },
+            wgpu::BindGroupEntry {
+                binding: 1,
+                resource: wgpu::BindingResource::TextureView(shadows[0]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 2,
+                resource: wgpu::BindingResource::TextureView(shadows[1]),
+            },
+        ],
+    })
+}
+
+/// A shadow map's view in the shader's terms (`model.wgsl`'s `Shadow`): the light's
+/// position and axes in `view`'s viewing frame, with the packed light it shadows, its
+/// focal length, its principal point and its filter radius in map pixels; `None` when
+/// its light isn't packed or its camera can't be seen.
+fn shadow_view(
+    shadow: &ShadowMap<'_>,
+    lighting: &SceneLighting,
+    view: &jstream_protocol::CameraView,
+) -> Option<[f32; 16]> {
+    let slot = lighting.sources.iter().position(|&s| s == shadow.light)?;
+    let size = (shadow.image.width(), shadow.image.height());
+    let seen = shadow
+        .camera
+        .view(Canvas {
+            width: size.0,
+            height: size.1,
+        })
+        .ok()?;
+    let at = view.in_view(seen.position()).map(|c| c as f32);
+    let [right, down, forward] = seen
+        .axes()
+        .map(|axis| view.direction_in_view(axis).map(|c| c as f32));
+    // The map is square: one principal coordinate serves both axes.
+    let [cx, _] = seen.principal();
+    // A hard edge still filters over a pixel; the softest over 12.
+    let radius = 0.75 + 11.25 * shadow.softness.clamp(0.0, 1.0);
+    Some([
+        at[0],
+        at[1],
+        at[2],
+        slot as f32,
+        right[0],
+        right[1],
+        right[2],
+        seen.focal_px(),
+        down[0],
+        down[1],
+        down[2],
+        cx,
+        forward[0],
+        forward[1],
+        forward[2],
+        radius,
+    ])
 }
 
 fn frame_bytes(
@@ -898,6 +1071,7 @@ fn frame_bytes(
     clip: &[[f32; 4]; 4],
     lighting: Lighting,
     lights: Option<&SceneLighting>,
+    shadows: &[[f32; 16]],
 ) -> Vec<u8> {
     let mut values = Vec::with_capacity((FRAME_BYTES / 4) as usize);
     values.extend(clip.iter().flatten());
@@ -922,6 +1096,21 @@ fn frame_bytes(
     values.push(count as f32);
     for light in lights.into_iter().flat_map(|l| &l.lights) {
         values.extend(light);
+    }
+    // The shadow maps' views follow every light slot; an unused one shadows no slot.
+    values.resize(
+        (64 + 64 + 48 + 16 + 16 + MAX_SCENE_LIGHTS as u64 * LIGHT_BYTES) as usize / 4,
+        0.0,
+    );
+    for slot in 0..MAX_SHADOW_MAPS {
+        match shadows.get(slot) {
+            Some(shadow) => values.extend(shadow),
+            None => {
+                let mut none = [0.0f32; 16];
+                none[3] = -1.0;
+                values.extend(none);
+            }
+        }
     }
     values.resize((FRAME_BYTES / 4) as usize, 0.0);
     f32_bytes(&values)

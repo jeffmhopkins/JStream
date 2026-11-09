@@ -45,7 +45,8 @@ and calls this crate.
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
-  scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md))
+  scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md),
+  and their shadow maps, ADR-0151)
   into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
@@ -698,6 +699,24 @@ or spot light by `(1 − (d / range)²)²` (none at range 0) and a spot light by
 `smoothstep` across the outer `softness` of its cone (a hard edge at softness 0), and
 shades each with the studio key light's `light`. Without a camera, or unlit, the lights
 are ignored and the frame is the one ADR-0107 draws.
+
+**Shadows** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
+3). `ModelDraw::shadows` holds up to `MAX_SHADOW_MAPS` (2) `ShadowMap`s: which of the
+lights casts it, the map, the light's view (`SceneCamera`) it was drawn through, and its
+softness. A map is a view depth drawn from the light, as `render_view_depth` draws cards
+and `draw_model_depth` draws models, into a square layer (`SHADOW_MAP_PX`, 2048, as the
+engine draws them), so its red is `1 / w` of the caster nearest the light. The draw
+takes each map's view into the model's viewing frame (`shadow_view`: the light's
+position and axes through `in_view` and `direction_in_view`, its focal length and
+principal point, and a filter radius of 0.75 to 12 map pixels by softness) after the
+lights in the frame uniform, and binds the maps beside it (the frame bind group's
+bindings 1 and 2; white stand-ins without, and one bind group kept per pair of maps, so
+a steady frame makes none). A map whose light isn't packed, or of another compositor, is
+left out. `visibility` in `model.wgsl` pushes the fragment off its surface by a map
+pixel's size there, projects it into the light's view, and counts 12 disc samples,
+rotated per pixel, whose stored `1 / w` isn't nearer the light than the fragment's by
+more than 0.2%; outside the map is lit. A shadowed light's light is scaled by that share
+(`golden_model_a_shadow_map_shadows_a_scene_lit_model`, a cube's and a card's map).
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
@@ -1495,15 +1514,17 @@ A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with rea
 prices a fixed-function mode's second draw and a backdrop mode's copy and pass), and
 the same items as cards in a 3D scene, turned, at their own depths and seen
 through an off-axis camera, their mips rebuilt each frame as a live source's are
-(`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed
-(`model_1080p`), a scene's view depth and `depth_fog` over the 3D scene's composite for
+(`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed,
+and the sphere lit by a spot light that casts shadows with its 2048² map drawn each frame
+(`model_1080p`, `sphere_shadowed`, ADR-0151), a scene's view depth and `depth_fog` over the 3D scene's composite for
 4 and 16 cards, the scene itself drawn outside the loop (`depth_fog_1080p_camera`,
 ADR-0143), the same with `ambient_occlusion` at its defaults
 (`ambient_occlusion_1080p_camera`, ADR-0151), the same with `volumetric_fog` at its
 defaults and the camera's view (`volumetric_fog_1080p_camera`), and
 refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
 20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
-items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms, and depth with
+items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms (the shadowed
+sphere 24 ms, its map and lit draw without the placing), and depth with
 fog 31 and 48 ms for 4 and 16 cards, depth with ambient occlusion 47 and 67 ms, and
 with volumetric fog 541 and 545 ms, its 48 steps a pixel dominating on a CPU
 rasterizer (criterion's `--quick`). Run them with

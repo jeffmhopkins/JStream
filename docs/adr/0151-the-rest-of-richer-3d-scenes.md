@@ -92,8 +92,10 @@ scene it changes nothing. It is a minor protocol version.
   and of type `spot` or `directional` cast shadows. Point and ambient lights never do,
   and more than 2 shadowed lights are logged once, as more than 8 lights are.
 - **The map.** Each shadowed light has a 2048 × 2048 depth map drawn from the light: a
-  perspective view along its aim with its cone for a spot light, and an orthographic view
-  along its aim fitted to the bounds of the scene's casters for a directional light. It is
+  perspective view along its aim with its cone for a spot light, and a view
+  along its aim fitted to the bounds of the scene's casters for a directional light: a
+  narrow perspective view from far back, which stands in for an orthographic one so both
+  kinds share the view depth's encoding. A billboarded item faces the light in its map. It is
   drawn once a frame, only while a `scene`-lit model or a filter reads it.
 - **Casters** are the scene's models and its cards seen through the camera: a model's
   triangles, and a card's box where its alpha is at least one half, as the view depth

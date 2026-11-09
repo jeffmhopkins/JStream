@@ -3119,6 +3119,23 @@ pub(crate) enum GpuKey {
     /// The view depth of a 3D scene whose video chain reads it (ADR-0143 decision 4),
     /// drawn after its composite, at the canvas size.
     ViewDepth(SceneId),
+    /// One of a 3D scene's shadow maps (ADR-0151 decision 3): the view depth of its
+    /// casters from its first or second light that casts shadows, at
+    /// [`jstream_render::SHADOW_MAP_PX`] square.
+    ShadowMap(SceneId, u8),
+}
+
+/// A shadow map drawn for a scene in this run of the chains (ADR-0151 decision 3).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DrawnShadow {
+    /// Which of the scene's lights, as [`scene_lights`] lists them, casts it.
+    pub(crate) light: usize,
+    /// Where it is drawn.
+    pub(crate) key: GpuKey,
+    /// The light's view it is drawn through.
+    pub(crate) camera: SceneCamera,
+    /// How soft its edge is.
+    pub(crate) softness: f32,
 }
 
 /// The depth a scene that a video filter reads (`scene_mask`) is drawn at: as a scene
@@ -5475,7 +5492,7 @@ fn run_chains(
                         (shot, pass, &drawn),
                         depth,
                         (at, canvas, camera),
-                        live,
+                        (live, None),
                     )?,
                     _ => None,
                 };
@@ -5484,10 +5501,13 @@ fn run_chains(
                     // The scene's lights, for the filters that light what they add
                     // (ADR-0151 decision 1).
                     let mut lights = std::mem::take(&mut chains.lights);
+                    let mut shadowed = std::mem::take(&mut chains.shadowed);
                     lights.clear();
-                    scene_lights(shot, &pass.scene, at, live, &mut lights);
+                    shadowed.clear();
+                    scene_lights(shot, &pass.scene, at, live, (&mut lights, &mut shadowed));
                     chains.drew_depth(cache, &pass.scene, depth, (view, &lights));
                     chains.lights = lights;
+                    chains.shadowed = shadowed;
                 }
                 chains.drew_layer(&pass.key);
                 meter.pass(&pass.scene, started.elapsed());
@@ -5632,10 +5652,12 @@ fn draw_model(
     // A `scene`-lit model in a 3D scene is lit by the scene's lights (ADR-0143
     // decision 3); in a 2D scene it is studio-lit.
     let mut lights = std::mem::take(&mut chains.lights);
+    let mut shadowed = std::mem::take(&mut chains.shadowed);
     lights.clear();
+    shadowed.clear();
     let lit = shown.lighting == Lighting::Scene && camera.is_some();
     if lit {
-        scene_lights(shot, scene_id, at, live, &mut lights);
+        scene_lights(shot, scene_id, at, live, (&mut lights, &mut shadowed));
         let shading = lights
             .iter()
             .filter(|light| light.kind != jstream_render::LightKind::Ambient)
@@ -5652,6 +5674,44 @@ fn draw_model(
             );
         }
     }
+    // Its scene's shadow maps, drawn by the first model this run that receives them
+    // (ADR-0151 decision 3). A map that can't be drawn leaves the light unshadowed.
+    if lit
+        && shown.receives_shadows
+        && !shadowed.is_empty()
+        && chains.shadows_of(scene_id).is_none()
+    {
+        let maps = draw_shadows(
+            compositor,
+            (&mut *cache, &mut *chains),
+            (shot, at),
+            scene_id,
+            (&lights, &shadowed),
+            (live, captures),
+        )
+        .unwrap_or_else(|error| {
+            tracing::debug!(scene = %scene_id, %error, "shadow maps not drawn this frame");
+            Vec::new()
+        });
+        chains.drew_shadows(scene_id, maps);
+    }
+    let maps: Vec<jstream_render::ShadowMap<'_>> = if lit && shown.receives_shadows {
+        chains
+            .shadows_of(scene_id)
+            .unwrap_or_default()
+            .iter()
+            .filter_map(|drawn| {
+                Some(jstream_render::ShadowMap {
+                    light: drawn.light,
+                    image: cache.get(&drawn.key)?,
+                    camera: drawn.camera,
+                    softness: drawn.softness,
+                })
+            })
+            .collect()
+    } else {
+        Vec::new()
+    };
     let drawn = match (chains.model(source), cache.get(key)) {
         (Some(model), Some(layer)) => Some(compositor.draw_model(
             &jstream_render::ModelDraw {
@@ -5660,12 +5720,15 @@ fn draw_model(
                 camera,
                 lighting: shown.lighting,
                 lights: lit.then_some(lights.as_slice()),
+                shadows: &maps,
             },
             layer,
         )),
         _ => None,
     };
+    drop(maps);
     chains.lights = lights;
+    chains.shadowed = shadowed;
     match drawn {
         Some(result) => result,
         None => {
@@ -5710,6 +5773,187 @@ fn note_light(
     });
 }
 
+/// Draws scene `scene_id`'s shadow maps for this run (ADR-0151 decision 3): for each of
+/// the first [`jstream_render::MAX_SHADOW_MAPS`] of `shadowed` (indices into `lights`),
+/// the view depth of the scene's cards and casting models seen from the light, into
+/// its [`GpuKey::ShadowMap`]. A spot light looks along its aim through its cone; a
+/// directional light from far along its aim, with a narrow view fitted to the casters'
+/// bounds, which stands in for an orthographic one. More shadowed lights are logged
+/// once. Returns the maps drawn; none for a scene no pass draws or a 2D one.
+///
+/// # Errors
+/// What the compositor reports for making or drawing into a map.
+fn draw_shadows(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (shot, at): (&Shot, MediaTime),
+    scene_id: &SceneId,
+    (lights, shadowed): (&[jstream_render::SceneLight], &[(usize, f32)]),
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> Result<Vec<DrawnShadow>, RenderError> {
+    let max = jstream_render::MAX_SHADOW_MAPS;
+    if shadowed.len() > max
+        && !chains.shadows_warned.contains(scene_id)
+        && chains.shadows_warned.insert(scene_id.clone())
+    {
+        tracing::warn!(
+            scene = %scene_id,
+            lights = shadowed.len(),
+            max,
+            "scene has more lights that cast shadows than are drawn; the first ones in stacking order cast them"
+        );
+    }
+    let Some(pass) = scene_pass(shot, scene_id) else {
+        return Ok(Vec::new());
+    };
+    let canvas = shot.canvas()?;
+    let side = jstream_render::SHADOW_MAP_PX;
+    let keys: Vec<GpuKey> = (0..shadowed.len().min(max))
+        .map(|slot| GpuKey::ShadowMap(scene_id.clone(), slot as u8))
+        .collect();
+    for key in &keys {
+        cache.layer(compositor, key, side, side)?;
+    }
+    let mut items = Vec::new();
+    let Some(camera) = fill_items(
+        &mut items,
+        (&*cache, &*chains),
+        (shot, pass),
+        (at, canvas),
+        (live, captures),
+    ) else {
+        return Ok(Vec::new());
+    };
+    let bounds = caster_bounds(&items);
+    let map_canvas = FrameSize::new(side, side).map_err(|_| RenderError::Invalid {
+        what: "shadow map",
+        detail: "a shadow map has no pixels".into(),
+    })?;
+    let mut drawn = Vec::with_capacity(keys.len());
+    let mut cast = Vec::with_capacity(items.len());
+    for (key, &(light, softness)) in keys.iter().zip(shadowed) {
+        let Some(from) = lights
+            .get(light)
+            .and_then(|light| light_camera(light, bounds))
+        else {
+            continue;
+        };
+        cast.clear();
+        cast.extend(items.iter().map(|item| Item {
+            camera: item.camera.map(|_| from),
+            ..*item
+        }));
+        let seen = scene(map_canvas, Color::TRANSPARENT, &cast);
+        draw_view_depth(
+            compositor,
+            (&*cache, &*chains),
+            (shot, pass, &seen),
+            key,
+            (at, canvas, camera),
+            (live, Some(from)),
+        )?;
+        drawn.push(DrawnShadow {
+            light,
+            key: key.clone(),
+            camera: from,
+            softness,
+        });
+    }
+    Ok(drawn)
+}
+
+/// The pass that composites scene `id` this frame: a chain's, the program's or a
+/// mix's.
+fn scene_pass<'s>(shot: &'s Shot, id: &SceneId) -> Option<&'s Pass> {
+    shot.chain_steps
+        .iter()
+        .find_map(|step| match step {
+            ChainStep::Pass(pass) if &pass.scene == id => Some(&**pass),
+            _ => None,
+        })
+        .or_else(|| shot.passes.iter().find(|pass| &pass.scene == id))
+        .or_else(|| {
+            shot.mix_passes
+                .values()
+                .flatten()
+                .find(|pass| &pass.scene == id)
+        })
+}
+
+/// The sphere around what `items` place in the scene's space, as a centre and radius:
+/// each box's centre at its depth, out to its corners and as deep.
+fn caster_bounds(items: &[Item<'_>]) -> Option<([f64; 3], f64)> {
+    let mut min = [f64::INFINITY; 3];
+    let mut max = [f64::NEG_INFINITY; 3];
+    for item in items {
+        let (Placement::Geometry(g) | Placement::Layer(g)) = item.placement else {
+            continue;
+        };
+        let reach = f64::from(g.size.width.get().hypot(g.size.height.get())) * 0.5;
+        let centre = [g.center.x.get(), g.center.y.get(), g.depth_px.get()].map(f64::from);
+        for axis in 0..3 {
+            min[axis] = min[axis].min(centre[axis] - reach);
+            max[axis] = max[axis].max(centre[axis] + reach);
+        }
+    }
+    if !min.iter().chain(&max).all(|c| c.is_finite()) {
+        return None;
+    }
+    let centre = [0, 1, 2].map(|axis| (min[axis] + max[axis]) * 0.5);
+    let radius = (0..3)
+        .map(|axis| (max[axis] - centre[axis]).powi(2))
+        .sum::<f64>()
+        .sqrt();
+    Some((centre, radius.max(1.0)))
+}
+
+/// The view a shadowed `light` draws its map through (ADR-0151 decision 3): a spot
+/// light's from where it is along its aim, through its cone and a little more; a
+/// directional light's from far back along its aim at the casters' `bounds`, through
+/// the narrow view that just holds them. `None` for a light that can't be placed, or
+/// a directional light with nothing to cast.
+fn light_camera(
+    light: &jstream_render::SceneLight,
+    bounds: Option<([f64; 3], f64)>,
+) -> Option<SceneCamera> {
+    let length = light.aim.iter().map(|c| c * c).sum::<f64>().sqrt();
+    if !(length.is_finite() && length > 0.0) {
+        return None;
+    }
+    let aim = light.aim.map(|c| c / length);
+    let (position, target, fov) = match light.kind {
+        jstream_render::LightKind::Spot => {
+            let at = light.position;
+            let fov = (light.cone_deg * 1.1)
+                .clamp(jstream_protocol::MIN_FOV_DEG, jstream_protocol::MAX_FOV_DEG);
+            (at, [0, 1, 2].map(|i| at[i] + aim[i] * 100.0), fov)
+        }
+        jstream_render::LightKind::Directional => {
+            let (centre, radius) = bounds?;
+            // Half of 30°: the sphere fits the view with a margin.
+            let half = 14f64.to_radians();
+            let distance = radius / half.sin() + radius;
+            (
+                [0, 1, 2].map(|i| centre[i] - aim[i] * distance),
+                centre,
+                30.0,
+            )
+        }
+        _ => return None,
+    };
+    let vec3 = |p: [f64; 3]| jstream_protocol::Vec3::new(p[0] as f32, p[1] as f32, p[2] as f32);
+    let camera = SceneCamera {
+        position: vec3(position)?,
+        target: vec3(target)?,
+        fov_deg: jstream_protocol::Finite32::new(fov)?,
+        roll_deg: jstream_protocol::Finite32::ZERO,
+        depth_sort: false,
+        focus_px: None,
+        blur_px: jstream_protocol::Finite32::ZERO,
+    };
+    camera.validate().ok().map(|()| camera)
+}
+
 /// The lights scene `id` places at `at`, in its stacking order (ADR-0143 decision 2):
 /// each `light` item at the centre of its box and shining out of its back, with its
 /// live values and motion applied, at its kind's intensity times its opacity. A light
@@ -5720,7 +5964,7 @@ fn scene_lights(
     id: &SceneId,
     at: MediaTime,
     live: &LiveParams,
-    lights: &mut Vec<jstream_render::SceneLight>,
+    (lights, shadowed): (&mut Vec<jstream_render::SceneLight>, &mut Vec<(usize, f32)>),
 ) {
     let Some(placed) = shot.lights.get(id) else {
         return;
@@ -5762,6 +6006,10 @@ fn scene_lights(
             cone_deg: light.cone_deg,
             softness: light.softness,
         });
+        // A spot or directional light may cast shadows (ADR-0151 decision 3).
+        if light.shadows && matches!(light.kind, LightType::Spot | LightType::Directional) {
+            shadowed.push((lights.len() - 1, light.shadow_softness));
+        }
     }
 }
 
@@ -5947,7 +6195,7 @@ fn draw_view_depth(
     (shot, pass, drawn): (&Shot, &Pass, &Scene<'_>),
     key: &GpuKey,
     (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
-    live: &LiveParams,
+    (live, from): (&LiveParams, Option<SceneCamera>),
 ) -> Result<Option<CameraView>, RenderError> {
     let Ok(view) = camera.view(shot.canvas) else {
         return Ok(None);
@@ -5998,13 +6246,18 @@ fn draw_view_depth(
         ) else {
             continue;
         };
+        // A shadow map leaves out a model that casts none (ADR-0151 decision 3).
+        if from.is_some() && !shown.casts_shadows {
+            continue;
+        }
         compositor.draw_model_depth(
             &jstream_render::ModelDraw {
                 model,
                 geometry,
-                camera: Some(camera),
+                camera: Some(from.unwrap_or(camera)),
                 lighting: shown.lighting,
                 lights: None,
+                shadows: &[],
             },
             target,
         )?;

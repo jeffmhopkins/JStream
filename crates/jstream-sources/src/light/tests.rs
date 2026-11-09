@@ -38,6 +38,8 @@ fn a_default_light_is_a_white_point_that_never_fades() {
             range_px: 0.0,
             cone_deg: 45.0,
             softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.3,
         })
     );
     let frame = source
@@ -81,4 +83,25 @@ fn every_setting_changes_live_and_a_bad_one_is_refused() {
         Some(light),
         "a refused change keeps the light"
     );
+}
+
+/// ADR-0151 decision 3: a light casts shadows when asked, with its softness; settings
+/// saved before shadows existed have none.
+#[test]
+fn a_light_casts_shadows_when_asked() {
+    let light = create(json!({"type": "spot", "shadows": true, "shadow_softness": 0.8}))
+        .light()
+        .expect("a light");
+    assert!(light.shadows);
+    assert!((light.shadow_softness - 0.8).abs() < 1e-6);
+    let mut older = settings(json!({}));
+    older.0.remove("shadows");
+    older.0.remove("shadow_softness");
+    let light = LightKind::new()
+        .create(&older, &Context::default())
+        .expect("a light")
+        .light()
+        .expect("a light");
+    assert!(!light.shadows);
+    assert!((light.shadow_softness - 0.3).abs() < 1e-6);
 }

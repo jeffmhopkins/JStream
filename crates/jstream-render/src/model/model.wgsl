@@ -16,6 +16,7 @@
 // environment is scaled by the scene's ambient light.
 
 const MAX_LIGHTS: u32 = 8u;
+const MAX_SHADOWS: u32 = 2u;
 
 struct Light {
     // xyz: position in the viewing frame; w: kind (0 point, 1 spot, 2 directional).
@@ -38,6 +39,19 @@ struct Frame {
     // rgb: the scene's ambient light; w: how many of `lights` are set.
     ambient: vec4<f32>,
     lights: array<Light, MAX_LIGHTS>,
+    shadows: array<Shadow, MAX_SHADOWS>,
+}
+
+// One light's shadow map (ADR-0151 decision 3), in the viewing frame.
+struct Shadow {
+    // xyz: the light's position; w: the light slot it shadows, -1 for none.
+    at: vec4<f32>,
+    // xyz: the light view's right axis; w: its focal length in map pixels.
+    right: vec4<f32>,
+    // xyz: its down axis; w: its principal point, both coordinates.
+    down: vec4<f32>,
+    // xyz: its forward axis; w: the filter's radius in map pixels.
+    forward: vec4<f32>,
 }
 
 struct Material {
@@ -51,6 +65,8 @@ struct Material {
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
+@group(0) @binding(1) var shadow0: texture_2d<f32>;
+@group(0) @binding(2) var shadow1: texture_2d<f32>;
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var tex_sampler: sampler;
 @group(1) @binding(2) var base_tex: texture_2d<f32>;
@@ -166,6 +182,65 @@ fn scene_light(source: Light, seen: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffu
     return light(n, v, l, strength, diffuse, f0, roughness) * source.color.rgb;
 }
 
+// The 1 / w shadow map `s` holds at `px`, 0 (nothing) outside it.
+fn shadow_texel(s: u32, px: vec2<i32>) -> f32 {
+    var size: vec2<u32>;
+    if s == 0u {
+        size = textureDimensions(shadow0);
+    } else {
+        size = textureDimensions(shadow1);
+    }
+    if any(px < vec2<i32>(0)) || any(px >= vec2<i32>(size)) {
+        return 0.0;
+    }
+    if s == 0u {
+        return textureLoad(shadow0, px, 0).r;
+    }
+    return textureLoad(shadow1, px, 0).r;
+}
+
+// How much of light slot `light` reaches `seen`, with the surface normal `n`
+// (ADR-0151 decision 3): 1 for a light that casts no shadow. The point is pushed off
+// the surface by a map pixel's size there, projected into the light's view, and
+// compared with the map over a disc of 12 samples rotated per pixel: a sample is lit
+// when nothing nearer to the light than the point (by a small bias) is stored there.
+fn visibility(light: u32, seen: vec3<f32>, n: vec3<f32>, pixel: vec2<f32>) -> f32 {
+    for (var s = 0u; s < MAX_SHADOWS; s++) {
+        let sh = frame.shadows[s];
+        if sh.at.w < 0.0 || u32(sh.at.w) != light {
+            continue;
+        }
+        let focal = sh.right.w;
+        let d0 = dot(seen - sh.at.xyz, sh.forward.xyz);
+        if d0 <= 0.0 || focal <= 0.0 {
+            return 1.0;
+        }
+        let p = seen + n * (1.5 * d0 / focal);
+        let rel = p - sh.at.xyz;
+        let d = dot(rel, sh.forward.xyz);
+        if d <= 0.0 {
+            return 1.0;
+        }
+        let at = vec2<f32>(dot(rel, sh.right.xyz), dot(rel, sh.down.xyz)) * focal / d
+            + vec2<f32>(sh.down.w);
+        let inverse_w = focal / d;
+        let spin = fract(52.9829189 * fract(dot(pixel, vec2<f32>(0.06711056, 0.00583715))))
+            * 6.2831853;
+        var lit = 0.0;
+        for (var k = 0u; k < 12u; k++) {
+            let r = sqrt((f32(k) + 0.5) / 12.0) * sh.forward.w;
+            let angle = f32(k) * 2.3999632 + spin;
+            let tap = at + vec2<f32>(cos(angle), sin(angle)) * r;
+            let stored = shadow_texel(s, vec2<i32>(floor(tap)));
+            if stored <= inverse_w * 1.002 {
+                lit += 1.0;
+            }
+        }
+        return lit / 12.0;
+    }
+    return 1.0;
+}
+
 // Karis's analytic fit of the split-sum environment BRDF.
 fn env_brdf(f0: vec3<f32>, roughness: f32, n_dot_v: f32) -> vec3<f32> {
     let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
@@ -234,8 +309,15 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         if frame.params.w > 0.5 {
             ambient = frame.ambient.rgb;
             let count = min(u32(frame.ambient.w), MAX_LIGHTS);
+            var surface_n = normalize(in.normal);
+            if !facing {
+                surface_n = -surface_n;
+            }
             for (var i = 0u; i < count; i++) {
-                lit += scene_light(frame.lights[i], in.seen, n, v, diffuse, f0, roughness);
+                let seen_by = visibility(i, in.seen, surface_n, in.clip.xy);
+                if seen_by > 0.0 {
+                    lit += seen_by * scene_light(frame.lights[i], in.seen, n, v, diffuse, f0, roughness);
+                }
             }
         } else {
             lit += light(n, v, normalize(vec3<f32>(-0.45, -0.65, 0.62)), 2.6, diffuse, f0, roughness);

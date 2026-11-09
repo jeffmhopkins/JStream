@@ -23,7 +23,8 @@
 //!   so every item takes the 3D path (its mip chain, anisotropic sampling, edge coverage).
 //! - `model_1080p`: one built-in sphere drawn into a 1080p layer through that camera,
 //!   lit by the studio rig, then placed in the scene (ADR-0107), the per-frame cost of a
-//!   model; and the same with a cube, the cheapest closed shape.
+//!   model; the same with a cube, the cheapest closed shape; and the sphere lit by a
+//!   spot light that casts shadows, its 2048² shadow map drawn each frame (ADR-0151).
 //! - `depth_fog_1080p_camera`: what a depth-aware scene filter adds to N of those
 //!   cards (ADR-0143): the scene's view depth, then `depth_fog` over its composite;
 //!   `ambient_occlusion_1080p_camera` and `volumetric_fog_1080p_camera` the same with
@@ -303,6 +304,7 @@ fn three_d(c: &mut Criterion) {
             camera: Some(camera),
             lighting: Lighting::Studio,
             lights: None,
+            shadows: &[],
         };
         group.bench_function(BenchmarkId::new("shape", shape.name()), |b| {
             b.iter(|| {
@@ -322,6 +324,88 @@ fn three_d(c: &mut Criterion) {
             });
         });
     }
+    // The sphere lit by one spot light that casts shadows (ADR-0151 decision 3): its
+    // 2048 x 2048 map drawn from the light each frame, then the lit draw reading it.
+    let sphere = compositor
+        .upload_model(
+            &Shape::Sphere
+                .model(Material::default())
+                .expect("invariant: a built-in shape builds"),
+        )
+        .expect("invariant: a shape uploads");
+    let side = jstream_render::SHADOW_MAP_PX;
+    let map = compositor
+        .layer(side, side)
+        .expect("invariant: a shadow map fits");
+    let from = [
+        WIDTH as f32 * 0.5 - 600.0,
+        HEIGHT as f32 * 0.5 - 600.0,
+        900.0 + 800.0,
+    ];
+    let light_camera = SceneCamera {
+        position: Vec3::new(from[0], from[1], from[2]).expect("invariant: finite"),
+        target: Vec3::new(WIDTH as f32 * 0.5, HEIGHT as f32 * 0.5, 900.0)
+            .expect("invariant: finite"),
+        fov_deg: Finite32::new(50.0).expect("invariant: finite"),
+        roll_deg: Finite32::ZERO,
+        depth_sort: false,
+        focus_px: None,
+        blur_px: Finite32::ZERO,
+    };
+    let aim = [600.0f64, 600.0, -800.0];
+    let lights = [jstream_render::SceneLight {
+        kind: jstream_render::LightKind::Spot,
+        position: from.map(f64::from),
+        aim,
+        color: Color::rgb(1.0, 1.0, 1.0),
+        intensity: 2.0,
+        range_px: 0.0,
+        cone_deg: 45.0,
+        softness: 0.2,
+    }];
+    let clear = Scene {
+        canvas: FrameSize::new(side, side).expect("invariant: non-zero"),
+        background: Color::TRANSPARENT,
+        items: &[],
+    };
+    let shadows = [jstream_render::ShadowMap {
+        light: 0,
+        image: &map,
+        camera: light_camera,
+        softness: 0.3,
+    }];
+    group.bench_function(BenchmarkId::new("shape", "sphere_shadowed"), |b| {
+        b.iter(|| {
+            compositor.render_view_depth(&clear, &map).expect("clear");
+            compositor
+                .draw_model_depth(
+                    &ModelDraw {
+                        model: &sphere,
+                        geometry: placed,
+                        camera: Some(light_camera),
+                        lighting: Lighting::Scene,
+                        lights: None,
+                        shadows: &[],
+                    },
+                    &map,
+                )
+                .expect("cast");
+            compositor
+                .draw_model(
+                    &ModelDraw {
+                        model: &sphere,
+                        geometry: placed,
+                        camera: Some(camera),
+                        lighting: Lighting::Scene,
+                        lights: Some(&lights),
+                        shadows: &shadows,
+                    },
+                    &layer,
+                )
+                .expect("draw");
+            wait(&compositor);
+        });
+    });
     group.finish();
 
     // A scene's view depth and depth fog over its composite (ADR-0143): the cost a

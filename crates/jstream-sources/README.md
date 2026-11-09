@@ -64,9 +64,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   the engine looks again then.
   `model()` (default `None`) is a `ShownModel` for a source that is a 3D model: the
   `Model` the engine draws in 3D where an item places it, with its `Lighting`
-  ([ADR-0107](../../docs/adr/0107-3d-models.md)). Only the `model` kind has one.
+  ([ADR-0107](../../docs/adr/0107-3d-models.md)) and whether it casts and receives
+  shadows. Only the `model` kind has one.
   `light()` (default `None`) is a `ShownLight` for the `light` kind: its `LightType`,
-  colour, intensity, range, cone and softness, which the engine places where an item
+  colour, intensity, range, cone and softness, and whether it casts shadows and how
+  softly, which the engine places where an item
   places the source ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)).
   `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
   captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
@@ -319,15 +321,21 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   name the same file (once percent-decoded) share one read, and all buffers together, a
   `.glb`'s binary chunk included, hold at most 512 MiB. Images decode as the `image` kind decodes them, within the same
   `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
-  `double_sided` (the last three for a shape only) and `lighting` (`studio`, `unlit`,
-  or `scene`, lit by the `light` sources of its 3D scene) are live. Its frame is a transparent stand-in at the model's bounds, the
+  `double_sided` (the last three for a shape only), `lighting` (`studio`, `unlit`,
+  or `scene`, lit by the `light` sources of its 3D scene), and `casts_shadows` and
+  `receives_shadows` (both default on,
+  [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3; settings
+  saved without them read as on) are live. Its frame is a transparent stand-in at the model's bounds, the
   longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
   `Source::model` hands the engine the model, which an item draws in the stand-in's
   place (`jstream-core`'s README).
 - `light` ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)): `LightKind`, a light for the `scene`-lit models of a 3D
   scene. `type` (`point`, `spot`, `directional` or `ambient`), `color`, `intensity` (0
   to 64), `range_px` (0 never fades), `cone_deg` (1 to 170) and `softness` (0 to 1, the
-  last two shown for a spot only) are all live. Its frame is one transparent pixel: it
+  last two shown for a spot only), `shadows` (default off: a spot or directional light
+  casts shadows) and `shadow_softness` (0 to 1, default 0.3,
+  [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3; settings
+  saved without them read as no shadows) are all live. Its frame is one transparent pixel: it
   draws nothing, and `Source::light` hands the engine its settings, which the item that
   places it gives a position, an aim and a strength (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),

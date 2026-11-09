@@ -2082,6 +2082,25 @@ source: crates/jstream-core/src/kinds.rs
           "equals": "spot"
         },
         "live": true
+      },
+      {
+        "id": "shadows",
+        "type": "bool",
+        "default": false,
+        "label": "Shadows",
+        "description": "A spot or directional light casts shadows from the scene's models and cards onto its scene-lit models. The first two in a scene do.",
+        "live": true
+      },
+      {
+        "id": "shadow_softness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.3,
+        "label": "Shadow softness",
+        "description": "How soft its shadows' edges are, 0 hard.",
+        "live": true
       }
     ]
   },
@@ -2987,6 +3006,22 @@ source: crates/jstream-core/src/kinds.rs
         "default": false,
         "label": "Double-sided",
         "description": "Draw a shape's back faces too. A file's materials keep their own.",
+        "live": true
+      },
+      {
+        "id": "casts_shadows",
+        "type": "bool",
+        "default": true,
+        "label": "Casts shadows",
+        "description": "Whether it blocks the light of its scene's lights that cast shadows.",
+        "live": true
+      },
+      {
+        "id": "receives_shadows",
+        "type": "bool",
+        "default": true,
+        "label": "Receives shadows",
+        "description": "Whether, lit by its scene, it is shadowed by the lights that cast them.",
         "live": true
       }
     ]
