@@ -23,7 +23,7 @@ pub(crate) mod testing;
 pub use assets::{Lut, LutError, lut_image};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
-pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Scratch, Shader};
+pub(crate) use pass::{Blend, Bound, Ctx, Draw, Pass, Runtime, Scratch, Shader};
 pub use program::{
     AUDIO_BANDS as PROGRAM_AUDIO_BANDS, ExternalProgram, FIRST_INPUT_BINDING,
     MAX_INPUTS as PROGRAM_MAX_INPUTS, MAX_PASSES as PROGRAM_MAX_PASSES, MAX_PROGRAM_BYTES,
@@ -33,11 +33,16 @@ pub use program::{
 use jstream_protocol::{KindDescriptor, Settings};
 
 /// A media-clock reading, for filters that move with time (scroll) or hold frames back
-/// (video delay).
+/// (video delay), and the song's position on it, for filters that move with the tempo
+/// (a border's speed in beats).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct FilterClock {
     /// Seconds since the media clock's origin.
     pub seconds: f64,
+    /// Quarter notes since the start of the song, as the engine's MIDI clock gives it at
+    /// `seconds` (ADR-0148): carried on while it plays, held while it is stopped or
+    /// quiet, and 0 before any clock is heard.
+    pub beat: f64,
 }
 
 /// Every built-in video filter kind, ordered by ID.

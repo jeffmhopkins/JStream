@@ -1354,6 +1354,12 @@ fn a_video_filters_asset_is_loaded_for_its_chain() {
     )
     .expect("created");
     let first = chain_asset(&engine, "pic").expect("the table is loaded");
+    // Installing an asset keeps what else plans read, the MIDI clock among it, so a
+    // border in beats doesn't stop at beat 0 (ADR-0148, #1453 review B1).
+    assert!(
+        engine.render_hub().load().shot().follows_tempo(),
+        "the plan still follows the tempo"
+    );
 
     let point = |path: &str| {
         batch(
@@ -2029,4 +2035,66 @@ fn a_page_painted_on_the_cpu_needs_no_plan() {
         assert_eq!(shown(&engine, "page"), Some(rgba), "the new paint");
     }
     assert_eq!(engine.plans(), plans, "and never re-planned for it");
+}
+
+/// A page with an `fps` of 0 paints at the program's frame rate, and opens again at a
+/// new one; a page with its own `fps` keeps it (#1405).
+#[test]
+fn a_page_at_fps_0_follows_the_programs_frame_rate() {
+    use jstream_browser::fake::FakeBrowser;
+
+    let browser = FakeBrowser::new();
+    let engine = Engine::new().with_browser(browser.clone());
+    let control = connected(&engine);
+    let page = |id: &str, fps: u32| {
+        source(
+            id,
+            "browser",
+            settings(&[
+                ("url", json!(format!("https://example.com/{id}"))),
+                ("width", json!(2)),
+                ("height", json!(1)),
+                ("fps", json!(fps)),
+            ]),
+        )
+    };
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            page("follows", 0),
+            page("own", 24),
+            add("a", "i1", "follows"),
+            add("a", "i2", "own"),
+        ]),
+    )
+    .expect("created");
+    // The fps of the newest open page at each URL.
+    let open_fps = |id: &str| -> Option<u32> {
+        let url = format!("https://example.com/{id}");
+        browser
+            .pages()
+            .iter()
+            .rev()
+            .find(|p| !p.is_closed() && format!("{:?}", p.spec().location).contains(&url))
+            .map(|p| p.spec().fps)
+    };
+    let wait_for = |id: &str, fps: u32| {
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while open_fps(id) != Some(fps) && Instant::now() < deadline {
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert_eq!(open_fps(id), Some(fps), "{id}");
+    };
+    wait_for("follows", 30);
+    wait_for("own", 24);
+    let opened = browser.pages().len();
+    batch(&control, edits(vec![Edit::CanvasSetFrameRate { fps: 60 }])).expect("frame rate");
+    wait_for("follows", 60);
+    wait_for("own", 24);
+    assert_eq!(
+        browser.pages().len(),
+        opened + 1,
+        "only the following page opened again"
+    );
 }

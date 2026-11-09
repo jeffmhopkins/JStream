@@ -81,6 +81,17 @@ pub(crate) trait Pass: Send {
         None
     }
 
+    /// How far, in input pixels, what this filter draws can reach past its input's
+    /// non-transparent texels, for a kind that draws transparent everywhere farther from
+    /// them, keeps its input's size, and draws each pass over the whole frame at that
+    /// pass's own scale (#1070). An input whose content is known
+    /// ([`Image::content`]) then has every pass drawn only over that content grown by
+    /// this ([`Bound`]). `None`, the default, for a kind that can draw anywhere: one that
+    /// holds frames, moves its input, draws a picture of its own or reshapes the frame.
+    fn reach(&self) -> Option<f32> {
+        None
+    }
+
     /// Records the filter into `ctx`: read `input`, fill all of `output`, a layer of
     /// [`Self::output_size`]. Multi-pass filters draw into [`Ctx::scratch`] images first,
     /// and keep nothing from them past the call; an image kept between frames comes from
@@ -598,6 +609,39 @@ pub(crate) struct Ctx<'a> {
     pub(crate) holds: &'a mut Vec<(Arc<dyn FrameSync>, wgpu::Texture)>,
     /// The drawing filter's intermediate layers.
     pub(crate) scratch: &'a mut Scratch,
+    /// Where in the output frame the filter can draw anything, when its input's content
+    /// and its [`Pass::reach`] say so: every draw is cut to it, at its target's scale.
+    pub(crate) bound: Option<Bound>,
+}
+
+/// The output pixels a bounded filter can draw into: `[x0, y0, x1, y1]` of a frame of
+/// `frame` pixels (#1070).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) struct Bound {
+    pub rect: [u32; 4],
+    pub frame: (u32, u32),
+}
+
+impl Bound {
+    /// Texels of a target of `width` by `height` that can hold what the frame's `rect`
+    /// does: scaled to the target, which spans the frame at its own scale, and grown by
+    /// two texels for a target rounded up from it and for a filtered read. `None` when
+    /// none can.
+    fn in_target(self, width: u32, height: u32) -> Option<[u32; 4]> {
+        const MARGIN: f32 = 2.0;
+        let scale = |value: u32, frame: u32, side: u32| value as f32 * side as f32 / frame as f32;
+        let [x0, y0, x1, y1] = self.rect;
+        let (fw, fh) = (self.frame.0.max(1), self.frame.1.max(1));
+        let low = |value: f32| (value - MARGIN).floor().max(0.0) as u32;
+        let high = |value: f32, side: u32| ((value + MARGIN).ceil() as u32).min(side);
+        let rect = [
+            low(scale(x0, fw, width)),
+            low(scale(y0, fh, height)),
+            high(scale(x1, fw, width), width),
+            high(scale(y1, fh, height), height),
+        ];
+        (x1 > x0 && y1 > y0 && rect[2] > rect[0] && rect[3] > rect[1]).then_some(rect)
+    }
 }
 
 impl Ctx<'_> {
@@ -726,6 +770,10 @@ impl Ctx<'_> {
             Blend::Replace => wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
             Blend::Over => wgpu::LoadOp::Load,
         };
+        // A bounded filter draws only where it can draw anything; the clear covers the rest.
+        let cut = self
+            .bound
+            .map(|bound| bound.in_target(draw.target.width(), draw.target.height()));
         let pipeline = self.runtime.pipeline(&self.gpu.device, shader)?;
         let mut pass = self.encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(shader.label),
@@ -743,6 +791,12 @@ impl Ctx<'_> {
             occlusion_query_set: None,
             multiview_mask: None,
         });
+        match cut {
+            // Nothing to draw: the pass only clears.
+            Some(None) => return Ok(()),
+            Some(Some([x0, y0, x1, y1])) => pass.set_scissor_rect(x0, y0, x1 - x0, y1 - y0),
+            None => {}
+        }
         pass.set_pipeline(pipeline);
         pass.set_bind_group(0, &bind_group, &[]);
         pass.draw(0..3, 0..1);

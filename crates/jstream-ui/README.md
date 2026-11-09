@@ -195,7 +195,7 @@ Contents ([Design](#design) explains the choices):
   the choice of in place or dialog, each owner's chains, name and note (an item's
   effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
-  `// @name` and `// @param` lines, the `effect.toml` they make, the pack it opens,
+  `// @name` and `// @param` lines, the `effect.toml` they make (a source's too), the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
   field the panels share (`number.rs`: `NumberField`, which can sit inline with a short
   caption and without steppers, and `AxisRow`, a row of such fields under one label, as
@@ -296,7 +296,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
-  `network`, `networkOpen`, `browse` and `allowNetwork`) before the page loads,
+  `network`, `networkOpen`, `wheelFocusOnly`, `browse` and `allowNetwork`) before the
+  page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -499,7 +500,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   once the engine has accepted the batch, waiting for the collection to list the
   source, and a placement of an existing one shows in the Inspector. A `kind.list`
   that fails leaves only the placed kinds and Scene, and its error shows as any failed
-  call's does.
+  call's does. While it lists any kinds, a Shader type under Generated writes a custom
+  shader source first and opens its Properties with the shader editor (ADR-0135, under
+  Filters below), and each custom shader source's kind is listed after it.
 - **Projectors** (`projector.rs`, [UI features › DL-07](../../docs/UI-FEATURES.md#dialogs)).
   A scene's Pop out submenu (on its row, on the canvas margin for the scene it shows,
   and on a nested scene's item), any other single object's (Source in a window or full
@@ -803,10 +806,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   window sent and the engine refuses a batch with one such key. Cancel doesn't reach
   the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
   manifest's version by one and adds the pair to `renames` (`Declared::version`,
-  ADR-0025). The engine doesn't apply an effect's renames to stored settings yet
-  (#1353), so a filter left on the pack keeps the value under the old ID and draws the
-  new one at its default; the template says so, and asks that no `@renamed` line be
-  deleted, since each is a version.
+  ADR-0025). The engine moves every filter of the pack's kind through the renames when
+  the new version loads (#1353), so a filter left on the pack keeps its value under the
+  new ID; the template asks that no `@renamed` line be deleted, since each is a version.
   Save as pack… writes the shader under a pack ID the person types (`save_as_problem`
   checks it against `pack.list`) and moves only the filter being edited to the new
   kind (`move_to_kind`: a remove and an add in its place, one batch, its settings
@@ -815,6 +817,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   stays for any other filter of it, and the window opens the editor on the new one.
   The coloured copy is sized to the textarea's box inside its scrollbars, through
   CSSOM (the page's CSP refuses a style attribute), so the two scroll as far.
+  A shader source (ADR-0135) is written the same way: Add source's Shader type
+  (`NEW_SHADER`) calls `custom_shader::write_new` with `Mode::Source`, adds a source of
+  the new kind and opens its Properties dialog with the editor over it
+  (`PropertiesDialog::open_shader`); if the add fails, it deletes that pack again. Its
+  manifest (`source_toml`) is one `[[source]] shader` with one pass, `previous`, whose
+  inputs come from `@feedback`, `@audio` and the `scene` settings, and `@size` its
+  default size. `custom_shader::open` opens a pack as a source when its manifest has a
+  `[[source]]` table. The Properties dialog of a custom shader source has Edit shader…;
+  a source has no Save as pack….
   An FX button (the Outputs panel's rows, the Mixer's master card or strip) picks the program
   output's chain (owner `master`) or an output's (ADR-0080) instead, and shows the
   panel; the same rows and dialogs edit it with that owner. Both chains show, and the

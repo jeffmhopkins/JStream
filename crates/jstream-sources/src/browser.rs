@@ -80,19 +80,20 @@ impl BrowserKind {
                 ParamDescriptor {
                     description: Some(
                         "The most frames a second the page paints. It paints less when \
-                         nothing changes."
+                         nothing changes. 0 follows the program's frame rate, so a page's \
+                         animation is as smooth as the program."
                             .into(),
                     ),
                     ..param(
                         "fps",
                         "Frame rate",
                         ParamType::Int {
-                            min: Some(1),
+                            min: Some(0),
                             max: Some(i64::from(MAX_FPS)),
                             step: Some(1),
                             unit: Some("fps".into()),
                         },
-                        json!(30),
+                        json!(0),
                     )
                 },
                 ParamDescriptor {
@@ -295,6 +296,24 @@ impl SourceKind for BrowserKind {
     }
 }
 
+/// The frames a second a page paints: its `fps` setting, or the program's frame rate for
+/// 0 (#1405), at most [`MAX_FPS`].
+pub(crate) fn page_fps(settings: &Settings, ctx: &Context) -> Result<u32, SourceError> {
+    let fps = setting(settings, "fps")?
+        .as_u64()
+        .and_then(|v| u32::try_from(v).ok())
+        .filter(|v| *v <= MAX_FPS)
+        .ok_or_else(|| SourceError::Setting {
+            param: "fps".into(),
+            reason: format!("must be a whole number from 0 to {MAX_FPS}"),
+        })?;
+    Ok(if fps == 0 {
+        ctx.program_fps().clamp(1, MAX_FPS)
+    } else {
+        fps
+    })
+}
+
 /// Opens a page at `location` with the `width`, `height`, `fps` and `css` settings: a
 /// `browser` source, or a kind built on one (`youtube_chat`). `descriptor` is the
 /// kind's, for telling live changes from restarts.
@@ -305,14 +324,7 @@ pub(crate) fn open(
     location: PageLocation,
 ) -> Result<Box<dyn Source>, SourceError> {
     let size = frame_size(settings, &ctx.limits)?;
-    let fps = setting(settings, "fps")?
-        .as_u64()
-        .and_then(|v| u32::try_from(v).ok())
-        .filter(|v| (1..=MAX_FPS).contains(v))
-        .ok_or_else(|| SourceError::Setting {
-            param: "fps".into(),
-            reason: format!("must be a whole number from 1 to {MAX_FPS}"),
-        })?;
+    let fps = page_fps(settings, ctx)?;
     let css = css(settings)?.to_owned();
     let backend = ctx
         .browser
@@ -598,5 +610,32 @@ impl SourceAudio for PageAudioOf {
 
     fn open(&self, handler: Box<dyn AudioInputHandler>) -> Box<dyn AudioStream> {
         Box::new(self.0.open(handler))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::page_fps;
+    use crate::source::Context;
+    use jstream_protocol::Settings;
+    use serde_json::json;
+
+    /// An `fps` of 0 is the program's rate (the default while none is set); any other
+    /// is the page's own, and past `MAX_FPS` is refused.
+    #[test]
+    fn an_fps_of_0_is_the_programs_frame_rate() {
+        let at = |fps: serde_json::Value| -> Settings {
+            std::iter::once(("fps".to_owned(), fps)).collect()
+        };
+        let unset = Context::default();
+        let sixty = Context {
+            frame_rate: 60,
+            ..Context::default()
+        };
+        assert_eq!(page_fps(&at(json!(0)), &unset).ok(), Some(30));
+        assert_eq!(page_fps(&at(json!(0)), &sixty).ok(), Some(60));
+        assert_eq!(page_fps(&at(json!(24)), &sixty).ok(), Some(24));
+        assert!(page_fps(&at(json!(61)), &sixty).is_err());
+        assert!(page_fps(&at(json!(-1)), &sixty).is_err());
     }
 }

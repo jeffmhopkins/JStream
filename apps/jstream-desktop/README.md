@@ -256,7 +256,10 @@ folder, and its log `logs\cef.log`.
   and save panels. Global hotkeys' keys need no permission; a wheel chord, bound while a
   follow camera is live, asks for the Accessibility permission the first time, and until
   it is granted in System Settings › Privacy & Security › Accessibility wheel chords are
-  heard only while JStream has the focus (the log says so).
+  heard only while JStream has the focus. The log says so, and so does each wheel
+  chord's chip in the Inspector, from the page global's `wheelFocusOnly`, which the app
+  sets at start when `jstream_platform_macos::wheel_needs_accessibility` (a check that
+  doesn't ask) finds the permission missing.
 - **Elsewhere**, and on Linux without `webkitgtk`, the binary prints that it has no
   window there, how to build one on Linux, and to use the daemon, and exits 1.
 
@@ -406,7 +409,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   (not Windows). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the data
   folder, `network`, whether "Allow devices on my network" was on at start,
-  `networkOpen`, whether its listener then opened, and two functions. `browse` calls the app's command `pick_path` and resolves to the
+  `networkOpen`, whether its listener then opened, `wheelFocusOnly`, whether wheel
+  chords were heard only while the window had the focus (macOS without Accessibility),
+  and two functions. `browse` calls the app's command `pick_path` and resolves to the
   filesystem path the person picked, or null if they cancelled or the dialog failed.
   `allowNetwork(allow)` calls `set_network` and resolves to whether the setting was
   saved, false when the command fails too (see *Network access*). `jtunnel` is the
@@ -505,12 +510,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   page makes.
 - **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
   (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
-  clock the mixer runs on. Its pages paint onto a device of the media adapter the app
-  opens for them (`WindowsGpu::open_device`) until a program stage runs; the engine then
-  lends the backend the stage's own context in its place, so the mix draws the pages,
-  and takes it back when the stage stops or leaves the GPU path mid-run, after which
-  the pages deliver no frames for the rest of that stage. The backend is added after the OS backends, so sources open on the media
-  clock. CEF runs only in the sandboxed browser helper, which the backend starts on the
+  clock the mixer runs on. Its pages paint on the engine's one GPU context, on the media
+  adapter, which the engine hands the backend when the app gives it the backend
+  (`Engine::with_browser`), and which every program stage, the preview and snapshots draw
+  on too ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5). Pages move
+  only when a lost context is replaced. The backend is added after the OS backends, so
+  sources open on the media clock and the engine has its context. CEF runs only in the sandboxed browser helper, which the backend starts on the
   first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
   doesn't link CEF, so a missing helper or missing CEF files fail that source, not the
   app. With no device, pages play audio but show no frames.

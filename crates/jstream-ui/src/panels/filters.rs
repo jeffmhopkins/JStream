@@ -442,29 +442,6 @@ pub fn with_custom(mut types: Vec<FilterType>, video: bool) -> Vec<FilterType> {
     types
 }
 
-/// Writes a new custom shader from the template as the first free `custom-<n>` pack
-/// (`pack.list` names the taken ones), reads the kinds again, and returns its pack.
-async fn new_shader(studio: Studio, s: &crate::session::Session) -> Result<String, String> {
-    let packs = match query(s, Query::PackList).await {
-        Ok(QueryResult::PackList { packs }) => packs,
-        Ok(_) => Vec::new(),
-        Err(error) => return Err(error.to_string()),
-    };
-    let pack = custom_shader::fresh_pack(&packs);
-    let files = custom_shader::pack_files(&pack, custom_shader::TEMPLATE)
-        .map_err(|error| error.to_string())?;
-    let action = Action::PackWrite {
-        pack: pack.clone(),
-        files,
-    };
-    s.control
-        .call(jstream_control::protocol::Call::Action { action })
-        .await
-        .map_err(|error| error.to_string())?;
-    studio.relist_kinds(s).await;
-    Ok(pack)
-}
-
 /// Whether a type matches the dialog's search: its name, hint or group, in any case.
 pub fn type_matches(t: &FilterType, search: &str) -> bool {
     let search = search.trim().to_lowercase();
@@ -3308,7 +3285,7 @@ fn AddBody(owner: FilterOwner, close: impl Fn() + Copy + Send + Sync + 'static) 
                     .with_untracked(|d| d.as_ref().is_none_or(|d| opens(d) == Opens::Dialog));
             spawn_local(async move {
                 let (kind, pack) = if custom {
-                    match new_shader(studio, &s).await {
+                    match custom_shader::write_new(studio, &s, custom_shader::Mode::Filter).await {
                         Ok(pack) => (custom_shader::kind_of(&pack), Some(pack)),
                         Err(error) => {
                             _ = problem.try_set(Some(error));

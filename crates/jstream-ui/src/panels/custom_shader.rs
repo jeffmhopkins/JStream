@@ -4,6 +4,11 @@
 //! limits and GPU-hang quarantine (ADR-0087), and shows in Add filter as a kind of its
 //! own for any other item.
 //!
+//! A shader source (ADR-0135) is the same editor from Add source: a pack with one
+//! `[[source]]`, `shader`, of one pass in `shader.wgsl` ([`Mode::Source`]). Its
+//! `// @size`, `// @feedback` and `// @audio` lines and `scene` settings make the
+//! source's size, its last frame, its audio and the scenes it reads ([`source_toml`]).
+//!
 //! The shader file is the whole of it. Its `// @name` line names the pack and its
 //! effect, and each `// @param` line declares one setting, which becomes a field of
 //! `p` in the shader and an ordinary filter setting: a slider, a switch, a choice or a
@@ -49,6 +54,28 @@ pub const PACK_PREFIX: &str = "custom-";
 /// The name a shader with no `// @name` line gets.
 pub const DEFAULT_NAME: &str = "Custom shader";
 
+/// The name a shader source with no `// @name` line gets.
+pub const DEFAULT_SOURCE_NAME: &str = "Shader source";
+
+/// The name a shader source's `// @feedback` line reads its last frame by: its one
+/// pass's ID, which the pass reads back (ADR-0093 decision 2).
+pub const PREVIOUS: &str = "previous";
+
+/// A shader source's sides, in pixels, as the engine takes them (ADR-0093 decision 2).
+const SIDE: std::ops::RangeInclusive<u32> = 16..=4096;
+
+/// The settings every shader source has already, which a `// @param` can't declare.
+const SOURCE_SETTINGS: [&str; 4] = ["width", "height", "audio", "audio_source"];
+
+/// What a custom shader's pack makes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Mode {
+    /// A video filter, from Add filter: one `[[effect]]`.
+    Filter,
+    /// A shader source, from Add source: one `[[source]]` of one pass (ADR-0135).
+    Source,
+}
+
 /// The longest name the engine takes for a pack or an effect (its `check_name`).
 const MAX_NAME: usize = 64;
 
@@ -62,9 +89,9 @@ pub const TEMPLATE: &str = r#"// @name Custom shader
 //   // @param <id> bool = true "Label"            (a u32: 1 is on)
 //   // @param <id> color = #rrggbbaa "Label"      (a vec4, linear light, straight alpha)
 //   // @param <id> enum a|b|c = a "Label"         (a u32: the option's index)
-// Give a setting a new ID with a `// @renamed <old> <new>` line: Save as pack… carries
-// the value over, and the pack records the rename (the engine doesn't move saved
-// values yet). Never delete the line: each one is a version.
+// Give a setting a new ID with a `// @renamed <old> <new>` line: the pack records the
+// rename, and every filter of it, and Save as pack…, carry the value over. Never delete
+// the line: each one is a version.
 //
 // Built in: src(uv) is the input at uv (premultiplied linear light), texel(px) one of
 // its pixels, frame.in_size and frame.out_size the sizes in pixels, frame.time the
@@ -78,6 +105,41 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let c = src(in.uv);
     let tinted = vec4<f32>(c.rgb * p.tint.rgb, c.a);
     return mix(c, tinted, p.amount);
+}
+"#;
+
+/// A new shader source's text (ADR-0135): moving bands between two colours, with the
+/// lines a source adds to a filter's.
+pub const SOURCE_TEMPLATE: &str = r#"// @name Shader source
+// @size 1920x1080
+//
+// Each `// @param` line is one setting, read in the shader as `p.<id>`:
+//   // @param <id> float <min>..<max> = <default> "Label"
+//   // @param <id> int <min>..<max> = <default> "Label"
+//   // @param <id> bool = true "Label"            (a u32: 1 is on)
+//   // @param <id> color = #rrggbbaa "Label"      (a vec4, linear light, straight alpha)
+//   // @param <id> enum a|b|c = a "Label"         (a u32: the option's index)
+//   // @param <id> scene "Label"                  (read as <id>(uv): that scene's picture)
+// `// @size <w>x<h>` is the size it starts at (16 to 4096 px a side); Width and Height
+// change it later. `// @feedback` lets it read its own last frame as previous(uv)
+// (transparent at first), for trails. `// @audio` gives it Audio settings, and
+// audio_band(i) (64 bands, 0 to 1), audio_wave(i), sys.level, sys.peak and sys.onset.
+// Give a setting a new ID with a `// @renamed <old> <new>` line; never delete the line.
+//
+// Built in: sys.size is the picture's size in pixels, sys.time the seconds since it was
+// last shown, sys.clock the media clock's, sys.frame the frames since, and in.uv this
+// pixel, (0, 0) top left. Return premultiplied linear light.
+//
+// @param speed float 0..4 = 1 "Speed"
+// @param color_a color = #1b3a8cff "Colour A"
+// @param color_b color = #ff5c8aff "Colour B"
+
+@fragment
+fn fs(in: VsOut) -> @location(0) vec4<f32> {
+    let t = sys.time * p.speed;
+    let wave = 0.5 + 0.5 * sin(in.uv.x * 6.2832 + t) * cos(in.uv.y * 3.1416 - t * 0.7);
+    let c = mix(p.color_a, p.color_b, wave);
+    return vec4<f32>(c.rgb * c.a, c.a);
 }
 "#;
 
@@ -115,6 +177,9 @@ pub enum ParamKind {
         /// The default option.
         default: String,
     },
+    /// `scene`, with no default: a shader source reads the scene it names as `<id>(uv)`
+    /// (ADR-0093 decision 2). A filter can't have one.
+    Scene,
 }
 
 /// One `// @param` line.
@@ -138,6 +203,12 @@ pub struct Declared {
     /// Each `// @renamed <old> <new>` line, in order: a setting saved under `old` is
     /// read as `new` (ADR-0025 › Versioning a kind).
     pub renames: Vec<(String, String)>,
+    /// A shader source's `// @size <w>x<h>`: its Width and Height defaults.
+    pub size: Option<(u32, u32)>,
+    /// A shader source's `// @feedback`: it reads its last frame as [`PREVIOUS`].
+    pub feedback: bool,
+    /// A shader source's `// @audio`: it hears a bus or a source.
+    pub audio: bool,
 }
 
 impl Declared {
@@ -237,6 +308,21 @@ fn good_color(text: &str) -> bool {
 /// Parses the body of one `@param` line, after `@param`.
 fn param(body: &str) -> Result<Param, String> {
     let (body, label) = split_label(body)?;
+    if let [id, "scene"] = body.split_whitespace().collect::<Vec<_>>()[..]
+        && !body.contains('=')
+    {
+        if !good_id(id) {
+            return Err(format!(
+                "`{id}` is not a setting ID: lower-case letters, digits and single `_`, \
+                 starting with a letter, at most 32 characters"
+            ));
+        }
+        return Ok(Param {
+            id: id.to_owned(),
+            label: label.unwrap_or_else(|| words(id)),
+            kind: ParamKind::Scene,
+        });
+    }
     let (spec, default) = body
         .split_once('=')
         .ok_or_else(|| "a setting has a default: `= <value>`".to_owned())?;
@@ -255,7 +341,7 @@ fn param(body: &str) -> Result<Param, String> {
         ));
     }
     let ty = words_in.next().ok_or_else(|| {
-        "the ID is followed by a type: float, int, bool, color or enum".to_owned()
+        "the ID is followed by a type: float, int, bool, color, enum or scene".to_owned()
     })?;
     let extra = words_in.next();
     if words_in.next().is_some() {
@@ -339,9 +425,10 @@ fn param(body: &str) -> Result<Param, String> {
                 default: default.to_owned(),
             }
         }
+        "scene" => return Err("a scene setting has no default: `scene \"Label\"`".into()),
         other => {
             return Err(format!(
-                "`{other}` is not a type: float, int, bool, color or enum"
+                "`{other}` is not a type: float, int, bool, color, enum or scene"
             ));
         }
     };
@@ -352,12 +439,42 @@ fn param(body: &str) -> Result<Param, String> {
     })
 }
 
-/// Reads a shader's `// @name` and `// @param` lines. Every other line, comments
-/// included, is the shader's own; naga checks it when the pack loads.
+/// Reads a custom shader filter's `// @name` and `// @param` lines: [`declared_as`] a
+/// [`Mode::Filter`].
 pub fn declared(wgsl: &str) -> Result<Declared, LineError> {
+    declared_as(wgsl, Mode::Filter)
+}
+
+/// `<w>x<h>`, each side within [`SIDE`].
+fn size(text: &str) -> Result<(u32, u32), String> {
+    let bad = || {
+        format!(
+            "a size is `// @size <width>x<height>`, {} to {} pixels a side",
+            SIDE.start(),
+            SIDE.end()
+        )
+    };
+    let (w, h) = text.split_once('x').ok_or_else(bad)?;
+    let side = |t: &str| {
+        t.trim()
+            .parse::<u32>()
+            .ok()
+            .filter(|n| SIDE.contains(n))
+            .ok_or_else(bad)
+    };
+    Ok((side(w)?, side(h)?))
+}
+
+/// Reads a shader's `// @name`, `// @param` and `// @renamed` lines, and for a
+/// [`Mode::Source`] its `// @size`, `// @feedback` and `// @audio` lines. Every other
+/// line, comments included, is the shader's own; naga checks it when the pack loads.
+pub fn declared_as(wgsl: &str, mode: Mode) -> Result<Declared, LineError> {
     let mut name = None;
     let mut params: Vec<Param> = Vec::new();
     let mut renames: Vec<(String, String, usize)> = Vec::new();
+    let mut size_at: Option<(u32, u32)> = None;
+    let mut feedback = false;
+    let mut audio = false;
     for (at, line) in wgsl.lines().enumerate() {
         let fail = |message: String| LineError {
             line: at + 1,
@@ -366,7 +483,34 @@ pub fn declared(wgsl: &str) -> Result<Declared, LineError> {
         let Some(text) = comment(line) else {
             continue;
         };
-        if let Some(rest) = text.strip_prefix("@name") {
+        // A source's own lines: a word after `@`, alone or with a value.
+        let source_line = ["@size", "@feedback", "@audio"].into_iter().find(|tag| {
+            text.strip_prefix(tag)
+                .is_some_and(|rest| rest.is_empty() || rest.starts_with(char::is_whitespace))
+        });
+        if let Some(tag) = source_line {
+            if mode == Mode::Filter {
+                return Err(fail(format!(
+                    "`{tag}` is for a shader source, from Add source; a filter's size is its input's"
+                )));
+            }
+            let rest = text[tag.len()..].trim();
+            match tag {
+                "@size" => {
+                    if size_at.is_some() {
+                        return Err(fail("the shader has one `@size` line".into()));
+                    }
+                    size_at = Some(size(rest).map_err(fail)?);
+                }
+                _ if !rest.is_empty() => {
+                    return Err(fail(format!(
+                        "`{tag}` is a line of its own, with nothing after it"
+                    )));
+                }
+                "@feedback" => feedback = true,
+                _ => audio = true,
+            }
+        } else if let Some(rest) = text.strip_prefix("@name") {
             if !rest.is_empty() && !rest.starts_with(char::is_whitespace) {
                 continue;
             }
@@ -386,6 +530,27 @@ pub fn declared(wgsl: &str) -> Result<Declared, LineError> {
                 continue;
             }
             let p = param(rest).map_err(fail)?;
+            match mode {
+                Mode::Filter if p.kind == ParamKind::Scene => {
+                    return Err(fail(
+                        "a filter reads its input, not a scene setting; a shader source from \
+                         Add source can"
+                            .into(),
+                    ));
+                }
+                Mode::Source if SOURCE_SETTINGS.contains(&p.id.as_str()) => {
+                    return Err(fail(format!(
+                        "every shader source has a `{}` setting already",
+                        p.id
+                    )));
+                }
+                Mode::Source if p.id == PREVIOUS && p.kind == ParamKind::Scene => {
+                    return Err(fail(format!(
+                        "`{PREVIOUS}` names the source's last frame, so a scene setting can't"
+                    )));
+                }
+                _ => {}
+            }
             if params.iter().any(|q| q.id == p.id) {
                 return Err(fail(format!("another setting is called `{}`", p.id)));
             }
@@ -433,10 +598,17 @@ pub fn declared(wgsl: &str) -> Result<Declared, LineError> {
             )));
         }
     }
+    let fallback = match mode {
+        Mode::Filter => DEFAULT_NAME,
+        Mode::Source => DEFAULT_SOURCE_NAME,
+    };
     Ok(Declared {
-        name: name.unwrap_or_else(|| DEFAULT_NAME.to_owned()),
+        name: name.unwrap_or_else(|| fallback.to_owned()),
         params,
         renames: renames.into_iter().map(|(o, n, _)| (o, n)).collect(),
+        size: size_at,
+        feedback,
+        audio,
     })
 }
 
@@ -466,28 +638,12 @@ fn toml_float(n: f64) -> String {
     }
 }
 
-/// The `effect.toml` for pack `pack` with these declarations: one effect, `shader`,
-/// drawn by `shader.wgsl`, at [`Declared::version`] with its renames.
-pub fn effect_toml(pack: &str, declared: &Declared) -> String {
-    let name = toml_string(&declared.name);
-    let mut out = format!(
-        "# Made by the Custom shader editor from the `// @` lines of {SHADER_FILE}.\n\
-         [pack]\nid = {}\nname = {name}\n\n[[effect]]\nid = \"{EFFECT}\"\nname = {name}\n\
-         version = {}\nshader = \"{SHADER_FILE}\"\n",
-        toml_string(pack),
-        declared.version()
-    );
-    if !declared.renames.is_empty() {
-        let pairs: Vec<String> = declared
-            .renames
-            .iter()
-            .map(|(old, new)| format!("{old} = {}", toml_string(new)))
-            .collect();
-        out.push_str(&format!("renames = {{ {} }}\n", pairs.join(", ")));
-    }
-    for p in &declared.params {
+/// The `[[<table>.param]]` tables of `params`, `table` being `effect` or `source`.
+fn params_toml(table: &str, params: &[Param]) -> String {
+    let mut out = String::new();
+    for p in params {
         out.push_str(&format!(
-            "\n[[effect.param]]\nid = {}\nlabel = {}\n",
+            "\n[[{table}.param]]\nid = {}\nlabel = {}\n",
             toml_string(&p.id),
             toml_string(&p.label)
         ));
@@ -528,26 +684,110 @@ pub fn effect_toml(pack: &str, declared: &Declared) -> String {
                 ));
                 for o in options {
                     out.push_str(&format!(
-                        "\n[[effect.param.options]]\nvalue = {}\nlabel = {}\n",
+                        "\n[[{table}.param.options]]\nvalue = {}\nlabel = {}\n",
                         toml_string(o),
                         toml_string(&words(o))
                     ));
                 }
             }
+            ParamKind::Scene => out.push_str("type = \"scene\"\n"),
         }
     }
     out
+}
+
+/// The `renames = { … }` line of `declared`, or nothing without renames.
+fn renames_toml(declared: &Declared) -> String {
+    if declared.renames.is_empty() {
+        return String::new();
+    }
+    let pairs: Vec<String> = declared
+        .renames
+        .iter()
+        .map(|(old, new)| format!("{old} = {}", toml_string(new)))
+        .collect();
+    format!("renames = {{ {} }}\n", pairs.join(", "))
+}
+
+/// The `effect.toml` for pack `pack` with these declarations: one effect, `shader`,
+/// drawn by `shader.wgsl`, at [`Declared::version`] with its renames.
+pub fn effect_toml(pack: &str, declared: &Declared) -> String {
+    let name = toml_string(&declared.name);
+    let mut out = format!(
+        "# Made by the Custom shader editor from the `// @` lines of {SHADER_FILE}.\n\
+         [pack]\nid = {}\nname = {name}\n\n[[effect]]\nid = \"{EFFECT}\"\nname = {name}\n\
+         version = {}\nshader = \"{SHADER_FILE}\"\n",
+        toml_string(pack),
+        declared.version()
+    );
+    out.push_str(&renames_toml(declared));
+    out.push_str(&params_toml("effect", &declared.params));
+    out
+}
+
+/// The `effect.toml` for shader source pack `pack` (ADR-0135): one source, `shader`, at
+/// the `// @size` given (1920 × 1080 without one), hearing audio for `// @audio`, of one
+/// pass, [`PREVIOUS`], drawn by `shader.wgsl`. The pass reads itself for `// @feedback`,
+/// `audio` for `// @audio` and each `scene` setting.
+pub fn source_toml(pack: &str, declared: &Declared) -> String {
+    let name = toml_string(&declared.name);
+    let (width, height) = declared.size.unwrap_or((1920, 1080));
+    let mut out = format!(
+        "# Made by the Custom shader editor from the `// @` lines of {SHADER_FILE}.\n\
+         [pack]\nid = {}\nname = {name}\n\n[[source]]\nid = \"{EFFECT}\"\nname = {name}\n\
+         version = {}\nwidth = {width}\nheight = {height}\n",
+        toml_string(pack),
+        declared.version()
+    );
+    if declared.audio {
+        out.push_str("audio = true\n");
+    }
+    out.push_str(&renames_toml(declared));
+    out.push_str(&params_toml("source", &declared.params));
+    let mut inputs: Vec<String> = Vec::new();
+    if declared.feedback {
+        inputs.push(PREVIOUS.to_owned());
+    }
+    if declared.audio {
+        inputs.push("audio".to_owned());
+    }
+    inputs.extend(
+        declared
+            .params
+            .iter()
+            .filter(|p| p.kind == ParamKind::Scene)
+            .map(|p| p.id.clone()),
+    );
+    let inputs: Vec<String> = inputs.iter().map(|i| toml_string(i)).collect();
+    out.push_str(&format!(
+        "\n[[source.pass]]\nid = \"{PREVIOUS}\"\nshader = \"{SHADER_FILE}\"\ninputs = [{}]\n",
+        inputs.join(", ")
+    ));
+    out
+}
+
+/// The manifest `mode` makes from `declared`.
+fn manifest_of(mode: Mode, pack: &str, declared: &Declared) -> String {
+    match mode {
+        Mode::Filter => effect_toml(pack, declared),
+        Mode::Source => source_toml(pack, declared),
+    }
 }
 
 /// The files a `pack.write` of this shader sends: the manifest its annotations make,
 /// and the shader itself. An annotation's problem is the error, before anything is
 /// sent.
 pub fn pack_files(pack: &str, wgsl: &str) -> Result<Vec<PackFile>, LineError> {
-    let declared = declared(wgsl)?;
+    pack_files_as(Mode::Filter, pack, wgsl)
+}
+
+/// [`pack_files`] for a pack that makes `mode`.
+pub fn pack_files_as(mode: Mode, pack: &str, wgsl: &str) -> Result<Vec<PackFile>, LineError> {
+    let declared = declared_as(wgsl, mode)?;
     Ok(vec![
         PackFile {
             path: MANIFEST_FILE.to_owned(),
-            content: PackContent::Text(effect_toml(pack, &declared)),
+            content: PackContent::Text(manifest_of(mode, pack, &declared)),
         },
         PackFile {
             path: SHADER_FILE.to_owned(),
@@ -556,7 +796,8 @@ pub fn pack_files(pack: &str, wgsl: &str) -> Result<Vec<PackFile>, LineError> {
     ])
 }
 
-/// The kind of the custom shader in pack `pack`.
+/// The kind of the custom shader in pack `pack`: its filter's, or its source's, since
+/// both are `shader`.
 pub fn kind_of(pack: &str) -> String {
     format!("{pack}/{EFFECT}")
 }
@@ -594,6 +835,37 @@ pub fn save_as_problem(id: &str, packs: &[PackInfo]) -> Option<String> {
     None
 }
 
+/// Writes a new custom shader of `mode` from its template ([`TEMPLATE`] or
+/// [`SOURCE_TEMPLATE`]) as the first free `custom-<n>` pack (`pack.list` names the taken
+/// ones), reads the kinds again, and returns its pack.
+pub async fn write_new(
+    studio: Studio,
+    s: &crate::session::Session,
+    mode: Mode,
+) -> Result<String, String> {
+    let packs = match query(s, Query::PackList).await {
+        Ok(QueryResult::PackList { packs }) => packs,
+        Ok(_) => Vec::new(),
+        Err(error) => return Err(error.to_string()),
+    };
+    let pack = fresh_pack(&packs);
+    let template = match mode {
+        Mode::Filter => TEMPLATE,
+        Mode::Source => SOURCE_TEMPLATE,
+    };
+    let files = pack_files_as(mode, &pack, template).map_err(|error| error.to_string())?;
+    let action = Action::PackWrite {
+        pack: pack.clone(),
+        files,
+    };
+    s.control
+        .call(Call::Action { action })
+        .await
+        .map_err(|error| error.to_string())?;
+    studio.relist_kinds(s).await;
+    Ok(pack)
+}
+
 /// The first `custom-<n>` that no pack in `pack.list` has, loaded or not, so a new
 /// shader never replaces one.
 pub fn fresh_pack(packs: &[PackInfo]) -> String {
@@ -611,6 +883,8 @@ pub struct Opened {
     /// Whether its manifest is the one the shader's annotations make. When it isn't (a
     /// pack written by hand), saving replaces it, which the editor says first.
     pub made_here: bool,
+    /// What the pack makes: a source when its manifest has a `[[source]]` table.
+    pub mode: Mode,
 }
 
 /// Opens pack `pack` in the editor from what `pack.read` returned: only a pack of
@@ -635,8 +909,17 @@ pub fn open(pack: &str, files: &[PackFileInfo]) -> Result<Opened, String> {
              this one’s folder instead."
         ));
     };
-    let made_here = declared(&wgsl).is_ok_and(|d| effect_toml(pack, &d) == manifest);
-    Ok(Opened { wgsl, made_here })
+    let mode = if manifest.lines().any(|l| l.trim() == "[[source]]") {
+        Mode::Source
+    } else {
+        Mode::Filter
+    };
+    let made_here = declared_as(&wgsl, mode).is_ok_and(|d| manifest_of(mode, pack, &d) == manifest);
+    Ok(Opened {
+        wgsl,
+        made_here,
+        mode,
+    })
 }
 
 /// The line of `shader.wgsl` a `pack.write` error names, if it names one: the engine
@@ -858,9 +1141,16 @@ pub fn highlight(text: &str) -> Vec<(Tok, &str)> {
         let tok = if bytes[at..].starts_with(b"//") {
             at = text[at..].find('\n').map_or(bytes.len(), |n| at + n);
             let line = text[start..at].trim_start_matches('/').trim_start();
-            if ["@name", "@param", "@renamed"]
-                .iter()
-                .any(|a| line.starts_with(a))
+            if [
+                "@name",
+                "@param",
+                "@renamed",
+                "@size",
+                "@feedback",
+                "@audio",
+            ]
+            .iter()
+            .any(|a| line.starts_with(a))
             {
                 Tok::Annotation
             } else {
@@ -935,8 +1225,9 @@ pub fn highlight(text: &str) -> Vec<(Tok, &str)> {
         .collect()
 }
 
-/// The custom shader editor over the Filters window: the shader of pack `pack`, as
-/// [`open`] read it. Undimmed, so the canvas shows each version as it compiles.
+/// The custom shader editor over the Filters window, or for a shader source over its
+/// Properties dialog: the shader of pack `pack`, as [`open`] read it. Undimmed, so the
+/// canvas shows each version as it compiles.
 #[component]
 pub fn ShaderEditor(
     /// The pack.
@@ -952,6 +1243,7 @@ pub fn ShaderEditor(
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
     let session = expect_context::<SessionContext>();
+    let mode = opened.mode;
     let text = RwSignal::new(opened.wgsl);
     let status = RwSignal::new(Status::Opened);
     // Each change's number: a compile only reports for the latest change.
@@ -977,7 +1269,7 @@ pub fn ShaderEditor(
             return;
         };
         let pack_id = pack.get_value();
-        let files = match pack_files(&pack_id, &text.get_untracked()) {
+        let files = match pack_files_as(mode, &pack_id, &text.get_untracked()) {
             Ok(files) => files,
             Err(error) => {
                 status.set(Status::Problem {
@@ -1228,7 +1520,15 @@ pub fn ShaderEditor(
                     </p>
                 })}
                 <p class="add-note">
-                    "The // @name line names this shader in Add filter, where any item can use it."
+                    {match mode {
+                        Mode::Filter => {
+                            "The // @name line names this shader in Add filter, where any item can use it."
+                        }
+                        Mode::Source => {
+                            "The // @name line names this shader in Add source, where any scene can \
+                             add another."
+                        }
+                    }}
                 </p>
             </div>
             {move || naming.get().then(|| view! {
@@ -1267,7 +1567,8 @@ pub fn ShaderEditor(
                 </form>
             })}
             <div class="modal-footer">
-                {move || (!naming.get() && !unsaved.get()).then(|| view! {
+                // A source can't move to another kind, so it has no Save as pack… yet.
+                {move || (mode == Mode::Filter && !naming.get() && !unsaved.get()).then(|| view! {
                     <button
                         type="button"
                         class="secondary shader-save-as-open"
@@ -1688,7 +1989,8 @@ mod tests {
             opened,
             Opened {
                 wgsl: TEMPLATE.into(),
-                made_here: true
+                made_here: true,
+                mode: Mode::Filter,
             }
         );
         let by_hand = open(
@@ -1712,6 +2014,103 @@ mod tests {
             )
             .is_err()
         );
+    }
+
+    /// The source template (ADR-0135) declares a name, a size and three settings, and
+    /// makes one source of one pass that reads nothing.
+    #[test]
+    fn the_source_template_makes_one_source_of_one_pass() {
+        let d = declared_as(SOURCE_TEMPLATE, Mode::Source).expect("the template parses");
+        assert_eq!(d.name, "Shader source");
+        assert_eq!(d.size, Some((1920, 1080)));
+        assert!(!d.feedback && !d.audio);
+        let ids: Vec<_> = d.params.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["speed", "color_a", "color_b"]);
+        let toml = source_toml("custom-2", &d);
+        assert!(toml.contains(
+            "[pack]\nid = \"custom-2\"\nname = \"Shader source\"\n\n[[source]]\nid = \"shader\"\n\
+             name = \"Shader source\"\nversion = 1\nwidth = 1920\nheight = 1080\n"
+        ));
+        assert!(toml.contains("\n[[source.param]]\nid = \"speed\"\n"));
+        assert!(toml.ends_with(
+            "\n[[source.pass]]\nid = \"previous\"\nshader = \"shader.wgsl\"\ninputs = []\n"
+        ));
+        assert!(!toml.contains("[[effect"));
+        // A filter refuses the source's lines.
+        let error = declared(SOURCE_TEMPLATE).unwrap_err();
+        assert_eq!(error.line, 2);
+        assert!(error.message.contains("@size"), "{error}");
+    }
+
+    /// `@feedback`, `@audio` and `scene` settings become the pass's inputs, in that order.
+    #[test]
+    fn a_source_reads_its_last_frame_its_audio_and_its_scenes() {
+        let wgsl = "// @feedback\n// @audio\n// @size 64x32\n// @param sky scene \"Sky\"\n\
+                    // @param glow float = 1\n";
+        let d = declared_as(wgsl, Mode::Source).expect("parses");
+        assert!(d.feedback && d.audio);
+        assert_eq!(d.size, Some((64, 32)));
+        assert_eq!(d.params[0].kind, ParamKind::Scene);
+        assert_eq!(d.params[0].label, "Sky");
+        let toml = source_toml("custom-3", &d);
+        assert!(toml.contains("width = 64\nheight = 32\naudio = true\n"));
+        assert!(toml.contains("id = \"sky\"\nlabel = \"Sky\"\ntype = \"scene\"\n"));
+        assert!(toml.contains("inputs = [\"previous\", \"audio\", \"sky\"]\n"));
+        // Without a size, a source starts at 1920 x 1080.
+        let d = declared_as("", Mode::Source).unwrap();
+        assert_eq!(d.name, "Shader source");
+        assert!(source_toml("custom-3", &d).contains("width = 1920\nheight = 1080\n"));
+    }
+
+    /// A source line or setting the engine would refuse names its line.
+    #[test]
+    fn a_bad_source_line_names_its_line() {
+        let bad = |wgsl: &str| declared_as(wgsl, Mode::Source).unwrap_err();
+        assert!(bad("// @size 8x8").message.contains("16 to 4096"));
+        assert!(bad("// @size 1920").message.contains("<width>x<height>"));
+        assert_eq!(bad("\n// @size 64x64\n// @size 64x64").line, 3);
+        assert!(bad("// @feedback yes").message.contains("nothing after it"));
+        assert!(
+            bad("// @param width float = 1")
+                .message
+                .contains("`width` setting")
+        );
+        assert!(
+            bad("// @param previous scene")
+                .message
+                .contains("last frame")
+        );
+        assert!(
+            bad("// @param sky scene = a")
+                .message
+                .contains("no default")
+        );
+        let filter = declared("// @param sky scene").unwrap_err();
+        assert!(filter.message.contains("scene setting"), "{filter}");
+        // Only the word itself: `@sizes` is a comment like any other.
+        assert!(declared("// @sizes are free text").is_ok());
+    }
+
+    /// A source pack written here opens as a source, made here.
+    #[test]
+    fn a_source_pack_opens_as_a_source() {
+        let made = source_toml(
+            "custom-2",
+            &declared_as(SOURCE_TEMPLATE, Mode::Source).unwrap(),
+        );
+        let opened = open(
+            "custom-2",
+            &[
+                file("effect.toml", &made),
+                file("shader.wgsl", SOURCE_TEMPLATE),
+            ],
+        )
+        .unwrap();
+        assert_eq!(opened.mode, Mode::Source);
+        assert!(opened.made_here);
+        let files = pack_files_as(Mode::Source, "custom-2", SOURCE_TEMPLATE).unwrap();
+        assert_eq!(files.len(), 2);
+        assert!(matches!(&files[0].content, PackContent::Text(t) if *t == made));
     }
 
     /// Tab's spaces go in at the selection, counted in UTF-16 as the text box counts.

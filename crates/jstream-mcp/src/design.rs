@@ -80,8 +80,15 @@ Give a new pack ID `custom-<word>` (not one `pack.list` has) one effect `shader`
 `@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>`, reads the input with \
 `src(in.uv)` (premultiplied linear) and each setting as `p.<id>`. To rename a \
 setting, add a `// @renamed <old> <new>` line, raise the effect's `version` by one and \
-add `renames = { <old> = \"<new>\" }`. The engine doesn't move saved values through \
-renames yet, so set the new ID on existing filters with `filter.set_settings`. \
+add `renames = { <old> = \"<new>\" }`, keeping earlier entries with each pointed at \
+the newest ID. When the new version loads, the engine moves every existing filter's \
+value to the new ID. \
+A generated picture works the same way, renames included, as a shader source a person can edit from its \
+Properties (Edit shader…): one `[[source]]` `shader` with `width`, `height` and one \
+`[[source.pass]]` `previous` drawing `shader.wgsl`, whose `fs` returns the picture. \
+Its `// @size <w>x<h>` line sets the default size, `// @feedback` adds `previous` to \
+the pass's inputs, `// @audio` sets `audio = true` and adds `audio`, and a \
+`// @param <id> scene \"Label\"` line is a `scene` setting, also an input. \
 Motion: animate with keyframe scenes. Build the graphic's off state as a scene (a \
 plate 10 px wide or cropped to nothing, text at opacity 0), add its on state with \
 `scene.create_variant`, override geometry, crop and opacity per item there, make a \
@@ -131,7 +138,8 @@ Borders: one `border` item effect frames an item: `radius` (or `corners` `each` 
 `width` and `color` stroke inside the edge, `outer_width`, `outer_gap` and \
 `outer_color` past it; `style` `double`, `dashed` (`dash`, `gap`) or `dotted`; `fill` \
 `linear` (`angle`) or `conic` to `color2`; `speed` (px/s) moves dashes and gradients \
-round. Its looks: card (`width` 1, `color` #ffffff33, `radius` 16), neon (`width` 3, \
+round, or with `speed_unit` `beats` they lap the edge every `lap_beats` beats of the \
+MIDI clock, on the beat (4 is a bar). Its looks: card (`width` 1, `color` #ffffff33, `radius` 16), neon (`width` 3, \
 `radius` 24, `fill` `conic` #00e5ff to #ff2bd6, `speed` 120, `outer_width` 2, \
 `outer_gap` 4, `outer_color` #00e5ff66) and broadcast frame (`width` 9, `style` \
 `double`, `color` #f4f4f2, `outer_width` 2, `outer_color` #0b2545). An ornate frame \

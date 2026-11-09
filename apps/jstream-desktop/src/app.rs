@@ -198,11 +198,12 @@ pub fn start(
         ui::ORIGIN,
         host.ws_url(),
         host.token(),
-        vcam.as_str(),
-        collection.as_ref(),
-        &bootstrap::Settings {
+        &bootstrap::Page {
+            vcam: vcam.as_str(),
+            collection: collection.as_ref(),
             network: network::allowed(&network::setting_file(data)),
             network_open: host.network().is_some(),
+            wheel_focus_only: wheel_focus_only(),
             jtunnel: &jtunnel::read(&jtunnel::setting_file(data)),
         },
     );
@@ -212,6 +213,20 @@ pub fn start(
         host: Some(host),
         network_file: Some(network::setting_file(data)),
         jtunnel_file: Some(jtunnel::setting_file(data)),
+    }
+}
+
+/// Whether wheel chords are heard only while the window has the focus: on macOS until
+/// the app has the Accessibility permission (ADR-0144 §2), which it checks without
+/// asking. Elsewhere the OS needs no permission for them.
+fn wheel_focus_only() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        jstream_platform_macos::wheel_needs_accessibility()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
     }
 }
 
