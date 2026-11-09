@@ -1060,8 +1060,9 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
 `VideoFilter::reads_depth` (`video_filter_reads_depth(kind)`) says which kinds want one.
 With none, or one of another size than the input, the kind passes its input through.
 They are built by `VideoFilter::new` but listed by `depth_filter_descriptors()`, not
-`video_filter_descriptors()`, until the engine draws the view depth for them, so no
-chain can hold one that never sees depth; `filter::testing` reads both lists.
+`video_filter_descriptors()`: the engine adds that list to its kinds because it draws the
+view depth they read (`jstream-core`'s `kinds.rs`), and an engine that didn't would leave
+it out; `filter::testing` reads both lists.
 - `depth_fog`: `mode` (`exponential`, the default, or `linear`), `color` (with alpha,
   default `#c8ccd2ff`), `start_px` (default 0), `end_px` (default 4000), both 0 to
   `MAX_DRAWN_PX`, `density` (0 to 20 per 1000 px, default 0.5), `max` (0 to 1, default

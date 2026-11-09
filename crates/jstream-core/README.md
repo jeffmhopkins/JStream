@@ -80,7 +80,8 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
 - **Kinds** (`kinds.rs`): the built-in kinds the graph validates settings
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   the source kinds of `jstream-sources`' built-in registry, the audio filter kinds and
-  `jstream-render`'s video filter kinds. Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
+  `jstream-render`'s video filter kinds, its depth-aware ones (`depth_fog`, ADR-0143)
+  included, since the chains draw the view depth they read. Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
   `jstream-sources` and `jstream-render` do for theirs), so a change to an audio
   filter's settings is reviewed like an API diff (ADR-0025, #635). The CLAP kinds a scan
   adds aren't in it. `INSTA_UPDATE=always cargo test -p jstream-core --lib kinds`
@@ -1549,7 +1550,23 @@ scene is, and runs the chain into `GpuKey::Filtered`. Every place
 that shows the scene shows that output: a `scene` source's item, a `scene_mask` that
 reads it, and the program or a video mix, which places it over the canvas. So it runs
 once per frame however many mixes and places show it, and a disabled or empty chain
-leaves the scene composited as before. In a transition the scene is one picture
+leaves the scene composited as before.
+
+A 3D scene whose chain holds a filter that reads depth (`Chain::reads_depth`, the render
+crate's `video_filter_reads_depth`; `depth_fog` so far) also gets its view depth
+([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
+planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
+composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, then
+each model it shows at least half opaque, posed as its layer is, whether the pass places
+the model's layer (`GpuKey::ItemBox`) or its effects' output (`GpuKey::Filtered`). `Chains::drew_depth`
+keeps it with the camera's focal length, and `run_one` hands it to the chain's
+depth-aware filters for that run only; anywhere else (a 2D scene, a source, item or
+output chain) they get none and pass their input through. A scene without such a filter
+draws and allocates no depth. A layer remade at another size retires the old one into
+the cache, as a scene a filter reads does
+(`depth_fog_on_a_scene_fogs_cards_and_models_by_their_distance`).
+
+In a transition the scene is one picture
 (ADR-0065 §6): one track over the canvas that pairs with nothing, so Fade crossfades
 it, Move falls back to that, and a filtered nested scene is never flattened into its
 items.

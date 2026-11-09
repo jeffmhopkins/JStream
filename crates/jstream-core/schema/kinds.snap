@@ -1439,6 +1439,92 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "depth_fog",
+    "category": "video_filter",
+    "name": "Depth fog",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "exponential",
+            "label": "Exponential"
+          },
+          {
+            "value": "linear",
+            "label": "Linear"
+          }
+        ],
+        "default": "exponential",
+        "label": "Mode",
+        "description": "Fog that thickens with distance from the scene's camera. It works in a scene's filters when the scene has a camera, best first in the chain; anywhere else it changes nothing. Linear fades in from Start to End; Exponential thickens past Start by Density.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#c8ccd2ff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "start_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 999999986991104.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Start",
+        "description": "Distance along the camera's view where fog begins, in scene pixels.",
+        "live": true
+      },
+      {
+        "id": "end_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 999999986991104.0,
+        "unit": "px",
+        "default": 4000.0,
+        "label": "End",
+        "description": "Linear: the distance where fog is at its most. At or before Start, fog goes straight to its most at Start.",
+        "live": true
+      },
+      {
+        "id": "density",
+        "type": "float",
+        "min": 0.0,
+        "max": 20.0,
+        "default": 0.5,
+        "label": "Density",
+        "description": "Exponential: how quickly fog thickens, per 1000 px past Start.",
+        "live": true
+      },
+      {
+        "id": "max",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "label": "Most",
+        "description": "The most fog anywhere: 1 hides what is far entirely.",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "bool",
+        "default": true,
+        "label": "Fog the background",
+        "description": "Fill where nothing was drawn, as if infinitely far, with the most fog.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "desktop_audio",
     "category": "source",
     "name": "Desktop audio",
