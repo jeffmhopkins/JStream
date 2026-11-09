@@ -997,3 +997,32 @@ fn bind_group(
         ],
     })
 }
+
+#[cfg(test)]
+mod bound_tests {
+    use super::Bound;
+
+    /// A bound moved into a frame grown around its own keeps the same pixels, shifted
+    /// by the origin and clipped to the new frame; mapped into a target of that frame,
+    /// it covers them with the margin.
+    #[test]
+    fn a_placed_bound_keeps_its_pixels_in_the_grown_frame() {
+        let bound = Bound {
+            rect: [10, 20, 30, 40],
+            frame: (100, 50),
+        };
+        let placed = bound.placed((8, 8), (116, 66));
+        assert_eq!(placed.rect, [18, 28, 38, 48]);
+        assert_eq!(placed.frame, (116, 66));
+        // Clipped to the frame it moves into.
+        assert_eq!(bound.placed((90, 30), (110, 60)).rect, [100, 50, 110, 60]);
+        // At a quarter scale, with two texels of margin on each side.
+        assert_eq!(placed.in_target(29, 17), Some([2, 5, 12, 15]));
+        // Nothing to draw.
+        let empty = Bound {
+            rect: [0; 4],
+            frame: (100, 50),
+        };
+        assert_eq!(empty.in_target(100, 50), None);
+    }
+}
