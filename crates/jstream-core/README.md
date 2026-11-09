@@ -1844,7 +1844,14 @@ hands `Chains::begin` each frame's blend (`jstream_render::transition::blend_set
 numbers and colours linearly, every other value switching halfway, the eased progress
 clamped to `[0, 1]`), which updates the running filters in place. Settings an item's
 motion drives (ADR-0138) are added on top of that blend, or of the plan's settings, in
-the same list (`Shot::drive`), and only on a frame where they add something. Goldens in `chain.rs`
+the same list (`Shot::drive`), and only on a frame where they add something. Every
+filter also draws on the song's position (`FilterClock::beat`, which a border's speed
+in beats follows,
+[ADR-0148](../../docs/adr/0148-a-borders-speed-in-beats.md)): `Live::set_midi` hands
+the engine's MIDI inputs to the filter assets, a plan hands them to its shot
+(`tempo::Tempo`), and each mix's frame reads the every-input clock's beat once, at its
+media time and without a lock (`Shot::beat_at`), for every chain it runs, the master
+and output stages included. A shot planned without them is at beat 0. Goldens in `chain.rs`
 draw a hard-edged `vignette` and compare small text grids of the canvas, as the render
 crate's geometry goldens do: on a cropped item, against the same vignette on its source,
 whose corners the crop cuts away; on a scene, against one on each of its items; and on an
@@ -2376,7 +2383,8 @@ shared checks and the 256-name limit, changes nothing on a refusal, and emits
 `values.changed` only when the value really changed. It is not in the activity or audit
 log, as `live.set` isn't: it carries data and may come many times a second.
 The engine sets the `tempo.*` values itself from the MIDI clock (see *JTunnel receiver* in
-[Contents](#contents-sources)). `values.list` reads them by name, and the page feed reads them all (`SharedValues::map`,
+[Contents](#contents-sources)). Filters don't read them: the render thread reads the
+clock's beat itself each frame (ADR-0148, see [Snapshots](#snapshots)). `values.list` reads them by name, and the page feed reads them all (`SharedValues::map`,
 *Page API* under [Snapshots](#snapshots)).
 
 <a id="preview-streams"></a>

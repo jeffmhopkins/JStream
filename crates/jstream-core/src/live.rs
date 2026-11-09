@@ -339,6 +339,12 @@ impl LiveSources {
     /// The MIDI inputs the `midi_*` sources draw (ADR-0137), which the JTunnel receiver
     /// feeds.
     pub(crate) fn set_midi(&mut self, midi: Arc<jstream_sources::MidiInputs>) {
+        // Their clock moves the filters that follow the tempo (ADR-0148).
+        self.loaded = Arc::new(
+            (*self.loaded)
+                .clone()
+                .with_tempo(crate::tempo::Tempo(Arc::clone(&midi))),
+        );
         self.ctx.midi = Some(midi);
     }
 

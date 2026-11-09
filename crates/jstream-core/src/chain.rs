@@ -703,7 +703,7 @@ impl Chains {
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
         (source, chain): (&ChainOwner, &Chain),
-        at: MediaTime,
+        (at, beat): (MediaTime, f64),
     ) {
         let Some(running) = self.running.get_mut(source) else {
             return;
@@ -765,6 +765,7 @@ impl Chains {
         }
         let clock = FilterClock {
             seconds: at.as_secs_f64(),
+            beat,
         };
         let cache = &*cache;
         let mut input = &chain.input;

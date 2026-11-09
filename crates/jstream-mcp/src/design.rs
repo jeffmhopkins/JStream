@@ -138,7 +138,8 @@ Borders: one `border` item effect frames an item: `radius` (or `corners` `each` 
 `width` and `color` stroke inside the edge, `outer_width`, `outer_gap` and \
 `outer_color` past it; `style` `double`, `dashed` (`dash`, `gap`) or `dotted`; `fill` \
 `linear` (`angle`) or `conic` to `color2`; `speed` (px/s) moves dashes and gradients \
-round. Its looks: card (`width` 1, `color` #ffffff33, `radius` 16), neon (`width` 3, \
+round, or with `speed_unit` `beats` they lap the edge every `lap_beats` beats of the \
+MIDI clock, on the beat (4 is a bar). Its looks: card (`width` 1, `color` #ffffff33, `radius` 16), neon (`width` 3, \
 `radius` 24, `fill` `conic` #00e5ff to #ff2bd6, `speed` 120, `outer_width` 2, \
 `outer_gap` 4, `outer_color` #00e5ff66) and broadcast frame (`width` 9, `style` \
 `double`, `color` #f4f4f2, `outer_width` 2, `outer_color` #0b2545). An ornate frame \

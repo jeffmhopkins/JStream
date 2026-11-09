@@ -209,7 +209,15 @@ fn filtered(opened: &mut Opened, filter: &mut VideoFilter, input: &Image) -> Ima
         .expect("layer");
     opened
         .compositor
-        .apply_filter_into(filter, input, &output, FilterClock { seconds: 0.0 })
+        .apply_filter_into(
+            filter,
+            input,
+            &output,
+            FilterClock {
+                seconds: 0.0,
+                beat: 0.0,
+            },
+        )
         .expect("apply the filter");
     output
 }
