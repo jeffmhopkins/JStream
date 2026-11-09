@@ -6,6 +6,7 @@
 //! naming and classification checks see every variant.
 
 use crate::ActivityEntry;
+use crate::NetworkAccess;
 use crate::PlacedKeyframe;
 use crate::SceneOptions;
 use crate::{
@@ -27,18 +28,25 @@ use crate::{
     YoutubeAuth,
 };
 use crate::{AudienceStatsInfo, QuotaInfo, StatsPolling};
+
+/// A certificate fingerprint as `NetworkAccess` writes it: 32 bytes, colon-separated.
+const FINGERPRINT: &str = "3F:A1:07:C2:9B:44:E8:15:6D:0A:B3:72:C9:5E:21:8F:\
+                           D4:66:0B:E7:13:A9:5C:F0:28:7D:B1:4E:93:C6:0F:52";
 use crate::{
     AudioFollow, BusId, BusInfo, BusMeter, BusMonitor, Loudness, MonitorTap, SendInfo, SourceAudio,
     SourceMeter,
 };
-use crate::{Canvas as CameraCanvas, SceneCamera};
-use crate::{CaptureTargetInfo, CaptureTargetKind, FontInfo, PixelSize, SourceSize};
-use crate::{Chord, DeviceId, DeviceInfo, HotkeyBinding};
+use crate::{Bezier, DroppedOverride, ItemOverride, KeyframeTiming, OverrideField};
+use crate::{Binding, Chord, DeviceId, DeviceInfo, HotkeyBinding, Trigger};
 use crate::{
-    Drawer, DrawerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
-    ThreadProfile, UnitProfile,
+    CameraControlInfo, CaptureFormatInfo, CaptureFormatPart, CaptureTargetInfo, CaptureTargetKind,
+    FontInfo, PixelSize, SourceSize,
 };
-use crate::{DroppedOverride, ItemOverride, OverrideField};
+use crate::{Canvas as CameraCanvas, SceneCamera};
+use crate::{
+    Drawer, DrawerProfile, MixerProfile, PhaseProfile, PlanProfile, ProfileInfo, ProfileStream,
+    ProfileUnit, SourceProfile, StreamProfile, ThreadProfile, UnitProfile,
+};
 use crate::{
     Easing, Glide, ItemEasing, ItemTransition, TransitionEffect, TransitionPresetId,
     TransitionPresetInfo, TransitionStarted, TransitionsInfo,
@@ -47,7 +55,10 @@ use crate::{
     EnumOption, KindCategory, KindDescriptor, KindSummary, Media, ParamDescriptor, ParamType,
     VisibleIf,
 };
-use crate::{FolderId, FolderInfo, LabelId, LabelInfo, SceneMeta, SourceMeta};
+use crate::{
+    FolderId, FolderInfo, LabelId, LabelInfo, LabelMembers, LabelledScene, LabelledTimeline,
+    SceneMeta, SourceMeta,
+};
 use crate::{FrameSheet, FrameStrip, SheetFrame};
 use crate::{GestureId, GestureInfo, LiveOutcome};
 use crate::{HistoryCall, HistoryDirection, HistoryOp, PreviewCodec, PreviewDraft};
@@ -486,6 +497,27 @@ pub(crate) fn edits() -> Vec<Edit> {
             scene_id: SceneId::new("scn_1"),
             follow: None,
         },
+        // PTZ shots (ADR-0146): a preset, and a pose.
+        Edit::SceneSetPtzShots {
+            scene_id: SceneId::new("scn_1"),
+            shots: vec![
+                crate::PtzShot {
+                    camera: "wide".into(),
+                    preset: Some(2),
+                    pose: crate::PtzPose::default(),
+                },
+                crate::PtzShot {
+                    camera: "close".into(),
+                    preset: None,
+                    pose: crate::PtzPose {
+                        pan: Some(-1200),
+                        tilt: Some(300),
+                        zoom: Some(0x2000),
+                        focus: Some(0x1000),
+                    },
+                },
+            ],
+        },
         Edit::LabelCreate {
             label_id: LabelId::new("lbl_sponsor"),
             name: "Sponsor".into(),
@@ -569,8 +601,22 @@ pub(crate) fn edits() -> Vec<Edit> {
                 preset_id: None,
             },
         },
+        Edit::HotkeySetLabels {
+            chord: Chord::new("Ctrl+Digit1"),
+            labels: vec![LabelId::new("lbl_sponsor")],
+        },
         Edit::HotkeyClear {
             chord: Chord::new("Ctrl+Digit1"),
+        },
+        Edit::BindingSet {
+            trigger: pad_trigger(),
+            action: Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+            },
+        },
+        Edit::BindingClear {
+            trigger: pad_trigger(),
         },
         // A timeline, then its delete (ADR-0115).
         Edit::TimelineSet {
@@ -637,6 +683,63 @@ fn keyframe_edits() -> Vec<Edit> {
             scene_id: Some(SceneId::new("scn_1_wide")),
             motion: keyframe_motion(),
         },
+        // A keyframe's timing for an item in moves into it, every field, then one
+        // field, then none, which clears it (ADR-0129).
+        Edit::ItemSetTiming {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_2"),
+            timing: keyframe_timing(),
+        },
+        Edit::ItemSetTiming {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_3"),
+            timing: KeyframeTiming {
+                easing: Some(ItemEasing::Hold),
+                ..KeyframeTiming::default()
+            },
+        },
+        Edit::ItemSetTiming {
+            scene_id: SceneId::new("scn_1_wide"),
+            item_id: ItemId::new("itm_3"),
+            timing: KeyframeTiming::default(),
+        },
+        // The easings ADR-0129 adds, on a preset and an item.
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::EaseIn),
+            patch: Settings::new(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::Hold),
+            patch: Settings::new(),
+        },
+        Edit::TransitionUpdate {
+            preset_id: TransitionPresetId::new("tr_move"),
+            name: None,
+            kind: None,
+            duration_ms: None,
+            easing: Some(Easing::CubicBezier(Bezier {
+                x1: Finite32::new(0.68).expect("finite"),
+                y1: Finite32::new(-0.6).expect("finite"),
+                x2: Finite32::new(0.32).expect("finite"),
+                y2: Finite32::new(1.6).expect("finite"),
+            })),
+            patch: Settings::new(),
+        },
+        Edit::ItemSetTransition {
+            item_id: ItemId::new("itm_4"),
+            transition: ItemTransition {
+                easing: ItemEasing::EaseIn,
+                ..ItemTransition::default()
+            },
+        },
     ];
     // Every property and every shape, in lists of at most 8 (ADR-0099).
     let every: Vec<MotionModifier> = MotionProperty::ALL
@@ -651,6 +754,7 @@ fn keyframe_edits() -> Vec<Edit> {
                     .expect("a string")
             ),
             property,
+            effect: None,
             kind: MotionKind::Oscillate {
                 shape,
                 amplitude: Finite32::new(1.0).expect("finite"),
@@ -670,6 +774,27 @@ fn keyframe_edits() -> Vec<Edit> {
                 motion: motion.to_vec(),
             }),
     );
+    // A border's width pulsing on a sine (ADR-0138).
+    edits.push(Edit::ItemSetMotion {
+        item_id: ItemId::new("itm_3"),
+        scene_id: None,
+        motion: vec![MotionModifier {
+            modifier_id: "pulse-border".into(),
+            property: MotionProperty::Effect,
+            effect: Some(crate::MotionEffect {
+                filter_id: FilterId::new("border"),
+                param: "width".into(),
+            }),
+            kind: MotionKind::Oscillate {
+                shape: MotionShape::Sine,
+                amplitude: Finite32::new(2.0).expect("finite"),
+                period_ms: 500,
+                phase: Finite32::ZERO,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        }],
+    });
     // Every audio measure and curve (ADR-0100), hearing the program mix, a bus and a
     // source.
     edits.push(Edit::ItemSetMotion {
@@ -685,6 +810,7 @@ fn keyframe_edits() -> Vec<Edit> {
             OverrideField::Visible,
             OverrideField::Effects,
             OverrideField::Motion,
+            OverrideField::Timing,
         ]
         .map(|field| Edit::ItemClearOverride {
             scene_id: SceneId::new("scn_1_wide"),
@@ -726,7 +852,23 @@ fn item_overrides() -> Vec<ItemOverride> {
         opacity: Some(Finite32::new(0.5).expect("finite")),
         effects: Some(keyframe_effects()),
         motion: Some(keyframe_motion()),
+        timing: Some(keyframe_timing()),
     }]
+}
+
+/// A keyframe's timing for one item: every field, the easing a curve (ADR-0129).
+fn keyframe_timing() -> KeyframeTiming {
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    KeyframeTiming {
+        delay_ms: Some(150),
+        easing: Some(ItemEasing::CubicBezier(Bezier {
+            x1: f(0.3),
+            y1: f(-0.5),
+            x2: f(0.2),
+            y2: f(1.5),
+        })),
+        duration_ms: Some(800),
+    }
 }
 
 /// A gentle sway: every kind, every option, on the properties a sway moves (ADR-0099).
@@ -736,6 +878,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "sway-x".into(),
             property: MotionProperty::X,
+            effect: None,
             kind: MotionKind::Wiggle {
                 amplitude: f(3.0),
                 frequency_hz: f(0.4),
@@ -748,6 +891,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "sway-roll".into(),
             property: MotionProperty::Rotation,
+            effect: None,
             kind: MotionKind::Oscillate {
                 shape: MotionShape::Triangle,
                 amplitude: f(0.1),
@@ -760,6 +904,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "scroll".into(),
             property: MotionProperty::CropLeft,
+            effect: None,
             kind: MotionKind::Drift {
                 rate_per_s: f(12.0),
                 wrap: Some(f(480.0)),
@@ -770,6 +915,7 @@ fn sway() -> Vec<MotionModifier> {
         MotionModifier {
             modifier_id: "jolt".into(),
             property: MotionProperty::Y,
+            effect: None,
             kind: MotionKind::Impulse {
                 amplitude: f(18.0),
                 frequency_hz: f(1.5),
@@ -802,6 +948,7 @@ fn reactive() -> Vec<MotionModifier> {
     let modifier = |id: &str, property, kind| MotionModifier {
         modifier_id: id.into(),
         property,
+        effect: None,
         kind,
         clock: MotionClock::Engine,
         enabled: true,
@@ -847,6 +994,7 @@ fn keyframe_motion() -> Vec<MotionModifier> {
     vec![MotionModifier {
         modifier_id: "pulse".into(),
         property: MotionProperty::Opacity,
+        effect: None,
         kind: MotionKind::Oscillate {
             shape: MotionShape::Sine,
             amplitude: Finite32::new(0.2).expect("finite"),
@@ -1108,7 +1256,8 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
                 scene_id: SceneId::new("scn_1"),
                 preset_id: None,
             },
-        ),
+        )
+        .with_labels(vec![LabelId::new("lbl_sponsor")]),
         HotkeyBinding::new(
             Chord::new("F9"),
             &Action::OutputStart {
@@ -1116,6 +1265,39 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
             },
         ),
     ]
+}
+
+/// The controller bindings the fixtures report: a pad's note switching scene, and a
+/// footswitch's CC starting the stream.
+fn controller_bindings() -> Vec<Binding> {
+    vec![
+        Binding::new(
+            pad_trigger(),
+            &Action::SceneSwitch {
+                scene_id: SceneId::new("scn_1"),
+                preset_id: None,
+            },
+        ),
+        Binding::new(
+            Trigger::MidiCc {
+                controller: 64,
+                channel: None,
+                input: None,
+            },
+            &Action::OutputStart {
+                output_id: OutputId::new("out_yt"),
+            },
+        ),
+    ]
+}
+
+/// Note 36 on channel 10 from the "Pads" input: a drum pad.
+fn pad_trigger() -> Trigger {
+    Trigger::MidiNote {
+        note: 36,
+        channel: Some(10),
+        input: Some("Pads".into()),
+    }
 }
 
 /// A recording profile: 12000 kbit/s VBR peaking at 20000, hardware preferred.
@@ -1285,6 +1467,16 @@ pub(crate) fn actions() -> Vec<Action> {
             source_id: None,
         },
         Action::PreviewUnsubscribe { channel: 1 },
+        Action::PreviewReport {
+            view: "projector:program".into(),
+            counts: crate::ViewCounts {
+                received: 300,
+                shown: 299,
+                skipped: 1,
+                placeholders: 1,
+                ..crate::ViewCounts::default()
+            },
+        },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
             preset_id: None,
@@ -1300,6 +1492,64 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
         },
+        // PTZ heads (ADR-0146).
+        Action::PtzDrive {
+            camera: "close".into(),
+            pan: -12,
+            tilt: 4,
+            zoom: 0,
+        },
+        Action::PtzAim {
+            camera: "close".into(),
+            pose: crate::PtzPose {
+                pan: Some(-1200),
+                tilt: Some(300),
+                zoom: Some(0x2000),
+                focus: None,
+            },
+            speed: Some(12),
+        },
+        Action::PtzHome {
+            camera: "wide".into(),
+        },
+        Action::PtzRecall {
+            camera: "wide".into(),
+            preset: 2,
+        },
+        Action::PtzStore {
+            camera: "wide".into(),
+            preset: 3,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Auto,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Manual,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::OnePush,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Near,
+            speed: Some(3),
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Far,
+            speed: None,
+        },
+        Action::PtzFocus {
+            camera: "close".into(),
+            focus: crate::PtzFocus::Stop,
+            speed: None,
+        },
         Action::SceneSetKeyframe {
             scene_id: SceneId::new("scn_panels"),
             keyframe_id: Some(SceneId::new("scn_panels_wide")),
@@ -1313,6 +1563,22 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::PairingStart,
         Action::DeviceRevoke {
             device_id: DeviceId::new("dev_1"),
+        },
+        Action::AgentApprove {
+            approval_id: "apr_1".into(),
+            decision: crate::ApprovalDecision::AllowOnce,
+        },
+        Action::AgentApprove {
+            approval_id: "apr_2".into(),
+            decision: crate::ApprovalDecision::AlwaysAllow,
+        },
+        Action::AgentApprove {
+            approval_id: "apr_3".into(),
+            decision: crate::ApprovalDecision::Deny,
+        },
+        Action::AgentForget {
+            client_name: "claude-code".into(),
+            transport: crate::AgentTransport::Websocket,
         },
         Action::UiSettingsSet {
             key: "workspace.dock".into(),
@@ -1340,6 +1606,7 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::EffectEnable {
             kind_id: "fx/blur".into(),
         },
+        Action::PluginClapRescan,
         Action::CodecDownload {
             download_id: "openh264".into(),
         },
@@ -1371,6 +1638,15 @@ pub(crate) fn actions() -> Vec<Action> {
             value: None,
         },
         Action::PrivacySet { on: true },
+        Action::CollectionOpen {
+            path: "C:/Users/me/Videos/Show/show.json".into(),
+        },
+        Action::CollectionNew {
+            path: "/home/me/shows/talk.json".into(),
+        },
+        Action::CollectionSaveAs {
+            path: "D:/Projects/show copy.json".into(),
+        },
         Action::PreviewSubscribe {
             channel: 2,
             max_width: None,
@@ -1462,6 +1738,7 @@ fn volley() -> TimelineInfo {
         )
     };
     TimelineInfo {
+        labels: vec![LabelId::new("lbl_sponsor")],
         timeline_id: TimelineId::new("tl_volley"),
         name: "Volley".into(),
         duration_ms: 4000,
@@ -1511,6 +1788,7 @@ fn volley() -> TimelineInfo {
 /// A short timeline that toggles an item, repeating as `looping` says.
 fn pulse(looping: TimelineLoop) -> TimelineInfo {
     TimelineInfo {
+        labels: Vec::new(),
         timeline_id: TimelineId::new(match looping {
             TimelineLoop::Loop => "tl_pulse",
             _ => "tl_once",
@@ -1568,6 +1846,9 @@ pub(crate) fn queries() -> Vec<Query> {
             scene_id: SceneId::new("scn_1"),
         },
         Query::StateGet,
+        Query::LabelMembers {
+            label_id: LabelId::new("lbl_sponsor"),
+        },
         Query::VideoSnapshot,
         Query::KindList,
         Query::KindDescribe {
@@ -1579,6 +1860,8 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::EncoderList,
         Query::VideoMixList,
         Query::CaptureTargets,
+        Query::PtzList,
+        Query::JtunnelSenders,
         Query::FontList,
         Query::ValuesList { prefix: None },
         Query::ValuesList {
@@ -1600,6 +1883,18 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::ProfileGet {
             seconds: Some(10),
             top: Some(5),
+        },
+        Query::QualityProbe {
+            stream: crate::ProbeStream::Output {
+                output_id: OutputId::new("out_1"),
+            },
+            frames: None,
+        },
+        Query::QualityProbe {
+            stream: crate::ProbeStream::Output {
+                output_id: OutputId::new("out_1"),
+            },
+            frames: Some(5),
         },
         Query::LiveList,
         Query::YoutubeStatus,
@@ -1653,6 +1948,7 @@ pub(crate) fn queries() -> Vec<Query> {
             },
         },
         Query::DeviceList,
+        Query::AgentApproved,
         Query::ActivityList {
             after_seq: None,
             limit: None,
@@ -1665,7 +1961,9 @@ pub(crate) fn queries() -> Vec<Query> {
             key: "workspace.dock".into(),
         },
         Query::PluginList,
+        Query::PluginClapScan,
         Query::CodecDownloads,
+        Query::CollectionInfo,
         Query::YoutubeStats,
         Query::SourceSizes,
         Query::VideoFrames {
@@ -1680,6 +1978,30 @@ pub(crate) fn queries() -> Vec<Query> {
 }
 
 /// A live broadcast's audience, every count reported.
+fn quality_probe() -> crate::QualityProbeInfo {
+    let db = |v: f32| Finite32::new(v).expect("finite");
+    let frame = |pts_us, psnr_y, psnr, ssim_y| crate::FrameQuality {
+        pts_us,
+        psnr_y: db(psnr_y),
+        psnr: db(psnr),
+        ssim_y: db(ssim_y),
+    };
+    crate::QualityProbeInfo {
+        encoder: "OpenH264 (Cisco Systems, software)".into(),
+        hardware: false,
+        decoder: "OpenH264 decoder (Cisco Systems, software)".into(),
+        width: 1280,
+        height: 720,
+        frames: vec![
+            frame(2_000_000, 42.5, 44.0, 0.985),
+            frame(2_033_333, 41.5, 43.0, 0.975),
+        ],
+        psnr_y: db(42.0),
+        psnr: db(43.5),
+        ssim_y: db(0.98),
+    }
+}
+
 fn profile_info() -> ProfileInfo {
     let ms = |value: f32| Finite32::new(value).expect("finite");
     ProfileInfo {
@@ -1793,6 +2115,82 @@ fn profile_info() -> ProfileInfo {
                 cpu_pct: ms(6.5),
             },
         ],
+        streams: vec![
+            StreamProfile {
+                stream: ProfileStream::Output {
+                    output_id: OutputId::new("out_yt"),
+                },
+                fps: ms(30.0),
+                frames_in: 150,
+                encoded: 149,
+                frames_out: 148,
+                dropped: 2,
+                late: 3,
+                encode_ms: ms(4.5),
+                kbps: 6_210,
+                target_kbps: 6_160,
+            },
+            StreamProfile {
+                stream: ProfileStream::Preview {
+                    channel: 1,
+                    scene_id: Some(SceneId::new("scn_2")),
+                    source_id: None,
+                },
+                fps: ms(15.0),
+                frames_in: 75,
+                encoded: 75,
+                frames_out: 75,
+                dropped: 0,
+                late: 0,
+                encode_ms: ms(2.0),
+                kbps: 1_700,
+                target_kbps: 1_728,
+            },
+        ],
+        mixer: Some(MixerProfile {
+            blocks: 234,
+            late_blocks: 1,
+            block_max_ms: ms(22.5),
+            block_ms: ms(21.333),
+            skipped_frames: 0,
+            underrun_frames: 480,
+            dropped_frames: 0,
+        }),
+        views: vec![crate::ViewProfile {
+            client: "jstream-ui".into(),
+            view: "canvas".into(),
+            counts: crate::ViewCounts {
+                received: 150,
+                shown: 148,
+                skipped: 2,
+                decode_errors: 0,
+                placeholders: 1,
+                blanks: 0,
+                reopens: 1,
+            },
+            received_fps: ms(30.0),
+            shown_fps: ms(29.6),
+        }],
+        network: Some(crate::NetworkProfile {
+            inputs: vec![crate::NetworkInputProfile {
+                sender: "Bitwig".into(),
+                sample_rate: 48_000,
+                recording: true,
+                latency_ms: ms(21.5),
+                lead_ms: ms(20.0),
+                drift_ppm: Some(ms(-12.5)),
+                played: 12_000,
+                concealed: 3,
+                late: 1,
+                repeats: 11_990,
+                restarts: 0,
+            }],
+            outside_lan: 0,
+            unaccepted: 2,
+            malformed: 0,
+            unsupported: 0,
+            midi: 640,
+        }),
     }
 }
 
@@ -1853,6 +2251,7 @@ fn color_settings() -> Settings {
 /// A descriptor using every parameter type and hint.
 fn color_kind() -> KindDescriptor {
     let param = |id: &str, ty: ParamType, default: Value| ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default,
@@ -1969,6 +2368,45 @@ fn color_kind() -> KindDescriptor {
                     max_len: 512,
                 },
                 json!(""),
+            ),
+            param(
+                "camera",
+                ParamType::CaptureTarget {
+                    kind: CaptureTargetKind::Device,
+                    max_len: 1024,
+                },
+                json!(""),
+            ),
+            param(
+                "resolution",
+                ParamType::CaptureFormat {
+                    part: CaptureFormatPart::Resolution,
+                    target: "camera".into(),
+                },
+                json!(""),
+            ),
+            param(
+                "fps",
+                ParamType::CaptureFormat {
+                    part: CaptureFormatPart::Fps,
+                    target: "camera".into(),
+                },
+                json!(0),
+            ),
+            param(
+                "pixel_format",
+                ParamType::CaptureFormat {
+                    part: CaptureFormatPart::PixelFormat,
+                    target: "camera".into(),
+                },
+                json!(""),
+            ),
+            param(
+                "camera_controls",
+                ParamType::CameraControls {
+                    target: "camera".into(),
+                },
+                json!({"exposure": -6, "white_balance": "auto"}),
             ),
         ],
     }
@@ -2229,6 +2667,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: Some(TransitionPresetId::new("tr_move")),
                     transition_out: None,
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: vec![volley(), pulse(TimelineLoop::Loop), pulse(TimelineLoop::Once)],
                     items: item_infos(),
@@ -2250,6 +2689,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: None,
                     transition_out: None,
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: Vec::new(),
                     items: vec![],
@@ -2268,6 +2708,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     transition_in: None,
                     transition_out: Some(TransitionPresetId::new("cut")),
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     timelines: Vec::new(),
                     items: vec![],
@@ -2313,6 +2754,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             }),
             hotkeys: hotkey_bindings(),
+            bindings: controller_bindings(),
         },
         // A 1×1 opaque black PNG, so the wire example stays small. The engine's
         // encoder may produce different bytes for the same pixels.
@@ -2403,6 +2845,70 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::JtunnelSenders {
+            on: true,
+            senders: vec![
+                crate::JtunnelSenderInfo {
+                    remote_name: "Bitwig".into(),
+                    address: "192.168.1.5:9000".into(),
+                    accepted: true,
+                },
+                crate::JtunnelSenderInfo {
+                    remote_name: "Laptop".into(),
+                    address: "192.168.1.9:9000".into(),
+                    accepted: false,
+                },
+            ],
+        },
+        QueryResult::JtunnelSenders {
+            on: false,
+            senders: Vec::new(),
+        },
+        QueryResult::PtzList {
+            cameras: vec![
+                crate::PtzCameraInfo {
+                    camera: "wide".into(),
+                    address: "192.168.1.40:52381".into(),
+                    transport: crate::PtzTransport::ViscaIp,
+                    visca_address: 1,
+                    reachable: true,
+                    pose: Some(crate::PtzPose {
+                        pan: Some(0),
+                        tilt: Some(0),
+                        zoom: Some(0),
+                        focus: Some(0x1000),
+                    }),
+                    error: None,
+                    sent: 120,
+                    replies: 240,
+                    dropped: 0,
+                },
+                crate::PtzCameraInfo {
+                    camera: "close".into(),
+                    address: "192.168.1.41:1259".into(),
+                    transport: crate::PtzTransport::Udp,
+                    visca_address: 1,
+                    reachable: false,
+                    pose: None,
+                    error: Some("no reply".into()),
+                    sent: 4,
+                    replies: 0,
+                    dropped: 2,
+                },
+                crate::PtzCameraInfo {
+                    camera: "bridge".into(),
+                    address: "10.0.0.9:5678".into(),
+                    transport: crate::PtzTransport::Tcp,
+                    visca_address: 2,
+                    reachable: true,
+                    pose: None,
+                    error: None,
+                    sent: 1,
+                    replies: 2,
+                    dropped: 0,
+                },
+            ],
+        },
         QueryResult::CaptureTargets {
             targets: vec![
                 CaptureTargetInfo {
@@ -2414,6 +2920,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         height: 1440,
                     }),
                     primary: true,
+                    formats: Vec::new(),
+                    controls: Vec::new(),
                 },
                 CaptureTargetInfo {
                     kind: CaptureTargetKind::Window,
@@ -2421,6 +2929,30 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     name: "Untitled - Notepad".into(),
                     size: None,
                     primary: false,
+                    formats: Vec::new(),
+                    controls: Vec::new(),
+                },
+                CaptureTargetInfo {
+                    kind: CaptureTargetKind::Device,
+                    target: r"\\?\usb#vid_046d&pid_085e#0001#{e5323777}\global".into(),
+                    name: "USB webcam".into(),
+                    size: None,
+                    primary: false,
+                    formats: vec![CaptureFormatInfo {
+                        width: 1920,
+                        height: 1080,
+                        fps: 29.97,
+                        pixel_format: "mjpeg".into(),
+                    }],
+                    controls: vec![CameraControlInfo {
+                        name: "white_balance".into(),
+                        min: 2800,
+                        max: 6500,
+                        step: 10,
+                        default: 4600,
+                        value: 4600,
+                        auto: Some(true),
+                    }],
                 },
             ],
         },
@@ -2459,6 +2991,9 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
         },
         QueryResult::ProfileGet {
             profile: profile_info(),
+        },
+        QueryResult::QualityProbe {
+            probe: quality_probe(),
         },
         QueryResult::FontList {
             fonts: vec![
@@ -2564,6 +3099,47 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     preset_id: None,
                 },
             )],
+            bindings: vec![Binding::new(
+                Trigger::MidiProgram {
+                    program: 4,
+                    channel: Some(1),
+                    input: None,
+                },
+                &Action::SceneSwitch {
+                    scene_id: SceneId::new("scn_mask"),
+                    preset_id: None,
+                },
+            )],
+        },
+        QueryResult::LabelMembers {
+            rev: Rev(12),
+            members: LabelMembers {
+                label: LabelInfo {
+                    label_id: LabelId::new("lbl_sponsor"),
+                    name: "Sponsor".into(),
+                    color: "#ff8800".into(),
+                    icon: Some("megaphone".into()),
+                },
+                scenes: vec![
+                    LabelledScene {
+                        scene_id: SceneId::new("scn_1"),
+                        name: "Main".into(),
+                        variant_of: None,
+                    },
+                    LabelledScene {
+                        scene_id: SceneId::new("scn_wide"),
+                        name: "Wide".into(),
+                        variant_of: Some(SceneId::new("scn_1")),
+                    },
+                ],
+                sources: vec![SourceId::new("src_cam")],
+                hotkeys: hotkey_bindings().into_iter().take(1).collect(),
+                timelines: vec![LabelledTimeline {
+                    timeline_id: TimelineId::new("tl_volley"),
+                    name: "Volley".into(),
+                    scene_id: SceneId::new("scn_1"),
+                }],
+            },
         },
         QueryResult::DeviceList {
             devices: vec![DeviceInfo {
@@ -2572,6 +3148,18 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 paired_at: 1_790_000_000,
                 last_used_at: 1_790_003_600,
             }],
+        },
+        QueryResult::AgentApproved {
+            asking: true,
+            approved: vec![crate::ApprovedAgent::new(
+                "claude-code",
+                crate::AgentTransport::Websocket,
+            )],
+            pending: vec![crate::AgentApproval::new(
+                "apr_4",
+                "cursor",
+                crate::AgentTransport::McpHttp,
+            )],
         },
         QueryResult::ActivityList {
             now_ms: 1_790_000_120_000,
@@ -2613,6 +3201,37 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     },
                     grant: crate::PluginGrant::default(),
                 },
+            ],
+        },
+        QueryResult::PluginClapScan {
+            scan: crate::ClapScanInfo::available(
+                vec![
+                    crate::ClapFolder::new(r"C:\Program Files\Common Files\CLAP", true),
+                    crate::ClapFolder::new(r"C:\Users\me\AppData\Local\Programs\Common\CLAP", false),
+                ],
+                false,
+                true,
+                vec![crate::ClapFound::new(
+                    "clap/com.example.reverb",
+                    "Room Reverb",
+                    r"C:\Program Files\Common Files\CLAP\Reverb.clap",
+                )],
+                vec![crate::ClapFailed::new(
+                    r"C:\Program Files\Common Files\CLAP\Broken.clap",
+                    "the plugin host crashed",
+                )],
+            ),
+        },
+        QueryResult::PluginClapScan {
+            scan: crate::ClapScanInfo::unavailable(Some(
+                "this platform has no CLAP plugin host yet".into(),
+            )),
+        },
+        QueryResult::CollectionInfo {
+            path: "C:/Users/me/Videos/Show/show.json".into(),
+            recent: vec![
+                "C:/Users/me/Videos/Show/show.json".into(),
+                "C:/Users/me/AppData/Roaming/JStream/collection.json".into(),
             ],
         },
         QueryResult::CodecDownloads {
@@ -2764,6 +3383,40 @@ pub(crate) fn events() -> Vec<Event> {
             id: "tl_other".into(),
         }),
     });
+    for (path, cause) in [
+        (
+            "C:/Users/me/Videos/Show/show.json",
+            crate::CollectionCause::Open,
+        ),
+        ("/home/me/shows/talk.json", crate::CollectionCause::New),
+        ("D:/Projects/show copy.json", crate::CollectionCause::SaveAs),
+    ] {
+        events.push(Event::CollectionFileChanged {
+            path: path.into(),
+            cause,
+            client_id: ClientId::new("c1"),
+            request_id: Some(RequestId::new("r7")),
+        });
+    }
+    for cause in [crate::KindsCause::ClapScan, crate::KindsCause::EffectPacks] {
+        events.push(Event::KindsChanged { cause });
+    }
+    events.push(Event::AgentApprovalRequested {
+        approval: crate::AgentApproval::new("apr_4", "cursor", crate::AgentTransport::McpHttp),
+    });
+    for outcome in [
+        crate::ApprovalOutcome::AllowedOnce,
+        crate::ApprovalOutcome::AlwaysAllowed,
+        crate::ApprovalOutcome::Denied,
+        crate::ApprovalOutcome::TimedOut,
+        crate::ApprovalOutcome::Closed,
+    ] {
+        events.push(Event::AgentApprovalResolved {
+            approval_id: "apr_4".into(),
+            outcome,
+        });
+    }
+    events.push(Event::JtunnelSendersChanged {});
     events.push(Event::EventsDropped { count: 1500 });
     events.push(Event::PluginStateChanged {
         plugin_id: PluginId::new("plg_1"),
@@ -2789,6 +3442,12 @@ pub(crate) fn events() -> Vec<Event> {
         blamed: vec!["fx/blur".into()],
         quarantined: vec!["fx/blur".into()],
         recovering: true,
+    });
+    events.push(Event::GpuEffectSlow {
+        kind_id: "fx/blur".into(),
+        took_us: 21_400,
+        limit_us: 16_666,
+        quarantined: vec!["fx/blur".into()],
     });
     events.push(Event::StatsTick {
         seq: 4,
@@ -3032,6 +3691,9 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
             size_bytes: 5_767_168,
             limit_bytes: 4_194_304,
         },
+        ProtocolError::NotAllowed {
+            reason: "the person declined this connection".into(),
+        },
         ProtocolError::Internal {
             reason: "render thread stopped".into(),
         },
@@ -3047,8 +3709,11 @@ pub(crate) fn errors() -> Vec<ProtocolError> {
         EntityKind::Bus,
         EntityKind::Device,
         EntityKind::Hotkey,
+        EntityKind::Binding,
         EntityKind::Plugin,
         EntityKind::Pack,
+        EntityKind::File,
+        EntityKind::Approval,
     ] {
         errors.push(ProtocolError::NotFound {
             entity,
@@ -3136,6 +3801,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
                 dropped_overrides: Vec::new(),
                 rev: Rev(13),
                 removed_hotkeys: vec![],
+                removed_bindings: vec![],
             },
         }),
         ServerMessage::Response(Response {
@@ -3150,6 +3816,7 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
                     .collect(),
                 rev: Rev(14),
                 removed_hotkeys: hotkey_bindings(),
+                removed_bindings: controller_bindings(),
             },
         }),
         ServerMessage::Response(Response {
@@ -3162,6 +3829,10 @@ pub(crate) fn server_messages() -> Vec<ServerMessage> {
                 result: Some(ActionResult::PairingStart {
                     code: SecretString::new("7K3M-9QXA"),
                     expires_in_secs: 120,
+                    network: Some(NetworkAccess {
+                        urls: vec!["https://studio.local:4456/".into()],
+                        fingerprint: FINGERPRINT.into(),
+                    }),
                 }),
             },
         }),

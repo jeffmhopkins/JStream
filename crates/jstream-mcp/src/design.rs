@@ -8,10 +8,14 @@
 //! and to look at the result before calling it done. It names the `backdrop` and `text`
 //! settings that make graphics look finished, the `shape` and `timer` kinds, how to
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
-//! light by role, mask, and build reflections on glossy surfaces (#1062), how
-//! to build a 3D set with a scene camera (ADR-0094) and its depth of field (ADR-0108),
-//! which transition to use (including a `stinger`), and when to build a graphic as HTML
-//! in a `browser` source, animated on one clock. Numbers are for a 1920×1080 canvas and scale with it.
+//! light by role, use the light and framing filters (bloom, glow, vignette) and
+//! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
+//! set with a scene camera (ADR-0094) and its depth of field (ADR-0108), which
+//! transition to use (including a `stinger`), when to build a graphic as HTML in a
+//! `browser` source, animated on one clock, or an audio visualiser on
+//! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
+//! `tempo.*` values (ADR-0147), and how to write a custom shader the Filters window's
+//! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -66,18 +70,46 @@ Fit boxes to content: a new text source draws at its own size, so read it from \
 `source.sizes` (or a `source.size_changed` event) and give its item that size, rather \
 than guessing a box; with the default `fit` mode a wrong box shrinks or offsets the \
 text. \
+A look no built-in filter makes: write it as a custom shader, an effect pack from \
+`pack.write` that a person can then open and edit in the Filters window (Edit shader…). \
+Give a new pack ID `custom-<word>` (not one `pack.list` has) one effect `shader` whose \
+`shader` is `shader.wgsl`. In that file put a `// @name <Name>` line and one \
+`// @param <id> <type> = <default> \"Label\"` line per setting, matching the manifest's \
+`[[effect.param]]` list: `float 0..1 = 0.5`, `int 0..64 = 8`, `bool = true`, \
+`color = #ff9a3cff` or `enum soft|hard = soft`. The shader defines \
+`@fragment fn fs(in: VsOut) -> @location(0) vec4<f32>`, reads the input with \
+`src(in.uv)` (premultiplied linear) and each setting as `p.<id>`. To rename a \
+setting, add a `// @renamed <old> <new>` line, raise the effect's `version` by one and \
+add `renames = { <old> = \"<new>\" }`, keeping earlier entries with each pointed at \
+the newest ID. When the new version loads, the engine moves every existing filter's \
+value to the new ID. \
+A generated picture works the same way, renames included, as a shader source a person can edit from its \
+Properties (Edit shader…): one `[[source]]` `shader` with `width`, `height` and one \
+`[[source.pass]]` `previous` drawing `shader.wgsl`, whose `fs` returns the picture. \
+Its `// @size <w>x<h>` line sets the default size, `// @feedback` adds `previous` to \
+the pass's inputs, `// @audio` sets `audio = true` and adds `audio`, and a \
+`// @param <id> scene \"Label\"` line is a `scene` setting, also an input. \
 Motion: animate with keyframe scenes. Build the graphic's off state as a scene (a \
 plate 10 px wide or cropped to nothing, text at opacity 0), add its on state with \
 `scene.create_variant`, override geometry, crop and opacity per item there, make a \
 `move` transition preset (`transition.create`, 500-800 ms, `ease_out`) and switch \
 between them with it. Reveal text with a crop that opens with its plate rather than a \
 fade over it, and stagger the parts with `item.set_transition` `delay_ms` (0, 120, \
-200). Items with no partner in the other scene appear and disappear by their \
+200). To lead with a part in one move and trail with it in another, give each keyframe \
+its own order with `item.set_timing` (the keyframe's `scene_id`, the item, and a \
+`timing` of `delay_ms`, `easing` and `duration_ms`), which applies only to switches into \
+that keyframe. Easings: `ease_out` for arrivals, `ease_in` for exits, `hold` for a jump \
+at a set time, and `{\"cubic_bezier\": {x1, y1, x2, y2}}` (y up to 3) for an overshoot. \
+Items with no partner in the other scene appear and disappear by their \
 transition's `appear` and `disappear` (`slide`, `scale` or `fade`). Keep moves under a \
 second and ease them; a cut beats a slow move. A variant that overrides an item's \
 geometry stores the whole geometry, so nudging x there also fixes its size and angles \
 against later edits to the item in the parent scene; finish an item's size and angles \
 in the parent first, and override geometry only on the items that move. \
+A variant can override an item's effects too (`item.set_effects`): keep the same \
+effects in the same order and change only their numbers or colours (a blur radius, a \
+colour grade), and a `move` blends them with the item; another list, or another mask \
+scene or image, cross-fades it instead. \
 Depth and blending: a keyframe variant can override an item's 3D placement, so a `move` \
 interpolates it: `tilt_deg` (top edge away), `turn_deg` (right edge away), `depth_px` \
 and `perspective_px` (about 1200-2000 for a natural look). A plate that flips down \
@@ -90,6 +122,33 @@ item with the blended result, so a half-strength `overlay` is the mode at 0.5. \
 Opacity goes up to 4 (400%): above 1 it multiplies the item's \
 light without covering more, so an `additive` glow or a blurred, masked reflection can \
 be brighter than its source draws it. \
+Light and framing filters: `bloom` makes the bright parts of any picture give off \
+light, an opaque camera included (`threshold` about 0.7, `intensity` 0.5-1.5, `radius` \
+16-40); `glow` lights the transparent area around a shape (a logo, text, a keyed \
+person), so on an opaque picture it shows only past its edge, as an item effect. As \
+item effects, `glow`, `drop_shadow` and `outline` draw past the item's box. A \
+`vignette` tints the edges towards its `color` (`blend` `normal`) or darkens by it \
+(`multiply`), as an ellipse that follows the frame or a `round` circle around \
+`center_x`, `center_y`; `strength` is the linear share of the colour, so a dark one \
+looks half as bright at the edge near 0.8. Its looks: subtle (`strength` 0.55, `radius` \
+0.5, `softness` 0.7), cinematic (0.85, 0.3, 0.7) and spotlight (1, 0.15, 0.45, \
+`shape` `round`). \
+Borders: one `border` item effect frames an item: `radius` (or `corners` `each` with \
+`radius_top_left` and the rest) rounds it and, with `clip` on, the picture with it; \
+`width` and `color` stroke inside the edge, `outer_width`, `outer_gap` and \
+`outer_color` past it; `style` `double`, `dashed` (`dash`, `gap`) or `dotted`; `fill` \
+`linear` (`angle`) or `conic` to `color2`; `speed` (px/s) moves dashes and gradients \
+round, or with `speed_unit` `beats` they lap the edge every `lap_beats` beats of the \
+MIDI clock, on the beat (4 is a bar). Its looks: card (`width` 1, `color` #ffffff33, `radius` 16), neon (`width` 3, \
+`radius` 24, `fill` `conic` #00e5ff to #ff2bd6, `speed` 120, `outer_width` 2, \
+`outer_gap` 4, `outer_color` #00e5ff66) and broadcast frame (`width` 9, `style` \
+`double`, `color` #f4f4f2, `outer_width` 2, `outer_color` #0b2545). An ornate frame \
+from an image: `frame` (an image asset) draws the inner stroke as a 9-slice, its \
+corners `frame_slice` image px square kept whole at `width` px and its edges \
+`frame_edges` `stretch` or `tile`. Stack effects in \
+order: the border (or `rounded_corners`, a vignette, a mask) first, then \
+`drop_shadow` or `glow`, which follow the rounded shape; a neon look is a conic \
+border with a `glow` of the same hue after it. \
 Layering: build a scene as separate layers by role (the background, what glows or \
 emits light, the light it throws onto nearby surfaces, and the foreground frame or \
 set in front of it), each with its own mask and blend, so lighting and reflections \
@@ -137,7 +196,10 @@ about 1304 at the default 45°, and through it a flat item lands exactly on its 
 box, so start there and move the camera. A floor is an item with `tilt_deg` 90 placed \
 low, a wall one pushed back with negative `depth_px`; items draw far to near. Move \
 the camera with a keyframe scene that overrides it (`scene.set_camera` on the \
-variant) and a `move` transition, which glides the camera with the items. Depth of \
+variant) and a `move` transition, which glides the camera with the items. A 2D \
+scene's keyframe may have a camera of its own too: a `move` into it starts from the \
+framing camera, so a flat 2D layout tilts or pushes into 3D and back; keep the 2D \
+side's items flat (no tilt, turn or depth), or the move fades. Depth of \
 field: `focus_px` is the distance along the view that stays sharp and `blur_px` (0-64) \
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
@@ -145,12 +207,16 @@ focus with two keyframe scenes that differ only in `focus_px` and a `move` trans
 A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
 kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
 `fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
-hand-held camera. To follow the pointer over a screen capture, `scene.set_camera_follow` \
-names an item of the scene showing a `display` or `window` source: the camera glides \
-after the pointer at an angle (`yaw_deg`, `pitch_deg`), keeps the capture filling the \
-frame and, with `blur_px` above 0, focuses where it looks. `zoom` (1-4) is its resting \
-zoom; `scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
-Both belong to the scene's family: set them on the parent, not a keyframe scene. \
+hand-held camera. To follow the pointer over a screen capture, add a `follow_pointer` \
+filter to the effects of an item showing a `display` or `window` source (`filter.add` \
+on the `item` owner); `scene.set_camera_follow` is a shortcut that does the \
+same. The scene's camera glides after the pointer at an angle (`yaw_deg`, \
+`pitch_deg`), keeps the capture filling the frame, keeps the pointer inside \
+`safe_margin_pct` (default 10% a side) and, with `blur_px` above 0, focuses where it \
+looks; a 2D scene gets a camera for it. `zoom` (1-4) is its resting zoom; \
+`scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
+Turning the filter off returns the camera to where it was. Camera motion and the \
+follow belong to the scene's family: set them on the parent, not a keyframe scene. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \
@@ -195,7 +261,34 @@ instead of a page that fakes the beat: it follows the program mix (or a bus, `au
 a source, `audio_source`) by `level`, `peak`, `onset` or a `band` (`low_hz`..`high_hz`, \
 such as 40..120 for a kick), with `attack_ms` and `release_ms`, mapped from `floor_db` \
 to `ceiling_db` onto `from`..`to`. On `opacity`, `from` -0.6 and `to` 0 dims a light to \
-40% between beats. It hears only while an output runs. Keep continuous motion \
+40% between beats. It hears only while an output runs. \
+To make an effect itself pulse (a border's `width`, a glow's `radius` or `strength`, a \
+blur's `radius`), give the item a modifier with `property` `effect` and \
+`effect: {filter_id, param}` naming one of its own effects and a number or colour \
+setting of it: any kind and clock works, its value is added to a number and kept \
+within the setting's range, or added to a colour's red, green and blue as a fraction \
+of full (0.3 lightens it), so an `audio` modifier with `from` 0 and `to` 6 on a border's `width` \
+thickens it by up to 6 px on each beat. \
+For an audio visualiser that the built-in `spectrum` and `waveform` kinds can't draw (a \
+scrolling spectrogram, a custom meter), build an HTML page on `jstream.levels()`: set the \
+`browser` source's `page_api`, `page_api_audio` and `page_api_bus` (the bus it shows, \
+never a microphone bus it doesn't), and in the page listen for `levels` events, each \
+`{peak: [l, r], rms: [l, r], bands}` with 64 bands from 20 Hz to 20 kHz, lowest first, \
+each 0 to 1. A spectrogram draws each reading as one column of a canvas, shifting the \
+canvas left by a column first; on a `null` reading (no output runs, or the bus is gone) \
+it draws nothing. The page gets at most one reading per frame of its `fps`, and only \
+while an output runs. \
+For a page that plays along with a performer (notes lighting up, a beat counter, a \
+controller-driven graphic), set the `browser` source's `page_api` and `page_api_midi`, \
+and `page_api_midi_input` to the MIDI input's name (empty for every input), and read \
+`jstream.midi()` or listen for `midi` events: `{input, tempo, notes, controllers, bend, \
+pressure, recent}`, where `tempo` is `null` or `{bpm, playing, clock, beat, at}`, `notes` \
+and `controllers` are `[channel, key or controller, value]` with channels 1 to 16, and \
+`recent` holds the last two seconds' note-ons as `[at, channel, key, velocity]`; times \
+are seconds on `jstream.clock`; `tempo` is there only while `page_api_tempo` is on too. \
+The engine also keeps `tempo.bpm`, `tempo.playing`, `tempo.beat` and `tempo.bar` as \
+shared values, which `values.list` reads and a page reads only with `page_api_tempo`, \
+never through `page_api_values`. Keep continuous motion \
 subtle: an ambient sway or drift of a few px and a fraction of a degree reads as real, \
 and more reads as unsteady; anything fast and thin (a streak, a line) must move less \
 per frame than its own length or it flickers. \
@@ -209,6 +302,11 @@ each `{at_ms, action}` running `scene.switch` (a keyframe scene to move to), \
 or `seek`. `timeline.play` runs it on the engine's clock, exact to the frame, and a \
 hotkey can bind it. A cue whose item is gone fails without stopping the timeline, so \
 after a first play read `timeline.cue_fired` in `events` for errors. \
+Group the parts of one effect (its keyframe scenes, the hotkeys that switch to them, \
+its timelines) under one label: `scene.set_meta` labels a keyframe scene, \
+`hotkey.set_labels` a hotkey and a timeline's own `labels` the timeline, and \
+`label.members` lists everything carrying the label in one call, so later you change \
+them together, such as every keyframe's `scene.set_transitions` in one batch. \
 Changing `html` \
 reloads the page, which replays the entrance and blanks it for a moment, so put text \
 that changes during a show in a `text` source over it. If creating the source fails \

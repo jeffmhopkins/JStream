@@ -10,6 +10,7 @@
 //! The split is enforced by the types: a [`Batch`] can only hold edits.
 
 use crate::audio::{AudioFollow, BusMonitor};
+use crate::binding::Trigger;
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
 use crate::encoder::EncoderProfile;
 use crate::error::EntityKind;
@@ -33,7 +34,7 @@ use crate::preview::{PreviewCodec, PreviewDraft};
 use crate::query::SceneOptions;
 use crate::settings::Settings;
 use crate::timeline::TimelineInfo;
-use crate::transition::{Easing, ItemTransition};
+use crate::transition::{Easing, ItemTransition, KeyframeTiming};
 use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -135,6 +136,25 @@ pub enum Edit {
         scene_id: Option<SceneId>,
         /// The modifiers, first first.
         motion: Vec<MotionModifier>,
+    },
+    /// Writes a keyframe scene's timing for an item in transitions into that keyframe
+    /// (ADR-0129, since 0.99): its delay, easing and duration there, each in place of the
+    /// item's own or the preset's. `scene_id` must name a keyframe scene whose tree holds
+    /// the item, with the errors of the placement edits addressed to a keyframe; any other
+    /// scene is `invalid_argument` on `scene_id`. A `delay_ms` or `duration_ms` over 60000
+    /// is `invalid_argument` on `timing.<field>`, and so is a `cubic_bezier` whose `x1` or
+    /// `x2` is outside 0 to 1 or whose `y1` or `y2` is outside -2 to 3
+    /// (`timing.easing.cubic_bezier.<field>`). A timing with no field set removes the
+    /// override. Inverse: `item.set_timing` with the old timing, or `item.clear_override`
+    /// of `timing` when the keyframe didn't override it.
+    #[serde(rename = "item.set_timing")]
+    ItemSetTiming {
+        /// The keyframe scene.
+        scene_id: SceneId,
+        /// The item in the parent's tree.
+        item_id: ItemId,
+        /// Its timing in transitions into the keyframe.
+        timing: KeyframeTiming,
     },
     /// Renames a scene. Inverse: `scene.rename` back to the previous name.
     #[serde(rename = "scene.rename")]
@@ -598,7 +618,7 @@ pub enum Edit {
         /// Frames per second: 30 or 60.
         fps: u32,
     },
-    /// Sets the space every blend mode of the project mixes in (since 0.98, ADR-0126):
+    /// Sets the space every blend mode of the project mixes in (since 0.101, ADR-0126):
     /// `srgb`, browser-style and the default, or `linear`. It applies to every scene from
     /// the next frame. Inverse: `canvas.set_blending` with the previous space.
     #[serde(rename = "canvas.set_blending")]
@@ -817,9 +837,10 @@ pub enum Edit {
     /// 3D scene: its items are placed in one 3D space by their geometry and seen through
     /// the camera. On a keyframe scene it writes or, with `camera` omitted, removes the
     /// keyframe's override of its parent's camera. `invalid_argument` for a field of view
-    /// outside 1 to 170, a position within 0.001 px of the target, a coordinate past the
-    /// drawable bound, or a camera on a keyframe scene whose parent has none. Removing a
-    /// parent's camera also removes its keyframe scenes' overrides. Inverse:
+    /// outside 1 to 170, a position within 0.001 px of the target, or a coordinate past
+    /// the drawable bound. A keyframe of a 2D scene may have a camera of its own
+    /// (ADR-0128). Removing a parent's camera also removes its keyframe scenes'
+    /// overrides; a removal on a parent that has none removes nothing. Inverse:
     /// `scene.set_camera` with the previous camera, then each removed override.
     #[serde(rename = "scene.set_camera")]
     SceneSetCamera {
@@ -828,6 +849,22 @@ pub enum Edit {
         /// The new camera. Omitted removes it.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         camera: Option<SceneCamera>,
+    },
+    /// Sets a scene's PTZ shots (ADR-0146 §6): the whole list of physical camera
+    /// framings the scene sends when it goes on program or preview. At most 16, one per
+    /// camera; each names a camera of the machine's PTZ list and either a preset or a
+    /// pose. A keyframe scene's shot for a camera replaces its parent's for that camera,
+    /// and it follows its parent's other shots. A camera the machine doesn't list is
+    /// kept, and skipped when the shot fires. Setting the shots moves no head.
+    /// `invalid_argument` for a list `check_ptz_shots` refuses. Inverse:
+    /// `scene.set_ptz_shots` with the previous list.
+    #[serde(rename = "scene.set_ptz_shots")]
+    SceneSetPtzShots {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The new list. Empty removes every shot.
+        #[serde(default)]
+        shots: Vec<crate::ptz::PtzShot>,
     },
     /// Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change
     /// its camera as it is drawn. It belongs to the scene family: `invalid_argument` on a
@@ -843,14 +880,19 @@ pub enum Edit {
         motion: Vec<CameraMotionModifier>,
     },
     /// Sets or removes a scene's follow camera (ADR-0113, since 0.85): a camera that glides after the
-    /// pointer over a display or window capture in the scene. It belongs to the scene
+    /// pointer over a display or window capture in the scene. Since 0.91 a follow camera
+    /// is a `follow_pointer` filter on the followed item's effects (ADR-0120), and this
+    /// edit is kept as a shortcut for those filter edits: with `follow`, it sets that
+    /// item's `follow_pointer` filter to its numbers and turns it on, adding one last in
+    /// the item's effects when it has none, and removes every other `follow_pointer`
+    /// filter of the scene's items; without, it removes them all. It belongs to the scene
     /// family: `invalid_argument` on a keyframe scene, for an item that isn't in the
-    /// scene or doesn't show a display or window capture, and for a number
-    /// `CameraFollow::check` refuses. Deleting the item, or moving it out of the scene,
-    /// leaves the follow in place and inert until it is set again or an undo brings the
-    /// item back. The follow camera reads the pointer only where the program is drawn
-    /// live: `video.snapshot` and a frame sheet show it at rest, on the capture's centre.
-    /// Inverse: `scene.set_camera_follow` with the previous value.
+    /// scene or doesn't show a display or window capture, for a number
+    /// `CameraFollow::check` refuses, and when the item's effects are full. The follow
+    /// camera reads the pointer only where the program is drawn live: `video.snapshot`
+    /// and a frame sheet show it at rest, on the capture's centre. Inverse: the inverse
+    /// of those filter edits (`filter.remove`, `filter.add`, `filter.set_settings` and
+    /// `filter.set_enabled`).
     #[serde(rename = "scene.set_camera_follow")]
     SceneSetCameraFollow {
         /// The scene to change.
@@ -944,6 +986,44 @@ pub enum Edit {
     HotkeyClear {
         /// The chord to unbind.
         chord: Chord,
+    },
+    /// Sets the labels a hotkey binding carries (ADR-0133, since 0.100), the whole set,
+    /// so it shows in each label's action group beside the keyframes and timelines that
+    /// carry it. Rejected with `not_found` (entity `hotkey`) for a chord that isn't
+    /// bound, `not_found` for a label that doesn't exist, and `invalid_argument` on
+    /// `labels` for one listed twice. `hotkey.clear` drops the labels with the binding,
+    /// and its inverse sets them again; a rebind (`hotkey.clear` then `hotkey.set`)
+    /// starts with none. Inverse: `hotkey.set_labels` with the old set.
+    #[serde(rename = "hotkey.set_labels")]
+    HotkeySetLabels {
+        /// The bound chord.
+        chord: Chord,
+        /// Its labels; empty for none.
+        labels: Vec<LabelId>,
+    },
+    /// Binds a controller trigger, such as a MIDI note, to an action (since 0.96,
+    /// ADR-0122 decision 1). The engine runs the action itself when an input it reads
+    /// sends the trigger, on the first frame at or after the message's time; running it
+    /// never adds to an undo history. Rejected with `invalid_argument` at
+    /// `trigger.<field>` for a trigger that isn't valid (see [`Trigger::problem`]) or at
+    /// `action.<field>` for an action that can't be bound (as `hotkey.set` refuses), with
+    /// `already_exists` (entity `binding`) for a trigger that is already bound
+    /// (rebinding is a batch of `binding.clear` then `binding.set`), and with `not_found`
+    /// for an object the action names that doesn't exist. Deleting that object later
+    /// removes the binding with it, as for hotkeys. Inverse: `binding.clear`.
+    #[serde(rename = "binding.set")]
+    BindingSet {
+        /// What fires it.
+        trigger: Trigger,
+        /// The action request it runs, checked as an `action` call is.
+        action: Action,
+    },
+    /// Removes a binding. Rejected with `not_found` (entity `binding`) for a trigger that
+    /// isn't bound. Inverse: `binding.set` with its action.
+    #[serde(rename = "binding.clear")]
+    BindingClear {
+        /// The trigger to unbind.
+        trigger: Trigger,
     },
     /// Stores a timeline in a scene (ADR-0115, since 0.87): a new one, or the whole of
     /// one the scene already holds, in its place. A timeline is timed cues, each running
@@ -1208,6 +1288,7 @@ impl Edit {
             Edit::ItemClearOverride { .. } => "item.clear_override",
             Edit::ItemSetEffects { .. } => "item.set_effects",
             Edit::ItemSetMotion { .. } => "item.set_motion",
+            Edit::ItemSetTiming { .. } => "item.set_timing",
             Edit::SceneRename { .. } => "scene.rename",
             Edit::SceneSetRole { .. } => "scene.set_role",
             Edit::SceneDelete { .. } => "scene.delete",
@@ -1267,6 +1348,7 @@ impl Edit {
             Edit::SceneSetOptions { .. } => "scene.set_options",
             Edit::SceneSetCamera { .. } => "scene.set_camera",
             Edit::SceneSetCameraMotion { .. } => "scene.set_camera_motion",
+            Edit::SceneSetPtzShots { .. } => "scene.set_ptz_shots",
             Edit::SceneSetCameraFollow { .. } => "scene.set_camera_follow",
             Edit::LabelCreate { .. } => "label.create",
             Edit::LabelUpdate { .. } => "label.update",
@@ -1274,7 +1356,10 @@ impl Edit {
             Edit::LabelDelete { .. } => "label.delete",
             Edit::SourceSetMeta { .. } => "source.set_meta",
             Edit::HotkeySet { .. } => "hotkey.set",
+            Edit::HotkeySetLabels { .. } => "hotkey.set_labels",
             Edit::HotkeyClear { .. } => "hotkey.clear",
+            Edit::BindingSet { .. } => "binding.set",
+            Edit::BindingClear { .. } => "binding.clear",
             Edit::TimelineSet { .. } => "timeline.set",
             Edit::TimelineDelete { .. } => "timeline.delete",
             Edit::TransitionCreate { .. } => "transition.create",
@@ -1514,6 +1599,22 @@ pub enum Action {
         /// The channel the stream was opened on.
         channel: u32,
     },
+    /// Reports what one of this session's views of preview streams has done since it
+    /// opened (0.103, ADR-0132): a client that shows preview pictures (a canvas, a
+    /// projector) sends it about once a second while its counts change, so
+    /// `profile.get`'s `views` shows what a person saw. `view` is the client's own label
+    /// for it, 1 to 64 characters; `counts` are running totals over every stream the view
+    /// has shown, and a report whose counts fall below the view's last one starts it
+    /// again. Serves only the session that sends it, like `preview.subscribe`, and can't
+    /// be bound to a hotkey. Fails with `invalid_argument` on `view` for a bad label, or
+    /// for a 17th view of one session.
+    #[serde(rename = "preview.report")]
+    PreviewReport {
+        /// The view's label, the client's own.
+        view: String,
+        /// Its running totals.
+        counts: crate::preview::ViewCounts,
+    },
     /// Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`
     /// names, else the scene's `transition_in`, else the current program scene's
     /// `transition_out`, else the default preset. A `cut`, a zero duration, or a preset
@@ -1607,6 +1708,82 @@ pub enum Action {
         /// The scene whose placement of the item to change. See [`Edit::ItemSetVisible`].
         #[serde(default, skip_serializing_if = "Option::is_none")]
         scene_id: Option<SceneId>,
+    },
+    /// Drives a PTZ camera (ADR-0146 §3): pans, tilts and zooms it at signed speeds in
+    /// VISCA steps until the next drive, where 0 stops that axis. `pan` is -24 to 24
+    /// (negative left), `tilt` -23 to 23 (negative down), `zoom` -8 to 8 (negative
+    /// wide). Not an edit: nothing is stored or undone. A drive queued behind another
+    /// replaces it. The action returns once the command is queued; `ptz.list` reports a
+    /// head that didn't answer. Fails with `invalid_argument` on `camera` for a camera
+    /// the machine's PTZ list doesn't name, and on a speed out of range, and with
+    /// `action_failed` when the machine has no PTZ camera.
+    #[serde(rename = "ptz.drive")]
+    PtzDrive {
+        /// The camera's name.
+        camera: String,
+        /// Pan speed: negative left, positive right, 0 stops.
+        #[serde(default)]
+        pan: i8,
+        /// Tilt speed: negative down, positive up, 0 stops.
+        #[serde(default)]
+        tilt: i8,
+        /// Zoom speed: negative wide, positive tele, 0 stops.
+        #[serde(default)]
+        zoom: i8,
+    },
+    /// Moves a PTZ camera to an absolute pose in its own counts (ADR-0146 §3, §5): pan
+    /// and tilt together, zoom and focus each optional, at least one. `speed` (1 to 24,
+    /// the fastest by default) paces pan and tilt; the tilt step is held to 23. Fails
+    /// as `ptz.drive` does, and with `invalid_argument` for a pose `PtzPose::problem`
+    /// refuses or an empty one.
+    #[serde(rename = "ptz.aim")]
+    PtzAim {
+        /// The camera's name.
+        camera: String,
+        /// Where to move.
+        #[serde(flatten)]
+        pose: crate::ptz::PtzPose,
+        /// The pan and tilt speed, 1 to 24. Omitted for the fastest.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speed: Option<u8>,
+    },
+    /// Sends a PTZ camera to its home position (ADR-0146 §3). Fails as `ptz.drive` does.
+    #[serde(rename = "ptz.home")]
+    PtzHome {
+        /// The camera's name.
+        camera: String,
+    },
+    /// Recalls a preset stored in a PTZ camera (ADR-0146 §3), 0 to 127. Fails as
+    /// `ptz.drive` does, and with `invalid_argument` on `preset` past 127.
+    #[serde(rename = "ptz.recall")]
+    PtzRecall {
+        /// The camera's name.
+        camera: String,
+        /// The preset number.
+        preset: u8,
+    },
+    /// Stores a PTZ camera's current pose as one of its presets (ADR-0146 §3), 0 to
+    /// 127, in the head's own memory: nothing is stored in the collection or undone, and
+    /// it replaces what the head held there. Fails as `ptz.recall` does.
+    #[serde(rename = "ptz.store")]
+    PtzStore {
+        /// The camera's name.
+        camera: String,
+        /// The preset number.
+        preset: u8,
+    },
+    /// Sets a PTZ camera's focus mode, focuses once, or drives the focus (ADR-0146 §3).
+    /// `speed` (1 to 8, the head's standard speed when omitted) paces `near` and `far`.
+    /// Fails as `ptz.drive` does.
+    #[serde(rename = "ptz.focus")]
+    PtzFocus {
+        /// The camera's name.
+        camera: String,
+        /// What to do.
+        focus: crate::ptz::PtzFocus,
+        /// The drive speed for `near` and `far`, 1 to 8.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        speed: Option<u8>,
     },
     /// Zooms a scene's follow camera (ADR-0113 §4, since 0.85): multiplies its live zoom by 1.25 per
     /// step, a negative step zooming out, held to 1 to 4, and smoothed over 350 ms. Not an
@@ -1738,6 +1915,28 @@ pub enum Action {
         /// The device to revoke, as `device.list` reports it.
         device_id: DeviceId,
     },
+    /// Answers a held client's request to connect (0.108, ADR-0131): `allow_once` lets it
+    /// in, `always_allow` also adds it to the approved list, and `deny` turns it away
+    /// with `not_allowed`. Every client gets `agent.approval_resolved`. Any admitted
+    /// client may answer. Fails with `not_found` for a request that isn't open (answered,
+    /// timed out, or the client went away). Answered by the server, like `device.revoke`.
+    #[serde(rename = "agent.approve")]
+    AgentApprove {
+        /// The request, as `agent.approval_requested` or `agent.approved` names it.
+        approval_id: String,
+        /// The answer.
+        decision: crate::ApprovalDecision,
+    },
+    /// Removes a row from the approved list (0.108, ADR-0131): that client's next
+    /// connection asks again. An open connection stays open. Fails with `not_found` for
+    /// a row the list doesn't hold. Answered by the server, like `device.revoke`.
+    #[serde(rename = "agent.forget")]
+    AgentForget {
+        /// The client name, as `agent.approved` lists it.
+        client_name: String,
+        /// How it connects, as `agent.approved` lists it.
+        transport: crate::AgentTransport,
+    },
     /// Keeps a UI setting on the engine's machine (0.52, ADR-0084): an opaque JSON value
     /// the UI owns, under `key` (the web UI keeps its dock under `workspace.dock`), so
     /// every client of the engine, the desktop app and each browser, reads the same one
@@ -1803,7 +2002,8 @@ pub enum Action {
         plugin_id: PluginId,
     },
     /// Re-enables an effect-pack kind the engine quarantined after a GPU device loss was
-    /// blamed on it (0.61, #349; `gpu.device_lost`), and the whole pack when the pack
+    /// blamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU
+    /// (0.102, `gpu.effect_slow`), and the whole pack when the pack
     /// was quarantined. Its filters draw again from the next frame. The engine never
     /// lifts a quarantine by itself, nor when the pack's files change. Succeeds for a
     /// kind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as
@@ -1814,6 +2014,16 @@ pub enum Action {
         /// The kind, `<pack>/<effect>`.
         kind_id: String,
     },
+    /// Scans the CLAP search folders again (0.106, ADR-0035), so a plugin installed since
+    /// the engine started is offered without a restart. It answers once the scan ends,
+    /// which takes a moment per plugin file; `plugin.clap_scan` then reports it. Each
+    /// effect found becomes its `clap/<plugin id>` filter kind; a kind an earlier scan
+    /// found stays until the engine restarts, so a filter that uses it keeps its
+    /// settings. A scan already running is waited for, then this one runs. For a person
+    /// only, like `plugin.install`: no MCP tool carries it, no plugin is granted it and no
+    /// hotkey binds it. Fails with `unsupported` when this engine hosts no CLAP plugins.
+    #[serde(rename = "plugin.clap_rescan")]
+    PluginClapRescan,
     /// Downloads a codec library `codec.downloads` lists, from its maker's server, and
     /// checks it against what the engine pins (0.69, ADR-0061): on Linux, Cisco's
     /// OpenH264. Send it only when a person asks, after showing the download's `notice`
@@ -1888,6 +2098,50 @@ pub enum Action {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
+    /// Opens the project (collection file) at `path` on the engine's machine and saves
+    /// there from then on (0.94, ADR-0121). The file is loaded and checked first; a file
+    /// the engine can't read or load (a newer `schema_version`, a broken file) fails with
+    /// `action_failed` and its reason, and the open project stays open with nothing
+    /// stopped, as it does when the open project can't be saved first. Then every
+    /// output that isn't stopped stops, and the collection is
+    /// replaced: `rev` becomes the file's or one past the current one, whichever is
+    /// greater, every client's undo history and idempotency keys are cleared, open
+    /// gestures are cancelled, timelines stop, and the first scene goes on program and
+    /// preview. Every client gets `state.changed`, `studio.changed` and
+    /// `collection.file_changed`. Fails with `invalid_argument` on `path` for a path
+    /// that breaks the `absolute` asset path rules, and `unsupported` when the host
+    /// named no collection file. Not an edit: undo can't take it back.
+    #[serde(rename = "collection.open")]
+    CollectionOpen {
+        /// The absolute path of the collection file.
+        path: String,
+    },
+    /// Creates a new, empty project at `path` (the four sample labels, the default
+    /// canvas and frame rate) and opens it as `collection.open` would (0.94, ADR-0121).
+    /// It never replaces a file: fails with `already_exists` when anything is at `path`,
+    /// `action_failed` when it can't be written, and otherwise as `collection.open`.
+    #[serde(rename = "collection.new")]
+    CollectionNew {
+        /// The absolute path of the new collection file.
+        path: String,
+    },
+    /// Writes the current project to a new file at `path` and saves there from then on
+    /// (0.94, ADR-0121). Every client gets `collection.file_changed`. When the new folder
+    /// differs, each `collection` asset reference is rewritten to keep naming the same
+    /// file: relative to the new folder when the file is under it, otherwise
+    /// `absolute`; an `absolute` reference to a file under the new folder becomes
+    /// relative to it. A rewrite is a new `rev` (`state.changed`) and clears every client's
+    /// undo history. Nothing stops. Each output's stream key is copied to the new file.
+    /// It never replaces a file: fails with `already_exists` when anything is at `path`,
+    /// the open file included, `invalid_argument` on `path` for a path that breaks the
+    /// `absolute` asset path rules, `action_failed` when the file can't be written (the
+    /// open file stays the one saved to), and `unsupported` when the host named no
+    /// collection file.
+    #[serde(rename = "collection.save_as")]
+    CollectionSaveAs {
+        /// The absolute path of the new collection file.
+        path: String,
+    },
     /// **Deprecated** (ADR-0080), removed in 1.0. JStream has no privacy
     /// screen: the engine refuses this with `unsupported` and covers nothing.
     #[serde(rename = "privacy.set")]
@@ -1915,16 +2169,25 @@ impl Action {
             Action::AudioResetLoudness {} => "audio.reset_loudness",
             Action::PreviewSubscribe { .. } => "preview.subscribe",
             Action::PreviewUnsubscribe { .. } => "preview.unsubscribe",
+            Action::PreviewReport { .. } => "preview.report",
             Action::SceneSwitch { .. } => "scene.switch",
             Action::SceneSwitchAndWatch { .. } => "scene.switch_and_watch",
             Action::PairingStart => "pairing.start",
             Action::DeviceRevoke { .. } => "device.revoke",
+            Action::AgentApprove { .. } => "agent.approve",
+            Action::AgentForget { .. } => "agent.forget",
             Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
             Action::ItemShow { .. } => "item.show",
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
             Action::SceneZoomCamera { .. } => "scene.zoom_camera",
+            Action::PtzDrive { .. } => "ptz.drive",
+            Action::PtzAim { .. } => "ptz.aim",
+            Action::PtzHome { .. } => "ptz.home",
+            Action::PtzRecall { .. } => "ptz.recall",
+            Action::PtzStore { .. } => "ptz.store",
+            Action::PtzFocus { .. } => "ptz.focus",
             Action::SceneSetKeyframe { .. } => "scene.set_keyframe",
             Action::ItemTriggerMotion { .. } => "item.trigger_motion",
             Action::TimelinePlay { .. } => "timeline.play",
@@ -1935,12 +2198,16 @@ impl Action {
             Action::PluginInstall { .. } => "plugin.install",
             Action::PluginGrant { .. } => "plugin.grant",
             Action::PluginEnable { .. } => "plugin.enable",
+            Action::PluginClapRescan => "plugin.clap_rescan",
             Action::EffectEnable { .. } => "effect.enable",
             Action::CodecDownload { .. } => "codec.download",
             Action::CodecDelete { .. } => "codec.delete",
             Action::PackWrite { .. } => "pack.write",
             Action::PackDelete { .. } => "pack.delete",
             Action::ValuesSet { .. } => "values.set",
+            Action::CollectionOpen { .. } => "collection.open",
+            Action::CollectionNew { .. } => "collection.new",
+            Action::CollectionSaveAs { .. } => "collection.save_as",
         }
     }
 
@@ -2006,7 +2273,14 @@ impl Action {
             Action::SourceRestart { source_id } => vec![(EntityKind::Source, source_id.as_str())],
             // Broadcasts, preview channels and devices are not collection objects, and a
             // live action can't be bound (`bind_problem`).
-            Action::AudioResetLoudness {}
+            // A PTZ camera belongs to the machine, not the collection (ADR-0146 §1).
+            Action::PtzDrive { .. }
+            | Action::PtzAim { .. }
+            | Action::PtzHome { .. }
+            | Action::PtzRecall { .. }
+            | Action::PtzStore { .. }
+            | Action::PtzFocus { .. }
+            | Action::AudioResetLoudness {}
             | Action::LiveSet { .. }
             | Action::LiveCancel { .. }
             | Action::YoutubeSignIn
@@ -2016,19 +2290,26 @@ impl Action {
             | Action::YoutubeTransitionBroadcast { .. }
             | Action::PreviewSubscribe { .. }
             | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewReport { .. }
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
             | Action::UiSettingsSet { .. }
             | Action::PrivacySet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
             | Action::PluginEnable { .. }
+            | Action::PluginClapRescan
             | Action::EffectEnable { .. }
             | Action::CodecDownload { .. }
             | Action::CodecDelete { .. }
             | Action::PackWrite { .. }
             | Action::PackDelete { .. }
-            | Action::ValuesSet { .. } => vec![],
+            | Action::ValuesSet { .. }
+            | Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. } => vec![],
         }
     }
 
@@ -2045,7 +2326,9 @@ impl Action {
                 "`output.set_key` can't be bound: a stream key is never stored in the \
                  collection (R-SEC-001)",
             )),
-            Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. } => Some((
+            Action::PreviewSubscribe { .. }
+            | Action::PreviewUnsubscribe { .. }
+            | Action::PreviewReport { .. } => Some((
                 "type",
                 "a preview action can't be bound: it serves only the session that sends it",
             )),
@@ -2064,6 +2347,11 @@ impl Action {
                 "a pairing or device action can't be bound: the server answers it for the \
                  client that asks",
             )),
+            Action::AgentApprove { .. } | Action::AgentForget { .. } => Some((
+                "type",
+                "an agent approval can't be bound: a person answers who may connect \
+                 through the UI (ADR-0131)",
+            )),
             Action::UiSettingsSet { .. } => Some((
                 "type",
                 "`ui_settings.set` can't be bound: the server answers it, and a UI keeps \
@@ -2076,6 +2364,16 @@ impl Action {
                 "a plugin action can't be bound: a person installs, grants and re-enables \
                  plugins through the UI (ADR-0069)",
             )),
+            Action::PtzDrive { .. } => Some((
+                "type",
+                "`ptz.drive` can't be bound: a binding fires only on press, so nothing would \
+                 stop the move; bind `ptz.aim`, `ptz.recall` or `ptz.home` (ADR-0146 §3)",
+            )),
+            Action::PluginClapRescan => Some((
+                "type",
+                "`plugin.clap_rescan` can't be bound: a person rescans the CLAP plugins \
+                 through the UI (ADR-0035)",
+            )),
             Action::EffectEnable { .. } => Some((
                 "type",
                 "`effect.enable` can't be bound: a person re-enables a quarantined effect \
@@ -2085,6 +2383,13 @@ impl Action {
                 "type",
                 "a codec action can't be bound: a person downloads or deletes a codec \
                  through the UI, after reading its licence (ADR-0061)",
+            )),
+            Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. } => Some((
+                "type",
+                "a collection action can't be bound: it replaces or moves the project a key \
+                 press would run in (ADR-0121)",
             )),
             Action::PackWrite { .. } | Action::PackDelete { .. } => Some((
                 "type",
@@ -2109,6 +2414,11 @@ impl Action {
             | Action::ItemHide { .. }
             | Action::ItemToggle { .. }
             | Action::SceneZoomCamera { .. }
+            | Action::PtzAim { .. }
+            | Action::PtzHome { .. }
+            | Action::PtzRecall { .. }
+            | Action::PtzStore { .. }
+            | Action::PtzFocus { .. }
             | Action::SceneSetKeyframe { .. }
             | Action::ItemTriggerMotion { .. }
             | Action::TimelinePlay { .. }
@@ -2133,6 +2443,67 @@ impl Action {
                     None
                 }
             }
+        }
+    }
+
+    /// Whether the action takes a step, so a wheel chord can run it once per notch
+    /// (ADR-0112 §3, 0.104): `scene.zoom_camera`, whose `steps` is what one notch zooms.
+    /// Every action is listed, so a new one has to be classified here.
+    pub fn takes_steps(&self) -> bool {
+        match self {
+            Action::SceneZoomCamera { .. } => true,
+            Action::PtzDrive { .. }
+            | Action::PtzAim { .. }
+            | Action::PtzHome { .. }
+            | Action::PtzRecall { .. }
+            | Action::PtzStore { .. }
+            | Action::PtzFocus { .. }
+            | Action::OutputStart { .. }
+            | Action::PreviewReport { .. }
+            | Action::OutputStop { .. }
+            | Action::OutputSetKey { .. }
+            | Action::OutputClearKey { .. }
+            | Action::LiveSet { .. }
+            | Action::LiveCancel { .. }
+            | Action::YoutubeSignIn
+            | Action::YoutubeSignOut
+            | Action::YoutubeCreateBroadcast { .. }
+            | Action::YoutubeBindBroadcast { .. }
+            | Action::YoutubeTransitionBroadcast { .. }
+            | Action::AudioResetLoudness {}
+            | Action::PreviewSubscribe { .. }
+            | Action::PreviewUnsubscribe { .. }
+            | Action::SceneSwitch { .. }
+            | Action::SceneSwitchAndWatch { .. }
+            | Action::StudioSetPreview { .. }
+            | Action::ItemShow { .. }
+            | Action::ItemHide { .. }
+            | Action::ItemToggle { .. }
+            | Action::ItemTriggerMotion { .. }
+            | Action::SceneSetKeyframe { .. }
+            | Action::TimelinePlay { .. }
+            | Action::TimelineStop { .. }
+            | Action::TimelineSeek { .. }
+            | Action::SourceRestart { .. }
+            | Action::PairingStart
+            | Action::DeviceRevoke { .. }
+            | Action::UiSettingsSet { .. }
+            | Action::PluginInstall { .. }
+            | Action::PluginClapRescan
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
+            | Action::PluginGrant { .. }
+            | Action::PluginEnable { .. }
+            | Action::EffectEnable { .. }
+            | Action::CodecDownload { .. }
+            | Action::CodecDelete { .. }
+            | Action::PackWrite { .. }
+            | Action::PackDelete { .. }
+            | Action::ValuesSet { .. }
+            | Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. }
+            | Action::PrivacySet { .. } => false,
         }
     }
 }
@@ -2471,7 +2842,7 @@ impl EffectsSpace {
 /// The list is the modes the UI offers, and the compositor draws every one (ADR-0082, since
 /// 0.47; before it the engine refused all but `normal`). The project's [`Blending`]
 /// picks the space every mode mixes in (ADR-0126). `normal_srgb` and `additive_srgb`
-/// (0.75 to 0.97, ADR-0105) still parse, as `normal` and `additive`; the engine never
+/// (0.75 to 0.100, ADR-0105) still parse, as `normal` and `additive`; the engine never
 /// sends them.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(rename_all = "snake_case")]
@@ -2546,7 +2917,7 @@ impl BlendMode {
     }
 }
 
-/// The colour space every blend mode of a project mixes in (ADR-0126, since 0.98).
+/// The colour space every blend mode of a project mixes in (ADR-0126, since 0.101).
 ///
 /// A new collection is [`Blending::Srgb`]. A collection saved before it gets one when it
 /// loads: `srgb` if its items used only the old `_srgb` modes, or none, and `linear`

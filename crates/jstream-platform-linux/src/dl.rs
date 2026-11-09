@@ -51,7 +51,7 @@ impl SystemLibrary {
     }
 
     /// Loads the library file at `path`: Cisco's OpenH264 binary, which JStream
-    /// downloads itself rather than finding on the system (ADR-0061).
+    /// downloads itself rather than finding on the system (ADR-0140).
     ///
     /// # Safety
     /// Loading runs the library's initialisers. The caller must have checked that `path`

@@ -1,4 +1,4 @@
-//! The audio the `waveform` and `spectrum` sources draw (ADR-0061's audio → render data
+//! The audio the `waveform` and `spectrum` sources draw (ADR-0140's audio → render data
 //! path): [`AudioScope`], a lock-free ring of the latest samples of one mix,
 //! [`AudioScopes`], the lookup that finds a source's scope (the program mix's, a bus's,
 //! or another source's), and what both kinds share.
@@ -448,8 +448,6 @@ struct ScopeSource<S: Scope> {
     descriptor: KindDescriptor,
     settings: Settings,
     painter: Arc<ScopePainter<S>>,
-    /// Whether there is a scope to read: without one, the first frame never changes.
-    fed: bool,
 }
 
 /// Builds a scope source of `scope` and paints its first frame.
@@ -479,8 +477,8 @@ fn create<S: Scope>(
     Ok(Box::new(ScopeSource {
         descriptor: descriptor.clone(),
         settings: settings.clone(),
-        fed: ctx.audio.is_some(),
         painter: Arc::new(ScopePainter {
+            fed: ctx.audio.is_some(),
             drawing: Mutex::new(drawing),
             ready: Mutex::new(ready),
         }),
@@ -489,18 +487,11 @@ fn create<S: Scope>(
 
 impl<S: Scope> Source for ScopeSource<S> {
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(Arc::clone(&lock(&self.painter.ready).frame))
+        Ok(self.painter.frame())
     }
 
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        if !self.fed {
-            return None;
-        }
-        if lock(&self.painter.ready).settled {
-            // Silent: only check, now and then, whether the ring moves again.
-            return Some(at_millis(millis(at) + STILL_MS));
-        }
-        Some(next_tick(at))
+        self.painter.next_change(at)
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
@@ -527,6 +518,8 @@ impl<S: Scope> Source for ScopeSource<S> {
 
 /// A scope source's drawing, shared between the source and whoever paints it.
 struct ScopePainter<S: Scope> {
+    /// Whether there is a scope to read: without one, the first frame never changes.
+    fed: bool,
     /// Held while a frame is drawn. Only [`Painter::paint`] takes it.
     drawing: Mutex<Drawing<S>>,
     /// The frame painted last, and new settings for the next paint. Held only to copy
@@ -556,6 +549,21 @@ impl<S: Scope> Painter for ScopePainter<S> {
         ready.frame = frame;
         // A restyle that arrived meanwhile still needs its frame.
         ready.settled = settled && ready.restyle.is_none();
+    }
+
+    fn frame(&self) -> Arc<VideoFrame> {
+        Arc::clone(&lock(&self.ready).frame)
+    }
+
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        if !self.fed {
+            return None;
+        }
+        if lock(&self.ready).settled {
+            // Silent: only check, now and then, whether the ring moves again.
+            return Some(at_millis(millis(at) + STILL_MS));
+        }
+        Some(next_tick(at))
     }
 }
 

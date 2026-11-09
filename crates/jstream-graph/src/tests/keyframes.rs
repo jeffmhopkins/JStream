@@ -205,6 +205,7 @@ fn writes_and_clears_have_the_inverses_adr_0049_gives() {
         overrides(&graph, "k"),
         [ItemOverride {
             motion: Default::default(),
+            timing: None,
             transform: None,
             item_id: ItemId::new("i1"),
             geometry: Some(geometry(5.0)),
@@ -346,6 +347,7 @@ fn removing_or_moving_an_item_out_drops_its_overrides_and_undo_restores_them() {
     };
     let none = |item: &str| ItemOverride {
         motion: Default::default(),
+        timing: None,
         transform: None,
         item_id: ItemId::new(item),
         geometry: None,
@@ -1163,6 +1165,7 @@ fn wiggle(id: &str, amplitude: f32) -> jstream_protocol::MotionModifier {
     jstream_protocol::MotionModifier {
         modifier_id: id.into(),
         property: jstream_protocol::MotionProperty::X,
+        effect: None,
         kind: jstream_protocol::MotionKind::Wiggle {
             amplitude: Finite32::new(amplitude).expect("finite"),
             frequency_hz: Finite32::ONE,

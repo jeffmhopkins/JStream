@@ -144,6 +144,10 @@ impl FanOut {
             // Release, so a snapshot that sees the packet also sees every input received
             // before it (`Counters::snapshot`).
             counters.packets.fetch_add(1, Ordering::Release);
+            counters.bytes.fetch_add(
+                u64::try_from(packet.data().len()).unwrap_or(u64::MAX),
+                Ordering::Relaxed,
+            );
             if packet.is_keyframe() {
                 counters.keyframes.fetch_add(1, Ordering::Release);
             }

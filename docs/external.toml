@@ -327,10 +327,10 @@ checked_note = "Re-read the README's description of libva as the VA-API implemen
 [[external]]
 id = "openh264-binary-license"
 url = "https://www.openh264.org/BINARY_LICENSE.txt"
-relied_on = "Cisco's MPEG LA patent license covers only the Cisco-provided OpenH264 binary, when it is separately downloaded to the end user's device and not integrated with third-party software before that download (ADR-0060 question 1, answered by ADR-0061)"
+relied_on = "Cisco's MPEG LA patent license covers only the Cisco-provided OpenH264 binary, when it is separately downloaded to the end user's device and not integrated with third-party software before that download (ADR-0060 question 1, answered by ADR-0061); for personal use it covers (i) encoding AVC video and (ii) decoding AVC video that was encoded by a consumer engaged in a personal activity, which is how the engine decodes its own streams (ADR-0140)"
 review_every = "180d"
 status = "ok"
-checked_note = "Re-read the conditions for the Cisco-provided binary"
+checked_note = "Re-read the page: the four conditions for the Cisco-provided binary, and the portfolio notice's clauses (i) encode and (ii) decode of video encoded by a consumer; it matches the copy in crates/jstream-platform-linux/src/openh264/BINARY_LICENSE.txt apart from typographic quotes and trailing spaces"
 
 [[external]]
 id = "ubuntu-release-cycle"
@@ -771,3 +771,35 @@ relied_on = "A screen capture placed in a 3D scene with a gliding scene camera, 
 review_every = "180d"
 status = "unverified"
 checked_note = "Not loaded from the builder sandbox"
+
+[[external]]
+id = "jclap-repo"
+url = "https://github.com/jeffmhopkins/Jclap"
+relied_on = "JTunnel (plugins/jtunnel): wire version 2 in src/protocol.h and protocol.cpp (packet layout, limits, event tags, the checks its parser makes), mDNS discovery as _jtunnel._udp.local with SRV and id/since TXT records in src/discovery.cpp, and the receiver behaviour its README describes (subscribe every half second, unicast replies, redundancy, clock drift)"
+review_every = "90d"
+status = "ok"
+checked_note = "Re-read plugins/jtunnel at ba839e9 (Jclap PR #203): protocol.h/.cpp, discovery.cpp and README; jstream-jtunnel's golden-bytes test was produced by compiling that protocol.cpp"
+
+[[external]]
+id = "sony-visca-command-list"
+url = "https://pro.sony/s3/2022/09/03065933/VISCA_Command_List_v4.pdf"
+relied_on = "VISCA command, inquiry and reply bytes (pan-tilt drive and position, zoom, focus, presets, home, reset, power, IF_Clear; ACK, completion and error codes), and VISCA-over-IP's header and payload types, which jstream-visca encodes and parses"
+review_every = "180d"
+status = "unverified"
+checked_note = "The maintainer's reference for #1182 and #1181. The builder sandbox's fetch was refused (HTTP 403), so the crate follows the command bytes those issues list; re-read it against crates/jstream-visca"
+
+[[external]]
+id = "tauri-linux-prerequisites"
+url = "https://v2.tauri.app/start/prerequisites/#linux"
+relied_on = "Tauri 2 on Linux builds against WebKitGTK 4.1 (Debian/Ubuntu: libwebkit2gtk-4.1-dev), which the desktop app's webkitgtk feature and the desktop-linux CI job install (ADR-0141)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: the Debian/Ubuntu list names libwebkit2gtk-4.1-dev"
+
+[[external]]
+id = "portal-file-chooser"
+url = "https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.FileChooser.html"
+relied_on = "OpenFile and SaveFile take (parent_window s, title s, options a{sv}) with handle_token, modal, directory (OpenFile, version 3), filters a(sa(us)), current_folder ay and current_name (SaveFile); the Response's results carry the picked files as uris (ADR-0141)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: OpenFile and SaveFile options include handle_token, directory, filters, current_folder and current_name; results carry uris"

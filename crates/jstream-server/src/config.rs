@@ -176,6 +176,11 @@ pub struct ServerConfig {
     /// turn it on. Turning it on for a listener reached over plain HTTP would send
     /// device tokens in the clear.
     pub tls: bool,
+    /// The network listener (ADR-0104): a second listener, TLS only, that admits device
+    /// tokens and never the control token, beside the loopback one. Off until the
+    /// person turns network access on; [`ServerConfig::new`] leaves it off.
+    #[cfg(feature = "tls")]
+    pub network: Option<crate::NetworkConfig>,
     /// Whether the server pairs devices at all (ADR-0044, ADR-0047). Off, it answers no
     /// `pairing.start`, `device.list` or `device.revoke` itself: they reach the session,
     /// which answers `unsupported`, so a host's UI hides its pairing panel. No code is
@@ -184,6 +189,23 @@ pub struct ServerConfig {
     /// [`ServerConfig::new`] leaves it on; a host whose engine serves only itself, like
     /// the desktop app's webview, turns it off.
     pub pairing: bool,
+    /// A second token, for the host's own UI (ADR-0131 §2): the desktop app makes one at
+    /// launch, keeps it only in memory and gives it to its webview. It admits a client
+    /// as the control token does, but its sessions are never held for approval.
+    /// [`ServerConfig::new`] leaves it unset.
+    pub ui_token: Option<Token>,
+    /// Whether a session the control token admits is held until the person approves its
+    /// client (ADR-0131): the desktop app turns it on with MCP. The UI setting
+    /// `agents.ask` set to `false` turns it off again. [`ServerConfig::new`] leaves it
+    /// off.
+    pub ask_agents: bool,
+    /// The file that keeps the approved agents (ADR-0131 §5), read when the server binds
+    /// and rewritten user-only on every change, like `device_file`.
+    /// [`ServerConfig::new`] leaves it unset: the list then lives in memory.
+    pub approvals_file: Option<PathBuf>,
+    /// How long a held client waits for the person's answer before it is turned away
+    /// with `not_allowed` (ADR-0131 §4). [`ServerConfig::new`] sets 2 minutes.
+    pub approval_timeout: Duration,
 }
 
 impl ServerConfig {
@@ -208,7 +230,13 @@ impl ServerConfig {
             device_file: None,
             ui_settings_file: None,
             tls: false,
+            #[cfg(feature = "tls")]
+            network: None,
             pairing: true,
+            ui_token: None,
+            ask_agents: false,
+            approvals_file: None,
+            approval_timeout: crate::approvals::APPROVAL_TIMEOUT,
         }
     }
 
@@ -227,6 +255,7 @@ impl ServerConfig {
             ("header_read_timeout", self.header_read_timeout.is_zero()),
             ("max_mcp_sessions", self.max_mcp_sessions == 0),
             ("mcp_idle_timeout", self.mcp_idle_timeout.is_zero()),
+            ("approval_timeout", self.approval_timeout.is_zero()),
         ];
         if let Some((field, _)) = zero.into_iter().find(|&(_, is_zero)| is_zero) {
             return Err(ServerError::InvalidLimit { field });

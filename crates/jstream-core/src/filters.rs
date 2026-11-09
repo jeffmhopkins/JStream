@@ -15,6 +15,28 @@
 //! activity gain, instead of its own. The key is resolved to a mixer input where the
 //! chain runs ([`resolve_keys`]); a key that names no playing input reads as silence, so
 //! nothing is ducked. Setting, clearing or re-resolving a key rebuilds the filter.
+//!
+//! # Behaviour
+//!
+//! **Audio filters** (`filters.rs`, ADR-0026):
+//! the `audio_filter` kinds `gain`, `noise_gate`, `compressor`, `limiter` and `delay`,
+//! one per `jstream-audio` kernel, the mapping from a filter's settings to the kernel's
+//! `FilterSpec` and `FilterParams`, and `Chain`, which keeps one mixer input's, the
+//! master's or an output tap's filters in line with its owner's audio chain. A
+//! `compressor`'s `key` ("Duck under", a `source` reference to an audio source, not
+//! live) is ADR-0028's sidechain key: the program stage's audio sources thread resolves
+//! it to the key source's mixer input once every input is open (`resolve_keys`), and
+//! builds the filter as a `FilterSpec::KeyedCompressor` on it, so the source ducks
+//! while the key plays. A key that names no playing input reads as silence. Setting,
+//! clearing or re-resolving it rebuilds the filter. A master or output filter holds no
+//! reference yet, so only a source's compressor has a key; the graph refuses a key on
+//! its own source and a cycle of keys as it refuses any reference cycle, and a key blocks
+//! deleting the source it names. A CLAP
+//! filter's plugin host (`ClapHosts`) runs on the program stage's
+//! `jstream-audio-sources` thread for every chain: a source's chain is kept there too,
+//! and the master's and the output taps' chains, which the routing keeps under the
+//! collection lock, take each ready host's block from that thread, so starting or
+//! stopping a host process never holds the lock.
 
 use jstream_audio::filter::{
     CompressorParams, GateParams, LimiterParams, MAX_DELAY_MS, MAX_LOOKAHEAD_MS,
@@ -126,6 +148,7 @@ pub(crate) fn descriptors() -> Vec<KindDescriptor> {
                 float("release_ms", "Release", 0.0, 5000.0, comp.release_ms, "ms"),
                 float("makeup_db", "Makeup gain", 0.0, 24.0, comp.makeup_db, "dB"),
                 ParamDescriptor {
+                    warning: None,
                     id: KEY.into(),
                     ty: ParamType::Source {
                         media: Some(Media::Audio),
@@ -747,6 +770,7 @@ fn filter(id: &str, name: &str, params: Vec<ParamDescriptor>) -> KindDescriptor 
 /// A live number from `min` to `max`, in `unit`.
 fn float(id: &str, label: &str, min: f64, max: f64, default: f32, unit: &str) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty: ParamType::Float {
             min: Some(min),

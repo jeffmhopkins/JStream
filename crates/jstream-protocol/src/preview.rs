@@ -16,6 +16,83 @@ use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::sync::Arc;
 
+/// The longest label a view may report under ([`ViewCounts`], `preview.report`).
+pub const MAX_VIEW_LABEL_CHARS: usize = 64;
+
+/// The most views one session may report ([`ViewCounts`], `preview.report`).
+pub const MAX_SESSION_VIEWS: usize = 16;
+
+/// What a client's view of preview streams has done since it opened, over every stream
+/// it has shown: the running totals `preview.report` sends (0.103, ADR-0132). A view is
+/// what a person looks at, such as the canvas or a projector, which may show several
+/// streams in turn as it switches scenes or falls back to JPEG.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct ViewCounts {
+    /// Preview frames that arrived for it.
+    pub received: u64,
+    /// Pictures it drew.
+    pub shown: u64,
+    /// Frames it didn't decode, to catch up: a decoder backlog, or a newer JPEG waiting.
+    pub skipped: u64,
+    /// Frames or decoders the client refused.
+    pub decode_errors: u64,
+    /// Times it showed its waiting text where a picture belongs, the first included.
+    pub placeholders: u64,
+    /// Times its stream ended or failed and it showed why instead of a picture.
+    pub blanks: u64,
+    /// Streams it opened after its first.
+    pub reopens: u64,
+}
+
+impl ViewCounts {
+    /// Whether every count is at least `earlier`'s: a later report of the same view.
+    /// A report that isn't starts the view again (a reloaded page).
+    pub fn follows(&self, earlier: &ViewCounts) -> bool {
+        self.received >= earlier.received
+            && self.shown >= earlier.shown
+            && self.skipped >= earlier.skipped
+            && self.decode_errors >= earlier.decode_errors
+            && self.placeholders >= earlier.placeholders
+            && self.blanks >= earlier.blanks
+            && self.reopens >= earlier.reopens
+    }
+
+    /// The growth from `earlier` to `self`, each count at least zero.
+    pub fn since(&self, earlier: &ViewCounts) -> ViewCounts {
+        ViewCounts {
+            received: self.received.saturating_sub(earlier.received),
+            shown: self.shown.saturating_sub(earlier.shown),
+            skipped: self.skipped.saturating_sub(earlier.skipped),
+            decode_errors: self.decode_errors.saturating_sub(earlier.decode_errors),
+            placeholders: self.placeholders.saturating_sub(earlier.placeholders),
+            blanks: self.blanks.saturating_sub(earlier.blanks),
+            reopens: self.reopens.saturating_sub(earlier.reopens),
+        }
+    }
+}
+
+/// Checks a `preview.report` view label: 1 to [`MAX_VIEW_LABEL_CHARS`] characters, no
+/// control characters.
+///
+/// # Errors
+/// `invalid_argument` on `view`.
+pub fn check_view_label(view: &str) -> Result<(), ProtocolError> {
+    if view.is_empty() || view.chars().count() > MAX_VIEW_LABEL_CHARS {
+        return Err(ProtocolError::invalid_argument(
+            "view",
+            format!("a view label is 1 to {MAX_VIEW_LABEL_CHARS} characters"),
+        ));
+    }
+    if view.chars().any(char::is_control) {
+        return Err(ProtocolError::invalid_argument(
+            "view",
+            "a view label has no control characters",
+        ));
+    }
+    Ok(())
+}
+
 /// How a preview stream's pictures are encoded.
 #[derive(
     Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
@@ -96,8 +173,9 @@ impl PreviewSettings {
     pub const WIDTH: std::ops::RangeInclusive<u32> = 16..=1920;
     /// The heights a client may ask for.
     pub const HEIGHT: std::ops::RangeInclusive<u32> = 16..=1080;
-    /// The rates a client may ask for.
-    pub const FPS: std::ops::RangeInclusive<u32> = 1..=30;
+    /// The rates a client may ask for: up to the fastest base rate (ADR-0119), so a
+    /// live view can show a 60 fps program at full rate (since 0.95; 30 before).
+    pub const FPS: std::ops::RangeInclusive<u32> = 1..=60;
     /// The codecs when the client lists none: H.264, then JPEG.
     pub const DEFAULT_CODECS: [PreviewCodec; 2] = [PreviewCodec::H264, PreviewCodec::Jpeg];
     /// The most preview streams one session may have open at once.
@@ -559,6 +637,11 @@ mod tests {
             field(PreviewSettings::resolve(None, None, Some(0), &[])),
             "fps"
         );
+        assert_eq!(
+            field(PreviewSettings::resolve(None, None, Some(61), &[])),
+            "fps"
+        );
+        assert!(PreviewSettings::resolve(None, None, Some(60), &[]).is_ok());
         let twice = [PreviewCodec::Jpeg, PreviewCodec::Jpeg];
         assert_eq!(
             field(PreviewSettings::resolve(None, None, None, &twice)),

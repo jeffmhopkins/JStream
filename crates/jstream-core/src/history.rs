@@ -22,6 +22,11 @@ use std::collections::{BTreeMap, VecDeque};
 /// The default number of steps kept per client; older steps are dropped first.
 pub(crate) const DEFAULT_HISTORY_LIMIT: usize = 100;
 
+/// The client the engine names for a change no client asked for: an effect pack's
+/// renames moving filters' stored settings (#1353). It never has steps of its own, so
+/// its changes only stop other clients' undos from overwriting them.
+pub(crate) const ENGINE_CLIENT: &str = "engine";
+
 /// One undoable step of a client's history.
 #[derive(Clone, Debug)]
 pub(crate) struct Step {
@@ -73,6 +78,13 @@ impl Default for History {
 }
 
 impl History {
+    /// Drops every client's stacks and the conflict log: the collection they undo was
+    /// replaced (ADR-0121 §3). The limit stays.
+    pub(crate) fn clear(&mut self) {
+        self.clients.clear();
+        self.log.clear();
+    }
+
     /// Sets how many steps each client keeps, dropping the oldest of any client over it.
     pub(crate) fn set_limit(&mut self, limit: usize) {
         self.limit = limit;
@@ -113,6 +125,13 @@ impl History {
                 stacks.undo.pop_front();
             }
         }
+        self.prune();
+    }
+
+    /// Records a change the engine made itself at `rev` ([`ENGINE_CLIENT`]): logged, so
+    /// a step of any client that touches what it touched conflicts, but no step.
+    pub(crate) fn record_engine(&mut self, rev: Rev, touched: Touched) {
+        self.log(&ClientId::new(ENGINE_CLIENT), rev, touched);
         self.prune();
     }
 

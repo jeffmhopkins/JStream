@@ -54,7 +54,7 @@ shown by the menu item. Nothing is downloaded or installed. That read is not tel
 | Attacker | What they start with | In scope? |
 |---|---|---|
 | A web page in the user's own browser | JavaScript on a foreign origin; can try `ws://127.0.0.1:<port>` and DNS rebinding | Yes: it must get nothing |
-| A device on the LAN or internet | Network access to the machine | Yes: listeners bind `127.0.0.1` by default; remote access only through pairing, whose device tokens are refused beyond loopback until there is TLS |
+| A device on the LAN or internet | Network access to the machine | Yes: listeners bind `127.0.0.1` by default; remote access only through pairing, on the opt-in TLS-only network listener ([ADR-0104](../adr/0104-network-listener-over-tls.md)), which admits paired devices and never the control token (see [Server](#server)) |
 | A page shown by a browser source | Arbitrary HTML and JavaScript, rendered by the engine's own helper | Yes: untrusted content ([ADR-0021](../adr/0021-browser-source.md)) |
 | A crafted file | A collection file, image, font or media file someone shares | Yes: parsing must not crash the engine or reach outside its asset roots |
 | A hostile streaming server or network | Controls the RTMP(S) or YouTube endpoint's replies | Yes: TLS is verified; its text is untrusted |
@@ -79,7 +79,7 @@ shown by the menu item. Nothing is downloaded or installed. That read is not tel
                collection, asset files ──────┘   └── helper processes: browser pages, CLAP hosts
 ```
 
-Every arrow into the engine crosses one of five boundaries:
+Every arrow into the engine crosses one of six boundaries:
 
 1. **The control API** (WebSocket, MCP over HTTP, static UI files): one gate for all of
    them. See [Control server](#server).
@@ -90,6 +90,8 @@ Every arrow into the engine crosses one of five boundaries:
 5. **The network out**: streaming servers, Google, and, when the user asks or has turned
    the launch check on, GitHub's releases API (see [Assets](#assets)). See
    [Secrets](#secrets).
+6. **LAN inputs outside TLS**: JTunnel senders, once the person turns receiving on
+   and accepts one. See [LAN inputs](#lan-inputs).
 
 <a id="server"></a>
 ## Control server
@@ -103,33 +105,68 @@ covers = [
   "apps/jstream-daemon/src/token.rs",
   "apps/jstream-daemon/src/args.rs",
   "crates/jstream-server/src/token_file.rs",
+  "crates/jstream-server/src/network.rs",
+  "crates/jstream-server/src/identity.rs",
 ]
-depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md"]
+depends_on = ["docs/RULES.md#R-SEC-002", "docs/adr/0006-mcp-full-access.md", "docs/adr/0104-network-listener-over-tls.md", "docs/adr/0130-browsers-keep-no-certificate-pin-v2.md"]
 -->
 
 **Threats:** a foreign web page driving the API (CSRF, DNS rebinding), a network peer,
 a stolen token, local denial of service.
 
 **Controls on main:**
-- One listener in [`jstream-server`](../../crates/jstream-server/README.md) carries the
+- The host's listener in [`jstream-server`](../../crates/jstream-server/README.md) carries the
   WebSocket API, MCP and (when configured) the UI's static files. Every request passes
   the same gate: `Host` must name the listener (`127.0.0.1`, `localhost` or `[::1]` with
   its port, or a configured extra), which defeats DNS rebinding; `Origin`, when present,
   must be that host or a configured extra, so a foreign page's WebSocket upgrade is
   refused; then the token, as a bearer token, a Basic password or a WebSocket
   subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)). The token may also be a paired
-  device's, accepted only on loopback or a TLS listener, and there is no TLS listener
-  yet. `POST /api/v1/pair` is the one request answered without one, only while a
-  pairing code is open (see [Pairing](#pairing)).
+  device's, accepted only on loopback or a TLS listener, or the host UI's own token
+  (`ServerConfig::ui_token`, ADR-0131), which the desktop app makes at launch and keeps
+  only in memory; it grants what the control token does, and the network listener
+  refuses it as it refuses the control token. `POST /api/v1/pair` is the one request
+  answered without one, only while a pairing code is open (see [Pairing](#pairing)).
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
-- The daemon binds `127.0.0.1` and has no flag to bind elsewhere. There is no TLS yet.
-  [ADR-0104](../adr/0104-network-listener-over-tls.md) decides how that changes, and
-  it is not built: an opt-in second listener for the network, TLS only with a
-  self-signed certificate native clients pin by fingerprint, admitting device tokens and
-  never the control token. A browser keeps no pin, only an exception for that one
-  certificate, so a new warning on a paired host means stop
-  ([ADR-0114](../adr/0114-browsers-keep-no-certificate-pin.md)).
+- The daemon's own listener binds `127.0.0.1`, with no flag to bind it elsewhere.
+  **Network access** ([ADR-0104](../adr/0104-network-listener-over-tls.md)) is a second
+  listener the person turns on with `--lan`, or in the desktop app with Settings ›
+  Devices › "Allow devices on my network" (the server's `tls` feature,
+  `ServerConfig::network`); it is off by default. The desktop app keeps that switch in
+  its data folder and saves it only through its own window's command, never through
+  the control API, so no agent, plugin or paired device can turn it on. Turning it off
+  applies at the app's next start and doesn't revoke the paired devices, which are
+  admitted again if it is turned back on; revoking them ends their access:
+  - **TLS only**, with rustls on the ring provider: TLS 1.3 and 1.2 with rustls' default
+    suites for them, ALPN `http/1.1`, no client certificates. Plain HTTP gets no answer.
+  - **A self-signed certificate made on the host**: an ECDSA P-256 key, made on first use
+    and kept with the certificate in one user-only file beside the token file
+    (`<token file>.tls`), checked and written like the token file. The key is in no log,
+    event, result or snapshot. The certificate names the host name, its `.local` name and
+    the machine's addresses. It is never renewed silently: when today's names aren't all
+    on it, the daemon says so at startup, and `--lan-renew` makes a new key.
+  - **Trust by fingerprint.** The daemon prints the certificate's SHA-256 fingerprint
+    with the listener's addresses, and `pairing.start` answers both, so the host UI's
+    pairing panel and `jstream pair` show them beside the code. A native client pins it after the person compares it.
+    A browser keeps no pin, so a new certificate warning on a paired host means continue
+    only if the fingerprint matches the one the host shows
+    ([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md), which supersedes
+    ADR-0114). The `/pair` page says the same next to its code field.
+  - **Device tokens only.** The control token, and the host UI's own token, are refused
+    there, however they are presented.
+    `Host` must be the listener's port with a name the certificate carries or the
+    address the connection arrived on, and `Origin`, when present, `https://` and that
+    host. Configured extra origins don't apply.
+  - **Limits.** It has its own pool of 128 open TCP connections, so the network can't
+    use up the host's own UI's. Its TLS handshake runs on the connection's task, within
+    the same 10 s header-read deadline. Its WebSocket and MCP sessions count against
+    the shared limits below. Its pairing attempts share the code's five (see
+    [Pairing](#pairing)).
+  - **Where it listens.** Every interface by default, on a fixed port (4456, `--lan-port`),
+    so it is also reachable on public Wi-Fi or a VPN the machine joins: `--lan-bind`
+    picks one address. On Windows and macOS, the first start can raise the OS firewall's
+    prompt.
   The desktop app serves only its window, on an OS-picked port with a token kept in
   memory, unless it is started with `--mcp`: then it binds `127.0.0.1` on a fixed port
   (4455 by default), turns MCP on and takes its token from a token file with the
@@ -177,6 +214,14 @@ the user's desktop session can read it while it is there. Failed tokens are not 
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
 
+The daemon's `--ptz-camera` (ADR-0123, [ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md))
+is the one way to make it send VISCA to a camera: the protocol can't add, change or
+remove a camera, so a client with the token, an agent or a paired device can move only
+the heads the person listed, by name. An address outside the LAN ranges is refused at
+startup, and a reply from anywhere but the camera's own address and port, or one that
+isn't VISCA, is dropped and counted; a reply can change only the pose and status
+`ptz.list` shows.
+
 **Gaps:** #546's Windows hardware pass reported the token file and the daemon's logs
 user-only with no inheritance. Still to run on hardware: the devices file after a real
 pairing, and the crash reports' DACL (#656), which hasn't run on Windows CI either. So
@@ -192,30 +237,39 @@ covers = [
   "crates/jstream-server/src/pair_page.rs",
   "crates/jstream-server/src/gate.rs",
 ]
-depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md"]
+depends_on = ["docs/adr/0044-pairing-remote-browsers.md", "docs/adr/0047-browser-pairing-page-and-device-cookie.md", "docs/adr/0104-network-listener-over-tls.md"]
 -->
 
 **Built:** codes, device tokens, and the browser pairing page and device cookie (#288),
 in [`jstream-server`](../../crates/jstream-server/README.md#design). `pairing.start`
 answers and device tokens are accepted only while the server listens on loopback or on a
-TLS listener. The server has no TLS listener yet, so a paired device is a local client
-with its own revocable token, and the pairing page, which only a TLS listener serves, is
-not reachable: no browser can pair today, although [R-SEC-002](../RULES.md#R-SEC-002)
-and SECURITY.md already describe that exception.
+TLS listener. With the daemon's `--lan` (see [Control server](#server)), devices on the
+network pair over the TLS network listener, and browsers pair on its `/pair` page.
 
 **Threats:** guessing a pairing code, a leaked device token, a cookie used cross-site,
 a device that should no longer have access.
 
 **Controls** ([ADR-0044](../adr/0044-pairing-remote-browsers.md),
 [ADR-0047](../adr/0047-browser-pairing-page-and-device-cookie.md)): one open code at a
-time, 40 bits, two minutes, void after five wrong attempts, kept only as a digest;
+time, 40 bits, two minutes, void after five wrong attempts from either listener
+together, kept only as a digest. A peer on the network listener can void the open code
+with five wrong guesses, which costs the person a new `pairing.start`, but never gets
+more guesses at a code than ADR-0044's five;
 256-bit device tokens kept as digests, revocable, dropped after 30 days unused; the
 browser's copy only as a `__Host-` cookie that is `Secure`, `HttpOnly` and
 `SameSite=Strict`, set and read only on a TLS listener, refused when a request carries
 it twice or without `Sec-Fetch-Site: same-origin` or `none`. A paired browser holds only
 its device token, and the cookie is never compared with the control token.
 
-**Accepted:** a device token has the control token's full power ("no tiers").
+**Accepted:** a device token has the control token's full power ("no tiers"). A paired
+browser whose user continues past a certificate warning for a certificate that isn't the
+host's hands that device's token to the impostor; revoking the device ends it
+([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md)). A person who skips the
+fingerprint check on first pairing can be fooled by an attacker already in the middle of
+that connection ([ADR-0104](../adr/0104-network-listener-over-tls.md)). With `--lan`, anyone
+on the network can void each open code with five wrong guesses, so pairing can be
+denied while they keep at it, never won; ADR-0044's five are kept rather than giving the
+network its own allowance.
 
 **Gaps:** the devices file's Windows DACL, like the token file's, waits on a Windows
 hardware run (#546, for #344).
@@ -263,11 +317,11 @@ private, link-local and local-name targets, redirects to them included, unless i
 the source's own origin and the source sets `local_network`. It is decided per request
 by the origin that makes it, so for a web page the opt-in never covers a third-party
 frame, and a file or blank page whose main frame navigates to the web loses its own
-access. A page given as HTML (the `html` setting, loaded as a `data:` URL with an opaque
-origin) loads no local files, and reaches no local targets unless its source sets
-`local_network`, and then only while its main frame stays on a `data:` document. Its
-opt-in is an opaque origin's, like a file page's, not a web page's: it covers every
-opaque frame inside the page (see Gaps). CEF on Linux names the opaque origin `null`, not none, as
+access. A page given as HTML (the `html` setting) loads from an `https` origin of its
+own, a host under a reserved domain that the helper answers itself (#1035), so no two
+sources share storage. It loads no local files, and reaches no local targets unless its
+source sets `local_network`; its opt-in then covers that origin exactly, as a web page's
+covers its own, and only its main frame loads from the reserved names. CEF on Linux names the opaque origin `null`, not none, as
 the initiator of a web source's own first load (#1069), so a main-frame load the helper
 itself started, to the source's own origin with a `null` initiator while the main frame
 hasn't left that origin, is judged as the browser's own. The helper marks the URL it
@@ -279,26 +333,36 @@ that a third-party frame made navigating the top to a path on a local source's s
 stays opaque and is refused. The rule holds on every platform, though only Linux is known
 to need it.
 
+**Controls (#347):** Chromium's Local Network Access checks refuse, at the network
+layer, a request from a public origin to a more private address, and every such request
+from a page that isn't a secure context. They see what the request policy can't: a
+public name that resolves to a local address, whether fixed (`*.nip.io`) or by DNS
+rebinding, and requests the resource handler never sees. In the pinned CEF's windowless
+pages they refuse without asking the permission handler, so for a source that opted in
+the helper allows them for the source's own origin, as the top-level origin, in a
+request context of the page's own. A third-party frame inside it and every other source
+stay refused. The Linux helper's end-to-end tests check, on the real helper with
+Chromium's test switches mapping public names to `127.0.0.1`
+(`crates/jstream-browser/tests/linux_page/local_network.rs`): a public page refused a
+public name that resolves locally; an opted-in `https` page reaching `127.0.0.1` while a
+third-party frame inside it is refused the same kind of name, both by Chromium alone;
+and an HTML page on an origin of its own. Service workers and `ws://` handshakes are
+covered by the same network-layer check but not tested. An opted-in page has a request
+context of its own, so it shares no cookies or storage with other sources from its
+origin; profiles are in memory, so nothing is lost.
+
 **Gaps:** permission requests are refused: the helper's permission handler cancels every
 camera, microphone and screen request and denies every permission prompt except
 Chromium's local network access one, which it grants only to a requesting origin its
 request policy already lets make local requests (`crates/jstream-browser/src/permission.rs`). What Chromium grants without asking, such as
 a focused page's clipboard writes, never reaches that handler; the helper never focuses a
 page or sends it input (#347).
-The local-network refusal reads only the URL's host: a public name that resolves to a
-local address, whether fixed (`*.nip.io`) or by DNS rebinding, passes it, and so does any
-request the helper's request handler doesn't see, such as a service worker's. CEF
-names opaque origins alike, so a sandboxed or `data:` frame that a third-party frame
-inside a local file page creates counts as the file page's (#721). The same holds inside
-a page given as HTML whose source sets `local_network`: such a frame, made by a
-third-party frame the HTML embeds, gets the page's local-network access. It can't be
-narrowed by origin, since the HTML document's own origin is opaque too; serving the
-HTML from a reserved origin would close it (#1035). Chromium's
-Local Network Access checks see both at the network layer and ask that permission
-handler first, so for an origin the policy refuses they are refused there; that Chromium
-enforces them in the pinned CEF's windowless pages is not yet confirmed on a Windows run
-(#347). ADR-0021's per-source
-"allow page to control JStream" opt-in must not hand the page the control token (#347).
+CEF names opaque origins alike, so a sandboxed or `data:` frame that a third-party frame
+inside a local file page creates counts as the file page's (#721). Chromium's network
+layer checks are confirmed on the Linux helper; the Windows helper runs the same CEF,
+and its first hardware run (#341) is still to confirm them there (#347). ADR-0021's
+per-source "allow page to control JStream" opt-in must not hand the page the control
+token (#347).
 
 **Accepted:** a Linux tester install, where the kernel restricts unprivileged user
 namespaces, makes `chrome-sandbox` setuid root inside a folder the user owns
@@ -312,11 +376,18 @@ location removes it.
 
 **Built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source may opt
 its page in to a read-only `window.jstream` with the engine animation clock and the
-page's own visibility, and, per further setting, the program and preview scenes, named
-shared values, and one bus's levels and bands (never its samples). The renderer
+page's own visibility, and, per further checkbox, the program and preview scenes, named
+shared values, one bus's levels and bands (never its samples), the engine's tempo, and
+one MIDI input's held notes, controllers and recent note-ons (never raw bytes or SysEx,
+[ADR-0147](../adr/0147-midi-tempo-and-state-for-pages.md)). The tempo has a checkbox
+of its own, as ADR-0124 decision 7 asks: the `tempo.*` values never reach a page through
+the shared values grant, and a MIDI reading carries a tempo only with it. Each checkbox shows
+its warning beside it, and the Sources panel badges a source whose page is granted
+anything ([ADR-0124](../adr/0124-page-api-read-review.md), which also lists what no
+setting ever grants). The renderer
 defines the API only in the main frame, and only while it shows the source's own
-document: the source's web origin exactly, its file's folder or below, or the `data:`
-document of a page given as HTML. Data flows one way: the engine filters it to the
+document: the source's web origin exactly, its file's folder or below, or the origin of
+its own a page given as HTML loads from. Data flows one way: the engine filters it to the
 grant before it leaves (`crates/jstream-sources/src/page_api.rs`), the helper accepts
 updates in the renderer only from the browser process, and its client drops every
 process message a renderer sends (`crates/jstream-browser/src/helper/handlers.rs`). A
@@ -324,7 +395,8 @@ page has no path to the engine. A compromised renderer holds only what the sourc
 sharing its renderer were granted; each granted page gets a request context of its own,
 which should keep it alone in its renderer, not yet checked on a run. Whatever a page is
 granted, a web page can send off the machine: preview scene names matter most, and a
-microphone bus's bands, which follow the shape of speech. The engine has no studio mode to leave, so a page
+microphone bus's bands, which follow the shape of speech, and a MIDI input's notes,
+which are the performance itself. The engine has no studio mode to leave, so a page
 granted the scenes always gets the preview scene's name.
 
 <a id="files"></a>
@@ -426,13 +498,17 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
   kind ID that draws the same WGSL (the quarantine keeps each blamed module's digest,
   ADR-0097), until a person re-enables them (`effect.enable`, which no MCP tool, plugin
   or hotkey carries), the whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
-  0.61). Not built yet: the GPU-time guard against long loops, which would turn an
-  effect off before the OS resets the device.
+  0.61). The GPU-time guard turns an effect off before the OS resets the device: where
+  the GPU has timestamp queries, a pack kind whose pass runs over half the frame budget
+  for 30 frames running on the program stage is quarantined the same way and reported
+  in `gpu.effect_slow` (protocol 0.102). A GPU without timestamp queries, a shader that
+  hangs the GPU at once, and the preview's drawing have only the device-loss guard.
+  Not run yet: a forced TDR on Windows hardware.
 
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0131-ask-before-a-new-agent-connects.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -460,6 +536,15 @@ output, sets or clears its key, goes live or stops, steps through its undo histo
 revokes a device, starts a pairing or replaces the UI's settings (#346). Other edits,
 deletes of scenes, sources and items included, are undoable and unannounced
 ([ADR-0098](../adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)).
+
+**Notice, not a control:** in the desktop app with `--mcp`, the person is asked before
+a new agent's first connection, and can allow it once, always, or deny it
+([ADR-0131](../adr/0131-ask-before-a-new-agent-connects.md)). It is a notice with a
+veto, and nothing may rely on it as a control: approval is keyed by the name a client
+gives itself, so a client can pass by naming itself after an approved one, and any
+process of the user can read the token file and write the approved list. Approved
+clients are trusted no differently from any other token holder. Agents get no tool to
+answer a request.
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through
@@ -586,6 +671,62 @@ A DLL registered by hand with `regsvr32` is registered where it is.
 **Gaps:** the copy's DACL and Frame Server loading it are not yet checked on Windows
 hardware (#563).
 
+<a id="lan-inputs"></a>
+## LAN inputs
+<!-- @section
+covers = ["crates/jstream-core/src/jtunnel/**"]
+depends_on = ["docs/adr/0123-lan-inputs-jtunnel-and-visca.md", "docs/RULES.md#R-SEC-002"]
+-->
+
+**Threats:** a host on the LAN, or beyond it, injecting audio into a show, or flooding
+the socket; a sender answering for another; JStream announcing itself or sending
+somewhere it shouldn't.
+
+**Controls on main** ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md)):
+- The JTunnel receiver is off unless the host turns it on with the senders it accepts:
+  the daemon's `--jtunnel-accept name@address:port`, each a LAN address. Off, no socket
+  is open.
+- It sends only subscribe and bye packets, only to accepted senders' addresses, which
+  must be loopback, private IPv4 or link-local, and every 10 s one mDNS PTR query for
+  `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
+  socket (a legacy unicast query, so senders answer that socket; no socket joins the
+  group or binds port 5353). It never announces itself and never sends audio or MIDI.
+- It drops and counts every datagram from outside those ranges, from an address it
+  didn't subscribe to, longer than a packet may be, or that `jstream-jtunnel`'s parser
+  refuses (fuzzed on its own). The socket is IPv4: an accepted sender's address is IPv4
+  (or IPv4 mapped into IPv6, taken as itself), and no two accepted senders share an
+  address and port, since datagrams are told apart by where they come from.
+  Parsing and playout allocate nothing, nor does reading an mDNS answer about anything
+  but a JTunnel instance, however its records repeat a long name (only a JTunnel
+  instance's name is copied, once it matches); a sender's audio goes only to the
+  `network_audio` source that names it, and its MIDI only to the MIDI state of its own
+  name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
+  doesn't trigger bindings (ADR-0142 §2).
+- An mDNS answer from a LAN address's port 5353 only lists a sender in
+  `jtunnel.senders` (its name as `remote_name`, text from the LAN): listing trusts it
+  with nothing, since only accepted senders are subscribed to and only their datagrams
+  are taken. The list holds at most 64 senders, at most 8 from one IP address, each
+  forgotten 35 s after it last answered, so answers can't grow it without bound; an answer it can't read is counted
+  as malformed. Plugins can't read the list.
+- The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
+  receives reaches the protocol.
+- PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) pass the same
+  LAN check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server)
+  for what they may send and receive.
+
+**Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
+inject audio into the source that records it, or notes into what its MIDI sources draw
+(ADR-0123 §6), as with JTunnel anywhere.
+Off by default, LAN only and accepted one sender at a time bound it to someone on the
+same network who already targets this machine. The check is of the source address a
+datagram claims, and the socket is bound to every IPv4 interface: a host beyond the LAN
+that can deliver a datagram with a spoofed private source, and guesses an accepted
+sender's address and port, gets past it. Binding only the interface that routes to the
+accepted senders would narrow that, and is still to come. A host on the LAN can also
+answer the query with made-up senders, or say goodbye for a real one, which changes only
+what the list shows; a person accepts a sender by name and address, so a made-up one is
+accepted only if they pick it.
+
 <a id="gaps"></a>
 ## Known gaps
 <!-- @section
@@ -598,9 +739,9 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #344 | Server, pairing | Windows devices file, crash reports and the desktop app's log file (#780) not yet checked user-only on hardware; token and daemon logs reported user-only (#546) | Low |
 | #547 | Files | Windows audit log's user-only DACL not yet checked across a rotation on hardware (#574 landed in the wave) | Low |
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
-| #347 | Browser | Permissions Chromium grants without a prompt; public names resolving locally (`*.nip.io`, DNS rebinding) and requests the handler doesn't see | Medium |
+| #347 | Browser | Permissions Chromium grants without a prompt; Chromium's local network checks not yet confirmed on Windows hardware | Low |
 | #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
-| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), and quarantines the pack effect blamed for it, but the GPU-time guard that would stop a hang before the reset is not built, and a forced TDR hasn't run on Windows hardware | Medium |
+| #349 | WGSL | A shader that hangs the GPU in one frame can still reset it: the engine survives a lost device (#604) and quarantines the pack effect blamed for it, and the GPU-time guard quarantines one that runs over half the frame budget for 30 frames before a reset, but only where the GPU has timestamp queries and only on the program stage. A forced TDR hasn't run on Windows hardware | Medium |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |

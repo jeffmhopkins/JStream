@@ -6,7 +6,7 @@ use crate::color::frame_size;
 use crate::describe::{asset, kind, param, size};
 use crate::page_api::{Feed, Grant, MAX_VALUES_GRANT_BYTES, PageView};
 use crate::source::{changed_non_live, setting};
-use crate::{Context, Source, SourceAudio, SourceError, SourceKind};
+use crate::{Context, Painter, Source, SourceAudio, SourceError, SourceKind};
 use jstream_browser::{
     BrowserPage, DEFAULT_CSS, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageAudio, PageData,
     PageLocation, PageSpec,
@@ -15,7 +15,7 @@ use jstream_media::{AudioFormat, MediaTime, Timebase, VideoFrame};
 use jstream_platform::{AudioInputHandler, AudioStream, GpuFrame};
 use jstream_protocol::{KindDescriptor, ParamDescriptor, ParamType, Settings, VisibleIf};
 use serde_json::{Value, json};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
 /// The kind's ID.
 const BROWSER: &str = "browser";
@@ -63,9 +63,9 @@ impl BrowserKind {
                     description: Some(
                         "The page itself, as HTML with its CSS and scripts inline: a graphic \
                          built here instead of loaded from a URL. Ignored when a local file \
-                         is set. It can load fonts and images from the web, but no local \
-                         files, and reaches this computer and the local network only when \
-                         allowed below."
+                         is set. It can load fonts, images and scripts from the web over \
+                         https, but no local files, and reaches this computer and the local \
+                         network only when allowed below."
                             .into(),
                     ),
                     ..param(
@@ -80,19 +80,20 @@ impl BrowserKind {
                 ParamDescriptor {
                     description: Some(
                         "The most frames a second the page paints. It paints less when \
-                         nothing changes."
+                         nothing changes. 0 follows the program's frame rate, so a page's \
+                         animation is as smooth as the program."
                             .into(),
                     ),
                     ..param(
                         "fps",
                         "Frame rate",
                         ParamType::Int {
-                            min: Some(1),
+                            min: Some(0),
                             max: Some(i64::from(MAX_FPS)),
                             step: Some(1),
                             unit: Some("fps".into()),
                         },
-                        json!(30),
+                        json!(0),
                     )
                 },
                 ParamDescriptor {
@@ -129,7 +130,8 @@ impl BrowserKind {
                         "Let a page from the internet make requests to this computer and \
                          the local network (localhost, 192.168.x.x and the like), for \
                          widgets that talk to an app running here. Off, those requests are \
-                         refused. A local file or a page on the local network may always."
+                         refused. It covers the page's own origin only, and only a page loaded \
+                         over https. A local file or a page on the local network may always."
                             .into(),
                     ),
                     advanced: true,
@@ -144,41 +146,54 @@ impl BrowserKind {
                     description: Some(
                         "Give the page window.jstream: the engine's clock, so it moves in step \
                          with native motion and other pages, and whether this source is \
-                         shown on program and preview. A page from the web can send what \
-                         it reads anywhere."
+                         shown on program and preview. Each kind of data below is its own \
+                         checkbox."
                             .into(),
                     ),
+                    warning: Some("A page from the web can send what it reads anywhere.".into()),
                     group: Some(PAGE_API_GROUP.into()),
                     ..param("page_api", "Page API", ParamType::Bool, json!(false))
                 },
                 ParamDescriptor {
                     description: Some(
-                        "Also give the page the program and preview scenes' names. A \
-                         preview scene's name can say what hasn't been shown yet."
-                            .into(),
+                        "Also give the page the program and preview scenes' names.".into(),
                     ),
+                    warning: Some("Preview scene names can say what hasn't been shown yet.".into()),
                     group: Some(PAGE_API_GROUP.into()),
-                    visible_if: Some(VisibleIf {
-                        param: "page_api".into(),
-                        equals: json!(true),
-                    }),
+                    visible_if: Some(page_api_on("page_api")),
                     ..param("page_api_scenes", "Scenes", ParamType::Bool, json!(false))
                 },
                 ParamDescriptor {
                     description: Some(
-                        "The shared values the page may read, set with values.set: names \
-                         or prefixes ending in .*, separated by commas (status.text, \
-                         counter.*). Empty gives it none."
+                        "Also give the page the shared values named below, set with \
+                         values.set."
+                            .into(),
+                    ),
+                    warning: Some(
+                        "The page can read these values, and a page from the web can send \
+                         them anywhere."
                             .into(),
                     ),
                     group: Some(PAGE_API_GROUP.into()),
-                    visible_if: Some(VisibleIf {
-                        param: "page_api".into(),
-                        equals: json!(true),
-                    }),
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param(
+                        "page_api_shared_values",
+                        "Shared values",
+                        ParamType::Bool,
+                        json!(false),
+                    )
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The shared values the page may read: names or prefixes ending in \
+                         .*, separated by commas (status.text, counter.*)."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api_shared_values")),
                     ..param(
                         "page_api_values",
-                        "Shared values",
+                        "Value names",
                         text(
                             u32::try_from(MAX_VALUES_GRANT_BYTES).unwrap_or(u32::MAX),
                             false,
@@ -188,22 +203,86 @@ impl BrowserKind {
                 },
                 ParamDescriptor {
                     description: Some(
-                        "The bus whose levels and bands the page may read, after its \
-                         fader, with jstream.levels(). A page given a bus can follow the \
-                         shape of its sound, and a page from the web can send that \
-                         anywhere. Give it only the bus it shows."
+                        "Also give the page one bus's levels and spectrum bands, after its \
+                         fader, with jstream.levels(). Never its samples."
+                            .into(),
+                    ),
+                    warning: Some(
+                        "A page given a bus can follow the shape of its sound, and a page \
+                         from the web can send that anywhere. Give it only the bus it shows."
                             .into(),
                     ),
                     group: Some(PAGE_API_GROUP.into()),
-                    visible_if: Some(VisibleIf {
-                        param: "page_api".into(),
-                        equals: json!(true),
-                    }),
-                    ..param("page_api_bus", "Levels", ParamType::Bus, Value::Null)
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param(
+                        "page_api_audio",
+                        "Audio levels",
+                        ParamType::Bool,
+                        json!(false),
+                    )
+                },
+                ParamDescriptor {
+                    description: Some("The bus whose levels the page may read.".into()),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api_audio")),
+                    ..param("page_api_bus", "Bus", ParamType::Bus, Value::Null)
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "Also give the page the engine's tempo: the tempo.* shared values, \
+                         and the tempo in jstream.midi()'s reading (ADR-0147)."
+                            .into(),
+                    ),
+                    warning: Some(
+                        "A page given the tempo can follow the song's beat and transport, \
+                         and a page from the web can send that anywhere."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param("page_api_tempo", "Tempo", ParamType::Bool, json!(false))
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "Also give the page one MIDI input's held notes, controllers and \
+                         latest notes, with jstream.midi() (ADR-0147); its tempo too while \
+                         Tempo is on."
+                            .into(),
+                    ),
+                    // ADR-0124 §7's warning, word for word.
+                    warning: Some(
+                        "A page given MIDI sees every note and control on its port.".into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api")),
+                    ..param("page_api_midi", "MIDI", ParamType::Bool, json!(false))
+                },
+                ParamDescriptor {
+                    description: Some(
+                        "The MIDI input the page may read: a MIDI port's or JTunnel sender's \
+                         name. Empty gives it every input at once."
+                            .into(),
+                    ),
+                    group: Some(PAGE_API_GROUP.into()),
+                    visible_if: Some(page_api_on("page_api_midi")),
+                    ..param(
+                        "page_api_midi_input",
+                        "MIDI input",
+                        text(crate::midi::MAX_INPUT_NAME as u32, false),
+                        json!(""),
+                    )
                 },
             ],
             ..kind(BROWSER, "Browser", true, true)
         })
+    }
+}
+
+/// Shown only while the checkbox `param` is on.
+fn page_api_on(param: &str) -> VisibleIf {
+    VisibleIf {
+        param: param.into(),
+        equals: json!(true),
     }
 }
 
@@ -217,6 +296,24 @@ impl SourceKind for BrowserKind {
     }
 }
 
+/// The frames a second a page paints: its `fps` setting, or the program's frame rate for
+/// 0 (#1405), at most [`MAX_FPS`].
+pub(crate) fn page_fps(settings: &Settings, ctx: &Context) -> Result<u32, SourceError> {
+    let fps = setting(settings, "fps")?
+        .as_u64()
+        .and_then(|v| u32::try_from(v).ok())
+        .filter(|v| *v <= MAX_FPS)
+        .ok_or_else(|| SourceError::Setting {
+            param: "fps".into(),
+            reason: format!("must be a whole number from 0 to {MAX_FPS}"),
+        })?;
+    Ok(if fps == 0 {
+        ctx.program_fps().clamp(1, MAX_FPS)
+    } else {
+        fps
+    })
+}
+
 /// Opens a page at `location` with the `width`, `height`, `fps` and `css` settings: a
 /// `browser` source, or a kind built on one (`youtube_chat`). `descriptor` is the
 /// kind's, for telling live changes from restarts.
@@ -227,14 +324,7 @@ pub(crate) fn open(
     location: PageLocation,
 ) -> Result<Box<dyn Source>, SourceError> {
     let size = frame_size(settings, &ctx.limits)?;
-    let fps = setting(settings, "fps")?
-        .as_u64()
-        .and_then(|v| u32::try_from(v).ok())
-        .filter(|v| (1..=MAX_FPS).contains(v))
-        .ok_or_else(|| SourceError::Setting {
-            param: "fps".into(),
-            reason: format!("must be a whole number from 1 to {MAX_FPS}"),
-        })?;
+    let fps = page_fps(settings, ctx)?;
     let css = css(settings)?.to_owned();
     let backend = ctx
         .browser
@@ -272,17 +362,29 @@ pub(crate) fn open(
     Ok(Box::new(BrowserSource {
         descriptor: descriptor.clone(),
         settings: settings.clone(),
-        page,
-        blank,
+        page: Arc::new(Page {
+            on_cpu: page.paints_on_cpu(),
+            page: Mutex::new(page),
+            blank,
+            every_ms: i64::from(1000_u32.div_ceil(fps)),
+        }),
         audio,
-        every_ms: i64::from(1000_u32.div_ceil(fps)),
         feed: grant.map(|grant| {
             let scope = grant
                 .bus
                 .as_ref()
                 .zip(ctx.audio.as_ref())
                 .map(|(bus, scopes)| scopes.bus(bus));
-            Feed::new(grant, fps, scope)
+            let midi = grant
+                .midi
+                .as_deref()
+                .zip(ctx.midi.as_ref())
+                .map(|(input, inputs)| inputs.drawn(input));
+            let feed = Feed::new(grant, fps, scope);
+            match midi {
+                Some(state) => feed.with_midi(state),
+                None => feed,
+            }
         }),
         hidden: false,
     }))
@@ -335,17 +437,58 @@ fn css(settings: &Settings) -> Result<&str, SourceError> {
 struct BrowserSource {
     descriptor: KindDescriptor,
     settings: Settings,
-    page: Box<dyn BrowserPage>,
-    /// A transparent frame of the page's size.
-    blank: Arc<VideoFrame>,
+    page: Arc<Page>,
     audio: Arc<dyn SourceAudio>,
-    /// How often a page that paints on the CPU is looked at again, in milliseconds: one
-    /// frame at its frame rate.
-    every_ms: i64,
     /// What a page granted the page API was sent (ADR-0102); `None` without a grant.
     feed: Option<Feed>,
     /// Whether the page was told nothing draws it.
     hidden: bool,
+}
+
+/// An open page, shared by the source and, for a page that paints on the CPU, its
+/// [`Painter`], through which the host takes each new paint without a plan
+/// (ADR-0117 §3).
+struct Page {
+    page: Mutex<Box<dyn BrowserPage>>,
+    /// Whether it paints on the CPU (CEF on Linux, ADR-0095).
+    on_cpu: bool,
+    /// A transparent frame of the page's size.
+    blank: Arc<VideoFrame>,
+    /// How often a page that paints on the CPU is looked at again, in milliseconds: one
+    /// frame at its frame rate.
+    every_ms: i64,
+}
+
+impl Page {
+    fn lock(&self) -> MutexGuard<'_, Box<dyn BrowserPage>> {
+        self.page.lock().unwrap_or_else(PoisonError::into_inner)
+    }
+}
+
+impl Painter for Page {
+    /// Nothing to draw: the page paints itself.
+    fn paint(&self, _: MediaTime) {}
+
+    /// The page's latest paint where its backend paints on the CPU, else a transparent
+    /// frame of the page's size: see [`Source::frame`].
+    fn frame(&self) -> Arc<VideoFrame> {
+        self.lock()
+            .cpu_frame()
+            .unwrap_or_else(|| Arc::clone(&self.blank))
+    }
+
+    /// A page that paints on the CPU is looked at again every frame of its frame rate;
+    /// one on the GPU has a frame of its own, and its stand-in never changes.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        if !self.on_cpu {
+            return None;
+        }
+        let ms = i64::try_from(crate::source::millis(at)).unwrap_or(i64::MAX);
+        Some(MediaTime::new(
+            ms.saturating_add(self.every_ms),
+            Timebase::MILLIS,
+        ))
+    }
 }
 
 impl Source for BrowserSource {
@@ -354,23 +497,18 @@ impl Source for BrowserSource {
     /// only on the GPU ([`gpu_frame`](Source::gpu_frame)), and is never copied to the
     /// CPU (ADR-0021). Before its first paint it is the transparent frame either way.
     fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
-        Ok(self
-            .page
-            .cpu_frame()
-            .unwrap_or_else(|| Arc::clone(&self.blank)))
+        Ok(Painter::frame(&*self.page))
     }
 
-    /// A page that paints on the CPU is looked at again every frame of its frame rate;
-    /// one on the GPU has a frame of its own, and its stand-in never changes.
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        if !self.page.paints_on_cpu() {
-            return None;
-        }
-        let ms = i64::try_from(crate::source::millis(at)).unwrap_or(i64::MAX);
-        Some(MediaTime::new(
-            ms.saturating_add(self.every_ms),
-            Timebase::MILLIS,
-        ))
+        Painter::next_change(&*self.page, at)
+    }
+
+    /// A page that paints on the CPU's: the host takes each new paint on its own
+    /// thread, without a plan. One that paints on the GPU has none.
+    fn painter(&self) -> Option<Arc<dyn Painter>> {
+        let painter: Arc<dyn Painter> = self.page.clone();
+        self.page.on_cpu.then_some(painter)
     }
 
     /// Reloads the page when `restart_on_show` is set (a kind built on `browser` without
@@ -382,13 +520,13 @@ impl Source for BrowserSource {
             .and_then(Value::as_bool)
             .unwrap_or(false)
         {
-            self.page.reload();
+            self.page.lock().reload();
         }
     }
 
     /// Loads the page again (`source.restart`).
     fn restart(&mut self, _: MediaTime) {
-        self.page.reload();
+        self.page.lock().reload();
     }
 
     /// Hides the page while nothing draws it, so it stops painting (#1071), and shows it
@@ -396,7 +534,7 @@ impl Source for BrowserSource {
     fn set_drawn(&mut self, drawn: bool) {
         if self.hidden == drawn {
             self.hidden = !drawn;
-            self.page.set_hidden(!drawn);
+            self.page.lock().set_hidden(!drawn);
         }
     }
 
@@ -408,14 +546,14 @@ impl Source for BrowserSource {
         }
         let css = css(settings)?;
         if Some(css) != self.settings.get("css").and_then(Value::as_str) {
-            self.page.set_css(css);
+            self.page.lock().set_css(css);
         }
         self.settings = settings.clone();
         Ok(())
     }
 
     fn gpu_frame(&mut self) -> Option<GpuFrame> {
-        self.page.frame()
+        self.page.lock().frame()
     }
 
     fn audio(&self) -> Option<Arc<dyn SourceAudio>> {
@@ -431,7 +569,7 @@ impl Source for BrowserSource {
         let data = feed.view(view);
         feed.post(data);
         if let Some(data) = feed.flush(view.now) {
-            self.page.send_data(data);
+            self.page.lock().send_data(data);
         }
         feed.due()
     }
@@ -443,11 +581,12 @@ impl Source for BrowserSource {
         let Some(feed) = &mut self.feed else {
             return;
         };
-        let pts = self
-            .page
+        let page = self.page.lock();
+        let pts = page
             .frame()
             .map(|frame| frame.info().pts)
-            .or_else(|| self.page.cpu_frame().map(|frame| frame.info().pts));
+            .or_else(|| page.cpu_frame().map(|frame| frame.info().pts));
+        drop(page);
         let age = pts.map(|pts| now.as_secs_f64() - pts.as_secs_f64());
         if let Some(clock) = feed.clock(now, age) {
             feed.post(PageData {
@@ -456,7 +595,7 @@ impl Source for BrowserSource {
             });
         }
         if let Some(data) = feed.flush(now) {
-            self.page.send_data(data);
+            self.page.lock().send_data(data);
         }
     }
 }
@@ -471,5 +610,32 @@ impl SourceAudio for PageAudioOf {
 
     fn open(&self, handler: Box<dyn AudioInputHandler>) -> Box<dyn AudioStream> {
         Box::new(self.0.open(handler))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::page_fps;
+    use crate::source::Context;
+    use jstream_protocol::Settings;
+    use serde_json::json;
+
+    /// An `fps` of 0 is the program's rate (the default while none is set); any other
+    /// is the page's own, and past `MAX_FPS` is refused.
+    #[test]
+    fn an_fps_of_0_is_the_programs_frame_rate() {
+        let at = |fps: serde_json::Value| -> Settings {
+            std::iter::once(("fps".to_owned(), fps)).collect()
+        };
+        let unset = Context::default();
+        let sixty = Context {
+            frame_rate: 60,
+            ..Context::default()
+        };
+        assert_eq!(page_fps(&at(json!(0)), &unset).ok(), Some(30));
+        assert_eq!(page_fps(&at(json!(0)), &sixty).ok(), Some(60));
+        assert_eq!(page_fps(&at(json!(24)), &sixty).ok(), Some(24));
+        assert!(page_fps(&at(json!(61)), &sixty).is_err());
+        assert!(page_fps(&at(json!(-1)), &sixty).is_err());
     }
 }

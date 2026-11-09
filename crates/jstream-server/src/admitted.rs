@@ -21,19 +21,28 @@
 //!   but a loopback address, unless the listener has TLS (`ServerConfig::tls`), which
 //!   it has no way to serve yet.
 //!
+//! - **Agent approval** (ADR-0131). A session the control token admits may be held at
+//!   `hello` until the person approves its client ([`Approvals`]); its request is the
+//!   session's, so a `hello` sent again waits on the same one. `agent.approve`,
+//!   `agent.forget` and `agent.approved` are answered here, for any greeted session,
+//!   and every session's events carry `agent.approval_requested` and
+//!   `agent.approval_resolved` beside the engine's.
+//!
 //! The pairing code is in `pairing.start`'s answer and nowhere else: it is not logged,
 //! and the answer goes only to the client that asked (R-SEC-001).
 
+use crate::approvals::{Approvals, Ticket};
 use crate::devices::{CODE_LIFETIME, Devices, Now};
 use crate::gate::Credential;
 use crate::ui_settings::{Refused, SetError, UiSettings};
+use futures_util::StreamExt;
 use jstream_control::{BinaryStream, BoxFuture, Control, ControlError, EventStream};
 use jstream_protocol::{
-    Action, ActionResult, Call, CallResult, EntityKind, Hello, ProtocolError, Query, QueryResult,
-    RequestId, Response, SecretString, Welcome,
+    Action, ActionResult, AgentTransport, Call, CallResult, EntityKind, Event, Hello,
+    NetworkAccess, ProtocolError, Query, QueryResult, RequestId, Response, SecretString, Welcome,
 };
-use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
 /// A `Control` session as admitted by one credential.
 pub(crate) struct Admitted {
@@ -46,33 +55,88 @@ pub(crate) struct Admitted {
     /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
     /// Off, they reach `inner` like any other call.
     serves_devices: bool,
+    /// Where a device on the network reaches the server, while its network listener is
+    /// on: `pairing.start` answers with it (ADR-0104, 0.97).
+    network: Option<NetworkAccess>,
     /// The UI settings the server keeps.
     ui_settings: Arc<UiSettings>,
-    /// Whether `hello` succeeded, which the calls answered here need too.
-    greeted: AtomicBool,
+    /// Whether `hello` succeeded, which the calls answered here need too, and which
+    /// [`Control::events`] waits for: a held agent gets no events (ADR-0131).
+    greeted: Arc<AtomicBool>,
     /// Numbers the requests answered here (`server_1`, ...).
     answered: AtomicU64,
+    /// The agent approvals (ADR-0131).
+    approvals: Arc<Approvals>,
+    /// How this session reaches the server, for its approval.
+    transport: AgentTransport,
+    /// This session's approval request, once its first `hello` opened one.
+    ticket: Mutex<Option<Arc<Ticket>>>,
+}
+
+/// What the server shares with every session it admits.
+#[derive(Clone)]
+pub(crate) struct Served {
+    /// The paired devices.
+    pub(crate) devices: Arc<Devices>,
+    /// Whether pairing is offered: the server listens on a loopback address or on a TLS
+    /// listener.
+    pub(crate) pairing_offered: bool,
+    /// Whether the server answers the pairing and device calls (`ServerConfig::pairing`).
+    pub(crate) serves_devices: bool,
+    /// Where a device on the network reaches the server, while its network listener is
+    /// on.
+    pub(crate) network: Option<NetworkAccess>,
+    /// The UI settings the server keeps.
+    pub(crate) ui_settings: Arc<UiSettings>,
+    /// The agent approvals (ADR-0131).
+    pub(crate) approvals: Arc<Approvals>,
 }
 
 impl Admitted {
     pub(crate) fn new(
         inner: Box<dyn Control>,
         credential: Credential,
-        devices: Arc<Devices>,
-        pairing_offered: bool,
-        serves_devices: bool,
-        ui_settings: Arc<UiSettings>,
+        transport: AgentTransport,
+        served: Served,
     ) -> Admitted {
+        let Served {
+            devices,
+            pairing_offered,
+            serves_devices,
+            network,
+            ui_settings,
+            approvals,
+        } = served;
         Admitted {
             inner,
             credential,
             devices,
             pairing_offered,
             serves_devices,
+            network,
             ui_settings,
-            greeted: AtomicBool::new(false),
+            greeted: Arc::new(AtomicBool::new(false)),
             answered: AtomicU64::new(0),
+            approvals,
+            transport,
+            ticket: Mutex::new(None),
         }
+    }
+
+    /// The approval request this session's `hello` waits on: the one it opened, or a new
+    /// one for `client_name` when the session is the control token's and its client
+    /// isn't approved. Runs inside the Tokio runtime.
+    fn ticket(&self, client_name: &str) -> Option<Arc<Ticket>> {
+        if !matches!(self.credential, Credential::Control) {
+            return None;
+        }
+        let mut slot = self.ticket.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(ticket) = slot.as_ref() {
+            return Some(Arc::clone(ticket));
+        }
+        let ticket = Arc::new(self.approvals.hold(client_name, self.transport)?);
+        *slot = Some(Arc::clone(&ticket));
+        Some(ticket)
     }
 
     /// The answer to a call the server serves ([`about_devices`], [`about_ui_settings`]).
@@ -119,6 +183,31 @@ impl Admitted {
                     })
                 }
             },
+            Call::Action {
+                action:
+                    Action::AgentApprove {
+                        approval_id,
+                        decision,
+                    },
+            } => self
+                .approvals
+                .decide(approval_id, *decision)
+                .map(|()| CallResult::action()),
+            Call::Action {
+                action:
+                    Action::AgentForget {
+                        client_name,
+                        transport,
+                    },
+            } => self
+                .approvals
+                .forget(client_name, *transport)
+                .map(|()| CallResult::action()),
+            Call::Query {
+                query: Query::AgentApproved,
+            } => Ok(CallResult::Query {
+                result: self.approvals.list(),
+            }),
             Call::Query {
                 query: Query::UiSettingsGet { key },
             } => {
@@ -155,6 +244,7 @@ impl Admitted {
             result: Some(ActionResult::PairingStart {
                 code: SecretString::new(code),
                 expires_in_secs: u32::try_from(CODE_LIFETIME.as_secs()).unwrap_or(u32::MAX),
+                network: self.network.clone(),
             }),
         })
     }
@@ -178,6 +268,19 @@ fn about_devices(call: &Call) -> bool {
     )
 }
 
+/// Whether `call` is about agent approval: `agent.approve`, `agent.forget` and
+/// `agent.approved`.
+fn about_agents(call: &Call) -> bool {
+    matches!(
+        call,
+        Call::Action {
+            action: Action::AgentApprove { .. } | Action::AgentForget { .. }
+        } | Call::Query {
+            query: Query::AgentApproved
+        }
+    )
+}
+
 /// Whether `call` reads or keeps a UI setting: `ui_settings.get` and `ui_settings.set`.
 fn about_ui_settings(call: &Call) -> bool {
     matches!(
@@ -195,16 +298,20 @@ impl Control for Admitted {
         if let Credential::Device { name, .. } = &self.credential {
             hello.client_name = format!("device:{name}");
         }
-        let welcome = self.inner.hello(hello);
         Box::pin(async move {
-            let welcome = welcome.await?;
+            if let Some(ticket) = self.ticket(&hello.client_name) {
+                ticket.wait().await?;
+            }
+            let welcome = self.inner.hello(hello).await?;
             self.greeted.store(true, Ordering::Release);
             Ok(welcome)
         })
     }
 
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
-        let served_here = (self.serves_devices && about_devices(&call)) || about_ui_settings(&call);
+        let served_here = (self.serves_devices && about_devices(&call))
+            || about_ui_settings(&call)
+            || (self.approvals.enabled() && about_agents(&call));
         if !served_here {
             return self.inner.call(call);
         }
@@ -221,8 +328,35 @@ impl Control for Admitted {
         })
     }
 
+    /// The engine's events, with the approval events beside them. The stream ends when
+    /// the engine's does.
     fn events(&self) -> EventStream {
-        self.inner.events()
+        let engine = self
+            .inner
+            .events()
+            .map(Some)
+            .chain(futures_util::stream::once(std::future::ready(None)));
+        let approvals = futures_util::stream::unfold(self.approvals.subscribe(), |mut rx| async {
+            loop {
+                match rx.recv().await {
+                    Ok(event) => return Some((Some(event), rx)),
+                    // A session that fell behind misses some; `agent.approved` has them.
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return None,
+                }
+            }
+        });
+        // Nothing reaches a session before its `hello` succeeds: a client held for the
+        // person's answer, which MCP's HTTP transport subscribes for at `initialize`,
+        // sees no state, no activity and no other agent's request (ADR-0131).
+        let greeted = Arc::clone(&self.greeted);
+        Box::pin(
+            futures_util::stream::select(engine, approvals)
+                .take_while(|event| std::future::ready(event.is_some()))
+                .filter_map(move |event: Option<Event>| {
+                    std::future::ready(event.filter(|_| greeted.load(Ordering::Acquire)))
+                }),
+        )
     }
 
     fn binary(&self) -> BinaryStream {
@@ -265,7 +399,10 @@ mod tests {
     }
 
     fn block<T>(future: impl Future<Output = T>) -> T {
-        match tokio::runtime::Builder::new_current_thread().build() {
+        match tokio::runtime::Builder::new_current_thread()
+            .enable_time()
+            .build()
+        {
             Ok(runtime) => runtime.block_on(future),
             Err(error) => panic!("runtime: {error}"),
         }
@@ -280,23 +417,52 @@ mod tests {
         pairing_offered: bool,
         serves_devices: bool,
     ) -> (Admitted, Arc<Mutex<String>>) {
+        admitted_on(
+            &MockEngine::new(),
+            credential,
+            pairing_offered,
+            serves_devices,
+        )
+    }
+
+    fn admitted_on(
+        engine: &MockEngine,
+        credential: Credential,
+        pairing_offered: bool,
+        serves_devices: bool,
+    ) -> (Admitted, Arc<Mutex<String>>) {
         let name = Arc::new(Mutex::new(String::new()));
         let inner = Named {
-            inner: MockEngine::new().connect(),
+            inner: engine.connect(),
             name: Arc::clone(&name),
         };
         let devices = match Devices::load(None) {
             Ok(devices) => Arc::new(devices),
             Err(error) => panic!("devices: {error}"),
         };
+        let ui_settings = Arc::new(UiSettings::load(None));
+        let approvals = match crate::approvals::Approvals::load(
+            false,
+            None,
+            crate::approvals::APPROVAL_TIMEOUT,
+            Arc::clone(&ui_settings),
+        ) {
+            Ok(approvals) => Arc::new(approvals),
+            Err(error) => panic!("approvals: {error}"),
+        };
         (
             Admitted::new(
                 Box::new(inner),
                 credential,
-                devices,
-                pairing_offered,
-                serves_devices,
-                Arc::new(UiSettings::load(None)),
+                jstream_protocol::AgentTransport::Websocket,
+                super::Served {
+                    devices,
+                    pairing_offered,
+                    serves_devices,
+                    network: None,
+                    ui_settings,
+                    approvals,
+                },
             ),
             name,
         )
@@ -329,6 +495,43 @@ mod tests {
         let (session, name) = admitted(Credential::Control, true);
         assert!(block(session.hello(hello())).is_ok());
         assert_eq!(said(&name), "claude-desktop");
+    }
+
+    /// A session gets no events until its `hello` succeeds, so a held agent, whose
+    /// transport may subscribe first (MCP over HTTP at `initialize`), sees nothing of
+    /// the studio before the person lets it in (ADR-0131, #1334 review B1).
+    #[test]
+    fn no_event_reaches_a_session_before_its_hello() {
+        use futures_util::StreamExt;
+        use jstream_protocol::{Batch, Edit, Event, SceneId};
+        let create = |id: &str| {
+            Call::Batch(Batch::single(Edit::SceneCreate {
+                scene_id: SceneId::new(id),
+                name: id.into(),
+                role: None,
+            }))
+        };
+        let engine = MockEngine::new();
+        let (held, _) = admitted_on(&engine, Credential::Control, true, true);
+        let other = engine.connect();
+        block(async {
+            let mut events = held.events();
+            assert!(other.hello(hello()).await.is_ok());
+            assert!(other.call(create("before")).await.is_ok());
+            let early = tokio::time::timeout(std::time::Duration::from_millis(200), events.next());
+            assert!(
+                early.await.is_err(),
+                "an event reached a session before its hello"
+            );
+
+            assert!(held.hello(hello()).await.is_ok());
+            assert!(other.call(create("after")).await.is_ok());
+            let next = tokio::time::timeout(std::time::Duration::from_secs(5), events.next()).await;
+            assert!(
+                matches!(next, Ok(Some(Event::StateChanged { .. }))),
+                "after hello the session hears the studio: {next:?}"
+            );
+        });
     }
 
     /// Beyond loopback, without TLS, pairing is refused.

@@ -11,6 +11,7 @@
 //! not panic.
 
 use crate::lock;
+use crate::profile::InputTotals;
 use jstream_audio::{BusControl, BusStats, InputControl, InputStats};
 use jstream_encode::{AudioSession, SessionStats, VideoSession};
 use jstream_platform::CaptureStats;
@@ -26,6 +27,12 @@ use std::sync::{Arc, Mutex};
 pub trait DropSource: Send + Sync {
     /// Running totals since this stage started. Fields it does not count stay 0.
     fn drops(&self) -> DropCounts;
+
+    /// An audio input's own counters, for `profile.get`'s mixer (protocol 0.92):
+    /// `None` for every other stage.
+    fn audio_input(&self) -> Option<InputStats> {
+        None
+    }
 }
 
 /// A [`DropSource`] built from a closure, for a stage whose handle the pipeline owns.
@@ -62,6 +69,8 @@ pub(crate) struct DropLedger {
     /// Last sample of every source that has been removed. Removing a finished stage
     /// must not make the running total fall.
     residual: DropCounts,
+    /// The same for the audio inputs' own counters.
+    residual_inputs: InputTotals,
 }
 
 impl DropLedger {
@@ -76,13 +85,33 @@ impl DropLedger {
     pub(crate) fn remove(&mut self, id: DropSourceId) {
         if let Some(source) = self.sources.remove(&id.0) {
             self.residual = self.residual.saturating_add(source.drops());
+            if let Some(stats) = source.audio_input() {
+                self.residual_inputs = add_input(self.residual_inputs, stats);
+            }
         }
+    }
+
+    /// The audio inputs' running totals: every input's, removed ones included.
+    pub(crate) fn input_totals(&self) -> InputTotals {
+        self.sources
+            .values()
+            .filter_map(|source| source.audio_input())
+            .fold(self.residual_inputs, add_input)
     }
 
     pub(crate) fn sample(&self) -> DropCounts {
         self.sources.values().fold(self.residual, |total, source| {
             total.saturating_add(source.drops())
         })
+    }
+}
+
+fn add_input(totals: InputTotals, stats: InputStats) -> InputTotals {
+    InputTotals {
+        underrun_frames: totals.underrun_frames.saturating_add(stats.underrun_frames),
+        dropped_frames: totals
+            .dropped_frames
+            .saturating_add(stats.overrun_frames.saturating_add(stats.late_frames)),
     }
 }
 
@@ -295,6 +324,10 @@ impl AudioInputDrops {
 impl DropSource for AudioInputDrops {
     fn drops(&self) -> DropCounts {
         audio_input_drops(self.input.stats())
+    }
+
+    fn audio_input(&self) -> Option<InputStats> {
+        Some(self.input.stats())
     }
 }
 

@@ -12,7 +12,7 @@ use crate::filter::{self, FilterClock, VideoFilter};
 use crate::gpu::{Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
-use crate::mips::{MipPipelines, Mips, Region};
+use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
 use crate::model::{GpuModel, ModelDraw, ModelRuntime};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Scene, Snapshot};
@@ -23,6 +23,15 @@ use jstream_protocol::{BlendMode, Blending};
 /// field with the shape's largest blur), tightly packed. wgpu only needs the stride and attribute offsets to be
 /// multiples of 4.
 pub(crate) const VERTEX_STRIDE: u64 = 116;
+/// How many texels a 2D item's canvas pixel spans, along its more minified axis, past
+/// which it samples a mip chain (#1217, ADR-0050 decision 5's note on 2D items). One
+/// bilinear tap reads a 2×2 texel footprint, so drawn smaller it skips texels and fine
+/// detail aliases. Against a box-filtered reference on lavapipe a chain is better from
+/// about 1.1 (mean error 3.2 against 4.7 with one level), at 1.2 (3.1 against 5.5) and
+/// much better at 2 (6 against 10). Up to this an item drawn nearly at its size stays
+/// on the one level, which costs no chain.
+const MINIFIED: f32 = 1.15;
+
 /// The most vertices one item draws: a five-vertex polygon as a fan of three triangles.
 const MAX_VERTICES_PER_ITEM: u32 = 3 * (MAX_VERTICES as u32 - 2);
 
@@ -46,6 +55,22 @@ struct Rect {
     y: u32,
     width: u32,
     height: u32,
+}
+
+impl Rect {
+    /// The smallest rectangle holding both.
+    fn union(self, other: Self) -> Self {
+        let x = self.x.min(other.x);
+        let y = self.y.min(other.y);
+        let right = (self.x + self.width).max(other.x + other.width);
+        let bottom = (self.y + self.height).max(other.y + other.height);
+        Self {
+            x,
+            y,
+            width: right - x,
+            height: bottom - y,
+        }
+    }
 }
 
 /// The copy of what is below an item that the modes reading it sample (ADR-0082). It
@@ -92,6 +117,8 @@ pub struct Compositor {
     vertices: Vec<u8>,
     vertex_buffer: wgpu::Buffer,
     draws: Vec<Draw>,
+    /// The texels the prepared draws can reach, or `None` when they reach none (#1070).
+    drawn: Option<Rect>,
     /// The order a 3D scene's items draw in (ADR-0094 decision 4), kept to reuse its
     /// allocation: each item's depth along the camera's axis and its index.
     order: Vec<(f64, usize)>,
@@ -103,6 +130,9 @@ pub struct Compositor {
     models: ModelRuntime,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
+    /// Times effect-pack passes once [`Self::time_passes`] asked, on a device that can
+    /// (#349, `timer.rs`).
+    timer: Option<crate::timer::PassTimer>,
     /// The CPU frame conversion (ADR-0117 §2), built on the first upload. Behind a lock
     /// because uploads take `&self`; only the thread drawing with the compositor takes it.
     ingest: Mutex<Option<Ingest>>,
@@ -136,6 +166,19 @@ impl Compositor {
     /// side exceeds the adapter limit.
     pub fn upload_rgba8(&self, width: u32, height: u32, rgba: &[u8]) -> Result<Image, RenderError> {
         image::upload(&self.maker(), width, height, rgba)
+    }
+
+    /// [`Self::upload_rgba8`] into a texture of `to` texels, smaller than the frame each
+    /// way or its size, placed at the frame's size: each texel is the mean of the
+    /// frame's texels under it, in premultiplied linear light (#1139).
+    pub(crate) fn upload_rgba8_into(
+        &self,
+        width: u32,
+        height: u32,
+        rgba: &[u8],
+        to: (u32, u32),
+    ) -> Result<Image, RenderError> {
+        image::upload_into(&self.maker(), width, height, rgba, to)
     }
 
     /// Samples `texture`, which must already be on this device: 2D, one sample,
@@ -325,6 +368,12 @@ impl Compositor {
         self.readback_wait
     }
 
+    /// How many texels the last composite's draws could reach (#1070).
+    #[cfg(test)]
+    pub(crate) fn drawn_texels(&self) -> u32 {
+        self.drawn.map_or(0, |rect| rect.width * rect.height)
+    }
+
     /// Composites `scene` into a new [`Image`] that a later scene on this compositor can
     /// place, as a nested scene is placed in its parent.
     ///
@@ -413,6 +462,25 @@ impl Compositor {
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
         target.mark_changed();
+        // Outside what the items reached the layer holds its clear colour, which is
+        // nothing when that is transparent: a scene placing it draws only over the rest.
+        let content = (scene.background.a == 0.0).then(|| {
+            self.drawn.map_or(
+                Region {
+                    x: 0,
+                    y: 0,
+                    width: 0,
+                    height: 0,
+                },
+                |rect| Region {
+                    x: rect.x,
+                    y: rect.y,
+                    width: rect.width,
+                    height: rect.height,
+                },
+            )
+        });
+        target.set_content(content);
         drop(submitting);
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
@@ -550,7 +618,16 @@ impl Compositor {
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                 label: Some("jstream-render-filter"),
             });
+        // A filter can draw anywhere in its output, unless what it reads is bounded and
+        // its kind says how far past that it draws (#1070).
+        output.set_content(None);
+        let padding = filter.pad();
         let (pass, scratch) = filter.parts();
+        let timing = match (&mut self.timer, pass.timed()) {
+            (Some(timer), Some(kind)) => timer.begin(&mut encoder, kind),
+            _ => None,
+        };
+        let bound = bound_of(input, padding, size, pass.reach());
         scratch.begin();
         let mut ctx = filter::Ctx {
             gpu: &self.gpu,
@@ -566,14 +643,30 @@ impl Compositor {
             clock,
             holds: &mut self.staged,
             scratch,
+            bound,
         };
         ctx.holds.clear();
-        let encoded = pass.encode(&mut ctx, input, output);
+        let encoded = if padding == 0 {
+            pass.encode(&mut ctx, input, output)
+        } else {
+            let grow = |side: u32| side.saturating_add(padding.saturating_mul(2));
+            ctx.scratch(grow(input.width()), grow(input.height()))
+                .and_then(|padded| {
+                    filter::pad(&mut ctx, input, padding, &padded)?;
+                    pass.encode(&mut ctx, &padded, output)
+                })
+        };
         ctx.hold(input);
         ctx.scratch.end();
         if let Err(err) = encoded {
             self.staged.clear();
+            if let (Some(timer), Some(timing)) = (&mut self.timer, timing) {
+                timer.abandon(timing);
+            }
             return Err(err);
+        }
+        if let (Some(timer), Some(timing)) = (&self.timer, &timing) {
+            timer.end(&mut encoder, timing);
         }
         // Staged only once recording succeeded, right before the submit it arms, and
         // handed back to the platform at the end of that submit, as `render` does: the
@@ -583,12 +676,27 @@ impl Compositor {
         for (sync, _) in &self.staged {
             if let Err(err) = sync.stage(&self.gpu.queue) {
                 self.staged.clear();
+                if let (Some(timer), Some(timing)) = (&mut self.timer, timing) {
+                    timer.abandon(timing);
+                }
                 return Err(RenderError::Sync(err));
             }
         }
         self.record_release(&mut encoder);
         self.gpu.queue.submit([encoder.finish()]);
+        output.set_content(bound.map(|bound| {
+            let [x0, y0, x1, y1] = bound.rect;
+            Region {
+                x: x0,
+                y: y0,
+                width: x1 - x0,
+                height: y1 - y0,
+            }
+        }));
         drop(submitting);
+        if let (Some(timer), Some(timing)) = (&self.timer, timing) {
+            timer.submitted(timing);
+        }
         // The platform reuses a frame's texture once nothing holds it.
         self.staged.clear();
         Ok(())
@@ -602,6 +710,28 @@ impl Compositor {
                 what: "image",
                 detail: "the filter input was made by another compositor".into(),
             })
+        }
+    }
+
+    /// Starts timing each effect-pack filter or shader source this compositor applies
+    /// on the GPU (#349), for [`Self::gpu_times`] to collect, and says whether it does:
+    /// `false` on a device without timestamp queries. A compositor times nothing until
+    /// asked, so one whose times nobody collects (a preview's) spends nothing on them.
+    pub fn time_passes(&mut self) -> bool {
+        if self.timer.is_none() {
+            self.timer = crate::timer::PassTimer::new(&self.gpu.device, &self.gpu.queue);
+        }
+        self.timer.is_some()
+    }
+
+    /// Hands `measured` the GPU time of each effect-pack filter or shader source applied
+    /// since the last call whose time has come back, with its kind ID (#349). A time
+    /// comes back a frame or two after its draw, read without waiting, and allocates
+    /// nothing. Nothing before [`Self::time_passes`], or on a device without timestamp
+    /// queries.
+    pub fn gpu_times(&mut self, measured: impl FnMut(&str, std::time::Duration)) {
+        if let Some(timer) = &mut self.timer {
+            timer.collect(&self.gpu.device, measured);
         }
     }
 
@@ -645,6 +775,13 @@ impl Compositor {
             let _ = self.gpu.device.poll(wgpu::PollType::Poll);
         }
         self.gpu.faults.lost.get().cloned()
+    }
+
+    /// Why the device was lost, when wgpu has already said so ([`Self::lost`]), without
+    /// polling: cheap enough to ask before every frame. The callback runs on a poll, and
+    /// the compositor polls its device as it reads frames back.
+    pub fn lost_already(&self) -> Option<&str> {
+        self.gpu.faults.lost.get().map(String::as_str)
     }
 
     /// The first uncaptured wgpu error on this compositor's device since the last call:
@@ -770,12 +907,14 @@ impl Compositor {
             vertices: Vec::new(),
             vertex_buffer,
             draws: Vec::new(),
+            drawn: None,
             order: Vec::new(),
             staged: Vec::new(),
             filters,
             mip_pipelines,
             models,
             readback_wait: std::time::Duration::ZERO,
+            timer: None,
             ingest: Mutex::new(None),
         }
     }
@@ -783,6 +922,7 @@ impl Compositor {
     fn prepare(&mut self, scene: &Scene<'_>) -> Result<(), RenderError> {
         self.vertices.clear();
         self.draws.clear();
+        self.drawn = None;
         let canvas_w = scene.canvas.width() as f32;
         let canvas_h = scene.canvas.height() as f32;
         // Stacking order, or far to near within each run of items seen through one camera
@@ -866,17 +1006,55 @@ impl Compositor {
                 .ok()
                 .filter(|first| first.checked_add(MAX_VERTICES_PER_ITEM).is_some())
                 .ok_or_else(too_many)?;
-            // A 3D item samples a chain of its crop, so its texture coordinates are
-            // mapped from the source's into the chain's.
-            let mips = shape.is_3d().then(|| {
+            // A 3D item, and a 2D one drawn small (#1217), samples a chain of its crop,
+            // so its texture coordinates are mapped from the source's into the chain's.
+            let texels = (item.image.width(), item.image.height());
+            let (least, most) = if shape.is_3d() {
+                (0.0, f32::INFINITY)
+            } else {
+                shape.minification(texels)
+            };
+            // How much of its frame's resolution the image needed, for an upload drawn
+            // at the size it is shown (`ResourceCache::upload_drawn`, #1139).
+            item.image.record_draw(least);
+            // A layer that is transparent outside what its scene drew is drawn only over
+            // that (#1070): the rest adds nothing in the modes that leave what is below
+            // a transparent texel as it was. Not with a chain, whose levels spread the
+            // drawn texels past the margin, nor in a mode that reads the backdrop.
+            if most <= MINIFIED
+                && matches!(
+                    item.blend,
+                    BlendMode::Normal | BlendMode::Additive | BlendMode::Screen
+                )
+                && let Some(content) = item.image.content()
+            {
+                let (w, h) = (texels.0 as f32, texels.1 as f32);
+                let keep = [
+                    content.x as f32 / w,
+                    content.y as f32 / h,
+                    (content.x + content.width) as f32 / w,
+                    (content.y + content.height) as f32 / h,
+                ];
+                if !shape.trim_to(keep) {
+                    continue;
+                }
+            }
+            // A 2D item minified `2^k` times or more along both axes never samples
+            // the levels finer than `k`.
+            let skip = if least >= 2.0 {
+                // `as` saturates, so even an infinite ratio (a degenerate quad) is in range.
+                (least.log2().floor() as u32).min(MAX_SKIP)
+            } else {
+                0
+            };
+            let mips = (most > MINIFIED).then(|| {
                 let image = item.image;
-                let texels = (image.width(), image.height());
                 // The crop counts in the extent; the chain is built from texels.
                 let region = shape.crop.map_or_else(
                     || Region::whole(texels.0, texels.1),
                     |crop| crop.in_texels(image.extent(), texels),
                 );
-                let chain = self.chain_of(image, region);
+                let chain = self.chain_of(image, region, skip);
                 let (w, h) = (image.width() as f32, image.height() as f32);
                 shape.remap_uv([
                     region.x as f32 / w,
@@ -892,6 +1070,9 @@ impl Compositor {
             } else {
                 item.image.alpha()
             };
+            if let Some(reach) = covered(shape, scene.canvas.width(), scene.canvas.height()) {
+                self.drawn = Some(self.drawn.map_or(reach, |drawn| drawn.union(reach)));
+            }
             let vertex_count = push_shape(
                 &mut self.vertices,
                 shape,
@@ -1053,16 +1234,17 @@ impl Compositor {
         Ok(())
     }
 
-    /// `image`'s mip chain of `region`, made the first time it is placed in 3D with it.
-    fn chain_of(&self, image: &Image, region: Region) -> Arc<Mips> {
-        image.chain(region, || {
+    /// `image`'s mip chain of `region` starting `skip` levels down, made the first time
+    /// it is placed in 3D or drawn small with it.
+    fn chain_of(&self, image: &Image, region: Region, skip: u32) -> Arc<Mips> {
+        image.chain(region, skip, || {
             Mips::new(
                 &self.gpu.device,
                 &self.gpu.queue,
                 &self.image_layout,
                 &self.mip_pipelines,
-                image,
                 region,
+                skip,
             )
         })
     }
@@ -1426,6 +1608,43 @@ fn covered(shape: &Shape, width: u32, height: u32) -> Option<Rect> {
         y: y0,
         width: x1 - x0,
         height: y1 - y0,
+    })
+}
+
+/// Where a filter that reaches `reach` input pixels past what it reads can draw, in its
+/// output of `size`: `input`'s content moved in by the `padding` and grown by the reach
+/// and a pixel, clipped (#1070). `None` when the input's content isn't known, the kind
+/// gives no reach, or it doesn't keep its padded input's size. An input with nothing in it
+/// gives an empty bound.
+fn bound_of(
+    input: &Image,
+    padding: u32,
+    size: (u32, u32),
+    reach: Option<f32>,
+) -> Option<filter::Bound> {
+    let content = input.content()?;
+    let reach = reach.filter(|reach| reach.is_finite() && *reach >= 0.0)?;
+    let grow = |side: u32| side.saturating_add(padding.saturating_mul(2));
+    if size != (grow(input.width()), grow(input.height())) {
+        return None;
+    }
+    if content.width == 0 || content.height == 0 {
+        return Some(filter::Bound {
+            rect: [0; 4],
+            frame: size,
+        });
+    }
+    let reach = (reach.ceil() as u32).saturating_add(1);
+    let low = |start: u32| start.saturating_add(padding).saturating_sub(reach);
+    let high = |end: u32, side: u32| end.saturating_add(padding).saturating_add(reach).min(side);
+    Some(filter::Bound {
+        rect: [
+            low(content.x),
+            low(content.y),
+            high(content.x + content.width, size.0),
+            high(content.y + content.height, size.1),
+        ],
+        frame: size,
     })
 }
 

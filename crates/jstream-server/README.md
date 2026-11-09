@@ -34,8 +34,25 @@ Contents (a first cut; [Design](#design) explains the choices):
   types and a Content Security Policy.
 - **Configuration** (`config.rs`): `ServerConfig` (bind address, extra hosts and
   origins, connection limits, the ping interval and liveness timeout, the MCP switch and its limits, the UI directory, the
-  device file, the UI settings file, the `tls` flag, the `pairing` switch) and `Token`,
-  the control token.
+  device file, the UI settings file, the `tls` flag, the `pairing` switch, with the `tls`
+  feature the network listener, and the agent approval settings: `ui_token`, `ask_agents`, `approvals_file` and `approval_timeout`)
+  and `Token`, the control token.
+- **Agent approval** (`approvals.rs`,
+  [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)): with
+  `ServerConfig::ask_agents` on and the UI setting `agents.ask` (`ASK_SETTING`) not
+  `false`, a session the control token admits is held at `hello` until the person
+  approves its client: allow once, always allow (kept in the user-only approved agents
+  file), deny, or no answer in `approval_timeout` (2 minutes). Every session hears
+  `agent.approval_requested` and `agent.approval_resolved`, and `Admitted` answers
+  `agent.approve`, `agent.forget` and `agent.approved` (with `ask_agents` off they reach
+  the engine, which answers `unsupported`). The request belongs to the
+  session, so a `hello` sent again (an MCP client's retry) waits on the same one, and
+  its timer stops when the session goes. A session's events start only once its
+  `hello` succeeds, so a held client, even one whose transport subscribed early (MCP
+  over HTTP at `initialize`), sees no state, activity or other agent's request. At
+  most 8 are open at once; one more is turned away. Sessions the UI's own token
+  (`ui_token`) or a device token admits are never held. It is a notice with a veto, not
+  a control: a client can pass by naming itself after an approved one.
 - **Devices** (`devices.rs`): the paired devices, the open pairing code, and the device
   file that keeps the devices' token digests
   ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)).
@@ -49,30 +66,44 @@ Contents (a first cut; [Design](#design) explains the choices):
   ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)).
 - **Admitted session** (`admitted.rs`): the `Control` wrapper every connection and MCP
   session gets, which answers `pairing.start`, `device.list` and `device.revoke` itself
-  unless `ServerConfig::pairing` is off
+  unless `ServerConfig::pairing` is off, and the agent approval calls, and holds a
+  `hello` for approval
   ([ADR-0057](../../docs/adr/0057-server-answers-credential-calls.md)).
-- **Listener** (`listener.rs`): accepts TCP connections, closes one accepted while
-  `max_tcp_connections` are open, and drops one that hasn't sent an accepted upgrade
-  request in time.
+- **Listener** (`listener.rs`): accepts TCP connections with Nagle's algorithm off,
+  closes one accepted while `max_tcp_connections` are open, and drops one that hasn't
+  sent an accepted upgrade request in time.
 - **Gate** (`gate.rs`): the `Host`, `Origin` and token checks every request passes
   ([R-SEC-002](../../docs/RULES.md#R-SEC-002)), the device cookie among them, and the
   limit on how many failed credentials are logged.
 - **Session** (`session.rs`): one connection, from the protocol envelope to one `Control`
   session and back, with the bounded outbox that keeps a slow client from holding up
   its events, the cap on calls in flight, and the pings that close a connection that
-  went silent.
+  went silent. A `hello` waits beside the rest of the loop, so one held for approval
+  keeps the connection pinged; another `hello` while one waits is refused as
+  `malformed`; a control-token connection's
+  handshake deadline is the handshake timeout plus the approval timeout while
+  `ask_agents` is on, and a `not_allowed` `hello` closes the connection (1008).
 - **Preview frames** (`preview.rs`): the session's binary channel, queued per
   connection and sent as WebSocket binary messages, dropping up to the next keyframe
   when the client reads slowly.
 - **Token file** (`token_file.rs`): the control token file the hosts that let outside
   clients in keep (the daemon, and the desktop app with `--mcp`): `load_or_create`
   reuses a user-only file's token or creates the file, user-only, with a new random one,
-  and `device_file` names the devices file beside it (ADR-0006).
+  `device_file` names the devices file beside it (ADR-0006), and `approvals_file` the
+  approved agents file (ADR-0131).
+- **Network listener** (`network.rs`, `tls` feature): `NetworkConfig`, and the second,
+  TLS-only listener for devices on the network
+  ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), on rustls with the
+  ring provider, with its own pool of open connections.
+- **Certificate** (`identity.rs`, `tls` feature): the network listener's key and
+  self-signed certificate, made on the host and kept in one user-only file beside the
+  token file (`identity_file`), its SHA-256 fingerprint, and the machine's names and
+  addresses it carries (`machine_names`).
 - **Errors** (`error.rs`): `ServerError`, a `thiserror` enum.
 
-Not here yet: a TLS listener ([Open questions](#design)). `ServerConfig::tls` says
-whether clients reach the listener over TLS, and only tests turn it on until there is
-one.
+`ServerConfig::tls` says whether clients reach the host's own listener over TLS; only
+tests turn it on, to run the TLS-only paths over plain HTTP. The network listener is
+always TLS.
 
 Why a crate and not a module of `jstream-control` or `jstream-mcp`: it owns the HTTP
 stack (axum, hyper, tokio's network runtime), which neither the WASM-safe
@@ -178,7 +209,11 @@ for it is logged at `warn` (`too many open connections`), and later ones are not
 a connection is accepted again. The header-read timeout is there since hyper's own isn't
 reachable through `axum::serve`: until the upgrade handler accepts a request, every read
 and write fails once the deadline has passed. So it also drops a connection that sends
-no request, asks for another path, or stays open after a refusal.
+no request, asks for another path, or stays open after a refusal. The listener also turns
+off Nagle's algorithm (`TCP_NODELAY`) on every connection it accepts, on the loopback
+port and the network listener alike: replies are small writes, often several in a row,
+and with Nagle on, each after the first waited for the client's delayed ACK (about 40 ms
+on Linux).
 The WebSocket cap (`max_connections`) is checked after the `Host`, `Origin` and token
 checks, so a refused upgrade learns nothing about how many sessions are open, and a
 refusal costs no session. The TCP cap is checked at accept, before any request is read. The listener
@@ -251,7 +286,10 @@ its own from a short code instead of the control token.
 - **The code.** `pairing.start`, from any admitted client, opens a code: 8 Crockford
   base32 characters (40 bits from `getrandom`), shown `XXXX-XXXX`. One is open at a time,
   and a new `pairing.start` replaces it. It lives 2 minutes, works once, and is void
-  after 5 wrong attempts (logged at `warn`, without the code). Entry ignores case,
+  after 5 wrong attempts (logged at `warn`, without the code), from the host's own
+  listener and the network listener together, as ADR-0044 sets. A peer on the network
+  can therefore void the open code, and the host starts pairing again; it never gets
+  more than five guesses at one. Entry ignores case,
   dashes and spaces, and reads `O` as `0` and `I`/`L` as `1`. `pairing.start` is refused
   (`action_failed`) unless the server is bound to loopback or `ServerConfig::tls` is on:
   a device token is accepted only over loopback or TLS
@@ -325,12 +363,22 @@ show the same workspace.
   logged at `warn` and replaced on the next change: the server still starts. A change
   that can't be written answers `action_failed` and is kept in memory until the server
   stops. Without a file, the settings last as long as the server.
+- **The host reads them.** `Server::ui_settings` hands the app that runs the server a
+  `UiSettingsView`: a key's value and a `watch` receiver that changes with every
+  change, so a setting the UI keeps can steer the host. It can't change them. The
+  desktop app reads `hotkeys.global` there to turn its global hotkeys off (ADR-0112
+  §6).
 
 ### The pairing page and the device cookie
 
 [ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md) lets a
-browser pair by itself and stay signed in. All of it exists only with
-`ServerConfig::tls` and `ServerConfig::pairing` on; otherwise `GET /pair` is 404 and the UI's `401` links nowhere.
+browser pair by itself and stay signed in. All of it exists only on a TLS listener (the
+network listener, or the host's own with `ServerConfig::tls`) with
+`ServerConfig::pairing` on; otherwise `GET /pair` is 404 and the UI's `401` links nowhere.
+The page tells the person to check the certificate's fingerprint against the host's
+before pairing, and that a new certificate warning later means continue only if the
+fingerprint matches the one the host shows
+([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)).
 
 - **The page.** `GET /pair` (`PAIR_PAGE_PATH`; `HEAD` too, any other method 405) is
   answered without a token, after the `Host` and `Origin` checks. It is a fixed page
@@ -362,6 +410,51 @@ browser pair by itself and stay signed in. All of it exists only with
 - **Secrets.** Like every header the cookie is never logged
   ([R-SEC-001](../../docs/RULES.md#R-SEC-001)); the test
   `tests::a_browser_pairs_into_a_cookie_that_admits_it_until_revoked` checks this.
+
+### The network listener
+
+[ADR-0104](../../docs/adr/0104-network-listener-over-tls.md) lets devices on the network
+reach the server. With the `tls` feature, `ServerConfig::network` (a `NetworkConfig`:
+an address and an `Identity`) opens a second listener beside the host's own, which is
+unchanged. The daemon's `--lan` sets it; nothing turns it on by default.
+
+- **TLS only.** rustls with the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)),
+  TLS 1.3 and 1.2 with rustls' default cipher suites for each, no client certificates,
+  ALPN `http/1.1` (#1129 N2). A plain HTTP request gets no HTTP answer. The handshake
+  runs on the connection's own task, when hyper first reads, never in the accept loop,
+  and the header-read deadline covers it.
+- **The certificate** (`identity.rs`). An ECDSA P-256 key and a self-signed
+  certificate from `rcgen`, made the first time and kept in one user-only file beside
+  the token file (`identity_file`: the token file's name plus `.tls`), read with the
+  token file's checks and rewritten through a temporary file. The key never appears in
+  a log or a `Debug` form. The certificate names the host name, its `.local` name and
+  the addresses `machine_names` finds (the bound address, or the OS's preferred
+  outgoing IPv4 and IPv6 ones), and is valid to the end of 2049: it is trusted by its
+  fingerprint, not its dates. `Identity::missing` says which of today's names it lacks,
+  and `Identity::renew` makes a new key; nothing renews it silently.
+- **Who gets in.** The same handlers and the same gate, on the gate's network side.
+  `Host` must carry the listener's port with a name the certificate carries or the
+  address the connection arrived on (a `Host` without a port means 443). `Origin`,
+  when present, must be `https://` and that host; the configured extra origins are the
+  host listener's only. The control token, and the host UI's own token (`ui_token`), are
+  refused there however they are presented, with a `401` that asks for a paired device's token (`Refusal::NetworkControlToken`).
+  A device token, or a browser's device cookie, gets in while pairing is on. The
+  pairing exchange and `GET /pair` are served there, sharing the code's five
+  attempts with the host's listener.
+- **Limits** (#1129 N1). It has its own pool of open TCP connections, as many as
+  `max_tcp_connections`, so connections from the network that never authenticate can't
+  use up the host's. The header-read and handshake timeouts are the same. The
+  WebSocket connection and MCP session limits are shared, since only a paired device
+  reaches them.
+- **The host's side.** `Server::network_addr`, `network_urls` (one per name the
+  certificate carries) and `network_fingerprint` give what the host shows the person:
+  the addresses and the SHA-256 fingerprint, as `AB:CD:…`, the way a browser's
+  certificate viewer writes it. `pairing.start`'s answer carries the same two as
+  `network` (protocol 0.97), so the host UI and the CLI show them beside the code;
+  without a network listener it is absent. The listener's start is logged at `info` with its
+  address and fingerprint.
+- **Where it listens.** Wherever `NetworkConfig::bind` says: the daemon binds every
+  interface on port 4456 unless told otherwise (#1129 N3), and says so in its help.
 
 ### Sessions
 
@@ -592,19 +685,21 @@ MCP server behind `/mcp`; `serde_json` for the pairing exchange, the device file
 `getrandom` for MCP session IDs, pairing codes and device tokens, already in the tree through
 tungstenite's `rand` and used by `jstream-daemon` for its token; on Windows only,
 `jstream-platform-windows` for the device file's user-only DACL and its check (#344):
-the server forbids `unsafe`, and the daemon links that crate anyway. No TLS crate is in the tree, so no `ring` or `rustls`.
+the server forbids `unsafe`, and the daemon links that crate anyway. With the `tls`
+feature only: `rustls` (ring provider, already in the tree for `jstream-outputs`' RTMPS)
+and `tokio-rustls`, the rustls project's async adapter, for the network listener;
+`rcgen` (ring) for its certificate, a normal dependency here where it was the RTMPS
+tests' dev-dependency (#1129 N2); `ring` for the certificate's SHA-256 fingerprint.
 
 ### Open questions
 
-1. **TLS.** Plain `ws://` on loopback is the first cut. Remote browsers need `wss://`
-   with rustls and the ring provider ([R-DEP-006](../../docs/RULES.md#R-DEP-006)): a TLS
-   feature and its wiring. `ring` is already on the lint-deps native-code allowlist, for
-   `jstream-outputs`' RTMPS, so that needs no further governance change. What depends on
-   TLS (pairing beyond loopback, the pairing page, the device cookie) is built behind
-   `ServerConfig::tls`, which the listener will set. How the certificate is made and
-   trusted is decided in [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md):
-   self-signed, made on the host and pinned by its fingerprint, on an opt-in second
-   listener for the network that admits device tokens only.
+1. **TLS** (answered). The network listener is TLS, behind the `tls` feature, with a
+   self-signed certificate made on the host and pinned by its fingerprint
+   ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md), see *The network
+   listener*). The host's own listener stays plain `ws://` on loopback. The host UI's
+   pairing panel and `jstream pair` show the addresses and the fingerprint, and the
+   desktop app turns the listener on with "Allow devices on my network"
+   ([jstream-desktop › Design](../../apps/jstream-desktop/README.md#design)).
 2. **Browser token.** Settled and built (see *`Basic` credentials* and *The token as
    a subprotocol*): a page load presents the token as `Basic` credentials, and the
    UI's upgrade either carries the same credentials (checked in Chromium) or offers

@@ -6,6 +6,7 @@
 use crate::bootstrap;
 use crate::host::{self, Host};
 use crate::logs::LogFile;
+use crate::network;
 use crate::ui::{self, Ui};
 use anyhow::Context;
 use jstream_crash::Secrets;
@@ -16,7 +17,8 @@ use tracing_subscriber::filter::{LevelFilter, Targets};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
-/// The UI bundle's folder beside the exe, when `--ui-dir` doesn't name one.
+/// The UI bundle's folder beside the exe (in a macOS app, in its resources:
+/// [`bundled_ui_dir`]), when `--ui-dir` doesn't name one.
 pub const UI_DIR: &str = "ui";
 
 /// The collection file in the data folder.
@@ -79,6 +81,9 @@ pub struct Startup {
     pub script: Option<String>,
     /// The engine and its server, when they started.
     pub host: Option<Host>,
+    /// The "Allow devices on my network" setting's file, which the window's
+    /// `set_network` command writes, when the data folder is known.
+    pub network_file: Option<PathBuf>,
 }
 
 impl Startup {
@@ -88,6 +93,7 @@ impl Startup {
             ui: Ui::Problem(message),
             script: None,
             host: None,
+            network_file: None,
         }
     }
 }
@@ -130,13 +136,35 @@ pub fn start(
             port: options.port.unwrap_or(host::MCP_PORT),
             token_file: data.join(host::TOKEN_FILE),
         });
-        Host::start(
-            engine,
+        let ui_settings = Some(data.join(jstream_platform::paths::UI_SETTINGS_FILE));
+        let network = network_access(data);
+        match Host::start(
+            Arc::clone(&engine),
             ui::ORIGIN,
             secrets,
-            Some(data.join(jstream_platform::paths::UI_SETTINGS_FILE)),
+            ui_settings.clone(),
             agents.as_ref(),
-        )
+            network.as_ref(),
+        ) {
+            Err(error) if network.is_some() => {
+                // Most likely the network listener's port is in use (a daemon with
+                // `--lan`): the app still starts, for this machine only. Any other cause
+                // fails the retry the same way, with its own error.
+                tracing::error!(
+                    error = format!("{error:#}"),
+                    "could not start with network access; trying again without it"
+                );
+                Host::start(
+                    engine,
+                    ui::ORIGIN,
+                    secrets,
+                    ui_settings,
+                    agents.as_ref(),
+                    None,
+                )
+            }
+            started => started,
+        }
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
     tracing::info!(vcam = vcam.as_str(), "virtual camera");
@@ -146,7 +174,7 @@ pub fn start(
     };
     let ui_dir = match (&options.ui_dir, exe_dir) {
         (Some(dir), _) => dir.clone(),
-        (None, Some(exe_dir)) => exe_dir.join(UI_DIR),
+        (None, Some(exe_dir)) => bundled_ui_dir(exe_dir),
         (None, None) => PathBuf::from(UI_DIR),
     };
     let ui = Ui::files(&ui_dir, host.ws_origin());
@@ -162,13 +190,72 @@ pub fn start(
         ui::ORIGIN,
         host.ws_url(),
         host.token(),
-        vcam.as_str(),
-        collection.as_ref(),
+        &bootstrap::Page {
+            vcam: vcam.as_str(),
+            collection: collection.as_ref(),
+            network: network::allowed(&network::setting_file(data)),
+            network_open: host.network().is_some(),
+            wheel_focus_only: wheel_focus_only(),
+        },
     );
     Startup {
         ui,
         script: Some(script),
         host: Some(host),
+        network_file: Some(network::setting_file(data)),
+    }
+}
+
+/// Whether wheel chords are heard only while the window has the focus: on macOS until
+/// the app has the Accessibility permission (ADR-0144 §2), which it checks without
+/// asking. Elsewhere the OS needs no permission for them.
+fn wheel_focus_only() -> bool {
+    #[cfg(target_os = "macos")]
+    {
+        jstream_platform_macos::wheel_needs_accessibility()
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        false
+    }
+}
+
+/// "Allow devices on my network", when the person turned it on: the network listener's
+/// configuration, and the paired devices' file, both beside the data folder's token
+/// file as the daemon keeps them. A certificate that can't be used is logged, and the
+/// app starts without network access.
+fn network_access(data: &Path) -> Option<host::Network> {
+    if !network::allowed(&network::setting_file(data)) {
+        return None;
+    }
+    let token_file = data.join(host::TOKEN_FILE);
+    match network::config(&token_file) {
+        Ok(config) => Some(host::Network {
+            config,
+            device_file: jstream_server::token_file::device_file(&token_file),
+        }),
+        Err(error) => {
+            tracing::error!(
+                error = format!("{error:#}"),
+                "starting without network access"
+            );
+            None
+        }
+    }
+}
+
+/// The UI bundle for an exe in `exe_dir`: the [`UI_DIR`] folder beside it, or in a macOS
+/// app (`JStream.app/Contents/MacOS/jstream`) the one in `Contents/Resources`, where an
+/// app keeps what isn't code, so the bundle can be signed as it is.
+pub fn bundled_ui_dir(exe_dir: &Path) -> PathBuf {
+    let in_app = exe_dir.file_name().is_some_and(|name| name == "MacOS")
+        && exe_dir
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == "Contents");
+    match exe_dir.parent() {
+        Some(contents) if in_app => contents.join("Resources").join(UI_DIR),
+        _ => exe_dir.join(UI_DIR),
     }
 }
 
@@ -211,6 +298,25 @@ mod tests {
 
     fn args(list: &[&str]) -> Vec<OsString> {
         list.iter().map(OsString::from).collect()
+    }
+
+    #[test]
+    fn a_macos_app_keeps_its_ui_in_resources() {
+        use super::bundled_ui_dir;
+        use std::path::Path;
+        assert_eq!(
+            bundled_ui_dir(Path::new("/Applications/JStream.app/Contents/MacOS")),
+            Path::new("/Applications/JStream.app/Contents/Resources/ui")
+        );
+        assert_eq!(
+            bundled_ui_dir(Path::new("/opt/jstream")),
+            Path::new("/opt/jstream/ui")
+        );
+        // A `MacOS` folder outside an app's `Contents` is an ordinary folder.
+        assert_eq!(
+            bundled_ui_dir(Path::new("/tmp/MacOS")),
+            Path::new("/tmp/MacOS/ui")
+        );
     }
 
     #[test]

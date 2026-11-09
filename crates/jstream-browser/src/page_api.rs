@@ -26,6 +26,9 @@ pub struct PageApi {
     pub values: bool,
     /// `jstream.levels()`: one bus's levels and bands, sent each page frame.
     pub levels: bool,
+    /// `jstream.midi()`: one MIDI input's tempo, held notes, controllers and latest
+    /// notes (ADR-0147).
+    pub midi: bool,
 }
 
 /// One update to a page's `window.jstream`: each field the engine sends is the latest of
@@ -44,6 +47,9 @@ pub struct PageData {
     /// The granted bus's latest reading, as a JSON object (`peak`, `rms`, `bands`), or
     /// `null` while there is none.
     pub levels: Option<String>,
+    /// The granted MIDI input's latest reading, as a JSON object (`input`, `tempo`,
+    /// `notes`, `controllers`, `recent`).
+    pub midi: Option<String>,
     /// Shared values by name: each value's JSON text, or `None` for one removed.
     pub values: Vec<(String, Option<String>)>,
 }
@@ -55,6 +61,7 @@ impl PageData {
             && self.source.is_none()
             && self.scenes.is_none()
             && self.levels.is_none()
+            && self.midi.is_none()
             && self.values.is_empty()
     }
 
@@ -63,6 +70,7 @@ impl PageData {
         16 + self.source.as_ref().map_or(0, String::len)
             + self.scenes.as_ref().map_or(0, String::len)
             + self.levels.as_ref().map_or(0, String::len)
+            + self.midi.as_ref().map_or(0, String::len)
             + self
                 .values
                 .iter()
@@ -71,7 +79,7 @@ impl PageData {
     }
 
     /// The update as one or more, each within [`MAX_PAGE_DATA_BYTES`]: the clock,
-    /// visibility, scenes and levels in the first, and the values in order, each whole in one of
+    /// visibility, scenes, levels and MIDI in the first, and the values in order, each whole in one of
     /// them. Sent in order, they leave the page as the one update would.
     pub fn split(self) -> Vec<PageData> {
         if self.bytes() <= MAX_PAGE_DATA_BYTES {
@@ -108,15 +116,15 @@ pub(crate) enum ApiHome {
     Web(String),
     /// A `file:` document at or below this folder URL, which ends in `/`.
     File(String),
-    /// A `data:` document: a page given as HTML.
-    Data,
 }
 
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
 impl ApiHome {
     /// Where a page at `location` gets the API: never for a blank page, nor for a file
-    /// whose folder can't be resolved.
-    pub(crate) fn of(location: &PageLocation) -> Option<Self> {
+    /// whose folder can't be resolved. A page given as HTML gets it on `html_url`'s
+    /// origin, the one its policy gave it
+    /// ([`RequestPolicy::html_url`](crate::RequestPolicy::html_url)).
+    pub(crate) fn of(location: &PageLocation, html_url: Option<&str>) -> Option<Self> {
         match location {
             PageLocation::Blank => None,
             PageLocation::Web(url) => Some(Self::Web(url.clone())),
@@ -128,7 +136,8 @@ impl ApiHome {
                 }
                 Some(Self::File(url))
             }
-            PageLocation::Html(_) => Some(Self::Data),
+            // Its own origin, which the helper serves it from (#1035).
+            PageLocation::Html(_) => Some(Self::Web(html_url?.to_owned())),
         }
     }
 
@@ -152,7 +161,6 @@ impl ApiHome {
                         }
                     })
             }
-            Self::Data => scheme.as_deref() == Some("data"),
         }
     }
 
@@ -161,7 +169,6 @@ impl ApiHome {
         match self {
             Self::Web(url) => ("web", url),
             Self::File(folder) => ("file", folder),
-            Self::Data => ("data", ""),
         }
     }
 
@@ -170,7 +177,6 @@ impl ApiHome {
         match kind {
             "web" => Some(Self::Web(value.to_owned())),
             "file" if value.ends_with('/') => Some(Self::File(value.to_owned())),
-            "data" => Some(Self::Data),
             _ => None,
         }
     }
@@ -181,8 +187,8 @@ impl ApiHome {
 #[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
 pub(crate) fn shim(api: PageApi) -> String {
     let grant = format!(
-        "{{scenes:{},values:{},levels:{}}}",
-        api.scenes, api.values, api.levels
+        "{{scenes:{},values:{},levels:{},midi:{}}}",
+        api.scenes, api.values, api.levels, api.midi
     );
     include_str!("page_api.js").replace("__GRANT__", &grant)
 }
@@ -198,6 +204,7 @@ pub(crate) struct PageCache {
     source: Option<String>,
     scenes: Option<String>,
     levels: Option<String>,
+    midi: Option<String>,
     values: std::collections::BTreeMap<String, String>,
 }
 
@@ -217,6 +224,9 @@ impl PageCache {
         if let Some(levels) = &data.levels {
             self.levels = Some(levels.clone());
         }
+        if let Some(midi) = &data.midi {
+            self.midi = Some(midi.clone());
+        }
         for (name, value) in &data.values {
             match value {
                 Some(value) => self.values.insert(name.clone(), value.clone()),
@@ -235,6 +245,7 @@ impl PageCache {
             source: self.source.clone(),
             scenes: self.scenes.clone(),
             levels: self.levels.clone(),
+            midi: self.midi.clone(),
             values: self
                 .values
                 .iter()
@@ -264,6 +275,9 @@ pub(crate) fn update_json(data: &PageData) -> String {
     if let Some(levels) = &data.levels {
         fields.push(format!("\"levels\":{levels}"));
     }
+    if let Some(midi) = &data.midi {
+        fields.push(format!("\"midi\":{midi}"));
+    }
     if !data.values.is_empty() {
         let values: Vec<String> = data
             .values
@@ -292,7 +306,11 @@ mod tests {
 
     #[test]
     fn a_web_page_gets_the_api_on_its_own_origin_only() {
-        let home = ApiHome::of(&PageLocation::Web("https://example.com/overlay/".into())).unwrap();
+        let home = ApiHome::of(
+            &PageLocation::Web("https://example.com/overlay/".into()),
+            None,
+        )
+        .unwrap();
         assert!(home.covers("https://example.com/other/page.html?x#y"));
         assert!(home.covers("https://EXAMPLE.com:443/"));
         assert!(!home.covers("http://example.com/"));
@@ -303,10 +321,10 @@ mod tests {
     }
 
     #[test]
-    fn a_file_page_gets_it_in_its_folder_and_an_html_page_on_data() {
+    fn a_file_page_gets_it_in_its_folder_and_an_html_page_on_its_own_origin() {
         let dir = std::env::temp_dir().join(format!("jstream-page-api-{}", std::process::id()));
         std::fs::create_dir_all(dir.join("sub")).unwrap();
-        let home = ApiHome::of(&PageLocation::File(dir.join("index.html"))).unwrap();
+        let home = ApiHome::of(&PageLocation::File(dir.join("index.html")), None).unwrap();
         let ApiHome::File(folder) = &home else {
             panic!("a file rule");
         };
@@ -317,10 +335,17 @@ mod tests {
         assert!(!home.covers("https://example.com/"));
         let _ = std::fs::remove_dir_all(&dir);
 
-        let html = ApiHome::of(&PageLocation::Html("<p>hi</p>".into())).unwrap();
-        assert!(html.covers("data:text/html;base64,PHA+"));
+        let url = "https://p7.html.jstream.invalid/";
+        let html = ApiHome::of(&PageLocation::Html("<p>hi</p>".into()), Some(url)).unwrap();
+        assert!(html.covers(url));
+        assert!(!html.covers("https://p8.html.jstream.invalid/"));
+        assert_eq!(
+            ApiHome::of(&PageLocation::Html("<p>hi</p>".into()), None),
+            None
+        );
+        assert!(!html.covers("data:text/html;base64,PHA+"));
         assert!(!html.covers("https://example.com/"));
-        assert_eq!(ApiHome::of(&PageLocation::Blank), None);
+        assert_eq!(ApiHome::of(&PageLocation::Blank, None), None);
     }
 
     #[test]
@@ -328,7 +353,6 @@ mod tests {
         for home in [
             ApiHome::Web("https://a.b/".into()),
             ApiHome::File("file:///x/".into()),
-            ApiHome::Data,
         ] {
             let (kind, value) = home.to_parts();
             assert_eq!(ApiHome::from_parts(kind, value), Some(home.clone()));
@@ -344,6 +368,7 @@ mod tests {
             source: Some(r#"{"shown":true}"#.into()),
             scenes: None,
             levels: Some(r#"{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]}"#.into()),
+            midi: Some(r#"{"input":"Keys","notes":[[1,60,100]]}"#.into()),
             values: vec![
                 ("status.text".into(), Some(r#""On air""#.into())),
                 ("counter.a".into(), None),
@@ -351,7 +376,7 @@ mod tests {
         };
         assert_eq!(
             update_json(&data),
-            r#"{"clock":{"t":10.5,"lead":0.25},"source":{"shown":true},"levels":{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]},"values":{"status.text":"On air","counter.a":null}}"#
+            r#"{"clock":{"t":10.5,"lead":0.25},"source":{"shown":true},"levels":{"peak":[1,0.5],"rms":[0.25,0.25],"bands":[0]},"midi":{"input":"Keys","notes":[[1,60,100]]},"values":{"status.text":"On air","counter.a":null}}"#
         );
         assert_eq!(update_json(&PageData::default()), "{}");
         // A name that isn't a value's is never written.
@@ -415,8 +440,9 @@ mod tests {
             scenes: true,
             values: false,
             levels: true,
+            midi: true,
         });
-        assert!(shim.ends_with("})({scenes:true,values:false,levels:true})\n"));
+        assert!(shim.ends_with("})({scenes:true,values:false,levels:true,midi:true})\n"));
         assert!(!shim.contains("__GRANT__"));
     }
 }

@@ -23,6 +23,45 @@
 //! **Shutting down.** The engine's `Shutdown`, its pipe closing, or a write to it failing
 //! closes every page; the loop quits once they have closed, or after [`CLOSE_GRACE`],
 //! and CEF shuts down on the UI thread before the process exits.
+//!
+//! # Pages, permissions and requests
+//!
+//! Every page is a windowless browser, with shared textures on Windows and software
+//! paints on Linux, painting at its spec's frame rate with a transparent background.
+//! Command-line switches let pages play sound without a click and turn off first-run and
+//! error dialogs, and on Linux with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, start
+//! Chromium on its headless platform. On Linux Chromium also keeps its in-memory
+//! profiles' key itself (`--password-store=basic`), never opening the desktop's keyring.
+//! Pop-ups are blocked. Every
+//! permission a page asks for (camera, microphone, screen capture, geolocation,
+//! notifications, clipboard, MIDI and the rest) is refused by the page's permission
+//! handler rather than left to CEF's default: a media request is cancelled and a
+//! permission prompt answered `DENY`. The one exception is Chromium's Local Network
+//! Access prompt (CEF's `LOCAL_NETWORK`, `LOOPBACK_NETWORK` and the deprecated
+//! `LOCAL_NETWORK_ACCESS` bits) asked alone: it is answered `ACCEPT` when the page's
+//! `RequestPolicy` lets the prompt's requesting origin (opaque when CEF names none)
+//! make local requests, and `DENY` otherwise, a third-party frame's included. The
+//! pinned CEF never asks it in windowless pages: its checks refuse a public origin's
+//! local request outright. So for a source that opted in with `local_network`, the
+//! helper gives the page a request context of its own and sets Chromium's
+//! `LOCAL_NETWORK`, `LOOPBACK_NETWORK` and `LOCAL_NETWORK_ACCESS` content settings to
+//! allow for the source's own origin as the top-level origin (`local_network_grant`):
+//! it reaches an app on `127.0.0.1` from that origin, while a third-party frame inside
+//! it, and every other source, is still refused at the network layer, a public name
+//! that resolves to a local address included (#347). The Linux helper's end-to-end
+//! tests check all of this (`tests/linux_page/local_network.rs`). The answers come from
+//! `permission.rs` (`answer_prompt` and `answer_media`), whose tests pin them for every
+//! permission bit, and the helper checks the three bits against CEF's when it compiles.
+//! A page given as HTML is answered by the request handler (`HtmlPage`): its main
+//! frame's `GET` of its URL gets `200`, `text/html` in UTF-8, uncached (#1035). The
+//! custom CSS is applied when the main frame finishes loading and again on each change.
+//! Every request a page makes, navigations included, goes through its `RequestPolicy`
+//! in `OnBeforeResourceLoad`, as the origin `GetResourceRequestHandler` names for it
+//! (each request gets a handler that holds it), and is cancelled when refused; an
+//! allowed main-frame navigation updates where the main frame is. A redirect's target
+//! goes through it too, in `OnResourceRedirect`, which can't cancel: a refused one is pointed at
+//! `about:jstream-refused`, which loads nothing. The engine logs the first refusal per
+//! page at `warn` and later ones at `debug`, with the count only.
 
 #[cfg(windows)]
 mod d3d11;
@@ -370,10 +409,13 @@ impl Host {
     }
 
     fn open(self: &Arc<Self>, id: u32, spec: &PageSpec) {
+        let policy = RequestPolicy::for_page(spec);
+        // A page given as HTML loads from a host of its own (#1035).
+        let html_url = policy.html_url();
         // A grant on a page with no document of its own (a blank page) gets nothing.
         let page_api = spec
             .page_api
-            .and_then(|api| Some((api, ApiHome::of(&spec.location)?)));
+            .and_then(|api| Some((api, ApiHome::of(&spec.location, html_url.as_deref())?)));
         let page = Arc::new(PageShared {
             id,
             size: (spec.size.width(), spec.size.height()),
@@ -387,8 +429,12 @@ impl Host {
             reloading: Mutex::new(ReloadHold::opening()),
             channels: AtomicUsize::new(0),
             host: Arc::clone(self),
-            policy: RequestPolicy::for_page(spec),
+            policy,
             page_api: page_api.as_ref().map(|_| Mutex::new(PageCache::default())),
+            html: match &spec.location {
+                crate::PageLocation::Html(html) => Some(Arc::from(html.as_bytes())),
+                _ => None,
+            },
         });
         let window_info = ::cef::WindowInfo {
             windowless_rendering_enabled: 1,
@@ -403,7 +449,8 @@ impl Host {
             ..Default::default()
         };
         let mut client = handlers::client(&page);
-        let url: CefString = spec.location.to_url().as_str().into();
+        let url = html_url.unwrap_or_else(|| spec.location.to_url());
+        let url: CefString = url.as_str().into();
         // A granted page's grant and rule cross to its renderer here, and it gets a
         // request context of its own, so its renderer process is never shared with
         // another source's page (ADR-0102 decision 3). In memory, as every page's is.
@@ -417,6 +464,24 @@ impl Host {
             ),
             None => (None, None),
         };
+        // A source that opted in to the local network has Chromium's Local Network
+        // Access checks told so for its own origin (#347): they refuse a public origin's
+        // local requests without asking the permission handler in windowless pages. The
+        // grant is the request context's, so the page gets one of its own and no other
+        // source from that origin shares it. It names the origin as the top-level one
+        // too, so it covers that origin's documents only while the main frame shows it,
+        // and never a frame from elsewhere.
+        if let Some(origin) = page.policy.local_network_grant() {
+            if context.is_none() {
+                context = ::cef::request_context_create_context(
+                    Some(&::cef::RequestContextSettings::default()),
+                    None,
+                );
+            }
+            if let Some(context) = &context {
+                grant_local_network(context, &origin);
+            }
+        }
         self.pages().insert(id, Arc::clone(&page));
         self.open.fetch_add(1, Ordering::AcqRel);
         // Asynchronous: the browser arrives in `OnAfterCreated` on the UI thread.
@@ -513,6 +578,29 @@ pub(crate) struct PageShared {
     page_api: Option<Mutex<PageCache>>,
     /// What the page may request; the request handler cancels the rest.
     pub(crate) policy: RequestPolicy,
+    /// The HTML of a page given as its HTML, which the request handler answers its URL
+    /// with ([`RequestPolicy::html_url`], #1035); `None` for other pages.
+    pub(crate) html: Option<Arc<[u8]>>,
+}
+
+/// Tells `context`'s Local Network Access checks that `origin` (`scheme://host[:port]`),
+/// as the top-level origin, may reach this computer and the local network (#347).
+fn grant_local_network(context: &::cef::RequestContext, origin: &str) {
+    use ::cef::ImplRequestContext as _;
+    use ::cef::sys::cef_content_setting_types_t as Type;
+    let origin: CefString = origin.into();
+    for kind in [
+        Type::CEF_CONTENT_SETTING_TYPE_LOCAL_NETWORK,
+        Type::CEF_CONTENT_SETTING_TYPE_LOOPBACK_NETWORK,
+        Type::CEF_CONTENT_SETTING_TYPE_LOCAL_NETWORK_ACCESS,
+    ] {
+        context.set_content_setting(
+            Some(&origin),
+            Some(&origin),
+            kind.into(),
+            ::cef::ContentSettingValues::ALLOW,
+        );
+    }
 }
 
 /// A browser, held across threads.
@@ -614,7 +702,7 @@ impl PageShared {
 
     /// The main frame started loading a document (`OnLoadStart`): sends it everything the
     /// page API cache holds. Chromium may put the new document in a renderer process
-    /// that has none of the page's updates (a reload of a `data:` page does), so each
+    /// that has none of the page's updates (a cross-origin navigation can), so each
     /// document is sent the whole state again; the renderer merges it, and the shim
     /// reports only what changed. Nothing for a page without a page API.
     pub(crate) fn document_started(&self, frame: &::cef::Frame) {

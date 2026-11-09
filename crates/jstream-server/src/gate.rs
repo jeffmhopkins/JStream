@@ -66,6 +66,7 @@
 use crate::config::{ServerConfig, Token};
 use crate::devices::{Devices, LAPSE};
 use crate::error::ServerError;
+use crate::listener::On;
 use axum::http::{HeaderMap, HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use jstream_control::WS_TOKEN_PROTOCOL_PREFIX;
@@ -149,6 +150,9 @@ pub(crate) enum Refusal {
     Origin,
     /// The control token is missing or wrong.
     Token,
+    /// The control token, presented to the network listener, which never accepts it
+    /// (ADR-0104 §3).
+    NetworkControlToken,
     /// The server already has as many connections open as it allows.
     Full,
     /// The server already has as many MCP sessions open as it allows.
@@ -169,6 +173,9 @@ pub(crate) enum Refusal {
 pub(crate) enum Credential {
     /// The control token (ADR-0006).
     Control,
+    /// The host UI's own token (`ServerConfig::ui_token`, ADR-0131 §2): the control
+    /// token's access, never held for approval.
+    Ui,
     /// A device token (ADR-0044).
     Device {
         /// The device.
@@ -186,7 +193,7 @@ impl Credential {
     /// The device, for a device token.
     pub(crate) fn device(&self) -> Option<&DeviceId> {
         match self {
-            Credential::Control => None,
+            Credential::Control | Credential::Ui => None,
             Credential::Device { id, .. } => Some(id),
         }
     }
@@ -199,6 +206,9 @@ impl Refusal {
             Refusal::Host => "Host not allowed",
             Refusal::Origin => "Origin not allowed",
             Refusal::Token => "missing or wrong control token",
+            Refusal::NetworkControlToken => {
+                "the control token was presented on the network listener, which takes device tokens only"
+            }
             Refusal::Full => "too many connections",
             Refusal::McpSessions => "too many MCP sessions",
             Refusal::NoPairingCode => "pairing attempted while no pairing code is open",
@@ -213,7 +223,10 @@ impl Refusal {
     pub(crate) fn is_credential(self) -> bool {
         matches!(
             self,
-            Refusal::Token | Refusal::CookieRepeated | Refusal::CookieSite
+            Refusal::Token
+                | Refusal::NetworkControlToken
+                | Refusal::CookieRepeated
+                | Refusal::CookieSite
         )
     }
 
@@ -229,6 +242,12 @@ impl IntoResponse for Refusal {
         match self {
             Refusal::Host => (StatusCode::FORBIDDEN, "Host not allowed\n").into_response(),
             Refusal::Origin => (StatusCode::FORBIDDEN, "Origin not allowed\n").into_response(),
+            Refusal::NetworkControlToken => (
+                StatusCode::UNAUTHORIZED,
+                [(header::WWW_AUTHENTICATE, "Bearer")],
+                "a paired device's token is required: pair this device on the host\n",
+            )
+                .into_response(),
             Refusal::Token | Refusal::CookieRepeated | Refusal::CookieSite => (
                 StatusCode::UNAUTHORIZED,
                 [(header::WWW_AUTHENTICATE, "Bearer")],
@@ -258,6 +277,8 @@ impl IntoResponse for Refusal {
 /// paired devices.
 pub(crate) struct Gate {
     token: Token,
+    /// `ServerConfig::ui_token`.
+    ui_token: Option<Token>,
     devices: Arc<Devices>,
     /// Whether device tokens are accepted: only while the server listens on loopback or
     /// on a TLS listener.
@@ -270,8 +291,71 @@ pub(crate) struct Gate {
     hosts: Vec<String>,
     /// Lowercase `scheme://host[:port]` values, besides `http://<accepted host>`.
     extra_origins: Vec<String>,
+    /// The network listener's side, when there is one (ADR-0104).
+    network: Option<NetworkSide>,
+    /// Whether the server pairs devices at all (`ServerConfig::pairing`): on the network
+    /// listener, which is TLS, that alone decides whether device tokens get in.
+    pairing: bool,
     /// The credential refusals of the current window, for logging them (#354).
     failures: Mutex<Failures>,
+}
+
+/// What the gate accepts on the network listener (ADR-0104 §2, §3): TLS, its own port,
+/// the names its certificate carries or the address a connection arrived on, and device
+/// tokens only.
+struct NetworkSide {
+    port: u16,
+    /// Lowercase names and addresses (IPv6 in brackets), without a port.
+    names: Vec<String>,
+}
+
+/// One listener's rules, as the checks read them.
+#[derive(Clone, Copy)]
+struct Side<'g> {
+    tls: bool,
+    /// Whether device tokens are accepted here.
+    devices: bool,
+    port: u16,
+    /// Whether the control token is accepted here.
+    control: bool,
+    hosts: Hosts<'g>,
+}
+
+/// The `Host` values a listener accepts.
+#[derive(Clone, Copy)]
+enum Hosts<'g> {
+    /// Lowercase `name:port` values.
+    Fixed(&'g [String]),
+    /// Lowercase names with the listener's port, or the connection's local address.
+    Network {
+        names: &'g [String],
+        local: SocketAddr,
+    },
+}
+
+impl Hosts<'_> {
+    /// Whether `host`, lowercase `name:port`, names the listener on `port`.
+    fn accepts(&self, host: &str, port: u16) -> bool {
+        match *self {
+            Hosts::Fixed(hosts) => hosts.iter().any(|accepted| accepted == host),
+            Hosts::Network { names, local } => {
+                let Some((name, host_port)) = host.rsplit_once(':') else {
+                    return false;
+                };
+                if host_port.parse::<u16>() != Ok(port) {
+                    return false;
+                }
+                let arrived = match local.ip() {
+                    std::net::IpAddr::V4(v4) => v4.to_string(),
+                    std::net::IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+                        Some(v4) => v4.to_string(),
+                        None => format!("[{v6}]"),
+                    },
+                };
+                name == arrived || names.iter().any(|accepted| accepted == name)
+            }
+        }
+    }
 }
 
 impl Gate {
@@ -299,13 +383,58 @@ impl Gate {
             .collect();
         Gate {
             token: config.token.clone(),
+            ui_token: config.ui_token.clone(),
             devices,
             devices_allowed: config.pairing && (local.ip().is_loopback() || config.tls),
             tls: config.tls,
             port,
             hosts,
             extra_origins,
+            network: None,
+            pairing: config.pairing,
             failures: Mutex::default(),
+        }
+    }
+
+    /// Adds the network listener's side: it listens on `port`, and its certificate
+    /// carries `names` (host names and addresses).
+    #[cfg(feature = "tls")]
+    pub(crate) fn with_network(mut self, port: u16, names: &[String]) -> Gate {
+        let names = names
+            .iter()
+            .map(|name| {
+                let name = name.to_ascii_lowercase();
+                match name.parse::<Ipv6Addr>() {
+                    Ok(v6) => format!("[{v6}]"),
+                    Err(_) => name,
+                }
+            })
+            .collect();
+        self.network = Some(NetworkSide { port, names });
+        self
+    }
+
+    /// The rules for a request that came `on` a listener. A request said to come on the
+    /// network listener when there is none gets the host's (it can't happen).
+    fn side(&self, on: On) -> Side<'_> {
+        match (on, &self.network) {
+            (On::Network(local), Some(network)) => Side {
+                tls: true,
+                devices: self.pairing,
+                port: network.port,
+                control: false,
+                hosts: Hosts::Network {
+                    names: &network.names,
+                    local,
+                },
+            },
+            _ => Side {
+                tls: self.tls,
+                devices: self.devices_allowed,
+                port: self.port,
+                control: true,
+                hosts: Hosts::Fixed(&self.hosts),
+            },
         }
     }
 
@@ -319,8 +448,9 @@ impl Gate {
         &self,
         headers: &HeaderMap,
         peer: SocketAddr,
+        on: On,
     ) -> Result<Credential, Refusal> {
-        let result = self.check(headers);
+        let result = self.check_on(headers, on);
         match result {
             Err(refusal) if refusal.is_credential() => {
                 self.log_failure(refusal, peer, Instant::now());
@@ -362,32 +492,54 @@ impl Gate {
         &self,
         headers: &HeaderMap,
         peer: SocketAddr,
+        on: On,
     ) -> Result<(), Refusal> {
-        let result = self.check_host_and_origin(headers);
+        let result = self.check_host_and_origin(headers, self.side(on));
         if let Err(refusal) = result {
             refusal.log(peer);
         }
         result
     }
 
-    /// Checks a request's headers: `Host`, `Origin`, then the token, and says which
-    /// credential the token is.
+    /// Checks a request to the host's own listener, as [`check_on`](Gate::check_on).
+    #[cfg(test)]
     pub(crate) fn check(&self, headers: &HeaderMap) -> Result<Credential, Refusal> {
-        self.check_host_and_origin(headers)?;
+        self.check_on(headers, On::Host)
+    }
+
+    /// Checks a request's headers: `Host`, `Origin`, then the token, and says which
+    /// credential the token is. On the network listener the control token is refused
+    /// (ADR-0104 §3).
+    pub(crate) fn check_on(&self, headers: &HeaderMap, on: On) -> Result<Credential, Refusal> {
+        let side = self.side(on);
+        self.check_host_and_origin(headers, side)?;
         let token = if headers.contains_key(header::AUTHORIZATION) {
             single(headers, &header::AUTHORIZATION).and_then(credentials)
         } else if offers_token_subprotocol(headers) {
             subprotocol_token(headers)
-        } else if self.tls {
-            return self.check_cookie(headers);
+        } else if side.tls {
+            return self.check_cookie(headers, side);
         } else {
             None
         }
         .ok_or(Refusal::Token)?;
         if self.token.matches(&token) {
-            return Ok(Credential::Control);
+            return if side.control {
+                Ok(Credential::Control)
+            } else {
+                Err(Refusal::NetworkControlToken)
+            };
         }
-        if !self.devices_allowed {
+        // The host UI's token is the host's alone, as the control token is: the network
+        // listener refuses it too (ADR-0104 §3, ADR-0131 §2).
+        if self.ui_token.as_ref().is_some_and(|ui| ui.matches(&token)) {
+            return if side.control {
+                Ok(Credential::Ui)
+            } else {
+                Err(Refusal::NetworkControlToken)
+            };
+        }
+        if !side.devices {
             return Err(Refusal::Token);
         }
         match self.devices.admit(&token, unix_now()) {
@@ -404,7 +556,7 @@ impl Gate {
     /// `Authorization` nor a token subprotocol: there must be exactly one, the request
     /// must be same-origin or typed by the user, pairing must be on, and it must be a
     /// device's token. It is never compared with the control token.
-    fn check_cookie(&self, headers: &HeaderMap) -> Result<Credential, Refusal> {
+    fn check_cookie(&self, headers: &HeaderMap, side: Side<'_>) -> Result<Credential, Refusal> {
         let token = match device_cookie(headers) {
             Cookie::Absent => return Err(Refusal::Token),
             Cookie::Repeated => return Err(Refusal::CookieRepeated),
@@ -415,7 +567,7 @@ impl Gate {
         if !same_origin {
             return Err(Refusal::CookieSite);
         }
-        if !self.devices_allowed {
+        if !side.devices {
             return Err(Refusal::Token);
         }
         match self.devices.admit_cookie(token, unix_now()) {
@@ -428,25 +580,25 @@ impl Gate {
         }
     }
 
-    /// Checks `Host`, then `Origin`.
-    fn check_host_and_origin(&self, headers: &HeaderMap) -> Result<(), Refusal> {
+    /// Checks `Host`, then `Origin`, by `side`'s rules.
+    fn check_host_and_origin(&self, headers: &HeaderMap, side: Side<'_>) -> Result<(), Refusal> {
         let host = single(headers, &header::HOST)
             .map(|value| value.to_ascii_lowercase())
             .ok_or(Refusal::Host)?;
         // A `Host` without a port names port 80: it can only be this server on port 80.
-        let default_port = if self.tls {
+        let default_port = if side.tls {
             DEFAULT_TLS_PORT
         } else {
             DEFAULT_PORT
         };
         let host = if has_port(&host) {
             host
-        } else if self.port == default_port {
+        } else if side.port == default_port {
             format!("{host}:{default_port}")
         } else {
             return Err(Refusal::Host);
         };
-        if !self.hosts.contains(&host) {
+        if !side.hosts.accepts(&host, side.port) {
             return Err(Refusal::Host);
         }
         // No `Origin` at all is a native client: the token is the gate (#44). One that is
@@ -455,7 +607,7 @@ impl Gate {
             let origin = single(headers, &header::ORIGIN)
                 .map(|value| value.to_ascii_lowercase())
                 .ok_or(Refusal::Origin)?;
-            let scheme = if self.tls { "https://" } else { "http://" };
+            let scheme = if side.tls { "https://" } else { "http://" };
             let own = origin.strip_prefix(scheme).is_some_and(|rest| {
                 if has_port(rest) {
                     rest == host
@@ -463,7 +615,9 @@ impl Gate {
                     format!("{rest}:{default_port}") == host
                 }
             });
-            if !own && !self.extra_origins.contains(&origin) {
+            // The configured extras are the host's own (a UI served from elsewhere on
+            // this machine); the network listener takes its own origin only.
+            if !own && !(side.control && self.extra_origins.contains(&origin)) {
                 return Err(Refusal::Origin);
             }
         }
@@ -712,6 +866,7 @@ pub(crate) mod tests {
     use crate::config::{ServerConfig, Token};
     use crate::devices::{Devices, Now};
     use crate::error::ServerError;
+    use crate::listener::On;
     use axum::http::{HeaderMap, HeaderName, HeaderValue, header};
     use std::fmt;
     use std::net::SocketAddr;
@@ -1079,15 +1234,23 @@ pub(crate) mod tests {
         let gate = gate(&[], &[]);
         let peer = SocketAddr::from(([127, 0, 0, 1], 50_000));
         assert_eq!(
-            gate.admit_unauthenticated(&with(header::AUTHORIZATION, None), peer),
+            gate.admit_unauthenticated(&with(header::AUTHORIZATION, None), peer, On::Host),
             Ok(())
         );
         assert_eq!(
-            gate.admit_unauthenticated(&with(header::ORIGIN, Some("http://evil.example")), peer),
+            gate.admit_unauthenticated(
+                &with(header::ORIGIN, Some("http://evil.example")),
+                peer,
+                On::Host
+            ),
             Err(Refusal::Origin)
         );
         assert_eq!(
-            gate.admit_unauthenticated(&with(header::HOST, Some("evil.example:4455")), peer),
+            gate.admit_unauthenticated(
+                &with(header::HOST, Some("evil.example:4455")),
+                peer,
+                On::Host
+            ),
             Err(Refusal::Host)
         );
     }
@@ -1408,15 +1571,23 @@ pub(crate) mod tests {
             assert_eq!(
                 gate.admit(
                     &with(header::AUTHORIZATION, Some("Bearer wr0ng-s3cret")),
-                    peer
+                    peer,
+                    On::Host
                 ),
                 Err(Refusal::Token)
             );
             assert_eq!(
-                gate.admit(&with(header::ORIGIN, Some("http://evil.example")), peer),
+                gate.admit(
+                    &with(header::ORIGIN, Some("http://evil.example")),
+                    peer,
+                    On::Host
+                ),
                 Err(Refusal::Origin)
             );
-            assert_eq!(gate.admit(&headers(&good()), peer), Ok(Credential::Control));
+            assert_eq!(
+                gate.admit(&headers(&good()), peer, On::Host),
+                Ok(Credential::Control)
+            );
             Refusal::Full.log(peer);
         });
         let logged = capture.text();
@@ -1475,13 +1646,20 @@ pub(crate) mod tests {
         let start = Instant::now();
         tracing::subscriber::with_default(capture.clone(), || {
             for _ in 0..500 {
-                assert_eq!(gate.admit(&wrong, peer), Err(Refusal::Token));
+                assert_eq!(gate.admit(&wrong, peer, On::Host), Err(Refusal::Token));
             }
-            assert_eq!(gate.admit(&headers(&good()), peer), Ok(Credential::Control));
+            assert_eq!(
+                gate.admit(&headers(&good()), peer, On::Host),
+                Ok(Credential::Control)
+            );
             // Not credential refusals: logged every time.
             for _ in 0..LOGGED_FAILURES + 5 {
                 assert_eq!(
-                    gate.admit(&with(header::ORIGIN, Some("http://evil.example")), peer),
+                    gate.admit(
+                        &with(header::ORIGIN, Some("http://evil.example")),
+                        peer,
+                        On::Host
+                    ),
                     Err(Refusal::Origin)
                 );
             }

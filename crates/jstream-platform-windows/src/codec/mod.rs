@@ -4,12 +4,120 @@
 //! CPU NV12, RGBA or BGRA frames, or from encode targets on the GPU once the backend is on
 //! a GPU context (`Codecs::on_context`). On the CPU path with hardware `Prefer`, a
 //! hardware encoder that refuses its first frame falls back to software (`fallback`). HEVC and AV1 run where the GPU (or an installed
-//! software MFT) offers them. Video decoders follow; until then they report
-//! `Unsupported`.
+//! software MFT) offers them. The H.264 decoder (`decoder`) decodes the engine's own
+//! streams, such as the quality probe's packets (ADR-0140); other codecs' decoders
+//! report `Unsupported`.
+//!
+//! # Behaviour
+//!
+//! **`MfCodecs`** (`Codecs`), Media Foundation codecs
+//! (ADR-0140): the **AAC encoder** and
+//! the **video encoders** (H.264, HEVC and AV1), from CPU frames or from encode targets on
+//! the GPU. AAC:
+//! - **Encoder:** the first AAC encoder MFT Media Foundation ranks for 16-bit PCM in. On
+//!   Windows that is Microsoft's software AAC encoder. It takes 44.1 or 48 kHz; mono or
+//!   stereo at 96, 128, 160 or 192 kbps, or 5.1 at six times those (576, 768, 960 or
+//!   1152 kbps). Any other configuration is `Unsupported`.
+//! - **Input:** samples are converted from `f32` to 16-bit PCM, clamped and rounded.
+//! - **Output:** one raw AAC-LC access unit (1024 frames, no ADTS) per packet, the framing
+//!   `jstream-media` defines. Packet times count from the first buffer's `pts`, in the
+//!   input's sample time base, as the `AudioEncoder` trait says. `finish` pads the last
+//!   access unit with silence, then drains the MFT. An empty output sample is skipped.
+//! - **Threads:** each session keeps Media Foundation started and the process MTA alive
+//!   (`CoIncrementMTAUsage`), so the engine's encode thread can drive it without
+//!   initialising COM. Sessions are opened from a thread that isn't an STA.
+//! - **Teardown:** dropping a session ends streaming and calls `ShutdownObject` on the
+//!   activation object, as Microsoft asks. One output sample is reused for every pull.
+//! - **Video encoders:** H.264 (High), HEVC (Main) and AV1 (Main), all 8-bit 4:2:0 from
+//!   NV12, through one session type (`codec/video.rs`) that differs per codec only in
+//!   the MFT's output subtype and profile. H.264 and HEVC packets are Annex B, AV1 packets
+//!   one temporal unit of low-overhead OBUs, as `jstream-media` defines; the first
+//!   keyframe carries the parameter sets (or sequence header) in-band, which `jstream-mux`'s
+//!   enhanced RTMP track builds its decoder configuration from. Windows ships a software
+//!   encoder for H.264 only, so HEVC and AV1 open only where the GPU has a hardware
+//!   encoder (or a software MFT is installed); elsewhere they are `Unsupported`.
+//!   `list` reports every encoder MFT for each of the three.
+//! - **Video encoders, CPU path:** `MfCodecs::new()`'s encoders take NV12, RGBA or BGRA
+//!   `VideoSurface::Cpu` frames and copy them into Media Foundation memory buffers as
+//!   NV12, the MFTs' input. RGBA (the compositor's output, which the engine's pipeline
+//!   encodes) and BGRA are converted first, the way display capture converts WGC's BGRA:
+//!   BT.709 limited range, left-sited chroma. It is ARCH's fallback path
+//!   (ARCH › GPU pipeline, step 6).
+//! - **Video encoders, GPU path** (step 5): `Codecs::on_context` on a context `WindowsGpu`
+//!   opened (another backend's is `InvalidState`) gives the same backend on that context.
+//!   Its video encoders take that context's NV12 encode targets (`VideoSurface::Gpu`) and
+//!   nothing else: a CPU frame, or a GPU frame that isn't one of its encode targets, is
+//!   `Unsupported`. Audio is unchanged.
+//!   - **Choosing an encoder:** only hardware encoder MFTs on the context's adapter
+//!     (`MFTEnum2` with the adapter's LUID) that say they are D3D11-aware
+//!     (`MF_SA_D3D11_AWARE`). Each gets a DXGI device manager on the context's D3D11
+//!     device (`MFT_MESSAGE_SET_D3D_MANAGER`) before its media types, which are the CPU
+//!     path's. A configuration that avoids hardware is `Unsupported`, and so is a machine
+//!     where no such MFT accepts it; the engine then opens a CPU encoder
+//!     (`jstream-encode`'s `VideoSession::open_on`).
+//!   - **Input:** each encode target is copied on the GPU into a texture from a sample
+//!     allocator on the same device (eight at most, with the encode targets' bind flags),
+//!     and that sample is encoded. So the target goes back to its producer as soon as the
+//!     copy is queued, however long the MFT holds its input. When the MFT holds all eight,
+//!     the frame is refused as `Busy`, which the session drops and counts.
+//!   - **Sync:** the copy waits on the context's fence for the target's last staged
+//!     write, and D3D11 then signals the context's release fence, which the target's next
+//!     staged write waits for (`WindowsGpu`, in `crate::gpu`). Neither waits on the CPU. The encoder
+//!     drops the frame once the copy is queued, so a producer writes a target again only
+//!     when it holds the frame's only clone.
+//! - **Video encoders, both paths:**
+//!   - **Choosing an encoder** on the CPU path: hardware encoder MFTs come first, then the
+//!     OS software encoder (H.264 only), following `HardwarePreference`. The first one that accepts the
+//!     media types wins, and `CodecInfo::hardware` says which kind it was. When
+//!     `Prefer` ends on the software MFT this way, `jstream-core` logs a warning naming
+//!     the output and why (#443 case 1), so this crate logs nothing for it.
+//!   - **First-frame fallback** (#443): with `Prefer`, a hardware encoder on the CPU path
+//!     that refuses the first frame at `ProcessInput` is replaced by the software MFT,
+//!     which gets that frame (`FirstFrameFallback`, `codec/fallback.rs`). No packet has
+//!     come out yet, so the stream sees one decoder configuration. It logs a warning
+//!     through `tracing` (the crate's one logging dependency) naming both encoders and
+//!     the refusal, and `info()` then reports the software encoder. The encoder doesn't
+//!     know its outputs, so `jstream-core` logs one naming each output on the session
+//!     (#965). Once the hardware
+//!     encoder has taken a frame, a refusal fails the session as before. `Require` and
+//!     the GPU path have no software to fall back to. The logic is tested with fake
+//!     encoders on every platform.
+//!   - **Configuration:** CBR or peak-constrained VBR, the keyframe interval as the GOP
+//!     size, no B-frames (so packets come out in presentation order and `dts == pts`),
+//!     low latency, quality over speed (`QualityVsSpeed` 70, the band hardware MFTs map to
+//!     their quality preset), the codec's profile from its `Format` (H.264 High, HEVC Main or AV1
+//!     Main), and BT.709 limited range. `ICodecAPI` settings are
+//!     best effort; the media type always carries the bit rate.
+//!   - **Timing:** each packet gets back its frame's exact `pts`, even when the frame's
+//!     time base doesn't round evenly to the encoder's 100 ns. Keyframes come from
+//!     `MFSampleExtension_CleanPoint`.
+//!   - **Keyframe on demand:** `request_keyframe` sets `CODECAPI_AVEncVideoForceKeyFrame`,
+//!     so the next input becomes an IDR frame. An encoder without `ICodecAPI`, or one
+//!     that refuses the property, reports `Unsupported` and keeps its GOP cadence.
+//!     Whether the GOP count restarts at a forced keyframe is up to the encoder.
+//!   - **Asynchronous MFTs** (most hardware encoders) ask for input and announce output
+//!     through events. `encode` and `poll` pump those events, so `can_accept` reflects the
+//!     last pump, and the encode thread polls every tick. Each output event gets exactly
+//!     one `ProcessOutput` call, as Microsoft's asynchronous-MFT model requires. `finish`
+//!     waits up to 5 s for the drain to complete.
+//!   - **Stream changes:** when an encoder changes its output type mid-stream, the
+//!     configured frame size, frame rate, bit rate and profile are re-applied to the type
+//!     it offers. If it refuses them, the offered type is taken as is. The output buffer
+//!     size is then read again.
+//! - **H.264 decoder:** the first synchronous, in-process H.264 decoder MFT Media
+//!   Foundation ranks (Microsoft's software decoder), NV12 out in system memory, cropped
+//!   to the display aperture and handed out as I420 or NV12 CPU frames with each
+//!   packet's exact `pts` (`codec/decoder.rs`). It is for the engine's own streams
+//!   (ADR-0140); media files decode through `MfMediaDecoders`. `Require` is
+//!   `Unsupported`, and so is a machine with no H.264 decoder MFT (an N edition without
+//!   the Media Feature Pack).
+//! - **Not yet:** HEVC and AV1 decoders, which report `Unsupported`.
 
 // Its platform-independent parts are tested on every platform.
 #[cfg(any(windows, test))]
 mod aac;
+#[cfg(any(windows, test))]
+mod decoder;
 #[cfg(any(windows, test))]
 mod fallback;
 #[cfg(windows)]
@@ -38,12 +146,13 @@ mod backend {
     };
 
     use super::aac::MfAacEncoder;
+    use super::decoder::MfH264Decoder;
     use super::fallback::FirstFrameFallback;
     use super::mf::{self, MfRuntime};
     use super::video::{Format, MfVideoEncoder};
     use crate::gpu::EncodeGpu;
 
-    /// Codecs through Media Foundation, the OS codecs ADR-0061 chooses.
+    /// Codecs through Media Foundation, the OS codecs ADR-0140 chooses.
     ///
     /// It holds no COM objects, so it is `Send + Sync`. Each session starts Media
     /// Foundation for itself and can be driven from any thread. Open sessions from a
@@ -139,9 +248,7 @@ mod backend {
             &self,
             config: &VideoDecoderConfig,
         ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
-            Err(PlatformError::Unsupported {
-                what: format!("{:?} video decoding (not implemented yet)", config.codec),
-            })
+            Ok(Box::new(MfH264Decoder::open(config)?))
         }
 
         /// MJPEG through Media Foundation's MJPEG decoder ([`MfMjpegDecoder`]), into
@@ -311,7 +418,7 @@ mod device_tests {
         codec: Codec,
         hardware: jstream_platform::HardwarePreference,
         format: jstream_platform::media::PixelFormat,
-    ) {
+    ) -> Vec<jstream_platform::media::Packet> {
         use jstream_platform::media::{
             ColorInfo, FrameSize, PixelFormat, VideoFrame, VideoFrameInfo,
         };
@@ -388,6 +495,45 @@ mod device_tests {
             out.iter().filter(|p| p.is_keyframe()).count() >= 2,
             "keyframe every 30"
         );
+        out
+    }
+
+    /// ADR-0140: the H.264 decoder gives back every picture of a stream the software
+    /// encoder made, at the stream's size (cropped from the decoder's 1280x736 buffer
+    /// where it pads), in presentation order with each packet's `pts`.
+    #[test]
+    #[ignore = "needs Media Foundation's software H.264 encoder and decoder"]
+    fn decodes_the_engines_own_h264() {
+        use jstream_platform::media::{FrameSize, PixelFormat};
+        use jstream_platform::{HardwarePreference, VideoDecoderConfig, VideoSurface};
+
+        let packets = encode_two_seconds(Codec::H264, HardwarePreference::Avoid, PixelFormat::Nv12);
+        for format in [PixelFormat::I420, PixelFormat::Nv12] {
+            let mut dec = MfCodecs::new()
+                .video_decoder(&VideoDecoderConfig {
+                    codec: Codec::H264,
+                    output_format: format,
+                    hardware: HardwarePreference::Prefer,
+                })
+                .expect("open the H.264 decoder");
+            let mut pictures = Vec::new();
+            for p in &packets {
+                dec.decode(p).expect("decode");
+                dec.poll(&mut pictures).expect("poll");
+            }
+            dec.finish(&mut pictures).expect("drain");
+            assert_eq!(pictures.len(), packets.len(), "a picture a packet");
+            for (picture, packet) in pictures.iter().zip(&packets) {
+                let VideoSurface::Cpu(frame) = picture else {
+                    panic!("CPU pictures");
+                };
+                let info = frame.info();
+                assert_eq!(info.size, FrameSize::new(1280, 720).expect("size"));
+                assert_eq!(info.format, format);
+                assert_eq!(info.pts, packet.pts());
+            }
+            assert!(dec.decode(&packets[0]).is_err(), "finished");
+        }
     }
 
     #[test]

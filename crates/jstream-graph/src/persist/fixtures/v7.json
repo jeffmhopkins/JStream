@@ -5,7 +5,6 @@
     "width": 1280,
     "height": 720
   },
-  "blending": "linear",
   "scenes": [
     {
       "id": "b",
@@ -107,14 +106,6 @@
           "clock": "engine"
         }
       ],
-      "camera_follow": {
-        "item_id": "i_screen",
-        "zoom": 1.5,
-        "yaw_deg": 20.0,
-        "pitch_deg": -10.0,
-        "lean_deg": 9.0,
-        "smooth_ms": 450
-      },
       "timelines": [
         {
           "timeline_id": "t_intro",
@@ -248,7 +239,22 @@
             "right": 0,
             "bottom": 0
           },
-          "visible": true
+          "visible": true,
+          "effects": [
+            {
+              "id": "follow-pointer",
+              "kind": "follow_pointer",
+              "kind_version": 1,
+              "settings": {
+                "lean_deg": 9.0,
+                "pitch_deg": -10.0,
+                "safe_margin_pct": 10,
+                "smooth_ms": 450,
+                "yaw_deg": 20.0,
+                "zoom": 1.5
+              }
+            }
+          ]
         }
       ]
     },

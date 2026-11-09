@@ -13,6 +13,9 @@
 //!   replaces it. Without a file they live in memory and are gone when the server stops.
 //! - **Not collection state.** Nothing here touches the engine: a change has no `rev`, no
 //!   undo and no event, and outlives switching collections.
+//! - **The host reads them too.** [`UiSettingsView`] lets the app that runs the server
+//!   read a key and wait for changes, so a setting the UI keeps can steer the host (the
+//!   desktop app's global hotkeys, ADR-0112 §6).
 
 use crate::devices::create_private;
 use serde_json::{Map, Value, json};
@@ -20,7 +23,8 @@ use std::collections::BTreeMap;
 use std::fs;
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::sync::{Mutex, PoisonError};
+use std::sync::{Arc, Mutex, PoisonError};
+use tokio::sync::watch;
 
 /// The settings file's format version.
 const FILE_VERSION: u64 = 1;
@@ -56,6 +60,8 @@ pub(crate) enum SetError {
 pub(crate) struct UiSettings {
     file: Option<PathBuf>,
     settings: Mutex<BTreeMap<String, Value>>,
+    /// Counts the changes, so a [`UiSettingsView`] can wait for the next one.
+    changed: watch::Sender<u64>,
 }
 
 impl UiSettings {
@@ -77,6 +83,7 @@ impl UiSettings {
         UiSettings {
             file,
             settings: Mutex::new(settings),
+            changed: watch::Sender::new(0),
         }
     }
 
@@ -126,10 +133,32 @@ impl UiSettings {
                 }
             }
         }
+        // Kept in memory from here, whether or not the file is written.
+        self.changed
+            .send_modify(|count| *count = count.wrapping_add(1));
         match &self.file {
             Some(path) => write_file(path, &settings).map_err(SetError::Unsaved),
             None => Ok(()),
         }
+    }
+}
+
+/// The UI settings as the app that runs the server reads them: a key's value, and a
+/// signal when any key changes. It can't change them; only a client's `ui_settings.set`
+/// does.
+#[derive(Clone, Debug)]
+pub struct UiSettingsView(pub(crate) Arc<UiSettings>);
+
+impl UiSettingsView {
+    /// The value under `key`, or `None` when nothing is kept there or the key isn't one
+    /// `ui_settings.set` accepts.
+    pub fn get(&self, key: &str) -> Option<Value> {
+        self.0.get(key).ok().flatten()
+    }
+
+    /// A receiver that sees each change to any key, from now on.
+    pub fn changes(&self) -> watch::Receiver<u64> {
+        self.0.changed.subscribe()
     }
 }
 
@@ -222,10 +251,35 @@ fn write_file(path: &Path, settings: &BTreeMap<String, Value>) -> io::Result<()>
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_KEYS, MAX_VALUE_BYTES, Refused, SetError, UiSettings, check_key};
+    use super::{
+        MAX_KEYS, MAX_VALUE_BYTES, Refused, SetError, UiSettings, UiSettingsView, check_key,
+    };
     use serde_json::{Value, json};
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::Arc;
+
+    #[test]
+    fn the_hosts_view_reads_keys_and_sees_each_change() {
+        let view = UiSettingsView(Arc::new(UiSettings::load(None)));
+        let mut changes = view.changes();
+        assert_eq!(view.get("hotkeys.global"), None);
+        assert!(!changes.has_changed().unwrap_or(true));
+
+        view.0.set("hotkeys.global", Some(json!(false))).unwrap();
+        assert_eq!(view.get("hotkeys.global"), Some(json!(false)));
+        assert!(changes.has_changed().unwrap_or(false));
+        changes.mark_unchanged();
+
+        // Removing a key that isn't there changes nothing; removing one that is does.
+        view.0.set("never.set", None).unwrap();
+        assert!(!changes.has_changed().unwrap_or(true));
+        view.0.set("hotkeys.global", None).unwrap();
+        assert!(changes.has_changed().unwrap_or(false));
+        assert_eq!(view.get("hotkeys.global"), None);
+        // A key `ui_settings.set` refuses reads as nothing.
+        assert_eq!(view.get("Not A Key"), None);
+    }
 
     fn scratch(name: &str) -> PathBuf {
         let dir =

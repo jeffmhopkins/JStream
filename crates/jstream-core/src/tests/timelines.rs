@@ -83,6 +83,7 @@ fn timeline(id: &str, duration_ms: u32, looping: TimelineLoop, cues: Vec<Timelin
     Edit::TimelineSet {
         scene_id: SceneId::new("a"),
         timeline: TimelineInfo {
+            labels: Vec::new(),
             timeline_id: TimelineId::new(id),
             name: String::new(),
             duration_ms,
@@ -657,4 +658,230 @@ fn a_late_tick_still_fires_a_cue_before_the_timeline_ends() {
     tick_late(&control, &clock, &["b"], 700);
     assert_eq!(shared_values(&control), [("late".to_owned(), json!(1))]);
     assert!(!playing_ids(&control).iter().any(|id| id == "b"), "b ended");
+}
+
+/// ADR-0133's done-when: label two keyframe scenes, the hotkeys that switch to them and
+/// a timeline, and `label.members` shows them together; changing the preset of both
+/// keyframes is one batch, which one undo takes back.
+#[test]
+fn a_label_gathers_keyframes_hotkeys_and_a_timeline_and_one_undo_restores_their_preset() {
+    use jstream_protocol::{
+        Easing, LabelId, LabelledScene, LabelledTimeline, SceneMeta, TransitionPresetId,
+    };
+    let (_engine, control) = engine_with_scenes();
+    let show = || vec![LabelId::new("lbl_show")];
+    let tag = |scene: &str| Edit::SceneSetMeta {
+        scene_id: SceneId::new(scene),
+        meta: SceneMeta {
+            labels: show(),
+            ..SceneMeta::default()
+        },
+    };
+    let mut labelled = timeline(
+        "t_show",
+        1000,
+        TimelineLoop::Once,
+        vec![cue(0, switch("k1"))],
+    );
+    if let Edit::TimelineSet { timeline, .. } = &mut labelled {
+        timeline.labels = show();
+    }
+    apply(
+        &control,
+        vec![
+            Edit::LabelCreate {
+                label_id: LabelId::new("lbl_show"),
+                name: "Show".into(),
+                color: "#3366ff".into(),
+                icon: None,
+            },
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k1"),
+                variant_of: SceneId::new("a"),
+                name: "Close".into(),
+            },
+            Edit::SceneCreateVariant {
+                scene_id: SceneId::new("k2"),
+                variant_of: SceneId::new("a"),
+                name: "Wide".into(),
+            },
+            tag("k1"),
+            tag("k2"),
+            Edit::HotkeySet {
+                chord: Chord::new("F1"),
+                action: switch("k1"),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F2"),
+                action: switch("k2"),
+            },
+            Edit::HotkeySet {
+                chord: Chord::new("F3"),
+                action: switch("b"),
+            },
+            Edit::HotkeySetLabels {
+                chord: Chord::new("F1"),
+                labels: show(),
+            },
+            Edit::HotkeySetLabels {
+                chord: Chord::new("F2"),
+                labels: show(),
+            },
+            labelled,
+            Edit::TransitionCreate {
+                preset_id: TransitionPresetId::new("slide"),
+                name: "Slide".into(),
+                kind: "move".into(),
+                duration_ms: 400,
+                easing: Easing::Linear,
+                settings: Settings::default(),
+            },
+        ],
+    );
+    let Ok(QueryResult::LabelMembers { members, .. }) = query(
+        &control,
+        Query::LabelMembers {
+            label_id: LabelId::new("lbl_show"),
+        },
+    ) else {
+        panic!("lists the members");
+    };
+    let keyframe = |id: &str, name: &str| LabelledScene {
+        scene_id: SceneId::new(id),
+        name: name.into(),
+        variant_of: Some(SceneId::new("a")),
+    };
+    assert_eq!(
+        members.scenes,
+        [keyframe("k1", "Close"), keyframe("k2", "Wide")]
+    );
+    let chords: Vec<_> = members.hotkeys.iter().map(|b| b.chord.as_str()).collect();
+    assert_eq!(chords, ["F1", "F2"]);
+    assert_eq!(
+        members.timelines,
+        [LabelledTimeline {
+            timeline_id: TimelineId::new("t_show"),
+            name: String::new(),
+            scene_id: SceneId::new("a"),
+        }]
+    );
+
+    // One batch sets the preset of every keyframe the label gathers; one undo restores it.
+    let presets = |control: &dyn Control| -> Vec<Option<TransitionPresetId>> {
+        let Ok(QueryResult::StateGet { scenes, .. }) = query(control, Query::StateGet) else {
+            panic!("state.get");
+        };
+        ["k1", "k2"]
+            .iter()
+            .map(|id| {
+                scenes
+                    .iter()
+                    .find(|s| s.scene_id.as_str() == *id)
+                    .and_then(|s| s.transition_in.clone())
+            })
+            .collect()
+    };
+    apply(
+        &control,
+        members
+            .scenes
+            .iter()
+            .map(|scene| Edit::SceneSetTransitions {
+                scene_id: scene.scene_id.clone(),
+                transition_in: Some(TransitionPresetId::new("slide")),
+                transition_out: None,
+            })
+            .collect(),
+    );
+    let slide = Some(TransitionPresetId::new("slide"));
+    assert_eq!(presets(&control), [slide.clone(), slide]);
+    block_on(control.call(Call::History(HistoryCall::new(HistoryOp::Undo)))).expect("undo");
+    assert_eq!(presets(&control), [None, None]);
+}
+
+/// The `timeline.changed` changes `events` carry for timeline `id`, in order.
+fn changes_of(events: &[Event], id: &str) -> Vec<TimelineChange> {
+    events
+        .iter()
+        .filter_map(|event| match event {
+            Event::TimelineChanged {
+                timeline_id,
+                change,
+                ..
+            } if timeline_id.as_str() == id => Some(*change),
+            _ => None,
+        })
+        .collect()
+}
+
+/// #1253: a late round that stops `b` at 500 must not then send `looped` for `b`'s
+/// boundary at 600, which would report a stopped timeline as playing.
+#[test]
+fn a_late_tick_sends_no_loop_for_a_timeline_stopped_before_it() {
+    let (_engine, clock, control) = clocked();
+    let mut events = control.events();
+    apply(
+        &control,
+        vec![
+            timeline("a", 2_000, TimelineLoop::Once, vec![cue(500, stop("b"))]),
+            timeline("b", 600, TimelineLoop::Loop, vec![]),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    drain(&mut events);
+    tick_late(&control, &clock, &["a", "b"], 700);
+    assert_eq!(
+        changes_of(&drain(&mut events), "b"),
+        [TimelineChange::Started, TimelineChange::Stopped]
+    );
+}
+
+/// #1253: `b` ends at 600, after a cue at 500 started it again, so that old run never
+/// reached its end: no `ended` after the new run's `started`.
+#[test]
+fn a_late_tick_sends_no_end_for_a_run_restarted_before_it() {
+    let (_engine, clock, control) = clocked();
+    let mut events = control.events();
+    apply(
+        &control,
+        vec![
+            timeline("a", 2_000, TimelineLoop::Once, vec![cue(500, play("b"))]),
+            timeline("b", 600, TimelineLoop::Once, vec![]),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    drain(&mut events);
+    tick_late(&control, &clock, &["a", "b"], 700);
+    assert_eq!(
+        changes_of(&drain(&mut events), "b"),
+        [TimelineChange::Started, TimelineChange::Started]
+    );
+    assert!(playing_ids(&control).iter().any(|id| id == "b"));
+}
+
+/// #1253: `b` ends at 600 and a cue at 650 starts it again, so the round sends the old
+/// run's `ended` before the new run's `started`, and loops in step with the cues.
+#[test]
+fn a_late_tick_sends_an_end_before_a_later_restart() {
+    let (_engine, clock, control) = clocked();
+    let mut events = control.events();
+    apply(
+        &control,
+        vec![
+            timeline("a", 2_000, TimelineLoop::Once, vec![cue(650, play("b"))]),
+            timeline("b", 600, TimelineLoop::Once, vec![]),
+            timeline("kicker", 2_000, TimelineLoop::Once, vec![]),
+        ],
+    );
+    drain(&mut events);
+    tick_late(&control, &clock, &["a", "b"], 700);
+    assert_eq!(
+        changes_of(&drain(&mut events), "b"),
+        [
+            TimelineChange::Started,
+            TimelineChange::Ended,
+            TimelineChange::Started
+        ]
+    );
+    assert!(playing_ids(&control).iter().any(|id| id == "b"));
 }

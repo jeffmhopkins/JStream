@@ -1,0 +1,6 @@
+{
+  "identifier": "network",
+  "description": "The app's own main window may save the \"Allow devices on my network\" setting, which applies at the next start. No other command is granted.",
+  "windows": ["main"],
+  "permissions": ["allow-set-network"]
+}

@@ -46,7 +46,7 @@ pub(crate) fn run(
 ) -> Snapshot {
     let output = opened
         .compositor
-        .apply_filter(filter, input, FilterClock { seconds })
+        .apply_filter(filter, input, FilterClock { seconds, beat: 0.0 })
         .expect("apply_filter");
     read(opened, &output)
 }

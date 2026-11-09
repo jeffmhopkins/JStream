@@ -1,12 +1,15 @@
 //! The store against a fake download: no test touches the network (R-TEST-004). The one
 //! that does, `downloads_the_pinned_release_from_cisco`, needs the `openh264-download`
-//! feature and `--ignored`. `cargo test` runs neither; CI's `e2e-stream` job runs it.
+//! feature and `--ignored`. `cargo test` runs neither; CI's `e2e-stream` job runs it. It
+//! also round-trips a stream through Cisco's encoder and decoder (ADR-0140).
 
 use std::cell::RefCell;
 use std::path::PathBuf;
 
 use jstream_platform::media::{Codec, FrameSize, PixelFormat, Timebase};
-use jstream_platform::{HardwarePreference, PlatformError, RateControl, VideoEncoderConfig};
+use jstream_platform::{
+    HardwarePreference, PlatformError, RateControl, VideoDecoderConfig, VideoEncoderConfig,
+};
 
 use super::{
     Fetch, OPENH264_PIN, OpenH264Pin, OpenH264Store, part_is_stale, process_is_running, sha256,
@@ -346,7 +349,7 @@ fn vaapi_codecs_list_download_and_delete_openh264() {
         assert_eq!(download.id, super::OPENH264_DOWNLOAD_ID);
         assert_eq!(download.codec, Codec::H264);
         assert_eq!(download.version, "2.6.0");
-        // ADR-0061 › Notices: Cisco's attribution and licence travel with the offer.
+        // ADR-0140 › Notices: Cisco's attribution and licence travel with the offer.
         assert_eq!(download.notice, super::OPENH264_NOTICE);
         assert_eq!(download.license_url, super::OPENH264_LICENSE_URL);
         // Condition 3's notice and condition 4 itself are in the text the app shows.
@@ -390,6 +393,173 @@ fn vaapi_codecs_list_download_and_delete_openh264() {
     let _ = std::fs::remove_dir_all(dir);
 }
 
+fn decoder_config(output_format: PixelFormat, hardware: HardwarePreference) -> VideoDecoderConfig {
+    VideoDecoderConfig {
+        codec: Codec::H264,
+        output_format,
+        hardware,
+    }
+}
+
+#[test]
+fn the_decoder_takes_h264_to_i420_or_nv12_in_software() {
+    use super::decoder::check;
+    for format in [PixelFormat::I420, PixelFormat::Nv12] {
+        for hardware in [HardwarePreference::Prefer, HardwarePreference::Avoid] {
+            check(&decoder_config(format, hardware)).expect("supported");
+        }
+    }
+    let refused = [
+        decoder_config(PixelFormat::Bgra8, HardwarePreference::Prefer),
+        decoder_config(PixelFormat::I420, HardwarePreference::Require),
+        VideoDecoderConfig {
+            codec: Codec::Hevc,
+            ..decoder_config(PixelFormat::I420, HardwarePreference::Prefer)
+        },
+    ];
+    for config in refused {
+        assert!(
+            matches!(check(&config), Err(PlatformError::Unsupported { .. })),
+            "{config:?}"
+        );
+    }
+}
+
+#[test]
+fn the_decoder_needs_the_downloaded_library() {
+    let dir = dir("decoder-missing");
+    let store = OpenH264Store::with_pin(dir.clone(), pin());
+    let config = decoder_config(PixelFormat::I420, HardwarePreference::Prefer);
+    assert!(matches!(
+        store.video_decoder(&config),
+        Err(PlatformError::MissingComponent { .. })
+    ));
+    // A config the decoder refuses is refused before the library is looked for.
+    let hevc = VideoDecoderConfig {
+        codec: Codec::Hevc,
+        ..config
+    };
+    assert!(matches!(
+        store.video_decoder(&hevc),
+        Err(PlatformError::Unsupported { .. })
+    ));
+    let _ = std::fs::remove_dir_all(dir);
+}
+
+/// Encodes `count` frames of a moving pattern on `store`'s library and decodes them
+/// again into `format`, checking each picture's size, time and likeness (ADR-0140).
+#[cfg(feature = "openh264-download")]
+fn round_trip(store: &OpenH264Store, format: PixelFormat) {
+    use jstream_platform::VideoSurface;
+    use jstream_platform::media::{ColorInfo, MediaTime, Plane, VideoFrame, VideoFrameInfo};
+
+    let (w, h) = (128usize, 96usize);
+    let size = FrameSize::new(w as u32, h as u32).expect("valid size");
+    let mut encoder = store
+        .video_encoder(&VideoEncoderConfig {
+            size,
+            input_format: PixelFormat::I420,
+            keyframe_interval: 30,
+            rate_control: RateControl::Cbr { kbps: 4000 },
+            ..config(HardwarePreference::Avoid)
+        })
+        .expect("opens an encoder on Cisco's library");
+    let mut decoder = store
+        .video_decoder(&decoder_config(format, HardwarePreference::Prefer))
+        .expect("opens a decoder on Cisco's library");
+    let tb = Timebase::new(1, 30).expect("valid time base");
+    let luma = |i: usize, x: usize, y: usize| ((x * 2 + y + i * 3) % 220 + 16) as u8;
+    // U runs across and V down, so a swapped or misplaced chroma plane shows.
+    let cb = |i: usize, x: usize, _y: usize| (64 + x + i) as u8;
+    let cr = |i: usize, _x: usize, y: usize| (64 + y * 2 + i) as u8;
+    let (cw, ch) = (w / 2, h / 2);
+    let chroma = |i: usize, f: &dyn Fn(usize, usize, usize) -> u8| -> Vec<u8> {
+        (0..ch)
+            .flat_map(|y| (0..cw).map(move |x| (x, y)))
+            .map(|(x, y)| f(i, x, y))
+            .collect()
+    };
+    let mut packets = Vec::new();
+    for i in 0..10 {
+        let y: Vec<u8> = (0..h)
+            .flat_map(|y| (0..w).map(move |x| (x, y)))
+            .map(|(x, y)| luma(i, x, y))
+            .collect();
+        let frame = VideoFrame::new(
+            VideoFrameInfo {
+                size,
+                format: PixelFormat::I420,
+                color: ColorInfo::default(),
+                pts: MediaTime::new(1000 + i as i64, tb),
+            },
+            vec![
+                Plane::new(y, w),
+                Plane::new(chroma(i, &cb), cw),
+                Plane::new(chroma(i, &cr), cw),
+            ],
+        )
+        .expect("frame");
+        encoder.encode(VideoSurface::Cpu(frame)).expect("encodes");
+        encoder.poll(&mut packets).expect("polls");
+    }
+    encoder.finish(&mut packets).expect("finishes");
+    assert_eq!(packets.len(), 10, "a packet a frame");
+    let mut pictures = Vec::new();
+    for packet in &packets {
+        decoder.decode(packet).expect("decodes");
+        decoder.poll(&mut pictures).expect("polls");
+    }
+    decoder.finish(&mut pictures).expect("drains");
+    assert_eq!(pictures.len(), 10, "a picture a packet");
+    for (i, picture) in pictures.iter().enumerate() {
+        let VideoSurface::Cpu(picture) = picture else {
+            panic!("CPU pictures only");
+        };
+        let info = picture.info();
+        assert_eq!((info.size, info.format), (size, format));
+        assert_eq!(info.pts, MediaTime::new(1000 + i as i64, tb), "picture {i}");
+        // At 4 Mbps on so small a picture the stream is all but lossless.
+        let mut error = 0u64;
+        for y in 0..h {
+            let row = picture.row(0, y as u32).expect("luma row");
+            for (x, &sample) in row.iter().enumerate().take(w) {
+                error += u64::from(sample.abs_diff(luma(i, x, y)));
+            }
+        }
+        let mean = error as f64 / (w * h) as f64;
+        assert!(mean < 4.0, "picture {i}: mean luma error {mean}");
+        let (mut u_error, mut v_error) = (0u64, 0u64);
+        for y in 0..ch {
+            let (us, vs): (Vec<u8>, Vec<u8>) = match format {
+                PixelFormat::Nv12 => {
+                    let row = picture.row(1, y as u32).expect("chroma row");
+                    row.chunks_exact(2).take(cw).map(|p| (p[0], p[1])).unzip()
+                }
+                _ => (
+                    picture.row(1, y as u32).expect("U row")[..cw].to_vec(),
+                    picture.row(2, y as u32).expect("V row")[..cw].to_vec(),
+                ),
+            };
+            for x in 0..cw {
+                u_error += u64::from(us[x].abs_diff(cb(i, x, y)));
+                v_error += u64::from(vs[x].abs_diff(cr(i, x, y)));
+            }
+        }
+        for (plane, error) in [("U", u_error), ("V", v_error)] {
+            let mean = error as f64 / (cw * ch) as f64;
+            assert!(mean < 4.0, "picture {i}: mean {plane} error {mean}");
+        }
+    }
+    assert_eq!(
+        decoder
+            .decode(&packets[0])
+            .err()
+            .map(|e| matches!(e, PlatformError::InvalidState { .. })),
+        Some(true),
+        "a finished decoder takes no more"
+    );
+}
+
 /// Downloads the pinned release from Cisco and checks it against the pin. While the pin
 /// has no hashes, it fails with both SHA-256 values in its message, which is how a pin is
 /// recorded. It touches the network, so it is behind the `openh264-download` feature and
@@ -429,5 +599,7 @@ fn downloads_the_pinned_release_from_cisco() {
     store
         .video_encoder(&vbr)
         .expect("opens a VBR encoder on Cisco's library");
+    round_trip(&store, PixelFormat::I420);
+    round_trip(&store, PixelFormat::Nv12);
     let _ = std::fs::remove_dir_all(dir);
 }

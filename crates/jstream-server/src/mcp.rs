@@ -124,7 +124,9 @@ impl Mcp {
                 }
                 None => tracing::info!(peer = %peer, "mcp session opened"),
             }
-            Arc::new(McpServer::new(Arc::from(app.open(credential))))
+            Arc::new(McpServer::new(Arc::from(
+                app.open(credential, jstream_protocol::AgentTransport::McpHttp),
+            )))
         });
         (number, server)
     }
@@ -236,7 +238,7 @@ pub(crate) async fn handle(
     body: Body,
 ) -> Response {
     let peer = accepted.peer;
-    let credential = match app.gate.admit(&headers, peer) {
+    let credential = match app.gate.admit(&headers, peer, accepted.on()) {
         Ok(credential) => credential,
         Err(refusal) => return refusal.into_response(),
     };

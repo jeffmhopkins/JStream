@@ -18,7 +18,10 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*"]
 The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): it runs a
 `jstream-core` `Engine` and serves it through `jstream-server`'s authenticated WebSocket
 API on `127.0.0.1`, so `jstream-cli --url …` and the stdio MCP proxy `jstream-cli mcp`
-can drive it, and turns on the server's MCP transport over streamable HTTP at `/mcp`, so
+can drive it, with `--lan` also on a TLS-only network listener for paired devices
+([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)) and with
+`--jtunnel-accept` receiving JTunnel senders' audio
+([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and turns on the server's MCP transport over streamable HTTP at `/mcp`, so
 an agent can connect without the proxy. Like every host it only wires the engine to its interfaces
 ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): each connection and each MCP
 session gets its own `InProcessControl` session through the server's `Connector`. Layer 6, an app that links
@@ -124,7 +127,7 @@ reconnects, and `ffmpeg -listen 1` as the server, which writes the stream to FLV
 binary on its own Linux backends, with nothing faked, against the same receiver.
 
 The H.264 encoder is Cisco's OpenH264, Linux's software encoder
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), when
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), when
 `JSTREAM_E2E_OPENH264` asks for it. `cargo xtask e2e-stream --openh264-download`, which
 CI runs, sets it to `download`: the harness installs the pinned release from Cisco's
 server through `OpenH264Store::install`, as the app does, into one store the run's tests
@@ -206,6 +209,12 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--effects-dir <dir>` | The folder of WGSL effect packs, one pack folder each, that the engine loads at startup and reloads when they change (`Engine::watch_effect_packs`, [jstream-core › Design](../../crates/jstream-core/README.md#design)). Each effect is a video filter kind, `<pack>/<effect>`, and each `[[source]]` a source kind, `<pack>/<source>` (ADR-0093). A missing folder holds no packs, and is watched for packs to appear. Default: `effects` in the platform data directory; without a data directory, no packs load. |
 | `--plugin-dir <dir>` | Where installed WASM plugins and their grants are saved (`plugins.json`) and loaded from at startup, created if missing ([ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). A file there that can't be read, or that a newer version wrote, is logged at `error` and left as it is, and plugins aren't loaded or saved that run. Default: `plugins` in the platform data directory; without a data directory, plugins aren't saved. |
 | `--ui-dir <dir>` | Serves the web UI's built files (`trunk build`'s `dist`) from this directory at `http://127.0.0.1:<port>/`. The browser asks for a user name and password: the password is the token (see **Web UI** below). A path that isn't a directory fails with exit code 1, before the token or collection file is written. Default: no UI. |
+| `--lan` | Also listens for devices on the network ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)): a second listener, TLS only, that admits paired devices and never the control token. Its certificate is made on first use (see **Network access** below). Default: off. |
+| `--lan-port <port>` | With `--lan`: the network listener's port, 1 to 65535. Default `4456`. |
+| `--lan-bind <addr>` | With `--lan`: listen on this one address (not a loopback one) instead of every interface. Default: every interface. |
+| `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes, no white space at either end) and the IPv4 LAN address and port it sends from, loopback, private or link-local. Repeatable, each name and each address and port once. A `network_audio` source naming the sender records its audio. Default: off, no JTunnel socket open. |
+| `--lan-renew` | With `--lan`: make a new key and certificate before serving, for when the machine's names or addresses changed. Every paired device then checks the new fingerprint, and a native client that pinned the old one pairs again. |
+| `--ptz-camera <spec>` | Lets this machine control a PTZ camera over VISCA ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)), repeatable: `name@address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the camera's VISCA address (1 to 7, default 1), as in `wide@192.168.1.40:52381`. The address must be on the LAN ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and names and addresses must not repeat. Default: none, so no PTZ socket is open. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
@@ -231,8 +240,46 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   devices stay paired across restarts; deleting it unpairs them all. A device file that
   can't be read or parsed, or that other users may access (on Unix, any group or other
   permission; on Windows, another owner or a DACL entry letting anyone but the user,
-  SYSTEM or Administrators in), is a startup failure (exit 1). A device token works only while the daemon listens on
-  `127.0.0.1`, which it always does for now.
+  SYSTEM or Administrators in), is a startup failure (exit 1). A device token works on the
+  daemon's own listener on `127.0.0.1`, and on the network listener with `--lan`.
+- **Network access** (`--lan`, [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)).
+  A second listener on every interface (or `--lan-bind`'s address), port 4456 (or
+  `--lan-port`), speaking TLS only and admitting paired devices only, never the control
+  token ([jstream-server › The network listener](../../crates/jstream-server/README.md#design)).
+  Every interface includes public Wi-Fi and any VPN the machine joins; `--lan-bind`
+  keeps it to one network. Its key and self-signed certificate are made on first use
+  and kept in `<token file>.tls` beside the token file, user-only and checked like the
+  token file; the key never leaves it. The certificate names the host name, its
+  `.local` name and the machine's address. It is never renewed silently: when those
+  changed, the daemon says which names the certificate lacks at startup, and logs it
+  at `warn`; `--lan-renew` makes a new one. To pair a device: start pairing with
+  `jstream-cli pair`, open one of the `network:` addresses on the device, compare the
+  certificate's fingerprint with the one the daemon printed, then enter the code (a
+  browser pairs on `/pair`). Once paired, a new certificate warning on that device means
+  continue only if the fingerprint matches the one the daemon shows
+  ([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)). On Windows
+  and macOS the first start can raise the firewall's prompt. A certificate file that
+  can't be read or made, or that other users may access, is a startup failure (exit 1),
+  and so is a network port that can't be bound.
+- **JTunnel** (`--jtunnel-accept`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)).
+  Off unless a sender is accepted. With one or more, the daemon starts the engine's
+  JTunnel receiver after the backends (arrivals are stamped on the media clock), on one
+  UDP socket on any interface and a port the system picks, and logs that port and the
+  senders at `info`. A sender's address can't be outside loopback, private IPv4 and
+  link-local, and the receiver drops everything not from an accepted sender, but for
+  the answers to its mDNS query, which only list senders in `jtunnel.senders`
+  ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
+  A sender is accepted per machine, on the command line, never from the collection.
+- **PTZ cameras** (`--ptz-camera`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)).
+  Off unless a camera is listed. With one or more, the daemon starts the engine's PTZ
+  control after the backends, one thread and socket per camera, and logs how many at
+  `info`. A camera's address can't be outside the LAN ranges, two cameras can't share a
+  name or an address and VISCA address, and replies from anywhere else are dropped
+  ([jstream-core › PTZ cameras](../../crates/jstream-core/README.md#contents-media)).
+  The cameras are listed per machine, on the command line, never from the collection,
+  which names them only by name. A camera a drive left moving is sent a stop when its
+  client disconnects and, best effort, when the engine shuts down; a daemon that is
+  killed outright sends none.
 - **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
   in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
   browser and the desktop app show the same workspace
@@ -242,7 +289,11 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 - **Output.** On stdout: `token file: <path> (created, new token)` or
   `… (existing token)`, then `mcp endpoint: http://127.0.0.1:<port>/mcp` (point an MCP
   client there, with the token as `Authorization: Bearer <token>`), then
-  `ui: http://127.0.0.1:<port>/` with `--ui-dir`, then
+  `ui: http://127.0.0.1:<port>/` with `--ui-dir`, then with `--lan` one
+  `network: https://<name>:<port>/ (TLS, paired devices only)` line for each name and
+  address the certificate carries, `network certificate fingerprint (SHA-256): AB:CD:…`,
+  ADR-0130's line that a new certificate warning means continue only if it matches,
+  and a line when the certificate was just made, renewed or lacks today's names, then
   `listening on ws://127.0.0.1:<port>/api/v1/ws` once it
   serves (a script waits for this line), and `stopped` after a graceful stop. Errors go
   to stderr as `error: <message>`.
@@ -301,12 +352,15 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   server URL, then `output.set_key` (stored in Windows Credential Manager, the login
   keychain on macOS, or on Linux the Secret Service, else the `0600` file
   `~/.config/jstream/secrets`, [ADR-0071](../../docs/adr/0071-linux-secret-store.md)),
-  then `output.start` connects and streams. A start fails with `action_failed` and a
+  then `output.start` connects and streams. The publish opener reads the key under the
+  name the engine gives it (`Engine::stream_key_name`, scoped to the open collection
+  file, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)). The daemon
+  keeps no recent-projects list. A start fails with `action_failed` and a
   reason that says what to fix when the output has no target (a `--output`
   placeholder), no stream key, or the key can't be read. On Linux it also fails, naming
   both ways to get one, when the machine has no H.264 encoder: neither VA-API nor
   Cisco's OpenH264, which is downloaded on the user's request
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Elsewhere
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Elsewhere
   (32-bit Linux and other Unixes), `output.start` only steps the placeholder state
   machine and `output.set_key` fails: there is no key store.
 - **Media Foundation (Windows).** On a Windows without Media Foundation (an N or KN
@@ -372,7 +426,7 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | Exit code | Meaning |
 |---|---|
 | 0 | Stopped by a signal, printed the help or version, or registered or unregistered the virtual camera (`--register-vcam`, `--unregister-vcam`) |
-| 1 | Failed: `--register-vcam` or `--unregister-vcam` could not finish (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the media clock can't be opened, or on macOS a backend refuses to open (a release below the floor), the port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
+| 1 | Failed: `--register-vcam` or `--unregister-vcam` could not finish (or isn't on Windows), the log directory, a log file or the audit log can't be created, the collection file can't be read, loaded or created, the YouTube client file can't be read or holds no client, the token file is unusable or can't be created, the device file is unusable, the network certificate file can't be read, made or written (`--lan`), the media clock can't be opened, or on macOS a backend refuses to open (a release below the floor), the port or the network port can't be bound, the `--ui-dir` directory isn't one, the signal handlers or runtime can't be set up, or the server failed while serving |
 | 2 | Usage: the command line could not be parsed, names no token file, or `--log-level` or `RUST_LOG` doesn't parse |
 | 3 | Windows only: Media Foundation or its AAC encoder is not installed (see **Media Foundation** above) |
 
@@ -403,11 +457,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   starts, or for the capture and video-device backends, when a preview shows a display,
   window or webcam (a webcam's one open is shared with the output's). A `jstream-clap-scan` thread then scans the CLAP plugins with
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
-  audio-filter kinds once found, and logs each file it couldn't scan; the daemon
-  serves meanwhile. The engine keeps the hosts, and from then on starts a
+  audio-filter kinds once found, and the engine logs each file it couldn't scan; the
+  daemon serves meanwhile. The engine keeps the hosts, rescans with them on
+  `plugin.clap_rescan`, and from then on starts a
   `jstream-plugin-host.exe` for each CLAP filter in an audio chain (a source's, the
   master's or an output's). Without
   `jstream-plugin-host.exe` beside the daemon every file fails to scan, and is logged.
+  When the hosts can't be set up, the daemon tells the engine why
+  (`Engine::set_clap_unavailable`), and `plugin.clap_scan` reports it. On macOS and
+  Linux the daemon tells the engine CLAP plugins are hosted on Windows only so far.
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,
@@ -451,7 +509,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 
   H.264 comes from VA-API, else from Cisco's OpenH264 in the data directory's
   `codecs/openh264` once the user has downloaded it
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Until one of
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Until one of
   them is there, `output.start` fails with the platform's reason, which names both. AAC
   is JStream's own encoder. Creating the backends lists the audio devices and probes
   the VA-API render nodes, and opens nothing else: the portal is asked when a pipeline
@@ -571,9 +629,10 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   (`Engine::with_browser`), so `browser` sources open their pages
   ([jstream-browser › Purpose](../../crates/jstream-browser/README.md#purpose)). It does
   so after `with_backends`, through a clone of the live engine (clones share its
-  sources), so pages start on the media clock. First
-  it opens a GPU device on the media adapter with the backends' `GpuInterop::open_device`
-  and hands it over with `use_device`, so a page's first paint already lands on it. CEF
+  sources), so pages start on the media clock. The engine hands the backend its one GPU
+  context, on the media adapter, with `use_device` before any page opens, so a page's
+  first paint already lands on the device every compositor draws on
+  ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5). CEF
   runs only in the sandboxed browser helper, which the backend starts with the first
   page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)): the helper
   (`jstream-browser-helper.exe`, CEF's bootstrap exe renamed, and
@@ -615,16 +674,21 @@ folder another process is using, so the daemon couldn't start pages while the ap
   no option to turn it off: it is behind the same token as the WebSocket API, which
   already gives full control ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)),
   except YouTube's account features, which MCP leaves out ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
-- **Listening.** Always `127.0.0.1` (`ServerConfig::new`, with only the port, MCP and the UI directory changed):
-  the server's `Host`, `Origin` and token checks apply unchanged
-  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). There is no
-  option to listen on other addresses until remote browsers need it (with TLS,
-  [ROADMAP › M2](../../ROADMAP.md#m2); [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)
-  decides it as an opt-in `--lan` flag, not built yet). Pairing is served already, and its device tokens
-  are accepted on loopback only until then. `ServerConfig::tls` stays off, so the browser
-  pairing page and the device cookie
-  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)) wait on
-  TLS too: `/pair` is 404.
+- **Listening.** The host's own listener is always `127.0.0.1` (`ServerConfig::new`,
+  with only the port, MCP, the UI directory and the network listener changed): the
+  server's `Host`, `Origin` and token checks apply unchanged
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)), and
+  `ServerConfig::tls` stays off there, so `/pair` on it is 404. Other devices reach the
+  daemon only through `--lan`'s network listener
+  ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), opt-in: TLS only, a
+  paired device's token or cookie only, and the browser pairing page and device cookie
+  ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md)) served
+  there. It binds every interface by default, so a phone on the same Wi-Fi reaches it
+  with nothing more; `--lan-bind` keeps it to one address (#1129 N3). The port is fixed
+  (4456 unless `--lan-port`) so a paired device's address stays the same across
+  restarts. `network_config` (`main.rs`) loads or makes the certificate beside the
+  token file with the machine's names (`jstream_server::machine_names`), reports names
+  it lacks rather than renewing, and renews only on `--lan-renew`.
 - **The device file** (`token.rs`, `main.rs`). The daemon names
   `ServerConfig::device_file` as the token file's path plus `.devices`, so the devices
   live and move with the token they stand beside, and deleting the two together resets
@@ -727,10 +791,10 @@ folder another process is using, so the daemon couldn't start pages while the ap
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
-  `--log-dir`,
+  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--jtunnel-accept`, `--log-dir`,
   `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
-- **Dependencies.** `jstream-core` and `jstream-server` (what a host links),
+- **Dependencies.** `jstream-core` and `jstream-server` with its `tls` feature (what a host links; `tls` for `--lan`),
   `jstream-platform` (`Backends`, the key store trait, the data directory),
   `jstream-browser` (the `BrowserBackend` seam, and its CEF backend with the `cef`
   feature; already in the tree through core), `jstream-platform-windows` on Windows only

@@ -1,4 +1,20 @@
 //! What a page is: where it loads from, its size and frame rate, and its custom CSS.
+//!
+//! # Behaviour
+//!
+//! A web address must be `http://` or
+//! `https://` with a host, at most 8 KiB, without whitespace or control characters; an
+//! empty one is a blank page. A local file becomes a percent-encoded `file:///` URL,
+//! including UNC and `\\?\` paths. A page can also be given as its HTML
+//! (`PageLocation::html`, at most 128 KiB, `MAX_HTML_BYTES`; blank text is a blank
+//! page), which loads from a host of its own under the reserved `HTML_PAGE_DOMAIN`
+//! (`https://p<n>.html.jstream.invalid/`, `RequestPolicy::html_url`) that the helper
+//! answers itself with the HTML. So the page has an origin of its own, and shares neither
+//! storage nor its opt-in with another source (#1035). Being `https`, it is a secure context, and Chromium refuses its plain `http`
+//! scripts and frames as mixed content. The custom CSS (at most 64 KiB) goes into the page as
+//! one `<style id="jstream-custom-css">` that every change replaces, through a script
+//! that quotes it as a JavaScript string (`css_script`). The default CSS makes the page's
+//! background transparent, as OBS does.
 
 use std::path::{Path, PathBuf};
 
@@ -20,6 +36,17 @@ pub const DEFAULT_CSS: &str =
 /// The longest HTML a page given as text takes ([`PageLocation::Html`]), in bytes.
 pub const MAX_HTML_BYTES: usize = 128 * 1024;
 
+/// The reserved name pages given as their HTML ([`PageLocation::Html`]) load under
+/// (#1035; `.invalid` never resolves, RFC 6761). Each such page loads from an `https`
+/// URL on a host of its own below it, `https://p<n>.html.jstream.invalid/`
+/// ([`RequestPolicy::html_url`](crate::RequestPolicy::html_url)), which the helper
+/// answers itself with the page's HTML. So the page has an origin of its own, not the
+/// opaque one of a `data:` URL, and shares neither storage nor its opt-in with another
+/// source. Its `local_network` opt-in covers that origin exactly, as a web page's covers
+/// its own, and never a frame inside it. No request for it reaches the network: the
+/// request policy refuses every other request to a name under this one.
+pub const HTML_PAGE_DOMAIN: &str = "html.jstream.invalid";
+
 /// The longest URL a page takes, in bytes.
 const MAX_URL_BYTES: usize = 8 * 1024;
 
@@ -40,9 +67,8 @@ pub struct PageSpec {
     /// ([`RequestPolicy`](crate::RequestPolicy), #347). On, for a page from a URL it
     /// covers only the origin of the source's own URL: a third-party frame inside it, or
     /// a page it navigates or redirects to, is refused all the same (#721). An inline
-    /// [`PageLocation::Html`] page has an opaque origin, so its opt-in works like a file
-    /// page's access: it covers every opaque frame inside the page, one a third-party
-    /// frame creates included, while the main frame is still on `data:`.
+    /// [`PageLocation::Html`] page's opt-in covers its own origin (under
+    /// [`HTML_PAGE_DOMAIN`]) the same way (#1035).
     pub local_network: bool,
     /// The page API it is granted (ADR-0102): `window.jstream` in its main frame while
     /// that shows the source's own document, with these members. `None`, the default
@@ -59,10 +85,13 @@ pub enum PageLocation {
     Web(String),
     /// A local HTML file, by its absolute host path.
     File(PathBuf),
-    /// A page given as its HTML, at most [`MAX_HTML_BYTES`]: loaded as a `data:` URL, so
-    /// it has an opaque origin, no folder to load files from, and no access to this
-    /// computer or the local network unless its spec opts in
-    /// ([`RequestPolicy`](crate::RequestPolicy)).
+    /// A page given as its HTML, at most [`MAX_HTML_BYTES`]: loaded from a host of its own
+    /// under [`HTML_PAGE_DOMAIN`], which the helper answers with it (#1035), so it has that
+    /// origin, no folder to load files from, and no access to this computer or the local
+    /// network unless its spec opts in ([`RequestPolicy`](crate::RequestPolicy)). Being
+    /// `https`,
+    /// it is a secure context, and Chromium refuses its plain `http` scripts and frames as
+    /// mixed content (an `http` image or media file is upgraded to `https`).
     Html(String),
 }
 
@@ -132,32 +161,11 @@ impl PageLocation {
             Self::Blank => "about:blank".to_owned(),
             Self::Web(url) => url.clone(),
             Self::File(path) => file_url(path),
-            Self::Html(html) => format!("data:text/html;charset=utf-8;base64,{}", base64(html)),
+            // The reserved name; the helper loads each page from a host of its own
+            // below it (`RequestPolicy::html_url`).
+            Self::Html(_) => format!("https://{HTML_PAGE_DOMAIN}/"),
         }
     }
-}
-
-/// `text`'s UTF-8 bytes in standard base64 (RFC 4648), padded.
-fn base64(text: &str) -> String {
-    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-    let bytes = text.as_bytes();
-    let mut out = String::with_capacity(bytes.len().div_ceil(3) * 4);
-    for chunk in bytes.chunks(3) {
-        let b = [
-            chunk[0],
-            chunk.get(1).copied().unwrap_or(0),
-            chunk.get(2).copied().unwrap_or(0),
-        ];
-        let n = (u32::from(b[0]) << 16) | (u32::from(b[1]) << 8) | u32::from(b[2]);
-        for i in 0..4 {
-            if i <= chunk.len() {
-                out.push(char::from(ALPHABET[((n >> (18 - 6 * i)) & 63) as usize]));
-            } else {
-                out.push('=');
-            }
-        }
-    }
-    out
 }
 
 /// The `file:` URL of an absolute host path, percent-encoded, as Chromium expects it.
@@ -246,23 +254,11 @@ mod tests {
     use super::*;
 
     #[test]
-    fn html_pages_load_as_base64_data_urls() {
+    fn html_pages_load_from_the_reserved_origin() {
         assert_eq!(PageLocation::html(" \n "), Ok(PageLocation::Blank));
         let page = PageLocation::html("<b>é</b>").expect("short HTML");
         assert_eq!(page, PageLocation::Html("<b>é</b>".into()));
-        assert_eq!(
-            page.to_url(),
-            "data:text/html;charset=utf-8;base64,PGI+w6k8L2I+"
-        );
-        // RFC 4648's test vectors, for the padding.
-        for (text, encoded) in [
-            ("f", "Zg=="),
-            ("fo", "Zm8="),
-            ("foo", "Zm9v"),
-            ("foob", "Zm9vYg=="),
-        ] {
-            assert_eq!(base64(text), encoded);
-        }
+        assert_eq!(page.to_url(), "https://html.jstream.invalid/");
         assert!(PageLocation::html(&"a".repeat(MAX_HTML_BYTES)).is_ok());
         assert!(matches!(
             PageLocation::html(&"a".repeat(MAX_HTML_BYTES + 1)),

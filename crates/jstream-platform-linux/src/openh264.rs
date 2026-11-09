@@ -1,5 +1,6 @@
-//! Cisco's OpenH264 binary: Linux's software H.264 encoder, downloaded from Cisco on the
-//! user's request and loaded at run time (docs/adr/0061-source-types-and-decoding-scope-v2.md).
+//! Cisco's OpenH264 binary: Linux's software H.264 encoder, and the decoder for the
+//! streams the engine encodes itself, downloaded from Cisco on the user's request and
+//! loaded at run time (docs/adr/0140-source-types-and-decoding-scope-v3.md).
 //!
 //! JStream never ships, mirrors, builds or patches OpenH264. [`OpenH264Store::install`]
 //! fetches the one pinned release ([`OPENH264_PIN`]) from Cisco's server, checks the
@@ -10,11 +11,12 @@
 //! the file it wrote, and checks its hash again each time; a copy from anywhere else is
 //! never loaded. [`OpenH264Store::remove`] deletes it again.
 //!
-//! The encoder itself is [`OpenH264Encoder`], on hand-written declarations of the few
-//! calls it makes (`ffi.rs`), so no crate links or builds OpenH264 and `deny.toml`'s
+//! The encoder itself is [`OpenH264Encoder`] and the decoder [`OpenH264Decoder`], on
+//! hand-written declarations of the few calls they make (`ffi.rs`), so no crate links or builds OpenH264 and `deny.toml`'s
 //! `openh264` bans stay (R-DEP-002).
 
 mod bzip2;
+mod decoder;
 mod encoder;
 mod ffi;
 mod https;
@@ -26,10 +28,14 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use jstream_platform::media::Codec;
-use jstream_platform::{CodecDownload, PlatformError, VideoEncoder, VideoEncoderConfig};
+use jstream_platform::{
+    CodecDownload, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder,
+    VideoEncoderConfig,
+};
 
 use crate::dl::SystemLibrary;
 
+pub use decoder::{OPENH264_DECODER_NAME, OpenH264Decoder, openh264_decoder_info};
 pub use encoder::{OPENH264_ENCODER_NAME, OpenH264Encoder, openh264_encoder_info};
 pub use https::HttpsFetch;
 
@@ -37,7 +43,7 @@ pub use https::HttpsFetch;
 pub const OPENH264_COMPONENT: &str = "Cisco's OpenH264 (software H.264)";
 
 /// The attribution the app shows wherever it offers the download and in its licence
-/// information, beside a link to [`OPENH264_LICENSE_URL`] (ADR-0061 › Notices).
+/// information, beside a link to [`OPENH264_LICENSE_URL`] (ADR-0140 › Notices).
 pub const OPENH264_NOTICE: &str = "OpenH264 Video Codec provided by Cisco Systems, Inc.";
 
 /// Cisco's licence page for its binary, which the app links to wherever it offers the
@@ -80,7 +86,7 @@ pub struct OpenH264Pin {
 }
 
 /// The pinned release: OpenH264 2.6.0 for 64-bit x86 Linux. A newer release reaches
-/// users through a JStream update that moves this pin (ADR-0061).
+/// users through a JStream update that moves this pin (ADR-0140).
 ///
 /// The two SHA-256 values were recorded by downloading the file from Cisco and hashing
 /// it, which the `openh264-download` test does (feature `openh264-download`; CI's
@@ -188,7 +194,7 @@ impl OpenH264Store {
             return Err(PlatformError::Unsupported {
                 what: format!(
                     "downloading OpenH264 {}: this JStream has no recorded SHA-256 for \
-                     Cisco's file yet (ADR-0061)",
+                     Cisco's file yet (ADR-0140)",
                     version(&self.pin)
                 ),
             });
@@ -234,6 +240,20 @@ impl OpenH264Store {
         encoder::params(config)?;
         let api = Arc::new(self.load()?);
         Ok(Box::new(OpenH264Encoder::open(api, config)?))
+    }
+
+    /// Opens a decoder for `config` on the stored library, for a stream the engine
+    /// encoded itself (ADR-0140).
+    ///
+    /// # Errors
+    /// As for [`video_encoder`](Self::video_encoder), and as for opening the decoder.
+    pub fn video_decoder(
+        &self,
+        config: &VideoDecoderConfig,
+    ) -> Result<Box<dyn VideoDecoder>, PlatformError> {
+        decoder::check(config)?;
+        let api = Arc::new(self.load()?);
+        Ok(Box::new(OpenH264Decoder::open(api, config)?))
     }
 
     /// Loads the stored library after checking it is the one this store wrote.
@@ -437,7 +457,7 @@ fn check_sha256(what: &'static str, data: &[u8], pinned: &[u8; 32]) -> Result<()
 
 /// Whether `config` should go to the software encoder: H.264 with
 /// [`HardwarePreference::Avoid`](jstream_platform::HardwarePreference::Avoid), or with
-/// `Prefer` when there is no hardware encoder (ADR-0061: hardware first, OpenH264 last
+/// `Prefer` when there is no hardware encoder (ADR-0140: hardware first, OpenH264 last
 /// in line).
 pub fn wants_software(hardware_encoders: usize, config: &VideoEncoderConfig) -> bool {
     use jstream_platform::HardwarePreference;

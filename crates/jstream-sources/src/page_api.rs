@@ -13,7 +13,22 @@ use jstream_protocol::{BusId, Reference, Settings, check_value_name};
 use serde_json::{Value, json};
 
 use crate::SourceError;
+use crate::midi::{CHANNELS, KEYS, MidiState, NoteEvent};
 use crate::scope::{AudioMeter, AudioScope, METER_BANDS};
+
+/// The most held notes a page's MIDI reading lists.
+const MAX_MIDI_NOTES: usize = 128;
+/// The most controllers a page's MIDI reading lists.
+const MAX_MIDI_CONTROLLERS: usize = 256;
+/// The most recent note-ons a page's MIDI reading lists, and how far back it looks.
+const MAX_MIDI_RECENT: usize = 32;
+const MIDI_RECENT_MS: u64 = 2000;
+/// How often a page granted MIDI is looked at while its input rests, in seconds.
+const MIDI_IDLE: f64 = 0.25;
+
+/// The prefix of the engine's tempo values (ADR-0147), which only `page_api_tempo`
+/// grants.
+const TEMPO: &str = "tempo";
 
 /// The longest `page_api_values` setting, in bytes.
 pub(crate) const MAX_VALUES_GRANT_BYTES: usize = 1024;
@@ -68,6 +83,12 @@ pub(crate) struct Grant {
     pub(crate) values: Vec<Covered>,
     /// The bus whose levels it may read (`page_api_bus`).
     pub(crate) bus: Option<BusId>,
+    /// The MIDI input it may read (`page_api_midi_input`; empty for every input), while
+    /// `page_api_midi` is on (ADR-0147).
+    pub(crate) midi: Option<String>,
+    /// Whether it may read the tempo (`page_api_tempo`, ADR-0124 §7): the engine's
+    /// `tempo.*` values, and a MIDI reading's `tempo`. No values grant covers them.
+    pub(crate) tempo: bool,
 }
 
 /// One entry of `page_api_values`.
@@ -96,13 +117,29 @@ impl Grant {
             .get("page_api_scenes")
             .and_then(Value::as_bool)
             .unwrap_or(false);
-        let values = parse_values(
+        let on = |param: &str| {
             settings
-                .get("page_api_values")
-                .and_then(Value::as_str)
-                .unwrap_or_default(),
-        )?;
-        let bus = match settings.get("page_api_bus").unwrap_or(&Value::Null) {
+                .get(param)
+                .and_then(Value::as_bool)
+                .unwrap_or(false)
+        };
+        // Each kind of data is read only while its own checkbox is on (ADR-0124).
+        let values = if on("page_api_shared_values") {
+            parse_values(
+                settings
+                    .get("page_api_values")
+                    .and_then(Value::as_str)
+                    .unwrap_or_default(),
+            )?
+        } else {
+            Vec::new()
+        };
+        let bus_setting = if on("page_api_audio") {
+            settings.get("page_api_bus").unwrap_or(&Value::Null)
+        } else {
+            &Value::Null
+        };
+        let bus = match bus_setting {
             Value::Null => None,
             value => match Reference::from_value(value) {
                 Some(Reference::Bus { bus_id }) => Some(bus_id),
@@ -114,10 +151,27 @@ impl Grant {
                 }
             },
         };
+        let midi = if on("page_api_midi") {
+            let input = settings
+                .get("page_api_midi_input")
+                .and_then(Value::as_str)
+                .unwrap_or_default();
+            if input.len() > crate::midi::MAX_INPUT_NAME {
+                return Err(SourceError::Setting {
+                    param: "page_api_midi_input".into(),
+                    reason: format!("must be at most {} bytes", crate::midi::MAX_INPUT_NAME),
+                });
+            }
+            Some(input.to_owned())
+        } else {
+            None
+        };
         Ok(Some(Self {
             scenes,
             values,
             bus,
+            midi,
+            tempo: on("page_api_tempo"),
         }))
     }
 
@@ -125,13 +179,21 @@ impl Grant {
     pub(crate) fn api(&self) -> PageApi {
         PageApi {
             scenes: self.scenes,
-            values: !self.values.is_empty(),
+            values: !self.values.is_empty() || self.tempo,
             levels: self.bus.is_some(),
+            midi: self.midi.is_some(),
         }
     }
 
     /// Whether the page may read the value `name`.
     pub(crate) fn covers(&self, name: &str) -> bool {
+        if name == TEMPO
+            || name
+                .strip_prefix(TEMPO)
+                .is_some_and(|rest| rest.starts_with('.'))
+        {
+            return self.tempo;
+        }
         self.values.iter().any(|covered| match covered {
             Covered::Name(own) => own == name,
             Covered::Below(prefix) => name
@@ -208,6 +270,17 @@ pub(crate) struct Feed {
     metering: bool,
     /// The millisecond the meter last measured at: its clock only counts up.
     measured: u64,
+    /// The granted MIDI input's state, and the reading as last sent.
+    midi: Option<Arc<MidiState>>,
+    midi_sent: Option<String>,
+    /// The input's change count at the last look, and whether something moved then
+    /// (a message, or a playing song): while it did, a page frame is always due.
+    midi_seen: Option<u64>,
+    midi_moving: bool,
+    /// The clock time of the last look.
+    looked: Option<f64>,
+    /// The log, read at each look that needs it.
+    events: Vec<NoteEvent>,
 }
 
 impl Feed {
@@ -237,7 +310,22 @@ impl Feed {
             levels: None,
             metering: false,
             measured: 0,
+            midi: None,
+            midi_sent: None,
+            midi_seen: None,
+            midi_moving: false,
+            looked: None,
+            events: Vec::new(),
         }
+    }
+
+    /// The feed with `state` as its granted MIDI input's (ADR-0147). Without a call, a
+    /// grant of MIDI reads an input that never plays.
+    pub(crate) fn with_midi(mut self, state: Arc<MidiState>) -> Self {
+        if self.grant.midi.is_some() {
+            self.midi = Some(state);
+        }
+        self
     }
 
     /// Adds `data` to what is still to be sent: a later clock, visibility or scenes
@@ -255,6 +343,9 @@ impl Feed {
         }
         if data.levels.is_some() {
             pending.levels = data.levels;
+        }
+        if data.midi.is_some() {
+            pending.midi = data.midi;
         }
         for (name, value) in data.values {
             match pending.values.iter_mut().find(|(n, _)| *n == name) {
@@ -289,23 +380,21 @@ impl Feed {
     }
 
     /// When what is still to be sent may go, on the media clock, or `None` with nothing
-    /// pending. While the granted bus has a reading, the next page frame is always due,
-    /// for the reading then.
+    /// pending. While the granted bus has a reading, or the granted MIDI input moves, the
+    /// next page frame is always due, for the reading then; while that input rests, a
+    /// look every [`MIDI_IDLE`] sees it move again.
     pub(crate) fn due(&self) -> Option<MediaTime> {
-        if self.pending.is_empty() && !self.metering {
-            return None;
+        // With no MIDI state to read, there's nothing to look at.
+        let resting = self.midi.is_some() && !self.midi_moving;
+        if self.pending.is_empty() && !self.metering && !self.midi_moving {
+            if !resting {
+                return None;
+            }
+            let at = self.looked.unwrap_or(0.0) + MIDI_IDLE;
+            return Some(micros(at));
         }
         let at = self.sent.map_or(0.0, |sent| sent + self.frame());
-        // Rounded up to a microsecond, so the update is never early.
-        let micros = (at * 1e6).ceil();
-        Some(MediaTime::new(
-            if micros.is_finite() {
-                micros as i64
-            } else {
-                i64::MAX
-            },
-            jstream_media::Timebase::MICROS,
-        ))
+        Some(micros(at))
     }
 
     /// One page frame, in seconds.
@@ -371,7 +460,24 @@ impl Feed {
             );
             data.levels = changed(&mut self.levels, levels);
         }
-        if !self.grant.values.is_empty() {
+        self.looked = Some(now);
+        if let (Some(input), Some(state)) = (&self.grant.midi, &self.midi) {
+            let changes = state.changes();
+            let now_ms = if now.is_finite() && now > 0.0 {
+                (now * 1000.0) as u64
+            } else {
+                0
+            };
+            let tempo = self.grant.tempo;
+            let playing = tempo && state.tempo().is_some_and(|t| t.playing && t.clock(now_ms));
+            self.midi_moving = self.midi_seen != Some(changes) || playing;
+            if self.midi_moving || self.midi_sent.is_none() {
+                self.midi_seen = Some(changes);
+                let reading = midi_json(input, state, tempo, now_ms, &mut self.events);
+                data.midi = changed(&mut self.midi_sent, reading);
+            }
+        }
+        if !self.grant.values.is_empty() || self.grant.tempo {
             let grant = &self.grant;
             let values = &mut self.values;
             values.retain(|name, _| {
@@ -439,6 +545,88 @@ fn levels_json(levels: &BusLevels, bands: Option<&[f32]>) -> String {
     .to_string()
 }
 
+/// A MIDI input's state at `now_ms` as the page's `midi` JSON (ADR-0147): its `tempo`
+/// (`null` before its clock or transport, or without `tempo`, the tempo grant), held `notes` and non-zero `controllers` as
+/// `[channel, key or controller, value]` with channels 1 to 16, non-zero `bend` and
+/// `pressure` as `[channel, value]`, and the `recent` note-ons of the last two seconds as
+/// `[at, channel, key, velocity]`, oldest first. Times are seconds on the page's clock.
+fn midi_json(
+    input: &str,
+    state: &MidiState,
+    tempo: bool,
+    now_ms: u64,
+    events: &mut Vec<NoteEvent>,
+) -> String {
+    let secs = |ms: u64| ms as f64 / 1000.0;
+    let reading = if tempo { state.tempo() } else { None };
+    let tempo = reading.map_or(Value::Null, |t| {
+        json!({
+            "bpm": t.bpm.map(|bpm| (bpm * 100.0).round() / 100.0),
+            "playing": t.playing,
+            "clock": t.clock(now_ms),
+            "beat": (t.beat_at(now_ms) * 1000.0).round() / 1000.0,
+            "at": secs(now_ms),
+        })
+    });
+    let mut notes = Vec::new();
+    let mut controllers = Vec::new();
+    let mut bend = Vec::new();
+    let mut pressure = Vec::new();
+    for channel in 0..CHANNELS as u8 {
+        let shown = channel + 1;
+        for key in 0..KEYS as u8 {
+            let velocity = state.held(channel, key);
+            if velocity > 0 && notes.len() < MAX_MIDI_NOTES {
+                notes.push(json!([shown, key, velocity]));
+            }
+            let value = state.controller(channel, key);
+            if value > 0 && controllers.len() < MAX_MIDI_CONTROLLERS {
+                controllers.push(json!([shown, key, value]));
+            }
+        }
+        if state.bend(channel) != 0 {
+            bend.push(json!([shown, state.bend(channel)]));
+        }
+        if state.pressure(channel) != 0 {
+            pressure.push(json!([shown, state.pressure(channel)]));
+        }
+    }
+    state.recent(events, crate::midi::LOG);
+    let since = now_ms.saturating_sub(MIDI_RECENT_MS);
+    let mut recent: Vec<Value> = events
+        .iter()
+        .rev()
+        .filter(|e| e.velocity > 0 && e.at_ms >= since)
+        .take(MAX_MIDI_RECENT)
+        .map(|e| json!([secs(e.at_ms), e.channel + 1, e.key, e.velocity]))
+        .collect();
+    recent.reverse();
+    json!({
+        "input": input,
+        "tempo": tempo,
+        "notes": notes,
+        "controllers": controllers,
+        "bend": bend,
+        "pressure": pressure,
+        "recent": recent,
+    })
+    .to_string()
+}
+
+/// `at` seconds on the media clock, rounded up to a microsecond, so an update is never
+/// early.
+fn micros(at: f64) -> MediaTime {
+    let micros = (at * 1e6).ceil();
+    MediaTime::new(
+        if micros.is_finite() {
+            micros as i64
+        } else {
+            i64::MAX
+        },
+        jstream_media::Timebase::MICROS,
+    )
+}
+
 /// `now` if it differs from what `last` holds, which then holds it.
 fn changed(last: &mut Option<String>, now: String) -> Option<String> {
     if last.as_ref() == Some(&now) {
@@ -477,12 +665,19 @@ mod tests {
             .unwrap(),
             None
         );
+        let names = (
+            "page_api_values",
+            json!(" status.text, counter.* ,,counter.*"),
+        );
+        // Without its checkbox, the names grant nothing (ADR-0124).
+        let unchecked = Grant::of(&settings(&[("page_api", json!(true)), names.clone()]))
+            .unwrap()
+            .unwrap();
+        assert!(unchecked.values.is_empty());
         let grant = Grant::of(&settings(&[
             ("page_api", json!(true)),
-            (
-                "page_api_values",
-                json!(" status.text, counter.* ,,counter.*"),
-            ),
+            ("page_api_shared_values", json!(true)),
+            names,
         ]))
         .unwrap()
         .unwrap();
@@ -499,8 +694,10 @@ mod tests {
                 scenes: false,
                 values: true,
                 levels: false,
+                midi: false,
             }
         );
+        let values_on = ("page_api_shared_values", json!(true));
         assert!(grant.covers("status.text"));
         assert!(grant.covers("counter.a.b"));
         assert!(!grant.covers("counter"));
@@ -510,6 +707,7 @@ mod tests {
             assert!(
                 Grant::of(&settings(&[
                     ("page_api", json!(true)),
+                    values_on.clone(),
                     ("page_api_values", json!(bad))
                 ]))
                 .is_err(),
@@ -520,6 +718,7 @@ mod tests {
         assert!(
             Grant::of(&settings(&[
                 ("page_api", json!(true)),
+                values_on,
                 ("page_api_values", json!(long))
             ]))
             .is_err()
@@ -532,6 +731,8 @@ mod tests {
             scenes: true,
             values: vec![Covered::Below("status".into())],
             bus: None,
+            midi: None,
+            tempo: false,
         };
         let mut feed = Feed::new(grant, 50, None);
         let mut values = BTreeMap::new();
@@ -582,6 +783,8 @@ mod tests {
             scenes: false,
             values: vec![Covered::Below("counter".into())],
             bus: None,
+            midi: None,
+            tempo: false,
         };
         // 50 a second: one page frame is 20 ms.
         let mut feed = Feed::new(grant, 50, None);
@@ -630,15 +833,23 @@ mod tests {
     #[test]
     fn a_page_given_a_bus_reads_its_levels_each_frame() {
         let vod = BusId::new("vod");
+        let bus = (
+            "page_api_bus",
+            Reference::Bus {
+                bus_id: vod.clone(),
+            }
+            .to_value(),
+        );
+        // Without its checkbox, the bus grants nothing (ADR-0124).
+        let unchecked = Grant::of(&settings(&[("page_api", json!(true)), bus.clone()]))
+            .unwrap()
+            .unwrap();
+        assert_eq!(unchecked.bus, None);
+        assert!(!unchecked.api().levels);
         let grant = Grant::of(&settings(&[
             ("page_api", json!(true)),
-            (
-                "page_api_bus",
-                Reference::Bus {
-                    bus_id: vod.clone(),
-                }
-                .to_value(),
-            ),
+            ("page_api_audio", json!(true)),
+            bus,
         ]))
         .unwrap()
         .unwrap();
@@ -647,6 +858,7 @@ mod tests {
         assert!(
             Grant::of(&settings(&[
                 ("page_api", json!(true)),
+                ("page_api_audio", json!(true)),
                 ("page_api_bus", json!("vod"))
             ]))
             .is_err()
@@ -720,6 +932,8 @@ mod tests {
                 scenes: false,
                 values: Vec::new(),
                 bus: None,
+                midi: None,
+                tempo: false,
             },
             30,
             None,
@@ -747,6 +961,8 @@ mod tests {
                 scenes: false,
                 values: Vec::new(),
                 bus: None,
+                midi: None,
+                tempo: false,
             },
             25,
             None,

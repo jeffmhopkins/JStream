@@ -6,7 +6,11 @@
 //! fresh at each start and kept only in memory, and accepts the webview's origin besides
 //! its own. MCP is off: nothing outside the app knows the token. With `--mcp` ([`Agents`])
 //! it lets agents in as the daemon does: it listens on a fixed port, takes its token from
-//! a user-only token file that MCP clients read, and serves MCP at `/mcp`.
+//! a user-only token file that MCP clients read, and serves MCP at `/mcp`. The webview
+//! then gets a second token, made at each start and kept only in memory, and the server
+//! asks the person before a new agent with the file's token connects (ADR-0131). With
+//! [`Network`] ("Allow devices on my network", `network.rs`) it also opens the TLS
+//! network listener and pairs devices (ADR-0104, ADR-0044).
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
@@ -22,7 +26,11 @@ use std::time::Duration;
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
-#[cfg(windows)]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 use {
     jstream_core::{LivePublish, OpenPublish, PublishError},
     jstream_crash::Redacting,
@@ -52,6 +60,17 @@ pub struct Agents {
     pub token_file: PathBuf,
 }
 
+/// "Allow devices on my network" (ADR-0104): the network listener, and the file that
+/// keeps the devices paired through it.
+#[derive(Clone)]
+pub struct Network {
+    /// Where the network listener binds and its certificate (`network::config`).
+    pub config: jstream_server::NetworkConfig,
+    /// The paired devices' file (`jstream_server::token_file::device_file`), beside the
+    /// token file as the daemon keeps it.
+    pub device_file: PathBuf,
+}
+
 /// The running engine and its server.
 pub struct Host {
     runtime: Runtime,
@@ -60,6 +79,10 @@ pub struct Host {
     ws_url: String,
     token: String,
     mcp_url: Option<String>,
+    /// The network listener's addresses and certificate fingerprint, with [`Network`].
+    network: Option<(Vec<String>, String)>,
+    /// The global hotkeys' listener (ADR-0112 §5 and §6), on Windows, macOS and X11.
+    hotkeys: Option<JoinHandle<()>>,
 }
 
 impl Host {
@@ -67,7 +90,8 @@ impl Host {
     /// settings in `ui_settings` (ADR-0084; in memory without one). Without `agents` it
     /// listens on a port the OS picks with a new token kept in memory, and serves no
     /// MCP. With them it listens on their port, takes the token from their token file
-    /// (`jstream_server::token_file`), and serves MCP.
+    /// (`jstream_server::token_file`), and serves MCP. With `network` it also opens the
+    /// network listener and pairs devices; without it, it pairs none.
     ///
     /// # Errors
     /// When the runtime can't start, the OS has no randomness for the token, the token
@@ -78,6 +102,7 @@ impl Host {
         secrets: &Secrets,
         ui_settings: Option<PathBuf>,
         agents: Option<&Agents>,
+        network: Option<&Network>,
     ) -> anyhow::Result<Host> {
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
@@ -97,17 +122,40 @@ impl Host {
         };
         secrets.register(&token);
         let mut config = ServerConfig::new(server_token);
-        if let Some(agents) = agents {
-            config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, agents.port));
-            config.mcp = true;
-        }
+        // With agents, the webview gets a token of its own, made now and kept only in
+        // memory, so the server can tell it from the agents that read the token file and
+        // ask the person before a new one connects (ADR-0131).
+        let token = match agents {
+            None => token,
+            Some(agents) => {
+                config.bind = SocketAddr::from((Ipv4Addr::LOCALHOST, agents.port));
+                config.mcp = true;
+                let ui_token = new_token()?;
+                secrets.register(&ui_token);
+                config.ui_token = Some(Token::new(ui_token.clone())?);
+                config.ask_agents = true;
+                config.approvals_file = Some(jstream_server::token_file::approvals_file(
+                    &agents.token_file,
+                ));
+                ui_token
+            }
+        };
         config.extra_origins = vec![origin.to_owned()];
-        // The window needs no pairing, and pairing remote browsers isn't offered yet, so it
-        // pairs no device (ADR-0047), with or without agents.
-        config.pairing = false;
+        // The window needs no pairing, so without network access the host pairs no device
+        // (ADR-0047), with or without agents. With it, devices on the network pair over
+        // the TLS listener, and the window's pairing panel opens their codes.
+        match network {
+            Some(network) => {
+                config.network = Some(network.config.clone());
+                config.device_file = Some(network.device_file.clone());
+            }
+            None => config.pairing = false,
+        }
         // The UI settings are still kept, so the window shows the workspace the daemon's
         // browsers do.
         config.ui_settings_file = ui_settings;
+        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+        let listening = Arc::clone(&engine);
         let connector: Connector = Arc::new(move || Box::new(engine.connect()));
         let server: Server = runtime
             .block_on(Server::bind(config, connector))
@@ -122,6 +170,19 @@ impl Host {
             })?;
         let ws_url = server.ws_url();
         let mcp_url = server.mcp_url();
+        let network = server.network_fingerprint().map(|fingerprint| {
+            let urls = server.network_urls();
+            tracing::info!(
+                urls = %urls.join(", "),
+                %fingerprint,
+                "devices on the network may pair (Allow devices on my network)"
+            );
+            (urls, fingerprint.to_owned())
+        });
+        #[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+        let hotkeys = global_hotkeys(&runtime, &listening, server.ui_settings());
+        #[cfg(not(any(windows, target_os = "linux", target_os = "macos")))]
+        let hotkeys = None;
         if let (Some(agents), Some(mcp_url)) = (agents, &mcp_url) {
             tracing::info!(
                 url = %ws_url,
@@ -142,7 +203,17 @@ impl Host {
             ws_url,
             token,
             mcp_url,
+            network,
+            hotkeys,
         })
+    }
+
+    /// The network listener's addresses and its certificate's SHA-256 fingerprint, with
+    /// [`Network`].
+    pub fn network(&self) -> Option<(&[String], &str)> {
+        self.network
+            .as_ref()
+            .map(|(urls, fingerprint)| (urls.as_slice(), fingerprint.as_str()))
     }
 
     /// The MCP endpoint, `http://127.0.0.1:<port>/mcp`, with `--mcp`.
@@ -162,8 +233,10 @@ impl Host {
         format!("ws://{authority}")
     }
 
-    /// The control token. Handed only to the webview and never logged; stored only in
-    /// the token file, with `--mcp`.
+    /// The webview's token, handed only to it and never logged: the control token, kept
+    /// only in memory, or with `--mcp` a second token kept only in memory, so the token
+    /// file's never reaches the webview and the server asks about the agents that use it
+    /// (ADR-0131).
     pub fn token(&self) -> &str {
         &self.token
     }
@@ -171,6 +244,10 @@ impl Host {
     /// Stops the server, closing every connection, and waits for it (at most
     /// 5 s). The engine stops when its last session goes.
     pub fn stop(mut self) {
+        // Lets every global hotkey go first.
+        if let Some(hotkeys) = self.hotkeys.take() {
+            hotkeys.abort();
+        }
         if let Some(stop) = self.stop.take() {
             let _ = stop.send(());
         }
@@ -189,6 +266,120 @@ impl Host {
     }
 }
 
+/// Starts the global hotkeys (ADR-0112 §5 and §6, `crate::hotkeys`) on `runtime`: the
+/// OS listener ([`hotkey_listener`]) and a session on `engine` that keeps it in step with
+/// the bindings and the `hotkeys.global` UI setting. `None`, logged, when the listener
+/// can't start: the page still hears hotkeys while it has the focus.
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+fn global_hotkeys(
+    runtime: &Runtime,
+    engine: &Arc<Engine>,
+    settings: jstream_server::UiSettingsView,
+) -> Option<JoinHandle<()>> {
+    use crate::hotkeys::{self, GLOBAL_KEY, Switch};
+
+    let (press, presses) = tokio::sync::mpsc::unbounded_channel();
+    let listener = match hotkey_listener(Box::new(move |chord| {
+        let _ = press.send(chord.to_owned());
+    })) {
+        Ok(listener) => listener,
+        Err(error) => {
+            tracing::warn!(
+                %error,
+                "global hotkeys are off: hotkeys are heard only while JStream has the focus"
+            );
+            return None;
+        }
+    };
+    tracing::info!(
+        wheel = listener.hears_wheel(),
+        "global hotkeys can be heard while another app has the focus"
+    );
+    let switch = Switch {
+        changes: settings.changes(),
+        on: Box::new(move || hotkeys::global_on(settings.get(GLOBAL_KEY).as_ref())),
+    };
+    let session = engine.connect();
+    Some(runtime.spawn(async move {
+        if let Err(error) = hotkeys::run(session, listener, switch, presses).await {
+            tracing::warn!(%error, "global hotkeys stopped");
+        }
+    }))
+}
+
+/// What a global hotkey listener calls with each chord pressed.
+#[cfg(any(windows, target_os = "linux", target_os = "macos"))]
+type OnPress = Box<dyn Fn(&str) + Send>;
+
+/// Windows' listener: `RegisterHotKey` on its own thread, and a low-level mouse hook there
+/// while a wheel chord is set.
+#[cfg(windows)]
+fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
+    use jstream_platform_windows::GlobalHotkeys;
+
+    struct Windows(GlobalHotkeys);
+    impl crate::hotkeys::Registrar for Windows {
+        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
+            self.0.set(chords)
+        }
+        fn hears_wheel(&self) -> bool {
+            true
+        }
+    }
+
+    GlobalHotkeys::start(on_press)
+        .map(|listener| Arc::new(Windows(listener)) as Arc<dyn crate::hotkeys::Registrar>)
+        .map_err(|error| error.to_string())
+}
+
+/// macOS's listener: Carbon hotkeys on the main thread, and a Quartz event tap on its own
+/// thread while a wheel chord is set. The tap needs the Accessibility permission, asked
+/// for at the first wheel chord; without it wheel chords are heard only while JStream has
+/// the focus, and `set` says so.
+#[cfg(target_os = "macos")]
+fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
+    use jstream_platform_macos::GlobalHotkeys;
+
+    struct Macos(GlobalHotkeys);
+    impl crate::hotkeys::Registrar for Macos {
+        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
+            self.0.set(chords)
+        }
+        fn hears_wheel(&self) -> bool {
+            true
+        }
+    }
+
+    GlobalHotkeys::start(on_press)
+        .map(|listener| Arc::new(Macos(listener)) as Arc<dyn crate::hotkeys::Registrar>)
+        .map_err(|error| error.to_string())
+}
+
+/// Linux's listener: X11 key and wheel grabs on their own connection, on an X11 session. Wayland
+/// has no grab (its GlobalShortcuts portal isn't wired yet), so there it doesn't start.
+#[cfg(target_os = "linux")]
+fn hotkey_listener(on_press: OnPress) -> Result<Arc<dyn crate::hotkeys::Registrar>, String> {
+    use jstream_platform_linux::{GlobalHotkeys, Session, SessionKind};
+
+    struct X11(GlobalHotkeys);
+    impl crate::hotkeys::Registrar for X11 {
+        fn set(&self, chords: Vec<String>) -> Vec<(String, String)> {
+            self.0.set(chords)
+        }
+        fn hears_wheel(&self) -> bool {
+            true
+        }
+    }
+
+    match Session::from_env().kind {
+        SessionKind::X11 => GlobalHotkeys::start(on_press)
+            .map(|listener| Arc::new(X11(listener)) as Arc<dyn crate::hotkeys::Registrar>)
+            .map_err(|error| error.to_string()),
+        SessionKind::Wayland => Err("a Wayland session has no global key grabs".into()),
+        SessionKind::Headless => Err("there is no graphical session".into()),
+    }
+}
+
 /// A new control token: 32 random bytes from the OS, as lowercase hex, which is valid
 /// both in an `Authorization` header and as a WebSocket subprotocol name.
 fn new_token() -> anyhow::Result<String> {
@@ -201,22 +392,29 @@ fn new_token() -> anyhow::Result<String> {
     }))
 }
 
-/// The engine the app runs: the collection in `collection` (created the first time,
-/// holding only the four sample labels), saved on every change, with `audit` recording
-/// every batch and action.
+/// The engine the app runs: the project opened most recently (ADR-0121 §6), or else the
+/// collection in `collection` (created the first time, holding only the four sample
+/// labels), saved on every change, with `audit` recording every batch and action, and the
+/// recent list kept in `data`.
 ///
 /// On Windows it is live, as the daemon's is: the OS backends, stream keys in
 /// Credential Manager, and RTMP(S) publishing on `output.start`, plus the virtual
 /// camera (`WindowsVcam`) unless `vcam` is false (`--no-vcam`). With the `cef` feature
 /// it also opens browser sources' pages, keeping CEF's cache and log under `data`
-/// (`browser::backend`). Elsewhere there are no backends yet. Either way it watches the
-/// effect packs in `data`'s `effects` folder (`Engine::watch_effect_packs`) and starts
-/// the engine's stats heartbeat, and on Windows each `stats.tick` carries the process's
-/// CPU time.
+/// (`browser::backend`). On 64-bit Linux it is live the same way on the Linux backends
+/// (`linux_backends`), with stream keys in the Secret Service, else its `0600` file
+/// (ADR-0071), and no virtual camera. On macOS it is live the same way on the backends the
+/// daemon uses there (`macos_backends`), with stream keys in the Keychain and no virtual
+/// camera. Elsewhere there are no backends yet. Either way it
+/// watches the effect packs in `data`'s `effects` folder (`Engine::watch_effect_packs`)
+/// and starts the engine's stats heartbeat, and where it is live each `stats.tick`
+/// carries the process's CPU time.
 ///
 /// # Errors
-/// When the collection file can't be read, loaded or created, and on Windows when a
-/// backend can't be created (the QPC clock).
+/// When the collection file can't be read, loaded or created, and where it is live when
+/// a backend can't be created (the QPC clock on Windows; on Linux neither PipeWire nor
+/// ALSA, or no config folder for the key store; on macOS the Mach clock, or a release
+/// below the floor).
 pub fn engine(
     collection: &Path,
     data: &Path,
@@ -224,34 +422,58 @@ pub fn engine(
     vcam: bool,
     secrets: &Secrets,
 ) -> anyhow::Result<Arc<Engine>> {
-    let engine = Engine::new()
-        .with_audit(audit)
-        .with_collection_file(collection)
-        .context("could not open the collection")?;
+    let engine = startup_collection(collection, data, &audit)?;
     #[cfg(windows)]
     let engine = {
         let backends = windows_backends(vcam)?;
         #[cfg(feature = "cef")]
         let browser = crate::browser::backend(data, Arc::clone(&backends.clock));
-        #[cfg(not(feature = "cef"))]
-        let browser = {
-            let _ = data;
-            None
+        let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_windows::WindowsCredentials);
+        let engine = live(engine, backends, keys, secrets);
+        #[cfg(feature = "cef")]
+        let engine = match browser {
+            Some(browser) => engine.with_browser(browser),
+            None => engine,
         };
-        live(engine, backends, browser, secrets)
+        handled(engine)
     };
-    #[cfg(not(windows))]
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     let engine = {
-        let _ = (data, vcam, secrets);
+        // No virtual camera on Linux yet (ADR-0060 §9).
+        let _ = vcam;
+        handled(live(engine, linux_backends(data)?, linux_keys()?, secrets))
+    };
+    #[cfg(target_os = "macos")]
+    let engine = {
+        // No virtual camera on macOS yet (ADR-0063 §13), so `--no-vcam` changes nothing.
+        let _ = vcam;
+        let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_macos::MacosKeychain);
+        handled(live(engine, macos_backends()?, keys, secrets))
+    };
+    #[cfg(not(any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", target_pointer_width = "64")
+    )))]
+    let engine = {
+        let _ = (vcam, secrets);
         Arc::new(engine)
     };
     engine.watch_effect_packs(data.join(jstream_platform::paths::EFFECTS_DIR));
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
     #[cfg(windows)]
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    engine.set_process_cpu(Arc::new(jstream_platform_linux::LinuxProcessCpu));
+    #[cfg(target_os = "macos")]
+    engine.set_process_cpu(Arc::new(jstream_platform_macos::MacosProcessCpu));
     // `profile.get`'s threads (ADR-0103).
     #[cfg(windows)]
     engine.set_thread_cpu(Arc::new(jstream_platform_windows::WindowsThreadCpu));
+    #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+    engine.set_thread_cpu(Arc::new(jstream_platform_linux::LinuxThreadCpu));
+    #[cfg(target_os = "macos")]
+    engine.set_thread_cpu(Arc::new(jstream_platform_macos::MacosThreadCpu));
     // The render and mixer threads' MMCSS tasks (ADR-0117 §8).
     #[cfg(windows)]
     engine.set_thread_priority(Arc::new(jstream_platform_windows::WindowsThreadPriority));
@@ -351,49 +573,204 @@ fn windows_backends(vcam: bool) -> anyhow::Result<Backends> {
     })
 }
 
-/// Makes `engine` live on `backends`, with keys in Credential Manager (behind
-/// [`Redacting`], registering each with `secrets`), a publish
-/// opener that connects RTMP(S) and, when there is one, `browser` for browser sources.
-/// The opener holds the engine weakly, so the engine still drops when the server lets
-/// go of it. The same wiring as the daemon's `live::live`
-/// (apps/jstream-daemon/src/live.rs), whose tests cover the opener.
-#[cfg(windows)]
+/// Makes `engine` live on `backends`, with `keys` (Credential Manager on Windows, the
+/// Secret Service or its fallback file on Linux, the Keychain on macOS) behind [`Redacting`], registering each
+/// with `secrets`, and a publish opener that connects RTMP(S). The opener holds the
+/// engine weakly, so [`handled`] gives it the engine once it is shared, and the engine
+/// still drops when the server lets go of it. The same wiring as the daemon's
+/// `live::live` (apps/jstream-daemon/src/live.rs), whose tests cover the opener.
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 fn live(
     engine: Engine,
     backends: Backends,
-    browser: Option<Arc<dyn jstream_sources::BrowserBackend>>,
+    keys: Arc<dyn StreamKeyStore>,
     secrets: &Secrets,
-) -> Arc<Engine> {
+) -> Live {
     // Behind `Redacting`, so each key is registered with the crash reports' redaction
     // as it is stored or read (#353).
-    let keys: Arc<dyn StreamKeyStore> = Arc::new(Redacting::new(
-        secrets.clone(),
-        Arc::new(jstream_platform_windows::WindowsCredentials),
-    ));
+    let keys: Arc<dyn StreamKeyStore> = Arc::new(Redacting::new(secrets.clone(), keys));
     let handle = Arc::new(OnceLock::new());
     let engine = engine
         .with_key_store(Arc::clone(&keys))
         .with_backends(backends)
         .with_publish_opener(opener(Arc::clone(&handle), keys));
-    let engine = Arc::new(match browser {
-        Some(browser) => engine.with_browser(browser),
-        None => engine,
-    });
+    Live { engine, handle }
+}
+
+/// A live engine whose publish opener doesn't have it yet: [`handled`] shares it and
+/// hands the opener its weak handle.
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
+struct Live {
+    engine: Engine,
+    handle: Arc<OnceLock<Weak<Engine>>>,
+}
+
+#[cfg(all(windows, feature = "cef"))]
+impl Live {
+    /// The engine with `browser` for browser sources.
+    fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
+        Self {
+            engine: self.engine.with_browser(browser),
+            handle: self.handle,
+        }
+    }
+}
+
+/// Shares `live`'s engine and gives its opener the handle.
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
+fn handled(live: Live) -> Arc<Engine> {
+    let engine = Arc::new(live.engine);
     // The cell is new, so this is its only value.
-    let _ = handle.set(Arc::downgrade(&engine));
+    let _ = live.handle.set(Arc::downgrade(&engine));
     engine
+}
+
+/// The macOS backends, as the daemon creates them (its `macos_backends`): the Mach
+/// clock, ScreenCaptureKit capture, AVFoundation webcams and media files, Core Audio,
+/// VideoToolbox and AudioToolbox codecs, and the engine's own GPU device until the Metal
+/// interop (`NoGpuInterop`). There is no virtual camera. Creating them opens no device:
+/// capture, webcams and audio check the release floor, and ask for their permissions
+/// only when a pipeline first uses them.
+#[cfg(target_os = "macos")]
+fn macos_backends() -> anyhow::Result<Backends> {
+    use jstream_platform_macos::{
+        AvFoundationVideoDevices, AvMediaDecoders, CoreAudioIo, MachClock, NoGpuInterop,
+        ScreenCaptureKitCapture, VideoToolboxCodecs,
+    };
+    Ok(Backends {
+        clock: Arc::new(MachClock::new().context("could not open the Mach media clock")?),
+        capture: Arc::new(
+            ScreenCaptureKitCapture::new().context("could not open ScreenCaptureKit capture")?,
+        ),
+        video_devices: Arc::new(
+            AvFoundationVideoDevices::new().context("could not open AVFoundation webcams")?,
+        ),
+        audio: Arc::new(CoreAudioIo::new().context("could not open Core Audio")?),
+        codecs: Arc::new(VideoToolboxCodecs::new()),
+        gpu: Arc::new(NoGpuInterop),
+        media: Arc::new(AvMediaDecoders::new()),
+        vcam: None,
+    })
+}
+
+/// The Linux backends (ADR-0060), as the daemon builds them (its `serve.rs`): ScreenCast
+/// portal capture with its restore tokens in `data`'s `capture-tokens` folder, V4L2
+/// webcams, PipeWire audio (else ALSA, logged), VA-API and OpenH264 encoding, and the
+/// Vulkan GPU interop. Media files are `Unsupported` until ADR-0072's decoders exist,
+/// and there is no virtual camera. Creating them opens no device.
+///
+/// # Errors
+/// When neither PipeWire nor ALSA can be used, or the media clock can't be read.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn linux_backends(data: &Path) -> anyhow::Result<Backends> {
+    use jstream_platform_linux::{LinuxBackends, LinuxGpu, NoMediaDecoders, Session};
+    let session = Session::from_env();
+    let set = LinuxBackends::new(session.clone(), Some(data.join(CAPTURE_TOKEN_DIR)))
+        .context("could not open the Linux backends")?;
+    tracing::info!(
+        session = ?session.kind,
+        tier = ?session.tier(),
+        audio = ?set.audio_backend,
+        "Linux backends"
+    );
+    // The software device is a Vulkan driver (lavapipe), which a fresh install may lack.
+    if let Some(warning) = jstream_core::no_adapter_warning() {
+        tracing::warn!("{warning}");
+    }
+    if let Some(error) = &set.pipewire_unavailable {
+        tracing::warn!(
+            %error,
+            "PipeWire is unavailable, so audio uses ALSA: no desktop or application audio"
+        );
+    }
+    Ok(set.into_backends(Arc::new(LinuxGpu::new()), Arc::new(NoMediaDecoders)))
+}
+
+/// The folder in the data folder that keeps the ScreenCast portal's restore tokens, the
+/// daemon's too.
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+const CAPTURE_TOKEN_DIR: &str = "capture-tokens";
+
+/// The stream key store on Linux (ADR-0071), the daemon's: the Secret Service, else
+/// `secrets` in the config folder, `0600`, with ADR-0071 §4's warning logged while that
+/// file holds a secret.
+///
+/// # Errors
+/// When there is no config folder (no absolute `XDG_CONFIG_HOME` or `HOME`).
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
+    use jstream_platform_linux::LinuxSecrets;
+    let dir = LinuxSecrets::config_dir().context(
+        "could not find the config folder for the stream key store's fallback file \
+         (no absolute XDG_CONFIG_HOME or HOME)",
+    )?;
+    let keys = LinuxSecrets::new(dir);
+    match keys.fallback_warning() {
+        Ok(Some(warning)) => tracing::warn!("{warning}"),
+        Ok(None) => {}
+        Err(error) => tracing::warn!(%error, "could not check the stream key store"),
+    }
+    Ok(Arc::new(keys))
+}
+
+/// The engine with the collection it starts on: the most recent project in the recent
+/// list (ADR-0121 §6) if it still loads, else `default`, which is created when missing.
+/// A recent project that doesn't load is logged and skipped, so a moved or broken file
+/// never keeps the app from starting.
+fn startup_collection(
+    default: &Path,
+    data: &Path,
+    audit: &Arc<dyn AuditSink>,
+) -> anyhow::Result<Engine> {
+    let recent = data.join(jstream_platform::paths::RECENT_COLLECTIONS_FILE);
+    let engine = || Engine::new().with_audit(Arc::clone(audit));
+    if let Some(last) = jstream_core::recent_collections(&recent).into_iter().next()
+        && last.is_file()
+    {
+        match engine().with_collection_file(&last) {
+            Ok(engine) => return Ok(engine.with_recent_collections(recent)),
+            Err(error) => tracing::warn!(
+                error = format!("{error:#}"),
+                "the most recent project did not open; opening the default collection"
+            ),
+        }
+    }
+    Ok(engine()
+        .with_collection_file(default)
+        .context("could not open the collection")?
+        .with_recent_collections(recent))
 }
 
 /// On each `output.start`: the output's server URL from the collection, its key from
 /// `keys`, then `connect_rtmp`. No reason carries the key (R-SEC-001).
-#[cfg(windows)]
+#[cfg(any(
+    windows,
+    target_os = "macos",
+    all(target_os = "linux", target_pointer_width = "64")
+))]
 fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) -> OpenPublish {
     Arc::new(move |output_id: &OutputId| {
-        let kind = engine
+        let engine = engine
             .get()
             .and_then(Weak::upgrade)
-            .ok_or_else(|| PublishError::new("the engine is shutting down"))?
-            .output_kind(output_id);
+            .ok_or_else(|| PublishError::new("the engine is shutting down"))?;
+        let kind = engine.output_kind(output_id);
+        // The key's name in this project (ADR-0121 §5); no strong handle is kept while
+        // the opener connects.
+        let key_name = engine.stream_key_name(output_id);
+        drop(engine);
         let url = match kind {
             Some(OutputKind::Rtmp {
                 target: RtmpTarget::Generic { url },
@@ -410,7 +787,7 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
             }
         };
         let key: Secret = keys
-            .get(output_id.as_str())
+            .get(&key_name)
             .map_err(|error| PublishError::new(format!("could not read the stream key: {error}")))?
             .ok_or_else(|| {
                 PublishError::new(format!(
@@ -425,7 +802,7 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
 
 #[cfg(test)]
 mod tests {
-    use super::{Agents, Host, VcamStatus, engine, new_token, vcam_status};
+    use super::{Agents, Host, Network, VcamStatus, engine, new_token, vcam_status};
     use crate::ui::ORIGIN;
     use jstream_control::protocol::{Hello, PROTOCOL_VERSION};
     use jstream_control::{Control, WsConfig, WsControl};
@@ -491,8 +868,15 @@ mod tests {
             &secrets,
         )
         .unwrap_or_else(|e| panic!("an engine: {e:#}"));
-        let host = Host::start(engine, "http://jstream.localhost", &secrets, None, None)
-            .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        let host = Host::start(
+            engine,
+            "http://jstream.localhost",
+            &secrets,
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert!(
             host.ws_url().starts_with("ws://127.0.0.1:"),
             "{}",
@@ -573,7 +957,7 @@ mod tests {
             &Secrets::new(),
         )
         .unwrap_or_else(|e| panic!("an engine: {e:#}"));
-        let host = Host::start(engine, ORIGIN, &Secrets::new(), None, None)
+        let host = Host::start(engine, ORIGIN, &Secrets::new(), None, None, None)
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
         assert_eq!(upgrade_status(&host, "http://evil.example"), "HTTP/1.1 403");
@@ -610,7 +994,7 @@ mod tests {
             token_file: scratch.join("token"),
         };
         let secrets = Secrets::new();
-        let host = Host::start(open(&secrets), ORIGIN, &secrets, None, Some(&agents))
+        let host = Host::start(open(&secrets), ORIGIN, &secrets, None, Some(&agents), None)
             .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(host.ws_url(), format!("ws://127.0.0.1:{port}/api/v1/ws"));
         assert_eq!(
@@ -618,14 +1002,15 @@ mod tests {
             Some(format!("http://127.0.0.1:{port}/mcp").as_str())
         );
         let written = std::fs::read_to_string(&agents.token_file).unwrap_or_else(|e| panic!("{e}"));
-        assert_eq!(
-            written.trim(),
+        let file_token = written.trim().to_owned();
+        assert_ne!(
+            file_token,
             host.token(),
-            "the window and the file share one token"
+            "the window has a token of its own, kept only in memory (ADR-0131)"
         );
         assert!(
-            secrets.is_registered(host.token()),
-            "redacted from crash reports"
+            secrets.is_registered(host.token()) && secrets.is_registered(&file_token),
+            "both are redacted from crash reports"
         );
         let initialize = |token: &str| {
             let body = r#"{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"t","version":"1"}}}"#;
@@ -646,9 +1031,12 @@ mod tests {
                 .unwrap_or_else(|e| panic!("{e}"));
             String::from_utf8_lossy(&head).into_owned()
         };
+        let host_token = host.token().to_owned();
         assert_eq!(initialize(host.token()), "HTTP/1.1 200");
+        // An agent with the file's token gets in too; its engine session waits for the
+        // person (ADR-0131), which `initialize` doesn't.
+        assert_eq!(initialize(&file_token), "HTTP/1.1 200");
         assert_eq!(initialize("wrong"), "HTTP/1.1 401");
-        let token = host.token().to_owned();
         host.stop();
 
         let again = Host::start(
@@ -657,18 +1045,125 @@ mod tests {
             &Secrets::new(),
             None,
             Some(&agents),
+            None,
         )
         .unwrap_or_else(|e| panic!("a host: {e:#}"));
-        assert_eq!(again.token(), token, "the token file's token is reused");
+        let reread = std::fs::read_to_string(&agents.token_file).unwrap_or_else(|e| panic!("{e}"));
+        assert_eq!(
+            reread.trim(),
+            file_token,
+            "the token file's token is reused"
+        );
+        assert_ne!(
+            again.token(),
+            host_token,
+            "the window's token is new at each start"
+        );
         again.stop();
 
-        let plain = Host::start(open(&Secrets::new()), ORIGIN, &Secrets::new(), None, None)
-            .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        let plain = Host::start(
+            open(&Secrets::new()),
+            ORIGIN,
+            &Secrets::new(),
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("a host: {e:#}"));
         assert_eq!(plain.mcp_url(), None);
         assert_ne!(
             plain.token(),
-            token,
+            file_token,
             "without --mcp the token is fresh and in memory"
+        );
+        plain.stop();
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
+
+    /// "Allow devices on my network": the host opens the TLS network listener, pairs
+    /// devices, and `pairing.start` names the listener's addresses and fingerprint.
+    /// Without it, the host pairs none (`unsupported`).
+    #[test]
+    fn network_access_opens_the_listener_and_pairs_devices() {
+        use jstream_control::protocol::{Action, ActionResult, Call, CallResult};
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-network-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
+        let token_file = scratch.join("token");
+        let mut config =
+            crate::network::config(&token_file).unwrap_or_else(|e| panic!("a config: {e:#}"));
+        assert_eq!(config.bind.port(), crate::network::NETWORK_PORT);
+        // A port the OS picks, so the test doesn't need 4456 free.
+        config.bind = std::net::SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
+        let network = Network {
+            config,
+            device_file: jstream_server::token_file::device_file(&token_file),
+        };
+        let open = |secrets: &Secrets| {
+            engine(
+                &scratch.join("collection.json"),
+                &scratch,
+                Arc::new(AuditMemory::new()),
+                false,
+                secrets,
+            )
+            .unwrap_or_else(|e| panic!("an engine: {e:#}"))
+        };
+        let pairing_start = |host: &Host| {
+            let client = tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap_or_else(|e| panic!("{e}"));
+            client.block_on(async {
+                let control = WsControl::connect(WsConfig::new(host.ws_url(), host.token()))
+                    .await
+                    .unwrap_or_else(|e| panic!("connect: {e}"));
+                control
+                    .hello(Hello {
+                        protocol: PROTOCOL_VERSION,
+                        client_name: "desktop-test".into(),
+                    })
+                    .await
+                    .unwrap_or_else(|e| panic!("hello: {e}"));
+                control
+                    .call(Call::Action {
+                        action: Action::PairingStart,
+                    })
+                    .await
+            })
+        };
+
+        let secrets = Secrets::new();
+        let host = Host::start(open(&secrets), ORIGIN, &secrets, None, None, Some(&network))
+            .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        let (urls, fingerprint) = host.network().unwrap_or_else(|| panic!("listening"));
+        let (urls, fingerprint) = (urls.to_vec(), fingerprint.to_owned());
+        assert!(!urls.is_empty() && urls.iter().all(|url| url.starts_with("https://")));
+        let started = pairing_start(&host).unwrap_or_else(|e| panic!("pairing: {e}"));
+        let CallResult::Action {
+            result: Some(ActionResult::PairingStart { network, .. }),
+        } = started.result
+        else {
+            panic!("no code: {:?}", started.result);
+        };
+        let network = network.unwrap_or_else(|| panic!("no network in the answer"));
+        assert_eq!((network.urls, network.fingerprint), (urls, fingerprint));
+        host.stop();
+
+        let plain = Host::start(
+            open(&Secrets::new()),
+            ORIGIN,
+            &Secrets::new(),
+            None,
+            None,
+            None,
+        )
+        .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        assert!(plain.network().is_none());
+        assert!(
+            pairing_start(&plain).is_err(),
+            "pairs no device: unsupported"
         );
         plain.stop();
         let _ = std::fs::remove_dir_all(&scratch);

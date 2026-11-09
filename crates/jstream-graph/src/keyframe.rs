@@ -26,16 +26,16 @@ use crate::model::{
 use jstream_anim::{Field, Inverse, Override, Value};
 use jstream_protocol::{
     Crop, DroppedOverride, Edit, EntityKind, FilterInfo, Finite32, ItemId, ItemOverride,
-    KindCategory, OverrideField, ProtocolError, Reference, SceneId, SceneMeta, SceneOptions,
-    SceneRole,
+    KeyframeTiming, KindCategory, OverrideField, ProtocolError, Reference, SceneId, SceneMeta,
+    SceneOptions, SceneRole,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
 /// The value a keyframe scene stores for one field.
-pub(crate) type FieldValue = Value<Placement, Crop, Chains, MotionList>;
+pub(crate) type FieldValue = Value<Placement, Crop, Chains, MotionList, KeyframeTiming>;
 
 /// One item's override in a keyframe scene.
-pub(crate) type ItemOverrides = Override<Placement, Crop, Chains, MotionList>;
+pub(crate) type ItemOverrides = Override<Placement, Crop, Chains, MotionList, KeyframeTiming>;
 
 /// Applies the keyframe edits; `None` for any other edit.
 pub(crate) fn apply(
@@ -62,6 +62,11 @@ pub(crate) fn apply(
         } => Some(set_effects(
             state, kinds, scene_id, item_id, effects, None, at,
         )),
+        Edit::ItemSetTiming {
+            scene_id,
+            item_id,
+            timing,
+        } => Some(set_timing(state, scene_id, item_id, timing, at)),
         _ => None,
     }
 }
@@ -128,6 +133,46 @@ pub(crate) fn set_effects(
         }
     }
     Ok(inverse)
+}
+
+/// Applies `item.set_timing` (ADR-0129): checks `timing` and writes it into the keyframe
+/// scene's override of the item, or clears that override when no field is set. Only a
+/// keyframe scene takes it: an item's own scene has no transitions into it to time.
+fn set_timing(
+    state: &mut State,
+    scene_id: &SceneId,
+    item_id: &ItemId,
+    timing: &KeyframeTiming,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    if let (Some((si, _)), Some(vi)) = (state.item_index(item_id), state.scene_index(scene_id))
+        && si != vi
+        && state.scenes[vi].variant_of.is_none()
+    {
+        return Err(invalid(at, "scene_id", not_a_keyframe(scene_id, item_id)));
+    }
+    let Some(vi) = target(state, item_id, Some(scene_id), at)? else {
+        return Err(invalid(
+            at,
+            "scene_id",
+            format!(
+                "scene `{scene_id}` is item `{item_id}`'s own scene: a timing belongs to a \
+                 keyframe scene, for transitions into it; set the item's own with \
+                 `item.set_transition`"
+            ),
+        ));
+    };
+    if let Some((field, reason)) = timing.problem() {
+        return Err(invalid(at, &format!("timing.{field}"), reason));
+    }
+    if timing.is_empty() {
+        let inverse = state.scenes[vi].overrides.clear(item_id, Field::Timing);
+        return Ok(inverse
+            .into_iter()
+            .map(|inverse| inverse_edit(scene_id, item_id, inverse))
+            .collect());
+    }
+    write(state, vi, item_id, Value::Timing(*timing), at)
 }
 
 /// `effects` as an override stores them: each entry's ID checked and unique, its kind a
@@ -267,7 +312,7 @@ fn create(
         options: SceneOptions::default(),
         camera: None,
         camera_motion: Vec::new(),
-        camera_follow: None,
+        ptz_shots: Vec::new(),
         timelines: BTreeMap::new(),
         items: Vec::new(),
         variant_of: Some(variant_of.clone()),
@@ -486,6 +531,7 @@ pub(crate) fn to_info(item_id: &ItemId, o: &ItemOverrides) -> ItemOverride {
         opacity: o.opacity.and_then(Finite32::new),
         effects: o.effects.as_ref().map(|chains| effects_info(&chains.video)),
         motion: o.motion.clone(),
+        timing: o.timing,
     }
 }
 
@@ -506,7 +552,7 @@ pub(crate) fn effects_info(filters: &[Filter]) -> Vec<FilterInfo> {
 fn inverse_edit(
     scene_id: &SceneId,
     item_id: &ItemId,
-    inverse: Inverse<Placement, Crop, Chains, MotionList>,
+    inverse: Inverse<Placement, Crop, Chains, MotionList, KeyframeTiming>,
 ) -> Edit {
     match inverse {
         Inverse::Write(value) => value_edit(scene_id, item_id, value),
@@ -560,6 +606,11 @@ fn value_edit(keyframe: &SceneId, item_id: &ItemId, value: FieldValue) -> Edit {
             scene_id,
             motion,
         },
+        Value::Timing(timing) => Edit::ItemSetTiming {
+            scene_id: keyframe.clone(),
+            item_id,
+            timing,
+        },
     }
 }
 
@@ -571,6 +622,7 @@ fn field_of(field: OverrideField) -> Field {
         OverrideField::Opacity => Field::Opacity,
         OverrideField::Effects => Field::Effects,
         OverrideField::Motion => Field::Motion,
+        OverrideField::Timing => Field::Timing,
     }
 }
 
@@ -582,5 +634,6 @@ fn wire_field(field: Field) -> OverrideField {
         Field::Opacity => OverrideField::Opacity,
         Field::Effects => OverrideField::Effects,
         Field::Motion => OverrideField::Motion,
+        Field::Timing => OverrideField::Timing,
     }
 }

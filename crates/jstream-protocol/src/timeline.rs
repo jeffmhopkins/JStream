@@ -9,7 +9,7 @@
 //! ([`Action::cue_problem`]), so playing a timeline never makes an edit.
 
 use crate::command::Action;
-use crate::id::{SceneId, TimelineId};
+use crate::id::{LabelId, SceneId, TimelineId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +48,10 @@ pub struct TimelineInfo {
     /// cues at the same time fire in list order. At most 256.
     #[serde(default)]
     pub cues: Vec<TimelineCue>,
+    /// The labels it carries (ADR-0133, since 0.100), ordered by ID, each at most once.
+    /// Every one must exist. Omitted for none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<LabelId>,
 }
 
 /// How a timeline repeats.
@@ -249,6 +253,7 @@ mod tests {
 
     fn timeline(duration_ms: u32, looping: TimelineLoop, at: &[u32]) -> TimelineInfo {
         TimelineInfo {
+            labels: Vec::new(),
             timeline_id: TimelineId::new("t"),
             name: String::new(),
             duration_ms,

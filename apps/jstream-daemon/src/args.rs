@@ -4,6 +4,11 @@
 //! The parser is pure: the `JSTREAM_TOKEN_FILE` fallback is read by `main`, not here.
 
 use jstream_protocol::OutputId;
+use std::net::IpAddr;
+
+/// The network listener's default port (ADR-0104 §1): fixed, so a paired device finds
+/// the host again, and next to the desktop app's `--mcp` port (4455).
+pub const LAN_PORT: u16 = 4456;
 
 /// The help text, printed by `--help` and `-h`.
 pub const USAGE: &str = "\
@@ -22,6 +27,14 @@ Options:
                        if it doesn't exist
                        (default: none, the collection starts empty every run)
   --output <id>        add a stopped placeholder output (repeatable)
+  --ptz-camera <name@address:port[/transport][#n]>
+                       drive this PTZ camera over VISCA (ADR-0146): its name,
+                       which scenes and `ptz.*` actions use, and its LAN
+                       address and port (repeatable). The transport is
+                       visca_ip (Sony-style UDP, the default; port 52381),
+                       udp (raw VISCA) or tcp (raw VISCA, also for a serial
+                       bridge); #n is its VISCA address, 1 to 7 (default 1).
+                       Off without it: no socket is open
   --plugin-dir <dir>   where installed WASM plugins and their grants are saved
                        (plugins.json) and loaded from at startup (default:
                        `plugins` in the platform data directory); created if
@@ -29,6 +42,29 @@ Options:
   --effects-dir <dir>  the folder of WGSL effect packs to load, one pack folder
                        each, and reload when they change (default: `effects` in
                        the platform data directory)
+  --lan                also listen for devices on the network (ADR-0104): a
+                       second listener, TLS only, with a self-signed
+                       certificate made on first use and kept beside the token
+                       file (<token-file>.tls). It admits paired devices only,
+                       never the control token. Its addresses and the
+                       certificate's fingerprint are printed at startup: a
+                       device checks the fingerprint once, then pairs with a
+                       code from `jstream-cli pair`. It listens on every
+                       interface, so also on public Wi-Fi or a VPN this
+                       machine joins; --lan-bind picks one
+  --lan-port <port>    the network listener's port (default: 4456)
+  --lan-bind <addr>    listen on this one address instead of every interface
+  --lan-renew          with --lan: make a new key and certificate before
+                       serving, for when the machine's names or addresses
+                       changed. Every paired device has to check the new
+                       fingerprint, and a native client that pinned the old
+                       one has to pair again
+  --jtunnel-accept <name@address:port>
+                       receive from this JTunnel sender (ADR-0123): a DAW
+                       plugin's tunnel name and the LAN address and port it
+                       sends from (repeatable). Off without it: no socket is
+                       open. A `network_audio` source naming the sender then
+                       records its audio
   --ui-dir <dir>       serve the web UI's built files from this directory at
                        http://127.0.0.1:<port>/ (the browser asks for the token
                        as a password)
@@ -92,6 +128,25 @@ pub struct Options {
     /// `--effects-dir`: the folder of WGSL effect packs. Without it `main` uses
     /// `effects` in the platform data directory; left out entirely, no packs load.
     pub effects_dir: Option<String>,
+    /// `--lan` and its options: the network listener, off without it.
+    pub lan: Option<Lan>,
+    /// `--ptz-camera`: the PTZ cameras to drive, in the order given (ADR-0146). None
+    /// leaves PTZ control off.
+    pub ptz: Vec<jstream_core::PtzCamera>,
+    /// `--jtunnel-accept`: the JTunnel senders to receive from, in the order given.
+    /// None turns the receiver off.
+    pub jtunnel: Vec<jstream_core::AcceptedSender>,
+}
+
+/// The network listener's options (`--lan`, ADR-0104).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Lan {
+    /// `--lan-port`, [`LAN_PORT`] by default.
+    pub port: u16,
+    /// `--lan-bind`: one address to listen on; every interface without it.
+    pub bind: Option<IpAddr>,
+    /// `--lan-renew`: make a new key and certificate first.
+    pub renew: bool,
 }
 
 /// A parsed command line.
@@ -113,6 +168,10 @@ pub enum Invocation {
 pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut options = Options::default();
     let mut port = None;
+    let mut lan = false;
+    let mut lan_port = None;
+    let mut lan_bind = None;
+    let mut lan_renew = false;
     let mut register_vcam = false;
     let mut unregister_vcam = false;
     let mut rest = args.iter();
@@ -138,7 +197,63 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                     return Err(format!("`{arg}` given twice"));
                 }
             }
+            "--lan" => lan = true,
+            "--lan-renew" => lan_renew = true,
+            "--lan-port" => {
+                let text = value()?;
+                let parsed = text
+                    .parse::<u16>()
+                    .ok()
+                    .filter(|port| *port != 0)
+                    .ok_or_else(|| {
+                        format!("`--lan-port` must be a number from 1 to 65535, not `{text}`")
+                    })?;
+                if lan_port.replace(parsed).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
+            }
+            "--lan-bind" => {
+                let text = value()?;
+                let parsed = text.parse::<IpAddr>().map_err(|_| {
+                    format!(
+                        "`--lan-bind` must be an IP address, such as 192.168.1.20, not `{text}`"
+                    )
+                })?;
+                if parsed.is_loopback() {
+                    return Err(
+                        "`--lan-bind` can't be a loopback address: the host's own listener is there"
+                            .to_owned(),
+                    );
+                }
+                if lan_bind.replace(parsed).is_some() {
+                    return Err(format!("`{arg}` given twice"));
+                }
+            }
             "--output" => options.outputs.push(OutputId::new(value()?.as_str())),
+            "--ptz-camera" => {
+                let camera = value()?
+                    .parse::<jstream_core::PtzCamera>()
+                    .map_err(|err| format!("`--ptz-camera`: {err}"))?;
+                options.ptz.push(camera);
+                jstream_core::PtzSetup::new(options.ptz.clone())
+                    .map_err(|err| format!("`--ptz-camera`: {err}"))?;
+            }
+            "--jtunnel-accept" => {
+                let text = value()?;
+                let sender = text
+                    .parse::<jstream_core::AcceptedSender>()
+                    .map_err(|err| format!("`--jtunnel-accept`: {err}"))?;
+                if options.jtunnel.iter().any(|s| s.name() == sender.name()) {
+                    return Err(format!(
+                        "`--jtunnel-accept` names the sender `{}` twice",
+                        sender.name()
+                    ));
+                }
+                options.jtunnel.push(sender);
+                // The setup's own checks: the limit, and one address and port twice.
+                jstream_core::JtunnelSetup::new(options.jtunnel.clone())
+                    .map_err(|err| format!("`--jtunnel-accept`: {err}"))?;
+            }
             "--log-dir" => {
                 let dir = value()?;
                 if options.log_dir.replace(dir.clone()).is_some() {
@@ -198,12 +313,21 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
         return Ok(Invocation::UnregisterVcam);
     }
     options.port = port.unwrap_or(0);
+    if lan {
+        options.lan = Some(Lan {
+            port: lan_port.unwrap_or(LAN_PORT),
+            bind: lan_bind,
+            renew: lan_renew,
+        });
+    } else if lan_port.is_some() || lan_bind.is_some() || lan_renew {
+        return Err("`--lan-port`, `--lan-bind` and `--lan-renew` need `--lan`".to_owned());
+    }
     Ok(Invocation::Serve(Box::new(options)))
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{Invocation, Options, parse};
+    use super::{Invocation, LAN_PORT, Lan, Options, parse};
     use jstream_protocol::OutputId;
 
     fn args(line: &str) -> Vec<String> {
@@ -230,6 +354,62 @@ mod tests {
         assert_eq!(serve("").port, 0);
     }
 
+    /// ADR-0123 §1: JTunnel is off unless a sender is accepted, each a LAN address.
+    #[test]
+    fn jtunnel_is_off_until_a_sender_is_accepted() {
+        assert!(serve("").jtunnel.is_empty());
+        let options =
+            serve("--jtunnel-accept Bitwig@192.168.1.5:9000 --jtunnel-accept Live@10.0.0.2:9000");
+        let names: Vec<&str> = options.jtunnel.iter().map(|s| s.name()).collect();
+        assert_eq!(names, ["Bitwig", "Live"]);
+        assert!(error("--jtunnel-accept Bitwig@8.8.8.8:9000").contains("not a LAN address"));
+        assert!(error("--jtunnel-accept Bitwig").contains("name@address:port"));
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-accept A@10.0.0.2:1").contains("twice")
+        );
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-accept B@10.0.0.1:1")
+                .contains("both send from")
+        );
+        assert!(error("--jtunnel-accept A@[::1]:9000").contains("IPv4 only"));
+    }
+
+    /// ADR-0104 §1: network access is off unless `--lan` turns it on, on a fixed port.
+    #[test]
+    fn the_network_listener_is_opt_in() {
+        assert_eq!(serve("").lan, None);
+        assert_eq!(
+            serve("--lan").lan,
+            Some(Lan {
+                port: LAN_PORT,
+                bind: None,
+                renew: false
+            })
+        );
+        assert_eq!(
+            serve("--lan-port 5000 --lan --lan-bind 192.168.1.20 --lan-renew").lan,
+            Some(Lan {
+                port: 5000,
+                bind: Some([192, 168, 1, 20].into()),
+                renew: true
+            })
+        );
+        assert_eq!(
+            error("--lan-port 5000"),
+            "`--lan-port`, `--lan-bind` and `--lan-renew` need `--lan`"
+        );
+        assert_eq!(
+            error("--lan --lan-port 0"),
+            "`--lan-port` must be a number from 1 to 65535, not `0`"
+        );
+        assert!(error("--lan --lan-bind studio").contains("must be an IP address"));
+        assert!(error("--lan --lan-bind 127.0.0.1").contains("loopback"));
+        assert_eq!(
+            error("--lan --lan-port 1 --lan-port 2"),
+            "`--lan-port` given twice"
+        );
+    }
+
     #[test]
     fn options_are_read_in_any_order() {
         let options = serve(
@@ -251,8 +431,35 @@ mod tests {
                 ui_dir: Some("/tmp/dist".to_owned()),
                 plugin_dir: Some("/tmp/plugins".to_owned()),
                 effects_dir: Some("/tmp/effects".to_owned()),
+                lan: None,
+                ptz: Vec::new(),
+                jtunnel: Vec::new(),
             }
         );
+    }
+
+    /// ADR-0146 §1: PTZ control is off unless `--ptz-camera` lists a camera, and each
+    /// one is checked as the engine checks it.
+    #[test]
+    fn ptz_cameras_are_opt_in_and_checked() {
+        assert!(serve("").ptz.is_empty());
+        let ptz =
+            serve("--ptz-camera wide@192.168.1.40:52381 --ptz-camera close@10.0.0.9:5678/tcp#2")
+                .ptz;
+        let names: Vec<_> = ptz.iter().map(|c| c.to_string()).collect();
+        assert_eq!(
+            names,
+            [
+                "wide@192.168.1.40:52381/visca_ip#1",
+                "close@10.0.0.9:5678/tcp#2"
+            ]
+        );
+        assert!(error("--ptz-camera wide@8.8.8.8:52381").contains("not a LAN address"));
+        assert!(
+            error("--ptz-camera a@192.168.1.40:1 --ptz-camera a@192.168.1.41:1")
+                .contains("two PTZ cameras are called `a`")
+        );
+        assert_eq!(error("--ptz-camera"), "`--ptz-camera` needs a value");
     }
 
     #[test]

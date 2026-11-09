@@ -47,6 +47,11 @@ JStream keeps its settings, scenes and logs in `%APPDATA%\JStream`. To keep them
 JStream folder instead (to run it from a USB stick), create an empty file named
 `portable`, with no extension, next to `jstream.exe`: they then go in its `data` folder.
 
+Your scenes, sources and outputs are one project file. **File › Save project as…** saves
+them to a new file, **File › Open project…** and **Open recent** switch to another, and
+**File › New project…** starts an empty one. JStream opens the last project at start.
+Opening one stops any output that is running, and each project keeps its own stream keys.
+
 <a id="scene"></a>
 ## Your first scene
 <!-- @section
@@ -67,13 +72,17 @@ adds, which makes soft glows and veils brighter.
    then type its name.
 2. In **Sources**, click **+** under the list (or right-click and choose **Add source…**).
    Pick a type, or type in the search box to find one: display or window capture, a
-   webcam, an audio input (your microphone), a media file, an image, a browser page,
+   webcam, an audio input (your microphone), a media file, an image, a 3D model (a glTF
+   or GLB file, or a built-in shape such as a cube), a browser page,
    text (it starts bold with a soft shadow), a colour, a backdrop (a painted studio
    backdrop, generated), a shape (a plate, pill or circle, with an optional gradient),
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
-   display or window from the list of those open now, the device or the file. In the
+   display or window from the list of those open now, the device (and, for a webcam,
+   its resolution, frame rate and video format, or Auto, and under **Camera** its
+   brightness, exposure, white balance and the other controls the camera offers, each
+   a slider with **Auto** where the camera can set it itself) or the file. In the
    desktop app a file field has a **Browse…** button; a browser page keeps the path as
    text. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,
@@ -118,24 +127,29 @@ depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md"]
 JStream streams to any service that takes RTMP or RTMPS (YouTube, Twitch and most
 others) with the server address and stream key the service gives you.
 
-1. In **Outputs**, under **Add an output**, choose **Stream (RTMP)**, paste the
-   **server URL** without the key (for example YouTube's `rtmps://` address), and press
-   **Add**.
-2. On the new output, enter the **Stream key**. It is kept in Windows Credential Manager,
-   never in JStream's files, and it shows only as "Stream key: set". Treat it like a
-   password: never paste it into a chat or an issue.
+1. In **Outputs**, press **+ Add output**, choose **Stream (RTMP)**, paste the
+   **server URL** without the key (for example YouTube's `rtmps://` address), paste the
+   **Stream key**, and press **Add**. The key is kept in Windows Credential Manager,
+   never in JStream's files, and shows only masked. Treat it like a password: never
+   paste it into a chat or an issue.
+2. Each output is one row in **Outputs**, with its state and a Start button. To change
+   it later, double-click the row (or choose **Settings…** in its **⋯** menu); nothing
+   changes until you press **OK** or **Apply**.
 3. Press **Go Live** at the top right. It starts every stream output whose key is set;
-   **End stream** stops them. Each output shows its state, and reconnects by itself if
-   the connection drops.
+   **End stream** stops them. Each row shows its state, and the stream reconnects by
+   itself if the connection drops.
 
 An output sends H.264 at the engine's default rate unless you pick otherwise. To change
 the codec or bit rate, or to send a vertical picture (1080 × 1920 for Shorts or TikTok),
-make an encoder or a video mix under **Encoders** and **Video mixes**, below the output
-cards, and pick it in the output's **Encoder** or **Video** list. A running output takes
-the new choice when it next starts.
+make an encoder or a video mix in **Encoders & mixes…**, under the output rows, and pick
+it in the output's settings, under **Encoder** or **Video**. From there, **Edit encoder…**,
+**New…** and **Edit mix…** open the same dialog on the one you need. A running output
+takes the new choice when it next starts. **Start all**, above the rows, starts every
+output that can start, recordings and the virtual camera too; **Stop all** beside it
+stops everything that runs.
 
 On Linux, a machine with no hardware H.264 encoder (or an encoder set to **Software
-only**) encodes with Cisco's OpenH264, which JStream doesn't ship: **Encoders** offers
+only**) encodes with Cisco's OpenH264, which JStream doesn't ship: **Encoders & mixes…** offers
 to download it from Cisco, with Cisco's licence, and nothing downloads until you press
 its button. **Delete** beside it removes it again.
 
@@ -148,12 +162,12 @@ create the broadcast in YouTube Studio and stream to it with its key.
 depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md"]
 -->
 
-In **Outputs**, add a **Recording (MP4)** output with the file path to write. In the
-desktop app, **Browse…** beside that field opens a save dialog; a browser page keeps
-the path as text. Then press
-**Record** at the top. **Stop recording** finishes the file. A recording runs on its own,
-whether or not you are live. It never overwrites a file, so for another take, press
-**Edit** on its card and give it a new file name. Browse… is there on Edit too.
+In **Outputs**, press **+ Add output** and add a **Recording (MP4)** with the file path
+to write. In the desktop app, **Browse…** beside that field opens a save dialog; a
+browser page keeps the path as text. Then press **Record** at the top. **Stop
+recording** finishes the file. A recording runs on its own, whether or not you are live.
+It never overwrites a file, so for another take, open its settings (double-click its
+row) and give it a new file name. Browse… is there too.
 
 <a id="vcam"></a>
 ## The virtual camera (optional)
@@ -168,10 +182,10 @@ administrator rights; everything else in JStream works without it.
 1. Close JStream. In the JStream folder, open a terminal and run
    `.\jstream-daemon.exe --register-vcam`, and accept the administrator prompt. It copies
    the camera into `%ProgramFiles%\JStream\vcam` and registers it there.
-2. Start JStream, add a **Virtual camera** output in **Outputs**, and start it.
+2. Start JStream, add a **Virtual camera** output in **Outputs** (**+ Add output**), and start it.
 3. Pick "JStream Virtual Camera" in the other app.
 
-After you update JStream, the Outputs panel may say "registered, but not for this
+After you update JStream, the virtual camera output's settings may say "registered, but not for this
 version": run the same command again to update the registered copy.
 
 <a id="agents"></a>
@@ -216,14 +230,20 @@ can look at the program with snapshots. Agents can't connect until you turn this
 
    Other MCP clients that speak streamable HTTP can use `http://127.0.0.1:4455/mcp`
    with the token file's contents as a bearer token.
-3. **Restart the agent's app** with JStream running. It lists JStream's tools, such as
-   `scene`, `source` and `batch`. Ask it to build a scene, then watch the window: what it
+3. **Restart the agent's app** with JStream running. The first time it connects,
+   JStream's window asks **Agent wants to connect**: choose **Always allow** (or **Allow
+   once** to be asked again next time). If nobody answers within two minutes, the agent
+   is turned away. **File › Settings…** lists the agents you always allow on its
+   **Devices** page, and its **General** page can turn asking off. The agent then lists
+   JStream's tools, such as `scene`, `source` and `batch`. Ask it to build a scene, then watch the window: what it
    changes shows there, and **Agent activity** lists each change. Your agent may ask
    before going live, changing a stream key or other steps undo can't take back. It can
    undo its own edits, and asking it to is the way back: your **Undo** steps through
    your edits only.
 
-Treat the `token` file like a password: anyone with it controls JStream. To change it,
+Treat the `token` file like a password: anyone with it controls JStream. Asking before
+an agent connects lets you notice and turn away one you didn't expect, but a program
+that can read the file can still get in. To change it,
 close JStream, delete the file and start JStream again, then restart the agent's app.
 
 <a id="trouble"></a>

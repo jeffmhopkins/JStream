@@ -137,24 +137,57 @@ fn centres(sheet: &FrameSheet) -> Vec<[u8; 4]> {
 /// was taken, so a slow machine that takes a picture late still passes.
 #[test]
 fn a_switch_and_watch_shows_the_fade_as_it_plays() {
+    watch_the_fade(0);
+}
+
+/// A sheet that starts late, as on a loaded machine, still counts each picture's
+/// `at_ms` from the switch, so the fade it shows matches the time it says: counted from
+/// the sheet's own start, the fade was further on than `at_ms` said (#1421's CI).
+#[test]
+fn a_late_sheet_counts_from_the_switch() {
+    struct Stall;
+    impl Drop for Stall {
+        fn drop(&mut self) {
+            crate::engine::SHEET_STALL_MS.store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
     let _gpu = super::one_gpu_test_at_a_time();
+    crate::engine::SHEET_STALL_MS.store(150, std::sync::atomic::Ordering::Relaxed);
+    let _stall = Stall;
+    if let Some(first) = watch_the_fade_held(150) {
+        assert!(
+            first >= 150,
+            "the first picture counts from the switch: {first} ms"
+        );
+    }
+}
+
+/// [`a_switch_and_watch_shows_the_fade_as_it_plays`] with the sheet started `stall_ms`
+/// after the switch.
+fn watch_the_fade(stall_ms: u32) {
+    let _gpu = super::one_gpu_test_at_a_time();
+    watch_the_fade_held(stall_ms);
+}
+
+/// The fade checks, with the GPU test lock held; the first picture's `at_ms`, or `None`
+/// with no adapter.
+fn watch_the_fade_held(stall_ms: u32) -> Option<u32> {
     let engine = Engine::new();
     let control = connected(&engine);
     two_scenes(&engine, &control);
-    let Some(sheet) = sheet_or_skip(switch_and_watch(
+    let sheet = sheet_or_skip(switch_and_watch(
         &control,
         "b",
         Some("fade"),
         FrameStrip::new(4, 250),
-    )) else {
-        return;
-    };
+    ))?;
     assert_eq!((sheet.columns, sheet.rows), (2, 2));
     assert_eq!((sheet.tile_width, sheet.tile_height), (480, 270));
     assert_eq!(sheet.frames.len(), 4);
     let times: Vec<u32> = sheet.frames.iter().map(|frame| frame.at_ms).collect();
     assert!(times.windows(2).all(|pair| pair[0] < pair[1]), "{times:?}");
     for (at, wanted) in times.iter().zip([0, 250, 500, 750]) {
+        let wanted = wanted + stall_ms;
         assert!(*at >= wanted, "a picture before its time: {times:?}");
     }
     let tiles = centres(&sheet);
@@ -167,13 +200,17 @@ fn a_switch_and_watch_shows_the_fade_as_it_plays() {
                 "at {at} ms the fade has barely begun: {red} {green}"
             );
         } else if at < 450 {
+            // Both show, whichever space the project blends in: a linear-light mix
+            // keeps more red late in the fade than a browser-style (sRGB) one, which
+            // is down to about 10% by 400 ms (#1298).
             assert!(
-                (32..224).contains(red) && (32..224).contains(green),
+                (1..255).contains(red) && (1..255).contains(green),
                 "at {at} ms red and green are mixed: {red} {green}"
             );
         } else if at < 590 {
+            // An sRGB mix has no red left by about 570 ms, but green is still rising.
             assert!(
-                *red > 0 && *green < 255,
+                *green < 255,
                 "at {at} ms the fade isn't over: {red} {green}"
             );
         } else if at >= 600 {
@@ -192,6 +229,7 @@ fn a_switch_and_watch_shows_the_fade_as_it_plays() {
         }
         other => panic!("not studio.get: {other:?}"),
     }
+    times.first().copied()
 }
 
 /// `video.frames` of a scene off program draws that scene alone, and of the program
@@ -314,6 +352,7 @@ fn a_scene_sheet_hears_audio_motion() {
                 motion: vec![MotionModifier {
                     modifier_id: "pulse".into(),
                     property: MotionProperty::Opacity,
+                    effect: None,
                     kind: MotionKind::Audio {
                         audio: None,
                         audio_source: None,
@@ -351,4 +390,242 @@ fn a_scene_sheet_hears_audio_motion() {
         pixel[0] > 200 && pixel[1] < 40 && pixel[2] < 40,
         "the scene sheet should show the loud mix, not silence: {pixel:?}"
     );
+}
+
+/// A 200 × 200 box of colour `hex`.
+fn small(id: &str, hex: &str) -> Edit {
+    let Edit::SourceCreate {
+        source_id,
+        name,
+        kind,
+        mut settings,
+        duplicated_from,
+    } = fill(id, hex)
+    else {
+        unreachable!("fill creates a source")
+    };
+    settings.0.insert("width".into(), json!(200));
+    settings.0.insert("height".into(), json!(200));
+    Edit::SourceCreate {
+        source_id,
+        name,
+        kind,
+        settings,
+        duplicated_from,
+    }
+}
+
+/// Item `item` as a 200 × 200 box centred on (`x`, `y`), in keyframe `scene` or its own.
+fn boxed(item: &str, scene: Option<&str>, x: f32, y: f32) -> Edit {
+    Edit::ItemSetGeometry {
+        item_id: ItemId::new(item),
+        scene_id: scene.map(SceneId::new),
+        geometry: jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(x, y).expect("finite"),
+            jstream_protocol::Size::try_new(200.0, 200.0).expect("positive"),
+        )
+        .expect("valid"),
+    }
+}
+
+/// The pixel at canvas point (`x`, `y`) of tile `index`, the canvas 1920 × 1080.
+fn pixel(sheet: &FrameSheet, rgba: &[u8], index: u32, x: f32, y: f32) -> [u8; 4] {
+    let (column, row) = (index % sheet.columns, index / sheet.columns);
+    let tx = (x / 1920.0 * sheet.tile_width as f32) as u32;
+    let ty = (y / 1080.0 * sheet.tile_height as f32) as u32;
+    let px = 4 + column * (sheet.tile_width + 4) + tx;
+    let py = 4 + row * (sheet.tile_height + 4) + ty;
+    let i = ((py * sheet.width + px) * 4) as usize;
+    [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+}
+
+/// #1067's done-when (ADR-0129): two keyframes of one scene stagger the same three
+/// items in opposite orders, seen in frame strips. Each item jumps down (a `hold`
+/// easing over 100 ms) after its keyframe's delay for it: into `k1` red, green, then
+/// blue, 400 ms apart; into `k2` blue, green, then red. Each tile is judged by the time
+/// it says it was taken, and a tile within 60 ms of a jump is not judged.
+#[test]
+fn two_keyframes_stagger_three_items_in_opposite_orders_in_a_frame_strip() {
+    use jstream_protocol::{ItemEasing, KeyframeTiming};
+    let _gpu = super::one_gpu_test_at_a_time();
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let colours = [
+        ("r", "#ff0000ff", 480.0, [255, 0, 0]),
+        ("g", "#00ff00ff", 960.0, [0, 255, 0]),
+        ("b", "#0000ffff", 1440.0, [0, 0, 255]),
+    ];
+    let (top, bottom) = (270.0, 810.0);
+    let mut list = vec![
+        create("p"),
+        Edit::SceneCreateVariant {
+            scene_id: SceneId::new("k1"),
+            variant_of: SceneId::new("p"),
+            name: "K1".into(),
+        },
+        Edit::SceneCreateVariant {
+            scene_id: SceneId::new("k2"),
+            variant_of: SceneId::new("p"),
+            name: "K2".into(),
+        },
+        Edit::TransitionCreate {
+            preset_id: TransitionPresetId::new("move"),
+            name: "Move".into(),
+            kind: "move".into(),
+            duration_ms: 100,
+            easing: Easing::Linear,
+            settings: Settings::default(),
+        },
+    ];
+    // The stock `cut` preset switches back between the strips.
+    let delays = [[0, 400, 800], [800, 400, 0]];
+    for (n, (item, hex, x, _)) in colours.iter().enumerate() {
+        list.push(small(item, hex));
+        list.push(add("p", item, item));
+        list.push(boxed(item, None, *x, top));
+        for (keyframe, delays) in ["k1", "k2"].into_iter().zip(delays) {
+            list.push(boxed(item, Some(keyframe), *x, bottom));
+            list.push(Edit::ItemSetTiming {
+                scene_id: SceneId::new(keyframe),
+                item_id: ItemId::new(*item),
+                timing: KeyframeTiming {
+                    delay_ms: Some(delays[n]),
+                    easing: Some(ItemEasing::Hold),
+                    duration_ms: Some(100),
+                },
+            });
+        }
+    }
+    batch(&control, edits(list)).expect("built");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let to = |scene: &str, preset: &str| {
+        let action = Action::SceneSwitch {
+            scene_id: SceneId::new(scene),
+            preset_id: Some(TransitionPresetId::new(preset)),
+        };
+        block_on(control.call(Call::Action { action })).expect("switch");
+    };
+    to("p", "cut");
+    for (keyframe, delays) in ["k1", "k2"].into_iter().zip(delays) {
+        let Some(sheet) = sheet_or_skip(switch_and_watch(
+            &control,
+            keyframe,
+            Some("move"),
+            FrameStrip::new(12, 100),
+        )) else {
+            return;
+        };
+        let bytes = decode_base64(&sheet.png).expect("png is base64");
+        let (_, _, rgba) = decode_png(&bytes).expect("png decodes");
+        let mut judged = [0; 3];
+        for (index, frame) in sheet.frames.iter().enumerate() {
+            let at = frame.at_ms as f32;
+            for (n, (item, _, x, colour)) in colours.iter().enumerate() {
+                let jump = (delays[n] + 100) as f32;
+                if (at - jump).abs() < 60.0 {
+                    continue;
+                }
+                judged[n] += 1;
+                let moved = at > jump;
+                let (here, gone) = if moved { (bottom, top) } else { (top, bottom) };
+                let shown = pixel(&sheet, &rgba, index as u32, *x, here);
+                let left = pixel(&sheet, &rgba, index as u32, *x, gone);
+                assert_eq!(
+                    shown[..3],
+                    colour[..],
+                    "into {keyframe} at {at} ms, {item} is {}",
+                    if moved { "down" } else { "up" }
+                );
+                assert_eq!(left[..3], [0, 0, 0], "into {keyframe} at {at} ms");
+            }
+        }
+        assert!(
+            judged.iter().all(|&n| n >= 4),
+            "each item judged before and after: {judged:?}"
+        );
+        to("p", "cut");
+    }
+}
+
+/// Each tile shows a painted source as it was when the picture was taken, not as its
+/// frame slot holds it when the sheet is drawn (ADR-0117 §3): the waveform is silent in
+/// the first tile and at full scale in the second.
+#[test]
+fn a_sheet_shows_a_painted_source_as_each_picture_was_taken() {
+    let _gpu = super::one_gpu_test_at_a_time();
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let settings = [
+        ("width", json!(1920)),
+        ("height", json!(1080)),
+        ("color", json!("#ff0000")),
+        ("background", json!("#0000ff")),
+    ];
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            Edit::SourceCreate {
+                source_id: SourceId::new("wave"),
+                name: "wave".into(),
+                kind: SourceKind::Builtin {
+                    kind: "waveform".into(),
+                },
+                settings: Settings(
+                    settings
+                        .iter()
+                        .map(|(k, v)| ((*k).to_owned(), v.clone()))
+                        .collect(),
+                ),
+                duplicated_from: None,
+            },
+            add("a", "i1", "wave"),
+        ]),
+    )
+    .expect("built");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let scope = engine.audio_scope();
+    let feeding = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(true));
+    let feeder = {
+        let feeding = std::sync::Arc::clone(&feeding);
+        std::thread::spawn(move || {
+            // After the first picture, and on until the sheet is drawn.
+            std::thread::sleep(std::time::Duration::from_millis(200));
+            while feeding.load(std::sync::atomic::Ordering::Relaxed) {
+                scope.push(48_000, &[1.0; 960]);
+                std::thread::sleep(std::time::Duration::from_millis(5));
+            }
+        })
+    };
+    let sheet = sheet_or_skip(frames(&control, FrameStrip::new(2, 800), None));
+    feeding.store(false, std::sync::atomic::Ordering::Relaxed);
+    feeder.join().expect("fed");
+    let Some(sheet) = sheet else {
+        return;
+    };
+    // A silent waveform draws its line across the middle; one at full scale, at the top.
+    let (top, middle) = (at_height(&sheet, 0), centres(&sheet));
+    assert!(
+        top[0][0] == 0 && middle[0][0] > 0,
+        "silent when taken: {top:?} {middle:?}"
+    );
+    assert!(
+        top[1][0] > 0 && middle[1][0] == 0,
+        "full scale when taken: {top:?} {middle:?}"
+    );
+}
+
+/// The pixel `y` rows into each tile, half-way across, in order.
+fn at_height(sheet: &FrameSheet, y: u32) -> Vec<[u8; 4]> {
+    let bytes = decode_base64(&sheet.png).expect("png is base64");
+    let (width, _, rgba) = decode_png(&bytes).expect("png decodes");
+    (0..sheet.frames.len() as u32)
+        .map(|index| {
+            let (column, row) = (index % sheet.columns, index / sheet.columns);
+            let x = 4 + column * (sheet.tile_width + 4) + sheet.tile_width / 2;
+            let y = 4 + row * (sheet.tile_height + 4) + y;
+            let i = ((y * width + x) * 4) as usize;
+            [rgba[i], rgba[i + 1], rgba[i + 2], rgba[i + 3]]
+        })
+        .collect()
 }

@@ -230,6 +230,11 @@ impl Found {
 }
 
 impl Opened {
+    /// The device's media source, whose camera controls `controls` reads and sets.
+    pub(crate) fn source(&self) -> &IMFMediaSource {
+        &self.source
+    }
+
     /// The native media types of the first video stream, as read.
     pub(crate) fn raw_types(&self) -> Result<Vec<(RawType, IMFMediaType)>, PlatformError> {
         let mut out = Vec::new();

@@ -4,6 +4,30 @@
 //! control channel. Every host is put in one job object that kills its processes
 //! when the engine's handle to it closes, so hosts never outlive the engine. A host
 //! starts with a scrubbed environment and inherits only its standard handles.
+//!
+//! # Behaviour
+//!
+//! `WindowsPluginHosts` is the `PluginHosts` backend. It runs `PLUGIN_HOST_EXE`
+//! (`jstream-plugin-host.exe`, beside the engine's executable, or another path through
+//! `with_exe`). Every host goes in one job object that kills its processes when the
+//! engine's handle closes (and suppresses the crash dialog), so no host outlives the
+//! engine. A host starts with a cleared environment that keeps only the system and
+//! user-folder variables (`KEPT_ENV`), so it never sees the engine's keys, tokens or
+//! configuration, and its stderr is discarded. `start` creates an unnamed block,
+//! initialised with the request's configuration, starts `run <file> <plugin-id>`,
+//! duplicates the block's handle into the new process and sends its value as the
+//! first control message (`Block`), before `Start`. It keeps the stdin and stdout
+//! pipes as the control channel; a thread decodes stdout into messages and stops on a
+//! frame that doesn't decode. The host's block is an `EngineBlock`, so the mixer's miss
+//! counts stay in the engine's memory, where the host can't reset them. Dropping a host kills it. `scan` runs `scan <file>` and kills the
+//! host after its answer, or after 20 s. `search_paths` is CLAP's order on Windows:
+//! `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and
+//! `%LOCALAPPDATA%\Programs\Common\CLAP`, keeping the ones that exist, without
+//! repeats.
+//!
+//! **Not yet:** a test that starts a real host process (CI's Windows job builds the
+//! launcher and tests `search_paths` only), and keeping the plugin from inheriting handles other threads make
+//! inheritable while it starts.
 
 use std::io::Write;
 use std::os::windows::io::AsRawHandle;
@@ -127,6 +151,10 @@ impl WindowsPluginHosts {
 impl PluginHosts for WindowsPluginHosts {
     fn search_paths(&self) -> Vec<PathBuf> {
         search_paths(|k| std::env::var_os(k))
+    }
+
+    fn folders(&self) -> Vec<PathBuf> {
+        folders(|k| std::env::var_os(k))
     }
 
     fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
@@ -306,9 +334,9 @@ fn assign(job: &Handle, child: &Child) -> Result<(), PlatformError> {
 }
 
 /// CLAP's search directories on Windows, in CLAP's order: each directory in
-/// `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and `%LOCALAPPDATA%\Programs\Common\CLAP`.
-/// Only the ones that exist.
-fn search_paths(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
+/// `CLAP_PATH`, then `%COMMONPROGRAMFILES%\CLAP` and `%LOCALAPPDATA%\Programs\Common\CLAP`,
+/// whether they exist or not, without repeats.
+fn folders(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
     let mut paths: Vec<PathBuf> = var("CLAP_PATH")
         .map(|p| std::env::split_paths(&p).collect())
         .unwrap_or_default();
@@ -320,12 +348,19 @@ fn search_paths(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf
     }
     let mut seen = Vec::new();
     paths.retain(|p| {
-        let new = p.is_dir() && !seen.contains(p);
+        let new = !p.as_os_str().is_empty() && !seen.contains(p);
         if new {
             seen.push(p.clone());
         }
         new
     });
+    paths
+}
+
+/// The [`folders`] that exist.
+fn search_paths(var: impl Fn(&str) -> Option<std::ffi::OsString>) -> Vec<PathBuf> {
+    let mut paths = folders(var);
+    paths.retain(|p| p.is_dir());
     paths
 }
 
@@ -348,6 +383,13 @@ mod tests {
             _ => None,
         });
         assert_eq!(paths, vec![a.clone(), common.join("CLAP")]);
+        // `folders` keeps the missing ones too, so a person can be told where to install.
+        let all = folders(|k| match k {
+            "CLAP_PATH" => Some(clap_path.clone()),
+            "COMMONPROGRAMFILES" => Some(common.clone().into_os_string()),
+            _ => None,
+        });
+        assert_eq!(all, vec![a.clone(), missing.clone(), common.join("CLAP")]);
         std::fs::remove_dir_all(&root).unwrap();
     }
 }

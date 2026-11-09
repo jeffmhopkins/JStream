@@ -1673,6 +1673,7 @@ mod tests {
                 variant_of: None,
                 overrides: Vec::new(),
                 camera_motion: Vec::new(),
+                ptz_shots: Vec::new(),
                 camera_follow: None,
                 timelines: Vec::new(),
                 items,
@@ -1967,6 +1968,7 @@ mod tests {
         };
         let none = |item: &str| ItemOverride {
             motion: Default::default(),
+            timing: None,
             item_id: ItemId::new(item),
             geometry: None,
             transform: None,

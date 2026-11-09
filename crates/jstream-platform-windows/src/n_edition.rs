@@ -1,10 +1,30 @@
 //! Detects a Windows without Media Foundation, such as an N or KN edition without the
 //! Media Feature Pack, so the host fails with an error the user can act on instead of an
-//! unexplained `MFStartup` failure (ADR-0061's Consequences name this gap).
+//! unexplained `MFStartup` failure (ADR-0140's Consequences name this gap).
 //!
 //! The probe loads `mfplat.dll` from System32 and looks for `MFStartup`; when that fails,
 //! the edition (the registry's `EditionID`) picks the advice. The decision is plain data
 //! in, error out, so it is tested on every platform.
+//!
+//! # Behaviour
+//!
+//! **`check_media_foundation`**, the Media Foundation check
+//! (ADR-0140): Windows N and
+//! KN editions ship without Media Foundation until the user installs the Media Feature
+//! Pack, and Windows Server until it adds the Server Media Foundation feature. The check
+//! loads `mfplat.dll` from System32 only and looks for `MFStartup`. If that fails, it
+//! returns `PlatformError::MissingComponent`, and the registry's `EditionID` picks the
+//! advice: the Media Feature Pack for an N edition (an ID ending in a capital `N`), the
+//! server feature for an ID starting with `Server`, and both otherwise. The host must
+//! call it before creating the backends, as `jstream-daemon`'s startup does.
+//! - **Delay-loading:** the `windows` crate imports Media Foundation's DLLs when the
+//!   process loads, so on such a machine Windows refuses to start a binary that links a
+//!   Media Foundation backend before any check can run. That binary must delay-load each
+//!   DLL its backends import (MSVC `/DELAYLOAD:<dll>` with `delayimp.lib`) for the check
+//!   to report anything: `mfplat.dll` for `MfCodecs`; `mfplat.dll`, `mf.dll` and
+//!   `mfreadwrite.dll` for `MfVideoDevices`; `mfplat.dll` and `mfreadwrite.dll` for
+//!   `MfMediaDecoders`; `mfplat.dll` for `MfMjpegDecoder`;
+//!   `mfplat.dll` and `mfsensorgroup.dll` for `WindowsVcam`. The check itself never imports Media Foundation.
 
 use jstream_platform::PlatformError;
 

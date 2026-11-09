@@ -12,6 +12,7 @@ mod aspect;
 mod assets;
 mod external;
 mod multipass;
+pub(crate) use multipass::pad;
 mod pack;
 mod params;
 mod pass;
@@ -22,7 +23,7 @@ pub(crate) mod testing;
 pub use assets::{Lut, LutError, lut_image};
 pub use external::ExternalFilter;
 pub use pass::PRELUDE;
-pub(crate) use pass::{Blend, Ctx, Draw, Pass, Runtime, Scratch, Shader};
+pub(crate) use pass::{Blend, Bound, Ctx, Draw, Pass, Runtime, Scratch, Shader};
 pub use program::{
     AUDIO_BANDS as PROGRAM_AUDIO_BANDS, ExternalProgram, FIRST_INPUT_BINDING,
     MAX_INPUTS as PROGRAM_MAX_INPUTS, MAX_PASSES as PROGRAM_MAX_PASSES, MAX_PROGRAM_BYTES,
@@ -32,11 +33,16 @@ pub use program::{
 use jstream_protocol::{KindDescriptor, Settings};
 
 /// A media-clock reading, for filters that move with time (scroll) or hold frames back
-/// (video delay).
+/// (video delay), and the song's position on it, for filters that move with the tempo
+/// (a border's speed in beats).
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct FilterClock {
     /// Seconds since the media clock's origin.
     pub seconds: f64,
+    /// Quarter notes since the start of the song, as the engine's MIDI clock gives it at
+    /// `seconds` (ADR-0148): carried on while it plays, held while it is stopped or
+    /// quiet, and 0 before any clock is heard.
+    pub beat: f64,
 }
 
 /// Every built-in video filter kind, ordered by ID.
@@ -47,6 +53,17 @@ pub fn descriptors() -> Vec<KindDescriptor> {
     kinds.extend(assets::descriptors());
     kinds.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
     kinds
+}
+
+/// How far a built-in filter of `kind_id` draws past each edge of its input at
+/// `settings`, px, never more than its kind's `max_outset_px` ([ADR-0136]):
+/// a drop shadow its offset plus its blur, a glow or a bloom its radius, an outline
+/// outside its width, a border its outer stroke after its gap. `None` for a kind that declares no outset, or one this crate
+/// doesn't draw; a caller then takes the declared `max_outset_px`.
+///
+/// [ADR-0136]: ../../../docs/adr/0136-an-effects-outset-follows-its-settings.md
+pub fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
+    multipass::outset(kind_id, settings).or_else(|| pack::outset(kind_id, settings))
 }
 
 /// The pass for a filter of `kind_id`, or `None` when it is not a built-in video kind.
@@ -64,6 +81,8 @@ pub struct VideoFilter {
     kind: String,
     pass: Box<dyn Pass>,
     scratch: Scratch,
+    /// Transparent pixels the input is grown by on every side before the pass draws.
+    pad: u32,
 }
 
 impl VideoFilter {
@@ -80,6 +99,7 @@ impl VideoFilter {
             kind: kind.to_owned(),
             pass,
             scratch: Scratch::default(),
+            pad: 0,
         }
     }
 
@@ -135,9 +155,25 @@ impl VideoFilter {
     /// The size this filter draws for an input of `width` by `height`. Most filters keep
     /// the size; aspect ratio reshapes it, which changes the source's reported size for
     /// every placement. An effect that draws outside its input (a drop shadow, an outside
-    /// outline, a glow) keeps it, and what falls past the frame is cut (ADR-0065 §5).
+    /// outline, a glow) keeps it, and what falls past the frame is cut (ADR-0065 §5),
+    /// unless it is padded ([`Self::set_pad`]).
     pub fn output_size(&self, width: u32, height: u32) -> (u32, u32) {
-        self.pass.output_size(width, height)
+        let grow = |side: u32| side.saturating_add(self.pad.saturating_mul(2));
+        self.pass.output_size(grow(width), grow(height))
+    }
+
+    /// Grows the input by `pad` transparent pixels on every side before the filter
+    /// draws, so it sees and keeps that room: 0 (the default) for none. An item's
+    /// effects pad their layer at the first effect that draws past its input, so the
+    /// ones before it frame the item's box itself (ADR-0065 §5).
+    pub fn set_pad(&mut self, pad: u32) {
+        self.pad = pad;
+        self.pass.set_pad(pad);
+    }
+
+    /// The padding [`Self::set_pad`] set.
+    pub(crate) fn pad(&self) -> u32 {
+        self.pad
     }
 
     /// Sets the image an asset or scene-reference filter reads (`apply_lut`'s table,

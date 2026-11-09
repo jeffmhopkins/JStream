@@ -8,10 +8,15 @@
 //!   ([`projector`]): a window of the app's own, under the same rules and with the same
 //!   script, full screen when the page asks for it. A link to one of the project's own
 //!   pages on GitHub, or Cisco's OpenH264 licence ([`links`]), opens in the
-//!   system browser instead. Any other is refused.
-//! - The page gets one Tauri command, `pick_path` ([`crate::pick`]), and no other.
-//!   The UI calls it through the bootstrap global's `browse`, and talks to the engine
-//!   only over the WebSocket API. The scheme's one other answer is the update check.
+//!   system browser instead (through Explorer on Windows, `open` on macOS, `xdg-open` on
+//!   Linux). Any
+//!   other is refused.
+//! - It runs on WebView2 on Windows, WKWebView on macOS and WebKitGTK on Linux (the
+//!   `webkitgtk` feature).
+//! - The page gets two Tauri commands, `pick_path` ([`crate::pick`]) and `set_network`
+//!   ([`crate::network`]), and no other. The UI calls them through the bootstrap
+//!   global's `browse` and `allowNetwork`, and talks to the engine only over the
+//!   WebSocket API. The scheme's one other answer is the update check.
 //! - When the app exits, the host stops: the server closes its connections and the
 //!   engine stops.
 //!
@@ -22,6 +27,7 @@ use crate::links;
 use crate::ui::{self, Ui};
 use crate::updates;
 use anyhow::Context;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::http::{Response, StatusCode};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
@@ -79,17 +85,32 @@ fn allowed(url: &Url, blank: bool) -> bool {
 }
 
 /// Opens `url`, one [`links::opens_in_browser`] accepts, in the system browser:
-/// Explorer hands an `https` URL to the default browser. The URL is one argument,
-/// never parsed by a shell.
+/// Explorer hands an `https` URL to the default browser on Windows, and `xdg-open` (the
+/// desktop's handler, found on `PATH`) on Linux. The URL is one argument, never parsed
+/// by a shell.
 fn open_in_browser(url: &Url) {
-    let explorer = std::env::var_os("SystemRoot")
+    #[cfg(windows)]
+    let opener = std::env::var_os("SystemRoot")
         .map(|root| std::path::Path::new(&root).join("explorer.exe"))
         .unwrap_or_else(|| "explorer.exe".into());
-    if let Err(error) = std::process::Command::new(explorer)
-        .arg(url.as_str())
-        .spawn()
-    {
-        tracing::warn!(%error, "could not open a link in the browser");
+    #[cfg(target_os = "macos")]
+    let opener = std::path::PathBuf::from("/usr/bin/open");
+    #[cfg(not(any(windows, target_os = "macos")))]
+    let opener = std::path::PathBuf::from("xdg-open");
+    match std::process::Command::new(opener).arg(url.as_str()).spawn() {
+        // Waited for on a thread of its own, so the opener doesn't linger as a zombie
+        // (`xdg-open` and Explorer exit once they have handed the URL over).
+        Ok(mut child) => {
+            let reaped = std::thread::Builder::new()
+                .name("jstream-link-opener".into())
+                .spawn(move || {
+                    let _ = child.wait();
+                });
+            if let Err(error) = reaped {
+                tracing::warn!(%error, "could not wait for the link opener");
+            }
+        }
+        Err(error) => tracing::warn!(%error, "could not open a link in the browser"),
     }
 }
 
@@ -153,11 +174,24 @@ fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
 }
 
 /// Runs the app until its window closes: `ui` serves the pages, `script` (if the
-/// engine started) hands them the engine, and `host` is stopped on exit.
-pub fn run(ui: Ui, script: Option<String>, host: Option<Host>) -> anyhow::Result<()> {
+/// engine started) hands them the engine, `host` is stopped on exit, and
+/// `network_file` is where `set_network` saves "Allow devices on my network".
+pub fn run(
+    ui: Ui,
+    script: Option<String>,
+    host: Option<Host>,
+    network_file: Option<PathBuf>,
+) -> anyhow::Result<()> {
     let start = start_url()?;
-    let app = tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![crate::pick::pick_path])
+    let mut builder = tauri::Builder::default();
+    if let Some(file) = network_file {
+        builder = builder.manage(crate::network::Setting(file));
+    }
+    let app = builder
+        .invoke_handler(tauri::generate_handler![
+            crate::pick::pick_path,
+            crate::network::set_network
+        ])
         // Asynchronous so the update check's request to GitHub doesn't block the
         // window. File requests are answered on this call, as they were before.
         .register_asynchronous_uri_scheme_protocol(
@@ -192,7 +226,11 @@ pub fn run(ui: Ui, script: Option<String>, host: Option<Host>) -> anyhow::Result
             Ok(())
         })
         .build(tauri::generate_context!())
-        .context("could not create the window (is WebView2 installed?)")?;
+        .context(if cfg!(windows) {
+            "could not create the window (is WebView2 installed?)"
+        } else {
+            "could not create the window (is there a display, and WebKitGTK 4.1?)"
+        })?;
     let mut host = host;
     app.run(move |_app, event| {
         if let RunEvent::Exit = event

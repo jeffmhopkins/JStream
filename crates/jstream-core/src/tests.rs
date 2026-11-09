@@ -21,6 +21,8 @@ mod live_values;
 mod packs;
 mod page_api;
 mod preview;
+mod projects;
+mod ptz;
 mod source_sizes;
 mod sources;
 mod timelines;
@@ -555,6 +557,257 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
     let filter = &sources[0].filters.audio[0];
     assert_eq!(filter.kind, "clap/org.example.gain");
     assert_eq!(filter.settings.get("1"), Some(&serde_json::json!(1.0)));
+}
+
+/// `plugin.clap_scan` reports the folders, what the last scan found and what failed, and
+/// `plugin.clap_rescan` finds a plugin installed since, without a restart (0.106).
+#[test]
+fn clap_rescan_finds_a_plugin_installed_since_and_the_scan_reports_it() {
+    use jstream_platform::plugin_host::fake::{FakePluginHosts, fake_param};
+    use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
+    use jstream_plugin_proto::control::PluginDesc;
+    use std::path::{Path, PathBuf};
+
+    struct Dirs(PathBuf, PathBuf, FakePluginHosts);
+    impl PluginHosts for Dirs {
+        fn search_paths(&self) -> Vec<PathBuf> {
+            vec![self.0.clone()]
+        }
+        fn folders(&self) -> Vec<PathBuf> {
+            vec![self.0.clone(), self.1.clone()]
+        }
+        fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
+            self.2.scan(file)
+        }
+        fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
+            self.2.start(request)
+        }
+    }
+    let desc = |id: &str, name: &str| PluginDesc {
+        id: id.into(),
+        name: name.into(),
+        vendor: String::new(),
+        version: String::new(),
+        description: String::new(),
+        params: vec![fake_param()],
+    };
+    let scan_of = |control: &dyn Control| match query(control, Query::PluginClapScan) {
+        Ok(QueryResult::PluginClapScan { scan }) => scan,
+        other => panic!("plugin.clap_scan: {other:?}"),
+    };
+    let rescan = |control: &dyn Control| {
+        block_on(control.call(Call::Action {
+            action: Action::PluginClapRescan,
+        }))
+    };
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    // No hosts: unavailable, with the host's reason, and a rescan is unsupported.
+    engine.set_clap_unavailable("no plugin host on this platform");
+    let scan = scan_of(&control);
+    assert!(!scan.available);
+    assert_eq!(
+        scan.reason.as_deref(),
+        Some("no plugin host on this platform")
+    );
+    let error = rescan(&control).expect_err("no hosts");
+    assert!(
+        matches!(error.protocol(), Some(ProtocolError::Unsupported { call }) if call == "plugin.clap_rescan"),
+        "{error:?}"
+    );
+
+    let dir =
+        std::env::temp_dir().join(format!("jstream-engine-clap-rescan-{}", std::process::id()));
+    let missing = dir.join("not-there");
+    std::fs::create_dir_all(&dir).unwrap();
+    let gain = dir.join("gain.clap");
+    let broken = dir.join("broken.clap");
+    let verb = dir.join("verb.clap");
+    std::fs::write(&gain, b"").unwrap();
+    std::fs::write(&broken, b"").unwrap();
+    let fake = FakePluginHosts::new();
+    fake.add_file(&gain, vec![desc("org.example.gain", "Gain")]);
+    fake.add_file(&verb, vec![desc("org.example.verb", "Verb")]);
+    engine.scan_clap_plugins(std::sync::Arc::new(Dirs(
+        dir.clone(),
+        missing.clone(),
+        fake,
+    )));
+
+    let scan = scan_of(&control);
+    assert!(scan.available && scan.scanned && !scan.scanning);
+    assert_eq!(scan.reason, None);
+    assert_eq!(
+        scan.folders,
+        vec![
+            jstream_protocol::ClapFolder::new(dir.display().to_string(), true),
+            jstream_protocol::ClapFolder::new(missing.display().to_string(), false),
+        ]
+    );
+    assert_eq!(
+        scan.found,
+        vec![jstream_protocol::ClapFound::new(
+            "clap/org.example.gain",
+            "Gain",
+            gain.display().to_string()
+        )]
+    );
+    assert_eq!(scan.failed.len(), 1);
+    assert_eq!(scan.failed[0].file, broken.display().to_string());
+
+    // A plugin installed since is found by a rescan, and becomes a kind.
+    std::fs::write(&verb, b"").unwrap();
+    rescan(&control).expect("rescan");
+    let scan = scan_of(&control);
+    std::fs::remove_dir_all(&dir).unwrap();
+    let found: Vec<_> = scan.found.iter().map(|f| f.kind_id.as_str()).collect();
+    assert_eq!(found, ["clap/org.example.gain", "clap/org.example.verb"]);
+    let Ok(QueryResult::KindList { kinds }) = query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    assert!(kinds.iter().any(|k| k.kind_id == "clap/org.example.verb"));
+}
+
+/// Every client hears `kinds.changed` when a CLAP scan finds a new kind, and when the
+/// effect packs change one, but not for a rescan that finds nothing new (#1328).
+#[test]
+fn every_client_hears_when_the_kinds_change() {
+    use crate::effect_packs::Packs;
+    use crate::effect_packs::test_pack::{self, Temp};
+    use jstream_platform::plugin_host::fake::{FakePluginHosts, fake_param};
+    use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
+    use jstream_plugin_proto::control::PluginDesc;
+    use jstream_protocol::KindsCause;
+    use std::path::{Path, PathBuf};
+
+    /// The fake hosts, searching `0`.
+    struct In(PathBuf, FakePluginHosts);
+    impl PluginHosts for In {
+        fn search_paths(&self) -> Vec<PathBuf> {
+            vec![self.0.clone()]
+        }
+        fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
+            self.1.scan(file)
+        }
+        fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
+            self.1.start(request)
+        }
+    }
+    let changes = |events: Vec<Event>| -> Vec<KindsCause> {
+        events
+            .into_iter()
+            .filter_map(|e| match e {
+                Event::KindsChanged { cause } => Some(cause),
+                _ => None,
+            })
+            .collect()
+    };
+    let engine = Engine::new();
+    let other = connected(&engine);
+    let mut events = other.events();
+
+    let dir = std::env::temp_dir().join(format!(
+        "jstream-engine-kinds-changed-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let gain = dir.join("gain.clap");
+    std::fs::write(&gain, b"").unwrap();
+    let fake = FakePluginHosts::new();
+    fake.add_file(
+        &gain,
+        vec![PluginDesc {
+            id: "org.example.gain".into(),
+            name: "Gain".into(),
+            vendor: String::new(),
+            version: String::new(),
+            description: String::new(),
+            params: vec![fake_param()],
+        }],
+    );
+    engine.scan_clap_plugins(std::sync::Arc::new(In(dir.clone(), fake)));
+    assert_eq!(changes(drain(&mut events)), [KindsCause::ClapScan]);
+    // The same plugins again: nothing changed.
+    let asker = connected(&engine);
+    block_on(asker.call(Call::Action {
+        action: Action::PluginClapRescan,
+    }))
+    .expect("rescan");
+    assert_eq!(changes(drain(&mut events)), []);
+    std::fs::remove_dir_all(&dir).unwrap();
+
+    let temp = Temp::new("kinds-changed");
+    test_pack::write(&temp.pack(), test_pack::MUL);
+    let mut packs = Packs::new(temp.0.clone());
+    engine.install_effects(packs.poll().expect("the pack loads"));
+    assert_eq!(changes(drain(&mut events)), [KindsCause::EffectPacks]);
+}
+
+/// `plugin.clap_rescan` scans on its own thread: while it runs, the session that asked
+/// still gets answers, and `plugin.clap_scan` reports it as scanning (#1288).
+#[test]
+fn a_clap_rescan_does_not_hold_up_the_session_that_asked() {
+    use jstream_platform::plugin_host::fake::FakePluginHosts;
+    use jstream_platform::{HostRequest, PlatformError, PluginHost, PluginHosts};
+    use jstream_plugin_proto::control::PluginDesc;
+    use std::path::{Path, PathBuf};
+    use std::sync::{Arc, Mutex};
+
+    /// Hosts whose scan waits while the test holds `gate`.
+    struct Gated(PathBuf, Arc<Mutex<()>>, FakePluginHosts);
+    impl PluginHosts for Gated {
+        fn search_paths(&self) -> Vec<PathBuf> {
+            vec![self.0.clone()]
+        }
+        fn scan(&self, file: &Path) -> Result<Vec<PluginDesc>, PlatformError> {
+            let _wait = self
+                .1
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner);
+            self.2.scan(file)
+        }
+        fn start(&self, request: &HostRequest) -> Result<Box<dyn PluginHost>, PlatformError> {
+            self.2.start(request)
+        }
+    }
+    let scanning = |control: &dyn Control| match query(control, Query::PluginClapScan) {
+        Ok(QueryResult::PluginClapScan { scan }) => scan.scanning,
+        other => panic!("plugin.clap_scan: {other:?}"),
+    };
+
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let dir =
+        std::env::temp_dir().join(format!("jstream-engine-clap-gated-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("a.clap"), b"").unwrap();
+    let gate = Arc::new(Mutex::new(()));
+    engine.scan_clap_plugins(Arc::new(Gated(
+        dir.clone(),
+        Arc::clone(&gate),
+        FakePluginHosts::new(),
+    )));
+    assert!(!scanning(&control));
+
+    let held = gate.lock().unwrap();
+    let rescan = control.call(Call::Action {
+        action: Action::PluginClapRescan,
+    });
+    // The rescan waits on the gate; the session still answers, and reports it.
+    assert!(query(&control, Query::KindList).is_ok());
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    while !scanning(&control) {
+        assert!(
+            std::time::Instant::now() < deadline,
+            "never reported scanning"
+        );
+        std::thread::yield_now();
+    }
+    drop(held);
+    block_on(rescan).expect("rescan");
+    assert!(!scanning(&control));
+    std::fs::remove_dir_all(&dir).unwrap();
 }
 
 /// The engine takes scene filters and item effects (ADR-0065), which run on the scene's
@@ -4273,6 +4526,71 @@ mod cpu_pipeline {
         );
     }
 
+    /// `profile.get` (protocol 0.92) lists a running output's stream, from its encoder
+    /// to what it published, and the mixer's blocks; a stopped output is left out of a
+    /// window that starts after it.
+    #[test]
+    fn profile_get_lists_a_running_outputs_stream_and_the_mixer() {
+        let fakes = fakes();
+        let publish = RecordingPublish::new();
+        let engine = engine(
+            share(&fakes.backends),
+            cpu_draw(),
+            Box::new(publish.clone()),
+        );
+        let control = connected(&engine);
+        let mut events = control.events();
+        start(&control, &mut events);
+        let profile = || match query(
+            &control,
+            Query::ProfileGet {
+                seconds: Some(60),
+                top: None,
+            },
+        )
+        .expect("profile.get")
+        {
+            QueryResult::ProfileGet { profile } => profile,
+            other => panic!("not a profile: {other:?}"),
+        };
+        let mut last = None;
+        assert!(
+            pump_until(&fakes.clock, &fakes.audio, || {
+                let info = profile();
+                let ready = info.mixer.is_some_and(|mixer| mixer.blocks > 0)
+                    && info.streams.iter().any(|stream| stream.frames_out >= 2);
+                last = Some(info);
+                ready
+            }),
+            "no stream or mixer in {last:?}"
+        );
+        let info = last.expect("a profile");
+        let stream = info
+            .streams
+            .iter()
+            .find(|stream| {
+                stream.stream
+                    == jstream_protocol::ProfileStream::Output {
+                        output_id: OutputId::new("yt"),
+                    }
+            })
+            .expect("the output's stream");
+        assert!(stream.frames_in >= stream.frames_out, "{stream:?}");
+        assert!(stream.encoded >= 1, "{stream:?}");
+        assert_eq!(stream.dropped, 0, "{stream:?}");
+        assert!(stream.target_kbps > 0, "{stream:?}");
+        assert!(stream.fps.get() > 0.0, "{stream:?}");
+        let mixer = info.mixer.expect("the mixer");
+        assert!(mixer.block_ms.get() > 0.0, "{mixer:?}");
+        assert!(mixer.late_blocks <= mixer.blocks, "{mixer:?}");
+
+        block_on(control.call(output_call("yt", false))).expect("output.stop");
+        assert!(
+            wait_until(|| profile().streams.is_empty()),
+            "a stopped output is left out"
+        );
+    }
+
     // --- Item: a failed start's teardown does not overlap the next start.
 
     /// Fails its first tag, the FLV header the output thread sends before the start
@@ -5501,6 +5819,57 @@ mod cpu_pipeline {
 
         block_on(control.call(output_call("yt", false))).expect("yt stop");
         assert_eq!(encoder_status(&control, "yt").2, 0);
+    }
+
+    /// `quality.probe` (ADR-0145) checks its call, refuses an output that isn't running,
+    /// and on a running one meets the frames the render thread copied with the decoded
+    /// pictures by `pts`: the fake decoder's pictures are 16 × 16, so the first pair
+    /// found fails the probe for its size, which only a matched pair can do.
+    #[test]
+    fn a_quality_probe_meets_the_encoders_frames_with_their_pictures() {
+        use jstream_protocol::ProbeStream;
+        let probe = |output: &str, frames: Option<u32>| Query::QualityProbe {
+            stream: ProbeStream::Output {
+                output_id: OutputId::new(output),
+            },
+            frames,
+        };
+        let dir = TempDir::new("probe");
+        let fakes = fakes();
+        let (_engine, control, mut events) =
+            recording_engine(&fakes, cpu_draw(), &dir.join("probe.mp4"));
+        drain(&mut events);
+
+        let err = query(&control, probe("nope", None)).expect_err("unknown output");
+        assert_eq!(code(&err), Some("not_found"), "{err:?}");
+        let err = query(&control, probe("rec", Some(11))).expect_err("too many frames");
+        assert_eq!(code(&err), Some("invalid_argument"), "{err:?}");
+        let err = query(&control, probe("rec", None)).expect_err("not running");
+        assert_eq!(code(&err), Some("action_failed"), "{err:?}");
+
+        block_on(control.call(output_call("rec", true))).expect("rec start");
+        let (tx, rx) = std::sync::mpsc::channel();
+        let answer = std::thread::scope(|scope| {
+            scope.spawn(|| {
+                let _ = tx.send(query(&control, probe("rec", Some(2))));
+            });
+            let mut answer = None;
+            assert!(
+                pump_until(&fakes.clock, &fakes.audio, || {
+                    answer = answer.take().or_else(|| rx.try_recv().ok());
+                    answer.is_some()
+                }),
+                "the probe never answered"
+            );
+            answer.expect("answered")
+        });
+        let err = answer.expect_err("the fake decoder's pictures are 16 x 16");
+        let reason = match err.protocol() {
+            Some(jstream_protocol::ProtocolError::ActionFailed { reason }) => reason.clone(),
+            other => panic!("not action_failed: {other:?}"),
+        };
+        assert!(reason.contains("16x16 picture of a"), "{reason}");
+        block_on(control.call(output_call("rec", false))).expect("rec stop");
     }
 
     /// A recording with an audio chain of its own (ADR-0080) gets an output tap and its

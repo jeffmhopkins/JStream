@@ -12,11 +12,11 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md", "docs/adr/0142-feeding-the-midi-sources-and-their-beat.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
-kind lives here ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): its
+kind lives here ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)): its
 descriptor, which the engine reports through `kind.list` and `kind.describe` and
 validates settings against
 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)), and the code that
@@ -34,9 +34,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `Source`: `frame(at)` returns the frame to show at `at`, the time since the source
   started on the media clock ([ADR-0014](../../docs/adr/0014-media-clock.md)), as an
   `Arc<VideoFrame>`. For the built-in kinds `frame` neither blocks on I/O nor
-  allocates, and a frame handed out stays valid after an update. Most make their frames
+  allocates (apart from a still image's once nothing holds its frame, below), and a
+  frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
-  the `waveform`, `spectrum`, `chat_message` and `timer` kinds draw theirs in a
+  the `waveform`, `spectrum`, `chat_message`, `timer` and `midi_*` kinds draw theirs in a
   `Painter` instead, and `frame`
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
@@ -78,10 +79,30 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   asks for frames under a lock paints before taking it, when `next_change` said a
   frame is due (the engine's `jstream-sources` thread does). A host that skipped a
   source nothing showed may paint it once under its lock, to catch it up before it is
-  shown again (the engine does, for a painter a plan reaches again). The `waveform` and
+  shown again (the engine does, for a painter a plan reaches again). The painter also
+  hands out the frame it painted last (`frame`) and says when the next is due
+  (`next_change`), as its source does, so a host can take new frames from it without
+  the source or its lock (the engine stores them in a frame slot, ADR-0117 §3). The `waveform` and
   `spectrum` painters allocate only while their frame pool grows, or when every pooled
   frame is still held; `chat_message`'s allocates when it redraws for a newly featured
   message, and `timer`'s when the value it shows changes, once a second at most.
+  An animated `image`, a `media` file with video and a `browser` page that paints on
+  the CPU have a painter too, which draws nothing: the image's picks the frame due
+  (its frames are decoded when it is built), the media file's takes the decoded frames
+  due from its player's queue, and the page's hands out its latest paint. So their new
+  frames also reach the picture without a plan. A still image, a file with no video and
+  a page on the GPU have none.
+- `Still`: a source's one frame that can be let go of and made again, from
+  `Source::still()` (default `None`; only a still `image` has one, #1139). Every frame
+  its `frame()` hands out shares one copy, freed once all are dropped; the next call
+  reads and decodes the file again, so it blocks and never runs on a real-time thread.
+  `frame_if_held()` gives the copy only if someone holds it (or the one decoded when the
+  source was built, until it is taken), and `held()` says whether anyone does. A file
+  that decodes again at another `size()` fails with `SourceError::Decode`, since what
+  shows the still is placed at the size it had. The image source's `frame` is its
+  still's, so a host that drops every frame it was handed makes the next `frame`
+  decode; the engine keeps a shown still's frame only while a draw needs it
+  (`jstream-core`'s `still`).
 - `Registry`: every kind by ID. `descriptors()` (ordered by ID), `descriptor(id)` and
   `create(id, settings, ctx)`. The engine creates its sources through it on its own
   `jstream-sources` thread, never under its collection lock or on the render thread,
@@ -129,7 +150,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   a read retries when a claim reached a slot it copied, so it never returns a window
   mixed from two passes of the ring. The analysis (the FFT included) runs in the
   source's `Painter`, on the thread that paints, never on the mixer thread
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)'s audio → render
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)'s audio → render
   path).
 - `AudioScopes`: where those sources find their scope, by their `audio_source` and
   `audio` settings: the program mix's (`program()`, which always exists), a bus's
@@ -166,6 +187,26 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   half-scale sine read at its amplitude by a band around it and not by one away from
   it, an inverted or NaN band reading 0, with its raw level, peak and onset, and a levels-only
   measure hearing the level with no spectrum.
+- `MidiState` and `MidiInputs` (`midi/`, [ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)):
+  what the `midi_*` kinds draw. A `MidiState` holds one input's held velocity per
+  channel and key, its controllers, pitch bend and channel pressure, and a log of the
+  last 1024 note events (`recent(out, most)`, oldest first), all in atomics, so any
+  thread pushes a `jstream_midi::Message` with `push(at_ms, message)` and any reads it
+  without a lock or an allocation. A reader skips a log slot a push is writing. CC 120
+  and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
+  (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
+  `drawn(name)` is the state a source's `input` setting draws. An input thread pushes
+  through a `MidiFeed` (`feed(name)`): its own state and the every-input one, looked up
+  once, and a `jstream-midi` `Tempo` tracker its clock and transport messages run,
+  which publishes a `TempoReading` (time, last timing clock, BPM, beat, playing) to both
+  states (`MidiState::tempo`) through a sequence-numbered cell, without a lock. Only a
+  timing clock (`F8`) counts as a running clock. The every-input state takes one feed's
+  clock at a time, until that clock has been silent for `CLOCK_TIMEOUT_MS` (500); a
+  lone stop or song position doesn't take it from a clock that runs. `set_clock` gives it the
+  host's media clock once (`now_ms`), and the kinds measure a note's age on it, the
+  clock messages are stamped on, rather than on the paint time a source is given, which
+  counts from its own start. `Context::midi` carries it; with none, the kinds draw their
+  first frame and never change.
 
 **Kinds.**
 - `backdrop`: a generated studio backdrop, like the painted canvas, muslin or seamless
@@ -210,7 +251,40 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   10 ms or less shows for 100 ms, as in browsers. A GIF plays once plus its
   NETSCAPE loop count, or forever; a WebP plays its loop count, or forever; after the
   last play the last frame stays. With no file, the source shows one transparent pixel.
+  A still image (one frame, or frames with no delay, which show the last) keeps only
+  that frame, as a `Still` that reads the file again once its pixels are let go of; an
+  animation keeps every frame.
   Colour profiles, gamma and JPEG EXIF orientation are not applied yet.
+- `midi_keyboard`, `midi_piano_roll`, `midi_pads` and `midi_cc`
+  ([ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)): a MIDI input's state,
+  drawn on the CPU `width` by `height`. `input` names the input (empty: every input) and
+  `channel` the channel (1 to 16, 0 for every one). A change of size or `input` restarts
+  the source; `channel`, the colours and every kind-specific setting are live. A colour scales with velocity from 35% to full. The
+  keyboard lights the held keys from `low_key` to `high_key`, black keys over the line
+  between two white ones. The piano roll draws each note as a bar in its key's lane,
+  from its note-on to its note-off, scrolling left from the right edge over `seconds`
+  (0.5 to 30); it rebuilds the bars each frame from the log, and draws a key still held
+  after its note-on left the log from the left edge. The pads are a `rows` by `columns`
+  grid from `first_key` (the bottom-left pad, 36 by default, on channel 10), each lit by
+  its key while held and fading over `decay_ms` after its last note-on, so a short drum
+  hit shows. The meters draw a bar for each controller in `controllers` (a
+  comma-separated list, at most 16) and, with `pitch_bend`, one more from the middle.
+  Each paints at 30 fps through a `Painter` from a pool of four frames, as the scope
+  sources do, and settles on one frame, polled every 250 ms, while its input has no new
+  message and nothing it draws is moving. Tests push synthetic messages and read the
+  pixels: velocity, channel and input filtering, the fade, the scroll, the lost note-on,
+  settling, live and restarting changes, and every setting refused.
+- `midi_beat` ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §4): a row
+  of `beats_per_bar` cells (1 to 16, default 4) for the bar its `input`'s MIDI clock is
+  in, the beat it is on lit: the bar's first in `downbeat`, the others in `color`,
+  flashing at full as the beat starts and dimming to 35% as it passes. Stopped, the
+  beat the song is on shows at 35%, whether or not the sender's clock still runs;
+  playing with no timing clock for half a second, nothing is lit. It has no `channel`,
+  since clock is for the whole input. Size and `input` restart it; the rest is live.
+  While a clock runs, each of its 24 messages a beat counts as a change, so every MIDI
+  source of that input (and of every input) redraws at its 30 fps. Tests feed clock and
+  transport and read the pixels: the beat lit, the downbeat, stopped with and without a
+  clock, and a playing song's clock going quiet.
 - `model` ([ADR-0107](../../docs/adr/0107-3d-models.md)): `ModelKind`, a glTF 2.0 file
   (`file`, a `.glb` or a `.gltf` whose buffers and images are read beside it under the
   same asset root, or embedded as `data:` URIs) or a built-in `shape` (`plane`, `cube`,
@@ -235,8 +309,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `Limits`, and over 4096 px are shrunk. `color` (multiplying a file's own), `metallic`, `roughness`,
   `double_sided` (the last three for a shape only) and `lighting` (`studio` or
   `unlit`) are live. Its frame is a transparent stand-in at the model's bounds, the
-  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes. The kind is
-  exported but not yet in `Registry::builtin()`: the engine doesn't draw models yet.
+  longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
+  `Source::model` hands the engine the model, which an item draws in the stand-in's
+  place (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -245,6 +320,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `AudioTarget::of(kind, settings)` reads from their settings (see `jstream-core`'s
   *Audio sources*). Both settings are free text rather than a list of what is present,
   so a collection naming an unplugged device still loads.
+- `network_audio` ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)
+  §6) is audio-only too: a network sender's audio, recorded by `jstream-core`'s JTunnel
+  receiver rather than the platform's audio I/O. `transport` is `jtunnel` (the only one
+  so far), `sender` the tunnel name (at most `MAX_SENDER_NAME`, 31 bytes, trimmed; free
+  text like a device ID, and recorded only once this machine accepts it), and
+  `latency_ms` how long frames wait before they play (`LATENCY_MS`: 5 to 500, 40 by
+  default; out of range reads as the default). Its target is
+  `AudioTarget::Network { transport: Transport::Jtunnel, sender, latency_ms }`.
 - `text`: the `text` string drawn with the `font` asset (TrueType or OpenType, or the
   first font of a collection), or with the bundled face `face` names when it is `null`
   (`regular`, `bold` or `condensed_bold`; see *Bundled fonts*). Fonts are
@@ -327,7 +410,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   Changing it needs a new source, so the capture starts again.
 - `media`: the `file` asset, a local video or audio file demuxed and decoded by the platform's
   `MediaDecoders` (the Media Foundation Source Reader on Windows,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), so it plays the
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), so it plays the
   containers and codecs the OS does. `create` opens the file through
   `AssetRoots::open` and decodes its first frame, so a file the platform can't play,
   one with neither video nor audio, or one without a media backend
@@ -422,7 +505,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `browser` ([ADR-0021](../../docs/adr/0021-browser-source.md)): a web page (`url`,
   `http://` or `https://`), the page itself as `html` (at most 128 KiB, its CSS and
   scripts inline; it wins over the URL when it isn't blank), or the `file` asset
-  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 1 to 60, default 30) through
+  (`.html` or `.htm`, which wins over both when set), opened at `width` by `height` with a frame-rate cap (`fps`, 0 to 60; the default 0 follows the program's base rate, `Context.frame_rate`, and the engine opens such a page again when that rate changes, #1405) through
   `Context.browser` ([`jstream-browser`](../jstream-browser/README.md)). An empty URL
   with no file is a blank page. `css` (at most 64 KiB; the default makes the page's
   background transparent) is the one live setting: `update` replaces the page's custom
@@ -438,20 +521,52 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `local_network` (advanced, default off) lets a page from the internet make requests
   to this computer and the local network, for widgets that talk to an app running here;
   off, `jstream-browser`'s request policy refuses them (#347), for a page given as
-  `html` too. `youtube_chat` never sets
-  it. The **Page API** group (ADR-0102, none of it live, all off by default):
+  `html` too. On, it covers the page's own origin only, and only an `https` page (a page
+  given as `html` is one): Chromium refuses a plain `http` page's local requests.
+  `youtube_chat` never sets
+  it. The **Page API** group (ADR-0102 and ADR-0124, none of it live, all off by
+  default, each kind of data its own checkbox shown under `page_api`, and each with a
+  `warning` the Properties dialog shows beside it):
   `page_api` gives the page `window.jstream` with the engine's clock and whether the
   source is shown on program and preview; `page_api_scenes` adds the two scenes;
-  `page_api_values` (at most 1 KiB) names the shared values it may read, as names or
+  `page_api_shared_values` adds the shared values that `page_api_values` (at most 1 KiB,
+  read only while the checkbox is on) names, as names or
   prefixes ending in `.*`, separated by commas, each name checked as `values.set`
-  checks one; `page_api_bus` (a bus, default none) gives it `jstream.levels()`, that
+  checks one; `page_api_audio` adds `jstream.levels()` for the bus `page_api_bus` names
+  (read only while the checkbox is on), that
   bus's post-fader peak and RMS per channel, as `meters.tick` meters them, and 64
   log-spaced bands from 20 Hz to 20 kHz, lowest first, each 0 to 1 on the dB scale from
   -90 to 0 dBFS, from the bus's scope (`AudioMeter`); or `null` while no mixer runs or
-  the bus is gone.
+  the bus is gone. A spectrogram page, for example, draws each reading as a column:
+
+  ```js
+  const g = document.querySelector("canvas").getContext("2d");
+  jstream.addEventListener("levels", (r) => {
+    const { width: w, height: h } = g.canvas;
+    g.drawImage(g.canvas, -1, 0);      // scroll left a column
+    g.clearRect(w - 1, 0, 1, h);
+    if (r === null) return;            // no output runs, or the bus is gone
+    r.bands.forEach((b, i) => {        // 64 bands, lowest first, 0 to 1
+      g.fillStyle = `hsl(${240 - 240 * b} 90% ${50 * b}%)`;
+      g.fillRect(w - 1, h - (i + 1) * h / 64, 1, h / 64);
+    });
+  });
+  ```
+
+  `page_api_tempo` adds the engine's `tempo.*` values, which no `page_api_values` entry
+  covers without it (ADR-0124 decision 7), and a MIDI reading's tempo.
+  `page_api_midi` adds `jstream.midi()` and a `midi` event for the MIDI input that
+  `page_api_midi_input` names (empty for every input; read only while the checkbox is
+  on), as [ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md) decides:
+  its tempo (`{bpm, playing, clock, beat, at}`, or `null` without the tempo grant),
+  held notes, non-zero
+  controllers, bend and pressure, with channels 1 to 16, and the last two seconds'
+  note-ons as `[at, channel, key, velocity]`, times on `jstream.clock`; at most 128
+  notes, 256 controllers and 32 recent notes. Never raw bytes or SysEx.
+
   The source sends its page only what changed (`page_api.rs`, `Feed`):
   the visibility with the clock time each part last became true, the scenes, the
-  levels, and the
+  levels, the MIDI reading, and the
   covered values, with a removal for one that went or left the grant's cover; and a
   clock anchor first, every 250 ms after that, and at once when the clock goes back or
   jumps more than a second. The anchor's lead is one frame of `fps` plus the mean age of
@@ -459,7 +574,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   of `fps`: what changes sooner is merged (the latest visibility, scenes and anchor, and
   each value's latest), held, and sent once the frame has passed, a held anchor moved to
   the clock's time as it goes. While the granted bus has a reading, the next page frame
-  is always due, so the page reads the bus every frame. `youtube_chat` never sets any
+  is always due, so the page reads the bus every frame. While the granted MIDI input
+  moves (a message since the last look, or, with the tempo granted, a song playing) the
+  next page frame is due too; while it rests, the source looks again every quarter
+  second, unless the engine gave it no MIDI state. `youtube_chat` never sets any
   of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,
@@ -507,10 +625,20 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   another message was featured since, and `frame` hands out the frame drawn last
   without drawing. Every setting but `font` is live.
 - `webcam`: a webcam or capture card, by the `device` setting, the ID the
-  platform's video-device backend lists it by (`VideoDevices::devices`). An empty
-  `device` captures the first device listed. Like `display` and `window`, it only says
-  what to capture (`CaptureSpec::Device`), and the engine opens the device. A new
-  device needs a new source. No query lists the device IDs yet. The kind keeps version 1:
+  platform's video-device backend lists it by (`VideoDevices::devices`), which
+  `capture.targets` lists (a `capture_target` of kind `device`, protocol 0.90). An empty
+  `device` captures the first device listed. `resolution` (`<width>x<height>`), `fps`
+  and `pixel_format` (`capture_format` parameters, in the Format group) ask for a format
+  the device lists; empty or 0 leaves that part to the engine, and a device that offers
+  no format matching them opens in the engine's choice. Like `display` and `window`, it
+  only says what to capture (`CaptureSpec::Device`, with a `DeviceFormatWant`), and the
+  engine opens the device. A new device or format needs a new source. `camera_controls`
+  (the Camera group, live, protocol 0.105, #1196) sets the device's controls: an object
+  of control name to a number or `"auto"`, as `capture.targets` lists them for the
+  device; a control it leaves out keeps what the device has. `webcam_controls(kind,
+  settings)` reads it, with the device as `webcam_device` gives it, as
+  `CameraControlSetting`s, and the engine sets them on the device while it captures,
+  never restarting the capture. The kind keeps version 1:
   before it had a setting, its sources couldn't start. It has audio too (#716): the
   input the platform pairs with the device, a webcam's microphone or a capture card's
   HDMI audio, which the engine records as an audio input's
@@ -602,7 +730,7 @@ Windows its bundled `jiff-tzdb`) for the `timer`'s time of day, each with defaul
 features off.
 `ttf-parser`, which `ab_glyph` and `fontdue` build on, is unmaintained
 (RUSTSEC-2026-0192), so the font crates come from Google's fontations instead
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)).
 
 **Tests.** Unit tests cover colour parsing, animation timing, the text outline's
 distance transform, the glTF loader (`model/gltf/tests.rs`: GLB and `.gltf` files built

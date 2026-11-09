@@ -56,7 +56,7 @@ but needed one before the browser source is built).
 <a id="m1"></a>
 ## M1: Headless engine, driven by agents (Windows)
 <!-- @section
-depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0066-portable-windows-distribution-v2.md"]
+depends_on = ["docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0066-portable-windows-distribution-v2.md"]
 -->
 
 - **M1a Thin slice to YouTube:** WGC display capture → compositor (one scene) → MF H.264 +
@@ -64,7 +64,7 @@ depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0
   `jstream-core`, `jstream-server`, `jstream-mcp`, `jstream-cli`, `video.snapshot`.
 - **M1b Scenes and mixing:**
   - Scene graph and source kinds
-    ([ADR-0061](docs/adr/0061-source-types-and-decoding-scope-v2.md)): display, window,
+    ([ADR-0140](docs/adr/0140-source-types-and-decoding-scope-v3.md)): display, window,
     video capture device (webcam or capture card, incl. MJPEG decode, with its audio),
     image (PNG, JPEG, WebP, animated GIF), color, text, audio input, desktop audio,
     application audio, and **browser** ([ADR-0021](docs/adr/0021-browser-source.md);
@@ -122,7 +122,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   per-item delay, easing, glide and appear and disappear effects.
 - The program master chain and per-output chains with their cost shown
   ([ADR-0080](docs/adr/0080-program-master-and-output-chains-v2.md)).
-- Source kinds ([ADR-0061](docs/adr/0061-source-types-and-decoding-scope-v2.md)): **media
+- Source kinds ([ADR-0140](docs/adr/0140-source-types-and-decoding-scope-v3.md)): **media
   file** (video or audio, looping; OS demux and decode, A/V sync on the media clock),
   **audio waveform** and **audio spectrum**.
 - Built with the UI that uses them ([ADR-0024](docs/adr/0024-scene-structure.md)):
@@ -162,10 +162,46 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   item when wanted.
 - Linux: the platform crate per [ADR-0060](docs/adr/0060-linux-platform-support.md)
   (portal and PipeWire capture, VA-API encode). Per
-  [ADR-0061](docs/adr/0061-source-types-and-decoding-scope-v2.md), software H.264 is Cisco's
+  [ADR-0140](docs/adr/0140-source-types-and-decoding-scope-v3.md), software H.264 is Cisco's
   OpenH264 binary, downloaded on the user's request, and AAC is an AAC-LC encoder in Rust,
   built once its own patent-check ADR is accepted. The virtual camera via v4l2loopback
   needs root, so it gets its own ADR.
+
+<a id="beta"></a>
+## Beta: what the first beta needs
+<!-- @section
+depends_on = ["docs/runbooks/release.md#version", "docs/runbooks/windows-hardware-pass.md#setup"]
+-->
+
+The alphas add features. The first beta, `0.1.0-beta.1`
+([RUNBOOK-RELEASE › The version](docs/runbooks/release.md#version)), adds none: it is what
+the alphas ship, made dependable on Windows. Its targets are the `beta.1` release in
+[`docs/progress.toml`](docs/progress.toml), which the README shows once alpha.5 ships. The
+maintainer set its scope:
+
+- **Windows only.** Linux and macOS stay in [M3](#m3) and their hardware runs don't gate
+  it.
+- **Unsigned**, like the alphas. A code-signing certificate isn't part of it.
+- **No promise that past projects load.** A beta build need not load a project saved by
+  an earlier build.
+
+It ships when all of these hold on the candidate build. The list is unranked; the
+maintainer orders it when the beta is gathered:
+
+- **The bench passes.** `jstream bench` passes on the Windows pass machine
+  ([Setup](docs/runbooks/windows-hardware-pass.md#setup)), with the thread model and the
+  seamless preview alpha.5 aims for.
+- **Every Windows run passes.** Each merged item marked *Windows run* in the README's
+  What's left table passes it, in one acceptance pass on the candidate build rather
+  than one run at a time.
+- **No known Windows bug breaks a core flow.** Going live, recording, the virtual camera,
+  browser pages, media files and snapshots work, and stopping is graceful.
+- **The security basics hold**: the threat-model follow-ups, a permission policy for
+  browser pages, a GPU-hang story for shader packs, and asking before a new agent
+  connects.
+
+Everything else, new features, Linux and macOS included, goes to the alphas before it or
+to the releases after it.
 
 <a id="endgame"></a>
 ## Endgame: what done means

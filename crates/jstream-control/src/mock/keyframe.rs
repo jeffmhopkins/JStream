@@ -8,13 +8,15 @@
 //! writes the effects field, a whole list (ADR-0088), with the graph's checks that need
 //! no kind descriptor: the IDs, their uniqueness and the list's length. Like the rest of
 //! the mock it stores the settings as given. `item.set_motion` writes the motion field,
-//! a whole list (ADR-0099), with the wire's check that the graph uses too.
+//! a whole list (ADR-0099), with the wire's check that the graph uses too, and
+//! `item.set_timing` the timing field (ADR-0129), keyframe scenes only, an empty timing
+//! clearing it.
 
 use super::{Collection, already_exists, check_id, check_name, invalid, not_found};
 use jstream_protocol::{
     Blocker, Crop, Edit, EntityKind, FilterChains, FilterInfo, Finite32, ItemGeometry, ItemId,
-    ItemOverride, ItemTransform, MAX_CHAIN_FILTERS, MotionModifier, OverrideField, ProtocolError,
-    SceneId, SceneRole, Settings, SourceKind,
+    ItemOverride, ItemTransform, KeyframeTiming, MAX_CHAIN_FILTERS, MotionModifier, OverrideField,
+    ProtocolError, SceneId, SceneRole, Settings, SourceKind,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -39,6 +41,8 @@ pub(super) struct Override {
     effects: Option<FilterChains>,
     /// The motion modifiers, a whole list (ADR-0099).
     motion: Option<Vec<MotionModifier>>,
+    /// The timing in transitions into the keyframe (ADR-0129), never empty.
+    timing: Option<KeyframeTiming>,
 }
 
 impl Override {
@@ -93,6 +97,13 @@ impl Override {
                 motion: motion.clone(),
             });
         }
+        if let (Some(timing), Some(scene_id)) = (self.timing, scene_id.clone()) {
+            edits.push(Edit::ItemSetTiming {
+                scene_id,
+                item_id: item_id.clone(),
+                timing,
+            });
+        }
         if let (Some(effects), Some(scene_id)) = (&self.effects, scene_id) {
             edits.push(Edit::ItemSetEffects {
                 scene_id,
@@ -121,6 +132,7 @@ impl Override {
             OverrideField::Opacity => only.opacity = self.opacity,
             OverrideField::Effects => only.effects = self.effects.clone(),
             OverrideField::Motion => only.motion = self.motion.clone(),
+            OverrideField::Timing => only.timing = self.timing,
         }
         only
     }
@@ -134,6 +146,7 @@ impl Override {
             OverrideField::Opacity => self.opacity = None,
             OverrideField::Effects => self.effects = None,
             OverrideField::Motion => self.motion = None,
+            OverrideField::Timing => self.timing = None,
         }
     }
 
@@ -145,6 +158,7 @@ impl Override {
         self.opacity = other.opacity.or(self.opacity);
         self.effects = other.effects.or(self.effects.take());
         self.motion = other.motion.or(self.motion.take());
+        self.timing = other.timing.or(self.timing);
     }
 
     /// The field `edit` writes, as an override of that field alone, and the field.
@@ -182,6 +196,10 @@ impl Override {
                 o.motion = Some(motion.clone());
                 OverrideField::Motion
             }
+            Edit::ItemSetTiming { timing, .. } => {
+                o.timing = Some(*timing);
+                OverrideField::Timing
+            }
             _ => return None,
         };
         Some((o, field))
@@ -204,6 +222,7 @@ impl Override {
             opacity: self.opacity,
             effects: self.effects.as_ref().map(|e| e.video.clone()),
             motion: self.motion.clone(),
+            timing: self.timing,
         }
     }
 }
@@ -274,6 +293,26 @@ impl Collection {
                 Ok(None) => None,
                 Err(error) => Some(Err(error)),
             },
+            // Only a keyframe scene (ADR-0129); an empty timing clears the override.
+            Edit::ItemSetTiming {
+                scene_id,
+                item_id,
+                timing,
+            } => Some(match self.variant_target(item_id, Some(scene_id), at) {
+                Ok(Some(_)) if timing.is_empty() => {
+                    self.clear_override(scene_id, item_id, OverrideField::Timing, at)
+                }
+                Ok(Some(vi)) => self.write_override(vi, item_id, edit, at),
+                Ok(None) => Err(invalid(
+                    at,
+                    "scene_id",
+                    format!(
+                        "scene `{scene_id}` is item `{item_id}`'s own scene: an item's timing \
+                         is `item.set_transition`; name a keyframe scene here"
+                    ),
+                )),
+                Err(error) => Err(error),
+            }),
             // Only a keyframe scene: an item's own effects take `filter.*` (ADR-0088).
             Edit::ItemSetEffects {
                 scene_id, item_id, ..
@@ -346,6 +385,7 @@ impl Collection {
             options: Default::default(),
             camera: None,
             camera_motion: Vec::new(),
+            ptz_shots: Vec::new(),
             camera_follow: None,
             filters: Default::default(),
             variant_of: Some(variant_of.clone()),
@@ -496,6 +536,11 @@ impl Collection {
             Edit::ItemSetOpacity { opacity, .. } => super::check_opacity(*opacity, at)?,
             Edit::ItemSetEffects { effects, .. } => check_effects(effects, at)?,
             Edit::ItemSetMotion { motion, .. } => super::check_motion_list(motion, at)?,
+            Edit::ItemSetTiming { timing, .. } => {
+                if let Some((field, reason)) = timing.problem() {
+                    return Err(invalid(at, &format!("timing.{field}"), reason));
+                }
+            }
             _ => {}
         }
         let Some((written, field)) = Override::of_edit(edit) else {

@@ -48,11 +48,13 @@ jstream-plugin-proto.workspace = true
 # The wasmtime host the engine runs automation plugins on (ADR-0069), behind
 # `wasm-plugins`.
 jstream-plugin-wasm = { workspace = true, optional = true }
+# The JTunnel wire format and playout the receiver drives (ADR-0122, ADR-0123).
+jstream-jtunnel.workspace = true
 jstream-protocol.workspace = true
 jstream-render.workspace = true
-# The built-in source kinds and their descriptors (ADR-0061, ADR-0025).
+# The built-in source kinds and their descriptors (ADR-0140, ADR-0025).
 jstream-sources.workspace = true
-# PNG for `video.snapshot` (ADR-0061). Encoding only; deflate stays pure Rust.
+# PNG for `video.snapshot` (ADR-0140). Encoding only; deflate stays pure Rust.
 png.workspace = true
 # The installed WASM plugins' file (`plugins.json`, ADR-0076).
 serde.workspace = true
@@ -63,6 +65,8 @@ serde_json.workspace = true
 thiserror.workspace = true
 # Sign-in and the Live API for YouTube outputs and the YouTube commands (ADR-0058).
 jstream-youtube.workspace = true
+# VISCA's bytes for the PTZ cameras the engine drives (ADR-0146), pure and fuzzed.
+jstream-visca.workspace = true
 # Spans around commands, outputs and sessions (R-RS-005).
 tracing.workspace = true
 

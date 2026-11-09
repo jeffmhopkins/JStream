@@ -1235,7 +1235,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d045de693cb712d0b22c6a64be5b953f67b3ce00ab5ad3dd5d8b441886ab8e1a"
 dependencies = [
  "quote",
- "syn 2.0.119",
+ "syn 3.0.9",
 ]
 
 [[package]]
@@ -2817,6 +2817,8 @@ dependencies = [
  "jstream-platform",
  "jstream-platform-windows",
  "libc",
+ "rcgen",
+ "rustls",
  "thiserror 2.0.21",
  "tracing",
  "wgpu",
@@ -2875,6 +2877,7 @@ dependencies = [
  "jstream-effects",
  "jstream-encode",
  "jstream-graph",
+ "jstream-jtunnel",
  "jstream-mcp",
  "jstream-media",
  "jstream-mux",
@@ -2886,6 +2889,7 @@ dependencies = [
  "jstream-protocol",
  "jstream-render",
  "jstream-sources",
+ "jstream-visca",
  "jstream-youtube",
  "png",
  "serde",
@@ -2936,18 +2940,22 @@ name = "jstream-desktop"
 version = "0.1.0-alpha.4.2"
 dependencies = [
  "anyhow",
+ "futures-util",
  "getrandom 0.4.3",
  "jstream-browser",
  "jstream-control",
  "jstream-core",
  "jstream-crash",
  "jstream-platform",
+ "jstream-platform-linux",
+ "jstream-platform-macos",
  "jstream-platform-windows",
  "jstream-protocol",
  "jstream-server",
  "jstream-sources",
  "rustls",
  "rustls-native-certs",
+ "serde_json",
  "tauri",
  "tauri-build",
  "tokio",
@@ -2996,6 +3004,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "jstream-jtunnel"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
+ "jstream-midi",
+]
+
+[[package]]
 name = "jstream-mcp"
 version = "0.0.0"
 dependencies = [
@@ -3013,6 +3029,13 @@ name = "jstream-media"
 version = "0.0.0"
 dependencies = [
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "jstream-midi"
+version = "0.0.0"
+dependencies = [
+ "assert_no_alloc",
 ]
 
 [[package]]
@@ -3054,6 +3077,7 @@ dependencies = [
  "ash",
  "jstream-aac",
  "jstream-platform",
+ "jstream-protocol",
  "libc",
  "libloading 0.9.0",
  "ring",
@@ -3069,9 +3093,11 @@ dependencies = [
  "block2",
  "dispatch2",
  "jstream-platform",
+ "jstream-protocol",
  "libc",
  "mach2",
  "objc2",
+ "objc2-app-kit",
  "objc2-audio-toolbox",
  "objc2-av-foundation",
  "objc2-core-audio",
@@ -3093,6 +3119,7 @@ version = "0.0.0"
 dependencies = [
  "jstream-platform",
  "jstream-plugin-proto",
+ "jstream-protocol",
  "jstream-vcam-proto",
  "tracing",
  "wgpu",
@@ -3175,10 +3202,14 @@ dependencies = [
  "jstream-mcp",
  "jstream-platform-windows",
  "jstream-protocol",
+ "rcgen",
+ "ring",
+ "rustls",
  "serde",
  "serde_json",
  "thiserror 2.0.21",
  "tokio",
+ "tokio-rustls",
  "tokio-tungstenite",
  "tracing",
 ]
@@ -3195,6 +3226,7 @@ dependencies = [
  "jiff",
  "jstream-browser",
  "jstream-media",
+ "jstream-midi",
  "jstream-platform",
  "jstream-protocol",
  "png",
@@ -3246,6 +3278,10 @@ dependencies = [
  "windows",
  "windows-core",
 ]
+
+[[package]]
+name = "jstream-visca"
+version = "0.0.0"
 
 [[package]]
 name = "jstream-youtube"
@@ -6376,6 +6412,16 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 3.0.9",
+]
+
+[[package]]
+name = "tokio-rustls"
+version = "0.26.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c9cc2678c2cdd569ef8215e2afd7954ada2ae20b4fdd2c5fe6139a3b02d105db"
+dependencies = [
+ "rustls",
+ "tokio",
 ]
 
 [[package]]

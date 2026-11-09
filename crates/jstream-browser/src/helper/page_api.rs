@@ -13,6 +13,26 @@
 //! covers, it evaluates the shim there, keeps the update function it returns, and feeds
 //! it everything the cache holds; each later update goes to it as it arrives. CEF calls
 //! all of these on the renderer's main thread, so the state is that thread's own.
+//!
+//! # Behaviour
+//!
+//! A granted page gets a request
+//! context of its own, so no other page's renderer process holds it, and its grant and
+//! `ApiHome` go to the renderer in the browser's `extra_info`. The browser process keeps
+//! each page's updates merged (`PageCache`); once the browser exists it sends the whole
+//! cache, then each update, as a `jstream.page_data` process message to the main frame,
+//! and the whole cache again whenever the main frame starts loading a document, which
+//! may be in a renderer process that has none of it.
+//! In the renderer, the render-process handler keeps each granted browser's grant, home
+//! and cache; when a JavaScript context is made in a main frame whose URL the home
+//! covers, it evaluates the shim before any page script runs, feeds it the cache, and
+//! feeds it each later update, until that context is released (only that one: an old
+//! document's context can go after the new one's is made). A cross-origin navigation makes the renderer's new browser object before it destroys the old one with
+//! the same ID, so the entry is counted and goes only with the last. The shim reports
+//! only what changed, so the state sent again fires no events. A subframe, a popup, or a main frame on any other
+//! document gets no `window.jstream`. It takes messages only from the browser process,
+//! and the client drops every process message a renderer sends, so nothing reaches the
+//! engine from a page.
 
 use std::collections::HashMap;
 use std::os::raw::c_int;
@@ -31,6 +51,7 @@ const KEY_API: &str = "jstream.page_api";
 const KEY_SCENES: &str = "jstream.page_api.scenes";
 const KEY_VALUES: &str = "jstream.page_api.values";
 const KEY_LEVELS: &str = "jstream.page_api.levels";
+const KEY_MIDI: &str = "jstream.page_api.midi";
 const KEY_HOME_KIND: &str = "jstream.page_api.home_kind";
 const KEY_HOME: &str = "jstream.page_api.home";
 
@@ -42,14 +63,17 @@ pub(crate) fn extra_info(api: PageApi, home: &ApiHome) -> Option<DictionaryValue
     info.set_bool(Some(&KEY_SCENES.into()), c_int::from(api.scenes));
     info.set_bool(Some(&KEY_VALUES.into()), c_int::from(api.values));
     info.set_bool(Some(&KEY_LEVELS.into()), c_int::from(api.levels));
+    info.set_bool(Some(&KEY_MIDI.into()), c_int::from(api.midi));
     info.set_string(Some(&KEY_HOME_KIND.into()), Some(&kind.into()));
     info.set_string(Some(&KEY_HOME.into()), Some(&value.into()));
     Some(info)
 }
 
 /// `data` as the process message its page's main frame is sent: the clock (a flag and
-/// two numbers), the visibility, scenes and levels (empty for none: JSON text is never
-/// empty), then each value's name and JSON text (empty for one removed).
+/// two numbers), the visibility, scenes, levels and MIDI (empty for none: JSON text is
+/// never empty), then each value's name and JSON text (empty for one removed). The
+/// layout is private to this crate: the engine and the helper it starts are always the
+/// same build, so a reordering here needs no version, only [`read_message`] to match.
 pub(crate) fn message(data: &PageData) -> Option<ProcessMessage> {
     let message = process_message_create(Some(&MESSAGE.into()))?;
     let list = message.argument_list()?;
@@ -60,10 +84,11 @@ pub(crate) fn message(data: &PageData) -> Option<ProcessMessage> {
     list.set_string(3, Some(&data.source.as_deref().unwrap_or_default().into()));
     list.set_string(4, Some(&data.scenes.as_deref().unwrap_or_default().into()));
     list.set_string(5, Some(&data.levels.as_deref().unwrap_or_default().into()));
+    list.set_string(6, Some(&data.midi.as_deref().unwrap_or_default().into()));
     for (n, (name, value)) in data.values.iter().enumerate() {
-        list.set_string(6 + 2 * n, Some(&name.as_str().into()));
+        list.set_string(7 + 2 * n, Some(&name.as_str().into()));
         list.set_string(
-            7 + 2 * n,
+            8 + 2 * n,
             Some(&value.as_deref().unwrap_or_default().into()),
         );
     }
@@ -85,9 +110,10 @@ fn read_message(message: &ProcessMessage) -> Option<PageData> {
         source: text(3),
         scenes: text(4),
         levels: text(5),
+        midi: text(6),
         values: Vec::new(),
     };
-    let mut index = 6;
+    let mut index = 7;
     while index + 1 < list.size() {
         if let Some(name) = text(index) {
             data.values.push((name, text(index + 1)));
@@ -106,7 +132,7 @@ struct Granted {
     /// frame shows a document the rule covers.
     feed: Option<(V8Context, V8Value)>,
     /// How many browser objects with this ID the renderer holds: a cross-origin
-    /// navigation (a `data:` page's reload among them) creates the new one before it
+    /// navigation creates the new one before it
     /// destroys the old, so the entry goes only with the last.
     browsers: usize,
 }
@@ -163,6 +189,7 @@ wrap_render_process_handler! {
                 scenes: info.bool(Some(&KEY_SCENES.into())) == 1,
                 values: info.bool(Some(&KEY_VALUES.into())) == 1,
                 levels: info.bool(Some(&KEY_LEVELS.into())) == 1,
+                midi: info.bool(Some(&KEY_MIDI.into())) == 1,
             };
             let id = browser.identifier();
             self.granted.with(|granted| {

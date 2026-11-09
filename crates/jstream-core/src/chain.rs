@@ -98,7 +98,7 @@ impl std::fmt::Display for ChainOwner {
 
 /// The most `kind` draws beyond each edge of its input at any settings
 /// (`max_outset_px`, ADR-0065 §5): 0 for a kind that declares none.
-fn outset_of(kind: &str) -> u32 {
+fn max_outset_of(kind: &str) -> u32 {
     static OUTSETS: OnceLock<BTreeMap<String, u32>> = OnceLock::new();
     OUTSETS
         .get_or_init(|| {
@@ -110,6 +110,34 @@ fn outset_of(kind: &str) -> u32 {
         .get(kind)
         .copied()
         .unwrap_or(0)
+}
+
+/// The step an outset is rounded up to, px: a Move that blends a shadow's blur or a
+/// glow's radius (ADR-0127) resizes the padded layer only when it crosses a step.
+const OUTSET_STEP: u32 = 16;
+
+/// How far a filter of `kind` draws beyond each edge of its input at `settings`
+/// (ADR-0136), rounded up to [`OUTSET_STEP`] and never more than the kind's
+/// `max_outset_px`: a kind render doesn't measure takes that whole.
+fn outset_of(kind: &str, settings: &Settings) -> u32 {
+    let most = max_outset_of(kind);
+    if most == 0 {
+        return 0;
+    }
+    match jstream_render::video_filter_outset(kind, settings) {
+        Some(px) => ((px.max(0.0).ceil() as u32).div_ceil(OUTSET_STEP) * OUTSET_STEP).min(most),
+        None => most,
+    }
+}
+
+/// The `int` parameters of `descriptor`, which a Move's blend keeps whole (ADR-0127).
+fn whole_params(descriptor: &jstream_protocol::KindDescriptor) -> Vec<String> {
+    descriptor
+        .params
+        .iter()
+        .filter(|param| matches!(param.ty, jstream_protocol::ParamType::Int { .. }))
+        .map(|param| param.id.clone())
+        .collect()
 }
 
 /// One filter of a [`Chain`], as the collection holds it.
@@ -195,6 +223,9 @@ fn make(kind: &str, settings: &Settings, effect: Option<&PackEffect>) -> Option<
 pub(crate) struct Chain {
     pub(crate) input: GpuKey,
     pub(crate) filters: Vec<ChainFilter>,
+    /// For an item's effects: the filter whose input is padded, and by how many layer
+    /// pixels on every side (ADR-0065 §5, [`Self::pad_at_also`]). `None` for any other chain.
+    pub(crate) pad: Option<(usize, u32)>,
 }
 
 impl Chain {
@@ -256,6 +287,7 @@ impl Chain {
         let mut chain = chain.unwrap_or(Self {
             input,
             filters: Vec::new(),
+            pad: None,
         });
         chain.filters.insert(0, first);
         Some(chain)
@@ -272,6 +304,8 @@ impl Chain {
         let filters: Vec<ChainFilter> = filters
             .iter()
             .filter(|filter| filter.enabled())
+            // A follow camera drives its scene's camera and draws nothing (ADR-0120).
+            .filter(|filter| filter.kind() != jstream_protocol::FOLLOW_POINTER_KIND)
             .filter_map(|filter| {
                 let effect = assets.effects().get(filter.kind()).cloned();
                 let drawn = effect.is_some()
@@ -298,17 +332,60 @@ impl Chain {
                 })
             })
             .collect();
-        (!filters.is_empty()).then_some(Self { input, filters })
+        (!filters.is_empty()).then_some(Self {
+            input,
+            filters,
+            pad: None,
+        })
     }
 
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
-    /// sum of their kinds' `max_outset_px`. Only an item's effects layer is padded by it;
-    /// a source's or a scene's chain draws at its input's size (ADR-0065 §5).
-    pub(crate) fn outset(&self) -> u32 {
+    /// sum of what each draws past its input at its settings (ADR-0136), each filter
+    /// taking the largest of its own settings' outset and that of each of `also`'s
+    /// settings at its place: the look a Move blends from (ADR-0127), or the least and
+    /// the most the settings that motion drives reach (ADR-0138), so the layer holds
+    /// what the filters draw at any point between. Only an item's effects layer is
+    /// padded by it; a source's or a scene's chain draws at its input's size
+    /// (ADR-0065 §5).
+    pub(crate) fn outset_also(&self, also: &[&[Settings]]) -> u32 {
+        self.outsets(also).into_iter().fold(0, u32::saturating_add)
+    }
+
+    /// Each filter's outset, as [`Self::outset_also`] takes it.
+    fn outsets(&self, also: &[&[Settings]]) -> Vec<u32> {
         self.filters
             .iter()
-            .map(|filter| outset_of(&filter.kind))
-            .fold(0, u32::saturating_add)
+            .enumerate()
+            .map(|(at, filter)| {
+                let own = outset_of(&filter.kind, &filter.settings);
+                also.iter()
+                    .filter_map(|also| also.get(at))
+                    .fold(own, |most, other| most.max(outset_of(&filter.kind, other)))
+            })
+            .collect()
+    }
+
+    /// Where an item's effects layer grows, for a layer of `scale` pixels per canvas
+    /// pixel (ADR-0065 §5): at the first filter that draws past its input, by the
+    /// outset of it and every filter after it, with the outsets of
+    /// [`Self::outset_also`]. The filters before it see the item's box itself, so
+    /// rounded corners or a vignette frame the box, not the room a later drop shadow
+    /// needs. `None` when no filter draws past its input.
+    pub(crate) fn pad_at_also(&self, scale: f32, also: &[&[Settings]]) -> Option<(usize, u32)> {
+        let outsets = self.outsets(also);
+        let first = outsets.iter().position(|px| *px > 0)?;
+        let outset = outsets[first..]
+            .iter()
+            .fold(0u32, |sum, px| sum.saturating_add(*px));
+        Some((first, (outset as f32 * scale).ceil() as u32))
+    }
+
+    /// The padding filter `index` draws with: [`Self::pad`]'s when it names it, else 0.
+    fn pad_of(&self, index: usize) -> u32 {
+        match self.pad {
+            Some((at, px)) if at == index => px,
+            _ => 0,
+        }
     }
 
     /// The kinds of its filters an effect pack draws: its effects, and the shader
@@ -318,6 +395,77 @@ impl Chain {
             .iter()
             .filter(|filter| filter.effect.is_some() || filter.program.is_some())
             .map(|filter| filter.kind.as_str())
+    }
+
+    /// Each filter's `int` parameters, in order, which a Move keeps whole as it blends
+    /// their settings (ADR-0127): from a pack effect's descriptor, or the built-in
+    /// kind's.
+    pub(crate) fn whole_params(&self) -> Vec<Vec<String>> {
+        static BUILTIN: OnceLock<BTreeMap<String, Vec<String>>> = OnceLock::new();
+        let builtin = BUILTIN.get_or_init(|| {
+            jstream_render::video_filter_descriptors()
+                .iter()
+                .map(|kind| (kind.kind_id.clone(), whole_params(kind)))
+                .collect()
+        });
+        self.filters
+            .iter()
+            .map(|filter| match &filter.effect {
+                Some(effect) => whole_params(effect.kind_descriptor()),
+                None => builtin.get(&filter.kind).cloned().unwrap_or_default(),
+            })
+            .collect()
+    }
+
+    /// Each filter's settings as planned, in order.
+    pub(crate) fn own_settings(&self) -> Vec<Settings> {
+        self.filters.iter().map(|f| f.settings.clone()).collect()
+    }
+
+    /// What filter `index`'s parameter `param` is, when a motion modifier can drive it
+    /// (ADR-0138): a number, with its smallest and largest value (unbounded ends
+    /// infinite) and whether it is whole (`int`), or a colour; with its default, which
+    /// a filter saved before its kind gained the parameter draws. `None` for another
+    /// type, or a parameter or filter it doesn't have.
+    pub(crate) fn drivable(
+        &self,
+        index: usize,
+        param: &str,
+    ) -> Option<(crate::driven::Target, serde_json::Value)> {
+        use crate::driven::Target;
+        static BUILTIN: OnceLock<BTreeMap<String, jstream_protocol::KindDescriptor>> =
+            OnceLock::new();
+        let builtin = BUILTIN.get_or_init(|| {
+            jstream_render::video_filter_descriptors()
+                .into_iter()
+                .map(|kind| (kind.kind_id.clone(), kind))
+                .collect()
+        });
+        let filter = self.filters.get(index)?;
+        let descriptor = match &filter.effect {
+            Some(effect) => effect.kind_descriptor(),
+            None => builtin.get(&filter.kind)?,
+        };
+        let described = descriptor.params.iter().find(|p| p.id == param)?;
+        let target = match described.ty {
+            jstream_protocol::ParamType::Float { min, max, .. } => Some(Target::Number {
+                range: (
+                    min.unwrap_or(f64::NEG_INFINITY),
+                    max.unwrap_or(f64::INFINITY),
+                ),
+                whole: false,
+            }),
+            jstream_protocol::ParamType::Int { min, max, .. } => Some(Target::Number {
+                range: (
+                    min.map_or(f64::NEG_INFINITY, |v| v as f64),
+                    max.map_or(f64::INFINITY, |v| v as f64),
+                ),
+                whole: true,
+            }),
+            jstream_protocol::ParamType::Color { .. } => Some(Target::Color),
+            _ => None,
+        }?;
+        Some((target, described.default.clone()))
     }
 
     /// The enabled filters' kinds and settings, in order: what makes two items' effects
@@ -377,13 +525,28 @@ impl Chain {
         let mut size = (width, height);
         self.filters
             .iter()
-            .map(|filter| {
-                if let Some(drawn) = filter.video_filter() {
+            .enumerate()
+            .map(|(index, filter)| {
+                if let Some(mut drawn) = filter.video_filter() {
+                    drawn.set_pad(self.pad_of(index));
                     size = drawn.output_size(size.0, size.1);
                 }
                 size
             })
             .collect()
+    }
+
+    /// The scratch layer the padded filter copies its input into (ADR-0125), for an
+    /// input of `width` by `height`: that filter's input grown by the padding on every
+    /// side. `None` for a chain with no padding.
+    pub(crate) fn pad_layer(&self, width: u32, height: u32) -> Option<(u32, u32)> {
+        let (at, pad) = self.pad.filter(|(_, pad)| *pad > 0)?;
+        let input = match at.checked_sub(1) {
+            Some(before) => *self.layer_sizes(width, height).get(before)?,
+            None => (width, height),
+        };
+        let grow = pad.saturating_mul(2);
+        Some((input.0.saturating_add(grow), input.1.saturating_add(grow)))
     }
 
     /// The size the chain draws for an input of `width` by `height`: the source's
@@ -453,6 +616,12 @@ pub(crate) struct Chains {
     /// that nests the same scene at the same depth reads instead of drawing it again
     /// (#1070).
     drawn: BTreeSet<GpuKey>,
+    /// The 3D models this compositor draws (ADR-0107), uploaded once per version, by
+    /// the source that shows them.
+    models: BTreeMap<SourceId, (u64, jstream_render::GpuModel)>,
+    /// The models drawn since the chains last began a frame: one no frame drew is let
+    /// go when the next begins.
+    models_used: BTreeSet<SourceId>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -469,13 +638,16 @@ impl Chains {
     /// caller runs none of them again: every mix a tick draws shares one frame, and a
     /// stateful filter sees each tick once. Each chain then runs with [`Self::run_one`].
     /// `stages` are the output stage's chains (ADR-0080), kept the same way, which
-    /// [`Self::stage`] runs once each per frame.
+    /// [`Self::stage`] runs once each per frame. `blended` holds, for a chain whose item
+    /// a Move blends between two looks (ADR-0127), the settings each of its filters
+    /// draws with this frame, in place of the plan's.
     pub(crate) fn begin(
         &mut self,
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
         chains: &BTreeMap<ChainOwner, Chain>,
         stages: &BTreeMap<ChainOwner, Chain>,
+        blended: &[(&ChainOwner, Vec<Settings>)],
     ) -> bool {
         let frame = cache.frame();
         if self.ran == Some(frame) {
@@ -489,6 +661,8 @@ impl Chains {
         self.failed.clear();
         self.staged.clear();
         self.drawn.clear();
+        let used = std::mem::take(&mut self.models_used);
+        self.models.retain(|source, _| used.contains(source));
         let retired = &mut self.retired;
         self.running.retain(|source, running| {
             let keep = chains.contains_key(source) || stages.contains_key(source);
@@ -502,7 +676,11 @@ impl Chains {
                 self.running.insert(source.clone(), Vec::new());
             }
             if let Some(running) = self.running.get_mut(source) {
-                sync(source, running, &chain.filters, &mut self.retired);
+                let blend = blended
+                    .iter()
+                    .find(|(owner, _)| *owner == source)
+                    .map(|(_, settings)| settings.as_slice());
+                sync(source, running, &chain.filters, blend, &mut self.retired);
                 for (r, f) in running.iter_mut().zip(&chain.filters) {
                     refer(compositor, source, r, f, &mut self.retired);
                 }
@@ -525,7 +703,7 @@ impl Chains {
         compositor: &mut Compositor,
         cache: &mut ResourceCache<GpuKey>,
         (source, chain): (&ChainOwner, &Chain),
-        at: MediaTime,
+        (at, beat): (MediaTime, f64),
     ) {
         let Some(running) = self.running.get_mut(source) else {
             return;
@@ -539,7 +717,8 @@ impl Chains {
         // carried through the filters' sizes (ADR-0073), as the input's own size is.
         let mut size = (input.width(), input.height());
         let mut placed = input.extent();
-        for filter in running.iter_mut() {
+        for (index, filter) in running.iter_mut().enumerate() {
+            filter.filter.set_pad(chain.pad_of(index));
             size = filter.filter.output_size(size.0, size.1);
             placed = filter.filter.output_size(placed.0, placed.1);
             let made = cache
@@ -586,6 +765,7 @@ impl Chains {
         }
         let clock = FilterClock {
             seconds: at.as_secs_f64(),
+            beat,
         };
         let cache = &*cache;
         let mut input = &chain.input;
@@ -702,7 +882,46 @@ impl Chains {
 
     /// Whether `key`, an image a layer shows, is a chain output that failed this frame.
     pub(crate) fn failed(&self, key: &GpuKey) -> bool {
-        matches!(key, GpuKey::Filtered(owner) if self.failed.contains(owner))
+        match key {
+            GpuKey::Filtered(owner) => self.failed.contains(owner),
+            // A model's layer, shown as drawn when it has no effects (ADR-0107).
+            GpuKey::ItemBox(scene, item) => self
+                .failed
+                .contains(&ChainOwner::Item(scene.clone(), item.clone())),
+            _ => false,
+        }
+    }
+
+    /// Uploads the model `source` shows, unless the upload kept for it is of the same
+    /// version (ADR-0107): drawing it again then allocates nothing.
+    ///
+    /// # Errors
+    /// What the compositor reports for the upload.
+    pub(crate) fn upload_model(
+        &mut self,
+        compositor: &Compositor,
+        source: &SourceId,
+        model: &jstream_media::model::Model,
+    ) -> Result<(), RenderError> {
+        self.models_used.insert(source.clone());
+        if self
+            .models
+            .get(source)
+            .is_some_and(|(version, _)| *version == model.version())
+        {
+            return Ok(());
+        }
+        // The old upload goes first, so two versions are never held at once.
+        self.models.remove(source);
+        let uploaded = compositor.upload_model(model)?;
+        self.models
+            .insert(source.clone(), (model.version(), uploaded));
+        Ok(())
+    }
+
+    /// The upload kept for the model `source` shows.
+    pub(crate) fn model(&self, source: &SourceId) -> Option<&jstream_render::GpuModel> {
+        self.models.get(source).map(|(_, model)| model)
     }
 
     /// How many filters run, for tests.
@@ -731,35 +950,52 @@ fn sync(
     source: &ChainOwner,
     running: &mut Vec<Running>,
     filters: &[ChainFilter],
+    blended: Option<&[Settings]>,
     retired: &mut Vec<VideoFilter>,
 ) {
+    // The settings filter `at` draws with: the blend's this frame, or the plan's.
+    fn settings<'a>(
+        blended: Option<&'a [Settings]>,
+        at: usize,
+        f: &'a ChainFilter,
+    ) -> &'a Settings {
+        blended
+            .and_then(|blended| blended.get(at))
+            .unwrap_or(&f.settings)
+    }
     let same_shape = running.len() == filters.len()
         && running
             .iter()
             .zip(filters)
             .all(|(r, f)| r.id == f.id && r.kind == f.kind);
     if same_shape {
-        for (r, f) in running.iter_mut().zip(filters) {
-            update(r, f, retired);
+        for (at, (r, f)) in running.iter_mut().zip(filters).enumerate() {
+            update(r, f, settings(blended, at, f), retired);
         }
         return;
     }
     let mut old: Vec<Running> = std::mem::take(running);
-    for f in filters {
+    for (at, f) in filters.iter().enumerate() {
         let kept = old
             .iter()
             .position(|r| r.id == f.id && r.kind == f.kind)
             .map(|at| old.swap_remove(at));
         let entry = match kept {
             Some(mut r) => {
-                update(&mut r, f, retired);
+                update(&mut r, f, settings(blended, at, f), retired);
                 r
             }
             None => match f.video_filter() {
-                Some(filter) => Running {
+                Some(mut filter) => Running {
                     id: f.id.clone(),
                     kind: f.kind.clone(),
-                    settings: f.settings.clone(),
+                    settings: {
+                        let settings = settings(blended, at, f);
+                        if *settings != f.settings {
+                            filter.set_settings(settings);
+                        }
+                        settings.clone()
+                    },
                     effect: f.effect.clone(),
                     program: f.program.as_ref().map(|p| (p.source.clone(), p.shown)),
                     slots: Vec::new(),
@@ -783,26 +1019,35 @@ fn sync(
     retired.extend(old.into_iter().map(|r| r.filter));
 }
 
-/// Gives `running` the settings of `filter`, the same filter as the plan has it now: in
+/// Gives `running` `settings` (`filter`'s, or a Move's blend of them, ADR-0127) and the
+/// rest of `filter`, the same filter as the plan has it now: in
 /// place, or, when its pack effect was reloaded, by making it again with the new effect
 /// and retiring the old one. A pack effect keeps no state between frames, so nothing is
 /// lost.
 ///
 /// A program is made again when its shader source was reloaded, losing its feedback,
 /// and restarted when its source showed a new frame.
-fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFilter>) {
+fn update(
+    running: &mut Running,
+    filter: &ChainFilter,
+    settings: &Settings,
+    retired: &mut Vec<VideoFilter>,
+) {
     let program = filter.program.as_ref().map(|p| (p.source.clone(), p.shown));
     let reloaded = running.program.as_ref().map(|(source, _)| source)
         != program.as_ref().map(|(source, _)| source);
     if running.effect != filter.effect || reloaded {
-        if let Some(fresh) = filter.video_filter() {
+        if let Some(mut fresh) = filter.video_filter() {
+            if *settings != filter.settings {
+                fresh.set_settings(settings);
+            }
             retired.push(std::mem::replace(&mut running.filter, fresh));
         }
         running.effect = filter.effect.clone();
         running.program = program;
         // The new filter holds no slot yet.
         running.slots.clear();
-        running.settings = filter.settings.clone();
+        running.settings = settings.clone();
         if running.meter.is_none() {
             running.meter = meter_for(filter);
         }
@@ -814,9 +1059,9 @@ fn update(running: &mut Running, filter: &ChainFilter, retired: &mut Vec<VideoFi
         running.filter.restart();
         *shown = *now;
     }
-    if running.settings != filter.settings {
-        running.filter.set_settings(&filter.settings);
-        running.settings = filter.settings.clone();
+    if running.settings != *settings {
+        running.filter.set_settings(settings);
+        running.settings = settings.clone();
     }
     if running.meter.is_none() {
         running.meter = meter_for(filter);
@@ -2232,10 +2477,18 @@ mod tests {
     /// rotation_deg)` in `boxes`.
     fn placed(boxes: &[Placed]) -> Graph {
         let mut graph = graph(&[]);
-        let mut edits = vec![Edit::CanvasSetSize {
-            width: CANVAS.0,
-            height: CANVAS.1,
-        }];
+        // The grids were drawn in linear light, where a glow's faint edge still clears the
+        // black class; browser-style blending (ADR-0126) mixes it dimmer, so these pin
+        // the space they test the effects' reach in.
+        let mut edits = vec![
+            Edit::CanvasSetSize {
+                width: CANVAS.0,
+                height: CANVAS.1,
+            },
+            Edit::CanvasSetBlending {
+                blending: jstream_protocol::Blending::Linear,
+            },
+        ];
         for &(id, (x, y), (w, h), rotation_deg) in boxes {
             let mut geometry = jstream_protocol::ItemGeometry::try_new(
                 jstream_protocol::Vec2::new(x, y).expect("finite"),
@@ -2308,6 +2561,210 @@ mod tests {
             .flat_map(|line| line.chars().chain(['\n']))
             .collect();
         assert_eq!(actual, expected, "{what}\nactual:\n{actual}");
+    }
+
+    /// [`shot`], with `cam` showing an unlit white model of `shape` (ADR-0107) in place
+    /// of its frame, a transparent stand-in.
+    fn model_shot(graph: &Graph, shape: &str) -> Shot {
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!(shape));
+        settings.insert(String::from("lighting"), serde_json::json!("unlit"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        let source = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let shown = source.model().expect("a shape is a model");
+        let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
+        let frame = Frame::new(16, 9, &white, 1).expect("invariant: 16x9 RGBA8");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(Some(shown));
+        snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::Frame(
+                    if id.as_str() == "cam" {
+                        stand_in.clone()
+                    } else {
+                        frame.clone()
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot
+    }
+
+    /// A model item draws its model where its box is, posed by its geometry and moved by
+    /// its motion (ADR-0107 decision 6), with or without effects over its layer.
+    #[test]
+    fn golden_a_model_draws_in_its_box_and_moves_with_its_motion() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo")]);
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            ",
+            "the plane fills its box",
+        );
+        // An oscillator a quarter through its period is at its amplitude: 32 px right.
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetMotion {
+                item_id: ItemId::new("cam"),
+                scene_id: None,
+                motion: vec![
+                    serde_json::from_value(serde_json::json!({
+                        "modifier_id": "slide",
+                        "property": "x",
+                        "kind": "oscillate",
+                        "amplitude": 32,
+                        "period_ms": 3600000,
+                        "phase": 0.25,
+                    }))
+                    .expect("a modifier"),
+                ],
+            }],
+        );
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ",
+            "its motion moves the model",
+        );
+        apply(
+            &mut graph,
+            vec![vignette(FilterOwner::Item {
+                item_id: ItemId::new("cam"),
+            })],
+        );
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            ........WWWWWWBB
+            ........WWWWWWWB
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWW
+            ........WWWWWWWB
+            ........WWWWWBBB
+            ",
+            "effects run over the model's layer: the canvas's ellipse, cut to the model",
+        );
+    }
+
+    /// In a 3D scene a model is seen through the scene's camera (ADR-0107 decision 6): a
+    /// plane turned 60° about its vertical axis is half as wide, about its own centre.
+    #[test]
+    fn golden_a_model_is_seen_through_the_scene_camera() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        let mut geometry = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(32.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        geometry.fit_mode = jstream_protocol::FitMode::Stretch;
+        geometry.turn_deg = jstream_protocol::Finite32::new(60.0).expect("finite");
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+            ],
+        );
+        let expected = "
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWWW.......
+            .....WWW........
+            ";
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            expected,
+            "turned 60°, the plane is about half as wide, its near edge the longer",
+        );
+        // A flat item in the same pose covers the same pixels.
+        apply(
+            &mut graph,
+            vec![
+                hide("cam"),
+                Edit::ItemSetVisible {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    visible: true,
+                },
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry,
+                },
+            ],
+        );
+        // The flat item's edge is antialiased where the model's isn't: a cell between
+        // the two (`?`) counts as either.
+        if let Some(flat) = golden(&shot(&graph)) {
+            let model: String = expected
+                .lines()
+                .map(str::trim)
+                .filter(|line| !line.is_empty())
+                .flat_map(|line| line.chars().chain(['\n']))
+                .collect();
+            assert!(
+                flat.chars()
+                    .zip(model.chars())
+                    .all(|(f, m)| f == m || f == '?')
+                    && flat.len() == model.len(),
+                "a flat item in the same pose covers the same cells\nflat:\n{flat}"
+            );
+        }
     }
 
     /// `cam`, cropped to the middle half of its frame and stretched over the canvas.
@@ -2466,6 +2923,229 @@ mod tests {
             ......BWWB......
             ",
             "the ellipse turns with the box",
+        );
+    }
+
+    /// `effect` of `kind` with `settings` on item `id`'s effects.
+    fn effect(id: &str, kind: &str, settings: serde_json::Value) -> Edit {
+        Edit::FilterAdd {
+            owner: FilterOwner::Item {
+                item_id: ItemId::new(id),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(kind),
+            kind: kind.into(),
+            settings: serde_json::from_value(settings).expect("an object"),
+            enabled: Some(true),
+            index: None,
+        }
+    }
+
+    /// `cam`, opaque white, in a 24x12 box in the middle of the canvas, with a strong
+    /// blue glow or a hard blue drop shadow on the item. The glow's samples 2 px past
+    /// the box are a partly lit blue over black, so they read `?`; cut at the box, as
+    /// before, they read `.`. The effects layer has room past
+    /// the box (the kinds' `max_outset_px`, ADR-0065 §5), so the light and the shadow of
+    /// an opaque picture show around it instead of being cut at its edge (#1226).
+    #[test]
+    fn golden_a_glow_and_a_shadow_show_past_an_opaque_items_box() {
+        let graph = placed(&[("cam", (32.0, 18.0), (24.0, 12.0), 0.0)]);
+        let mut glow = graph.clone();
+        apply(
+            &mut glow,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "glow",
+                    serde_json::json!({"color": "#0000ff", "radius": 4.0, "strength": 4.0}),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&glow),
+            "
+            ................
+            ................
+            ....????????....
+            ....?WWWWWW?....
+            ....?WWWWWW?....
+            ....?WWWWWW?....
+            ....????????....
+            ................
+            ................
+            ",
+            "the glow rings the box",
+        );
+        let mut shadow = graph;
+        apply(
+            &mut shadow,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "drop_shadow",
+                    serde_json::json!({
+                        "color": "#0000ff", "offset_x": 8.0, "offset_y": 8.0, "blur": 0.0
+                    }),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&shadow),
+            "
+            ................
+            ................
+            ................
+            .....WWWWWW.....
+            .....WWWWWW.....
+            .....WWWWWWBB...
+            .......BBBBBB...
+            .......BBBBBB...
+            ................
+            ",
+            "the shadow falls past the box, below and to the right",
+        );
+    }
+
+    /// An item's layer grows by what its effects draw at their settings, not the most
+    /// their kinds could (ADR-0136): a drop shadow and an outline at their
+    /// defaults (8 px offset and blur, a 4 px stroke) pad it by 16 px each, not 300 and
+    /// 65.
+    #[test]
+    fn effects_at_their_defaults_pad_by_what_they_draw() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                effect("cam", "drop_shadow", serde_json::json!({})),
+                effect("cam", "outline", serde_json::json!({})),
+            ],
+        );
+        let shot = shot(&graph);
+        let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
+        assert_eq!(chain.map(|chain| chain.outset_also(&[])), Some(32));
+        assert_eq!(chain.and_then(|c| c.pad), Some((0, 32)));
+    }
+
+    /// A border with no outer stroke draws nothing past the box, so it doesn't grow the
+    /// layer; with one, the layer grows by the stroke after its gap (#1376).
+    #[test]
+    fn a_border_pads_only_for_its_outer_stroke() {
+        let pad = |settings: serde_json::Value| {
+            let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+            apply(
+                &mut graph,
+                vec![hide("logo"), effect("cam", "border", settings)],
+            );
+            let shot = shot(&graph);
+            let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
+            chain.and_then(|c| c.pad)
+        };
+        assert_eq!(pad(serde_json::json!({"width": 4.0})), None);
+        // 20 + 10 + 1 px, rounded up to the 16 px step.
+        assert_eq!(
+            pad(serde_json::json!({"outer_width": 10.0, "outer_gap": 20.0})),
+            Some((0, 32))
+        );
+    }
+
+    /// A `border` with rounded corners and an outer stroke on an opaque item (#1227): the
+    /// stroke rings the box past its edge, in the room the border's own outset gives it,
+    /// and the corners of the picture are cut round. The `?` samples fall on the
+    /// antialiased curve of a corner; the grid's samples sit right of and below each
+    /// cell's centre, so the right and bottom corners show more of them.
+    #[test]
+    fn golden_a_border_rings_an_opaque_items_box() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (24.0, 12.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                effect(
+                    "cam",
+                    "border",
+                    serde_json::json!({
+                        "width": 0.0, "radius": 6.0, "outer_width": 3.0,
+                        "outer_color": "#0000ff"
+                    }),
+                ),
+            ],
+        );
+        assert_golden(
+            &shot(&graph),
+            "
+            ................
+            ................
+            .....BBBBB?.....
+            ....BWWWWW??....
+            ....BWWWWWWB....
+            ....??WWWW?.....
+            .....?BBBB......
+            ................
+            ................
+            ",
+            "the outer stroke rings the box",
+        );
+    }
+
+    /// A vignette before an effect that draws past the box (a glow, here an invisible
+    /// one) frames the box itself, as it does alone: the layer grows only where the glow
+    /// runs (`Chain::pad_at`), so rounded corners or a vignette followed by a shadow keep
+    /// their shape (#1226).
+    #[test]
+    fn golden_effects_before_a_glow_frame_the_box_itself() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                vignette(FilterOwner::Item {
+                    item_id: ItemId::new("cam"),
+                }),
+                effect(
+                    "cam",
+                    "glow",
+                    serde_json::json!({"color": "#0000ff00", "radius": 50.0}),
+                ),
+            ],
+        );
+        let shot = shot(&graph);
+        let chain = shot.item_chain(&SceneId::new("main"), &ItemId::new("cam"));
+        let chain = chain.expect("cam's effects");
+        // The glow's radius, 50, rounded up to the 16 px step (ADR-0136).
+        assert_eq!(chain.pad, Some((1, 64)));
+        // The pad copy is one more layer and pass, the glow's input grown by the pad
+        // on every side (#1285).
+        let box_size = (64, 36);
+        let sizes = chain.layer_sizes(box_size.0, box_size.1);
+        assert_eq!(chain.pad_layer(box_size.0, box_size.1), Some((192, 164)));
+        let bytes = |(w, h): (u32, u32)| u64::from(w) * u64::from(h) * 8;
+        let cost = shot.chain_cost([]);
+        assert_eq!(
+            (cost.item_layers, cost.item_passes),
+            (4, 4),
+            "the box, the vignette, the pad copy and the glow"
+        );
+        assert_eq!(
+            cost.layer_bytes,
+            bytes(box_size) + sizes.iter().copied().map(bytes).sum::<u64>() + bytes((192, 164))
+        );
+        assert_golden(
+            &shot,
+            "
+            BBWWWWWWWWWWWWBB
+            WWWWWWWWWWWWWWWB
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            WWWWWWWWWWWWWWWW
+            BWWWWWWWWWWWWWWB
+            BBBWWWWWWWWWWBBB
+            ",
+            "the vignette frames the box, not the glow's room",
         );
     }
 

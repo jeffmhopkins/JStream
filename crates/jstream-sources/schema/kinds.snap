@@ -1,5 +1,6 @@
 ---
 source: crates/jstream-sources/tests/kinds.rs
+assertion_line: 17
 ---
 [
   {
@@ -241,7 +242,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "max_len": 131072,
         "default": "",
         "label": "HTML",
-        "description": "The page itself, as HTML with its CSS and scripts inline: a graphic built here instead of loaded from a URL. Ignored when a local file is set. It can load fonts and images from the web, but no local files, and reaches this computer and the local network only when allowed below.",
+        "description": "The page itself, as HTML with its CSS and scripts inline: a graphic built here instead of loaded from a URL. Ignored when a local file is set. It can load fonts, images and scripts from the web over https, but no local files, and reaches this computer and the local network only when allowed below.",
         "live": false
       },
       {
@@ -269,13 +270,13 @@ source: crates/jstream-sources/tests/kinds.rs
       {
         "id": "fps",
         "type": "int",
-        "min": 1,
+        "min": 0,
         "max": 60,
         "step": 1,
         "unit": "fps",
-        "default": 30,
+        "default": 0,
         "label": "Frame rate",
-        "description": "The most frames a second the page paints. It paints less when nothing changes.",
+        "description": "The most frames a second the page paints. It paints less when nothing changes. 0 follows the program's frame rate, so a page's animation is as smooth as the program.",
         "live": false
       },
       {
@@ -301,7 +302,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Allow local network",
-        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. A local file or a page on the local network may always.",
+        "description": "Let a page from the internet make requests to this computer and the local network (localhost, 192.168.x.x and the like), for widgets that talk to an app running here. Off, those requests are refused. It covers the page's own origin only, and only a page loaded over https. A local file or a page on the local network may always.",
         "advanced": true,
         "live": false
       },
@@ -310,7 +311,8 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Page API",
-        "description": "Give the page window.jstream: the engine's clock, so it moves in step with native motion and other pages, and whether this source is shown on program and preview. A page from the web can send what it reads anywhere.",
+        "description": "Give the page window.jstream: the engine's clock, so it moves in step with native motion and other pages, and whether this source is shown on program and preview. Each kind of data below is its own checkbox.",
+        "warning": "A page from the web can send what it reads anywhere.",
         "group": "Page API",
         "live": false
       },
@@ -319,7 +321,22 @@ source: crates/jstream-sources/tests/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Scenes",
-        "description": "Also give the page the program and preview scenes' names. A preview scene's name can say what hasn't been shown yet.",
+        "description": "Also give the page the program and preview scenes' names.",
+        "warning": "Preview scene names can say what hasn't been shown yet.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_shared_values",
+        "type": "bool",
+        "default": false,
+        "label": "Shared values",
+        "description": "Also give the page the shared values named below, set with values.set.",
+        "warning": "The page can read these values, and a page from the web can send them anywhere.",
         "group": "Page API",
         "visible_if": {
           "param": "page_api",
@@ -333,8 +350,22 @@ source: crates/jstream-sources/tests/kinds.rs
         "multiline": false,
         "max_len": 1024,
         "default": "",
-        "label": "Shared values",
-        "description": "The shared values the page may read, set with values.set: names or prefixes ending in .*, separated by commas (status.text, counter.*). Empty gives it none.",
+        "label": "Value names",
+        "description": "The shared values the page may read: names or prefixes ending in .*, separated by commas (status.text, counter.*).",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api_shared_values",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_audio",
+        "type": "bool",
+        "default": false,
+        "label": "Audio levels",
+        "description": "Also give the page one bus's levels and spectrum bands, after its fader, with jstream.levels(). Never its samples.",
+        "warning": "A page given a bus can follow the shape of its sound, and a page from the web can send that anywhere. Give it only the bus it shows.",
         "group": "Page API",
         "visible_if": {
           "param": "page_api",
@@ -346,11 +377,54 @@ source: crates/jstream-sources/tests/kinds.rs
         "id": "page_api_bus",
         "type": "bus",
         "default": null,
-        "label": "Levels",
-        "description": "The bus whose levels and bands the page may read, after its fader, with jstream.levels(). A page given a bus can follow the shape of its sound, and a page from the web can send that anywhere. Give it only the bus it shows.",
+        "label": "Bus",
+        "description": "The bus whose levels the page may read.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api_audio",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_tempo",
+        "type": "bool",
+        "default": false,
+        "label": "Tempo",
+        "description": "Also give the page the engine's tempo: the tempo.* shared values, and the tempo in jstream.midi()'s reading (ADR-0147).",
+        "warning": "A page given the tempo can follow the song's beat and transport, and a page from the web can send that anywhere.",
         "group": "Page API",
         "visible_if": {
           "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_midi",
+        "type": "bool",
+        "default": false,
+        "label": "MIDI",
+        "description": "Also give the page one MIDI input's held notes, controllers and latest notes, with jstream.midi() (ADR-0147); its tempo too while Tempo is on.",
+        "warning": "A page given MIDI sees every note and control on its port.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api",
+          "equals": true
+        },
+        "live": false
+      },
+      {
+        "id": "page_api_midi_input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The MIDI input the page may read: a MIDI port's or JTunnel sender's name. Empty gives it every input at once.",
+        "group": "Page API",
+        "visible_if": {
+          "param": "page_api_midi",
           "equals": true
         },
         "live": false
@@ -610,6 +684,675 @@ source: crates/jstream-sources/tests/kinds.rs
         "label": "Restart when shown",
         "description": "Plays from the start each time the program shows it again.",
         "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "midi_beat",
+    "category": "source",
+    "name": "MIDI beat",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The input it draws: a MIDI port's or JTunnel sender's name. Empty draws every input at once.",
+        "live": false
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 480,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 80,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "beats_per_bar",
+        "type": "int",
+        "min": 1,
+        "max": 16,
+        "step": 1,
+        "default": 4,
+        "label": "Beats per bar",
+        "description": "How many beats a bar has: MIDI clock counts beats but carries no meter.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#36c3ffff",
+        "label": "Beat",
+        "live": true
+      },
+      {
+        "id": "downbeat",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffb000ff",
+        "label": "First beat",
+        "description": "The colour of each bar's first beat.",
+        "live": true
+      },
+      {
+        "id": "off",
+        "type": "color",
+        "alpha": true,
+        "default": "#2a2a2aff",
+        "label": "Other beats",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "midi_cc",
+    "category": "source",
+    "name": "MIDI controller meters",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The input it draws: a MIDI port's or JTunnel sender's name. Empty draws every input at once.",
+        "live": false
+      },
+      {
+        "id": "channel",
+        "type": "int",
+        "min": 0,
+        "max": 16,
+        "step": 1,
+        "default": 0,
+        "label": "Channel",
+        "description": "The MIDI channel it draws, 1 to 16, as a device's panel shows it; 0 draws every channel.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 320,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 160,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "controllers",
+        "type": "string",
+        "multiline": false,
+        "max_len": 128,
+        "default": "1, 7, 11, 74",
+        "label": "Controllers",
+        "description": "The controller numbers drawn, left to right, separated by commas: 1 is the mod wheel, 7 volume, 11 expression, 74 brightness. At most 16.",
+        "live": true
+      },
+      {
+        "id": "pitch_bend",
+        "type": "bool",
+        "default": false,
+        "label": "Pitch bend",
+        "description": "Adds a bar for pitch bend after the controllers, drawn from the middle.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#7ee081ff",
+        "label": "Bar",
+        "live": true
+      },
+      {
+        "id": "track",
+        "type": "color",
+        "alpha": true,
+        "default": "#2a2a2aff",
+        "label": "Track",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "midi_keyboard",
+    "category": "source",
+    "name": "MIDI keyboard",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The input it draws: a MIDI port's or JTunnel sender's name. Empty draws every input at once.",
+        "live": false
+      },
+      {
+        "id": "channel",
+        "type": "int",
+        "min": 0,
+        "max": 16,
+        "step": 1,
+        "default": 0,
+        "label": "Channel",
+        "description": "The MIDI channel it draws, 1 to 16, as a device's panel shows it; 0 draws every channel.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1280,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 160,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "low_key",
+        "type": "int",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 21,
+        "label": "Lowest key",
+        "description": "The lowest key drawn: 21 is a piano's lowest A, 60 middle C.",
+        "live": true
+      },
+      {
+        "id": "high_key",
+        "type": "int",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 108,
+        "label": "Highest key",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ff5a36ff",
+        "label": "Held key",
+        "description": "A held key's colour, brighter the harder it was struck.",
+        "live": true
+      },
+      {
+        "id": "white_key",
+        "type": "color",
+        "alpha": true,
+        "default": "#f2f2f2ff",
+        "label": "White key",
+        "live": true
+      },
+      {
+        "id": "black_key",
+        "type": "color",
+        "alpha": true,
+        "default": "#1e1e1eff",
+        "label": "Black key",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "midi_pads",
+    "category": "source",
+    "name": "MIDI drum pads",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The input it draws: a MIDI port's or JTunnel sender's name. Empty draws every input at once.",
+        "live": false
+      },
+      {
+        "id": "channel",
+        "type": "int",
+        "min": 0,
+        "max": 16,
+        "step": 1,
+        "default": 10,
+        "label": "Channel",
+        "description": "The MIDI channel it draws, 1 to 16, as a device's panel shows it; 0 draws every channel.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 480,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 240,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "rows",
+        "type": "int",
+        "min": 1,
+        "max": 8,
+        "step": 1,
+        "default": 2,
+        "label": "Rows",
+        "live": true
+      },
+      {
+        "id": "columns",
+        "type": "int",
+        "min": 1,
+        "max": 8,
+        "step": 1,
+        "default": 4,
+        "label": "Columns",
+        "live": true
+      },
+      {
+        "id": "first_key",
+        "type": "int",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 36,
+        "label": "First key",
+        "description": "The bottom-left pad's key; each pad to the right, then each row up, is the next key. 36 is General MIDI's bass drum.",
+        "live": true
+      },
+      {
+        "id": "decay_ms",
+        "type": "int",
+        "min": 0,
+        "max": 5000,
+        "step": 1,
+        "default": 250,
+        "label": "Decay",
+        "description": "How long a pad fades after its note starts, in milliseconds, so a short drum hit still shows. A held note stays lit.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#36c3ffff",
+        "label": "Hit pad",
+        "live": true
+      },
+      {
+        "id": "pad",
+        "type": "color",
+        "alpha": true,
+        "default": "#2a2a2aff",
+        "label": "Pad",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "midi_piano_roll",
+    "category": "source",
+    "name": "MIDI piano roll",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 64,
+        "default": "",
+        "label": "MIDI input",
+        "description": "The input it draws: a MIDI port's or JTunnel sender's name. Empty draws every input at once.",
+        "live": false
+      },
+      {
+        "id": "channel",
+        "type": "int",
+        "min": 0,
+        "max": 16,
+        "step": 1,
+        "default": 0,
+        "label": "Channel",
+        "description": "The MIDI channel it draws, 1 to 16, as a device's panel shows it; 0 draws every channel.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 1280,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 360,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "low_key",
+        "type": "int",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 36,
+        "label": "Lowest key",
+        "description": "The lowest key drawn: 21 is a piano's lowest A, 60 middle C.",
+        "live": true
+      },
+      {
+        "id": "high_key",
+        "type": "int",
+        "min": 0,
+        "max": 127,
+        "step": 1,
+        "default": 96,
+        "label": "Highest key",
+        "live": true
+      },
+      {
+        "id": "seconds",
+        "type": "float",
+        "min": 0.5,
+        "max": 30.0,
+        "step": 0.5,
+        "unit": "s",
+        "default": 4.0,
+        "label": "Seconds shown",
+        "description": "How much time the roll shows: a note scrolls from the right edge, where it sounds, to the left in this long. It keeps the last 1024 note events, so a very busy performance shows its newest notes.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffb000ff",
+        "label": "Note",
+        "description": "A note's colour, brighter the harder it was struck.",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "model",
+    "category": "source",
+    "name": "3D model",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "shape",
+        "type": "enum",
+        "options": [
+          {
+            "value": "file",
+            "label": "From a file"
+          },
+          {
+            "value": "plane",
+            "label": "Plane"
+          },
+          {
+            "value": "cube",
+            "label": "Cube"
+          },
+          {
+            "value": "sphere",
+            "label": "Sphere"
+          },
+          {
+            "value": "cylinder",
+            "label": "Cylinder"
+          },
+          {
+            "value": "cone",
+            "label": "Cone"
+          }
+        ],
+        "default": "file",
+        "label": "Shape",
+        "description": "A glTF file, or a built-in shape one unit across.",
+        "live": false
+      },
+      {
+        "id": "file",
+        "type": "asset",
+        "accept": [
+          "glb",
+          "gltf"
+        ],
+        "default": null,
+        "label": "Model file",
+        "description": "A glTF 2.0 file (.glb, or .gltf with its files beside it), for the shape `file`.",
+        "live": false
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#ffffffff",
+        "label": "Color",
+        "description": "A shape's base colour; multiplies a file's own.",
+        "live": true
+      },
+      {
+        "id": "metallic",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.0,
+        "label": "Metallic",
+        "description": "How metallic a shape is. A file's materials keep their own.",
+        "live": true
+      },
+      {
+        "id": "roughness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.5,
+        "label": "Roughness",
+        "description": "How rough a shape is, 0 a mirror. A file's materials keep their own.",
+        "live": true
+      },
+      {
+        "id": "lighting",
+        "type": "enum",
+        "options": [
+          {
+            "value": "studio",
+            "label": "Studio"
+          },
+          {
+            "value": "unlit",
+            "label": "Unlit"
+          }
+        ],
+        "default": "studio",
+        "label": "Lighting",
+        "description": "Studio lights it from above and to the left of the camera; unlit shows its colours as they are.",
+        "live": true
+      },
+      {
+        "id": "double_sided",
+        "type": "bool",
+        "default": false,
+        "label": "Double-sided",
+        "description": "Draw a shape's back faces too. A file's materials keep their own.",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "network_audio",
+    "category": "source",
+    "name": "Network audio",
+    "version": 1,
+    "video": false,
+    "audio": true,
+    "params": [
+      {
+        "id": "transport",
+        "type": "enum",
+        "options": [
+          {
+            "value": "jtunnel",
+            "label": "JTunnel"
+          }
+        ],
+        "default": "jtunnel",
+        "label": "Transport",
+        "description": "How the audio arrives. JTunnel is a DAW plugin that sends a track over the local network.",
+        "live": false
+      },
+      {
+        "id": "sender",
+        "type": "string",
+        "multiline": false,
+        "max_len": 31,
+        "default": "",
+        "label": "Sender",
+        "description": "The sender's name, as its plugin shows it. JStream receives only from senders accepted on this machine.",
+        "live": false
+      },
+      {
+        "id": "latency_ms",
+        "type": "int",
+        "min": 5,
+        "max": 500,
+        "step": 1,
+        "unit": "ms",
+        "default": 40,
+        "label": "Latency",
+        "description": "How long frames wait before they play, so one delayed on the network still arrives in time. Higher survives a busier network; lower is closer to live.",
+        "live": false
       }
     ]
   },
@@ -1451,13 +2194,56 @@ source: crates/jstream-sources/tests/kinds.rs
     "params": [
       {
         "id": "device",
-        "type": "string",
-        "multiline": false,
+        "type": "capture_target",
+        "kind": "device",
         "max_len": 1024,
         "default": "",
         "label": "Device",
-        "description": "The ID of the webcam or capture card, as the platform lists it. Empty captures the first device listed.",
+        "description": "The ID of the webcam or capture card, as `capture.targets` lists it. Empty captures the first device listed.",
         "live": false
+      },
+      {
+        "id": "resolution",
+        "type": "capture_format",
+        "part": "resolution",
+        "target": "device",
+        "default": "",
+        "label": "Resolution",
+        "description": "The frame size to capture, as `<width>x<height>` (`1920x1080`), one the device lists in `capture.targets`. Empty lets the engine choose: the largest up to 1920x1080.",
+        "group": "Format",
+        "live": false
+      },
+      {
+        "id": "fps",
+        "type": "capture_format",
+        "part": "fps",
+        "target": "device",
+        "default": 0,
+        "label": "Frame rate",
+        "description": "The frames per second to capture, one the device lists for the resolution. 0 lets the engine choose: the fastest.",
+        "group": "Format",
+        "live": false
+      },
+      {
+        "id": "pixel_format",
+        "type": "capture_format",
+        "part": "pixel_format",
+        "target": "device",
+        "default": "",
+        "label": "Video format",
+        "description": "How the device sends its frames: `mjpeg` (compressed, decoded by the engine), `yuy2`, `nv12`, `bgra` or `rgba`. Empty lets the engine choose: uncompressed when it can.",
+        "group": "Format",
+        "live": false
+      },
+      {
+        "id": "camera_controls",
+        "type": "camera_controls",
+        "target": "device",
+        "default": {},
+        "label": "Camera controls",
+        "description": "The device's camera controls to set, by name, each to a number in the range `capture.targets` lists for it or to `\"auto\"` to let the device set it: `{\"exposure\": -6, \"white_balance\": \"auto\"}`. A control left out keeps what the device has. Applied while the device captures, without restarting it.",
+        "group": "Camera",
+        "live": true
       }
     ]
   },

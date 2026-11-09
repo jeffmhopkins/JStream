@@ -1,5 +1,5 @@
 //! Help › Check for updates, and the Settings checkbox that runs it at launch
-//! (docs/UI-FEATURES.md#header).
+//! (docs/UI-FEATURES.md#header), on the Settings dialog's General page (`settings.rs`).
 //!
 //! The desktop app serves GitHub's public releases list at [`CHECK_PATH`] (its
 //! `updates.rs`). This page reads that list and compares it with the version it was
@@ -16,6 +16,7 @@
 use crate::about::{REPOSITORY, VERSION};
 use crate::dialog::Modal;
 use crate::host;
+use crate::ui_settings::{self, GLOBAL_HOTKEYS_KEY, Kept, global_hotkeys_on};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde_json::Value;
@@ -441,46 +442,76 @@ pub fn UpdateDialog(
     }
 }
 
-/// Settings. The launch check is the first thing it holds; the dialog grows as the
-/// other application settings arrive.
+/// The Settings dialog's General page (`settings.rs`): "Check for updates at launch" and,
+/// in the desktop app, whether hotkeys are heard while another application has the focus.
 #[component]
-pub fn SettingsDialog(
-    /// Closes the dialog.
-    close: impl Fn() + Copy + Send + Sync + 'static,
-) -> impl IntoView {
+pub fn LaunchCheckSetting() -> impl IntoView {
     let on = RwSignal::new(kept_launch_check());
+    // Global hotkeys, in the desktop app only: the server keeps the switch, which the
+    // desktop app reads (ADR-0112 §6).
+    let session = host::desktop().and_then(|_| {
+        use_context::<crate::app::SessionContext>().and_then(|context| context.get())
+    });
+    let global = RwSignal::new(None::<bool>);
+    if let Some(session) = &session {
+        let control = session.control.clone();
+        spawn_local(async move {
+            if let Ok(kept) = ui_settings::get(&*control, GLOBAL_HOTKEYS_KEY).await
+                && kept != Kept::Unserved
+            {
+                global.try_set(Some(global_hotkeys_on(&kept)));
+            }
+        });
+    }
+    let control = StoredValue::new_local(session.map(|session| session.control));
+    let keep_global = move |checked: bool| {
+        global.set(Some(checked));
+        let Some(control) = control.get_value() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(error) =
+                ui_settings::set(&*control, GLOBAL_HOTKEYS_KEY, Value::Bool(checked)).await
+            {
+                leptos::logging::warn!("the hotkeys setting could not be kept: {error}");
+            }
+        });
+    };
     view! {
-        <Modal label="Settings" class="settings-dialog" cancel=close>
-            <div class="modal-header">
-                <div class="modal-titles">
-                    <h2 class="modal-title">"Settings"</h2>
-                </div>
-                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
-            </div>
-            <div class="settings-body">
-                <label class="settings-check">
-                    <input
-                        type="checkbox"
-                        aria-label="Check for updates at launch"
-                        prop:checked=move || on.get()
-                        on:change=move |event| {
-                            let checked = event_target_checked(&event);
-                            on.set(checked);
-                            keep_launch_check(checked);
-                        }
-                    />
-                    <span>
-                        <span class="settings-check-label">"Check for updates at launch"</span>
-                        <span class="settings-check-note">
-                            "When on, the desktop app looks once at start and shows a notice only when a newer release exists. Nothing is downloaded. Off until you turn it on."
-                        </span>
+        <label class="settings-check">
+            <input
+                type="checkbox"
+                aria-label="Check for updates at launch"
+                prop:checked=move || on.get()
+                on:change=move |event| {
+                    let checked = event_target_checked(&event);
+                    on.set(checked);
+                    keep_launch_check(checked);
+                }
+            />
+            <span>
+                <span class="settings-check-label">"Check for updates at launch"</span>
+                <span class="settings-check-note">
+                    "When on, the desktop app looks once at start and shows a notice only when a newer release exists. Nothing is downloaded. Off until you turn it on."
+                </span>
+            </span>
+        </label>
+        <Show when=move || global.get().is_some()>
+            <label class="settings-check">
+                <input
+                    type="checkbox"
+                    aria-label="Hear hotkeys while another app has the focus"
+                    prop:checked=move || global.get().unwrap_or(true)
+                    on:change=move |event| keep_global(event_target_checked(&event))
+                />
+                <span>
+                    <span class="settings-check-label">"Hear hotkeys while another app has the focus"</span>
+                    <span class="settings-check-note">
+                        "When on, the desktop app listens for the keys you've bound, and only those, while you work in another app. A key another app already holds is heard only while JStream has the focus. On until you turn it off."
                     </span>
-                </label>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="primary" data-primary on:click=move |_| close()>"Close"</button>
-            </div>
-        </Modal>
+                </span>
+            </label>
+        </Show>
     }
 }
 

@@ -63,10 +63,10 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     EncoderProfile, EncoderProfileId, HardwarePreference as ProfileHardware, OutputId, OutputKind,
-    ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
+    ProfileStream, ProtocolError, RateControl as ProfileRate, VideoCodec, VideoMixId,
 };
 use jstream_render::{
-    Compositor, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
+    Compositor, Copier, Nv12Converter, Nv12Pass, Nv12Target, OpenOptions, ReadbackRing, Reclaimed,
     RenderError, ResourceCache,
 };
 use jstream_sources::AudioScopes;
@@ -81,7 +81,11 @@ use crate::drops::{
 use crate::engine::Engine;
 use crate::lock;
 use crate::output_stats::{MeterGuard, OutputSample, ReadSample, SentCounters};
-use crate::profile::{DrawMeter, Phase};
+use crate::profile::{
+    DrawMeter, MixerGuard, MixerMeter, MixerSource, Phase, StreamGuard, StreamMeter, StreamTotals,
+    streams,
+};
+use crate::quality::{ProbeJob, ProbeTap};
 use crate::runtime::captures::{self, RenderCaptures};
 use crate::runtime::sink::{Destination, Sink, StreamInfo};
 use crate::runtime::vcam::{VcamOut, VcamSlot, VcamTap, camera_channels, run_camera};
@@ -219,7 +223,8 @@ pub(crate) struct MixFrame {
     /// The first base tick it is due on again.
     pub(crate) next: u64,
     /// Whether this tick reads it back into `out`: a session on the CPU path or a
-    /// virtual camera is fed it. Without, `out` is left as it was.
+    /// virtual camera is fed it, or a quality probe is armed on a GPU session it feeds
+    /// (ADR-0145). Without, `out` is left as it was.
     pub(crate) readback: bool,
     /// Where it is read back: RGBA8 at `size` once a readback the draw recorded has
     /// finished, a tick or two after it was drawn (ADR-0117 §4).
@@ -238,9 +243,17 @@ pub(crate) struct MixFrame {
     pushed: Option<MediaTime>,
     /// This tick's [`MixFrame::push_time`].
     pub(crate) push_at: Option<MediaTime>,
+    /// Whether `push_at` is a frame newly read back, at the time it was drawn for,
+    /// rather than the last one repeated: only such a frame is the reference of the GPU
+    /// frame of its draw (ADR-0145).
+    pub(crate) push_fresh: bool,
     /// Ticks this mix was not read back because every readback buffer was still on its
     /// way (R-RT-004), counted by the draw.
     pub(crate) unread: u64,
+    /// Whether this tick reads it back only for a quality probe of a GPU session, which
+    /// is sent every frame whether or not the readback keeps up: its `unread` are no
+    /// dropped frames, so [`MixFrame::take_unread`] counts none (ADR-0145).
+    pub(crate) probe_only: bool,
     /// The platform's NV12 encode target on the compositor's device to convert it into
     /// this tick (ARCH › GPU pipeline, step 4), for the sessions on the GPU path.
     pub(crate) nv12: Option<GpuFrame>,
@@ -256,11 +269,15 @@ impl MixFrame {
     fn push_time(&mut self, due: MediaTime, broken: bool) -> Option<MediaTime> {
         let fresh = self.fresh.take();
         let awaiting = std::mem::take(&mut self.awaiting);
+        self.push_fresh = false;
         if !self.due {
             return None;
         }
         let at = match fresh {
-            Some(pts) if !broken => pts,
+            Some(pts) if !broken => {
+                self.push_fresh = true;
+                pts
+            }
             _ if awaiting && !broken => return None,
             _ => due,
         };
@@ -297,9 +314,18 @@ impl MixFrame {
             awaiting: false,
             pushed: None,
             push_at: None,
+            push_fresh: false,
             unread: 0,
+            probe_only: false,
             nv12: None,
         }
+    }
+
+    /// This tick's frames not read back, which go into the published drops (R-RT-004),
+    /// and resets them. A readback only for a probe drops no frame, so it counts none.
+    fn take_unread(&mut self) -> u64 {
+        let unread = std::mem::take(&mut self.unread);
+        if self.probe_only { 0 } else { unread }
     }
 }
 
@@ -779,6 +805,10 @@ pub(crate) struct Program {
     audio: Mutex<AudioInputs>,
     capture_drops: DropSnapshot,
     bus: BusControl,
+    /// What the mixer thread counts of its blocks, for `profile.get` (protocol 0.92).
+    mixer_meter: Arc<MixerMeter>,
+    /// The mixer's place in `profile.get`, given up when the stage stops.
+    mixer_profile: Option<MixerGuard>,
     drop_guard: Option<DropGuard>,
     ticker: Option<JoinHandle<()>>,
     /// Emits one last `stats.tick` once the threads have stopped and the sources are
@@ -863,6 +893,7 @@ impl Program {
                 audio: Mutex::new(None),
                 attached: AtomicBool::new(false),
                 claim: Mutex::new(claim),
+                probe: Arc::new(ProbeTap::default()),
                 drop_guard: Some(DropGuard::new(engine.drop_ledger(), ids)),
             })
         })
@@ -926,6 +957,7 @@ impl Program {
             input: encoders.video.input(),
             gpu: *encoders.video.path() == VideoPath::Gpu,
             claim: lock(&encoders.claim).take(),
+            probe: Some(Arc::clone(&encoders.probe)),
         };
         let _ = self.video_taps.send((encoders.feed.clone(), tap));
     }
@@ -945,6 +977,7 @@ impl Program {
             input,
             gpu: false,
             claim: None,
+            probe: None,
         };
         let _ = self.video_taps.send((feed, tap));
     }
@@ -970,6 +1003,11 @@ impl Program {
             engine.add_drop_source(AudioBusDrops::new(self.bus.clone())),
         ];
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
+        let bus = self.bus.clone();
+        self.mixer_profile = Some(engine.profiler().add_mixer(MixerSource {
+            meter: Arc::clone(&self.mixer_meter),
+            skipped: Box::new(move || bus.stats().skipped_frames),
+        }));
         self.ticker = engine.spawn_stats_ticker(Arc::clone(&self.stop));
         *lock(&self.final_tick) = Some(engine.stats_emitter());
     }
@@ -1153,6 +1191,9 @@ pub(crate) struct Encoders {
     /// A GPU-path session's claim on the context, until [`Program::attach`] hands it to
     /// the render thread with the tap. Dropped with the encoders if never attached.
     claim: Mutex<Option<GpuClaim>>,
+    /// Where the render thread copies the frames it feeds the video session while a
+    /// `quality.probe` is armed (ADR-0145).
+    probe: Arc<ProbeTap>,
     drop_guard: Option<DropGuard>,
 }
 
@@ -1183,6 +1224,21 @@ impl Encoders {
     /// that refused its first frame fell back to software (#443).
     pub(crate) fn hardware(&self) -> bool {
         self.video.codec().hardware
+    }
+
+    /// What a `quality.probe` of the video session needs (ADR-0145): its tap, a
+    /// subscription to its packets, and its size and encoder.
+    pub(crate) fn probe_job(&self, codecs: Arc<dyn Codecs>, frames: u32) -> ProbeJob {
+        let codec = self.video.codec();
+        ProbeJob {
+            tap: Arc::clone(&self.probe),
+            packets: self.video.subscribe(),
+            codecs,
+            size: self.feed.size,
+            encoder: codec.name.clone(),
+            hardware: codec.hardware,
+            frames,
+        }
     }
 }
 
@@ -1287,6 +1343,8 @@ pub(crate) struct Running {
     started: Instant,
     /// Its meter in each `stats.tick`'s `outputs`, removed with the drop guard.
     meter: Option<MeterGuard>,
+    /// Its stream in `profile.get` (protocol 0.92), removed with the drop guard.
+    profiled: Option<StreamGuard>,
     /// Its failure channel's place in the program, given up once its thread is gone.
     registration: Option<Registration>,
     /// Dropped last: when this was the program's last output, that stops the render
@@ -1354,6 +1412,64 @@ impl Running {
         self.drop_guard = Some(DropGuard::new(engine.drop_ledger(), ids));
         self.meter =
             Some(engine.add_output_meter(self.output_id.clone(), self.started, self.read_sample()));
+        if let Some(encoders) = &self.encoders {
+            let (fps, target_kbps) = streams::encoder_target(
+                encoders.video.info(),
+                self.audio.as_ref().map(|audio| audio.info()),
+            );
+            self.profiled = Some(engine.profiler().add_stream(StreamMeter {
+                stream: ProfileStream::Output {
+                    output_id: self.output_id.clone(),
+                },
+                fps,
+                target_kbps,
+                read: self.read_stream(),
+            }));
+        }
+    }
+
+    /// How this output's stream reads in `profile.get`: its video encoder's frames,
+    /// counted from the time it was armed like [`read_sample`](Self::read_sample)'s
+    /// drops, then what the output thread sent and lost after it.
+    fn read_stream(&self) -> streams::ReadStream {
+        let sample = self.read_sample();
+        let video = self
+            .encoders
+            .as_ref()
+            .map(|encoders| Arc::downgrade(&encoders.video));
+        let read = move || {
+            video
+                .as_ref()
+                .and_then(Weak::upgrade)
+                .map(|video| video.stats())
+        };
+        let base = read().unwrap_or_default();
+        // The last reading while the session was alive, so the totals don't fall once it
+        // closes.
+        let last = Mutex::new(base);
+        Box::new(move || {
+            let video = match read() {
+                Some(stats) => {
+                    *lock(&last) = stats;
+                    stats
+                }
+                None => *lock(&last),
+            };
+            let sent = sample();
+            let since = |now: u64, then: u64| now.saturating_sub(then);
+            StreamTotals {
+                frames_in: since(
+                    video.received.saturating_add(video.dropped_queue_full),
+                    base.received.saturating_add(base.dropped_queue_full),
+                ),
+                encoded: since(video.encoded, base.encoded),
+                frames_out: sent.frames,
+                dropped: sent.dropped_frames,
+                late: since(video.late, base.late),
+                encode_nanos: since(video.encode_nanos, base.encode_nanos),
+                bytes: sent.bytes,
+            }
+        })
     }
 
     /// How this output's meter reads its counters: what the output thread sent, and
@@ -1575,12 +1691,34 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
             "render compositor opened"
         );
         let mut cache = ResourceCache::<GpuKey>::new();
+        // A still drawn small holds only the texels it is drawn with (#1139).
+        cache.draw_uploads_small(true);
         let mut chains = Chains::default();
         let mut nv12 = Nv12Passes::default();
-        let mut readbacks = Readbacks::default();
+        let mut readbacks = Readbacks::copied();
+        // Whether the compositor was asked to time the pack passes yet: once a meter
+        // guards them (#349).
+        let mut timing = false;
         let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
             if let Some(hook) = &hook {
                 hook(&compositor);
+            }
+            // A device wgpu has said is lost is replaced before anything is drawn on it.
+            // Its draws don't always fail: on a destroyed device a submit can be a quiet
+            // no-op and a readback's map fail at once, so the ring never fills and the
+            // frames stop with no error to say why (#1370).
+            if let Some(why) = compositor.lost_already() {
+                return Err(DrawError::Lost(why.to_owned()));
+            }
+            // The pack passes' GPU times that came back since the last tick, a tick or
+            // two late, go to the guard (#349).
+            if let Some(guard) = meter.pass_guard() {
+                if !timing {
+                    timing = true;
+                    compositor.time_passes();
+                }
+                compositor.gpu_times(|kind, took| guard.measured(kind, took));
+                guard.end_tick();
             }
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
@@ -1683,10 +1821,14 @@ fn open_gpu_draw(hook: Option<DrawHook>) -> OpenDraw {
 }
 
 /// The readback rings of the mixes read back, one per mix by its feed's identity
-/// ([`Frames::add`]), kept in the draw so they go with its compositor's device.
+/// ([`Frames::add`]), kept in the draw so they go with its compositor's device. Their
+/// mapped buffers are copied out on the draw's `jstream-readback` thread, so the render
+/// thread copies no pixels (ADR-0117 §4); the thread ends with the draw.
 #[derive(Default)]
 struct Readbacks {
     rings: Vec<(ReadbackKey, ReadbackRing<MediaTime>)>,
+    /// `None` only if the OS refused the thread: the render thread copies, as before.
+    copier: Option<Copier>,
 }
 
 /// A mix's identity, as [`Frames::add`] matches feeds.
@@ -1708,6 +1850,19 @@ impl ReadbackKey {
 }
 
 impl Readbacks {
+    /// Rings copied out on a `jstream-readback` thread of their own.
+    fn copied() -> Self {
+        let copier = Copier::spawn()
+            .inspect_err(|err| {
+                tracing::warn!(%err, "no readback thread: the render thread copies frames");
+            })
+            .ok();
+        Self {
+            rings: Vec::new(),
+            copier,
+        }
+    }
+
     /// Drops the rings of mixes no longer drawn, or no longer read back.
     fn retain(&mut self, frames: &[MixFrame]) {
         self.rings
@@ -1725,7 +1880,11 @@ impl Readbacks {
                     divisor: frame.divisor,
                     owner: frame.owner.clone(),
                 };
-                self.rings.push((key, ReadbackRing::default()));
+                let ring = match &self.copier {
+                    Some(copier) => ReadbackRing::with_copier(copier),
+                    None => ReadbackRing::default(),
+                };
+                self.rings.push((key, ring));
                 self.rings.len() - 1
             }
         };
@@ -1814,6 +1973,16 @@ pub(crate) enum PipelineEvent {
     LinkDown,
     /// The publish link is up again: `active`.
     LinkUp,
+}
+
+/// What the program stage's render thread tells the engine about the effect packs it
+/// draws (#349), on the engine's `jstream-device-losses` thread.
+#[derive(Debug)]
+pub(crate) enum GpuEvent {
+    /// The device was lost.
+    Lost(DeviceLoss),
+    /// A pack kind's pass ran too long ([`PassGuard`](crate::runtime::PassGuard)).
+    Slow(crate::runtime::SlowPass),
 }
 
 /// A lost GPU device on the program stage's render thread (#349), for the engine to
@@ -1908,6 +2077,16 @@ fn panic_message(panic: &(dyn Any + Send)) -> &str {
 /// the clock: a clock that runs slow or jumps is followed within this.
 const MAX_TICK_WAIT: Duration = Duration::from_millis(4);
 
+/// How long until the mixer's next block is `due`, from `now` on the media clock. The
+/// mixer counts in its sample rate and the clock in its own time base (100 ns on
+/// Windows), so `due` is rescaled to the clock's first: [`until_due`] across two time
+/// bases would wait only its floor, and the thread would wake about 10,000 times a
+/// second. A `due` that can't be rescaled waits 1 ms, as before the first block.
+fn until_block(now: MediaTime, due: MediaTime) -> Duration {
+    due.rescale(now.timebase(), Rounding::Up)
+        .map_or(Duration::from_millis(1), |due| until_due(now, due))
+}
+
 /// How long until `due` on the media clock, from `now`, at most [`MAX_TICK_WAIT`] and
 /// never zero, so a clock that cannot say still leaves the thread asleep a moment.
 fn until_due(now: MediaTime, due: MediaTime) -> Duration {
@@ -1953,6 +2132,13 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
     let captures = captures::spawn(backends, parts.clock.timebase(), size_tx)?;
     let format = engine_format()?;
     let mixer = Mixer::new(MixerConfig::default()).map_err(|err| format!("mixer: {err}"))?;
+    let mixer_meter = {
+        let config = mixer.config();
+        let block = Duration::from_secs_f64(
+            config.block_frames as f64 / f64::from(config.sample_rate.max(1)),
+        );
+        Arc::new(MixerMeter::new(block))
+    };
     // The monitors the audio sources' thread opens hand their feeds to the mixer
     // thread here, at most one per bus at a time.
     let (monitor_routes, monitor_feeds) = mpsc::sync_channel(jstream_audio::MAX_BUSES);
@@ -2035,7 +2221,11 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             drops: capture_drops.clone(),
             fail: fail_tx.clone(),
             losses: loss_tx,
-            meter: engine.profiler().program_meter(),
+            meter: {
+                let mut meter = engine.profiler().program_meter();
+                meter.guard_passes();
+                meter
+            },
         };
         move || {
             let _raised = raise(priority.as_deref(), ThreadRole::Video);
@@ -2066,7 +2256,11 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
             taps: Arc::clone(&scope_taps),
             monitors: monitor_feeds,
         };
-        let mixing = Mixing { mixer, metering };
+        let mixing = Mixing {
+            mixer,
+            metering,
+            meter: Arc::clone(&mixer_meter),
+        };
         move || {
             let _raised = raise(priority.as_deref(), ThreadRole::Audio);
             mixer_thread(mixing, clock, &out, stop, fail, &collector);
@@ -2106,6 +2300,8 @@ pub(crate) fn launch_program(engine: &Engine, parts: Parts) -> Result<Arc<Progra
         audio: Mutex::new(audio),
         capture_drops,
         bus,
+        mixer_meter,
+        mixer_profile: None,
         drop_guard: None,
         ticker: None,
         final_tick: Mutex::new(None),
@@ -2277,6 +2473,7 @@ pub(crate) fn launch(
         sent,
         started,
         meter: None,
+        profiled: None,
         registration: Some(registration),
         program: Some(program),
     };
@@ -2346,6 +2543,7 @@ pub(crate) fn launch_vcam(
         sent: Arc::default(),
         started: Instant::now(),
         meter: None,
+        profiled: None,
         registration: Some(registration),
         program: Some(program),
     })
@@ -2370,7 +2568,8 @@ fn engine_format() -> Result<AudioFormat, String> {
     .map_err(|err| format!("engine audio format: {err}"))
 }
 
-fn frame_period(clock: Timebase, fps: u32) -> Result<MediaTime, String> {
+/// The base frame period at `fps` in the clock's time base, as the render thread steps.
+pub(crate) fn frame_period(clock: Timebase, fps: u32) -> Result<MediaTime, String> {
     let base =
         Timebase::new(FRAME_NUM, fps.max(1)).map_err(|err| format!("frame period: {err}"))?;
     MediaTime::new(1, base)
@@ -2690,6 +2889,16 @@ pub(crate) struct VideoTap {
     /// A GPU session's claim on the context, released once the render thread has the
     /// tap ([`Frames::add`]), from when [`Frames::feeds_gpu`] keeps it there.
     claim: Option<GpuClaim>,
+    /// Where the frames pushed are copied while a `quality.probe` is armed (ADR-0145):
+    /// an output's session has one, a preview's none.
+    probe: Option<Arc<ProbeTap>>,
+}
+
+impl VideoTap {
+    /// Whether a probe is armed on the session, so its frames are copied.
+    fn probed(&self) -> bool {
+        self.probe.as_ref().is_some_and(|probe| probe.armed())
+    }
 }
 
 /// Whether video sessions may open on the platform's GPU context, shared by
@@ -2792,10 +3001,12 @@ struct RenderJob {
     gpu_gate: Arc<GpuGate>,
     drops: DropSnapshot,
     fail: Sender<PipelineEvent>,
-    /// Told of each lost device, with the pack kinds drawn before it (#349): the
-    /// engine handles it on its `jstream-device-losses` thread, never on this one.
-    losses: Sender<DeviceLoss>,
-    /// Times each tick and its units for `profile.get` (ADR-0103).
+    /// Told of each lost device, with the pack kinds drawn before it, and of each pack
+    /// kind whose pass ran too long (#349): the engine handles them on its
+    /// `jstream-device-losses` thread, never on this one.
+    losses: Sender<GpuEvent>,
+    /// Times each tick and its units for `profile.get` (ADR-0103), and guards the pack
+    /// passes' GPU time (#349, [`PassGuard`](crate::runtime::PassGuard)).
     meter: DrawMeter,
 }
 
@@ -2966,7 +3177,11 @@ impl Frames {
             let held = held
                 .iter()
                 .any(|owner| is_program(frame, size, owner.as_ref()));
-            frame.readback = held || taps.iter().any(|tap| !tap.gpu);
+            // A GPU session is read back too while a probe is armed on it: the readback
+            // is its reference frame (ADR-0145).
+            let fed = held || taps.iter().any(|tap| !tap.gpu);
+            frame.readback = fed || taps.iter().any(|tap| tap.probed());
+            frame.probe_only = frame.readback && !fed;
             encode.starved = false;
             let gpu_taps = taps.iter().filter(|tap| tap.gpu).count() as u64;
             if !frame.due || gpu_taps == 0 {
@@ -3278,6 +3493,12 @@ fn render_loop(job: RenderJob) {
                 // A tick that failed part-way leaves its units' time uncounted.
                 meter.discard_frame();
             }
+            // A pack kind that ran too long on the GPU is quarantined by the engine, on
+            // its own thread, as a lost device's are (#349). Its passes draw until the
+            // engine publishes the snapshot without it, a tick or two.
+            if let Some(slow) = meter.pass_guard().and_then(|guard| guard.take()) {
+                let _unsent = loss_sender.send(GpuEvent::Slow(slow));
+            }
             match tick {
                 Ok(Ok(freed)) => {
                     // The totals it replaces go to the collector (R-RT-003).
@@ -3333,12 +3554,12 @@ fn render_loop(job: RenderJob) {
                     // writes no file. A loss it can't take is handled (dropped) here.
                     let (handled, flag) = LossHandled::new();
                     loss_handled = Some(flag);
-                    let _unsent = loss_sender.send(DeviceLoss {
+                    let _unsent = loss_sender.send(GpuEvent::Lost(DeviceLoss {
                         cause,
                         drawn: reader.held().0.shot().pack_kinds(),
                         recovering: started.is_ok(),
                         handled,
-                    });
+                    }));
                     match started {
                         Ok(started) => switch = Some(started),
                         Err(fell) => {
@@ -3409,7 +3630,7 @@ fn render_loop(job: RenderJob) {
             reader.adopt();
         }
         for frame in &mut frames.mixes {
-            unread = unread.saturating_add(std::mem::take(&mut frame.unread));
+            unread = unread.saturating_add(frame.take_unread());
         }
         drops.publish(
             capture_drops(captures.stats())
@@ -3432,16 +3653,27 @@ fn render_loop(job: RenderJob) {
             if frame.due {
                 push_each(
                     targets,
-                    |tap| match (tap.gpu, &encode.shown) {
-                        // Every target was held, or a covered draw failed: the frame
-                        // is dropped, not repeated.
-                        (true, _) if starved => true,
-                        (true, Some(target)) => push_gpu(&tap.input, target, due),
-                        (false, _) if !shown.is_empty() => match frame.push_at {
-                            Some(pts) => push_frame(&tap.input, frame.size, pts, shown),
-                            None => true,
-                        },
-                        _ => true,
+                    |tap| {
+                        // A probe's reference: the frame a CPU session is pushed, or
+                        // for a GPU one the frame newly read back, at the time it was
+                        // drawn for, which the GPU frame of that draw went out with.
+                        if let (Some(probe), Some(pts)) = (&tap.probe, frame.push_at)
+                            && !shown.is_empty()
+                            && (!tap.gpu || frame.push_fresh)
+                        {
+                            probe.offer(frame.size, pts, shown);
+                        }
+                        match (tap.gpu, &encode.shown) {
+                            // Every target was held, or a covered draw failed: the
+                            // frame is dropped, not repeated.
+                            (true, _) if starved => true,
+                            (true, Some(target)) => push_gpu(&tap.input, target, due),
+                            (false, _) if !shown.is_empty() => match frame.push_at {
+                                Some(pts) => push_frame(&tap.input, frame.size, pts, shown),
+                                None => true,
+                            },
+                            _ => true,
+                        }
                     },
                     |tap| collector.free(Garbage::Video(tap.input)),
                 );
@@ -3467,10 +3699,17 @@ fn render_loop(job: RenderJob) {
                 collector.free(Garbage::Vcam(cams.swap_remove(at)));
             }
         }
-        next = match due.checked_add(period) {
-            Ok(next) => Some(next),
-            Err(err) => {
-                report(&fail, format!("frame time overflow: {err}"));
+        // The next tick on the frame grid, where the live sources' thread plans for it
+        // (ADR-0117 §3): a period on from a tick on the grid, and sooner from the first,
+        // which is drawn at once wherever it falls.
+        let after = due
+            .checked_add(MediaTime::new(1, due.timebase()))
+            .ok()
+            .and_then(|after| on_frame_grid(after, period));
+        next = match after {
+            Some(next) => Some(next),
+            None => {
+                report(&fail, "frame time overflow: the next tick".to_string());
                 break;
             }
         };
@@ -3659,6 +3898,22 @@ impl EncodeRing {
 
 /// The tick to draw when the clock reads `now` and the next tick was `due`, and how
 /// many whole periods before it were missed. Not late by a period: `due`, none missed.
+/// The first program tick at or after `at`: the render thread ticks on multiples of
+/// `period` on the media clock, so other threads can time their work to its ticks
+/// (ADR-0117 §3). `None` on overflow; `at` itself for a period too fine to step.
+pub(crate) fn on_frame_grid(at: MediaTime, period: MediaTime) -> Option<MediaTime> {
+    let step = period
+        .rescale(at.timebase(), Rounding::Nearest)
+        .ok()?
+        .ticks();
+    if step <= 0 {
+        return Some(at);
+    }
+    let ticks = at.ticks();
+    let frames = ticks.div_euclid(step) + i64::from(ticks.rem_euclid(step) != 0);
+    Some(MediaTime::new(frames.checked_mul(step)?, at.timebase()))
+}
+
 fn catch_up(due: MediaTime, now: MediaTime, period: MediaTime) -> Result<(MediaTime, u64), String> {
     let overflow = |err: jstream_media::MediaError| format!("frame time overflow: {err}");
     let late = now.checked_sub(due).map_err(overflow)?.ticks();
@@ -3779,6 +4034,8 @@ fn mixer_thread(
 struct Mixing {
     mixer: Mixer,
     metering: MasterMetering,
+    /// Counts each block and how long its mix took.
+    meter: Arc<MixerMeter>,
 }
 
 /// Mixes on the media clock, meters the master, and pushes each block into the program
@@ -3792,6 +4049,7 @@ fn mixer_loop(
     Mixing {
         mut mixer,
         mut metering,
+        meter,
     }: Mixing,
     clock: &dyn MediaClock,
     out: &MixOut,
@@ -3818,6 +4076,8 @@ fn mixer_loop(
     // allocates here.
     let mut monitors: Vec<MonitorRoute> = Vec::with_capacity(2 * jstream_audio::MAX_BUSES);
     'mix: while !stop.load(Ordering::Relaxed) {
+        // A block's mix is the poll that makes it and everything done with it after.
+        let began = Instant::now();
         match mixer.poll(clock.now(), &mut samples) {
             Ok(Some(block)) => {
                 metering.process(&samples);
@@ -3877,8 +4137,13 @@ fn mixer_loop(
                     report(fail, format!("mixer block rejected: {err}"));
                     break 'mix;
                 }
+                meter.mixed(began.elapsed());
             }
-            Ok(None) => thread::sleep(Duration::from_millis(1)),
+            // Asleep until the next block is due on the media clock (ADR-0117 §9), not
+            // in 1 ms polls; before the first block, a short wait.
+            Ok(None) => thread::sleep(mixer.next_due().map_or(Duration::from_millis(1), |due| {
+                until_block(clock.now(), due)
+            })),
             Err(err) => {
                 report(fail, format!("mixer poll failed: {err}"));
                 break;
@@ -4209,7 +4474,7 @@ mod tests {
     use super::{
         DrawFn, EncodeRing, FRAME_DEN, Feed, Frames, GpuGate, GpuSources, MixFrame, OpenDraw,
         Switch, SwitchWhy, VideoTap, catch_up, check_video_encoder, encode_ring_len, lock,
-        open_video, output_size, push_each, stream_info, video_config,
+        open_video, output_size, push_each, stream_info, until_block, video_config,
     };
     use crate::runtime::captures::rgba_from_surface;
     use crate::snapshot::{CaptureFrame, CaptureImage, Captures, LiveParams, Shot};
@@ -4795,6 +5060,7 @@ mod tests {
             input,
             gpu: false,
             claim: None,
+            probe: None,
         }
     }
 
@@ -4944,6 +5210,7 @@ mod tests {
                 input: session.input(),
                 gpu: true,
                 claim: None,
+                probe: None,
             },
         );
         assert!(frames.feeds_gpu());
@@ -4987,6 +5254,7 @@ mod tests {
                 input: session.input(),
                 gpu: true,
                 claim: Some(claim),
+                probe: None,
             },
         );
         assert!(frames.feeds_gpu());
@@ -5053,6 +5321,50 @@ mod tests {
             .expect("draw");
             assert_eq!(frames[0].out, rgba[..8], "from a {own:?} capture");
         }
+    }
+
+    /// #1370: once wgpu has said the device is lost, the next draw says so, even one with
+    /// nothing on it that would fail on a lost device. Before, such draws went on
+    /// "succeeding" and the frames stopped with no loss counted.
+    #[test]
+    fn a_draw_after_a_reported_loss_says_the_device_is_lost() {
+        struct NoCaptures;
+        impl Captures for NoCaptures {
+            fn frame(&self, _: &crate::snapshot::CaptureKey) -> Option<CaptureFrame<'_>> {
+                None
+            }
+        }
+        let lose = Arc::new(AtomicBool::new(false));
+        let flag = Arc::clone(&lose);
+        let hook: super::DrawHook = Arc::new(move |compositor: &jstream_render::Compositor| {
+            if flag.swap(false, Ordering::SeqCst) {
+                compositor.device().destroy();
+                let _ = compositor.device().poll(wgpu::PollType::Wait {
+                    submission_index: None,
+                    timeout: Some(Duration::from_secs(5)),
+                });
+            }
+        });
+        // Without an adapter there is nothing to lose; CI's Linux jobs have lavapipe.
+        let Ok(mut draw) = (super::gpu_draw_with(hook))(None) else {
+            return;
+        };
+        let mut call = || {
+            draw(
+                &Shot::default(),
+                &LiveParams::default(),
+                &NoCaptures,
+                &mut [],
+                MediaTime::zero(Timebase::NANOS),
+                &mut crate::profile::DrawMeter::default(),
+            )
+        };
+        assert!(call().is_ok(), "a usable device draws");
+        lose.store(true, Ordering::SeqCst);
+        assert!(
+            matches!(call(), Err(super::DrawError::Lost(_))),
+            "a lost device is reported"
+        );
     }
 
     /// A virtual camera holds the program at the program stage's size: its frame is drawn on
@@ -5152,8 +5464,13 @@ mod tests {
         frame.fresh = Some(us(100));
         frame.awaiting = true;
         assert_eq!(frame.push_time(us(133), false), Some(us(100)));
+        assert!(
+            frame.push_fresh,
+            "a probe of a GPU session takes it (ADR-0145)"
+        );
         // Nothing drawn this tick (a failed draw, a fallback opening): a repeat.
         assert_eq!(frame.push_time(us(166), false), Some(us(166)));
+        assert!(!frame.push_fresh, "a repeat is no GPU frame's reference");
         // The readback recorded before the repeat lands after it, and is dropped.
         frame.fresh = Some(us(133));
         assert_eq!(frame.push_time(us(200), false), None);
@@ -5167,6 +5484,26 @@ mod tests {
         // A frame not due pushes nothing.
         frame.due = false;
         assert_eq!(frame.push_time(us(266), false), None);
+    }
+
+    /// A mix read back only for a probe of a GPU session drops no frame when its
+    /// readback falls behind, so its misses never reach the published drops; a mix
+    /// whose readback feeds a session or a camera counts them (R-RT-004, ADR-0145).
+    #[test]
+    fn a_readback_only_for_a_probe_counts_no_drops() {
+        let size = FrameSize::new(4, 4).expect("size");
+        let mut frame = MixFrame::new(None, size, 1, None);
+        frame.unread = 2;
+        assert_eq!(frame.take_unread(), 2, "a fed readback's misses are drops");
+        assert_eq!(frame.unread, 0, "reset");
+        frame.probe_only = true;
+        frame.unread = 3;
+        assert_eq!(
+            frame.take_unread(),
+            0,
+            "only the probe's reference was missed"
+        );
+        assert_eq!(frame.unread, 0, "reset");
     }
 
     /// Less than a period late keeps the tick. A period or more skips to the latest
@@ -5280,5 +5617,20 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// The mixer's due time is in its sample rate, the clock's in its own time base:
+    /// the wait is how long is left, not the floor a time-base mismatch gave (#1271 B1).
+    #[test]
+    fn the_mixer_waits_for_its_block_on_a_clock_of_another_time_base() {
+        use std::time::Duration;
+        // A Windows-like clock in 100 ns units, at 1 s; the block due 2 ms later at 48 kHz.
+        let hundred_ns = Timebase::new(1, 10_000_000).expect("time base");
+        let now = MediaTime::new(10_000_000, hundred_ns);
+        let due = MediaTime::new(48_000 + 96, Timebase::new(1, 48_000).expect("time base"));
+        assert_eq!(until_block(now, due), Duration::from_millis(2));
+        // Further off than a wait may last: the cap, so a stop is still seen soon.
+        let later = MediaTime::new(48_000 * 2, Timebase::new(1, 48_000).expect("time base"));
+        assert_eq!(until_block(now, later), super::MAX_TICK_WAIT);
     }
 }

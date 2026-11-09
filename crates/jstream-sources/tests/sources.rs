@@ -9,8 +9,8 @@
 use jstream_media::{MediaTime, PixelFormat, Timebase, VideoFrame};
 use jstream_protocol::{AssetRoot, Reference, Settings};
 use jstream_sources::{
-    AssetRoots, AudioTarget, CaptureSpec, Context, Limits, Registry, SourceError, decode_still,
-    needs_restart, webcam_device,
+    AssetRoots, AudioTarget, CaptureSpec, Context, DeviceFormatWant, Limits, Registry, SourceError,
+    decode_still, needs_restart, webcam_device,
 };
 use serde_json::{Value, json};
 use std::path::{Path, PathBuf};
@@ -94,6 +94,13 @@ fn the_registry_describes_every_builtin_kind_in_order() {
             "display",
             "image",
             "media",
+            "midi_beat",
+            "midi_cc",
+            "midi_keyboard",
+            "midi_pads",
+            "midi_piano_roll",
+            "model",
+            "network_audio",
             "shape",
             "spectrum",
             "text",
@@ -251,10 +258,14 @@ fn display_window_and_webcam_sources_say_what_to_capture() {
         );
         source.capture().cloned().expect("a capture source")
     };
-    assert_eq!(device(""), CaptureSpec::Device(None), "the first device");
+    assert_eq!(
+        device(""),
+        CaptureSpec::Device(None, DeviceFormatWant::default()),
+        "the first device"
+    );
     assert_eq!(
         device("fake-webcam-0"),
-        CaptureSpec::Device(Some("fake-webcam-0".into()))
+        CaptureSpec::Device(Some("fake-webcam-0".into()), DeviceFormatWant::default())
     );
     // A webcam's sound is its device's paired audio (#716); the engine records it.
     let webcam = registry.descriptor("webcam").expect("webcam");
@@ -763,4 +774,31 @@ fn a_webp_animation_counts_the_decoders_buffers() {
     };
     assert!(matches!(open_with(383), Err(SourceError::TooLarge { .. })));
     assert!(open_with(384).is_ok());
+}
+
+/// A still image hands its frame out as a `Still`, which lets go of its pixels once no
+/// one holds them and decodes the file again for the next frame; a file that changed
+/// size since fails, as nothing placed at the old size can show it (#1139).
+#[test]
+fn a_still_image_decodes_its_file_again_once_its_pixels_are_let_go_of() {
+    let dir = folder("still-again");
+    write_png(&dir.join("a.png"), 2, 1, png::ColorType::Rgba, &[9; 8]);
+    let mut source = open(&dir, "a.png").expect("a still image");
+    let still = source.still().expect("a still image is a still");
+    assert_eq!(still.size().width(), 2);
+    let first = source.frame(ms(0)).expect("its frame");
+    assert!(Arc::ptr_eq(&first, &still.frame().expect("shared")));
+    drop(first);
+    assert!(!still.held(), "let go of once no one holds it");
+
+    write_png(&dir.join("a.png"), 2, 1, png::ColorType::Rgba, &[7; 8]);
+    let again = source.frame(ms(0)).expect("decoded again");
+    assert_eq!(pixel(&again, 1, 0), [7; 4]);
+    drop(again);
+
+    write_png(&dir.join("a.png"), 3, 1, png::ColorType::Rgba, &[7; 12]);
+    assert!(matches!(still.frame(), Err(SourceError::Decode { .. })));
+    std::fs::copy(data("anim.webp"), dir.join("anim.webp")).expect("copied");
+    let animated = open(&dir, "anim.webp").expect("an animation");
+    assert!(animated.still().is_none(), "an animation has none");
 }

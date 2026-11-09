@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform/src/**", "crates/jstream-platform/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform", "docs/ARCHITECTURE.md#threading", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0004-wgpu-with-native-interop.md", "docs/adr/0014-media-clock.md", "docs/adr/0066-portable-windows-distribution-v2.md", "crates/jstream-media/README.md#purpose"]
 -->
 
 Layer-1 backend traits: the seam between the engine and the OS. Platform crates
@@ -97,7 +97,7 @@ Contents:
   from the target's origin and bounds, scaled to the frame. Like `latest`, it must not
   block.
 - **Video capture devices** (webcams and capture cards,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `VideoDevices`
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)): `VideoDevices`
   (`Send + Sync`) lists devices (`VideoDeviceInfo`, with the paired `AudioIo` input
   endpoint when the backend can pair one), each device's `VideoDeviceFormat`s (size, frame
   period, `CaptureEncoding`), and opens a device in one format as a `CaptureStream`, the
@@ -111,7 +111,13 @@ Contents:
   whose streams deliver `Gpu` frames, or `None` (the default) when it has no GPU path.
   That backend opens only the formats it can deliver there and is `Unsupported` for the
   rest; the engine then opens the device on the backend itself, and never asks it for a
-  compressed format.
+  compressed format. Camera controls (#1196): `VideoDevices::controls` lists a device's
+  `CameraControlInfo`s (a `CameraControlId` such as `exposure`, `focus` or
+  `white_balance` by its stable `name`, its range, step, default, value now, and `auto`:
+  `None` without an automatic mode, else whether it is on), and `set_control` sets one
+  to a `CameraControlValue` (`Manual`, clamped and snapped to the step, or `Auto`), on
+  a running stream without reopening it. Both are default methods: no controls, and
+  `Unsupported`.
 - **Audio:** `AudioIo` (`Send + Sync`) lists devices and running processes (every
   process on Windows, only Core Audio's audio clients on macOS)
   (`AudioProcess`: ID, parent ID, executable name, for process loopback), says which
@@ -136,7 +142,7 @@ Contents:
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). Packets keep their frame's `pts` on the
   media clock and follow `jstream-media`'s framing (H.264 Annex B, raw AAC).
   `HardwarePreference` defaults to hardware first with the software codec as fallback,
-  as [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md) says.
+  as [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md) says.
   `VideoEncoder::info` names the implementation encoding: it changes only when an
   encoder falls back before its first packet (a hardware one refusing its first frame,
   #443).
@@ -151,9 +157,9 @@ Contents:
   installed), and `Codecs::download` and `Codecs::delete_download` fetch or delete one.
   Their defaults list none and refuse with `Unsupported`: only Linux downloads a codec,
   Cisco's OpenH264
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)).
 - **Media files** (`media_file.rs`,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)): `MediaDecoders`
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)): `MediaDecoders`
   (`Send + Sync`) opens a local file by its host path for a `MediaDecoderConfig` (the
   video pixel format, a `HardwarePreference`, and whether to decode audio too) as a
   `MediaDecoder` (`Send`), which owns the whole file: the platform demuxes and decodes
@@ -191,7 +197,9 @@ Contents:
   contain a token. `jstream-youtube` keeps its Google refresh token here.
 - **CLAP plugin hosts** (`plugin_host.rs`,
   [ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)): `PluginHosts`
-  (`Send + Sync`) lists the CLAP search directories that exist, `scan`s a plugin file
+  (`Send + Sync`) lists the CLAP search directories that exist, and with `folders`
+  (by default the same) every one it searches whether it exists or not, for telling a
+  person where to install a plugin; it `scan`s a plugin file
   in a short-lived host process (so a plugin that crashes while scanned costs only that
   process), and `start`s a host for a `HostRequest` (file, plugin id, the block's
   `Config` and a saved state): it creates the block initialised with that
@@ -216,6 +224,8 @@ Contents:
   the UI settings, so the desktop app and the daemon name the same one
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)), and
   `paths::EFFECTS_DIR` the folder of WGSL effect packs both watch.
+  `paths::RECENT_COLLECTIONS_FILE` names the file that keeps the projects opened most
+  recently ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
 - **Shared backend helpers** (`mailbox.rs`, `nv12.rs`, `yuv.rs`): safe, platform-independent code
   the platform crates share, so it is written and tested once. `mailbox::Mailbox` is the
   capture callbacks' single-slot latest-frame mailbox: `put` swaps a boxed frame in and
@@ -247,7 +257,8 @@ Contents:
   order, holding each until a packet's `dts` reaches its `pts`) and `FakeVcamSink`
   (dropping it stops it; a test watches it through a `FakeVcamProbe`),
   `FakeVideoDevices` (a webcam paired with the fake microphone offering NV12, YUY2 and
-  MJPEG, and a capture card; `unplug` loses a device) with `FakeCaptureDecoder`, which
+  MJPEG, and brightness, white balance and exposure controls, the last two automatic,
+  and a capture card with no controls; `unplug` loses a device) with `FakeCaptureDecoder`, which
   `FakeCodecs::capture_decoder` makes for MJPEG (all-zero NV12 frames), plus
   `FakeGpuInterop` (no GPU: `open_device` is `Unsupported`, as on CI),
   `FakeMediaDecoders` (a path registered with `add` plays a `FakeClip`, synthetic RGBA
@@ -293,8 +304,9 @@ Windows `GpuInterop` opens the device and encode targets, and Windows capture
 (`WgcCapture::on_gpu`) delivers frames in a ring of shared BGRA textures, as
 **Frame lifetime** below describes. `jstream-render` composites one scene, or a
 transition between two, on that device when the engine has one, sampling capture frames there, and the frames a
-browser source's page paints on it, and opens its own (hardware adapter first, the
-software one as the fallback) when it does not. It has the NV12 pass that can render
+browser source's page paints on it (the engine opens it once and lends it to every
+compositor and to the browser engine, ADR-0117 §5), and opens its own (hardware adapter
+first, the software one as the fallback) when it does not. It has the NV12 pass that can render
 into an encode target's plane views (`Nv12Converter`). Windows' video encoders take
 encode targets on the context they reached through `Codecs::on_context`, and the
 engine's render thread converts each video mix's composite into the next of that mix's
@@ -341,6 +353,13 @@ The earlier proposed default (keep `wgpu` out of this crate) is dropped for this
     - `jstream-render` uses this device when the engine has one, so capture, render and
       encode share one adapter. With no interop it opens its own, hardware adapter first
       with the software one as the fallback.
+    - `GpuContext` is `Clone`: clones are the same context (device, `ContextKey`,
+      `SubmitLock` and platform state), which the engine opens once and lends to every
+      compositor and to the browser engine
+      ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §5). The platform's
+      state drops with the last clone. `GpuContext::watch` keeps one value for the
+      device that every clone shares, made by the first caller: `jstream-render`'s
+      device-loss watch, since wgpu keeps one lost callback per device.
     - `GpuContext::key()` identifies the context (a `ContextKey`, compared by
       allocation), so the engine can tell whether a texture is on the context a
       compositor runs on. wgpu's own `Device` equality is per instance and can't.

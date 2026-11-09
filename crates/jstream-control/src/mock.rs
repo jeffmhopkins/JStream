@@ -10,8 +10,8 @@
 //! by one, `expected_rev` conflicts, idempotency keys, every query, the output and
 //! stream-key actions, `scene.switch`, `studio.set_preview` and the program and preview
 //! scenes they set (`studio.get`),
-//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`], and one window,
-//! [`MOCK_WINDOW`]),
+//! `capture.targets` (one made-up primary display, [`MOCK_DISPLAY`], one window,
+//! [`MOCK_WINDOW`], and one webcam with two formats, [`MOCK_DEVICE`]),
 //! `font.list` (two made-up fonts of one family, [`MOCK_FONTS`], whose files don't exist),
 //! `source.sizes` (every source without a size, since the mock makes no frames),
 //! `activity.list` (always empty: the mock keeps no activity log),
@@ -40,18 +40,19 @@ use crate::control::{BoxFuture, Control, EventStream};
 use crate::error::ControlError;
 use futures_core::Stream;
 use jstream_protocol::KindDescriptor;
+use jstream_protocol::LabelId;
 use jstream_protocol::{
-    Action, Batch, BlendMode, BusId, Call, CallResult, Canvas, CaptureTargetInfo,
-    CaptureTargetKind, Chord, ClientId, Crop, Edit, EncoderProfile, EncoderProfileId,
-    EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo, GeometryError, GestureId,
-    GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding, INITIAL_PRESET,
-    IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition, LiveOutcome,
-    MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, MAX_VALUES, OutputId, OutputInfo, OutputKind,
-    OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query, QueryResult,
-    RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId, SceneInfo,
-    SceneRole, SceneSummary, SecretString, Settings, SharedValue, SourceAudio, SourceId,
+    Action, Batch, Binding, BlendMode, BusId, Call, CallResult, CameraControlInfo, Canvas,
+    CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, Chord, ClientId, Crop, Edit,
+    EncoderProfile, EncoderProfileId, EncoderProfileInfo, EntityKind, Event, Finite32, FontInfo,
+    GeometryError, GestureId, GestureInfo, Hello, HistoryCall, HistoryDirection, HotkeyBinding,
+    INITIAL_PRESET, IdempotencyKey, ItemGeometry, ItemId, ItemInfo, ItemTransform, ItemTransition,
+    LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, MAX_VALUES, OutputId, OutputInfo,
+    OutputKind, OutputState, PROTOCOL_VERSION, PixelSize, PlacementForm, ProtocolError, Query,
+    QueryResult, RecordContainer, Reference, RequestId, Response, Rev, RtmpTarget, SceneId,
+    SceneInfo, SceneRole, SceneSummary, SecretString, Settings, SharedValue, SourceAudio, SourceId,
     SourceInfo, SourceKind, SourceSize, TransitionPresetId, TransitionStarted, TransitionsInfo,
-    VideoMix, VideoMixId, VideoMixInfo, Welcome, check_value_name, check_value_size,
+    Trigger, VideoMix, VideoMixId, VideoMixInfo, Welcome, check_value_name, check_value_size,
     is_live_adjustable, prefix_covers,
 };
 use std::collections::{BTreeMap, BTreeSet, VecDeque};
@@ -283,6 +284,13 @@ impl Drop for MockControl {
 }
 
 /// Everything the mock engine knows.
+/// The hotkey and controller bindings a batch's deletes removed (ADR-0040 §3).
+#[derive(Default)]
+struct Removed {
+    hotkeys: Vec<HotkeyBinding>,
+    bindings: Vec<Binding>,
+}
+
 #[derive(Default)]
 struct State {
     collection: Collection,
@@ -375,6 +383,10 @@ pub const MOCK_DISPLAY: &str = "mock:display";
 /// The capture target ID of the one window the mock's `capture.targets` lists, titled
 /// "Mock window".
 pub const MOCK_WINDOW: &str = "mock:window";
+
+/// The ID of the one video capture device the mock's `capture.targets` lists, named
+/// "Mock webcam", with two formats (since protocol 0.90).
+pub const MOCK_DEVICE: &str = "mock:webcam";
 
 /// The fonts the mock's `font.list` lists, as (family, style, path): made up, so a
 /// UI's font picker has something to offer. The files don't exist.
@@ -572,6 +584,10 @@ struct Collection {
     video_mixes: BTreeMap<VideoMixId, (String, VideoMix)>,
     /// The hotkey bindings, ordered by chord.
     hotkeys: BTreeMap<Chord, Action>,
+    /// The labels each binding carries, ordered by ID (ADR-0133); no entry for none.
+    hotkey_labels: BTreeMap<Chord, Vec<LabelId>>,
+    /// The controller bindings (ADR-0122), ordered by trigger.
+    bindings: BTreeMap<Trigger, Action>,
     /// The scene list's folders, in folder order (ADR-0024 §3).
     folders: Vec<jstream_protocol::FolderInfo>,
     /// The labels, in label order (ADR-0024 §4).
@@ -607,6 +623,8 @@ impl Default for Collection {
             output_filters: BTreeMap::new(),
             master: jstream_protocol::FilterChains::default(),
             hotkeys: BTreeMap::new(),
+            hotkey_labels: BTreeMap::new(),
+            bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
         }
@@ -646,6 +664,8 @@ struct Scene {
     camera: Option<jstream_protocol::SceneCamera>,
     /// Its camera motion (ADR-0113); empty for a keyframe scene.
     camera_motion: Vec<jstream_protocol::CameraMotionModifier>,
+    /// Its own PTZ shots (ADR-0146), a keyframe scene's included.
+    ptz_shots: Vec<jstream_protocol::PtzShot>,
     /// Its follow camera (ADR-0113); `None` for a keyframe scene.
     camera_follow: Option<jstream_protocol::CameraFollow>,
     /// Its filters (ADR-0065), settings as given: a video chain only.
@@ -727,12 +747,13 @@ impl State {
         if batch.edits.is_empty() {
             return Err(ProtocolError::EmptyBatch);
         }
-        let (rev, inverse, removed_hotkeys) = self.apply(batch.edits)?;
+        let (rev, inverse, removed) = self.apply(batch.edits)?;
         self.history.record_batch(client_id, rev, inverse);
         let result = CallResult::Batch {
             dropped_overrides: Vec::new(),
             rev,
-            removed_hotkeys,
+            removed_hotkeys: removed.hotkeys,
+            removed_bindings: removed.bindings,
         };
         if let Some(key) = batch.idempotency_key {
             self.applied
@@ -811,15 +832,13 @@ impl State {
     }
 
     /// Applies `edits` atomically as one `rev` bump, and returns that `rev`, the edits
-    /// that undo them, and the hotkey bindings their deletes removed (ADR-0040 §3).
-    fn apply(
-        &mut self,
-        edits: Vec<Edit>,
-    ) -> Result<(Rev, Vec<Edit>, Vec<HotkeyBinding>), ProtocolError> {
+    /// that undo them, and the hotkey and controller bindings their deletes removed
+    /// (ADR-0040 §3).
+    fn apply(&mut self, edits: Vec<Edit>) -> Result<(Rev, Vec<Edit>, Removed), ProtocolError> {
         let running = self.running();
         let mut next = self.collection.clone();
         let mut undo = Vec::with_capacity(edits.len());
-        let mut removed = Vec::new();
+        let mut removed = Removed::default();
         for (at, edit) in edits.into_iter().enumerate() {
             let deleted = match &edit {
                 Edit::SceneDelete { scene_id } => Some((EntityKind::Scene, scene_id.to_string())),
@@ -1091,6 +1110,23 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            // The mock controls no PTZ camera (ADR-0146): it checks the call as the
+            // engine does, then refuses it as an engine with none listed does.
+            Action::PtzDrive { .. }
+            | Action::PtzAim { .. }
+            | Action::PtzHome { .. }
+            | Action::PtzRecall { .. }
+            | Action::PtzStore { .. }
+            | Action::PtzFocus { .. } => {
+                if let Some((_, Some((field, reason)))) =
+                    jstream_protocol::ptz_action_check(&action)
+                {
+                    return Err(invalid(0, field, reason));
+                }
+                return Err(ProtocolError::ActionFailed {
+                    reason: "this machine controls no PTZ cameras".into(),
+                });
+            }
             // The mock draws nothing, so a fire only checks its arguments (#1107).
             Action::ItemTriggerMotion {
                 item_id,
@@ -1153,11 +1189,15 @@ impl State {
             // As the engine: the server in front answers the pairing calls (ADR-0044) and
             // keeps the UI settings (ADR-0084).
             // The mock runs no plugins (ADR-0069), so it installs none: it can't load a
-            // module, and none is ever installed to grant or enable.
+            // module, and none is ever installed to grant or enable. It hosts no CLAP
+            // plugins either, so it has nothing to rescan.
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
             | Action::UiSettingsSet { .. }
-            | Action::PluginInstall { .. }) => {
+            | Action::PluginInstall { .. }
+            | Action::PluginClapRescan) => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
                 });
@@ -1182,8 +1222,13 @@ impl State {
             }
             // The mock runs no mixer, so there is no loudness to reset.
             Action::AudioResetLoudness {} => return Ok(CallResult::action()),
-            // The mock watches no packs folder (ADR-0097), as an engine without one.
-            action @ (Action::PackWrite { .. } | Action::PackDelete { .. }) => {
+            // The mock watches no packs folder (ADR-0097), as an engine without one, and
+            // keeps no collection file (ADR-0121), as an engine whose host named none.
+            action @ (Action::PackWrite { .. }
+            | Action::PackDelete { .. }
+            | Action::CollectionOpen { .. }
+            | Action::CollectionNew { .. }
+            | Action::CollectionSaveAs { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: action.name().into(),
                 });
@@ -1301,6 +1346,10 @@ impl State {
                     scene_id,
                 }
             }
+            Query::LabelMembers { label_id } => QueryResult::LabelMembers {
+                rev: self.collection.rev,
+                members: self.collection.label_members(&label_id)?,
+            },
             Query::StateGet => QueryResult::StateGet {
                 rev: self.collection.rev,
                 canvas: self.collection.canvas,
@@ -1319,6 +1368,7 @@ impl State {
                         name: scene.name.clone(),
                         role: scene.role,
                         camera_motion: scene.camera_motion.clone(),
+                        ptz_shots: scene.ptz_shots.clone(),
                         camera_follow: scene.camera_follow.clone(),
                         timelines: Vec::new(),
                         items: self.collection.item_infos(scene),
@@ -1338,11 +1388,12 @@ impl State {
                 master: Box::new(jstream_protocol::MasterInfo {
                     filters: self.collection.master.clone(),
                 }),
-                hotkeys: self
+                hotkeys: self.collection.hotkey_bindings(|_| true),
+                bindings: self
                     .collection
-                    .hotkeys
+                    .bindings
                     .iter()
-                    .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                    .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                     .collect(),
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: self.collection.folders.clone(),
@@ -1375,6 +1426,14 @@ impl State {
                 rev: self.collection.rev,
                 video_mixes: self.collection.video_mix_infos(),
             },
+            // The mock runs no JTunnel receiver (ADR-0123 §1: off by default).
+            Query::JtunnelSenders => QueryResult::JtunnelSenders {
+                on: false,
+                senders: Vec::new(),
+            },
+            Query::PtzList => QueryResult::PtzList {
+                cameras: Vec::new(),
+            },
             Query::CaptureTargets => QueryResult::CaptureTargets {
                 targets: vec![
                     CaptureTargetInfo {
@@ -1386,6 +1445,8 @@ impl State {
                             height: 1080,
                         }),
                         primary: true,
+                        formats: Vec::new(),
+                        controls: Vec::new(),
                     },
                     CaptureTargetInfo {
                         kind: CaptureTargetKind::Window,
@@ -1396,6 +1457,49 @@ impl State {
                             height: 720,
                         }),
                         primary: false,
+                        formats: Vec::new(),
+                        controls: Vec::new(),
+                    },
+                    CaptureTargetInfo {
+                        kind: CaptureTargetKind::Device,
+                        target: MOCK_DEVICE.into(),
+                        name: "Mock webcam".into(),
+                        size: None,
+                        primary: false,
+                        formats: vec![
+                            CaptureFormatInfo {
+                                width: 1920,
+                                height: 1080,
+                                fps: 30.0,
+                                pixel_format: "mjpeg".into(),
+                            },
+                            CaptureFormatInfo {
+                                width: 1280,
+                                height: 720,
+                                fps: 60.0,
+                                pixel_format: "nv12".into(),
+                            },
+                        ],
+                        controls: vec![
+                            CameraControlInfo {
+                                name: "brightness".into(),
+                                min: 0,
+                                max: 255,
+                                step: 1,
+                                default: 128,
+                                value: 128,
+                                auto: None,
+                            },
+                            CameraControlInfo {
+                                name: "exposure".into(),
+                                min: -11,
+                                max: -2,
+                                step: 1,
+                                default: -6,
+                                value: -6,
+                                auto: Some(true),
+                            },
+                        ],
                     },
                 ],
             },
@@ -1433,7 +1537,10 @@ impl State {
                     call: query.name().into(),
                 });
             }
-            Query::DeviceList | Query::UiSettingsGet { .. } => {
+            Query::DeviceList
+            | Query::AgentApproved
+            | Query::UiSettingsGet { .. }
+            | Query::CollectionInfo => {
                 return Err(ProtocolError::Unsupported {
                     call: query.name().into(),
                 });
@@ -1444,6 +1551,13 @@ impl State {
             },
             Query::CodecDownloads => QueryResult::CodecDownloads {
                 downloads: self.codec_downloads.clone(),
+            },
+            // The mock hosts no CLAP plugins (ADR-0035), as the engine on a platform
+            // without a plugin host.
+            Query::PluginClapScan => QueryResult::PluginClapScan {
+                scan: jstream_protocol::ClapScanInfo::unavailable(Some(
+                    "the mock engine hosts no CLAP plugins".into(),
+                )),
             },
             // The mock keeps no activity log (ADR-0083), so it lists none.
             Query::ActivityList { .. } => QueryResult::ActivityList {
@@ -1661,6 +1775,7 @@ impl Collection {
                     options: Default::default(),
                     camera: None,
                     camera_motion: Vec::new(),
+                    ptz_shots: Vec::new(),
                     camera_follow: None,
                     filters: Default::default(),
                     variant_of: None,
@@ -1796,6 +1911,12 @@ impl Collection {
                     inverse.push(Edit::SceneSetCameraMotion {
                         scene_id: scene.id.clone(),
                         motion: scene.camera_motion.clone(),
+                    });
+                }
+                if !scene.ptz_shots.is_empty() {
+                    inverse.push(Edit::SceneSetPtzShots {
+                        scene_id: scene.id.clone(),
+                        shots: scene.ptz_shots.clone(),
                     });
                 }
                 if scene.camera_follow.is_some() {
@@ -2456,7 +2577,8 @@ impl Collection {
             | Edit::FilterSetSettings { .. }
             | Edit::FilterReorder { .. }) => self.apply_filter(edit, at)?,
             // The graph's checks, in its order: the chord, whether it is bound, whether
-            // the action can be bound, then the objects it names.
+            // the action can be bound, whether a wheel chord's action takes steps, then
+            // the objects it names.
             Edit::HotkeySet { chord, action } => {
                 if let Some(reason) = chord.problem() {
                     return Err(invalid(at, "chord", reason));
@@ -2464,36 +2586,85 @@ impl Collection {
                 if self.hotkeys.contains_key(&chord) {
                     return Err(already_exists(EntityKind::Hotkey, chord.as_str()));
                 }
-                if let Some((field, reason)) = action.bind_problem() {
-                    return Err(invalid(at, &format!("action.{field}"), reason));
-                }
-                for (entity, id) in action.named_objects() {
-                    let exists = match entity {
-                        EntityKind::Scene => self.scenes.iter().any(|s| s.id.as_str() == id),
-                        EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
-                        EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
-                        EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
-                        // The mock has only the `cut` preset every collection starts with.
-                        EntityKind::Transition => id == INITIAL_PRESET,
-                        EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
-                        _ => false,
-                    };
-                    if !exists {
-                        return Err(not_found(entity, id));
-                    }
-                }
+                self.check_bindable(&action, chord.is_wheel(), at)?;
                 self.hotkeys.insert(chord.clone(), action);
                 vec![Edit::HotkeyClear { chord }]
             }
+            // The graph's checks: the binding, then the labels (ADR-0133).
+            Edit::HotkeySetLabels { chord, labels } => {
+                if !self.hotkeys.contains_key(&chord) {
+                    return Err(not_found(EntityKind::Hotkey, chord.as_str()));
+                }
+                let labels = self.checked_labels(&labels, at)?;
+                let old = if labels.is_empty() {
+                    self.hotkey_labels.remove(&chord)
+                } else {
+                    self.hotkey_labels.insert(chord.clone(), labels)
+                };
+                vec![Edit::HotkeySetLabels {
+                    chord,
+                    labels: old.unwrap_or_default(),
+                }]
+            }
             Edit::HotkeyClear { chord } => {
-                let Some(action) = self.hotkeys.remove(&chord) else {
+                let Some(binding) = self.take_hotkey(&chord) else {
                     return Err(not_found(EntityKind::Hotkey, chord.as_str()));
                 };
-                vec![Edit::HotkeySet { chord, action }]
+                restore_hotkey(binding)
+            }
+            // The graph's checks, in its order, as for hotkeys.
+            Edit::BindingSet { trigger, action } => {
+                if let Some((field, reason)) = trigger.problem() {
+                    return Err(invalid(at, &format!("trigger.{field}"), reason));
+                }
+                if self.bindings.contains_key(&trigger) {
+                    return Err(already_exists(EntityKind::Binding, &trigger.to_string()));
+                }
+                self.check_bindable(&action, false, at)?;
+                self.bindings.insert(trigger.clone(), action);
+                vec![Edit::BindingClear { trigger }]
+            }
+            Edit::BindingClear { trigger } => {
+                let Some(action) = self.bindings.remove(&trigger) else {
+                    return Err(not_found(EntityKind::Binding, &trigger.to_string()));
+                };
+                vec![Edit::BindingSet { trigger, action }]
             }
             other => return Err(unimplemented_by_mock(other.name())),
         };
         Ok(inverse)
+    }
+
+    /// Checks that `action` can be bound, as the graph does: the action's own rule,
+    /// then for a `wheel` chord that it takes steps, then the objects it names.
+    fn check_bindable(&self, action: &Action, wheel: bool, at: usize) -> Result<(), ProtocolError> {
+        if let Some((field, reason)) = action.bind_problem() {
+            return Err(invalid(at, &format!("action.{field}"), reason));
+        }
+        if wheel && !action.takes_steps() {
+            return Err(invalid(
+                at,
+                "action.type",
+                "a wheel chord runs once per notch, so it can only be bound to an action \
+                 that takes one step, such as `scene.zoom_camera` (ADR-0112)",
+            ));
+        }
+        for (entity, id) in action.named_objects() {
+            let exists = match entity {
+                EntityKind::Scene => self.scenes.iter().any(|s| s.id.as_str() == id),
+                EntityKind::Source => self.sources.keys().any(|s| s.as_str() == id),
+                EntityKind::Output => self.outputs.keys().any(|o| o.as_str() == id),
+                EntityKind::Encoder => self.encoders.keys().any(|p| p.as_str() == id),
+                // The mock has only the `cut` preset every collection starts with.
+                EntityKind::Transition => id == INITIAL_PRESET,
+                EntityKind::Item => self.items.contains_key(&ItemId::new(id)),
+                _ => false,
+            };
+            if !exists {
+                return Err(not_found(entity, id));
+            }
+        }
+        Ok(())
     }
 
     /// Checks a video mix as the engine does: its own ranges, then that the scene it
@@ -2510,37 +2681,58 @@ impl Collection {
         Ok(())
     }
 
-    /// Removes the hotkey bindings whose action names an item the collection no longer
-    /// has (ADR-0101), as [`Self::remove_hotkeys_naming`] does for a deleted object.
-    fn remove_hotkeys_of_missing_items(&mut self, removed: &mut Vec<HotkeyBinding>) -> Vec<Edit> {
-        let chords: Vec<Chord> = self
-            .hotkeys
+    /// Every binding `keep` keeps, ordered by chord, with its labels.
+    fn hotkey_bindings(&self, keep: impl Fn(&[LabelId]) -> bool) -> Vec<HotkeyBinding> {
+        self.hotkeys
             .iter()
-            .filter(|(_, action)| {
-                action.named_objects().iter().any(|&(entity, id)| {
-                    entity == EntityKind::Item && !self.items.contains_key(&ItemId::new(id))
-                })
-            })
-            .map(|(chord, _)| chord.clone())
-            .collect();
-        chords
-            .into_iter()
-            .filter_map(|chord| {
-                let action = self.hotkeys.remove(&chord)?;
-                removed.push(HotkeyBinding::new(chord.clone(), &action));
-                Some(Edit::HotkeySet { chord, action })
+            .filter_map(|(chord, action)| {
+                let labels = self.hotkey_labels.get(chord).cloned().unwrap_or_default();
+                keep(&labels).then(|| HotkeyBinding::new(chord.clone(), action).with_labels(labels))
             })
             .collect()
     }
 
-    /// Removes the hotkey bindings whose action names `entity` `id`, which a delete has
-    /// just removed, records them in `removed`, and returns the `hotkey.set` edits that
-    /// restore them, ordered by chord.
+    /// Removes the binding of `chord` and its labels, and returns it.
+    fn take_hotkey(&mut self, chord: &Chord) -> Option<HotkeyBinding> {
+        let action = self.hotkeys.remove(chord)?;
+        let labels = self.hotkey_labels.remove(chord).unwrap_or_default();
+        Some(HotkeyBinding::new(chord.clone(), &action).with_labels(labels))
+    }
+
+    /// Removes the hotkey and controller bindings whose action names an item the
+    /// collection no longer has (ADR-0101), as [`Self::remove_hotkeys_naming`] does for a
+    /// deleted object.
+    fn remove_hotkeys_of_missing_items(&mut self, removed: &mut Removed) -> Vec<Edit> {
+        let items = &self.items;
+        let gone = |action: &Action| {
+            action.named_objects().iter().any(|&(entity, id)| {
+                entity == EntityKind::Item && !items.contains_key(&ItemId::new(id))
+            })
+        };
+        let chords: Vec<Chord> = self
+            .hotkeys
+            .iter()
+            .filter(|(_, action)| gone(action))
+            .map(|(chord, _)| chord.clone())
+            .collect();
+        let triggers: Vec<Trigger> = self
+            .bindings
+            .iter()
+            .filter(|(_, action)| gone(action))
+            .map(|(trigger, _)| trigger.clone())
+            .collect();
+        self.remove_bound(chords, triggers, removed)
+    }
+
+    /// Removes the hotkey and controller bindings whose action names `entity` `id`,
+    /// which a delete has just removed, records them in `removed`, and returns the
+    /// `hotkey.set` edits (ordered by chord) then `binding.set` edits (ordered by
+    /// trigger) that restore them.
     fn remove_hotkeys_naming(
         &mut self,
         entity: EntityKind,
         id: &str,
-        removed: &mut Vec<HotkeyBinding>,
+        removed: &mut Removed,
     ) -> Vec<Edit> {
         let chords: Vec<Chord> = self
             .hotkeys
@@ -2548,14 +2740,39 @@ impl Collection {
             .filter(|(_, action)| action.named_objects().contains(&(entity, id)))
             .map(|(chord, _)| chord.clone())
             .collect();
-        chords
-            .into_iter()
-            .filter_map(|chord| {
-                let action = self.hotkeys.remove(&chord)?;
-                removed.push(HotkeyBinding::new(chord.clone(), &action));
-                Some(Edit::HotkeySet { chord, action })
-            })
-            .collect()
+        let triggers: Vec<Trigger> = self
+            .bindings
+            .iter()
+            .filter(|(_, action)| action.named_objects().contains(&(entity, id)))
+            .map(|(trigger, _)| trigger.clone())
+            .collect();
+        self.remove_bound(chords, triggers, removed)
+    }
+
+    /// Removes the bindings of `chords` and `triggers`, records them, and returns the
+    /// edits that restore them.
+    fn remove_bound(
+        &mut self,
+        chords: Vec<Chord>,
+        triggers: Vec<Trigger>,
+        removed: &mut Removed,
+    ) -> Vec<Edit> {
+        let mut restore = Vec::new();
+        for chord in chords {
+            if let Some(binding) = self.take_hotkey(&chord) {
+                removed.hotkeys.push(binding.clone());
+                restore.extend(restore_hotkey(binding));
+            }
+        }
+        for trigger in triggers {
+            if let Some(action) = self.bindings.remove(&trigger) {
+                removed
+                    .bindings
+                    .push(Binding::new(trigger.clone(), &action));
+                restore.push(Edit::BindingSet { trigger, action });
+            }
+        }
+        restore
     }
 
     /// Applies `item.move` with `jstream-graph`'s checks in its order: the item, the
@@ -3291,6 +3508,25 @@ fn already_exists(entity: EntityKind, id: &str) -> ProtocolError {
     }
 }
 
+/// The edits that put back a removed binding: its `hotkey.set`, then its
+/// `hotkey.set_labels` when it carried any (ADR-0133).
+fn restore_hotkey(binding: HotkeyBinding) -> Vec<Edit> {
+    let Some(action) = binding.action() else {
+        return Vec::new();
+    };
+    let mut edits = vec![Edit::HotkeySet {
+        chord: binding.chord.clone(),
+        action,
+    }];
+    if !binding.labels.is_empty() {
+        edits.push(Edit::HotkeySetLabels {
+            chord: binding.chord,
+            labels: binding.labels,
+        });
+    }
+    edits
+}
+
 /// A protocol variant added after this mock was written.
 fn unimplemented_by_mock(what: &str) -> ProtocolError {
     ProtocolError::Internal {
@@ -3781,19 +4017,22 @@ mod tests {
     }
 
     #[test]
-    fn capture_targets_lists_one_primary_display_and_one_window() {
+    fn capture_targets_lists_one_primary_display_one_window_and_one_device() {
         let engine = MockEngine::new();
         let control = connected(&engine);
         let Ok(QueryResult::CaptureTargets { targets }) = query(&*control, Query::CaptureTargets)
         else {
             panic!("a capture.targets result");
         };
-        assert_eq!(targets.len(), 2);
+        assert_eq!(targets.len(), 3);
         assert_eq!(targets[0].target, super::MOCK_DISPLAY);
         assert!(targets[0].primary);
         assert_eq!(targets[1].kind, crate::protocol::CaptureTargetKind::Window);
         assert_eq!(targets[1].target, super::MOCK_WINDOW);
         assert!(!targets[1].primary);
+        assert_eq!(targets[2].kind, crate::protocol::CaptureTargetKind::Device);
+        assert_eq!(targets[2].target, super::MOCK_DEVICE);
+        assert_eq!(targets[2].formats.len(), 2);
     }
 
     #[test]
@@ -3912,6 +4151,7 @@ mod tests {
             audio: false,
             max_outset_px: None,
             params: vec![ParamDescriptor {
+                warning: None,
                 id: "lut".into(),
                 ty: ParamType::Asset {
                     accept: vec!["cube".into()],
@@ -4038,6 +4278,7 @@ mod tests {
                 buses,
                 sends,
                 hotkeys,
+                bindings,
                 transitions,
                 folders,
                 labels,
@@ -4056,6 +4297,7 @@ mod tests {
                 buses,
                 sends,
                 hotkeys,
+                bindings,
                 transitions,
                 folders,
                 labels,
@@ -4279,6 +4521,7 @@ mod tests {
                 sends: vec![],
                 master: Default::default(),
                 hotkeys: vec![],
+                bindings: vec![],
                 transitions: Box::new(TransitionsInfo::default()),
                 folders: Vec::new(),
                 labels: Vec::new(),
@@ -5070,6 +5313,43 @@ mod tests {
         };
         let chords: Vec<_> = hotkeys.iter().map(|b| b.chord.as_str()).collect();
         assert_eq!(chords, ["F1", "F9"]);
+    }
+
+    /// A wheel chord binds only an action that takes steps, as the graph checks it
+    /// (ADR-0112 §3), before the objects the action names.
+    #[test]
+    fn a_wheel_chord_binds_only_an_action_that_takes_steps() {
+        let (_engine, control) = parity_engine();
+        let bind = |action| {
+            batch(
+                &*control,
+                Batch::single(Edit::HotkeySet {
+                    chord: jstream_protocol::Chord::new("Ctrl+WheelUp"),
+                    action,
+                }),
+            )
+        };
+        let refused = bind(Action::SceneSwitch {
+            scene_id: SceneId::new("missing"),
+            preset_id: None,
+        })
+        .expect_err("a switch takes no steps");
+        assert!(
+            matches!(
+                refused.protocol(),
+                Some(ProtocolError::InvalidArgument { field, .. }) if field == "edits.0.action.type"
+            ),
+            "{refused:?}"
+        );
+        let refused = bind(Action::SceneZoomCamera {
+            scene_id: SceneId::new("missing"),
+            steps: 1,
+        })
+        .expect_err("the scene is missing");
+        assert!(
+            matches!(refused.protocol(), Some(ProtocolError::NotFound { .. })),
+            "{refused:?}"
+        );
     }
 
     #[test]
