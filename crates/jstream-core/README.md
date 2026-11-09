@@ -1250,9 +1250,12 @@ follows the same rules: `studio.set_preview` sets it (`not_found` for a
 missing scene; setting the scene already there emits nothing), the first scene goes on
 preview when it is created, and a deleted preview scene gives way to the first scene
 left. A switch never moves it, and nothing draws it until E2's preview mix does. The
-studio also names the **warm scenes** (ADR-0117 §7, `Studio::warm`): the Preview scene,
-then the scenes most recently on program, never the program scene, at most the warm
-budget in all. The Preview scene is warm even past the budget, so a budget of 0 keeps
+studio also names the **warm scenes** (ADR-0117 §7 and
+[ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md), `Studio::warm`, which
+reads the collection): the Preview scene, then the scenes whose `keep_warm` option is
+on, in display order, then the scenes a hotkey's or a trigger binding's `scene.switch`
+names, then the scenes most recently on program, never the program scene, each once,
+at most the warm budget in all. The Preview scene is warm even past the budget, so a budget of 0 keeps
 only it. A deleted scene is forgotten. The budget is `studio.set_warm`'s (0 to
 `MAX_WARM_SCENES`, `DEFAULT_WARM_SCENES` until set, `invalid_argument` past it), an
 application setting: it changes no `rev` and emits nothing, a newly opened collection's
@@ -2571,8 +2574,8 @@ first frame, which the sources' thread takes once decoded, so the switch to its 
 shows that frame in its first plan and plays on with no seek. A preview that looks at
 a cued source first lets it play on from there (`Source::uncue`). A warm scene is not
 composited unless it is monitored. The set is also published after `studio.set_warm`
-changes the budget. The pin and the hotkey-bound scenes are still to come, and so is
-the budget's estimate of GPU bytes.
+changes the budget, and after each plan when an edit kept a scene warm or bound one.
+The budget's estimate of GPU bytes is still to come.
 
 A JPEG or PNG stream gets a picture queue instead of an encoder session
 (`Program::attach_pictures`, `picture_queue`): the render thread copies each frame read

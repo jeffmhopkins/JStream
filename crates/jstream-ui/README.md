@@ -425,7 +425,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
   Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
   chain in the Filters panel; Pop out opens the scene in a projector window, Show in
-  multiview toggles the scene's flag (`scene.set_meta`), Copy and Paste scene do what
+  multiview toggles the scene's flag (`scene.set_meta`), Keep warm toggles its
+  `keep_warm` option (`scene.set_options` with its other options kept, disabled on a
+  keyframe scene, [ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)), Copy and Paste scene do what
   Ctrl+C and Ctrl+V do, and Duplicate scene sends `clipboard.rs`'s copy of it). A
   Sources row's menu for one item starts with Rename, as F2. The
   Transition in and out submenus,
@@ -701,13 +703,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out, the
-  hotkey, the Background color, Show in multiview, Include its audio when nested and the
-  camera: the hotkey field takes the next key press as a chord (the modifiers in the
+  hotkey, the Background color, Show in multiview, Include its audio when nested, Keep
+  warm (hidden on a keyframe scene) and the camera: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, `scene.set_meta` (the scene's labels, icon,
   colour and favourite kept as the collection has them at OK), `scene.set_options` (the
-  nested audio switch and the background, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
+  nested audio switch, the background and Keep warm, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
   and `hotkey.clear` of the old chord before
   `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
   named (none for a first hotkey). A chord bound already, or a background that isn't

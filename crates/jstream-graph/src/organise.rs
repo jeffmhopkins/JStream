@@ -531,6 +531,13 @@ fn set_scene_options(
             "a keyframe scene shows its parent's background",
         ));
     }
+    if options.keep_warm && state.scenes[si].variant_of().is_some() {
+        return Err(invalid(
+            at,
+            "keep_warm",
+            "a keyframe scene is shown through its parent, which is the one kept warm",
+        ));
+    }
     let old = std::mem::replace(&mut state.scenes[si].options, options.clone());
     Ok(vec![Edit::SceneSetOptions {
         scene_id: scene_id.clone(),

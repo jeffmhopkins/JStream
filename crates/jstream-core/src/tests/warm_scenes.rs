@@ -261,3 +261,35 @@ fn the_warm_budget_drops_the_recent_scenes_and_is_kept_in_its_file() {
     );
     std::fs::remove_dir_all(&dir).expect("cleaned up");
 }
+
+#[test]
+fn a_kept_warm_scene_is_warm_before_it_is_shown() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    let scenes = vec![
+        create("main"),
+        create("b"),
+        screen(),
+        add("b", "shown", "screen"),
+    ];
+    batch(&control, edits(scenes)).expect("scenes");
+    assert!(engine.settle_sources(), "the capture sources were built");
+    assert_eq!(hub.load_warm().len(), 0, "b is neither preview nor shown");
+
+    let keep_warm = |on: bool| Edit::SceneSetOptions {
+        scene_id: SceneId::new("b"),
+        options: jstream_protocol::SceneOptions {
+            keep_warm: on,
+            ..jstream_protocol::SceneOptions::default()
+        },
+    };
+    batch(&control, edits(vec![keep_warm(true)])).expect("kept warm");
+    assert_eq!(hub.load_warm().len(), 1, "b is kept warm");
+
+    act(&control, Action::StudioSetWarm { scenes: 0 });
+    assert_eq!(hub.load_warm().len(), 0, "a budget of 0 keeps only Preview");
+    act(&control, Action::StudioSetWarm { scenes: 3 });
+    batch(&control, edits(vec![keep_warm(false)])).expect("no longer");
+    assert_eq!(hub.load_warm().len(), 0, "b is warm no more");
+}

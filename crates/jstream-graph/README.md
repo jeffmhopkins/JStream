@@ -400,7 +400,8 @@ that does not want to change the graph it has.
   ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)): `include_audio`,
   which the engine reads when it follows nesting for audio, and `background`, checked as
   a colour (`SceneOptions::problem`) and refused on a keyframe scene, which shows its
-  parent's. A deleted scene's inverse restores them.
+  parent's, and `keep_warm` (ADR-0149), refused on a keyframe scene too, since its
+  parent is the scene kept warm. A deleted scene's inverse restores them.
   `scene.set_camera` (`camera.rs`) sets or removes a scene's camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), checked by `SceneCamera::validate`
   (field `camera.fov_deg`, `camera.target` when it is on the position, else `camera`). On a keyframe scene it writes
@@ -576,7 +577,8 @@ by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writ
 while absent, is `schema_version` 10. Version 11 (ADR-0133) adds a hotkey binding's and a
 timeline's `labels`. Version 13 (ADR-0138) adds motion modifiers with `property`
 `effect` and their `effect` target, which drive an effect's setting. A scene's `ptz_shots` (ADR-0146), omitted
-while empty, are `schema_version` 14. Loading creates the folders top level first, then
+while empty, are `schema_version` 14, and a scene's `keep_warm` (ADR-0149), omitted
+while `false`, is `schema_version` 15. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't

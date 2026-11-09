@@ -815,6 +815,34 @@ pub fn Scenes() -> impl IntoView {
                     })
                     .checked(on)
                 };
+                // "Keep warm" (ADR-0117 §7), as in Scene properties. A keyframe scene is
+                // shown through its parent, so it can't be kept warm itself.
+                let keep_warm = {
+                    let id = id.clone();
+                    let (on, keyframe) = studio.collection.with_untracked(|c| {
+                        c.as_ref()
+                            .and_then(|c| c.scene(&id))
+                            .map_or((false, true), |s| {
+                                (s.options.keep_warm, s.variant_of.is_some())
+                            })
+                    });
+                    Entry::item("Keep warm", move || {
+                        let options = studio.collection.with_untracked(|c| {
+                            c.as_ref()
+                                .and_then(|c| c.scene(&id))
+                                .map(|s| s.options.clone())
+                        });
+                        if let Some(mut options) = options {
+                            options.keep_warm = !options.keep_warm;
+                            send_all(vec![Edit::SceneSetOptions {
+                                scene_id: id.clone(),
+                                options,
+                            }]);
+                        }
+                    })
+                    .checked(on)
+                    .disabled_if(keyframe)
+                };
                 let copy_id = id.clone();
                 menus.open(
                     &event,
@@ -859,6 +887,7 @@ pub fn Scenes() -> impl IntoView {
                             Some(crate::screenshot::Shot::Scene(id.clone())),
                         ),
                         multiview,
+                        keep_warm,
                         Entry::Sep,
                         Entry::item("New scene", move || new_scene(scene_folder.clone())),
                         Entry::item("New keyframe", move || new_keyframe(keyframe_id.clone())),

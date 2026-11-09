@@ -339,7 +339,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.115 because the studio's warm budget is a setting: the action
+`PROTOCOL_VERSION` is 0.116 because a scene can be kept warm: `SceneOptions`'
+`keep_warm`, set with `scene.set_options` and refused on a keyframe scene
+([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md), #1468); 0.115 because
+the studio's warm budget is a setting: the action
 `studio.set_warm` and `studio.get`'s `warm_scenes` (ADR-0117 §7, #1468); 0.114 because
 the JTunnel receiver finds senders on the LAN:
 the query `jtunnel.senders` (`JtunnelSenderInfo`) and the event
@@ -1362,9 +1365,12 @@ Mixer through no nesting of it, whatever each scene source's own `audio.enabled`
 it is still heard on program itself (on a group, which is only reached through nesting,
 it leaves out the children's audio wherever the group shows), and `background` (default
 none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn under the
-scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it). `scene.set_options` replaces them all the
+scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it), and
+since 0.116 `keep_warm` (default `false`), which keeps the scene warm while it is off
+program, ranked after the Preview scene within the warm budget
+([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)). `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
-parent and is refused, and `state.get` reports them flattened beside the scene's other
+parent and is refused, and `keep_warm`, which its parent decides and is refused, and `state.get` reports them flattened beside the scene's other
 fields, each omitted while it has its default. A scene's **camera**
 (`scene.set_camera {scene_id, camera?}`, since 0.70,
 [ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s

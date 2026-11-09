@@ -14,14 +14,17 @@
 //! studio keeps it as [`Running`] until it ends, and the program mix draws it.
 //!
 //! The studio also names the scenes kept warm beside the program (ADR-0117 §7): the
-//! Preview scene, then the scenes most recently on program, at most the warm budget
-//! (`studio.set_warm`, [`DEFAULT_WARM_SCENES`] until it is set). The Preview scene is
+//! Preview scene, then the scenes kept warm by their `keep_warm` option, then those a
+//! hotkey or a trigger switches to, then the scenes most recently on program, at most
+//! the warm budget (`studio.set_warm`, [`DEFAULT_WARM_SCENES`] until it is set). The Preview scene is
 //! warm even past the budget, so a budget of 0 keeps only it. A running transition's
 //! destination is the program scene itself. The budget is an application setting: a
 //! new collection's studio keeps it ([`Studio::fresh`]).
 
 use jstream_graph::State;
-use jstream_protocol::{DEFAULT_WARM_SCENES, EntityKind, MAX_WARM_SCENES, ProtocolError, SceneId};
+use jstream_protocol::{
+    Action, DEFAULT_WARM_SCENES, EntityKind, MAX_WARM_SCENES, ProtocolError, SceneId,
+};
 
 use crate::transition::Running;
 
@@ -107,15 +110,31 @@ impl Studio {
     }
 
     /// The scenes kept warm beside the program, in priority order (ADR-0117 §7): the
-    /// Preview scene, even past the budget, then the scenes most recently on program, at
-    /// most the budget in all, never the program scene.
-    pub(crate) fn warm(&self) -> Vec<SceneId> {
+    /// Preview scene, even past the budget; then the scenes `collection` keeps warm
+    /// (`keep_warm`), in display order; then the scenes its hotkeys and its trigger
+    /// bindings switch to; then the scenes most recently on program. At most the budget
+    /// in all, the Preview scene counted, never the program scene, each once.
+    pub(crate) fn warm(&self, collection: &State) -> Vec<SceneId> {
         let mut warm: Vec<SceneId> = Vec::with_capacity(self.budget.max(1));
         let program = self.program.as_ref();
         if let Some(preview) = self.preview.as_ref().filter(|id| Some(*id) != program) {
             warm.push(preview.clone());
         }
-        for id in &self.recent {
+        let pinned = collection
+            .scenes()
+            .iter()
+            .filter(|scene| scene.options().keep_warm)
+            .map(|scene| scene.id());
+        let bound = collection
+            .hotkeys()
+            .map(|(_, action)| action)
+            .chain(collection.bindings().map(|(_, action)| action))
+            .filter_map(|action| match action {
+                Action::SceneSwitch { scene_id, .. } => Some(scene_id),
+                _ => None,
+            })
+            .filter(|id| collection.scene(id).is_some());
+        for id in pinned.chain(bound).chain(&self.recent) {
             if warm.len() >= self.budget {
                 break;
             }
@@ -306,23 +325,23 @@ mod tests {
         );
         studio.reconcile(graph.state());
         assert_eq!(
-            studio.warm(),
+            studio.warm(graph.state()),
             Vec::<SceneId>::new(),
             "preview is the program"
         );
 
         studio.switch(scene("b"), None);
         assert_eq!(
-            studio.warm(),
+            studio.warm(graph.state()),
             vec![scene("a")],
             "a is preview and was shown"
         );
         studio.switch(scene("c"), None);
         studio.switch(scene("b"), None);
-        assert_eq!(studio.warm(), vec![scene("a"), scene("c")]);
+        assert_eq!(studio.warm(graph.state()), vec![scene("a"), scene("c")]);
         studio.switch(scene("b"), None);
         assert_eq!(
-            studio.warm(),
+            studio.warm(graph.state()),
             vec![scene("a"), scene("c")],
             "switching to the program again changes nothing"
         );
@@ -332,7 +351,7 @@ mod tests {
             .expect("e exists");
         studio.switch(scene("d"), None);
         assert_eq!(
-            studio.warm(),
+            studio.warm(graph.state()),
             vec![scene("e"), scene("b"), scene("c")],
             "preview first, then the most recent, capped"
         );
@@ -345,7 +364,7 @@ mod tests {
         );
         studio.reconcile(graph.state());
         assert_eq!(
-            studio.warm(),
+            studio.warm(graph.state()),
             vec![scene("e"), scene("c"), scene("a")],
             "a deleted scene is forgotten"
         );
@@ -370,18 +389,22 @@ mod tests {
             .set_preview(graph.state(), &scene("a"))
             .expect("a exists");
         assert_eq!(
-            studio.warm(),
+            studio.warm(graph.state()),
             vec![scene("a"), scene("e"), scene("d")],
             "the default budget is 3"
         );
 
         assert!(studio.set_budget(0));
-        assert_eq!(studio.warm(), vec![scene("a")], "preview stays warm at 0");
+        assert_eq!(
+            studio.warm(graph.state()),
+            vec![scene("a")],
+            "preview stays warm at 0"
+        );
         assert!(!studio.set_budget(0), "the same budget changes nothing");
 
         assert!(studio.set_budget(5));
         assert_eq!(
-            studio.warm(),
+            studio.warm(graph.state()),
             vec![scene("a"), scene("e"), scene("d"), scene("c"), scene("b")],
             "a larger budget brings back scenes shown before it was set"
         );
@@ -389,6 +412,60 @@ mod tests {
         let fresh = studio.fresh();
         assert_eq!(fresh.budget(), 5, "a new collection keeps the budget");
         assert_eq!(fresh.program(), None);
-        assert!(fresh.warm().is_empty());
+        assert!(fresh.warm(graph.state()).is_empty());
+    }
+
+    #[test]
+    fn kept_warm_and_bound_scenes_rank_after_preview_and_before_the_recent_ones() {
+        use jstream_protocol::{Action, Chord, SceneOptions};
+        let mut graph = Graph::new();
+        apply(
+            &mut graph,
+            ["a", "b", "c", "d", "e"].into_iter().map(create).collect(),
+        );
+        let mut studio = Studio::default();
+        studio.reconcile(graph.state());
+        studio.switch(scene("b"), None);
+        studio.switch(scene("a"), None);
+        studio
+            .set_preview(graph.state(), &scene("c"))
+            .expect("c exists");
+        assert_eq!(studio.warm(graph.state()), vec![scene("c"), scene("b")]);
+
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetOptions {
+                    scene_id: scene("e"),
+                    options: SceneOptions {
+                        keep_warm: true,
+                        ..SceneOptions::default()
+                    },
+                },
+                Edit::HotkeySet {
+                    chord: Chord::new("F1"),
+                    action: Action::SceneSwitch {
+                        scene_id: scene("d"),
+                        preset_id: None,
+                    },
+                },
+            ],
+        );
+        assert_eq!(
+            studio.warm(graph.state()),
+            vec![scene("c"), scene("e"), scene("d")],
+            "preview, kept warm, bound; the recent b is past the budget of 3"
+        );
+        studio.set_budget(8);
+        assert_eq!(
+            studio.warm(graph.state()),
+            vec![scene("c"), scene("e"), scene("d"), scene("b")]
+        );
+        studio.switch(scene("e"), None);
+        assert_eq!(
+            studio.warm(graph.state()),
+            vec![scene("c"), scene("d"), scene("a"), scene("b")],
+            "a kept-warm scene on program is the program's"
+        );
     }
 }

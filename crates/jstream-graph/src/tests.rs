@@ -1777,6 +1777,7 @@ mod property {
                         1 => Some(color(rng).into()),
                         _ => Some("none".into()),
                     },
+                    keep_warm: false,
                 },
             },
             65 => Edit::SourceSetMeta {
