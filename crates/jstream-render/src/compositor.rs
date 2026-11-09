@@ -9,7 +9,7 @@ use crate::blend::{self, BlendPipelines, Layouts, Steps};
 use crate::color::{self, premultiplied_linear};
 use crate::error::RenderError;
 use crate::filter::{self, FilterClock, VideoFilter};
-use crate::gpu::{Gpu, OpenOptions};
+use crate::gpu::{Faults, Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
@@ -106,6 +106,10 @@ pub struct Compositor {
     blends: BlendPipelines,
     backdrop: Option<Backdrop>,
     resolve_layout: wgpu::BindGroupLayout,
+    /// The resolve's input: the working target and a nearest sampler, since sampling
+    /// it costs a software renderer less than loading its texels (#1449).
+    resolve_input: wgpu::BindGroupLayout,
+    resolve_sampler: wgpu::Sampler,
     resolve: wgpu::RenderPipeline,
     targets: Option<Targets>,
     vertices: Vec<u8>,
@@ -331,7 +335,7 @@ impl Compositor {
         let output = targets.output.clone();
         let waiting = std::time::Instant::now();
         let pixels = match readback_buffer {
-            Some(buffer) => Some(map_snapshot(&self.gpu.device, buffer, width, height)?),
+            Some(buffer) => Some(map_snapshot(&self.gpu, buffer, width, height)?),
             None => None,
         };
         self.readback_wait = waiting.elapsed();
@@ -814,6 +818,22 @@ impl Compositor {
         self.gpu.faults.lost.get().cloned()
     }
 
+    /// Destroys the device, as a driver reset would lose it: tests that stand in for a
+    /// loss, and a host that gives a device up on purpose, call this and never
+    /// `wgpu::Device::destroy` itself. The loss is recorded first ([`Self::lost`] says
+    /// `destroyed`), once no thread is reading one of the device's mapped buffers, such
+    /// as a readback's copier: the next poll of a destroyed device frees its buffers, so
+    /// a read still under way would read freed memory.
+    pub fn destroy_device(&self) {
+        self.gpu.faults.mark_lost("destroyed".to_owned());
+        self.gpu.device.destroy();
+    }
+
+    /// How this compositor's device has failed, shared with every compositor on it.
+    pub(crate) fn faults(&self) -> &Arc<Faults> {
+        &self.gpu.faults
+    }
+
     /// The first uncaptured wgpu error on this compositor's device since the last call:
     /// one no call returned, such as a validation error in a submitted command. wgpu's
     /// default would panic on it. The compositor installs its own handler instead, so a
@@ -893,7 +913,13 @@ impl Compositor {
             "jstream-render-resolve",
             include_str!("resolve.wgsl"),
         );
-        let resolve = resolve_pipeline(&gpu.device, &resolve_layout, &resolve_shader);
+        let resolve_input = resolve_input_layout(&gpu.device);
+        let resolve = resolve_pipeline(&gpu.device, &resolve_input, &resolve_shader);
+        // Nearest and clamped: the resolve samples each texel's centre.
+        let resolve_sampler = gpu.device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("jstream-render-resolve"),
+            ..Default::default()
+        });
         let filters = filter::Runtime::new(&gpu.device);
         let mip_pipelines = MipPipelines::new(&gpu.device, &image_layout);
         let models = ModelRuntime::new(&gpu);
@@ -911,6 +937,8 @@ impl Compositor {
             blends,
             backdrop: None,
             resolve_layout,
+            resolve_input,
+            resolve_sampler,
             resolve,
             targets: None,
             vertices: Vec::new(),
@@ -1206,11 +1234,17 @@ impl Compositor {
             .device
             .create_bind_group(&wgpu::BindGroupDescriptor {
                 label: Some("jstream-render-resolve"),
-                layout: &self.resolve_layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: wgpu::BindingResource::TextureView(&working_view),
-                }],
+                layout: &self.resolve_input,
+                entries: &[
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: wgpu::BindingResource::TextureView(&working_view),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.resolve_sampler),
+                    },
+                ],
             });
         self.targets = Some(Targets {
             width,
@@ -1661,7 +1695,7 @@ pub(crate) fn padded_row_bytes(width: u32) -> u32 {
 }
 
 fn map_snapshot(
-    device: &wgpu::Device,
+    gpu: &Gpu,
     buffer: wgpu::Buffer,
     width: u32,
     height: u32,
@@ -1672,7 +1706,7 @@ fn map_snapshot(
         .map_async(wgpu::MapMode::Read, move |result| {
             let _ = send.send(result);
         });
-    device
+    gpu.device
         .poll(wgpu::PollType::wait_indefinitely())
         .map_err(|e| RenderError::Readback {
             detail: e.to_string(),
@@ -1685,17 +1719,16 @@ fn map_snapshot(
             detail: e.to_string(),
         })?;
     let stride = padded_row_bytes(width) as usize;
-    let snapshot = {
-        let view = buffer
-            .slice(..)
-            .get_mapped_range()
-            .map_err(|e| RenderError::Readback {
-                detail: e.to_string(),
-            })?;
-        Snapshot::from_padded(width, height, &view, stride)
-    };
+    let snapshot = gpu
+        .faults
+        .read_mapped(&buffer, |view| {
+            Snapshot::from_padded(width, height, view, stride)
+        })
+        .ok_or_else(|| RenderError::Readback {
+            detail: "the readback buffer can't be read: the device was lost".into(),
+        });
     buffer.unmap();
-    Ok(snapshot)
+    snapshot
 }
 
 fn shader(device: &wgpu::Device, label: &str, source: &str) -> wgpu::ShaderModule {
@@ -1742,6 +1775,31 @@ fn resolve_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
             },
             count: None,
         }],
+    })
+}
+
+/// [`resolve_layout`]'s texture and a non-filtering sampler for it.
+fn resolve_input_layout(device: &wgpu::Device) -> wgpu::BindGroupLayout {
+    device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+        label: Some("jstream-render-resolve-input"),
+        entries: &[
+            wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Texture {
+                    sample_type: wgpu::TextureSampleType::Float { filterable: false },
+                    view_dimension: wgpu::TextureViewDimension::D2,
+                    multisampled: false,
+                },
+                count: None,
+            },
+            wgpu::BindGroupLayoutEntry {
+                binding: 1,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::NonFiltering),
+                count: None,
+            },
+        ],
     })
 }
 

@@ -520,9 +520,9 @@ every mix runs at the base rate divided by an integer.
 | Render | Composites every mix on each base-rate tick, then the monitored scenes preview streams show; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. A monitored scene not begun within the tick's period is skipped and counted, so the program never waits for one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
 | Readback (`jstream-readback`, one per program stage's render thread) | Copies each mapped readback buffer out as tightly packed RGBA8 and hands it back to the render thread, which swaps it in, so the render thread copies no pixels ([ADR-0117](adr/0117-real-time-video-thread-model.md) §4) | Not real-time: it only copies and unmaps. A buffer is reused once its copy is back. Ends with the render thread's compositor. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
-| Preview (one per engine, while any preview stream is open) | For an H.264 stream of the program or of a scene, holds the program stage (opening it with no output) and hands it the stream's encoder, which the render thread feeds with the program, or the scene as a monitored scene, at the stream's size; a sender thread per such stream forwards its packets ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a source, a draft, JPEG or PNG) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
+| Preview (one per engine, while any preview stream is open) | For a stream of the program or of a scene, holds the program stage (opening it with no output) and hands it the stream's H.264 encoder, or a JPEG or PNG stream's picture queue, which the render thread feeds with the program, or the scene as a monitored scene, at the stream's size; a sender thread per such stream forwards its packets, or encodes and sends its pictures ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a source, a draft, or any stream of an engine without backends) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
-| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while it runs (while any output or H.264 preview stream of the program holds it), fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
+| Collector | Frees objects whose last reference was released by RT threads | [R-RT-003](RULES.md#R-RT-003). One for the program stage while it runs (while any output or program or scene preview stream holds it), fed by its render and mixer threads (snapshots, live values, GPU images, finished sessions' inputs, a dropped mix's frame buffers, a closed picture queue, replaced monitored-scene snapshots), and the mixer's own for the input rings the mixer and audio threads release, and removed buses' state, filter chains and filters. |
 
 **Target video model** ([ADR-0117](adr/0117-real-time-video-thread-model.md), being built
 in steps under #1221): the render thread only composites and submits, never touching
@@ -533,8 +533,9 @@ NV12 readback is #1433); the engine shares
 one GPU context; and the program stage runs while anything consumes it (a preview stream,
 a projector, an output or a virtual camera), compositing the program and every monitored
 scene, so the preview thread encodes and sends frames the render thread drew instead of
-compositing its own (built for H.264 streams of the program and of scenes; JPEG and PNG
-streams still draw on the preview thread). A small `jstream-work-*` pool takes CPU work with no thread of its
+compositing its own (built for the program's and the scenes' streams; source and draft
+streams still draw on the preview thread, and JPEG and PNG encode on each stream's
+sender thread until the pool exists). A small `jstream-work-*` pool takes CPU work with no thread of its
 own. The table above is the model as built; each step edits it as it lands.
 
 This section is the engine-wide model. Each subsystem's runtime, as built, is described
@@ -1132,7 +1133,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
-  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette), borders
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
   and how to stack them, layering light, masks and reflections, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
@@ -1292,7 +1293,10 @@ crate draws them through the filter harness), and the output path below.
 **Device loss** (#349). A GPU hang that Windows resets (TDR), a driver reset or a removed
 GPU takes the device with it, and with it everything made on it. The compositor watches
 its device, its own or the context's, for the loss (`Compositor::lost`), and keeps the
-invalid-resource errors that follow from panicking the render thread. The render thread
+invalid-resource errors that follow from panicking the render thread. The next poll of a
+lost device, on any thread, frees every buffer made on it, so recording the loss waits
+for any read of a mapped buffer under way (the `jstream-readback` copier's), and a read
+after it reads nothing (#1454). The render thread
 treats a lost device as one event: it opens the compositor on a new device at once, off
 the render thread with the fallback's deadline, and the output repeats its last frame
 meanwhile and stays up. On the platform's context that is step 6's fallback, so capture
