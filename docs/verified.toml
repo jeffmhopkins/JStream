@@ -1431,7 +1431,7 @@ stamp = { hash = "b3:4f0b3f117068e82b", by = "agent:claude@session_01E4Mb9bbGDC2
 stamp = { hash = "b3:a0092f39030c74c7", by = "agent:browser-linux", note = "Added the Linux executable (src/main.rs, run_helper), its $ORIGIN rpath build.rs, the cef-gated bin and why the zip builds --lib; Windows DLL text unchanged and still true (ADR-0095)." }
 
 ["CRATE-jstream-cli#design"."body"]
-stamp = { hash = "b3:6b67c2377f4118c2", by = "agent:perf-thread", note = "The bench bullet now says the engine must be able to write to --out; open question 4 lists exit 5 as provisional" }
+stamp = { hash = "b3:6b139f7a258f08e0", by = "agent:claude-perf-suite", note = "The bench stays a protocol client; its design now names every call it uses (adding quality.probe and kind.list); scenario sources are made by its batch and cleaned up." }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
 stamp = { hash = "b3:fe0a452ab2d9cc7c", by = "agent:jtunnel-discovery", note = "Re-read against the control README's new mock bullet: the CLI's design is unaffected; holds." }
@@ -1440,10 +1440,10 @@ stamp = { hash = "b3:fe0a452ab2d9cc7c", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:3e32440780464802", by = "agent:claude", note = "quality probe (ADR-0145): the CLI's quality probe command, the bench's probe after each switch and its failed_probes, min_probe_psnr_y and min_probe_ssim_y gates are described as built" }
+stamp = { hash = "b3:8a7d369e5a585c0e", by = "agent:claude-perf-suite", note = "The bench stays a protocol client; scenario sources are made by its batch and cleaned up; no design change." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:896cbcb0c1695742", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:b9e16b1e44fa4694", by = "agent:claude-perf-suite", note = "The bench still reads only protocol events; the baseline-tick fix changes no design point. | kept from the merged side: still protocol-only; the mock test now shows captures aren't run by default and kind-less engines skip" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -1470,10 +1470,10 @@ stamp = { hash = "b3:1c9936a59c9c02c5", by = "agent:perf-thread", note = "Conten
 stamp = { hash = "b3:eaa5df84ce41e8df", by = "agent:browser-linux", note = "ARCH crate-map/apps changed only the browser helper's row and the daemon's cef-on-Linux note; nothing in the CLI's purpose refers to either." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:3e32440780464802", by = "agent:claude", note = "quality probe (ADR-0145): the CLI's quality probe command, the bench's probe after each switch and its failed_probes, min_probe_psnr_y and min_probe_ssim_y gates are described as built" }
+stamp = { hash = "b3:8a7d369e5a585c0e", by = "agent:claude-perf-suite", note = "Purpose's bench line (bench.rs, gates, #1220) still holds with the new scenarios." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:896cbcb0c1695742", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:b9e16b1e44fa4694", by = "agent:claude-perf-suite", note = "Purpose's bench line still holds after the baseline-tick fix. | kept from the merged side: bench scenarios and options are still summarised by the Contents line, including review round 1's opt-in captures and the skip when kinds can't be read" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -1494,13 +1494,13 @@ stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Re
 stamp = { hash = "b3:095239aa3b94ff11", by = "agent:camera-controls", note = "Re-read: capture targets output stays in run.rs; it now adds a line per camera control, which the purpose's contents list needs no change for (#1196). | merge: Merged wave/alpha5: #1298 (blending space, 0.101), #1313 (effect-pack GPU quarantine, 0.102), #1336 (view reports, 0.103). This PR's protocol number moved from 0.107 to 0.105 per the wave queue. Re-read the parts the merge changed alongside this PR's camera-controls text: no conflict, still holds. | kept from the merged side: #1230: args.rs parses canvas.set_blending and the set_blend usage lists nine modes; purpose unchanged. | merge: Merged wave/alpha5: it brought protocol 0.96 to 0.100 (controller bindings, the pairing network listener, 2D/3D moves, keyframe timing and easings, hotkey and timeline labels) and collection schema 8 to 11. This branch is renumbered on top: protocol 0.101 and schema 12 (v11_to_v12 migration, v12.json fixture, the since-0.101 notes). Its blending text stands beside the wave's, and nothing in the wave touches blend modes or the blending space. | merge: Merged wave/alpha5 (syncs #1390 and #1394): it brought main's #1341 Properties & filters dialog, #1345 compact number rows (IN-06 crop on one row), #1262 and main's 0.90 capture types. IN-06 takes the wave's compact crop text and IN-07 keeps this branch's nine modes in the project's blending space. Protocol stays 0.101 and schema 12, and the snapshots are unchanged on regeneration. | kept from the merged side: review N1: pair and the panel now list each network address's pairing page (<url>/pair), not the listener root; the contents list holds | merge: the wave brought #1364's squash, the same content this branch already had; this branch adds #1364 N1 (<url>/pair) | merge: main's #1262 webcam device, resolution, frame rate and format picking (protocol 0.90: capture.targets lists devices with CaptureFormatInfo, the capture_format parameter type), #1348 an open webcam switching to a later open's format, #1352 9-slice border frame, #1383 border outset at its settings, #1389/#1392 Outputs panel review fixes; merged with the wave's 0.91 to 0.100 protocol, labels, MIDI and motion work; this section still holds | kept from the merged side: run.rs's pair output gains the network addresses and fingerprint; the contents list (commands, running, exit codes, blocking, bench, mcp) still holds | kept from the merged side: run/tests.rs now expects the mock webcam and its two format lines in capture targets; the section holds | kept from the merged side: Re-read the purpose: it does not describe the state.get golden; the fixture now expects the initial Cut at duration 0, and the command list is unchanged." }
 
 ["CRATE-jstream-cli#usage"."body"]
-stamp = { hash = "b3:85e8aa823df2e289", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:7d7ea8e7b70ad833", by = "agent:claude-perf-suite", note = "The window now counts from the latest tick after the outside sources show a picture (review B1), so a source's start isn't measured; the Bench text says so. | kept from the merged side: Bench: all runs basic..browser; display and webcam only when named (comma list); sheets are <scenario>-switch-<n>.png; kinds unreadable means skip; checked against Scenario::ALL/EVERY/parse, save_sheet and run (review B1, N1, N2)" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:3e32440780464802", by = "agent:claude", note = "quality probe (ADR-0145): the CLI's quality probe command, the bench's probe after each switch and its failed_probes, min_probe_psnr_y and min_probe_ssim_y gates are described as built" }
+stamp = { hash = "b3:8a7d369e5a585c0e", by = "agent:claude-perf-suite", note = "Bench re-cut on the wave: scenarios small_2d, media, browser, display and webcam, the comma list, <scenario>-switch-<n>.png sheets, views gated only when reported as the window opens, kept with the wave's quality probe gates; Not yet now only a preview-stream probe." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:896cbcb0c1695742", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:b9e16b1e44fa4694", by = "agent:claude-perf-suite", note = "The window now counts from the latest tick after the outside sources show a picture (review B1), so a source's start isn't measured; the Bench text says so. | kept from the merged side: Bench: all runs basic..browser; display and webcam only when named (comma list); sheets are <scenario>-switch-<n>.png; kinds unreadable means skip; checked against Scenario::ALL/EVERY/parse, save_sheet and run (review B1, N1, N2)" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:c3e2bb63c14b238a", by = "agent:perf-thread", note = "Bench paragraph names exit 5 for a run that can't finish (CliError::Bench), that the engine writes the recording to the CLI's --out path, and the two counts not over the window; the exit table and JSON codes gain 5 and bench_failed; the help text in args.rs matches" }
@@ -6789,7 +6789,7 @@ stamp = { hash = "b3:22c3015c6af03877", by = "agent:claude", note = "Added the v
 stamp = { hash = "b3:6be7d361d99aa3ff", by = "agent:claude-settings", note = "Step 3 now walks through the Agent wants to connect prompt (Always allow, Allow once, two-minute timeout) and where Settings lists approved agents and turns asking off; the token note says asking is a notice, not a lock. Matches agents.rs and host.rs" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:85e8aa823df2e289", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:7d7ea8e7b70ad833", by = "agent:claude-perf-suite", note = "Only the CLI usage's bench window text changed (review B1); this section's MCP and go-live commands don't use the bench and still hold. | kept from the merged side: bench's scenario list and options changed; the agents walkthrough doesn't name them" }
 
 ["GETTING-STARTED#agents"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:30bb26f8e7f51f47", by = "agent:claude", note = "Re-read against the desktop usage's new JTunnel senders bullet and UI-FEATURES' Devices text: this section says nothing about the Devices page or JTunnel, and holds. | merge: Re-read against the desktop usage after the macOS merge (#1421): this section doesn't mention JTunnel or the Devices page; holds. | merge: wave changed the desktop README usage (wheel chords, macOS app) and UI-FEATURES rows; this section's steps still match | kept from the merged side: Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The guide covers the released Windows zip, which this doesn't change. | merge: The merge brought #1419's squash into wave/alpha5 (the same Linux window code this branch already carried) and the wave's other landings; this branch's macOS additions are re-applied unchanged, so the section still holds. | kept from the merged side: Re-read against the desktop README's usage change: it only adds the Linux build of the window (from source, with webkitgtk); this guide covers the released Windows zip, which is unchanged | kept from the merged side: The guide is Windows-only; the change adds a macOS-only chip note and a desktop global field, nothing this section describes." }
@@ -7017,7 +7017,7 @@ stamp = { hash = "b3:226bdb52d4a97ee7", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:994677f799d9b9e9", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:85e8aa823df2e289", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:7d7ea8e7b70ad833", by = "agent:claude-perf-suite", note = "Only the CLI usage's bench window text changed (review B1); this section's MCP and go-live commands don't use the bench and still hold. | kept from the merged side: bench changes don't touch the smoke script's commands" }
 
 ["RUNBOOK-GO-LIVE#smoke"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:226bdb52d4a97ee7", by = "agent:jtunnel-discovery", note = "Re-read against the daemon usage's JTunnel note: the go-live runbook doesn't use JTunnel; holds. | kept from the merged side: Re-read: the daemon usage change is --jtunnel-accept's stricter checks, which this runbook doesn't use." }
@@ -7029,7 +7029,7 @@ stamp = { hash = "b3:f8133a4bc39c3167", by = "agent:claude-linux-daemon", note =
 stamp = { hash = "b3:13c57061e7eadb1e", by = "agent:ui-parity", note = "Step 4 now says stats.tick lines come about once a second before and while live, and end with the load (program_frames about 30 a second while live, cpu_ms), matching the CLI's line and the 1/30 s base tick." }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-cli/README.md#usage"]
-stamp = { hash = "b3:85e8aa823df2e289", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
+stamp = { hash = "b3:7d7ea8e7b70ad833", by = "agent:claude-perf-suite", note = "Only the CLI usage's bench window text changed (review B1); this section's MCP and go-live commands don't use the bench and still hold. | kept from the merged side: bench changes don't touch the go-live steps' commands" }
 
 ["RUNBOOK-GO-LIVE#steps"."dep:apps/jstream-daemon/README.md#usage"]
 stamp = { hash = "b3:226bdb52d4a97ee7", by = "agent:jtunnel-discovery", note = "Re-read against the daemon usage's JTunnel note: the go-live runbook doesn't use JTunnel; holds. | kept from the merged side: Re-read: the daemon usage change is --jtunnel-accept's stricter checks, which this runbook doesn't use." }
