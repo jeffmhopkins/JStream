@@ -1132,7 +1132,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   source the UI's shader editor opens, animating with keyframe
   scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
   and one-shot jolts that
-  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette), borders
+  `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
   and how to stack them, layering light, masks and reflections, 3D sets through a scene camera, a camera
   that sways or follows the pointer, and
   checking each step with `video.snapshot`), since what an agent
@@ -1292,7 +1292,10 @@ crate draws them through the filter harness), and the output path below.
 **Device loss** (#349). A GPU hang that Windows resets (TDR), a driver reset or a removed
 GPU takes the device with it, and with it everything made on it. The compositor watches
 its device, its own or the context's, for the loss (`Compositor::lost`), and keeps the
-invalid-resource errors that follow from panicking the render thread. The render thread
+invalid-resource errors that follow from panicking the render thread. The next poll of a
+lost device, on any thread, frees every buffer made on it, so recording the loss waits
+for any read of a mapped buffer under way (the `jstream-readback` copier's), and a read
+after it reads nothing (#1454). The render thread
 treats a lost device as one event: it opens the compositor on a new device at once, off
 the render thread with the fallback's deadline, and the output repeats its last frame
 meanwhile and stays up. On the platform's context that is step 6's fallback, so capture

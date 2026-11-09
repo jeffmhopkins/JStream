@@ -2257,6 +2257,89 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "scanlines",
+    "category": "video_filter",
+    "name": "Scanlines",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.35,
+        "label": "Strength",
+        "description": "How dark the lines are, in linear light: 0 draws none.",
+        "live": true
+      },
+      {
+        "id": "spacing",
+        "type": "float",
+        "min": 1.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 3.0,
+        "label": "Spacing",
+        "description": "One line every this many pixels.",
+        "live": true
+      },
+      {
+        "id": "thickness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Thickness",
+        "description": "How much of each spacing the dark line takes.",
+        "live": true
+      },
+      {
+        "id": "speed",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 0.0,
+        "label": "Roll speed",
+        "description": "How fast the lines roll; positive moves them down. 0 holds them still.",
+        "live": true
+      },
+      {
+        "id": "rgb_offset",
+        "type": "float",
+        "min": 0.0,
+        "max": 16.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Color fringe",
+        "description": "Red is read this far to the left and blue to the right, a CRT's colour fringe. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "grain",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Grain",
+        "description": "Noise that changes every frame, as film grain or a weak signal. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "flicker",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Flicker",
+        "description": "How far the picture dims at random from frame to frame. 0 holds it steady.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "scene_mask",
     "category": "video_filter",
     "name": "Scene mask",
