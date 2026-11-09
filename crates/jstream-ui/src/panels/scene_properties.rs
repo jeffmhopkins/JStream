@@ -71,6 +71,8 @@ pub struct SceneDraft {
     pub include_audio: bool,
     /// Its background colour as typed (`#rrggbb` or `#rrggbbaa`), or none.
     pub background: Option<String>,
+    /// Whether the studio keeps it warm while it is off program (ADR-0117 §7).
+    pub keep_warm: bool,
     /// Its camera, which makes it a 3D scene (ADR-0094); on a keyframe scene its
     /// override of its parent's.
     pub camera: Option<SceneCamera>,
@@ -90,6 +92,7 @@ impl SceneDraft {
             show_in_multiview: scene.meta.show_in_multiview,
             include_audio: scene.options.include_audio,
             background: scene.options.background.clone(),
+            keep_warm: scene.options.keep_warm,
             camera: scene.camera,
             camera_motion: scene.camera_motion.clone(),
         })
@@ -156,13 +159,20 @@ pub fn scene_edits(
     if background.is_some_and(|b| parse_rgba(b).is_none()) {
         return Err("The background color must be #rrggbb or #rrggbbaa.".into());
     }
-    if (draft.include_audio, background) != (before.include_audio, before.background.as_deref()) {
+    if (draft.include_audio, background, draft.keep_warm)
+        != (
+            before.include_audio,
+            before.background.as_deref(),
+            before.keep_warm,
+        )
+    {
         let mut options = collection
             .scene(scene_id)
             .map(|s| s.options.clone())
             .unwrap_or_default();
         options.include_audio = draft.include_audio;
         options.background = background.map(str::to_owned);
+        options.keep_warm = draft.keep_warm;
         edits.push(Edit::SceneSetOptions {
             scene_id: scene_id.clone(),
             options,
@@ -741,6 +751,21 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     />
                     <span class="field-note">"When off, its sources don't reach the Mixer through this scene."</span>
                 </label>
+                <Show when=move || !keyframe>
+                    <label class="field">
+                        <span class="label">"Keep warm"</span>
+                        <input
+                            type="checkbox"
+                            aria-label="Keep warm"
+                            prop:checked=move || draft.with(|d| d.keep_warm)
+                            on:change=move |event| {
+                                let on = event_target_checked(&event);
+                                draft.update(|d| d.keep_warm = on);
+                            }
+                        />
+                        <span class="field-note">"Its videos, pages and cameras keep running while it's off program, so showing it starts nothing. It counts toward Settings › General › Warm scenes."</span>
+                    </label>
+                </Show>
                 <div class="camera-field">
                     <label class="camera-check">
                         <input
@@ -1020,6 +1045,40 @@ mod tests {
         assert_eq!(meta.color.as_deref(), Some("#ff0000"));
     }
 
+    /// "Keep warm" sends `scene.set_options` with the other options kept (ADR-0117 §7).
+    #[test]
+    fn keep_warm_sends_the_scene_s_options() {
+        let scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+            "include_audio": false,
+        }))
+        .expect("a scene");
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        assert!(!before.keep_warm);
+        let warm = SceneDraft {
+            keep_warm: true,
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &a, &before, &warm),
+            Ok(vec![Edit::SceneSetOptions {
+                scene_id: a,
+                options: SceneOptions {
+                    include_audio: false,
+                    background: None,
+                    keep_warm: true,
+                },
+            }])
+        );
+    }
+
     /// The nested audio switch sends `scene.set_options`.
     #[test]
     fn the_audio_switch_sends_the_scene_s_options() {
@@ -1048,6 +1107,7 @@ mod tests {
                 options: SceneOptions {
                     include_audio: false,
                     background: None,
+                    keep_warm: false,
                 },
             }])
         );
@@ -1082,6 +1142,7 @@ mod tests {
                 options: SceneOptions {
                     include_audio: false,
                     background: Some("#0F111580".into()),
+                    keep_warm: false,
                 },
             }])
         );
@@ -1092,6 +1153,7 @@ mod tests {
                 options: SceneOptions {
                     include_audio: false,
                     background: None,
+                    keep_warm: false,
                 },
             }])
         );

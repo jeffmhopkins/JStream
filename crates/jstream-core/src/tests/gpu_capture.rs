@@ -42,7 +42,7 @@ use super::{
 };
 use crate::audio_sources::Wanted;
 use crate::runtime::{
-    DrawError, DrawFn, DrawHook, OpenDraw, RenderHub, cpu_draw, gpu_draw, gpu_draw_with,
+    DrawError, DrawFn, DrawHook, MixFrame, OpenDraw, RenderHub, cpu_draw, gpu_draw, gpu_draw_with,
     open_capture, parts_from, start_capture,
 };
 use crate::snapshot::CaptureImage;
@@ -506,6 +506,36 @@ struct Seen {
     pixel: Option<[u8; 4]>,
 }
 
+/// The top-left pixel of the frame `frame` read back, as RGBA8: decoded from BT.709
+/// limited range when the mix was read back as NV12 (only encoders take it, ADR-0117
+/// §4), whose Y is the first byte and whose CbCr pair starts the second plane.
+fn first_pixel(frame: &MixFrame) -> Option<[u8; 4]> {
+    if !frame.out_planar {
+        return frame.out.first_chunk::<4>().copied();
+    }
+    let luma = *frame.out.first()?;
+    let chroma = frame.size.width() as usize * frame.size.height() as usize;
+    let (cb, cr) = (*frame.out.get(chroma)?, *frame.out.get(chroma + 1)?);
+    let y = 1.164_38 * (f32::from(luma) - 16.0);
+    let (cb, cr) = (f32::from(cb) - 128.0, f32::from(cr) - 128.0);
+    let channel = |v: f32| v.round().clamp(0.0, 255.0) as u8;
+    Some([
+        channel(y + 1.792_74 * cr),
+        channel(y - 0.213_25 * cb - 0.532_91 * cr),
+        channel(y + 2.112_40 * cb),
+        255,
+    ])
+}
+
+/// Whether `pixel` is [`RED`], give or take the 1 a round trip through NV12 can add to
+/// a channel.
+fn is_red(pixel: [u8; 4]) -> bool {
+    pixel
+        .iter()
+        .zip(RED)
+        .all(|(got, want)| got.abs_diff(want) <= 1)
+}
+
 /// [`gpu_draw`], recording what it was opened on and what it drew into `seen`.
 fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
     Arc::new(move |context: Option<&GpuContext>| {
@@ -514,12 +544,12 @@ fn watched_draw(seen: Arc<Mutex<Seen>>) -> OpenDraw {
         seen.lock()
             .unwrap_or_else(PoisonError::into_inner)
             .on_context = Some(context.is_some());
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
-            let freed = inner(shot, live, captures, frames, at, meter)?;
+        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
+            let freed = inner(shot, scenes, live, captures, frames, at, meter)?;
             // The first mix drawn this tick; with no video mixes, the program.
             let drawn = frames.iter().find(|frame| frame.due);
-            if let Some(pixel) = drawn.and_then(|frame| frame.out.first_chunk::<4>()) {
-                seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(*pixel);
+            if let Some(pixel) = drawn.and_then(first_pixel) {
+                seen.lock().unwrap_or_else(PoisonError::into_inner).pixel = Some(pixel);
             }
             Ok(freed)
         });
@@ -556,7 +586,7 @@ fn an_output_composites_gpu_capture_frames() {
         thread::sleep(Duration::from_millis(20));
         let stats = engine.output_stats().expect("running");
         let pixel = seen.lock().unwrap_or_else(PoisonError::into_inner).pixel;
-        if stats.gpu_captures >= 2 && stats.readbacks >= 2 && pixel == Some(RED) {
+        if stats.gpu_captures >= 2 && stats.readbacks >= 2 && pixel.is_some_and(is_red) {
             drew_red = true;
             break;
         }
@@ -867,7 +897,7 @@ fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
         }
         let mut inner = (gpu_draw())(context)?;
         let opens = Arc::clone(&opens);
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
+        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
             let gpu_frame = shot.captures().iter().any(|key| {
                 captures
                     .frame(key)
@@ -882,14 +912,13 @@ fn breaking_draw(breaks: Breaks, opens: Arc<Mutex<Opens>>) -> OpenDraw {
                 }
                 _ => {}
             }
-            let freed = inner(shot, live, captures, frames, at, meter)?;
+            let freed = inner(shot, scenes, live, captures, frames, at, meter)?;
             let drawn = frames.iter().find(|frame| frame.due);
-            if !on_context && let Some(pixel) = drawn.and_then(|frame| frame.out.first_chunk::<4>())
-            {
+            if !on_context && let Some(pixel) = drawn.and_then(first_pixel) {
                 opens
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
-                    .own_pixel = Some(*pixel);
+                    .own_pixel = Some(pixel);
             }
             Ok(freed)
         });
@@ -1084,7 +1113,7 @@ fn losing_draw(lose: usize, after: u32, opens: Arc<Mutex<Vec<bool>>>) -> OpenDra
         let drawn = AtomicU64::new(0);
         let hook: DrawHook = Arc::new(move |compositor: &Compositor| {
             if opened <= lose && drawn.fetch_add(1, Ordering::Relaxed) + 1 == u64::from(after) {
-                compositor.device().destroy();
+                compositor.destroy_device();
                 let _ = compositor.device().poll(wgpu::PollType::Wait {
                     submission_index: None,
                     timeout: Some(Duration::from_secs(5)),
@@ -1526,12 +1555,12 @@ fn hanging_fallback(release: Arc<(Mutex<bool>, Condvar)>) -> OpenDraw {
         }
         let mut inner = (cpu_draw())(context)?;
         let mut drawn = false;
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
+        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
             if drawn {
                 return Err(DrawError::Failed("device removed".to_owned()));
             }
             drawn = true;
-            inner(shot, live, captures, frames, at, meter)
+            inner(shot, scenes, live, captures, frames, at, meter)
         });
         Ok(draw)
     })
@@ -1772,12 +1801,12 @@ fn flaky_draw(from: u64, to: u64, draws: Arc<AtomicU64>) -> OpenDraw {
     Arc::new(move |context: Option<&GpuContext>| {
         let mut inner = (gpu_draw())(context)?;
         let draws = Arc::clone(&draws);
-        let draw: DrawFn = Box::new(move |shot, live, captures, frames, at, meter| {
+        let draw: DrawFn = Box::new(move |shot, scenes, live, captures, frames, at, meter| {
             let n = draws.fetch_add(1, Ordering::Relaxed) + 1;
             if (from..=to).contains(&n) {
                 return Err(DrawError::Failed("unsupported format".to_owned()));
             }
-            inner(shot, live, captures, frames, at, meter)
+            inner(shot, scenes, live, captures, frames, at, meter)
         });
         Ok(draw)
     })

@@ -11,7 +11,7 @@ use std::fmt;
 /// bumps `major`, needs an ADR, and needs a minor release that deprecates it first.
 pub const PROTOCOL_VERSION: ProtocolVersion = ProtocolVersion {
     major: 0,
-    minor: 114,
+    minor: 116,
 };
 
 /// A protocol version: `major.minor`. Patch releases never change the wire format, so
@@ -49,6 +49,20 @@ mod tests {
 
     fn v(major: u32, minor: u32) -> ProtocolVersion {
         ProtocolVersion { major, minor }
+    }
+
+    /// The README's version paragraph opens on the current number, so every bump rewrites
+    /// that one line with its own reason. Two PRs that take the same number then conflict
+    /// in git, and the second to land has to take the next one
+    /// (docs/runbooks/waves.md#protocol).
+    #[test]
+    fn the_readme_opens_on_the_current_version() {
+        let readme = include_str!("../README.md");
+        let opening = format!("`PROTOCOL_VERSION` is {PROTOCOL_VERSION} because ");
+        assert!(
+            readme.lines().any(|line| line.starts_with(&opening)),
+            "README.md#versions must open with \"{opening}\" and give this bump's reason"
+        );
     }
 
     #[test]

@@ -26,6 +26,8 @@ pub(crate) struct BlendPipelines {
     /// Multiply's two draws, in order.
     multiply: [wgpu::RenderPipeline; 2],
     backdrop: [wgpu::RenderPipeline; BACKDROP_MODES.len()],
+    /// A scene's view depth (ADR-0143 decision 4): `fs_depth`, keeping the larger value.
+    depth: wgpu::RenderPipeline,
 }
 
 /// How one item is drawn.
@@ -83,7 +85,23 @@ impl BlendPipelines {
                 None,
             )
         });
+        let largest = wgpu::BlendComponent {
+            src_factor: wgpu::BlendFactor::One,
+            dst_factor: wgpu::BlendFactor::One,
+            operation: wgpu::BlendOperation::Max,
+        };
+        let depth = pipeline(
+            device,
+            layouts,
+            "jstream-render-view-depth",
+            "fs_depth",
+            Some(wgpu::BlendState {
+                color: largest,
+                alpha: largest,
+            }),
+        );
         Self {
+            depth,
             normal: fixed("jstream-render-composite", over, over),
             // s + d, alpha as source-over so it stays in [0, 1].
             additive: fixed(
@@ -100,6 +118,11 @@ impl BlendPipelines {
             multiply,
             backdrop,
         }
+    }
+
+    /// The pipeline that draws a scene's view depth (ADR-0143 decision 4).
+    pub(crate) fn depth(&self) -> &wgpu::RenderPipeline {
+        &self.depth
     }
 
     /// How `mode` is drawn.

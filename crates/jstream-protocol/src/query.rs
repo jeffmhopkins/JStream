@@ -665,6 +665,10 @@ pub enum QueryResult {
         /// (ADR-0116, since 0.88), ordered by scene. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         keyframes: Vec<PlacedKeyframe>,
+        /// How many scenes besides the program the studio keeps warm, which
+        /// `studio.set_warm` sets (ADR-0117 §7, since 0.115). Omitted by an older server.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        warm_scenes: Option<u32>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]
@@ -1265,6 +1269,13 @@ pub struct SceneOptions {
     /// draws none: it is part of the scene that holds it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<String>,
+    /// Whether the studio keeps it warm while it is off program (ADR-0117 §7, since
+    /// 0.116): its sources keep running, so showing it starts nothing. A kept-warm scene
+    /// ranks after the Preview scene and before the scenes shown most recently, within
+    /// the warm budget (`studio.set_warm`). A keyframe scene is shown through its parent,
+    /// so `scene.set_options` refuses it there. Omitted for `false`, the default.
+    #[serde(skip_serializing_if = "is_false")]
+    pub keep_warm: bool,
 }
 
 impl Default for SceneOptions {
@@ -1272,6 +1283,7 @@ impl Default for SceneOptions {
         SceneOptions {
             include_audio: true,
             background: None,
+            keep_warm: false,
         }
     }
 }
@@ -1304,6 +1316,10 @@ impl SceneOptions {
 
 fn is_true(value: &bool) -> bool {
     *value
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// One item, a placement of a source in a scene, as `item.list` and `state.get` report

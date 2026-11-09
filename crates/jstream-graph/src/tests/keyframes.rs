@@ -668,6 +668,30 @@ fn a_background_is_checked_and_a_keyframe_has_none_of_its_own() {
     assert!(reason.contains("parent"), "{reason}");
 }
 
+/// A scene is kept warm through its options (ADR-0117 §7); a keyframe scene is shown
+/// through its parent, so it can't be kept warm itself.
+#[test]
+fn a_scene_is_kept_warm_but_not_a_keyframe() {
+    let mut graph = family();
+    let warm = |scene: &str| Edit::SceneSetOptions {
+        scene_id: SceneId::new(scene),
+        options: jstream_protocol::SceneOptions {
+            keep_warm: true,
+            ..jstream_protocol::SceneOptions::default()
+        },
+    };
+    apply_ok(&mut graph, vec![warm("a")]);
+    assert!(
+        graph
+            .state()
+            .scene(&SceneId::new("a"))
+            .is_some_and(|s| s.options().keep_warm)
+    );
+    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![warm("k")]));
+    assert!(field.ends_with("keep_warm"), "{field}");
+    assert!(reason.contains("parent"), "{reason}");
+}
+
 /// A keyframe's override of an item's effects (ADR-0088): one `tint` per entry, with
 /// `amount` set and `mask` naming a scene, or the defaults.
 fn effects(entries: &[(&str, Option<f64>, Option<&str>)]) -> Vec<FilterInfo> {

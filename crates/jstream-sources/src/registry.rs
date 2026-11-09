@@ -8,6 +8,7 @@ use crate::capture::CaptureKind;
 use crate::chat::ChatKind;
 use crate::color::ColorKind;
 use crate::image::ImageKind;
+use crate::light::LightKind;
 use crate::media::MediaKind;
 use crate::midi::{BeatKind, CcKind, KeyboardKind, PadsKind, PianoRollKind};
 use crate::model::ModelKind;
@@ -47,6 +48,7 @@ impl Registry {
         add(Box::new(CaptureKind::window()));
         add(Box::new(CaptureKind::webcam()));
         add(Box::new(ImageKind::new()));
+        add(Box::new(LightKind::new()));
         add(Box::new(MediaKind::new()));
         add(Box::new(KeyboardKind::new()));
         add(Box::new(PianoRollKind::new()));

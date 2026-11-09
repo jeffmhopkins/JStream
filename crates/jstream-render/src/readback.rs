@@ -11,14 +11,23 @@
 //! A ring made [`with_copier`](ReadbackRing::with_copier) leaves the copy out of the
 //! mapped buffer to a [`Copier`]'s `jstream-readback` thread (ADR-0117 §4): the drawing
 //! thread hands it each buffer once mapped and later takes back the finished frame, a
-//! buffer of its own that it swaps in, so it never touches a frame's pixels.
+//! buffer of its own that it swaps in, so it never touches a frame's pixels. A lost
+//! device's buffers are freed by the next poll of it on any thread, so the copier reads
+//! a buffer only while its device can't be marked lost, and reads nothing once it is
+//! ([`Compositor::destroy_device`]).
+//!
+//! A ring reads back RGBA8 ([`ReadbackRing::record`]) or NV12
+//! ([`ReadbackRing::record_nv12`]): the output converted on the GPU first, in the same
+//! submit as the copy, so 1.5 bytes a pixel cross to the CPU instead of 4 (ADR-0117 §4).
 
 use std::sync::Arc;
 use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 
 use crate::compositor::Compositor;
+use crate::convert::{Nv12Pass, Nv12Planes};
 use crate::error::RenderError;
+use crate::gpu::Faults;
 use crate::scene::Output;
 
 /// How many readbacks can be on their way at once: the frame drawn, the one the GPU is
@@ -41,9 +50,105 @@ pub struct Copier {
     jobs: Sender<Job>,
 }
 
+/// What a ring reads back.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum ReadbackFormat {
+    /// Tightly packed RGBA8, as the output is.
+    #[default]
+    Rgba8,
+    /// NV12 in one buffer: `width * height` Y bytes, then `width * height / 2`
+    /// interleaved Cb, Cr bytes, in the colour the [`Nv12Pass`] was bound with.
+    Nv12,
+}
+
+impl ReadbackFormat {
+    /// How many bytes a tightly packed `width` x `height` frame takes.
+    pub fn frame_bytes(self, width: u32, height: u32) -> usize {
+        let pixels = width as usize * height as usize;
+        match self {
+            Self::Rgba8 => pixels * 4,
+            Self::Nv12 => pixels * 3 / 2,
+        }
+    }
+
+    /// Where each plane sits in a readback buffer: its rows padded to the copy
+    /// alignment, one plane after the other. NV12's second plane has no rows for an RGBA
+    /// frame.
+    fn planes(self, width: u32, height: u32) -> [PlaneRows; 2] {
+        let padded = |bytes: u32| {
+            let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+            bytes.div_ceil(align) as usize * align as usize
+        };
+        let (w, h) = (width as usize, height as usize);
+        match self {
+            Self::Rgba8 => [
+                PlaneRows {
+                    offset: 0,
+                    stride: padded(width.saturating_mul(4)),
+                    row: w * 4,
+                    rows: h,
+                },
+                PlaneRows::NONE,
+            ],
+            Self::Nv12 => {
+                let stride = padded(width);
+                [
+                    PlaneRows {
+                        offset: 0,
+                        stride,
+                        row: w,
+                        rows: h,
+                    },
+                    PlaneRows {
+                        offset: stride * h,
+                        stride,
+                        row: w,
+                        rows: h / 2,
+                    },
+                ]
+            }
+        }
+    }
+
+    /// The readback buffer's size, `None` past `u64`.
+    fn buffer_bytes(self, width: u32, height: u32) -> Option<u64> {
+        let mut end = 0usize;
+        for plane in self.planes(width, height) {
+            end = end.max(
+                plane
+                    .stride
+                    .checked_mul(plane.rows)?
+                    .checked_add(plane.offset)?,
+            );
+        }
+        u64::try_from(end).ok()
+    }
+}
+
+/// One plane's rows in a readback buffer.
+#[derive(Clone, Copy, Debug)]
+struct PlaneRows {
+    offset: usize,
+    stride: usize,
+    row: usize,
+    rows: usize,
+}
+
+impl PlaneRows {
+    const NONE: Self = Self {
+        offset: 0,
+        stride: 0,
+        row: 0,
+        rows: 0,
+    };
+}
+
 /// One mapped buffer to copy out and unmap.
 struct Job {
     buffer: wgpu::Buffer,
+    /// How the buffer's device has failed: the copy holds off its loss.
+    faults: Arc<Faults>,
+    format: ReadbackFormat,
     width: u32,
     height: u32,
     order: u64,
@@ -78,8 +183,19 @@ impl Copier {
             .name("jstream-readback".into())
             .spawn(move || {
                 for mut job in queue {
-                    let copied = unpack(&job.buffer, job.width, job.height, &mut job.into);
-                    job.buffer.unmap();
+                    let copied = unpack(
+                        &job.faults,
+                        &job.buffer,
+                        job.format,
+                        (job.width, job.height),
+                        &mut job.into,
+                    );
+                    // A lost device's buffers are gone: unmapping one only raises an
+                    // error for the uncaptured-error handler to keep (as on the ring's
+                    // own copies below).
+                    if job.faults.lost.get().is_none() {
+                        job.buffer.unmap();
+                    }
                     let frame = copied.then_some(job.into);
                     // A ring that is gone wants nothing back.
                     let _ = job.done.send(Copied {
@@ -115,6 +231,7 @@ struct Slot<T> {
 /// into them: a ring is dropped with its compositor.
 pub struct ReadbackRing<T> {
     slots: Vec<Slot<T>>,
+    format: ReadbackFormat,
     width: u32,
     height: u32,
     /// The next recording's order.
@@ -127,6 +244,7 @@ impl<T> Default for ReadbackRing<T> {
     fn default() -> Self {
         Self {
             slots: Vec::new(),
+            format: ReadbackFormat::default(),
             width: 0,
             height: 0,
             next: 0,
@@ -138,6 +256,7 @@ impl<T> Default for ReadbackRing<T> {
 impl<T> std::fmt::Debug for ReadbackRing<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("ReadbackRing")
+            .field("format", &self.format)
             .field("width", &self.width)
             .field("height", &self.height)
             .field("slots", &self.slots.len())
@@ -173,12 +292,72 @@ impl<T> ReadbackRing<T> {
         output: &Output,
         tag: T,
     ) -> Result<bool, RenderError> {
-        let (width, height) = (output.width(), output.height());
-        if (width, height) != (self.width, self.height) {
+        let size = (output.width(), output.height());
+        self.record_with(
+            compositor,
+            (ReadbackFormat::Rgba8, size),
+            tag,
+            |encoder, buffer| {
+                compositor.record_copy_out(encoder, output, buffer);
+            },
+        )
+    }
+
+    /// As [`record`](Self::record), but converts the output to NV12 first, with `pass`
+    /// (bound to the output and to `planes`), in the same submit as the copy of the two
+    /// planes: the frame comes back as [`ReadbackFormat::Nv12`]. A ring that read back
+    /// RGBA8 changes over as it does for a new size.
+    ///
+    /// # Errors
+    /// [`RenderError::TooLarge`] when a frame of this size does not fit in a buffer.
+    pub fn record_nv12(
+        &mut self,
+        compositor: &Compositor,
+        pass: &Nv12Pass,
+        planes: &Nv12Planes,
+        tag: T,
+    ) -> Result<bool, RenderError> {
+        let (width, height) = (planes.width(), planes.height());
+        let [y, uv] = ReadbackFormat::Nv12.planes(width, height);
+        self.record_with(
+            compositor,
+            (ReadbackFormat::Nv12, (width, height)),
+            tag,
+            |encoder, buffer| {
+                pass.encode(encoder);
+                for (texture, rows) in [(planes.y(), y), (planes.uv(), uv)] {
+                    encoder.copy_texture_to_buffer(
+                        texture.as_image_copy(),
+                        wgpu::TexelCopyBufferInfo {
+                            buffer,
+                            layout: wgpu::TexelCopyBufferLayout {
+                                offset: rows.offset as u64,
+                                bytes_per_row: u32::try_from(rows.stride).ok(),
+                                rows_per_image: u32::try_from(rows.rows).ok(),
+                            },
+                        },
+                        texture.size(),
+                    );
+                }
+            },
+        )
+    }
+
+    /// Records into a free buffer what `copy` writes there, as [`record`](Self::record)
+    /// describes.
+    fn record_with(
+        &mut self,
+        compositor: &Compositor,
+        (format, (width, height)): (ReadbackFormat, (u32, u32)),
+        tag: T,
+        copy: impl FnOnce(&mut wgpu::CommandEncoder, &wgpu::Buffer),
+    ) -> Result<bool, RenderError> {
+        if (format, width, height) != (self.format, self.width, self.height) {
             if self.slots.iter().any(|slot| slot.tag.is_some()) {
                 return Ok(false);
             }
             self.slots.clear();
+            self.format = format;
             self.width = width;
             self.height = height;
         }
@@ -189,7 +368,11 @@ impl<T> ReadbackRing<T> {
                 .any(|slot| slot.tag.is_none() && slot.state.load(Ordering::Acquire) == IDLE)
         {
             self.slots.push(Slot {
-                buffer: compositor.readback_buffer(width, height)?,
+                buffer: compositor.map_read_buffer(
+                    format.buffer_bytes(width, height),
+                    width,
+                    height,
+                )?,
                 state: Arc::new(AtomicU8::new(IDLE)),
                 tag: None,
             });
@@ -207,7 +390,7 @@ impl<T> ReadbackRing<T> {
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("jstream-render readback"),
                 });
-        compositor.record_copy_out(&mut encoder, output, &slot.buffer);
+        copy(&mut encoder, &slot.buffer);
         {
             // As every submit on a platform context's queue: no other thread's staged
             // fences ride on this one.
@@ -229,7 +412,8 @@ impl<T> ReadbackRing<T> {
 
     /// Polls the device without waiting, then hands every frame whose map has finished,
     /// oldest first by the order they were recorded in, to `ready`: its tag and its
-    /// tightly packed RGBA8, which is also left in `out`. Maps finish in the order their
+    /// tightly packed pixels in the ring's [`format`](Self::format), which are also left
+    /// in `out`. Maps finish in the order their
     /// submits complete, which is the order they were recorded in on one queue; should a
     /// later one finish first, it is handed first and the earlier one after it, so a
     /// caller that orders by tag drops that one. A map that failed (a lost device) frees
@@ -275,6 +459,8 @@ impl<T> ReadbackRing<T> {
                 slot.state.store(COPYING, Ordering::Release);
                 let job = Job {
                     buffer: slot.buffer.clone(),
+                    faults: Arc::clone(compositor.faults()),
+                    format: self.format,
                     width: self.width,
                     height: self.height,
                     order,
@@ -283,8 +469,16 @@ impl<T> ReadbackRing<T> {
                 };
                 if let Err(mpsc::SendError(job)) = handoff.jobs.send(job) {
                     // The copier is gone: copied here instead, as without one.
-                    let copied = unpack(&slot.buffer, self.width, self.height, out);
-                    slot.buffer.unmap();
+                    let copied = unpack(
+                        compositor.faults(),
+                        &slot.buffer,
+                        self.format,
+                        (self.width, self.height),
+                        out,
+                    );
+                    if compositor.faults().lost.get().is_none() {
+                        slot.buffer.unmap();
+                    }
                     handoff.spares.push(job.into);
                     if let Some((_, tag)) = slot.tag.take()
                         && copied
@@ -330,8 +524,16 @@ impl<T> ReadbackRing<T> {
                 break;
             };
             if slot.state.load(Ordering::Acquire) == MAPPED {
-                let unpacked = unpack(&slot.buffer, self.width, self.height, out);
-                slot.buffer.unmap();
+                let unpacked = unpack(
+                    compositor.faults(),
+                    &slot.buffer,
+                    self.format,
+                    (self.width, self.height),
+                    out,
+                );
+                if compositor.faults().lost.get().is_none() {
+                    slot.buffer.unmap();
+                }
                 if unpacked {
                     ready(tag, out);
                     handed += 1;
@@ -352,23 +554,38 @@ impl<T> ReadbackRing<T> {
     pub fn pending(&self) -> usize {
         self.slots.iter().filter(|slot| slot.tag.is_some()).count()
     }
+
+    /// What the frames it hands over are: the format it last recorded.
+    pub fn format(&self) -> ReadbackFormat {
+        self.format
+    }
 }
 
-/// Copies the mapped `buffer`'s padded rows into `out` as tightly packed RGBA8.
-fn unpack(buffer: &wgpu::Buffer, width: u32, height: u32, out: &mut Vec<u8>) -> bool {
-    let Ok(view) = buffer.slice(..).get_mapped_range() else {
-        return false;
-    };
-    let row = width as usize * 4;
-    let stride = crate::compositor::padded_row_bytes(width) as usize;
+/// Copies the mapped `buffer`'s padded rows into `out`, tightly packed in `format`.
+/// `false` when it can't be read, as on a lost device, whose loss waits for the copy
+/// ([`Faults::read_mapped`]).
+fn unpack(
+    faults: &Faults,
+    buffer: &wgpu::Buffer,
+    format: ReadbackFormat,
+    (width, height): (u32, u32),
+    out: &mut Vec<u8>,
+) -> bool {
     out.clear();
-    for y in 0..height as usize {
-        match view.get(y * stride..y * stride + row) {
-            Some(bytes) => out.extend_from_slice(bytes),
-            None => return false,
-        }
-    }
-    true
+    faults
+        .read_mapped(buffer, |view| {
+            for plane in format.planes(width, height) {
+                for y in 0..plane.rows {
+                    let start = plane.offset + y * plane.stride;
+                    match view.get(start..start + plane.row) {
+                        Some(bytes) => out.extend_from_slice(bytes),
+                        None => return false,
+                    }
+                }
+            }
+            true
+        })
+        .unwrap_or(false)
 }
 
 #[cfg(test)]
@@ -510,5 +727,126 @@ mod tests {
             assert!(ring.record(compositor, &output, tag).expect("record"));
         }
         assert!(ring.is_full());
+    }
+
+    /// A device lost while the copier reads one of its mapped buffers frees nothing
+    /// under it: the next poll of a destroyed device frees every buffer made on it, so
+    /// before the loss waited for the copy this read freed memory on the
+    /// `jstream-readback` thread (#1454). Frames large enough that each copy takes a
+    /// while, handed over and then lost at once, a few times over.
+    #[test]
+    fn a_device_lost_while_the_copier_reads_frees_nothing_under_it() {
+        for _ in 0..8 {
+            let Some(mut opened) = open() else { return };
+            let compositor = &mut opened.compositor;
+            let copier = Copier::spawn().expect("the copier thread");
+            let mut ring = ReadbackRing::with_copier(&copier);
+            let (width, height) = (3840, 2160);
+            for tag in 0..READBACK_DEPTH as u32 {
+                let output = render(compositor, width, height, 1.0);
+                assert!(ring.record(compositor, &output, tag).expect("record"));
+            }
+            let _ = compositor
+                .device()
+                .poll(wgpu::PollType::wait_indefinitely());
+            let mut out = Vec::new();
+            let mut tags = Vec::new();
+            ring.collect(compositor, &mut out, |tag, _| tags.push(tag));
+            compositor.destroy_device();
+            let _ = compositor
+                .device()
+                .poll(wgpu::PollType::wait_indefinitely());
+            assert_eq!(compositor.lost().as_deref(), Some("destroyed"));
+            // A copy that finished before the loss still comes back, whole and red; one
+            // the loss caught comes back as nothing. Each frame comes back at most once,
+            // and every buffer is free again once the copier has answered for it.
+            for _ in 0..50 {
+                ring.collect(compositor, &mut out, |tag, rgba| {
+                    tags.push(tag);
+                    assert_eq!(rgba.len(), (width * height * 4) as usize, "frame {tag}");
+                    assert!(
+                        rgba.chunks_exact(4).all(|px| px == [255, 0, 0, 255]),
+                        "frame {tag} came back partly copied"
+                    );
+                });
+                if ring.pending() == 0 {
+                    break;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+            assert_eq!(ring.pending(), 0, "a buffer is still out after the loss");
+            let handed = tags.len();
+            tags.sort_unstable();
+            tags.dedup();
+            assert_eq!(tags.len(), handed, "a frame came back twice: {tags:?}");
+            assert!(
+                tags.iter().all(|tag| (*tag as usize) < READBACK_DEPTH),
+                "a frame that was never recorded came back: {tags:?}"
+            );
+        }
+    }
+
+    /// An NV12 ring hands back the same bytes as the planes it converted into, read
+    /// back synchronously: the Y plane, then the interleaved CbCr plane, tightly packed
+    /// though the width pads both planes' rows. A ring changes from RGBA8 to NV12 as it
+    /// does for a new size.
+    #[test]
+    fn an_nv12_ring_hands_back_the_converted_planes() {
+        use jstream_media::ColorInfo;
+
+        use super::ReadbackFormat;
+        use crate::Nv12Converter;
+
+        let Some(mut opened) = open() else { return };
+        let compositor = &mut opened.compositor;
+        let copier = Copier::spawn().expect("the copier thread");
+        let mut ring = ReadbackRing::with_copier(&copier);
+        // Wide enough to pad the rows: 34 is not a multiple of the copy alignment.
+        let (width, height) = (34, 6);
+        let output = render(compositor, width, height, 1.0);
+        assert!(ring.record(compositor, &output, 0u32).expect("record"));
+        assert_eq!(ring.format(), ReadbackFormat::Rgba8);
+        let rgba = collect_all(&mut ring, compositor, 1);
+        assert_eq!(
+            rgba[0].1.len(),
+            ReadbackFormat::Rgba8.frame_bytes(width, height)
+        );
+
+        let converter = Nv12Converter::new(compositor.device());
+        let planes = converter
+            .planes(FrameSize::new(width, height).expect("a test size"))
+            .expect("planes");
+        let pass = converter
+            .bind(output.texture(), &planes.target(), ColorInfo::default())
+            .expect("bind");
+        assert!(
+            ring.record_nv12(compositor, &pass, &planes, 1)
+                .expect("record")
+        );
+        assert_eq!(ring.format(), ReadbackFormat::Nv12);
+        let got = collect_all(&mut ring, compositor, 1);
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].0, 1);
+        let expected = planes
+            .read(compositor.device(), compositor.queue())
+            .expect("the planes read back");
+        assert_eq!(
+            got[0].1.len(),
+            ReadbackFormat::Nv12.frame_bytes(width, height)
+        );
+        assert_eq!(got[0].1, expected);
+        // Red in BT.709 limited range: Y 63, Cb 102, Cr 240.
+        assert!(
+            got[0].1[..(width * height) as usize]
+                .iter()
+                .all(|y| *y == 63)
+        );
+        assert!(
+            got[0].1[(width * height) as usize..]
+                .chunks_exact(2)
+                .all(|c| c == [102, 240]),
+            "{:?}",
+            &got[0].1[(width * height) as usize..]
+        );
     }
 }

@@ -2,7 +2,8 @@
 //! settings that belong to the application rather than to a scene or a selected item,
 //! with its pages listed on the left, as OBS's Settings has them.
 //!
-//! - **General** holds "Check for updates at launch" (`updates.rs`).
+//! - **General** holds "Check for updates at launch" (`updates.rs`), whether to ask
+//!   before a new agent connects (`agents.rs`) and "Warm scenes" (`warm.rs`).
 //! - **Plugins** is the WASM automation plugins' list, install and permissions
 //!   (`plugins.rs`).
 //! - **Audio plugins** is where the engine looks for CLAP audio effects, what it found
@@ -180,6 +181,7 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                         SettingsPage::General => view! {
                             <LaunchCheckSetting />
                             <crate::agents::AskAgentsSetting />
+                            <crate::warm::WarmScenesSetting />
                         }.into_any(),
                         SettingsPage::Plugins => view! { <Plugins /> }.into_any(),
                         SettingsPage::AudioPlugins => view! { <ClapPlugins /> }.into_any(),

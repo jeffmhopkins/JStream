@@ -39,6 +39,13 @@ use crate::youtube::{BroadcastPrivacy, BroadcastTransition};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
+/// The most scenes besides the program `studio.set_warm` keeps warm (ADR-0117 §7).
+pub const MAX_WARM_SCENES: u32 = 8;
+
+/// How many scenes besides the program the studio keeps warm until `studio.set_warm`
+/// changes it.
+pub const DEFAULT_WARM_SCENES: u32 = 3;
+
 /// A change to the collection state: undoable, batchable and atomic.
 ///
 /// Serialized with an internal `type` tag holding the command name (`noun.verb`,
@@ -821,10 +828,11 @@ pub enum Edit {
         meta: SceneMeta,
     },
     /// Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the
-    /// Mixer when it is nested, and its background colour. Every field left out takes
-    /// its default. A keyframe scene has options of its own, except a background, which
-    /// it shows from its parent. `invalid` for a background that isn't a colour, or one
-    /// on a keyframe scene. Inverse: `scene.set_options` with the previous options.
+    /// Mixer when it is nested, its background colour, and since 0.116 whether the
+    /// studio keeps it warm (ADR-0117 §7). Every field left out takes its default. A
+    /// keyframe scene has options of its own, except a background, which it shows from
+    /// its parent, and `keep_warm`, which its parent decides. `invalid` for a background
+    /// that isn't a colour, or a background or `keep_warm` on a keyframe scene. Inverse: `scene.set_options` with the previous options.
     #[serde(rename = "scene.set_options")]
     SceneSetOptions {
         /// The scene to change.
@@ -1661,6 +1669,20 @@ pub enum Action {
         /// The scene to put on preview.
         scene_id: SceneId,
     },
+    /// Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117
+    /// §7): their sources keep running, so showing one starts nothing. The Preview scene
+    /// is always warm, even past `scenes`; the rest are the scenes most recently on
+    /// program, the most recent first. An application setting, not collection state: it
+    /// changes no `rev`, is never undone, emits no event, holds whatever collection is
+    /// open, and is kept across restarts when the engine's host names a file for it.
+    /// `studio.get` reports it. Fails with `invalid_argument` on `scenes` above
+    /// [`MAX_WARM_SCENES`].
+    #[serde(rename = "studio.set_warm")]
+    StudioSetWarm {
+        /// The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is
+        /// [`DEFAULT_WARM_SCENES`].
+        scenes: u32,
+    },
     /// Shows an item (0.80, ADR-0101) with its own appear effect, the way a hotkey shows
     /// one: the placement's `visible` becomes `true` as `item.set_visible` would make it,
     /// with the same `scene_id` rules and the same errors (`not_found` for an item or
@@ -2178,6 +2200,7 @@ impl Action {
             Action::AgentForget { .. } => "agent.forget",
             Action::UiSettingsSet { .. } => "ui_settings.set",
             Action::StudioSetPreview { .. } => "studio.set_preview",
+            Action::StudioSetWarm { .. } => "studio.set_warm",
             Action::ItemShow { .. } => "item.show",
             Action::ItemHide { .. } => "item.hide",
             Action::ItemToggle { .. } => "item.toggle",
@@ -2296,6 +2319,7 @@ impl Action {
             | Action::AgentApprove { .. }
             | Action::AgentForget { .. }
             | Action::UiSettingsSet { .. }
+            | Action::StudioSetWarm { .. }
             | Action::PrivacySet { .. }
             | Action::PluginInstall { .. }
             | Action::PluginGrant { .. }
@@ -2351,6 +2375,11 @@ impl Action {
                 "type",
                 "an agent approval can't be bound: a person answers who may connect \
                  through the UI (ADR-0131)",
+            )),
+            Action::StudioSetWarm { .. } => Some((
+                "type",
+                "`studio.set_warm` can't be bound: it's an application setting, changed in \
+                 Settings",
             )),
             Action::UiSettingsSet { .. } => Some((
                 "type",
@@ -2488,6 +2517,7 @@ impl Action {
             | Action::PairingStart
             | Action::DeviceRevoke { .. }
             | Action::UiSettingsSet { .. }
+            | Action::StudioSetWarm { .. }
             | Action::PluginInstall { .. }
             | Action::PluginClapRescan
             | Action::AgentApprove { .. }

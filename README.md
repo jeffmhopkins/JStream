@@ -176,7 +176,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
-| 1 | A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video | ⏳ planned: measured, then decided in an ADR; no further preview fix is built until it lands | #1221 | #1235, #1236 |
+| 1 | A thread model that uses more cores: CPU frame work off the render thread, the preview reusing the program frame, upcoming scenes kept warm, and audio threads that never wait on video | ⏳ planned: measured, then decided in an ADR; no further preview fix is built until it lands | #1221 | #1235, #1236, #1462, #1463, #1464, #1470, #1471 |
 | 1 | jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality | 🧪 merged, Windows run pending: each Windows run opens with it, and a fail blocks the release | #1220, #1140 | #1260, #1315, #1336, #1339 |
 | 1 | A seamless, full-quality preview: no placeholder, blank or stall on a scene switch, an effectively lossless local preview, and no dropped frames in the preview, stream or recording | ⏳ planned: #1205's placeholder was fixed in alpha.4.1 (#1233); the bench checks the whole bar | #1205, #1217 |  |
 | 1 | Animated sources plan once a frame, and a small still image costs what it draws | ⏳ planned | #1138, #1139 |  |
@@ -193,7 +193,7 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | Webcam Properties: a device picker, resolution, frame rate and format, and camera controls | 🔍 in review | #1195, #1196 | #1262, #1348, #1393, #1396 |
 |  | Ask before a new agent connects, with always-allowed agents listed in Settings | ⏳ planned | #1229 |  |
 |  | Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects | ⏳ planned: finishes roadmap item 3D3 | #1231 |  |
-|  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned | #1222, #1223, #1224 | #1272, #1273, #1299, #1374, #1375, #1415, #1427, #1428, #1444, #1446, #1447 |
+|  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned | #1222, #1223, #1224 | #1272, #1273, #1299, #1374, #1375, #1415, #1427, #1428, #1444, #1446, #1447, #1466 |
 |  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 | #1423 |
 
 <details open>

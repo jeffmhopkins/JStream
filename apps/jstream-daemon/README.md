@@ -702,6 +702,10 @@ folder another process is using, so the daemon couldn't start pages while the ap
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). With no data
   directory the settings live in memory. The server owns the file, as it owns the device
   file.
+- **The warm scenes file** (`serve.rs`). The engine keeps the warm budget
+  (`studio.set_warm`, ADR-0117 §7) in `warm-scenes.json` in the data directory
+  (`jstream_platform::paths::WARM_SCENES_FILE`, `Engine::with_warm_file`), the file the
+  desktop app names too. With no data directory it lives in memory.
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`

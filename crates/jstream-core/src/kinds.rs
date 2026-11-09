@@ -2,8 +2,9 @@
 //! settings against (ADR-0025, docs/adr/0025-typed-settings-kind-descriptors.md): the
 //! descriptors of `jstream-sources`' built-in registry, the audio filter kinds of
 //! [`crate::filters`], and `jstream-render`'s built-in video filter kinds, which
-//! [`crate::chain`] runs, and the follow camera's `follow_pointer`, which drives its
-//! scene's camera and draws nothing (ADR-0120). The effect packs' video filter kinds are added as their packs
+//! [`crate::chain`] runs, depth-aware ones included (ADR-0143), and the follow camera's
+//! `follow_pointer`, which drives its scene's camera and draws nothing (ADR-0120). The
+//! effect packs' video filter kinds are added as their packs
 //! load ([`crate::effect_packs`]), and the CLAP kinds after a scan.
 //!
 //! Frames still come from `Engine::set_source_frame`; rendering sources from the
@@ -17,6 +18,8 @@ pub(crate) fn builtin() -> Vec<KindDescriptor> {
     let mut kinds = jstream_sources::Registry::builtin().descriptors();
     kinds.extend(crate::filters::descriptors());
     kinds.extend(jstream_render::video_filter_descriptors());
+    // The depth-aware kinds, whose view depth the chains draw (ADR-0143 decision 4).
+    kinds.extend(jstream_render::depth_filter_descriptors());
     kinds.push(jstream_protocol::follow_pointer_descriptor());
     kinds.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
     kinds

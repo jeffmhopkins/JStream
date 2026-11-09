@@ -55,10 +55,10 @@ use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
     CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
     Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, KindsCause, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState,
-    OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream, ProtocolError, Query, QueryResult,
-    RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId, SourceSize,
-    TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
+    IdempotencyKey, KindsCause, LiveOutcome, MAX_WARM_SCENES, OutputHealth, OutputId, OutputKind,
+    OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream, ProtocolError, Query,
+    QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId,
+    SourceSize, TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -124,6 +124,10 @@ struct Shared {
     /// The projects opened most recently, once the host names their file (ADR-0121 §6).
     /// Taken after the collection file's lock, never with the collection lock.
     recent: Mutex<Option<crate::projects::Recent>>,
+    /// The warm budget's file (ADR-0117 §7), once the host names it. Taken before the
+    /// collection lock: `studio.set_warm` holds it while it sets the budget and then
+    /// writes the file with the collection lock released, so writes land in order.
+    warm_file: Mutex<Option<PathBuf>>,
     /// The open collection file's stream-key scope (ADR-0121 §5), derived from its path,
     /// or `None` without a file. Set whenever the file changes; a leaf lock, taken alone
     /// or last.
@@ -222,6 +226,7 @@ impl Default for Engine {
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
                     recent: Mutex::new(None),
+                    warm_file: Mutex::new(None),
                     key_scope: Mutex::new(None),
                     audio_scopes,
                     youtube: Mutex::new(None),
@@ -318,6 +323,52 @@ impl Engine {
         *lock(&self.shared.recent) = Some(crate::projects::Recent::load(path.into()));
         self.note_recent();
         self
+    }
+
+    /// Keeps the warm budget (`studio.set_warm`, ADR-0117 §7) in the file at `path`:
+    /// the budget it holds applies now, and every change is saved there. A file that
+    /// can't be read is logged and replaced on the next change.
+    #[must_use]
+    pub fn with_warm_file(self, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        if let Some(scenes) = crate::warm_file::load(&path) {
+            let mut state = lock(&self.shared.state);
+            if state.studio.set_budget(scenes as usize) {
+                state.publish_warm();
+            }
+        }
+        *lock(&self.shared.warm_file) = Some(path);
+        self
+    }
+
+    /// `studio.set_warm` (0.115, ADR-0117 §7), or `None` for any other call.
+    fn warm_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        let Call::Action {
+            action: Action::StudioSetWarm { scenes },
+        } = call
+        else {
+            return None;
+        };
+        let scenes = *scenes;
+        if scenes > MAX_WARM_SCENES {
+            return Some(Err(ProtocolError::invalid_argument(
+                "scenes",
+                format!("at most {MAX_WARM_SCENES} scenes are kept warm"),
+            )));
+        }
+        let file = lock(&self.shared.warm_file);
+        let changed = {
+            let mut state = lock(&self.shared.state);
+            let changed = state.studio.set_budget(scenes as usize);
+            if changed {
+                state.publish_warm();
+            }
+            changed
+        };
+        if changed && let Some(path) = file.as_ref() {
+            crate::warm_file::save(path, scenes);
+        }
+        Some(Ok(CallResult::action()))
     }
 
     /// The name the key store holds `output_id`'s stream key under in the open
@@ -784,7 +835,7 @@ impl Engine {
             state.outputs.sync(state.graph.state());
             // Program is not saved: the loaded collection's first scene goes on it, with
             // no event, as no client is connected yet (ADR-0030).
-            state.studio = Studio::default();
+            state.studio = state.studio.fresh();
             state.studio.reconcile(state.graph.state());
             // `collection` asset references are relative to the file's folder.
             state
@@ -1737,6 +1788,12 @@ impl Engine {
         self
     }
 
+    /// Asks every preview stream for a keyframe, as a channel that lost a frame does.
+    #[cfg(test)]
+    pub(crate) fn ask_preview_keyframes(&self) {
+        self.shared.previews.ask_keyframes();
+    }
+
     /// Replaces how the preview thread draws, for tests that watch what it is given.
     #[cfg(test)]
     #[must_use]
@@ -2028,6 +2085,8 @@ impl Engine {
         } else if let Some(result) = self.pack_call(client_id, &call) {
             result
         } else if let Some(result) = self.clap_call(&call) {
+            result
+        } else if let Some(result) = self.warm_call(&call) {
             result
         } else if let Some(result) = self.collection_call(client_id, request_id, &call, previews) {
             result
@@ -3443,6 +3502,23 @@ impl Engine {
         lock(&self.shared.state).live.meters().plans()
     }
 
+    /// The first pixel of the frame `source_id`'s painter holds now, for tests.
+    #[cfg(test)]
+    pub(crate) fn painted_pixel(&self, source_id: &str) -> Option<[u8; 4]> {
+        lock(&self.shared.state)
+            .live
+            .painted_pixel(&SourceId::new(source_id))
+    }
+
+    /// Whether `source_id`'s live instance rests because no mix draws it (#1071), for
+    /// tests; `None` while it has none.
+    #[cfg(test)]
+    pub(crate) fn resting(&self, source_id: &str) -> Option<bool> {
+        lock(&self.shared.state)
+            .live
+            .resting(&SourceId::new(source_id))
+    }
+
     /// How many times the live sources painted `source_id` (ADR-0103's meters), for
     /// tests.
     #[cfg(test)]
@@ -4092,6 +4168,94 @@ fn command_name(call: &Call) -> &'static str {
     }
 }
 
+/// The captures and sources of the scenes the studio keeps warm (ADR-0117 §7), planned
+/// again only when the collection's revision, its placed keyframes (which are no
+/// revision, ADR-0118), the warm scenes or a running source changed: a plan of the
+/// program mix, which may run every frame, rarely has to plan them.
+#[derive(Default)]
+struct WarmCaptures {
+    /// What `captures` and `sources` were planned at.
+    of: Option<WarmKey>,
+    captures: Arc<BTreeSet<CaptureKey>>,
+    /// Every source the warm scenes draw, which the live sources keep from resting.
+    sources: BTreeSet<SourceId>,
+}
+
+/// The revision, the warm scenes, the live sources' installs and the placed keyframes
+/// [`WarmCaptures`] planned at.
+type WarmKey = (Rev, Vec<SceneId>, u64, BTreeMap<SceneId, SceneId>);
+
+impl WarmCaptures {
+    /// The captures of `scenes` in `graph`, as the running sources of `live` capture
+    /// them, and the sources they draw, planned again when what they depend on changed.
+    /// Only the captures are looked up, so the plan reaches no source and makes none
+    /// shown or heard (ADR-0028); the sources it asks for are noted.
+    fn update(
+        &mut self,
+        graph: &Graph,
+        scenes: Vec<SceneId>,
+        live: &LiveSources,
+        assets: &crate::filter_assets::FilterAssets,
+    ) -> &Arc<BTreeSet<CaptureKey>> {
+        if self
+            .of
+            .as_ref()
+            .is_some_and(|(rev, warm, installs, placed)| {
+                *rev == graph.rev()
+                    && *warm == scenes
+                    && *installs == live.installs()
+                    && placed == graph.placed_keyframes()
+            })
+        {
+            return &self.captures;
+        }
+        let key = (
+            graph.rev(),
+            scenes,
+            live.installs(),
+            graph.placed_keyframes().clone(),
+        );
+        let mut captures = BTreeSet::new();
+        let mut sources = BTreeSet::new();
+        for scene_id in &key.1 {
+            if graph.state().scene(scene_id).is_none() {
+                continue;
+            }
+            let planning = snapshot::plan_scene(
+                graph,
+                scene_id,
+                &mut |id| {
+                    sources.insert(id.clone());
+                    live.capture_key(id).map(Look::Capture)
+                },
+                assets,
+            );
+            // A scene that draws nothing asks for the primary display, which only an
+            // output without a program scene shows.
+            let primary = CaptureKey::primary();
+            captures.extend(
+                planning
+                    .shot
+                    .captures()
+                    .iter()
+                    .filter(|capture| **capture != primary)
+                    .cloned(),
+            );
+        }
+        if *self.captures != captures {
+            self.captures = Arc::new(captures);
+        }
+        self.sources = sources;
+        self.of = Some(key);
+        &self.captures
+    }
+
+    /// The sources the warm scenes draw, as last planned.
+    fn sources(&self) -> &BTreeSet<SourceId> {
+        &self.sources
+    }
+}
+
 /// Everything the engine knows.
 #[derive(Default)]
 struct State {
@@ -4148,6 +4312,9 @@ struct State {
     /// The copy of the collection each previewed source is planned on, kept while the
     /// collection's revision holds (#969 N2).
     source_copies: snapshot::SourceCopies,
+    /// The warm scenes' captures (ADR-0117 §7), which the render thread keeps running
+    /// beside the program's.
+    warm: WarmCaptures,
     /// When each item the program mix draws was first drawn: the origin of its motion
     /// modifiers' `shown` clock (ADR-0099).
     shown_since: crate::motion::ShownSince,
@@ -4589,7 +4756,7 @@ impl State {
         self.camera_zooms.clear();
         self.shown_since = crate::motion::ShownSince::default();
         self.fired = crate::motion::Fired::default();
-        self.studio = Studio::default();
+        self.studio = self.studio.fresh();
         self.live
             .set_collection_folder(folder.map(Path::to_path_buf));
         let rev = self.graph.rev();
@@ -5231,6 +5398,7 @@ impl State {
             }
             Action::StudioSetPreview { scene_id } => {
                 if self.studio.set_preview(self.graph.state(), &scene_id)? {
+                    self.publish_warm();
                     self.emit_studio(client_id, request_id, None, wake);
                     self.feed_pages();
                 }
@@ -5314,6 +5482,13 @@ impl State {
             | Action::UiSettingsSet { .. }) => {
                 return Err(served_by_the_server(other.name()));
             }
+            // `Engine::execute` answers it before taking the collection lock, so it
+            // only gets here from a path that isn't a client's call, which can't set it.
+            other @ Action::StudioSetWarm { .. } => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
+            }
             // Built without the `wasm-plugins` feature, the engine can't run a plugin, so
             // none is ever installed. With it, `Engine::execute` answers these before
             // taking the collection lock.
@@ -5385,6 +5560,10 @@ impl State {
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
+                    warm_scenes: Some(
+                        u32::try_from(self.studio.budget())
+                            .expect("invariant: the budget is at most MAX_WARM_SCENES"),
+                    ),
                     timelines: self
                         .timelines
                         .report(crate::timelines::ns(self.live.now()), |id| {
@@ -5819,6 +5998,21 @@ impl State {
         end_ms
     }
 
+    /// Publishes the warm scenes' captures and sources (ADR-0117 §7) after the warm scenes changed
+    /// with no plan of the program mix, as a new Preview scene does.
+    fn publish_warm(&mut self) {
+        let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
+        let assets = self.live.filter_assets();
+        let warm = self
+            .warm
+            .update(graph, self.studio.warm(graph.state()), &self.live, &assets);
+        self.render.publish_warm(warm);
+        self.live.set_warm(self.warm.sources());
+        // A source that left the warm scenes rests now if nothing drew it in the
+        // latest plans, as it would after one.
+        self.live.rest_undrawn();
+    }
+
     /// One plan of [`Self::publish_render`].
     fn publish_render_once(&mut self) -> Option<f32> {
         let started = Instant::now();
@@ -5837,6 +6031,7 @@ impl State {
             shown_since,
             fired,
             shared,
+            warm,
             ..
         } = self;
         // Drawn with the open gestures' source settings (ADR-0091); its revision is the
@@ -5902,6 +6097,12 @@ impl State {
         if !same {
             *scene_shots = Arc::new(shots);
         }
+        // The program stage draws the scenes it is asked to as extra mixes (ADR-0117 §6).
+        render.publish_scenes(scene_shots);
+        // And keeps the warm scenes' captures running, so showing one starts nothing;
+        // their other sources keep producing too.
+        render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets));
+        live.set_warm(warm.sources());
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
         let previewed: BTreeSet<SourceId> = previews

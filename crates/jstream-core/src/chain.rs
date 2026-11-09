@@ -104,6 +104,7 @@ fn max_outset_of(kind: &str) -> u32 {
         .get_or_init(|| {
             jstream_render::video_filter_descriptors()
                 .into_iter()
+                .chain(jstream_render::depth_filter_descriptors())
                 .filter_map(|kind| kind.max_outset_px.map(|px| (kind.kind_id, px)))
                 .collect()
         })
@@ -339,6 +340,16 @@ impl Chain {
         })
     }
 
+    /// Whether one of its filters reads its scene's view depth (ADR-0143 decision 5), so
+    /// a 3D scene's composite draws one for it (decision 4).
+    pub(crate) fn reads_depth(&self) -> bool {
+        self.filters.iter().any(|filter| {
+            filter.effect.is_none()
+                && filter.program.is_none()
+                && jstream_render::video_filter_reads_depth(&filter.kind)
+        })
+    }
+
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
     /// sum of what each draws past its input at its settings (ADR-0136), each filter
     /// taking the largest of its own settings' outset and that of each of `also`'s
@@ -405,6 +416,7 @@ impl Chain {
         let builtin = BUILTIN.get_or_init(|| {
             jstream_render::video_filter_descriptors()
                 .iter()
+                .chain(&jstream_render::depth_filter_descriptors())
                 .map(|kind| (kind.kind_id.clone(), whole_params(kind)))
                 .collect()
         });
@@ -622,6 +634,16 @@ pub(crate) struct Chains {
     /// The models drawn since the chains last began a frame: one no frame drew is let
     /// go when the next begins.
     models_used: BTreeSet<SourceId>,
+    /// The lights of the scene a model is drawn in this frame (ADR-0143 decision 3),
+    /// kept to reuse its allocation.
+    pub(crate) lights: Vec<jstream_render::SceneLight>,
+    /// The scenes whose lights past the limit have been logged, so each logs once.
+    pub(crate) lights_warned: BTreeSet<jstream_protocol::SceneId>,
+    /// Each 3D scene's view depth (ADR-0143 decision 4), as its composite last drew it,
+    /// with the frame of the chains' run that drew it: a scene's depth-reading filters
+    /// read it only in that run. Kept, like a scene layer a filter reads, to tell when
+    /// the layer is remade.
+    depths: BTreeMap<jstream_protocol::SceneId, (u64, jstream_render::ViewDepth)>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -653,6 +675,15 @@ impl Chains {
         if self.ran == Some(frame) {
             return false;
         }
+        // A view depth the last run didn't draw is let go with the cache's images.
+        let last = self.ran;
+        self.depths.retain(|_, (drawn, depth)| {
+            let keep = Some(*drawn) == last;
+            if !keep {
+                cache.retire_image(Image::clone(&depth.image));
+            }
+            keep
+        });
         self.ran = Some(frame);
         #[cfg(test)]
         {
@@ -755,6 +786,19 @@ impl Chains {
             {
                 hear(r, heard, at);
             }
+            // A depth-aware filter reads its scene's view depth drawn this run, and
+            // anywhere else has none, so it passes its input through (ADR-0143).
+            if r.filter.reads_depth() {
+                let depth = match source {
+                    ChainOwner::Scene(scene) => self
+                        .depths
+                        .get(scene)
+                        .filter(|(drawn, _)| Some(*drawn) == self.ran)
+                        .map(|(_, depth)| depth.clone()),
+                    _ => None,
+                };
+                r.filter.set_depth(depth);
+            }
             let Some(scene) = &f.scene else {
                 continue;
             };
@@ -830,6 +874,37 @@ impl Chains {
             // It is the same size, so this reuses it and can't fail; if it ever does, the
             // next run makes it again.
             let _ = cache.layer(compositor, key, size.0, size.1);
+        }
+    }
+
+    /// Records that scene `scene`'s view depth was drawn into `key` in this run, seen
+    /// with a focal length of `focal_px`, for its chain's depth-aware filters to read
+    /// (ADR-0143 decision 5). A layer remade since the last frame (the first, or one at
+    /// another size) retires the one it replaces into `cache` (R-RT-003); a steady frame
+    /// makes no layer and no new handle to it.
+    pub(crate) fn drew_depth(
+        &mut self,
+        cache: &mut ResourceCache<GpuKey>,
+        scene: &jstream_protocol::SceneId,
+        key: &GpuKey,
+        focal_px: f32,
+    ) {
+        let (Some(ran), Some(layer)) = (self.ran, cache.get(key)) else {
+            return;
+        };
+        if let Some((drawn, depth)) = self.depths.get_mut(scene)
+            && depth.image.texture() == layer.texture()
+        {
+            *drawn = ran;
+            depth.focal_px = focal_px;
+            return;
+        }
+        let fresh = jstream_render::ViewDepth {
+            image: Arc::new(layer.clone()),
+            focal_px,
+        };
+        if let Some((_, old)) = self.depths.insert(scene.clone(), (ran, fresh)) {
+            cache.retire_image(Image::clone(&old.image));
         }
     }
 
@@ -2680,6 +2755,383 @@ mod tests {
             ........WWWWWBBB
             ",
             "effects run over the model's layer: the canvas's ellipse, cut to the model",
+        );
+    }
+
+    /// The centre pixel of `graph` with `cam` a white `scene`-lit plane (ADR-0143
+    /// decision 3) and `logo` the light `light`, or `None` without an adapter.
+    fn lit_centre(graph: &Graph, light: jstream_sources::ShownLight) -> Option<[u8; 4]> {
+        lit_centre_in(graph, light, None)
+    }
+
+    /// [`lit_centre`] with `running` under way at its start.
+    fn lit_centre_in(
+        graph: &Graph,
+        light: jstream_sources::ShownLight,
+        running: Option<&crate::transition::Running>,
+    ) -> Option<[u8; 4]> {
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("plane"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        let source = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(source.model());
+        let lamp = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_light(Some(light));
+        let shot = snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            running.map(|running| (running, running.start)),
+            &mut |id| {
+                Some(Look::Frame(
+                    if id.as_str() == "cam" {
+                        stand_in.clone()
+                    } else {
+                        lamp.clone()
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let mut compositor = gpu()?;
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let pixels = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&shot, &LiveParams::default()),
+            &[(32, 18)],
+        );
+        Some(pixels[0])
+    }
+
+    /// ADR-0143 decisions 2 and 3: a `scene`-lit model in a 3D scene is lit by the light
+    /// items placed there, where their items put them and as bright as their opacity
+    /// lets them be; with none it is dark, and in a 2D scene it is studio-lit.
+    #[test]
+    fn a_scene_lit_model_is_lit_by_the_lights_its_scene_places() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        let lamp = |depth: f32| {
+            let mut geometry = jstream_protocol::ItemGeometry::try_new(
+                jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+                jstream_protocol::Size::try_new(8.0, 8.0).expect("positive"),
+            )
+            .expect("valid");
+            geometry.depth_px = jstream_protocol::Finite32::new(depth).expect("finite");
+            Edit::ItemSetGeometry {
+                scene_id: None,
+                item_id: ItemId::new("logo"),
+                geometry,
+            }
+        };
+        let light = |kind| jstream_sources::ShownLight {
+            kind,
+            color: [1.0; 3],
+            intensity: 2.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+        };
+        let point = light(jstream_sources::LightType::Point);
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        // In a 2D scene the plane is studio-lit, whatever lights are placed.
+        apply(&mut graph, vec![lamp(-200.0)]);
+        let Some(flat) = lit_centre(&graph, point) else {
+            return;
+        };
+        assert!(luma(flat) > 60, "studio-lit in a 2D scene: {flat:?}");
+        apply(
+            &mut graph,
+            vec![Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(jstream_protocol::SceneCamera::framing(
+                    jstream_protocol::Canvas {
+                        width: CANVAS.0,
+                        height: CANVAS.1,
+                    },
+                )),
+            }],
+        );
+        // Behind the plane, a point light lights only its back, which isn't drawn.
+        let behind = lit_centre(&graph, point).expect("an adapter");
+        assert!(luma(behind) < 6, "lit from behind: {behind:?}");
+        // In front of it, the same light lights its face.
+        apply(&mut graph, vec![lamp(200.0)]);
+        let front = lit_centre(&graph, point).expect("an adapter");
+        assert!(luma(front) > 150, "lit from the front: {front:?}");
+        // The item's opacity scales the light: at 0 it is off.
+        apply(
+            &mut graph,
+            vec![Edit::ItemSetOpacity {
+                item_id: ItemId::new("logo"),
+                scene_id: None,
+                opacity: jstream_protocol::Finite32::new(0.0).expect("finite"),
+            }],
+        );
+        let off = lit_centre(&graph, point).expect("an adapter");
+        assert!(luma(off) < 6, "a light at opacity 0 is off: {off:?}");
+        // An ambient light lights it from everywhere, wherever its item is.
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetOpacity {
+                    item_id: ItemId::new("logo"),
+                    scene_id: None,
+                    opacity: jstream_protocol::Finite32::new(1.0).expect("finite"),
+                },
+                lamp(-200.0),
+            ],
+        );
+        let ambient =
+            lit_centre(&graph, light(jstream_sources::LightType::Ambient)).expect("an adapter");
+        assert!(luma(ambient) > 30, "ambient light: {ambient:?}");
+    }
+
+    /// Points of `graph`'s program drawn once: `cam` shows a plane model when `model`
+    /// is set, and every other source a white frame. `None` where the machine has no
+    /// adapter.
+    fn drawn_points(graph: &Graph, model: bool, points: &[(u32, u32)]) -> Option<Vec<[u8; 4]>> {
+        use jstream_sources::SourceKind as _;
+        let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
+        let plain = Frame::new(16, 9, &white, 1).expect("invariant: 16x9 RGBA8");
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("plane"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        // Unlit, so it is white and no brighter: studio light can take a layer past 1.
+        settings.insert(String::from("lighting"), serde_json::json!("unlit"));
+        let plane = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let modelled = plain.clone().with_model(plane.model());
+        let shot = snapshot::plan_with(
+            graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::Frame(
+                    if model && id.as_str() == "cam" {
+                        modelled.clone()
+                    } else {
+                        plain.clone()
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let mut compositor = gpu()?;
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        Some(draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&shot, &LiveParams::default()),
+            points,
+        ))
+    }
+
+    /// ADR-0143 decisions 4 to 6: `depth_fog` on a 3D scene's chain fogs each card and
+    /// model by its own distance from the camera, read from the view depth the chains
+    /// draw for it; on a 2D scene it has no depth and passes the picture through.
+    #[test]
+    fn depth_fog_on_a_scene_fogs_cards_and_models_by_their_distance() {
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let camera = jstream_protocol::SceneCamera::framing(canvas);
+        let f = camera.view(canvas).expect("a view").focal_px();
+        // `logo` on the canvas plane at the left; `cam` a focal length behind it at
+        // the right, seen half as large about the centre, so its centre is at x = 40.
+        let mut graph = placed(&[
+            ("logo", (16.0, 18.0), (32.0, 36.0), 0.0),
+            ("cam", (48.0, 18.0), (32.0, 36.0), 0.0),
+        ]);
+        let mut far = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(48.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(32.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        far.fit_mode = jstream_protocol::FitMode::Stretch;
+        far.depth_px = jstream_protocol::Finite32::new(-f).expect("finite");
+        // Black fog from one focal length to three, and none where nothing is: the
+        // near card is clear, and anything at twice the focal length half fogged.
+        let fog = Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("main"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("fog"),
+            kind: "depth_fog".into(),
+            settings: [
+                ("mode", serde_json::json!("linear")),
+                ("color", serde_json::json!("#000000ff")),
+                ("start_px", serde_json::json!(f)),
+                ("end_px", serde_json::json!(3.0 * f)),
+                ("density", serde_json::json!(0.5)),
+                ("max", serde_json::json!(1.0)),
+                ("background", serde_json::json!(false)),
+            ]
+            .into_iter()
+            .collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry: far,
+                },
+                fog,
+            ],
+        );
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let points = [(12, 18), (40, 18)];
+        // In 2D the fog has no depth: the picture passes through.
+        let Some(flat) = drawn_points(&graph, false, &points) else {
+            return;
+        };
+        assert!(
+            flat.iter().all(|&pixel| luma(pixel) > 700),
+            "a 2D scene isn't fogged: {flat:?}"
+        );
+        apply(
+            &mut graph,
+            vec![Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(camera),
+            }],
+        );
+        let mut clear = graph.clone();
+        apply(
+            &mut clear,
+            vec![Edit::FilterSetEnabled {
+                owner: FilterOwner::Scene {
+                    scene_id: SceneId::new("main"),
+                },
+                filter_id: FilterId::new("fog"),
+                enabled: false,
+            }],
+        );
+        // A model whose item has effects is placed through their output, and still
+        // writes its own depth.
+        let mut affected = graph.clone();
+        apply(&mut affected, vec![item_tint("cam", "#ffffff")]);
+        let mut affected_clear = clear.clone();
+        apply(&mut affected_clear, vec![item_tint("cam", "#ffffff")]);
+        for (model, what, clear, graph) in [
+            (false, "card", &clear, &graph),
+            (true, "model", &clear, &graph),
+            (true, "model with effects", &affected_clear, &affected),
+        ] {
+            let seen = drawn_points(clear, model, &points).expect("an adapter");
+            let fogged = drawn_points(graph, model, &points).expect("an adapter");
+            assert!(
+                luma(fogged[0]) + 6 >= luma(seen[0]),
+                "the near card is clear: {:?} against {:?}",
+                fogged[0],
+                seen[0]
+            );
+            // Half fogged at twice the focal length: linear 0.5 of white, sRGB 188.
+            assert_eq!(seen[1], WHITE, "the far {what} unfogged");
+            assert!(
+                fogged[1][..3].iter().all(|&c| c.abs_diff(188) <= 3),
+                "the far {what} is half fogged: {:?}",
+                fogged[1]
+            );
+        }
+    }
+
+    /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition
+    /// switches to that scene too, not only once it has landed.
+    #[test]
+    fn a_scene_lit_model_stays_lit_through_a_transition() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        let main = SceneId::new("main");
+        let mut geometry = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(8.0, 8.0).expect("positive"),
+        )
+        .expect("valid");
+        geometry.depth_px = jstream_protocol::Finite32::new(200.0).expect("finite");
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: main.clone(),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+            ],
+        );
+        let light = jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Point,
+            color: [1.0; 3],
+            intensity: 2.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+        };
+        let running = crate::transition::Running {
+            from: crate::transition::From::Scene(main.clone()),
+            to: main.clone(),
+            start: MediaTime::zero(Timebase::MILLIS),
+            run: crate::transition::Run {
+                preset_id: jstream_protocol::TransitionPresetId::new("fade"),
+                pairs: true,
+                duration_ms: 500,
+                easing: jstream_protocol::Easing::Linear,
+                unmatched: jstream_protocol::TransitionEffect::None,
+                stagger_ms: 0,
+                stinger: None,
+            },
+            by_item: true,
+            from_camera: crate::transition::camera_of(&graph, &main),
+        };
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let Some(landed) = lit_centre(&graph, light) else {
+            return;
+        };
+        let switching = lit_centre_in(&graph, light, Some(&running)).expect("an adapter");
+        assert!(luma(landed) > 150, "lit once landed: {landed:?}");
+        assert!(
+            luma(switching) > 150,
+            "lit while switching: {switching:?} (landed {landed:?})"
         );
     }
 

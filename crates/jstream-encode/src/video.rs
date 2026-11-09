@@ -1,6 +1,9 @@
 //! Video sessions: one [`VideoEncoder`] fed with frames from a video mix.
 
-use jstream_platform::media::{MediaKind, Packet, PixelFormat};
+use jstream_platform::media::{
+    ColorInfo, MediaKind, Packet, PixelFormat, VideoFrame, VideoFrameInfo,
+};
+use jstream_platform::nv12::{RgbOrder, rgb_to_nv12};
 use jstream_platform::{
     CodecInfo, Codecs, GpuContext, PlatformError, VideoEncoder, VideoEncoderConfig, VideoSurface,
 };
@@ -16,6 +19,42 @@ struct VideoDriver {
     hardware: bool,
     /// The encoder's name, as last seen.
     name: String,
+    /// The CPU format it was opened for.
+    input: PixelFormat,
+}
+
+impl VideoDriver {
+    /// `frame` as the encoder takes it: an RGBA or BGRA CPU frame pushed to an encoder
+    /// opened for NV12 is converted here, on the encode thread, with the platforms'
+    /// shared converter (BT.709 limited range); every other frame is as it came.
+    fn in_input_format(&self, frame: VideoSurface) -> Result<VideoSurface, PlatformError> {
+        let VideoSurface::Cpu(cpu) = &frame else {
+            return Ok(frame);
+        };
+        let info = *cpu.info();
+        let order = match info.format {
+            PixelFormat::Rgba8 => RgbOrder::Rgba,
+            PixelFormat::Bgra8 => RgbOrder::Bgra,
+            _ => return Ok(frame),
+        };
+        if self.input != PixelFormat::Nv12 {
+            return Ok(frame);
+        }
+        let mut nv12 = VideoFrame::zeroed(VideoFrameInfo {
+            format: PixelFormat::Nv12,
+            color: ColorInfo::default(),
+            ..info
+        })
+        .map_err(|err| PlatformError::Unsupported {
+            what: format!("an NV12 frame of {:?} for the encoder: {err}", info.size),
+        })?;
+        let plane = cpu.plane(0).ok_or(PlatformError::InvalidState {
+            what: "converting a frame to NV12",
+            state: "the frame has no plane",
+        })?;
+        rgb_to_nv12(plane.data(), plane.stride(), order, &mut nv12)?;
+        Ok(VideoSurface::Cpu(nv12))
+    }
 }
 
 impl Driver for VideoDriver {
@@ -33,6 +72,7 @@ impl Driver for VideoDriver {
     ) -> Result<(), PlatformError> {
         // A dropped frame needs no repair: the encoder numbers keyframes over the frames
         // it is given, so the stream stays decodable and frame times keep their gaps.
+        let frame = self.in_input_format(frame)?;
         self.encoder.encode(frame)
     }
 
@@ -71,6 +111,8 @@ impl Driver for VideoDriver {
 pub struct VideoSession {
     core: Core<VideoDriver>,
     path: VideoPath,
+    /// The pixel format the encoder was opened for.
+    input: PixelFormat,
 }
 
 /// Which frames a [`VideoSession`]'s encoder takes.
@@ -168,14 +210,16 @@ impl VideoSession {
         let driver = VideoDriver {
             hardware: codec.hardware,
             name: codec.name.clone(),
+            input: config.input_format,
             encoder,
         };
+        let input = config.input_format;
         let info = StreamInfo {
             codec,
             settings: EncoderSettings::Video(config),
         };
         let core = Core::start("jstream-encode-video", driver, info, &options)?;
-        Ok(Self { core, path })
+        Ok(Self { core, path, input })
     }
 
     /// Which frames the encoder takes. Pushing the other kind fails the session.
@@ -187,6 +231,7 @@ impl VideoSession {
     pub fn input(&self) -> VideoInput {
         VideoInput {
             inner: self.core.input(),
+            format: self.input,
         }
     }
 
@@ -269,9 +314,17 @@ fn check_kind(config: &VideoEncoderConfig) -> Result<(), EncodeError> {
 #[derive(Clone)]
 pub struct VideoInput {
     inner: InputHandle<VideoSurface>,
+    format: PixelFormat,
 }
 
 impl VideoInput {
+    /// The pixel format the session's encoder was opened for. A CPU frame in it goes
+    /// to the encoder as it is; an RGBA8 or BGRA8 frame pushed to an NV12 session is
+    /// converted on the session's thread.
+    pub fn format(&self) -> PixelFormat {
+        self.format
+    }
+
     /// Queues `frame` for the encoder, or drops it when the queue is full.
     ///
     /// Frames are taken from the queue only when the encoder can accept one, so a slow

@@ -326,6 +326,14 @@ panic = "unwind"   # R-UNSAFE-005: catch_unwind at FFI boundaries needs unwindin
 [profile.dev.package.jstream-audio]
 opt-level = 3
 
+# The RGB to NV12 converter likewise (`jstream-platform`'s `nv12`): an encoder session
+# opened in NV12 converts each RGBA8 frame with it, as do the CPU compositor tests'
+# draws and the Linux and Windows CPU encoders. Unoptimised, it doubles how long a
+# recording test takes to get its frames, which put the pipeline tests past their
+# deadline on the Windows runner, and it is as slow in a debug app.
+[profile.dev.package.jstream-platform]
+opt-level = 3
+
 # The web UI's debug build (`trunk build` without `--release`, which the UI tests use):
 # `crates/jstream-ui/index.html` picks it with `data-cargo-profile-dev`. Without it, the
 # wasm's name section alone is larger than the server serves a UI file at

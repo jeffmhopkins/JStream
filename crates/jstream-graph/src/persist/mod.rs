@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 14;
+pub const SCHEMA_VERSION: u32 = 15;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -64,7 +64,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
-    v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14,
+    v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -396,6 +396,21 @@ fn v13_to_v14(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Version 15 adds whether the studio keeps a scene warm (`scenes[].keep_warm`, ADR-0117
+/// §7). A version 14 file keeps none warm, so it upgrades unchanged, and the field there
+/// is refused.
+fn v14_to_v15(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    if scenes
+        .into_iter()
+        .flatten()
+        .any(|s| s.get("keep_warm").is_some())
+    {
+        return Err("a version 14 scene has no `keep_warm`".into());
+    }
+    Ok(())
+}
+
 /// Why a collection file could not be loaded. The message never quotes the file's
 /// values beyond IDs, so it is safe to log.
 #[derive(Clone, Debug, PartialEq, Eq, thiserror::Error)]
@@ -587,6 +602,10 @@ struct FileScene {
     /// Its background colour (ADR-0089 §4); omitted for none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     background: Option<String>,
+    /// Whether the studio keeps it warm (ADR-0117 §7, schema_version 15); omitted for
+    /// `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    keep_warm: bool,
     /// Its camera (ADR-0094), or a keyframe scene's override of its parent's; omitted
     /// for none, so a file without cameras is unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -922,6 +941,7 @@ impl Graph {
                     show_in_multiview: scene.meta.show_in_multiview,
                     include_audio: scene.options.include_audio,
                     background: scene.options.background.clone(),
+                    keep_warm: scene.options.keep_warm,
                     camera: scene.camera,
                     camera_motion: scene.camera_motion.clone(),
                     ptz_shots: scene.ptz_shots.clone(),
@@ -1403,6 +1423,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
         let options = SceneOptions {
             include_audio: scene.include_audio,
             background: scene.background.clone(),
+            keep_warm: scene.keep_warm,
         };
         if !options.is_default() {
             edits.push((

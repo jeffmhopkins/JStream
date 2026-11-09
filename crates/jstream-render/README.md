@@ -44,10 +44,23 @@ and calls this crate.
 - A **3D model** ([ADR-0107](../../docs/adr/0107-3d-models.md)) is not an item of its
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
-  item's geometry, the scene's camera, the lighting) into a canvas-sized layer with its
-  own depth test. The engine runs filters over that layer and places it with
+  item's geometry, the scene's camera, the lighting, and for a scene-lit model the
+  scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md))
+  into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
+- A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
+  draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
+  nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
+  mips, drawing each visible card seen through a camera with `fs_depth`
+  (`composite.wgsl`), which discards where the sampled alpha times opacity times the
+  sharp edge coverage is under one half; the pipeline blends with `Max`, so the
+  nearest card wins in any order and depth of field doesn't blur it. A
+  `Placement::Layer` writes nothing; `draw_model_depth(draw, target)` adds a model's
+  own per-fragment `1 / w` the same way (`model.wgsl`'s `fs_depth`: both faces, masked
+  and blended materials under half alpha discarded), and nothing without a camera. A
+  scene with no camera leaves the target all 0. Depth-aware filters read it
+  (**Filters › Depth-aware kinds**).
 - Each item places one image with one of
   [ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md)'s two placement forms:
   - a **geometry** (decisions 2 and 3): a box on the canvas. The image is cropped in
@@ -203,14 +216,34 @@ and calls this crate.
   the first error instead (`Compositor::take_error`, logged as
   `uncaptured wgpu error` before a loss), and `render` fails with
   `RenderError::Uncaptured` when one is pending, before any readback.
+  The next poll of a lost device, on any thread, frees every buffer made on it, mapped
+  ones too, so a read of a mapped buffer (a ring's copier, a snapshot on the shared
+  context) holds a per-device lock and reads nothing once the device is lost, and
+  recording the loss waits for the reads under way (#1454). A driver's loss still leaves
+  a gap: wgpu marks the device invalid and only then calls the device-lost callback,
+  which records it, so while a copy under way finishes a poll on another thread (the
+  preview's or the snapshot thread's compositor on the shared context) can free the
+  buffer under it. Closing it would mean serialising every poll against the reads, or
+  the copier holding wgpu's own lock through `unsafe`; neither is done (#1457). A
+  deliberate loss goes through `Compositor::destroy_device`, which records it and then
+  destroys the device, so it has no gap, never `wgpu::Device::destroy` alone, whose
+  callback comes only after the buffers are freed (a test of the callback itself is the
+  one exception). A copy the loss caught leaves its buffer mapped: unmapping a lost
+  device's buffer only raises another error.
   `Nv12Converter::bind` returns `RenderError::Uncaptured` too when its parameter
   buffer can't be mapped, as on a lost device, where wgpu's `create_buffer_init`
   would panic. `render` empties
   the slot, so an error that recurs every frame is logged once per frame until the caller
-  gives up. The handler is per device: on the shared context an error that a browser or
-  capture thread, or another compositor on the context (the preview's, a snapshot's),
-  raised is taken by whichever compositor's `render` comes next and counts against its
-  frames.
+  gives up. The handler is per device, so on the shared context an error that a
+  browser or capture thread raised is taken by whichever compositor's `render` comes
+  next and counts against its frames. A compositor that shares the context with one
+  rendering on another thread can keep its own errors instead
+  (`Compositor::keeping_own_errors`, #1268; the preview's and the snapshot thread's do):
+  each of its calls pushes wgpu's error scopes (validation, internal, out of memory) on
+  the calling thread and returns what they caught as `RenderError::Uncaptured`, and its
+  `render` no longer takes the shared slot. wgpu's scopes are per thread, so another
+  thread's errors still reach the slot, for the program stage's next `render`, and
+  neither compositor's errors fail the other's frames.
 
 **Not in this cut.** The render thread and its snapshots are `jstream-core`'s
 (`runtime/`), not this crate's, and so is the choice of encode target each tick. Also
@@ -342,7 +375,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    source drawn only at about its size or larger, and never in 3D, gets no chain.
 3. **Composite.** One render pass clears the FP16 target to the background converted
    to premultiplied linear (sRGB transfer on RGB, alpha unchanged, then RGB multiplied
-   by alpha). Each visible item is a convex polygon drawn as a triangle fan: a 2D item
+   by alpha). A layer drawn again over a transparent background whose content is known
+   is loaded instead, and made transparent over that content alone (`Wipe`, #1449):
+   a clear writes every texel, which on a software renderer costs about 2 ms a 1080p
+   layer. Each visible item is a convex polygon drawn as a triangle fan: a 2D item
    is its quad (two triangles), a 3D item three to five vertices (up to three
    triangles). The vertex buffer holds clip-space positions, UVs, opacity, the image's
    alpha mode, ADR-0050's `w`, the item's five edge lines and its UV bounds (26
@@ -380,8 +416,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    on, and a layer's reader, see linear light. The curves are written so that 1 encodes
    and decodes to exactly 1, so white survives nested scenes' round trips.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
-   blending off. It `textureLoad`s the FP16 texel, un-premultiplies (zero RGB where
-   alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
+   blending off. It samples the FP16 texel at its centre with a nearest sampler (the
+   value a `textureLoad` gives, at about half the cost on llvmpipe, #1449),
+   un-premultiplies (zero RGB where alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
    alpha is stored as-is. The output usage is `RENDER_ATTACHMENT | COPY_SRC |
    TEXTURE_BINDING`, so a snapshot or a later consumer can use it.
 
@@ -428,7 +465,13 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    hands it the buffers that have mapped and takes back the frames it has copied, each
    swapped into the caller's buffer, whose old one is reused for a later copy, so the
    caller's thread copies no pixels and a steady size allocates nothing. A buffer stays
-   busy until its copy is back, a call or two after its map finished. The source buffer of the ingest pass
+   busy until its copy is back, a call or two after its map finished. A copy on a lost
+   device reads nothing and hands nothing back (see the lost device above). `record_nv12`
+   records into the same ring an output converted by an `Nv12Pass` into `Nv12Planes`
+   (step 6), in the same submit: both planes are copied into one buffer, Y then CbCr,
+   each row padded, and handed back as tight NV12 (`width × height` Y bytes, then
+   `width × height / 2` of interleaved CbCr), the ring's `format()` saying which it
+   holds. A change of format is a change of size: it waits until no buffer is out. The source buffer of the ingest pass
    is held to one storage binding (`max_storage_buffer_binding_size`) as well as one
    buffer: a larger frame is `TooLarge` before any buffer is made for it.
 
@@ -640,6 +683,22 @@ adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
+**Scene lights** (ADR-0143 decision 3). With `ModelDraw::lights` set and a camera, the
+rig is replaced by the scene's lights. `SceneLight` holds a light in the scene's space
+(position and aim, `f64`), and the draw takes each into the viewing frame through
+`CameraView::in_view` and `direction_in_view`, so only light positions relative to the
+camera reach the GPU as `f32`. Ambient lights sum into one linear colour that scales the
+environment terms. The first `MAX_SCENE_LIGHTS` (8) other lights in the order given (the
+caller's stacking order, before any depth sort) each take a slot, lit or not, so a light
+fading to intensity 0 never lets a ninth on; any after them are dropped, and the caller
+logs that. A slotted light is packed into the frame uniform, four `vec4` each, unless
+its intensity isn't above 0, a value is non-finite, or a spot or directional light has
+no aim. A caller passes lights only for a model its source lights by the scene. `scene_light` in `model.wgsl` fades a point
+or spot light by `(1 − (d / range)²)²` (none at range 0) and a spot light by a
+`smoothstep` across the outer `softness` of its cone (a hard edge at softness 0), and
+shades each with the studio key light's `light`. Without a camera, or unlit, the lights
+are ignored and the frame is the one ADR-0107 draws.
+
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
 function:
@@ -710,7 +769,7 @@ depends_on = ["docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0026
 The built-in video filter kinds ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)
 descriptors for [ADR-0026](../../docs/adr/0026-source-filter-chains.md)'s video chain),
 and the GPU passes that draw them. The kinds are grouped by roadmap item, one module
-each under `src/filter/` (`pack`, `aspect`, `multipass`, `assets`). Each kind has a
+each under `src/filter/` (`pack`, `aspect`, `multipass`, `assets`, `depth`). Each kind has a
 `video_filter` descriptor, the mapping from its settings (complete, as the graph stores
 them) to shader values, and its WGSL. A test checks that every kind is unique, that its
 defaults pass its descriptor, and that they build its pass.
@@ -770,19 +829,28 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
 - **Bounded filters** (#1070). Some kinds draw transparent wherever they are far from
   their input's non-transparent texels, keep their input's size, and draw every pass
   over the whole frame at that pass's scale. Such a kind gives `Pass::reach`, how far
-  past that content it can draw, in input pixels. A blur gives its span plus a working
-  texel each for its downsample and read back. `image_mask` and `scene_mask` multiply
-  by coverage, so they give 0. If the input's content is known (`Image::content`: a
-  transparent scene's layer, or a bounded filter's output), `apply_filter_into` grows it by
-  the padding, the reach and a pixel into a `Bound` on the output. Each `Ctx` draw
-  still clears its whole target, but shades only that bound scaled to the target and
-  grown by two texels: one for a scratch size rounded up and one for a filtered read.
-  The output then keeps the bound as its content, so the next filter of the chain and
-  the scene that places the result are bounded too. An empty input draws nothing.
-  Outside the bound, the result differs from a whole-frame draw only by a gaussian
-  tail under half a code of alpha. Every other kind can draw anywhere: a held frame,
-  a scroll, a program, a reshaped frame, a pack effect. Its output's content is
-  unknown.
+  past that content it can draw, in input pixels:
+  - A blur gives its span plus one working texel for its downsample and one for its
+    read back.
+  - `image_mask` and `scene_mask` multiply by coverage, so they give 0.
+  - A drop shadow or a glow gives its offset plus that span. For its blur, it moves
+    the bound into its grown shape frame (`Bound::placed`).
+
+  Each reach is the kind's whole support, so outside the bound a whole-frame draw is
+  transparent too. A kind that opts in joins the test that draws each kind both
+  bounded and whole (`tests/content.rs`), because nothing else checks that promise.
+
+  When the input's content is known (`Image::content`: a transparent scene's layer, or
+  a bounded filter's output), `apply_filter_into` grows it by the padding, the reach
+  and one pixel into a `Bound` on the output. Each `Ctx` draw shades only that bound,
+  scaled to the target and grown by two texels: one for a scratch size that was
+  rounded up, one for a filtered read. A target whose content is known isn't cleared
+  whole first (#1449): it is loaded, and made transparent over that content when the
+  draw doesn't replace all of it; any other is cleared. What each draw leaves becomes
+  its target's content once the submit is made, the output's too, so the next filter
+  of the chain is bounded, and so is the scene that places the result. An empty input draws nothing. Every other kind can
+  draw anywhere (a held frame, a scroll, a program, a reshaped frame, a pack effect),
+  so its output's content is unknown.
 - Each `apply_filter` makes its output layer (`apply_filter_into` reuses the caller's).
   A multi-pass filter's `Ctx::scratch` layers (up to three, each at most the filter's
   output size, about 16.6 MB at 1080p) come from a pool its `VideoFilter` keeps (V0): a
@@ -898,6 +966,18 @@ premultiplied linear light on the way out.
   looping axis, so a ticker's last item doesn't run into its first: the offset wraps
   to the image plus the gap, and the shader reads transparent in the gap. A new speed
   jumps to where that speed puts the picture at the current time.
+- `scanlines` (#1406): the CRT and monitor-screen look. `strength` (0..1, default
+  0.35) is how far each line darkens, in linear light; `spacing` (1..64 px, default 3)
+  the line period and `thickness` (0..1, default 0.5) the share of it the line takes,
+  each output row darkened by how much of it the line covers. `speed` (px/s, either
+  way) rolls the lines, the offset clock seconds times speed in `f64` wrapped to the
+  spacing, as `scroll`'s is. `rgb_offset` (0..16 px) reads red that far left and blue
+  that far right, a colour fringe, kept inside the pixel's coverage. `grain` (0..1)
+  adds per-pixel noise seeded from the clock's step (60 a second), scaled by alpha,
+  and `flicker` (0..1) dims the whole picture by up to half of it times a SplitMix64
+  draw for the step, so two machines draw the same frame at the same time. All
+  default to off but the lines. Coverage is kept. The UI offers it with presets
+  (Monitor, CRT, Film grain).
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
   (0..1, default 0.5), `color` (with alpha, default opaque black), `shape` (`frame`, the
   default, an ellipse that follows the frame's aspect, or `round`, a circle), `blend`
@@ -1008,6 +1088,29 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
   shown are reused. A new input size empties the ring, and so does a clock that goes
   backwards.
 
+**Depth-aware kinds** (`src/filter/depth/`,
+[ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decisions
+5 and 6). A kind there reads a scene's view depth beside its input:
+`VideoFilter::set_depth(Some(ViewDepth { image, focal_px }))` hands it the image
+`Compositor::render_view_depth` drew and the camera's focal length, and
+`VideoFilter::reads_depth` (`video_filter_reads_depth(kind)`) says which kinds want one.
+With none, or one of another size than the input, the kind passes its input through.
+They are built by `VideoFilter::new` but listed by `depth_filter_descriptors()`, not
+`video_filter_descriptors()`: the engine adds that list to its kinds because it draws the
+view depth they read (`jstream-core`'s `kinds.rs`), and an engine that didn't would leave
+it out; `filter::testing` reads both lists.
+- `depth_fog`: `mode` (`exponential`, the default, or `linear`), `color` (with alpha,
+  default `#c8ccd2ff`), `start_px` (default 0), `end_px` (default 4000), both 0 to
+  `MAX_DRAWN_PX`, `density` (0 to 20 per 1000 px, default 0.5), `max` (0 to 1, default
+  1) and `background` (default on). The shader reads the depth texel under each output
+  pixel with `textureLoad`, turns `1 / w` back into `D = f / (1 / w)`, and takes the
+  amount `(D − start) / (end − start)` (linear; a step at `start` when `end` is at or
+  before it) or `1 − exp(−density (D − start) / 1000)`, clamped and capped at `max`, 0
+  nearer than `start`, and `max` or 0 where the depth is empty, by `background`. It lays
+  the premultiplied fog over the pixel source-over at that amount,
+  `fog · a + pixel · (1 − fog.alpha · a)`, so a translucent fog colour never thins the
+  picture.
+
 **Bounds.** Drop shadow, outline (outside), glow and bloom draw within their input's
 frame, as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for
 a source or scene chain: the output is the input's size, the input is drawn 1:1, and
@@ -1097,6 +1200,16 @@ browser-page import through unchanged (read as premultiplied linear, it would br
 (`schema/kinds.snap`, an `insta` snapshot, as `jstream-sources` does for source kinds),
 so a change to a filter's settings is reviewed like an API diff (ADR-0025, #369).
 `INSTA_UPDATE=always cargo test -p jstream-render --test kinds` rewrites it.
+Depth fog (`filter/depth/fog/tests.rs`, ADR-0143) maps its settings, passes through
+with no depth or one of another size, and over a 4x1 depth of known distances is half
+at the middle of a linear range, full past it and at an empty background, capped by
+`max`, exponential as `1 − exp(−density · distance / 1000)`, and over a transparent
+pixel its own colour at its own opacity; half-alpha white fog over opaque black stays
+opaque at half the white, and fog at alpha 0 changes nothing. End to end over `render_view_depth` through
+the framing camera: the nearest of three cards wins whatever their order, with a card
+a focal length back seen half as far from the middle; a card at 0.4 opacity or hidden
+writes no depth and one at 0.6 does; a scene with no camera writes nothing; and a
+cube's own front face, through `draw_model_depth`, is nearer than the card behind it.
 
 **Why tolerance instead of a smoke-only Linux run.** Flat, opaque, channel-pure sRGB
 colours (0 and 1) round-trip through the linear FP16 target exactly, and a 1:1
@@ -1143,7 +1256,16 @@ the placement mirrors the model, and seen from behind (a double-sided plane turn
 lights as the front of the opposite tilt, while an unmapped plane's back lights as its
 front; a model draws into layers of three sizes in a row (the
 depth target follows the layer); and a primitive past the adapter's buffer limit is
-refused with `RenderError::Invalid`.
+refused with `RenderError::Invalid`. Scene lights (ADR-0143), each through the framing
+camera: a point light to the right lights a sphere's right side and leaves its left
+black, and no light at all leaves it black; a red light tints it red; a point light past
+its range lights nothing and inside it is dimmer than one that never fades; a spot
+light with a 20° cone lights the middle of a plane and not a point 60 px off it, a
+directional light lights the whole plane, and one aimed away lights none of it; two
+ambient lights of 1 light a sphere as one of 2 does; a ninth light stays off behind
+eight at intensity 0, while eight ambient lights take no slot from it; a light with a
+non-finite position, intensity or range lights nothing; and without a
+camera, or unlit, lights change nothing.
 
 **3D goldens** (`tests/three_d.rs`). Spike S5's scenarios at a quarter of its size, on a
 240×136 canvas from a 64² checkerboard with a texel grid (512² for C), against a CPU
@@ -1273,10 +1395,14 @@ size without the plan), and a key held small given a whole upload of a frame the
 size is made again, not refilled; without
 `draw_uploads_small`, or under 256 × 256 texels, it stays whole. A lost
 device: after `destroy` (what wgpu reports a driver reset through too) `lost` says
-`destroyed`, a render fails, an NV12 bind returns `Uncaptured`
+`destroyed`; a device destroyed while the copier reads 4K frames from it frees nothing
+under the copy, and hands each frame back at most once and every buffer back
+(`readback.rs`); a render fails, an NV12 bind returns `Uncaptured`
 (`convert/tests.rs`), and an upload and a layer return without a panic (wgpu hands back invalid handles, which only a later `render` reports); an uncaptured
 validation error before any loss fails the next render as `Uncaptured`, and the
-render after it draws. Without
+render after it draws; a compositor keeping its own errors gets its own as its
+call's `Uncaptured`, while the other compositor on the context gets neither its
+errors nor loses its own to it. Without
 an adapter, unit tests still cover the binary16 encode
 (every value an upload can produce, within half an ulp), the premultiply order and
 the compositor identity.
@@ -1330,10 +1456,13 @@ prices a fixed-function mode's second draw and a backdrop mode's copy and pass),
 the same items as cards in a 3D scene, turned, at their own depths and seen
 through an off-axis camera, their mips rebuilt each frame as a live source's are
 (`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed
-(`model_1080p`), and
+(`model_1080p`), a scene's view depth and `depth_fog` over the 3D scene's composite for
+4 and 16 cards, the scene itself drawn outside the loop (`depth_fog_1080p_camera`,
+ADR-0143), and
 refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
 20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
-items against 9.6, 17 and 58 ms for the 2D submit, and either model 22 ms. Run them with
+items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms, and depth with
+fog 31 and 48 ms for 4 and 16 cards. Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the

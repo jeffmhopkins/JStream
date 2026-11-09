@@ -240,6 +240,12 @@ Contents ([Design](#design) explains the choices):
   Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Audio
   plugins, Devices)
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
+- **Warm scenes** (`warm.rs`, ADR-0117 §7): `WarmScenesSetting`, the General page's
+  "Warm scenes" choice, from "Only the Preview scene" to `MAX_WARM_SCENES` scenes. It
+  reads the budget with `studio.get` each time the page opens and sets it with
+  `studio.set_warm`, putting the old choice back with an error if the engine refuses;
+  it hides for an engine that reports no budget. `budget`, `set_budget` and
+  `choice_label` are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
   plugins page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with
@@ -251,8 +257,10 @@ Contents ([Design](#design) explains the choices):
   network" switch above it, and the calls behind them, tested natively against `MockEngine` and a
   stub that answers them as the server does.
 - **JTunnel** (`jtunnel.rs`): `JtunnelSettingView`, the desktop app's "Receive from
-  JTunnel senders" switch and accepted senders on the Devices page, and `with_sender`,
-  the add row's check, tested natively.
+  JTunnel senders" switch, accepted senders and the senders heard on the network
+  (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
+  check, and `accepts`, whether a heard sender is on the list, tested natively. The
+  store's `jtunnel_changed` counts `jtunnel.senders_changed`.
 - **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
   `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
   holds a new agent's hello (Deny, Allow once, Always allow), on
@@ -420,7 +428,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
   Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
   chain in the Filters panel; Pop out opens the scene in a projector window, Show in
-  multiview toggles the scene's flag (`scene.set_meta`), Copy and Paste scene do what
+  multiview toggles the scene's flag (`scene.set_meta`), Keep warm toggles its
+  `keep_warm` option (`scene.set_options` with its other options kept, disabled on a
+  keyframe scene, [ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)), Copy and Paste scene do what
   Ctrl+C and Ctrl+V do, and Duplicate scene sends `clipboard.rs`'s copy of it). A
   Sources row's menu for one item starts with Rename, as F2. The
   Transition in and out submenus,
@@ -488,7 +498,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
   platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
-  with a cube icon), plus the kinds of placed sources it didn't report, which can be
+  with a cube icon, and its `light` after it with the sparkle icon, placed at 64 × 64),
+  plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
   it is shown, else the first match. "Create new" sends `source.create` and
@@ -695,13 +706,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out, the
-  hotkey, the Background color, Show in multiview, Include its audio when nested and the
-  camera: the hotkey field takes the next key press as a chord (the modifiers in the
+  hotkey, the Background color, Show in multiview, Include its audio when nested, Keep
+  warm (hidden on a keyframe scene) and the camera: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, `scene.set_meta` (the scene's labels, icon,
   colour and favourite kept as the collection has them at OK), `scene.set_options` (the
-  nested audio switch and the background, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
+  nested audio switch, the background and Keep warm, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
   and `hotkey.clear` of the old chord before
   `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
   named (none for a first hotkey). A chord bound already, or a background that isn't
@@ -860,9 +871,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`EffectsSpaceCheck`) sends `item.set_effects_space`
   ([ADR-0106](../../docs/adr/0106-item-effects-in-canvas-space.md)), so the effects run
   after the item is placed. It isn't shown under a keyframe's effects, since the space
-  belongs to the item in every scene. The Add filter dialog lists the vignette, bloom and border
+  belongs to the item in every scene. The Add filter dialog lists the vignette, scanlines, bloom and border
   under Style. A kind with presets (`filter_presets.rs`: the vignette's Subtle, Cinematic
-  and Spotlight, the border's Card, Neon and Broadcast frame) has a Preset select above its form in the Filters window, which sets the
+  and Spotlight, the border's Card, Neon and Broadcast frame, the scanlines' Monitor, CRT
+  and Film grain) has a Preset select above its form in the Filters window, which sets the
   preset's values and every other setting back to its default in one `filter.set_settings`.
 - **The shell** is the header bar over the workspace. When the desktop app's launch
   check finds a newer release, a dismissable notice sits under the header (`updates.rs`).
@@ -1065,6 +1077,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   never a protocol call; a refused change is undone and the app's reason shown (the
   page itself only asks for a name, an address and a name no other sender has), and
   while it differs from the setting the app started with it says to restart JStream.
+  Below them, while the engine's receiver runs, "Senders on this network" lists what
+  `jtunnel.senders` answers, read when the page opens and again on each
+  `jtunnel.senders_changed`, each sender's name (its own text, shown as text) and
+  address, with "Accepted" or Accept…. Accept… asks first, naming the sender and its
+  address and what accepting lets it do (ADR-0123 §3: the first use is explicit), and
+  only Accept in that prompt adds it, through the same save. With the receiver off it
+  says senders show while receiving is on.
   The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
   calls `device.list` when it opens and shows its controls only if that is served: a
   session with no server in front answers `unsupported`, and the Devices page then says

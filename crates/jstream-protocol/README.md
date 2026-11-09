@@ -72,6 +72,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
+  `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`),
   `scene.zoom_camera`, `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`, `ptz.store`,
   `ptz.focus`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
@@ -178,7 +179,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   since 0.91 `camera_follow` is read from its items' `follow_pointer` filters, ADR-0120)
   and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
-  are drawn through (`PlacedKeyframe`, ADR-0116), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
+  (`warm_scenes`), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
@@ -307,7 +309,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   `framing(canvas)`, the camera that puts every flat item on its 2D box, and `validate`,
   and `CameraView`, the camera seen on one canvas, whose `blur_at` is the camera's
   depth-of-field blur at a distance along its view
-  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)). `drawn_polygon_seen`, `unplace_seen`,
+  ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and whose `in_view` and
+  `direction_in_view` take scene points and directions into a model's viewing frame.
+  `ItemGeometry::light_pose` is where a light its item places sits and shines: the
+  box's centre at its `depth_px`, and its back normal.
+  `drawn_polygon_seen`, `unplace_seen`,
   `drawn_vertex_seen` and `project_seen` take an optional view, and with one place the
   item by its geometry in the scene's space through the camera (`w = D / f`, the same
   near plane); with none they are the functions above.
@@ -333,7 +339,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.114 because the JTunnel receiver finds senders on the LAN:
+`PROTOCOL_VERSION` is 0.116 because a scene can be kept warm: `SceneOptions`'
+`keep_warm`, set with `scene.set_options` and refused on a keyframe scene
+([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md), #1468); 0.115 because
+the studio's warm budget is a setting: the action
+`studio.set_warm` and `studio.get`'s `warm_scenes` (ADR-0117 §7, #1468); 0.114 because
+the JTunnel receiver finds senders on the LAN:
 the query `jtunnel.senders` (`JtunnelSenderInfo`) and the event
 `jtunnel.senders_changed` (ADR-0123 §3, #1223, a number the release queue set); 0.113
 because `profile.get` reports the JTunnel receiver's
@@ -580,6 +591,12 @@ and the geometry wire surface ([Item geometry](#geometry)), 0.10 the `history` c
 0.9 the `record` output kind, 0.8 the kind queries and settings, 0.7 the output
 edits, `output.list`, the key actions and `key_set`, 0.6 `stats.tick` and 0.5
 `video.snapshot`.
+
+A bump rewrites the paragraph's opening line, `` `PROTOCOL_VERSION` is 0.N because `` and
+its own reason, and keeps the reason before it as the next clause. The test
+`the_readme_opens_on_the_current_version` holds that line to the number, so two PRs that
+take the same number conflict in git and the second to land takes the next one
+([waves › Protocol versions](../../docs/runbooks/waves.md#protocol)).
 
 <a id="contents-schema"></a>
 ## Contents: schema and parity fixture
@@ -1354,9 +1371,12 @@ Mixer through no nesting of it, whatever each scene source's own `audio.enabled`
 it is still heard on program itself (on a group, which is only reached through nesting,
 it leaves out the children's audio wherever the group shows), and `background` (default
 none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn under the
-scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it). `scene.set_options` replaces them all the
+scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it), and
+since 0.116 `keep_warm` (default `false`), which keeps the scene warm while it is off
+program, ranked after the Preview scene within the warm budget
+([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)). `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
-parent and is refused, and `state.get` reports them flattened beside the scene's other
+parent and is refused, and `keep_warm`, which its parent decides and is refused, and `state.get` reports them flattened beside the scene's other
 fields, each omitted while it has its default. A scene's **camera**
 (`scene.set_camera {scene_id, camera?}`, since 0.70,
 [ADR-0094](../../docs/adr/0094-scene-cameras.md)) makes it a 3D scene: `SceneCamera`'s
@@ -1471,6 +1491,13 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
 - `studio.set_preview {scene_id}` puts a scene on preview, studio mode's next scene.
   Like a switch it changes no `rev` and is never undone; a switch leaves preview where
   it is.
+- `studio.set_warm {scenes}` (0.115, [ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §7)
+  sets how many scenes besides the program the studio keeps warm, 0 to
+  `MAX_WARM_SCENES` (8; `invalid_argument` on `scenes` past it), `DEFAULT_WARM_SCENES`
+  (3) until it is set. The Preview scene is warm even past it; the rest are the scenes
+  most recently on program. An application setting: no `rev`, never undone, no event,
+  whatever collection is open, and kept across restarts when the engine's host names a
+  file for it. It can't be bound to a hotkey, and no plugin is granted it.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1582,7 +1609,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   scene, its `position_ms` and its `pass` ([Timelines](#timelines)), omitted while none
   plays. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
-  omitted while none is.
+  omitted while none is. Since 0.115 `warm_scenes` is the warm budget
+  `studio.set_warm` sets.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
@@ -2246,7 +2274,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
-  previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, folders and labels themselves
+  previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` (an application setting), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
   `privacy.set`, `youtube.*`, pairing and devices, `plugin.*` itself, and the
   `timeline.*` edits and actions, whose cues run actions the `edit` class can't
@@ -2796,7 +2824,13 @@ function in this crate so the compositor and the UI share one implementation.
   ([ADR-0111](../../docs/adr/0111-camera-up-at-the-poles.md), #1047). Through `SceneCamera::framing` an item
   with neutral 3D lands exactly on its 2D box. `CameraView::on_plane` goes the other way
   for an editor: the point of the plane `z = depth` under a canvas point, which the UI's canvas
-  drags an item to.
+  drags an item to. `CameraView::in_view` and `direction_in_view` take a point or a
+  direction of the scene's space into the viewing frame a `Solid` seen through the
+  camera uses, relative to the camera in `f64`: where the renderer places scene lights
+  ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)). `ItemGeometry::light_pose` gives a light's place
+  and aim in the scene's space from the item that places it: the centre of its box at
+  its `depth_px`, and its back normal, `[0, 0, -1]` (away from the viewer) unturned and
+  turned by its rotations as a placed model's back is.
 - `content` maps a cropped source into that local frame, before the placement above.
   `stretch` fills the box. `fit` is the largest rectangle of the source's aspect ratio
   inside the box, centred, and the rest stays transparent. `fill` is the smallest such

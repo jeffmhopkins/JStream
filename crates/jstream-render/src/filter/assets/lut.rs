@@ -97,13 +97,16 @@ impl Pass for ApplyLut {
 /// The image `apply_lut` reads for `lut`, to hand to [`VideoFilter::set_reference`](crate::VideoFilter::set_reference):
 /// the table's 2D tile layout as `Rgba16Float`, so a 33- or 64-point table keeps its
 /// precision. Output values are clamped to `0..=1`. It is uploaded straight through the
-/// compositor's image maker, with no draw or submit.
+/// compositor's image maker, with no draw or submit, inside the compositor's error
+/// scopes when it keeps its own errors, as its own uploads are.
 ///
 /// # Errors
-/// [`RenderError::TooLarge`] if the layout (512x512 at most) exceeds the adapter limit.
+/// [`RenderError::TooLarge`] if the layout (512x512 at most) exceeds the adapter limit,
+/// and [`RenderError::Uncaptured`] when the compositor keeps its own errors and the
+/// upload raised one.
 pub fn lut_image(compositor: &Compositor, lut: &Lut) -> Result<Image, RenderError> {
     let (width, height, texels) = lut.layout();
-    image::upload_unit_f16(&compositor.maker(), width, height, &texels)
+    compositor.scoped(|| image::upload_unit_f16(&compositor.maker(), width, height, &texels))
 }
 
 #[cfg(test)]

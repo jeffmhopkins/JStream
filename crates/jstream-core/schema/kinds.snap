@@ -1549,6 +1549,92 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "depth_fog",
+    "category": "video_filter",
+    "name": "Depth fog",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "exponential",
+            "label": "Exponential"
+          },
+          {
+            "value": "linear",
+            "label": "Linear"
+          }
+        ],
+        "default": "exponential",
+        "label": "Mode",
+        "description": "Fog that thickens with distance from the scene's camera. It works in a scene's filters when the scene has a camera, best first in the chain; anywhere else it changes nothing. Linear fades in from Start to End; Exponential thickens past Start by Density.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#c8ccd2ff",
+        "label": "Color",
+        "live": true
+      },
+      {
+        "id": "start_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 999999986991104.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Start",
+        "description": "Distance along the camera's view where fog begins, in scene pixels.",
+        "live": true
+      },
+      {
+        "id": "end_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 999999986991104.0,
+        "unit": "px",
+        "default": 4000.0,
+        "label": "End",
+        "description": "Linear: the distance where fog is at its most. At or before Start, fog goes straight to its most at Start.",
+        "live": true
+      },
+      {
+        "id": "density",
+        "type": "float",
+        "min": 0.0,
+        "max": 20.0,
+        "default": 0.5,
+        "label": "Density",
+        "description": "Exponential: how quickly fog thickens, per 1000 px past Start.",
+        "live": true
+      },
+      {
+        "id": "max",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 1.0,
+        "label": "Most",
+        "description": "The most fog anywhere: 1 hides what is far entirely.",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "bool",
+        "default": true,
+        "label": "Fog the background",
+        "description": "Fill where nothing was drawn, as if infinitely far, with the most fog.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "desktop_audio",
     "category": "source",
     "name": "Desktop audio",
@@ -1838,6 +1924,105 @@ source: crates/jstream-core/src/kinds.rs
         "type": "bool",
         "default": false,
         "label": "Invert",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "light",
+    "category": "source",
+    "name": "Light",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "type",
+        "type": "enum",
+        "options": [
+          {
+            "value": "point",
+            "label": "Point"
+          },
+          {
+            "value": "spot",
+            "label": "Spot"
+          },
+          {
+            "value": "directional",
+            "label": "Directional"
+          },
+          {
+            "value": "ambient",
+            "label": "Ambient"
+          }
+        ],
+        "default": "point",
+        "label": "Type",
+        "description": "Point shines every way from the item's centre; spot shines out of the back of the item within its cone; directional shines out of its back from infinitely far; ambient lights everything evenly.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#ffffff",
+        "label": "Color",
+        "description": "The light's colour.",
+        "live": true
+      },
+      {
+        "id": "intensity",
+        "type": "float",
+        "min": 0.0,
+        "max": 64.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Intensity",
+        "description": "How bright it is on a surface facing it, before it fades; the item's opacity scales it, so fading or hiding the item dims it.",
+        "live": true
+      },
+      {
+        "id": "range_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 1000000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Range",
+        "description": "How far a point or spot light reaches before it has faded to nothing; 0 never fades.",
+        "live": true
+      },
+      {
+        "id": "cone_deg",
+        "type": "float",
+        "min": 1.0,
+        "max": 170.0,
+        "step": 1.0,
+        "unit": "deg",
+        "default": 45.0,
+        "label": "Cone",
+        "description": "A spot light's full cone angle.",
+        "visible_if": {
+          "param": "type",
+          "equals": "spot"
+        },
+        "live": true
+      },
+      {
+        "id": "softness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.2,
+        "label": "Softness",
+        "description": "The share of a spot cone, from its edge inward, over which it fades out.",
+        "visible_if": {
+          "param": "type",
+          "equals": "spot"
+        },
         "live": true
       }
     ]
@@ -2592,11 +2777,15 @@ source: crates/jstream-core/src/kinds.rs
           {
             "value": "unlit",
             "label": "Unlit"
+          },
+          {
+            "value": "scene",
+            "label": "Scene"
           }
         ],
         "default": "studio",
         "label": "Lighting",
-        "description": "Studio lights it from above and to the left of the camera; unlit shows its colours as they are.",
+        "description": "Studio lights it from above and to the left of the camera; unlit shows its colours as they are; scene lights it with the light sources placed in its 3D scene (studio in a 2D scene).",
         "live": true
       },
       {
@@ -2891,6 +3080,89 @@ source: crates/jstream-core/src/kinds.rs
         "alpha": true,
         "default": "#ffffffff",
         "label": "Border color",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "scanlines",
+    "category": "video_filter",
+    "name": "Scanlines",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.35,
+        "label": "Strength",
+        "description": "How dark the lines are, in linear light: 0 draws none.",
+        "live": true
+      },
+      {
+        "id": "spacing",
+        "type": "float",
+        "min": 1.0,
+        "max": 64.0,
+        "unit": "px",
+        "default": 3.0,
+        "label": "Spacing",
+        "description": "One line every this many pixels.",
+        "live": true
+      },
+      {
+        "id": "thickness",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.5,
+        "label": "Thickness",
+        "description": "How much of each spacing the dark line takes.",
+        "live": true
+      },
+      {
+        "id": "speed",
+        "type": "float",
+        "min": -2000.0,
+        "max": 2000.0,
+        "unit": "px/s",
+        "default": 0.0,
+        "label": "Roll speed",
+        "description": "How fast the lines roll; positive moves them down. 0 holds them still.",
+        "live": true
+      },
+      {
+        "id": "rgb_offset",
+        "type": "float",
+        "min": 0.0,
+        "max": 16.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Color fringe",
+        "description": "Red is read this far to the left and blue to the right, a CRT's colour fringe. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "grain",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Grain",
+        "description": "Noise that changes every frame, as film grain or a weak signal. 0 is none.",
+        "live": true
+      },
+      {
+        "id": "flicker",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.0,
+        "label": "Flicker",
+        "description": "How far the picture dims at random from frame to frame. 0 holds it steady.",
         "live": true
       }
     ]
