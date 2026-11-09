@@ -573,13 +573,24 @@ mod tests {
                 .device()
                 .poll(wgpu::PollType::wait_indefinitely());
             assert_eq!(compositor.lost().as_deref(), Some("destroyed"));
-            // Whatever the copier still had comes back as nothing, and no frame after.
+            // A copy that finished before the loss still comes back, whole and red; one
+            // the loss caught comes back as nothing. No more than were handed over.
+            let mut back = 0;
             for _ in 0..50 {
-                ring.collect(compositor, &mut out, |tag, _| {
-                    panic!("frame {tag} handed over after the loss")
+                ring.collect(compositor, &mut out, |tag, rgba| {
+                    back += 1;
+                    assert_eq!(rgba.len(), (width * height * 4) as usize, "frame {tag}");
+                    assert!(
+                        rgba.chunks_exact(4).all(|px| px == [255, 0, 0, 255]),
+                        "frame {tag} came back partly copied"
+                    );
                 });
                 std::thread::sleep(std::time::Duration::from_millis(2));
             }
+            assert!(
+                back <= READBACK_DEPTH,
+                "{back} frames back from {READBACK_DEPTH}"
+            );
         }
     }
 }

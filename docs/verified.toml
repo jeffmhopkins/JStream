@@ -477,7 +477,7 @@ stamp = { hash = "b3:fe208e097a335521", by = "agent:claude-00lbbl", note = "Re-r
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Added one sentence on nested layers drawn only over their content box (#1070); the rest of the section re-read against the compositor, image and place changes." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/readback.rs"]
-stamp = { hash = "b3:a27f3c73bedf52dd", by = "agent:claude", note = "device loss paragraph says recording the loss waits for mapped reads (the copier's) and later reads read nothing (#1454); rest unchanged" }
+stamp = { hash = "b3:133c899131ac5039", by = "agent:claude", note = "only the loss test changed: a copy finished before the loss may still come back, whole; the README's 'a copy on a lost device hands nothing back' still holds for copies the loss catches" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/resolve.wgsl"]
 stamp = { hash = "b3:62fced90ebade4b5" }
@@ -4566,7 +4566,7 @@ stamp = { hash = "b3:fe208e097a335521", by = "agent:claude-00lbbl", note = "Re-r
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Added the #1070 paragraph under render_into: content bounds from transparent-background composites, invalidated by the change count and apply_filter_into, and Shape::trim_to for 2D normal/additive/screen without a chain. Rest of the pipeline steps re-read against the diff." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/readback.rs"]
-stamp = { hash = "b3:a27f3c73bedf52dd", by = "agent:claude", note = "lost-device entry now says a lost device's next poll frees its mapped buffers, reads hold a per-device lock, the callback and destroy_device record the loss first; the ring entry says a copy on a lost device hands back nothing (#1454)" }
+stamp = { hash = "b3:133c899131ac5039", by = "agent:claude", note = "only the loss test changed: a copy finished before the loss may still come back, whole; the README's 'a copy on a lost device hands nothing back' still holds for copies the loss catches" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/resolve.wgsl"]
 stamp = { hash = "b3:62fced90ebade4b5" }
@@ -5091,7 +5091,7 @@ stamp = { hash = "b3:fe208e097a335521", by = "agent:claude-00lbbl", note = "Re-r
 stamp = { hash = "b3:49d380b32c0a2e68", by = "agent:claude", note = "Re-read against the content trim: a nested scene is still a layer the caller composites; nothing here about one scene changed." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/readback.rs"]
-stamp = { hash = "b3:a27f3c73bedf52dd", by = "agent:claude", note = "mapped reads take a per-device lock and destroy_device was added; still no unsafe, layer 2, purpose unchanged" }
+stamp = { hash = "b3:133c899131ac5039", by = "agent:claude", note = "only the loss test changed: a copy finished before the loss may still come back, whole; the README's 'a copy on a lost device hands nothing back' still holds for copies the loss catches" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/resolve.wgsl"]
 stamp = { hash = "b3:62fced90ebade4b5" }
