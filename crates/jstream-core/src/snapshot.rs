@@ -5547,7 +5547,13 @@ fn run_chains(
                     let mut shadowed = std::mem::take(&mut chains.shadowed);
                     lights.clear();
                     shadowed.clear();
-                    scene_lights(shot, &pass.scene, at, live, (&mut lights, &mut shadowed));
+                    scene_lights(
+                        shot,
+                        &pass.scene,
+                        (at, &view),
+                        live,
+                        (&mut lights, &mut shadowed),
+                    );
                     // Its shadow maps, for a filter that reads them, unless a model
                     // that receives them drew them this run (ADR-0151 decision 6).
                     let reads_shadows = pass.reads_shadows;
@@ -5745,9 +5751,10 @@ fn draw_model(
     let mut shadowed = std::mem::take(&mut chains.shadowed);
     lights.clear();
     shadowed.clear();
-    let lit = shown.lighting == Lighting::Scene && camera.is_some();
-    if lit {
-        scene_lights(shot, scene_id, at, live, (&mut lights, &mut shadowed));
+    let view = camera.and_then(|camera| camera.view(shot.canvas).ok());
+    let lit = shown.lighting == Lighting::Scene && view.is_some();
+    if let (true, Some(view)) = (lit, view.as_ref()) {
+        scene_lights(shot, scene_id, (at, view), live, (&mut lights, &mut shadowed));
         let shading = lights
             .iter()
             .filter(|light| light.kind != jstream_render::LightKind::Ambient)
@@ -6236,11 +6243,12 @@ fn light_camera(
 /// each `light` item at the centre of its box and shining out of its back, with its
 /// live values and motion applied, at its kind's intensity times its opacity. A light
 /// that isn't placed by a box (a filled or canvas placement) has no position, and is
-/// left out.
+/// left out. A billboard light turns to face the camera `view` (ADR-0151 decision 2),
+/// so it shines away from it.
 fn scene_lights(
     shot: &Shot,
     id: &SceneId,
-    at: MediaTime,
+    (at, view): (MediaTime, &CameraView),
     live: &LiveParams,
     (lights, shadowed): (&mut Vec<jstream_render::SceneLight>, &mut Vec<(usize, f32)>),
 ) {
@@ -6270,7 +6278,7 @@ fn scene_lights(
         let Placement::Geometry(geometry) = placement else {
             continue;
         };
-        let (position, aim) = geometry.light_pose();
+        let (position, aim) = geometry.light_pose_seen(view);
         let [r, g, b] = light.color;
         lights.push(jstream_render::SceneLight {
             kind: match light.kind {

@@ -92,6 +92,12 @@ impl ItemGeometry {
         (item_origin(self), rotate(self, [0.0, 0.0, -1.0]))
     }
 
+    /// [`Self::light_pose`] as `view` sees it: a billboard light's aim turned with its
+    /// box to face the camera (ADR-0151 decision 2), so it shines away from it.
+    pub fn light_pose_seen(self, view: &CameraView) -> ([f64; 3], [f64; 3]) {
+        self.facing(view).light_pose()
+    }
+
     /// The model with `bounds` placed by this item and seen through `view` (a 3D scene),
     /// or by the item's own viewer without one (ADR-0107 decision 3).
     ///
@@ -104,6 +110,18 @@ impl ItemGeometry {
         view: Option<&CameraView>,
     ) -> Result<Solid, GeometryError> {
         self.validate()?;
+        let this = match view {
+            Some(view) => self.facing(view),
+            None => self,
+        };
+        this.solid_facing(bounds, view)
+    }
+
+    fn solid_facing(
+        self,
+        bounds: SolidBounds,
+        view: Option<&CameraView>,
+    ) -> Result<Solid, GeometryError> {
         let scale = bounds.scale(self.size.width.get(), self.size.height.get(), self.fit_mode);
         let flip = [
             if self.flip_h { -1.0 } else { 1.0 },
