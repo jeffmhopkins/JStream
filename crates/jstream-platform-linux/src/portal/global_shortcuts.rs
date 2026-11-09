@@ -290,7 +290,8 @@ pub use listener::PortalHotkeys;
 
 #[cfg(target_os = "linux")]
 mod listener {
-    use std::sync::atomic::{AtomicU64, Ordering};
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
     use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
     use std::thread::JoinHandle;
     use std::time::{Duration, Instant};
@@ -329,8 +330,14 @@ mod listener {
     /// The desktop app's global hotkeys on Wayland: a GlobalShortcuts session on a
     /// thread of its own, which binds the chords [`set`](Self::set) asks for and calls
     /// back with each one activated. Dropping it closes the session.
+    ///
+    /// The thread does one thing at a time: while the desktop's confirmation for a new
+    /// set of chords is open (up to five minutes), it neither reports presses nor takes
+    /// the next set, which it binds once the confirmation is answered. Dropping it during
+    /// a confirmation stops the wait within a poll.
     pub struct PortalHotkeys {
         chords: Option<Sender<Vec<String>>>,
+        stopping: Arc<AtomicBool>,
         thread: Option<JoinHandle<()>>,
     }
 
@@ -352,6 +359,8 @@ mod listener {
         ) -> Result<Self, PlatformError> {
             let (ready_tx, ready_rx) = mpsc::sync_channel(1);
             let (chords_tx, chords_rx) = mpsc::channel();
+            let stopping = Arc::new(AtomicBool::new(false));
+            let stop = Arc::clone(&stopping);
             let thread = std::thread::Builder::new()
                 .name("jstream-portal-hotkeys".into())
                 .spawn(move || {
@@ -365,12 +374,13 @@ mod listener {
                             return;
                         }
                     };
-                    listen(&mut bus, &chords_rx, &on_event);
+                    listen(&mut bus, &chords_rx, &stop, &on_event);
                 })
                 .map_err(|e| no_answer("starting the hotkey thread", &e.to_string()))?;
             match ready_rx.recv_timeout(QUICK + QUICK) {
                 Ok(Ok(())) => Ok(Self {
                     chords: Some(chords_tx),
+                    stopping,
                     thread: Some(thread),
                 }),
                 Ok(Err(error)) => {
@@ -399,7 +409,9 @@ mod listener {
 
     impl Drop for PortalHotkeys {
         fn drop(&mut self) {
-            // Closing the channel ends the thread's loop within a poll.
+            // Closing the channel ends the thread's loop within a poll, and the flag ends a
+            // wait for the desktop's confirmation.
+            self.stopping.store(true, Ordering::Relaxed);
             self.chords.take();
             if let Some(thread) = self.thread.take() {
                 let _ = thread.join();
@@ -474,6 +486,7 @@ mod listener {
     fn listen(
         c: &mut Connected,
         chords: &Receiver<Vec<String>>,
+        stop: &AtomicBool,
         on_event: &dyn Fn(PortalHotkeyEvent<'_>),
     ) {
         loop {
@@ -490,13 +503,13 @@ mod listener {
                 }
             }
             if let Some(set) = wanted {
-                bind(c, &set, on_event);
+                bind(c, &set, stop, on_event);
             }
             let deadline = Instant::now() + POLL;
             let Some(session) = c.session.clone() else {
                 // Nothing bound: wait for a set.
                 match chords.recv_timeout(POLL) {
-                    Ok(set) => bind(c, &set, on_event),
+                    Ok(set) => bind(c, &set, stop, on_event),
                     Err(RecvTimeoutError::Timeout) => {}
                     Err(RecvTimeoutError::Disconnected) => return,
                 }
@@ -522,10 +535,17 @@ mod listener {
     }
 
     /// [`rebind`]s `chords` and reports how it went.
-    fn bind(c: &mut Connected, chords: &[String], on_event: &dyn Fn(PortalHotkeyEvent<'_>)) {
-        match rebind(c, chords) {
+    fn bind(
+        c: &mut Connected,
+        chords: &[String],
+        stop: &AtomicBool,
+        on_event: &dyn Fn(PortalHotkeyEvent<'_>),
+    ) {
+        match rebind(c, chords, stop) {
             Ok(0) => {}
             Ok(count) => on_event(PortalHotkeyEvent::Bound(count)),
+            // Stopping: the wait was cut short, which is no refusal.
+            Err(_) if stop.load(Ordering::Relaxed) => {}
             Err(error) => on_event(PortalHotkeyEvent::NotBound(&error.to_string())),
         }
     }
@@ -533,13 +553,17 @@ mod listener {
     /// Closes the current session and, when `chords` has any the portal can take, opens a
     /// new one and binds them, answering how many. A new session each time, as not every
     /// desktop lets a session bind twice.
-    fn rebind(c: &mut Connected, chords: &[String]) -> Result<usize, PlatformError> {
+    fn rebind(
+        c: &mut Connected,
+        chords: &[String],
+        stop: &AtomicBool,
+    ) -> Result<usize, PlatformError> {
         close(c);
         let (bound, _) = shortcuts(chords);
         if bound.is_empty() {
             return Ok(0);
         }
-        let results = request(c, create_session(&token("h"), &token("s")), QUICK)?;
+        let results = request(c, create_session(&token("h"), &token("s")), QUICK, stop)?;
         let session = results
             .iter()
             .find(|(k, _)| k == "session_handle")
@@ -547,15 +571,26 @@ mod listener {
             .map(str::to_owned)
             .ok_or_else(|| no_answer(GLOBAL_SHORTCUTS, "no session_handle"))?;
         c.session = Some(session.clone());
-        request(c, bind_shortcuts(&session, &bound, &token("b")), PICKER)?;
+        if let Err(error) = request(
+            c,
+            bind_shortcuts(&session, &bound, &token("b")),
+            PICKER,
+            stop,
+        ) {
+            // Nothing is bound in it, so the session goes too.
+            close(c);
+            return Err(error);
+        }
         Ok(bound.len())
     }
 
-    /// Calls a portal request and waits up to `timeout` for its `Response`.
+    /// Calls a portal request and waits up to `timeout` for its `Response`, giving up
+    /// within a poll once `stop` is set.
     fn request(
         c: &mut Connected,
         call: Message,
         timeout: Duration,
+        stop: &AtomicBool,
     ) -> Result<Vec<(String, Value)>, PlatformError> {
         let token = match call.body.last().and_then(Value::as_dict) {
             Some(options) => options
@@ -574,14 +609,28 @@ mod listener {
             expected.push(handle.to_owned());
         }
         let portal = c.portal.clone();
-        let response = c
-            .bus
-            .wait_signal(Instant::now() + timeout, |m| {
+        let deadline = Instant::now() + timeout;
+        // Waited for a poll at a time, so a stop doesn't wait out the confirmation; a
+        // signal that arrives meanwhile stays queued on the bus.
+        let response = loop {
+            if stop.load(Ordering::Relaxed) {
+                return Err(no_answer(GLOBAL_SHORTCUTS, "the listener is stopping"));
+            }
+            let now = Instant::now();
+            if now >= deadline {
+                return Err(no_answer(
+                    GLOBAL_SHORTCUTS,
+                    "no answer from the desktop in time",
+                ));
+            }
+            if let Some(response) = c.bus.wait_signal((now + POLL).min(deadline), |m| {
                 m.is_signal(REQUEST, "Response")
                     && m.sender.as_deref() == Some(portal.as_str())
                     && m.path.as_ref().is_some_and(|p| expected.contains(p))
-            })?
-            .ok_or_else(|| no_answer(GLOBAL_SHORTCUTS, "no answer from the desktop in time"))?;
+            })? {
+                break response;
+            }
+        };
         response_results(&response.body, GLOBAL_SHORTCUTS)
     }
 
