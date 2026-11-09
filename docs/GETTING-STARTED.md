@@ -55,7 +55,7 @@ Opening one stops any output that is running, and each project keeps its own str
 <a id="scene"></a>
 ## Your first scene
 <!-- @section
-depends_on = ["docs/UI-FEATURES.md"]
+depends_on = ["docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#docking", "docs/UI-FEATURES.md#canvas", "docs/UI-FEATURES.md#menus", "docs/UI-FEATURES.md#dialogs", "docs/UI-FEATURES.md#scenes", "docs/UI-FEATURES.md#objects", "docs/UI-FEATURES.md#inspector", "docs/UI-FEATURES.md#transform", "docs/UI-FEATURES.md#mixer", "docs/UI-FEATURES.md#transitions"]
 -->
 
 A new JStream starts empty, but for four sample labels (Intro / outro, Gameplay, Overlay
@@ -121,7 +121,7 @@ Properties or on their right-click menu.
 <a id="live"></a>
 ## Going live
 <!-- @section
-depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md"]
+depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#outputs"]
 -->
 
 JStream streams to any service that takes RTMP or RTMPS (YouTube, Twitch and most
@@ -159,7 +159,7 @@ create the broadcast in YouTube Studio and stream to it with its key.
 <a id="record"></a>
 ## Recording
 <!-- @section
-depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md"]
+depends_on = ["apps/jstream-desktop/README.md#usage", "docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#outputs"]
 -->
 
 In **Outputs**, press **+ Add output** and add a **Recording (MP4)** with the file path

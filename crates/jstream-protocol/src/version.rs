@@ -51,6 +51,20 @@ mod tests {
         ProtocolVersion { major, minor }
     }
 
+    /// The README's version paragraph opens on the current number, so every bump rewrites
+    /// that one line with its own reason. Two PRs that take the same number then conflict
+    /// in git, and the second to land has to take the next one
+    /// (docs/runbooks/waves.md#protocol).
+    #[test]
+    fn the_readme_opens_on_the_current_version() {
+        let readme = include_str!("../README.md");
+        let opening = format!("`PROTOCOL_VERSION` is {PROTOCOL_VERSION} because ");
+        assert!(
+            readme.lines().any(|line| line.starts_with(&opening)),
+            "README.md#versions must open with \"{opening}\" and give this bump's reason"
+        );
+    }
+
     #[test]
     fn same_version_is_served() {
         assert!(PROTOCOL_VERSION.can_serve(PROTOCOL_VERSION));
