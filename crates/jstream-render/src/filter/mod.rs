@@ -68,7 +68,9 @@ pub fn descriptors() -> Vec<KindDescriptor> {
 ///
 /// [ADR-0136]: ../../../docs/adr/0136-an-effects-outset-follows-its-settings.md
 pub fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
-    multipass::outset(kind_id, settings).or_else(|| pack::outset(kind_id, settings))
+    multipass::outset(kind_id, settings)
+        .or_else(|| depth::outset(kind_id, settings))
+        .or_else(|| pack::outset(kind_id, settings))
 }
 
 /// The pass for a filter of `kind_id`, or `None` when it is not a built-in video kind.

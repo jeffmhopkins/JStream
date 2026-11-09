@@ -10,6 +10,7 @@
 //! view depth for them, as `jstream-core` does, so no chain holds a depth filter that
 //! could never see depth.
 
+mod bloom;
 mod fog;
 mod occlusion;
 mod reflection;
@@ -92,6 +93,7 @@ impl ViewDepth {
 pub fn descriptors() -> Vec<KindDescriptor> {
     vec![
         occlusion::descriptor(),
+        bloom::descriptor(),
         fog::descriptor(),
         reflection::descriptor(),
         volumetric::descriptor(),
@@ -102,6 +104,7 @@ pub fn descriptors() -> Vec<KindDescriptor> {
 pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>> {
     match kind_id {
         fog::KIND => Some(Box::new(fog::DepthFog::new(settings))),
+        bloom::KIND => Some(Box::new(bloom::DepthBloom::new(settings))),
         occlusion::KIND => Some(Box::new(occlusion::AmbientOcclusion::new(settings))),
         volumetric::KIND => Some(Box::new(volumetric::VolumetricFog::new(settings))),
         reflection::KIND => Some(Box::new(reflection::FloorReflection::new(settings))),
@@ -113,12 +116,19 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
 /// a scene chain that holds one (ADR-0143 decision 4).
 pub fn reads_depth(kind_id: &str) -> bool {
     [
+        bloom::KIND,
         fog::KIND,
         occlusion::KIND,
         reflection::KIND,
         volumetric::KIND,
     ]
     .contains(&kind_id)
+}
+
+/// How far past its input a filter of this group's `kind_id` draws at `settings`, in
+/// canvas pixels; `None` for a kind that draws within it, or another group's.
+pub(crate) fn outset(kind_id: &str, settings: &Settings) -> Option<f32> {
+    (kind_id == bloom::KIND).then(|| bloom::outset(settings))
 }
 
 /// The floor a filter of `kind_id` with `settings` mirrors its scene in, so the engine
@@ -148,6 +158,7 @@ mod tests {
             ids,
             [
                 "ambient_occlusion",
+                "depth_bloom",
                 "depth_fog",
                 "floor_reflection",
                 "volumetric_fog"
