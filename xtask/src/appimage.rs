@@ -42,7 +42,8 @@ const RELATIVE_USR: &[u8] = b"././";
 /// plugin's hook first, which sets `APPDIR` too.
 const APP_RUN: &str = "#!/bin/sh\n\
 # JStream's AppImage (cargo xtask dist-linux). WebKitGTK finds its processes at\n\
-# ././lib/..., so jstream starts from the AppDir's usr; $OWD is the caller's directory.\n\
+# ././lib/..., so jstream starts from the AppDir's usr: a relative path argument\n\
+# (--ui-dir) resolves there, so give it absolute ($OWD is the caller's directory).\n\
 APPDIR=\"${APPDIR:-$(dirname \"$(readlink -f \"$0\")\")}\"\n\
 cd \"$APPDIR/usr\" || exit 1\n\
 exec \"$APPDIR/usr/bin/jstream\" \"$@\"\n";
