@@ -1271,6 +1271,7 @@ mod tests {
             timelines: Vec::new(),
             keyframes: Vec::new(),
             warm_scenes: None,
+            warm_gpu_mib: None,
         };
         assert_eq!(Collection::from_result(other), None);
     }

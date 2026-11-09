@@ -72,7 +72,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
-  `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`),
+  `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
+  `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`),
   `scene.zoom_camera`, `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`, `ptz.store`,
   `ptz.focus`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
@@ -180,7 +181,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
-  (`warm_scenes`), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
+  (`warm_scenes`, with `warm_gpu_mib` since 0.117), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
   returns the program mix as a PNG, and `video.frames` a frame sheet ([Frame
   sheets](#design)). `youtube.status`, `youtube.list_broadcasts` and
   `youtube.list_streams` read the YouTube account, and `youtube.stats` the running
@@ -339,7 +340,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.116 because a scene can be kept warm: `SceneOptions`'
+`PROTOCOL_VERSION` is 0.117 because the warm scenes have a GPU-byte budget:
+`studio.set_warm`'s `gpu_mib`, `studio.get`'s `warm_gpu_mib` and `profile.get`'s `warm`
+(`WarmSceneProfile`, [ADR-0150](../../docs/adr/0150-the-warm-scenes-gpu-byte-budget.md),
+#1468); 0.116 because a scene can be kept warm: `SceneOptions`'
 `keep_warm`, set with `scene.set_options` and refused on a keyframe scene
 ([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md), #1468); 0.115 because
 the studio's warm budget is a setting: the action
@@ -1497,7 +1501,15 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   (3) until it is set. The Preview scene is warm even past it; the rest are the scenes
   most recently on program. An application setting: no `rev`, never undone, no event,
   whatever collection is open, and kept across restarts when the engine's host names a
-  file for it. It can't be bound to a hotkey, and no plugin is granted it.
+  file for it. It can't be bound to a hotkey, and no plugin is granted it. Since 0.117
+  ([ADR-0150](../../docs/adr/0150-the-warm-scenes-gpu-byte-budget.md)) `gpu_mib` also
+  limits the GPU memory the warm scenes are estimated to hold, in MiB: 0 for no limit
+  (the default), at most `MAX_WARM_GPU_MIB` (65536; `invalid_argument` on `gpu_mib`
+  past it), and left out it doesn't change. A source is estimated at one RGBA8 frame of
+  its size (its frame's now, else the last the engine saw, else the canvas), counted
+  once, and nothing for a source a mix draws anyway. The scenes are walked in the warm
+  order and the first that would pass the limit is left cold with every one after it;
+  the Preview scene never is.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1610,7 +1622,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
   plays. Since 0.88 `keyframes` lists each scene drawn through one of its keyframe
   scenes where it is placed ([Keyframe tracks](#keyframe-tracks)), ordered by scene,
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
-  `studio.set_warm` sets.
+  `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
+  none).
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
@@ -1694,7 +1707,12 @@ Queries read and never change `rev`. Those that read the collection state carry 
   enough stream has arrived, and its frames `played`, `concealed`, `late`, `repeats` and
   `restarts`; and the receiver's drops, `outside_lan`, `unaccepted`, `malformed` and
   `unsupported`, with the `midi` messages it handed on. Unlike the rest of the profile,
-  these count from when the receiver started, not over the window.
+  these count from when the receiver started, not over the window. Since 0.117, `warm`
+  (omitted while no scene besides the program is warm, ADR-0150) lists the scenes the
+  warm count picked, in the warm order, each a `WarmSceneProfile`: its `scene_id`, the
+  `gpu_bytes` it is estimated to hold beyond what a mix draws anyway and the warm scenes
+  kept before it, and `cold: true` when the GPU-memory limit left it cold. Like
+  `network`, it is the state now, not the window's.
   Runtime state, so no `rev`. Added in 0.73.
 - `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
   frames its encoder was given

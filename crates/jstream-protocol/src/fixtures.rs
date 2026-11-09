@@ -1489,7 +1489,14 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::StudioSetPreview {
             scene_id: SceneId::new("scn_1"),
         },
-        Action::StudioSetWarm { scenes: 2 },
+        Action::StudioSetWarm {
+            scenes: 2,
+            gpu_mib: Some(1024),
+        },
+        Action::StudioSetWarm {
+            scenes: 3,
+            gpu_mib: None,
+        },
         Action::SceneZoomCamera {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
@@ -2193,6 +2200,18 @@ fn profile_info() -> ProfileInfo {
             unsupported: 0,
             midi: 640,
         }),
+        warm: vec![
+            crate::WarmSceneProfile {
+                scene_id: SceneId::new("scn_brb"),
+                gpu_bytes: 8_294_400,
+                cold: false,
+            },
+            crate::WarmSceneProfile {
+                scene_id: SceneId::new("scn_panels"),
+                gpu_bytes: 33_177_600,
+                cold: true,
+            },
+        ],
     }
 }
 
@@ -2818,6 +2837,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 keyframe_id: SceneId::new("scn_panels_wide"),
             }],
             warm_scenes: Some(3),
+            warm_gpu_mib: Some(2048),
         },
         QueryResult::StudioGet {
             program_scene: None,
@@ -2825,6 +2845,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             timelines: Vec::new(),
             keyframes: Vec::new(),
             warm_scenes: None,
+            warm_gpu_mib: None,
         },
         QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {

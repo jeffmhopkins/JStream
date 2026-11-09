@@ -669,6 +669,10 @@ pub enum QueryResult {
         /// `studio.set_warm` sets (ADR-0117 §7, since 0.115). Omitted by an older server.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         warm_scenes: Option<u32>,
+        /// The limit on the warm scenes' estimated GPU memory in MiB, 0 for none, which
+        /// `studio.set_warm` sets (ADR-0150, since 0.117). Omitted by an older server.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        warm_gpu_mib: Option<u32>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]

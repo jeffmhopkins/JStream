@@ -116,7 +116,8 @@ fn an_mcp_agent_drives_the_engine_in_process() {
             "type": "studio.get",
             "program_scene": "scn_1",
             "preview_scene": "scn_1",
-            "warm_scenes": 3
+            "warm_scenes": 3,
+            "warm_gpu_mib": 0
         })
     );
     let switched = call_tool(

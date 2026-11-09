@@ -321,6 +321,8 @@ struct State {
     /// The warm budget `studio.set_warm` set, or `None` for the default. The mock runs
     /// no sources, so it only reports it.
     warm_scenes: Option<u32>,
+    /// The GPU-byte limit in MiB `studio.set_warm` set (ADR-0150), 0 for none.
+    warm_gpu_mib: u32,
     /// The shared values `values.set` set (ADR-0102 decision 7), by name: runtime state,
     /// like the studio, and checked by the engine's rules.
     values: BTreeMap<String, SharedValue>,
@@ -1153,7 +1155,16 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
-            Action::StudioSetWarm { scenes } => {
+            Action::StudioSetWarm { scenes, gpu_mib } => {
+                if gpu_mib.is_some_and(|mib| mib > jstream_protocol::MAX_WARM_GPU_MIB) {
+                    return Err(ProtocolError::invalid_argument(
+                        "gpu_mib",
+                        format!(
+                            "the GPU limit is at most {} MiB",
+                            jstream_protocol::MAX_WARM_GPU_MIB
+                        ),
+                    ));
+                }
                 if scenes > jstream_protocol::MAX_WARM_SCENES {
                     return Err(ProtocolError::invalid_argument(
                         "scenes",
@@ -1164,6 +1175,9 @@ impl State {
                     ));
                 }
                 self.warm_scenes = Some(scenes);
+                if let Some(mib) = gpu_mib {
+                    self.warm_gpu_mib = mib;
+                }
                 return Ok(CallResult::action());
             }
             Action::ValuesSet { name, value } => {
@@ -1437,6 +1451,7 @@ impl State {
                     self.warm_scenes
                         .unwrap_or(jstream_protocol::DEFAULT_WARM_SCENES),
                 ),
+                warm_gpu_mib: Some(self.warm_gpu_mib),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,

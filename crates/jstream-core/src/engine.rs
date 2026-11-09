@@ -55,10 +55,11 @@ use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
     CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
     Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, KindsCause, LiveOutcome, MAX_WARM_SCENES, OutputHealth, OutputId, OutputKind,
-    OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream, ProtocolError, Query,
-    QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId, SecretString, SourceId,
-    SourceSize, TransitionPresetId, TransitionStarted, VideoMixId, YoutubeAuth,
+    IdempotencyKey, KindsCause, LiveOutcome, MAX_WARM_GPU_MIB, MAX_WARM_SCENES, OutputHealth,
+    OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream,
+    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
+    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
+    YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -331,9 +332,10 @@ impl Engine {
     #[must_use]
     pub fn with_warm_file(self, path: impl Into<PathBuf>) -> Self {
         let path = path.into();
-        if let Some(scenes) = crate::warm_file::load(&path) {
+        if let Some(budget) = crate::warm_file::load(&path) {
             let mut state = lock(&self.shared.state);
-            if state.studio.set_budget(scenes as usize) {
+            let scenes = state.studio.set_budget(budget.scenes as usize);
+            if state.studio.set_gpu_mib(budget.gpu_mib) | scenes {
                 state.publish_warm();
             }
         }
@@ -341,10 +343,11 @@ impl Engine {
         self
     }
 
-    /// `studio.set_warm` (0.115, ADR-0117 §7), or `None` for any other call.
+    /// `studio.set_warm` (0.115, ADR-0117 §7; `gpu_mib` since 0.117, ADR-0150), or
+    /// `None` for any other call.
     fn warm_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
         let Call::Action {
-            action: Action::StudioSetWarm { scenes },
+            action: Action::StudioSetWarm { scenes, gpu_mib },
         } = call
         else {
             return None;
@@ -356,17 +359,31 @@ impl Engine {
                 format!("at most {MAX_WARM_SCENES} scenes are kept warm"),
             )));
         }
+        if gpu_mib.is_some_and(|mib| mib > MAX_WARM_GPU_MIB) {
+            return Some(Err(ProtocolError::invalid_argument(
+                "gpu_mib",
+                format!("the GPU limit is at most {MAX_WARM_GPU_MIB} MiB"),
+            )));
+        }
         let file = lock(&self.shared.warm_file);
-        let changed = {
+        let saved = {
             let mut state = lock(&self.shared.state);
-            let changed = state.studio.set_budget(scenes as usize);
+            let mut changed = state.studio.set_budget(scenes as usize);
+            if let Some(mib) = *gpu_mib {
+                changed |= state.studio.set_gpu_mib(mib);
+            }
             if changed {
                 state.publish_warm();
             }
-            changed
+            changed.then(|| crate::warm_file::Budget {
+                scenes,
+                gpu_mib: state.studio.gpu_mib(),
+            })
         };
-        if changed && let Some(path) = file.as_ref() {
-            crate::warm_file::save(path, scenes);
+        if let Some(budget) = saved
+            && let Some(path) = file.as_ref()
+        {
+            crate::warm_file::save(path, budget);
         }
         Some(Ok(CallResult::action()))
     }
@@ -2137,6 +2154,7 @@ impl Engine {
             let inputs = drops::lock_ledger(&self.drops).input_totals();
             let mut profile = self.shared.profile.profile(*seconds, *top, cpu, inputs);
             profile.network = self.jtunnel_profile();
+            profile.warm = lock(&self.shared.state).warm.report().to_vec();
             Ok(CallResult::Query {
                 result: QueryResult::ProfileGet { profile },
             })
@@ -4171,33 +4189,72 @@ fn command_name(call: &Call) -> &'static str {
 /// The captures and sources of the scenes the studio keeps warm (ADR-0117 §7), planned
 /// again only when the collection's revision, its placed keyframes (which are no
 /// revision, ADR-0118), the warm scenes or a running source changed: a plan of the
-/// program mix, which may run every frame, rarely has to plan them.
+/// program mix, which may run every frame, rarely has to plan them. The GPU-byte limit
+/// (ADR-0150) is applied to what was planned on every update, since the sizes it reads
+/// change without a new plan.
 #[derive(Default)]
 struct WarmCaptures {
-    /// What `captures` and `sources` were planned at.
+    /// What `planned` was planned at.
     of: Option<WarmKey>,
+    /// What each scene the count picked draws, in the studio's warm order.
+    planned: Vec<WarmScene>,
+    /// Which of `planned` the GPU-byte limit keeps warm, as `captures` and `sources`
+    /// were gathered.
+    kept: Vec<bool>,
     captures: Arc<BTreeSet<CaptureKey>>,
     /// Every source the warm scenes draw, which the live sources keep from resting.
     sources: BTreeSet<SourceId>,
+    /// The size each source's frame last had, so a source that stopped or rests is
+    /// still estimated at it.
+    seen: BTreeMap<SourceId, [u32; 2]>,
+    /// What each of `planned` is estimated to hold, for `profile.get`'s `warm`.
+    report: Vec<jstream_protocol::WarmSceneProfile>,
+}
+
+/// What one scene the warm count picked draws, as [`WarmCaptures`] planned it.
+struct WarmScene {
+    id: SceneId,
+    captures: BTreeSet<CaptureKey>,
+    /// The sources it draws, nested scenes' included, each once, in the order it
+    /// reached them.
+    sources: Vec<SourceId>,
+}
+
+/// What [`WarmCaptures::update`] reads besides the plan: the GPU-byte limit and the
+/// sizes its estimate is made from (ADR-0150).
+struct WarmLimit<'a> {
+    /// The limit in bytes, `None` for none.
+    bytes: Option<u64>,
+    /// The Preview scene, which no limit leaves cold.
+    preview: Option<&'a SceneId>,
+    /// The frames stored with `set_source_frame`.
+    frames: &'a BTreeMap<SourceId, Frame>,
 }
 
 /// The revision, the warm scenes, the live sources' installs and the placed keyframes
 /// [`WarmCaptures`] planned at.
 type WarmKey = (Rev, Vec<SceneId>, u64, BTreeMap<SceneId, SceneId>);
 
+/// The bytes one RGBA8 frame of `size` holds (ADR-0150 decision 1).
+fn frame_bytes([width, height]: [u32; 2]) -> u64 {
+    u64::from(width) * u64::from(height) * 4
+}
+
 impl WarmCaptures {
     /// The captures of `scenes` in `graph`, as the running sources of `live` capture
-    /// them, and the sources they draw, planned again when what they depend on changed.
-    /// Only the captures are looked up, so the plan reaches no source and makes none
-    /// shown or heard (ADR-0028); the sources it asks for are noted.
+    /// them, and the sources they draw, planned again when what they depend on changed,
+    /// less the scenes `limit` leaves cold. Only the captures are looked up, so the plan
+    /// reaches no source and makes none shown or heard (ADR-0028); the sources it asks
+    /// for are noted.
     fn update(
         &mut self,
         graph: &Graph,
         scenes: Vec<SceneId>,
         live: &LiveSources,
         assets: &crate::filter_assets::FilterAssets,
+        limit: &WarmLimit<'_>,
     ) -> &Arc<BTreeSet<CaptureKey>> {
-        if self
+        let fresh = self
             .of
             .as_ref()
             .is_some_and(|(rev, warm, installs, placed)| {
@@ -4205,54 +4262,152 @@ impl WarmCaptures {
                     && *warm == scenes
                     && *installs == live.installs()
                     && placed == graph.placed_keyframes()
-            })
-        {
-            return &self.captures;
+            });
+        if !fresh {
+            self.plan(graph, scenes, live, assets);
         }
+        let kept = self.trim(graph, live, limit);
+        if !fresh || kept != self.kept {
+            let mut captures = BTreeSet::new();
+            let mut sources = BTreeSet::new();
+            for (scene, _) in self.planned.iter().zip(&kept).filter(|(_, kept)| **kept) {
+                captures.extend(scene.captures.iter().cloned());
+                sources.extend(scene.sources.iter().cloned());
+            }
+            if *self.captures != captures {
+                self.captures = Arc::new(captures);
+            }
+            self.sources = sources;
+            self.kept = kept;
+        }
+        &self.captures
+    }
+
+    /// Plans what each of `scenes` draws.
+    fn plan(
+        &mut self,
+        graph: &Graph,
+        scenes: Vec<SceneId>,
+        live: &LiveSources,
+        assets: &crate::filter_assets::FilterAssets,
+    ) {
         let key = (
             graph.rev(),
             scenes,
             live.installs(),
             graph.placed_keyframes().clone(),
         );
-        let mut captures = BTreeSet::new();
-        let mut sources = BTreeSet::new();
-        for scene_id in &key.1 {
-            if graph.state().scene(scene_id).is_none() {
-                continue;
-            }
-            let planning = snapshot::plan_scene(
-                graph,
-                scene_id,
-                &mut |id| {
-                    sources.insert(id.clone());
-                    live.capture_key(id).map(Look::Capture)
-                },
-                assets,
-            );
-            // A scene that draws nothing asks for the primary display, which only an
-            // output without a program scene shows.
-            let primary = CaptureKey::primary();
-            captures.extend(
-                planning
+        // A scene that draws nothing asks for the primary display, which only an
+        // output without a program scene shows.
+        let primary = CaptureKey::primary();
+        self.planned = key
+            .1
+            .iter()
+            .filter(|scene_id| graph.state().scene(scene_id).is_some())
+            .map(|scene_id| {
+                let mut sources = Vec::new();
+                let planning = snapshot::plan_scene(
+                    graph,
+                    scene_id,
+                    &mut |id| {
+                        if !sources.contains(id) {
+                            sources.push(id.clone());
+                        }
+                        live.capture_key(id).map(Look::Capture)
+                    },
+                    assets,
+                );
+                let captures = planning
                     .shot
                     .captures()
                     .iter()
                     .filter(|capture| **capture != primary)
-                    .cloned(),
-            );
-        }
-        if *self.captures != captures {
-            self.captures = Arc::new(captures);
-        }
-        self.sources = sources;
+                    .cloned()
+                    .collect();
+                WarmScene {
+                    id: scene_id.clone(),
+                    captures,
+                    sources,
+                }
+            })
+            .collect();
+        self.seen.retain(|id, _| graph.state().source(id).is_some());
         self.of = Some(key);
-        &self.captures
     }
 
-    /// The sources the warm scenes draw, as last planned.
+    /// Which planned scenes `limit` keeps warm (ADR-0150 decision 3), with the report
+    /// of what each is estimated to hold.
+    fn trim(&mut self, graph: &Graph, live: &LiveSources, limit: &WarmLimit<'_>) -> Vec<bool> {
+        let canvas = graph.state().canvas();
+        let mut counted = BTreeSet::new();
+        let mut total = 0u64;
+        let mut full = false;
+        let mut kept = Vec::with_capacity(self.planned.len());
+        let mut report = Vec::with_capacity(self.planned.len());
+        for scene in &self.planned {
+            let mut bytes = 0u64;
+            let mut new = Vec::new();
+            for id in &scene.sources {
+                // A source a mix draws anyway, or a warm scene before it, costs nothing
+                // more.
+                if live.reached(id) || counted.contains(id) {
+                    continue;
+                }
+                new.push(id);
+                let size = limit
+                    .frames
+                    .get(id)
+                    .map(Frame::pixel_size)
+                    .or_else(|| live.size(id).map(|size| [size.width(), size.height()]));
+                let size = match size {
+                    Some(size) => {
+                        self.seen.insert(id.clone(), size);
+                        size
+                    }
+                    None => self
+                        .seen
+                        .get(id)
+                        .copied()
+                        .unwrap_or([canvas.width, canvas.height]),
+                };
+                bytes = bytes.saturating_add(frame_bytes(size));
+            }
+            let preview = limit.preview == Some(&scene.id);
+            if !preview
+                && limit
+                    .bytes
+                    .is_some_and(|most| total.saturating_add(bytes) > most)
+            {
+                // The budget evicts from the bottom (ADR-0117 §7): this scene and every
+                // one after it.
+                full = true;
+            }
+            let cold = full && !preview;
+            if !cold {
+                total = total.saturating_add(bytes);
+                counted.extend(new);
+            }
+            kept.push(!cold);
+            report.push(jstream_protocol::WarmSceneProfile {
+                scene_id: scene.id.clone(),
+                gpu_bytes: bytes,
+                cold,
+            });
+        }
+        if self.report != report {
+            self.report = report;
+        }
+        kept
+    }
+
+    /// The sources the warm scenes draw, as last planned and trimmed.
     fn sources(&self) -> &BTreeSet<SourceId> {
         &self.sources
+    }
+
+    /// What each scene the warm count picked is estimated to hold, for `profile.get`.
+    fn report(&self) -> &[jstream_protocol::WarmSceneProfile] {
+        &self.report
     }
 }
 
@@ -5564,6 +5719,7 @@ impl State {
                         u32::try_from(self.studio.budget())
                             .expect("invariant: the budget is at most MAX_WARM_SCENES"),
                     ),
+                    warm_gpu_mib: Some(self.studio.gpu_mib()),
                     timelines: self
                         .timelines
                         .report(crate::timelines::ns(self.live.now()), |id| {
@@ -6003,9 +6159,18 @@ impl State {
     fn publish_warm(&mut self) {
         let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
         let assets = self.live.filter_assets();
-        let warm = self
-            .warm
-            .update(graph, self.studio.warm(graph.state()), &self.live, &assets);
+        let limit = WarmLimit {
+            bytes: self.studio.gpu_limit(),
+            preview: self.studio.preview(),
+            frames: &self.frames,
+        };
+        let warm = self.warm.update(
+            graph,
+            self.studio.warm(graph.state()),
+            &self.live,
+            &assets,
+            &limit,
+        );
         self.render.publish_warm(warm);
         self.live.set_warm(self.warm.sources());
         // A source that left the warm scenes rests now if nothing drew it in the
@@ -6101,7 +6266,12 @@ impl State {
         render.publish_scenes(scene_shots);
         // And keeps the warm scenes' captures running, so showing one starts nothing;
         // their other sources keep producing too.
-        render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets));
+        let limit = WarmLimit {
+            bytes: studio.gpu_limit(),
+            preview: studio.preview(),
+            frames,
+        };
+        render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets, &limit));
         live.set_warm(warm.sources());
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();

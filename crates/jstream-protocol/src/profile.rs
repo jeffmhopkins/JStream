@@ -73,6 +73,25 @@ pub struct ProfileInfo {
     /// while the receiver is off.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub network: Option<NetworkProfile>,
+    /// The scenes the warm count picked (since 0.117, ADR-0150), in the studio's warm
+    /// order, each with what it is estimated to hold on the GPU. Like `network`, the
+    /// state now, not the window's. Omitted when no scene besides the program is warm.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warm: Vec<WarmSceneProfile>,
+}
+
+/// A scene the warm count picked ([`ProfileInfo::warm`], ADR-0117 §7, ADR-0150).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WarmSceneProfile {
+    /// The scene.
+    pub scene_id: SceneId,
+    /// The GPU bytes its sources are estimated to hold beyond what a mix draws anyway
+    /// and what the warm scenes kept before it hold: each source's frame as RGBA8,
+    /// counted once. For a cold scene, what keeping it warm would add.
+    pub gpu_bytes: u64,
+    /// Whether the GPU-byte limit left it cold. Omitted while it is warm.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cold: bool,
 }
 
 /// A JTunnel sender heard on the LAN (`jtunnel.senders`, 0.114, ADR-0123 §3): it

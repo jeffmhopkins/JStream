@@ -244,8 +244,13 @@ Contents ([Design](#design) explains the choices):
   "Warm scenes" choice, from "Only the Preview scene" to `MAX_WARM_SCENES` scenes. It
   reads the budget with `studio.get` each time the page opens and sets it with
   `studio.set_warm`, putting the old choice back with an error if the engine refuses;
-  it hides for an engine that reports no budget. `budget`, `set_budget` and
-  `choice_label` are tested natively.
+  it hides for an engine that reports no budget. Beside it, "Warm scenes' GPU memory"
+  ([ADR-0150](../../docs/adr/0150-the-warm-scenes-gpu-byte-budget.md)) offers No limit
+  and 512 MB to 16 GB, and the engine's own value when it is none of those; it sends
+  `studio.set_warm` with the count and `gpu_mib`, and hides for an engine older than
+  0.117, which reports no `warm_gpu_mib`. Setting the count alone leaves `gpu_mib` out,
+  so the limit holds. `budget`, `read`, `set_budget`, `choice_label` and `gpu_label`
+  are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
   plugins page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with

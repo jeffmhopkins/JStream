@@ -3,13 +3,18 @@
 //! nothing. The Preview scene is always one of them. It reads the number from
 //! `studio.get` each time the page opens and sets it with `studio.set_warm`; the engine
 //! keeps it on its machine, whatever collection is open. An engine older than 0.115
-//! reports none, and the control hides.
+//! reports none, and the control hides. Beside it, "Warm scenes' GPU memory" sets the
+//! limit on what the warm scenes are estimated to hold on the GPU (`gpu_mib`,
+//! ADR-0150), hidden from an engine older than 0.117.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
 use crate::app::SessionContext;
 use jstream_control::Control;
 use jstream_protocol::{Action, Call, CallResult, MAX_WARM_SCENES, Query, QueryResult};
+
+/// The GPU-memory limits the choice offers, in MiB: 0 for no limit.
+const GPU_CHOICES: [u32; 7] = [0, 512, 1024, 2048, 4096, 8192, 16_384];
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 
@@ -18,33 +23,61 @@ use leptos::task::spawn_local;
 /// # Errors
 /// The call's failure, as text.
 pub async fn budget(control: &dyn Control) -> Result<Option<u32>, String> {
+    Ok(read(control).await?.0)
+}
+
+/// The engine's warm budget and its GPU-memory limit in MiB (`studio.get`), each `None`
+/// from an engine too old to report it.
+///
+/// # Errors
+/// The call's failure, as text.
+pub async fn read(control: &dyn Control) -> Result<(Option<u32>, Option<u32>), String> {
     let call = Call::Query {
         query: Query::StudioGet,
     };
     match control.call(call).await {
         Ok(response) => match response.result {
             CallResult::Query {
-                result: QueryResult::StudioGet { warm_scenes, .. },
-            } => Ok(warm_scenes),
+                result:
+                    QueryResult::StudioGet {
+                        warm_scenes,
+                        warm_gpu_mib,
+                        ..
+                    },
+            } => Ok((warm_scenes, warm_gpu_mib)),
             _ => Err("the engine answered `studio.get` with something else".into()),
         },
         Err(error) => Err(error.to_string()),
     }
 }
 
-/// Sets the engine's warm budget (`studio.set_warm`).
+/// Sets the engine's warm budget (`studio.set_warm`), and its GPU-memory limit when
+/// `gpu_mib` names one.
 ///
 /// # Errors
 /// The call's failure, as text.
-pub async fn set_budget(control: &dyn Control, scenes: u32) -> Result<(), String> {
+pub async fn set_budget(
+    control: &dyn Control,
+    scenes: u32,
+    gpu_mib: Option<u32>,
+) -> Result<(), String> {
     let call = Call::Action {
-        action: Action::StudioSetWarm { scenes },
+        action: Action::StudioSetWarm { scenes, gpu_mib },
     };
     control
         .call(call)
         .await
         .map(drop)
         .map_err(|error| error.to_string())
+}
+
+/// What the GPU-memory choice for `mib` reads.
+pub fn gpu_label(mib: u32) -> String {
+    match mib {
+        0 => "No limit".to_owned(),
+        mib if mib % 1024 == 0 => format!("{} GB", mib / 1024),
+        mib => format!("{mib} MB"),
+    }
 }
 
 /// What the choice for `scenes` reads.
@@ -61,13 +94,15 @@ pub fn choice_label(scenes: u32) -> String {
 pub fn WarmScenesSetting() -> impl IntoView {
     let session = use_context::<SessionContext>().and_then(|context| context.get());
     let scenes = RwSignal::new(None::<u32>);
+    let gpu = RwSignal::new(None::<u32>);
     let error = RwSignal::new(None::<String>);
     if let Some(session) = &session {
         let control = session.control.clone();
         spawn_local(async move {
-            match budget(&*control).await {
-                Ok(kept) => {
+            match read(&*control).await {
+                Ok((kept, limit)) => {
                     scenes.try_set(kept);
+                    gpu.try_set(limit);
                 }
                 Err(message) => {
                     error.try_set(Some(message));
@@ -84,11 +119,38 @@ pub fn WarmScenesSetting() -> impl IntoView {
             return;
         };
         spawn_local(async move {
-            if let Err(message) = set_budget(&*control, chosen).await {
+            if let Err(message) = set_budget(&*control, chosen, None).await {
                 scenes.try_set(before);
                 error.try_set(Some(message));
             }
         });
+    };
+    let choose_gpu = move |chosen: u32| {
+        let (Some(kept), before) = (scenes.get_untracked(), gpu.get_untracked()) else {
+            return;
+        };
+        gpu.set(Some(chosen));
+        error.set(None);
+        let Some(control) = control.get_value() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(message) = set_budget(&*control, kept, Some(chosen)).await {
+                gpu.try_set(before);
+                error.try_set(Some(message));
+            }
+        });
+    };
+    // The engine's limit is offered even when it isn't one of the usual ones.
+    let gpu_choices = move || {
+        let mut choices = GPU_CHOICES.to_vec();
+        if let Some(current) = gpu.get()
+            && !choices.contains(&current)
+        {
+            choices.push(current);
+            choices.sort_unstable();
+        }
+        choices
     };
     view! {
         <Show when=move || scenes.get().is_some()>
@@ -112,6 +174,27 @@ pub fn WarmScenesSetting() -> impl IntoView {
                 </span>
             </label>
         </Show>
+        <Show when=move || scenes.get().is_some() && gpu.get().is_some()>
+            <label class="settings-field warm-gpu">
+                <span class="settings-check-label">"Warm scenes' GPU memory"</span>
+                <select
+                    aria-label="Warm scenes' GPU memory"
+                    prop:value=move || gpu.get().unwrap_or_default().to_string()
+                    on:change=move |event| {
+                        if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
+                            choose_gpu(chosen);
+                        }
+                    }
+                >
+                    {move || gpu_choices().into_iter().map(|mib| view! {
+                        <option value=mib.to_string()>{gpu_label(mib)}</option>
+                    }).collect_view()}
+                </select>
+                <span class="settings-check-note">
+                    "The most video memory the warm scenes may use, as JStream estimates it from the size of each video, page and camera they show. Scenes are kept in the order above until the next one would go past it; the Preview scene always stays ready. The estimate is a lower bound. No limit until you change it."
+                </span>
+            </label>
+        </Show>
         {move || error.get().map(|message| view! {
             <p class="settings-error" role="alert">{format!("Warm scenes: {message}")}</p>
         })}
@@ -120,7 +203,7 @@ pub fn WarmScenesSetting() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::{budget, choice_label, set_budget};
+    use super::{budget, choice_label, gpu_label, read, set_budget};
     use jstream_control::protocol::{Hello, PROTOCOL_VERSION};
     use jstream_control::{Control, MockEngine};
     use std::pin::pin;
@@ -143,11 +226,39 @@ mod tests {
         }))
         .expect("hello");
         assert_eq!(now(budget(&control)), Ok(Some(3)), "the default");
-        now(set_budget(&control, 0)).expect("0 is allowed");
+        now(set_budget(&control, 0, None)).expect("0 is allowed");
         assert_eq!(now(budget(&control)), Ok(Some(0)));
-        let refused = now(set_budget(&control, 9)).expect_err("past the most");
+        let refused = now(set_budget(&control, 9, None)).expect_err("past the most");
         assert!(refused.contains("scenes"), "{refused}");
         assert_eq!(now(budget(&control)), Ok(Some(0)), "unchanged");
+    }
+
+    #[test]
+    fn the_gpu_limit_is_read_and_set_with_the_count() {
+        let control = MockEngine::new().connect();
+        now(control.hello(Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        }))
+        .expect("hello");
+        assert_eq!(now(read(&control)), Ok((Some(3), Some(0))), "no limit");
+        now(set_budget(&control, 3, Some(2048))).expect("a limit");
+        assert_eq!(now(read(&control)), Ok((Some(3), Some(2048))));
+        now(set_budget(&control, 5, None)).expect("the count alone");
+        assert_eq!(
+            now(read(&control)),
+            Ok((Some(5), Some(2048))),
+            "setting the count keeps the limit"
+        );
+        let refused = now(set_budget(&control, 5, Some(70_000))).expect_err("past the most");
+        assert!(refused.contains("gpu_mib"), "{refused}");
+    }
+
+    #[test]
+    fn each_gpu_choice_says_how_much() {
+        assert_eq!(gpu_label(0), "No limit");
+        assert_eq!(gpu_label(512), "512 MB");
+        assert_eq!(gpu_label(2048), "2 GB");
     }
 
     #[test]

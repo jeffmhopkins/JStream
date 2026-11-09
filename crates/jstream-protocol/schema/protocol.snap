@@ -480,8 +480,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Fails with `invalid_argument` on `scenes` above\n[`MAX_WARM_SCENES`].",
+          "description": "Sets how many scenes besides the program the studio keeps warm (0.115, ADR-0117\n§7): their sources keep running, so showing one starts nothing. The Preview scene\nis always warm, even past `scenes`; the rest are the scenes most recently on\nprogram, the most recent first. An application setting, not collection state: it\nchanges no `rev`, is never undone, emits no event, holds whatever collection is\nopen, and is kept across restarts when the engine's host names a file for it.\n`studio.get` reports it. Since 0.117 it also sets a limit on the GPU bytes the\nwarm scenes are estimated to hold (ADR-0150): the scenes are walked in order,\nand the first that would pass the limit is left cold with every scene after it.\nThe Preview scene is never left cold. Fails with `invalid_argument` on `scenes`\nabove [`MAX_WARM_SCENES`], or on `gpu_mib` above [`MAX_WARM_GPU_MIB`].",
           "properties": {
+            "gpu_mib": {
+              "description": "The limit on the warm scenes' estimated GPU memory, in MiB (since 0.117,\nADR-0150): 0 for no limit, the default, up to [`MAX_WARM_GPU_MIB`]. Left out,\nthe limit doesn't change.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "scenes": {
               "description": "The number of warm scenes, 0 to [`MAX_WARM_SCENES`]. The default is\n[`DEFAULT_WARM_SCENES`].",
               "format": "uint32",
@@ -12623,6 +12632,15 @@ source: crates/jstream-protocol/src/fixtures.rs
               "const": "studio.get",
               "type": "string"
             },
+            "warm_gpu_mib": {
+              "description": "The limit on the warm scenes' estimated GPU memory in MiB, 0 for none, which\n`studio.set_warm` sets (ADR-0150, since 0.117). Omitted by an older server.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
             "warm_scenes": {
               "description": "How many scenes besides the program the studio keeps warm, which\n`studio.set_warm` sets (ADR-0117 §7, since 0.115). Omitted by an older server.",
               "format": "uint32",
@@ -13402,6 +13420,13 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "What the clients' views did with their preview streams in the window, as they\nreported it with `preview.report` (since 0.103, ADR-0132): one per view a session\nreported in the window, the session's that has ended included while the window\nreaches back to its last report.",
               "items": {
                 "$ref": "#/$defs/ViewProfile"
+              },
+              "type": "array"
+            },
+            "warm": {
+              "description": "The scenes the warm count picked (since 0.117, ADR-0150), in the studio's warm\norder, each with what it is estimated to hold on the GPU. Like `network`, the\nstate now, not the window's. Omitted when no scene besides the program is warm.",
+              "items": {
+                "$ref": "#/$defs/WarmSceneProfile"
               },
               "type": "array"
             }
@@ -15266,6 +15291,30 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "WarmSceneProfile": {
+      "description": "A scene the warm count picked ([`ProfileInfo::warm`], ADR-0117 §7, ADR-0150).",
+      "properties": {
+        "cold": {
+          "description": "Whether the GPU-byte limit left it cold. Omitted while it is warm.",
+          "type": "boolean"
+        },
+        "gpu_bytes": {
+          "description": "The GPU bytes its sources are estimated to hold beyond what a mix draws anyway\nand what the warm scenes kept before it hold: each source's frame as RGBA8,\ncounted once. For a cold scene, what keeping it warm would add.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "scene_id": {
+          "$ref": "#/$defs/SceneId",
+          "description": "The scene."
+        }
+      },
+      "required": [
+        "scene_id",
+        "gpu_bytes"
+      ],
+      "type": "object"
+    },
     "Welcome": {
       "description": "The server's answer to [`Hello`].",
       "properties": {
@@ -15714,5 +15763,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.116"
+  "title": "JStream protocol 0.117"
 }
