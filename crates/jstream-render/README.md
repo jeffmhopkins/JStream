@@ -1168,7 +1168,9 @@ it out; `filter::testing` reads both lists.
   (`video_filter_reflection_floor`) and draws the scene mirrored in it into
   `ViewDepth::reflection` (`DepthReflection`: the picture and its view depth, through
   the mirrored camera made right-handed, so x runs the other way about the principal
-  point, and the floor it used, which the filter mirrors in). One draw
+  point, and the floor it used, which the filter mirrors in; its models are drawn with
+  `ModelDraw::floor`, which `model.wgsl` cuts at in `fs` and `fs_depth` through the
+  frame's `cut` plane, `golden_model_a_floor_cuts_what_is_below_it`). One draw
   (`reflection/floor.wgsl`, through `Ctx::draw_program` for its four textures) rebuilds
   each pixel's point from the view depth; one within a footprint of the floor (two
   pixels at its distance, or the half float's precision there) takes the mirrored

@@ -286,6 +286,24 @@ impl ItemGeometry {
         Ok((signed_area(polygon.vertices()).abs() > MIN_AREA).then_some(polygon))
     }
 
+    /// The box's four corners in the scene's space (ADR-0094): its centre at
+    /// `depth_px`, its local axes turned by its rotations. A 3D scene places a card
+    /// there; the mirrored floor pass (ADR-0151 decision 4) leaves out a card lying in
+    /// or below its floor by them.
+    pub fn corners_in_scene(self) -> [[f64; 3]; 4] {
+        let (ax, ay) = axes(self);
+        let origin = item_origin(self);
+        let (half_w, half_h) = (
+            f64::from(self.size.width.get()) * 0.5,
+            f64::from(self.size.height.get()) * 0.5,
+        );
+        [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)].map(|(sx, sy)| {
+            [0, 1, 2].map(|c| {
+                origin[c] + f64::from(ax[c]) * sx * half_w + f64::from(ay[c]) * sy * half_h
+            })
+        })
+    }
+
     /// Whether the compositor can draw this geometry, so an edit may store it (ADR-0022:
     /// stored state never claims what isn't drawn). With neutral 3D that is
     /// [`Self::project`]'s finite corners. Otherwise every input is bounded: the centre's
