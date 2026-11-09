@@ -2282,7 +2282,8 @@ one sent, a keyframe was asked for (the request is that thread's to take, never 
 hub's), or 2 s passed, and only while the stream's queue has room. A staged stream's
 `pts_us` go on from the hub's own across stages and sizes (`StreamClock`): its first
 picture on a stage is timed by how long the stream has been open, later ones by their
-media time past that one's, never going back. The hub doesn't wait for that thread when it closes the stream:
+media time past that one's, never back past the last time the stream sent, whether
+the hub, this stage's sender or an earlier one sent it (`Work::last_pts`, shared). The hub doesn't wait for that thread when it closes the stream:
 it sees the close within its 100 ms wait, sends nothing more and ends, and the render
 thread then lets go of the queue. A JPEG or PNG stream the stage can't take is drawn by
 the hub from then on, with one warning, until the client subscribes again. Source and draft streams, an engine
@@ -2935,7 +2936,8 @@ The render thread reads the capture mailbox of each capture the render snapshot 
 *Snapshots*) at 30 frames per second, repeats a capture's last frame when its mailbox
 is empty, and hands each mix's composite to the encoder sessions it feeds in the kind
 each takes: converted to NV12 in one of the platform's encode targets for a session on
-the GPU path, read back as RGBA8 for the others (see [Runtime](#runtime)). Without the
+the GPU path, read back for the others, in NV12 when every consumer of the mix is a
+session opened in NV12 and in RGBA8 otherwise (see [Runtime](#runtime)). Without the
 platform's GPU context it opens its compositor on a hardware adapter when the machine
 has one, and on the software adapter otherwise (`OpenOptions::hardware`): on WARP a
 720p program ran at about 10 fps (#433). It draws at the canvas size the collection has when the
@@ -3463,9 +3465,16 @@ the tick's frame is dropped for that mix's GPU sessions and counted in
 `encode_frames`, never written over a held one. The conversion (`Nv12Converter`,
 BT.709 in the target's range) is a submit of its own that stages the target's fence.
 It pushes that target, stamped with the tick's time, to every such session. Sessions
-on the CPU path get the mix read back as RGBA8, as do JPEG and PNG preview streams'
+on the CPU path get the mix read back, as do JPEG and PNG preview streams'
 picture queues (*Preview streams*), and virtual cameras the program; a
-mix none of them is fed is not read back, and each readback is counted
+mix none of them is fed is not read back. Outputs' sessions open in NV12, so when
+every consumer of a mix is one of them (no camera, no picture queue, no session
+opened in RGBA8 such as a preview's H.264, nothing held, and an even size) the mix is
+converted by `Nv12Converter` into planes and read back as NV12 (ADR-0117 §4), and the
+CPU draw converts its frame with `rgb_to_nv12`; otherwise it is read back as RGBA8,
+which an NV12 session converts on its encode thread. A frame read back in one format
+is not handed to a consumer that needs the other, so one attached as the format
+changes waits a tick or two. Each readback is counted
 (`OutputStats::readbacks`, one per mix read back). The readback never waits for the
 GPU ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §4): the draw
 records it into the mix's `ReadbackRing` of three map-read buffers, kept with the

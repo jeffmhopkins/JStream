@@ -436,7 +436,12 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    swapped into the caller's buffer, whose old one is reused for a later copy, so the
    caller's thread copies no pixels and a steady size allocates nothing. A buffer stays
    busy until its copy is back, a call or two after its map finished. A copy on a lost
-   device reads nothing and hands nothing back (see the lost device above). The source buffer of the ingest pass
+   device reads nothing and hands nothing back (see the lost device above). `record_nv12`
+   records into the same ring an output converted by an `Nv12Pass` into `Nv12Planes`
+   (step 6), in the same submit: both planes are copied into one buffer, Y then CbCr,
+   each row padded, and handed back as tight NV12 (`width × height` Y bytes, then
+   `width × height / 2` of interleaved CbCr), the ring's `format()` saying which it
+   holds. A change of format is a change of size: it waits until no buffer is out. The source buffer of the ingest pass
    is held to one storage binding (`max_storage_buffer_binding_size`) as well as one
    buffer: a larger frame is `TooLarge` before any buffer is made for it.
 

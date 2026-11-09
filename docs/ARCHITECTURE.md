@@ -518,7 +518,7 @@ every mix runs at the base rate divided by an integer.
 | Audio (one per stream) | Device I/O, resampling into the engine's ring | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio". |
 | Mixer | Activity gains, sends, buses, filters with keys (in audio-graph order), latency compensation, meters on the engine clock | [R-RT-001](RULES.md#R-RT-001). Registered with MMCSS "Pro Audio" on Windows. |
 | Render | Composites every mix on each base-rate tick, then the monitored scenes preview streams show; converts CPU source frames with a compute pass, and reads frames back through a ring it collects without waiting | [R-RT-002](RULES.md#R-RT-002). A missing source frame repeats the last one. A monitored scene not begun within the tick's period is skipped and counted, so the program never waits for one. Registered with MMCSS "Playback" on Windows; sleeps until the next tick. |
-| Readback (`jstream-readback`, one per program stage's render thread) | Copies each mapped readback buffer out as tightly packed RGBA8 and hands it back to the render thread, which swaps it in, so the render thread copies no pixels ([ADR-0117](adr/0117-real-time-video-thread-model.md) §4) | Not real-time: it only copies and unmaps. A buffer is reused once its copy is back. Ends with the render thread's compositor. |
+| Readback (`jstream-readback`, one per program stage's render thread) | Copies each mapped readback buffer out as tightly packed RGBA8, or NV12 for a mix only NV12 encoders take, and hands it back to the render thread, which swaps it in, so the render thread copies no pixels ([ADR-0117](adr/0117-real-time-video-thread-model.md) §4) | Not real-time: it only copies and unmaps. A buffer is reused once its copy is back. Ends with the render thread's compositor. |
 | Encode (per session) | Encodes frames and samples, fans packets out to outputs | [R-RT-002](RULES.md#R-RT-002). Bounded queues; drops are counted. |
 | Preview (one per engine, while any preview stream is open) | For a stream of the program or of a scene, holds the program stage (opening it with no output) and hands it the stream's H.264 encoder, or a JPEG or PNG stream's picture queue, which the render thread feeds with the program, or the scene as a monitored scene, at the stream's size; a sender thread per such stream forwards its packets, or encodes and sends its pictures ([ADR-0117](adr/0117-real-time-video-thread-model.md) §6). Draws every other stream (a source, a draft, or any stream of an engine without backends) small itself and encodes it into the session's bounded frame queue | Not real-time: for the streams it draws it has its own compositor, like `video.snapshot`'s, and loads the render snapshot, `rev` and live values under a brief collection lock, never held while drawing or encoding. A stream whose queue is full is not drawn. |
 | Capture (per source) | Platform callbacks into a single-slot "latest frame" mailbox | [R-UNSAFE-005](RULES.md#R-UNSAFE-005) |
@@ -528,8 +528,8 @@ every mix runs at the base rate divided by an integer.
 in steps under #1221): the render thread only composites and submits, never touching
 pixels on the CPU or waiting for the GPU; sources hand it GPU-ready frames through frame
 slots from their own threads, so a new frame no longer re-plans; read-back consumers are
-served by a `jstream-readback` thread from a ring of staging buffers (built, as RGBA8;
-NV12 readback is #1433); the engine shares
+served by a `jstream-readback` thread from a ring of staging buffers (built, in NV12
+when only encoders take a mix, else RGBA8); the engine shares
 one GPU context; and the program stage runs while anything consumes it (a preview stream,
 a projector, an output or a virtual camera), compositing the program and every monitored
 scene, so the preview thread encodes and sends frames the render thread drew instead of
@@ -1274,7 +1274,9 @@ that mix's ring of the platform's encode targets, which it is pushed as a GPU fr
 its own submit that stages the target's fence and hands it back in `PRESENT`. Sessions
 on the CPU path and the virtual cameras still get their mix read back, through a ring
 of map-read buffers the render thread collects without waiting for the GPU (§4 of the
-ADR), and a mix none of them is fed is not read back. Built-in video filters are kinds with
+ADR): converted to NV12 on the GPU first when only encoder sessions opened in NV12 take
+the mix, so the readback is half the bytes and no CPU conversion follows, and RGBA8
+otherwise. A mix none of them is fed is not read back. Built-in video filters are kinds with
 descriptors whose passes `apply_filter` draws from any image (an upload, a layer or an
 import, a browser page's included) into a premultiplied `Rgba16Float` layer, of the size the filter reports
 ([jstream-render › Filters](../crates/jstream-render/README.md#filters));
