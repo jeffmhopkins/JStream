@@ -742,7 +742,9 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
   clock)` draws into a layer the caller keeps (a `ResourceCache` layer), so a chain
   that runs every frame allocates no output; it refuses an output of another size than
   the filter reports, the input itself, or an image that isn't a layer. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync`, and that of any image the
+  that move or hold frames, and the song's position on it (`FilterClock::beat`, quarter
+  notes from the engine's MIDI clock, 0 without one, ADR-0148), for those that follow
+  the tempo. An imported input's `FrameSync`, and that of any image the
   filter reads besides it (`Ctx::hold`), is staged once the pass has recorded, right
   before the submit, and the submit hands those textures back in `PRESENT`, as `render`
   does. The prelude's `frame.time` is that time wrapped
@@ -927,7 +929,11 @@ premultiplied linear light on the way out.
   a triangle wave so it loops without a seam. `speed` (−2000 to 2000 px/s) moves the
   dashes along the edge and the gradient round it once per perimeter; the distance is
   worked out in `f64` on the CPU and wrapped to the dash period and to one turn, so it
-  stays exact. On a source or scene chain the outer stroke past the frame is cut.
+  stays exact. With `speed_unit` `beats` (default `px_s`), `lap_beats` (−64 to 64,
+  default 4; 0 holds still) replaces it: the pattern goes once round the edge every
+  that many beats of the song, the perimeter × `FilterClock::beat` ÷ `lap_beats`, so it
+  stays on the beat and stops with the song
+  ([ADR-0148](../../docs/adr/0148-a-borders-speed-in-beats.md)). On a source or scene chain the outer stroke past the frame is cut.
   `frame` (an image asset, `null` by default, #1294) draws the inner stroke from an
   image as a 9-slice frame instead of in its style and fill: the image's corners,
   `frame_slice` image px square (1 to 1024, default 16, held to half the image), fill

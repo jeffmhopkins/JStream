@@ -788,7 +788,10 @@ fn an_effect_draws_through_the_render_harness_and_reloads() {
     let input = compositor
         .upload_rgba8(1, 2, &[255, 255, 255, 255, 255, 255, 255, 255])
         .expect("upload");
-    let clock = jstream_render::FilterClock { seconds: 0.0 };
+    let clock = jstream_render::FilterClock {
+        seconds: 0.0,
+        beat: 0.0,
+    };
 
     // One line, half strength, a white tint: linear 0.5 is sRGB 188.
     let mut filter = scan.video_filter(&settings(&[

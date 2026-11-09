@@ -3,7 +3,13 @@
 //! MIDI state follows. A `jstream-tempo` thread reads that state without a lock and
 //! takes the engine's only when a value changes, which is at most once a beat while a
 //! song plays.
+//!
+//! The render thread reads the same state each frame, through [`Tempo`], for the
+//! song's position the filters that follow the tempo move with (ADR-0148).
 
+use std::sync::Arc;
+
+use jstream_media::{MediaTime, Rounding, Timebase};
 use jstream_sources::{MidiInputs, TempoReading};
 use serde_json::{Value, json};
 
@@ -70,6 +76,41 @@ impl Published {
     }
 }
 
+/// The engine's MIDI inputs, as a plan hands them to the render thread: equal only to
+/// the same inputs.
+#[derive(Clone)]
+pub(crate) struct Tempo(pub(crate) Arc<MidiInputs>);
+
+impl PartialEq for Tempo {
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.0, &other.0)
+    }
+}
+
+impl std::fmt::Debug for Tempo {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("Tempo")
+    }
+}
+
+impl Tempo {
+    /// The song's position at `at` on the media clock, in quarter notes since its start
+    /// (ADR-0148): the every-input clock's beat carried on to `at` while it plays, never
+    /// past its next clock, so a clock that goes quiet holds; where it stopped while it
+    /// is stopped; 0 before any clock. Reads without a lock or an allocation.
+    pub(crate) fn beat_at(&self, at: MediaTime) -> f64 {
+        let ms = at
+            .rescale(Timebase::MILLIS, Rounding::Down)
+            .map_or(0, |t| u64::try_from(t.ticks()).unwrap_or(0));
+        beat_of(self.0.any().tempo(), ms)
+    }
+}
+
+/// The song's position at `now_ms` from `reading`, as [`Tempo::beat_at`] gives it.
+fn beat_of(reading: Option<TempoReading>, now_ms: u64) -> f64 {
+    reading.map_or(0.0, |reading| reading.beat_at(now_ms).max(0.0))
+}
+
 /// The every-input tempo now, and the media clock's time, if it has one.
 pub(crate) fn read(midi: &MidiInputs) -> Option<(Option<TempoReading>, u64)> {
     let now_ms = midi.now_ms()?;
@@ -88,6 +129,28 @@ mod tests {
             playing,
             beat,
         }
+    }
+
+    /// ADR-0148: the render thread's beat runs on while the song plays, holds where it
+    /// stopped, holds a tick past a clock that went quiet, and is 0 before any clock.
+    #[test]
+    fn the_song_position_runs_while_it_plays_and_holds_otherwise() {
+        assert_eq!(beat_of(None, 5_000), 0.0);
+        let playing = reading(Some(120.0), true, 8.0, 1_000);
+        assert!((beat_of(Some(playing), 1_010) - 8.02).abs() < 1e-9);
+        // MIDI clock ticks 24 times a beat.
+        let a_tick = 8.0 + 1.0 / 24.0;
+        assert!((beat_of(Some(playing), 9_000) - a_tick).abs() < 1e-9);
+        let stopped = reading(Some(120.0), false, 8.0, 1_000);
+        assert_eq!(beat_of(Some(stopped), 9_000), 8.0);
+        let fresh = Tempo(Arc::new(MidiInputs::new()));
+        assert_eq!(
+            fresh.beat_at(MediaTime::zero(Timebase::MILLIS)),
+            0.0,
+            "no clock yet"
+        );
+        assert_eq!(fresh, fresh.clone());
+        assert_ne!(fresh, Tempo(Arc::new(MidiInputs::new())));
     }
 
     #[test]

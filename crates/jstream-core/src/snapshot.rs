@@ -672,6 +672,10 @@ pub(crate) struct Shot {
     shown: BTreeMap<ItemId, MediaTime>,
     /// The effect settings each item chain's motion drives (ADR-0138).
     driven: BTreeMap<ChainOwner, crate::driven::Driven>,
+    /// The engine's MIDI inputs, whose clock gives the song's position each frame
+    /// ([`FilterClock::beat`](jstream_render::FilterClock), ADR-0148); `None` in a
+    /// shot planned without them, which is always at the start of the song.
+    tempo: Option<crate::tempo::Tempo>,
     /// Its items' audio modifiers (ADR-0100), with the level the render thread's
     /// follower stores for each tick ([`crate::reactive`]).
     audio: crate::reactive::Bindings,
@@ -919,6 +923,7 @@ impl Default for Shot {
             moves: false,
             shown: BTreeMap::new(),
             driven: BTreeMap::new(),
+            tempo: None,
             audio: crate::reactive::Bindings::default(),
             fired: motion::Fired::default(),
         }
@@ -926,6 +931,18 @@ impl Default for Shot {
 }
 
 impl Shot {
+    /// Whether the shot draws on the engine's MIDI clock (ADR-0148).
+    #[cfg(test)]
+    pub(crate) fn follows_tempo(&self) -> bool {
+        self.tempo.is_some()
+    }
+
+    /// The song's position at `at`, in quarter notes since its start, from the engine's
+    /// MIDI clock (ADR-0148): 0 without one.
+    fn beat_at(&self, at: MediaTime) -> f64 {
+        self.tempo.as_ref().map_or(0.0, |tempo| tempo.beat_at(at))
+    }
+
     /// What the copied scene `id` clears to under its items: its background, or
     /// transparent.
     fn background(&self, id: &SceneId) -> Color {
@@ -1469,6 +1486,7 @@ impl PartialEq for Shot {
             && self.fired == other.fired
             // An edit to an effect modifier alone changes only this (ADR-0138).
             && self.driven == other.driven
+            && self.tempo == other.tempo
     }
 }
 
@@ -1678,6 +1696,7 @@ fn plan_inner(
         canvas: state.canvas(),
         blending: state.blending(),
         program: program.clone(),
+        tempo: assets.tempo().cloned(),
         ..Shot::default()
     };
     let mut planner = Planner {
@@ -4907,6 +4926,8 @@ pub(crate) fn compose_metered(
         readback,
     } = to;
     let canvas = shot.canvas()?;
+    // Read once, so every chain of the frame is on the same beat (ADR-0148).
+    let beat = shot.beat_at(at);
     compositor.set_blending(shot.blending);
     // A follow camera no frame has drawn for a while starts again at rest.
     chains.cameras().sweep(at);
@@ -5046,7 +5067,7 @@ pub(crate) fn compose_metered(
         (&mut *cache, &mut *chains, &mut *meter),
         shot,
         (live, captures),
-        at,
+        (at, beat),
     );
     meter.phase_since(Phase::Chains, chaining);
     ran?;
@@ -5065,7 +5086,7 @@ pub(crate) fn compose_metered(
             compositor,
             (cache, chains, meter),
             stage,
-            at,
+            (at, beat),
             (output, readback),
         );
     }
@@ -5122,7 +5143,7 @@ pub(crate) fn compose_metered(
                     compositor,
                     (cache, chains, meter),
                     stage,
-                    at,
+                    (at, beat),
                     (output, readback),
                 ),
                 None => Err(RenderError::Invalid {
@@ -5217,7 +5238,7 @@ pub(crate) fn compose_metered(
             compositor,
             (cache, chains, meter),
             stage,
-            at,
+            (at, beat),
             (output, readback),
         ),
         // Every path without a stage returned above.
@@ -5241,7 +5262,7 @@ fn finish_stage(
     compositor: &mut Compositor,
     (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     stage: &Stage<'_>,
-    at: MediaTime,
+    (at, beat): (MediaTime, f64),
     (output, readback): (FrameSize, bool),
 ) -> Result<Output, RenderError> {
     let started = Instant::now();
@@ -5251,7 +5272,7 @@ fn finish_stage(
         let key = GpuKey::Filtered(owner.clone());
         if chains.stage(&key) {
             let running = Instant::now();
-            chains.run_one(compositor, cache, (owner, chain), at);
+            chains.run_one(compositor, cache, (owner, chain), (at, beat));
             meter.chain(owner, running);
         }
         failed |= chains.failed(&key);
@@ -5315,7 +5336,7 @@ fn run_chains(
     (cache, chains, meter): (&mut ResourceCache<GpuKey>, &mut Chains, &mut DrawMeter),
     shot: &Shot,
     (live, captures): (&LiveParams, &dyn Captures),
-    at: MediaTime,
+    (at, beat): (MediaTime, f64),
 ) -> Result<(), RenderError> {
     // A Move blending an item's effects gives its chain this frame's settings (ADR-0127),
     // and motion moves the settings it drives from there (ADR-0138).
@@ -5336,7 +5357,7 @@ fn run_chains(
         match step {
             ChainStep::Run(source) => {
                 if let Some(chain) = shot.chains.get(source) {
-                    chains.run_one(compositor, cache, (source, chain), at);
+                    chains.run_one(compositor, cache, (source, chain), (at, beat));
                     meter.chain(source, started);
                 }
             }
@@ -6850,6 +6871,30 @@ pub(crate) mod tests {
             shot.captures().iter().all(|k| k.source.is_some()),
             "each capture is for its source"
         );
+    }
+
+    /// ADR-0148: a plan hands the render thread the engine's MIDI inputs, so its chains
+    /// draw on the song's position; one planned without them is at the start, and a
+    /// re-plan with other inputs is a new shot.
+    #[test]
+    fn a_shot_reads_the_song_position_from_the_engines_midi_clock() {
+        use crate::filter_assets::FilterAssets;
+        use crate::tempo::Tempo;
+        use std::sync::Arc;
+        let graph = jstream_graph::Graph::new();
+        let plan = |assets: &FilterAssets| {
+            super::plan_with(&graph, None, None, &mut |_| None, assets).shot
+        };
+        let at = MediaTime::zero(Timebase::MILLIS);
+        let without = plan(&FilterAssets::default());
+        assert_eq!(without.beat_at(at), 0.0);
+        let midi = Arc::new(jstream_sources::MidiInputs::new());
+        let assets = FilterAssets::default().with_tempo(Tempo(Arc::clone(&midi)));
+        let with = plan(&assets);
+        assert_eq!(with.tempo, Some(Tempo(midi)));
+        assert_eq!(with.beat_at(at), 0.0, "no clock heard yet");
+        assert_ne!(with, without);
+        assert_eq!(with, plan(&assets), "the same inputs plan the same shot");
     }
 
     /// The program scene is depth 0. A scene [`MAX_NESTING`] levels down is drawn; one
