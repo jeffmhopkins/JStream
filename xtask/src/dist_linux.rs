@@ -355,12 +355,16 @@ fn size_kib(dir: &Path) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BINARIES, LIB_DIR, control, deb_arch, deb_version, desktop_entry, lay_out, pack};
-    use std::fs;
+    use super::{control, deb_arch, deb_version, desktop_entry};
+    // The package test runs on Linux only, so its imports are Linux's too.
     #[cfg(target_os = "linux")]
-    use std::os::unix::fs::PermissionsExt as _;
-    use std::path::Path;
-    use std::process::Command;
+    use {
+        super::{BINARIES, LIB_DIR, lay_out, pack},
+        std::fs,
+        std::os::unix::fs::PermissionsExt as _,
+        std::path::Path,
+        std::process::Command,
+    };
 
     /// Lays out a package from stand-in binaries and a one-page UI, and, where
     /// `dpkg-deb` is installed, packs it and reads the package back.
