@@ -2052,6 +2052,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "CardBack": {
+            "description": "Whether a card's back is drawn (ADR-0151 decision 10).",
+            "oneOf": [
+              {
+                "const": "show",
+                "description": "Seen from behind, the card shows its picture mirrored.",
+                "type": "string"
+              },
+              {
+                "const": "hide",
+                "description": "Seen from behind, the card draws nothing, in any scene.",
+                "type": "string"
+              }
+            ]
+          },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n- Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since\n  0.104, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,\n  or each 120 units of high-resolution wheel delta, so it can only be bound to an\n  action that takes one step ([`Action::takes_steps`]).\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
             "type": "string"
@@ -4955,6 +4970,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Size",
                 "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
               },
+              "surface": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Surface"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "How a card's own surface is drawn in a 3D scene (ADR-0151 decision 10): lit by the\nscene's lights, and whether its back shows. Absent draws it as every card was\ndrawn before: unlit, its back shown. A model ignores it."
+              },
               "tilt_deg": {
                 "$ref": "#/$defs/Finite32",
                 "default": 0.0,
@@ -6194,6 +6220,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "Surface": {
+            "description": "A card's surface (ADR-0151 decision 10): [`ItemGeometry::surface`].\n\nOn the wire every field may be omitted for its default, which today's cards behave\nas. [`ItemGeometry::check_drawable`] bounds the numbers.",
+            "properties": {
+              "back": {
+                "$ref": "#/$defs/CardBack",
+                "default": "show",
+                "description": "Whether the card's back, its picture mirrored, is drawn where the camera sees it.\nDefault [`CardBack::Show`]."
+              },
+              "emissive": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "How much of its own picture a lit card adds back unlit, 0 to 4, so a screen still\nglows in a dark set. Default 0."
+              },
+              "lit": {
+                "description": "Whether the scene's lights light the card in a 3D scene: its picture is the base\ncolour of a flat glTF quad, shaded by the lights, their shadows and the scene's\nenvironment. With no light of any type, or in a 2D scene, it draws as an unlit\ncard. Default `false`.",
+                "type": "boolean"
+              },
+              "metalness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "As a model material's metalness, 0 to 1. Default 0."
+              },
+              "roughness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "As a model material's roughness, 0 to 1. Default 1."
+              },
+              "shadows": {
+                "default": true,
+                "description": "Whether a lit card receives the shadows of the scene's lights. Default `true`.",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
           },
           "TimelineCue": {
             "description": "One timed action.",
@@ -8648,6 +8709,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "CardBack": {
+            "description": "Whether a card's back is drawn (ADR-0151 decision 10).",
+            "oneOf": [
+              {
+                "const": "show",
+                "description": "Seen from behind, the card shows its picture mirrored.",
+                "type": "string"
+              },
+              {
+                "const": "hide",
+                "description": "Seen from behind, the card draws nothing, in any scene.",
+                "type": "string"
+              }
+            ]
+          },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n- Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since\n  0.104, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,\n  or each 120 units of high-resolution wheel delta, so it can only be bound to an\n  action that takes one step ([`Action::takes_steps`]).\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
             "type": "string"
@@ -11551,6 +11627,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Size",
                 "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
               },
+              "surface": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Surface"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "How a card's own surface is drawn in a 3D scene (ADR-0151 decision 10): lit by the\nscene's lights, and whether its back shows. Absent draws it as every card was\ndrawn before: unlit, its back shown. A model ignores it."
+              },
               "tilt_deg": {
                 "$ref": "#/$defs/Finite32",
                 "default": 0.0,
@@ -12790,6 +12877,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "Surface": {
+            "description": "A card's surface (ADR-0151 decision 10): [`ItemGeometry::surface`].\n\nOn the wire every field may be omitted for its default, which today's cards behave\nas. [`ItemGeometry::check_drawable`] bounds the numbers.",
+            "properties": {
+              "back": {
+                "$ref": "#/$defs/CardBack",
+                "default": "show",
+                "description": "Whether the card's back, its picture mirrored, is drawn where the camera sees it.\nDefault [`CardBack::Show`]."
+              },
+              "emissive": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "How much of its own picture a lit card adds back unlit, 0 to 4, so a screen still\nglows in a dark set. Default 0."
+              },
+              "lit": {
+                "description": "Whether the scene's lights light the card in a 3D scene: its picture is the base\ncolour of a flat glTF quad, shaded by the lights, their shadows and the scene's\nenvironment. With no light of any type, or in a 2D scene, it draws as an unlit\ncard. Default `false`.",
+                "type": "boolean"
+              },
+              "metalness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "As a model material's metalness, 0 to 1. Default 0."
+              },
+              "roughness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "As a model material's roughness, 0 to 1. Default 1."
+              },
+              "shadows": {
+                "default": true,
+                "description": "Whether a lit card receives the shadows of the scene's lights. Default `true`.",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
           },
           "TimelineCue": {
             "description": "One timed action.",
@@ -17026,6 +17148,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "CardBack": {
+            "description": "Whether a card's back is drawn (ADR-0151 decision 10).",
+            "oneOf": [
+              {
+                "const": "show",
+                "description": "Seen from behind, the card shows its picture mirrored.",
+                "type": "string"
+              },
+              {
+                "const": "hide",
+                "description": "Seen from behind, the card draws nothing, in any scene.",
+                "type": "string"
+              }
+            ]
+          },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n- Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since\n  0.104, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,\n  or each 120 units of high-resolution wheel delta, so it can only be bound to an\n  action that takes one step ([`Action::takes_steps`]).\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
             "type": "string"
@@ -19929,6 +20066,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Size",
                 "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
               },
+              "surface": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Surface"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "How a card's own surface is drawn in a 3D scene (ADR-0151 decision 10): lit by the\nscene's lights, and whether its back shows. Absent draws it as every card was\ndrawn before: unlit, its back shown. A model ignores it."
+              },
               "tilt_deg": {
                 "$ref": "#/$defs/Finite32",
                 "default": 0.0,
@@ -21169,6 +21317,41 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "Surface": {
+            "description": "A card's surface (ADR-0151 decision 10): [`ItemGeometry::surface`].\n\nOn the wire every field may be omitted for its default, which today's cards behave\nas. [`ItemGeometry::check_drawable`] bounds the numbers.",
+            "properties": {
+              "back": {
+                "$ref": "#/$defs/CardBack",
+                "default": "show",
+                "description": "Whether the card's back, its picture mirrored, is drawn where the camera sees it.\nDefault [`CardBack::Show`]."
+              },
+              "emissive": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "How much of its own picture a lit card adds back unlit, 0 to 4, so a screen still\nglows in a dark set. Default 0."
+              },
+              "lit": {
+                "description": "Whether the scene's lights light the card in a 3D scene: its picture is the base\ncolour of a flat glTF quad, shaded by the lights, their shadows and the scene's\nenvironment. With no light of any type, or in a 2D scene, it draws as an unlit\ncard. Default `false`.",
+                "type": "boolean"
+              },
+              "metalness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "As a model material's metalness, 0 to 1. Default 0."
+              },
+              "roughness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "As a model material's roughness, 0 to 1. Default 1."
+              },
+              "shadows": {
+                "default": true,
+                "description": "Whether a lit card receives the shadows of the scene's lights. Default `true`.",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
+          },
           "TimelineCue": {
             "description": "One timed action.",
             "properties": {
@@ -21808,6 +21991,21 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "An audio bus in the collection (ADR-0028). [`BusId::master`] names the master\nbus, which every collection has.",
             "type": "string"
           },
+          "CardBack": {
+            "description": "Whether a card's back is drawn (ADR-0151 decision 10).",
+            "oneOf": [
+              {
+                "const": "show",
+                "description": "Seen from behind, the card shows its picture mirrored.",
+                "type": "string"
+              },
+              {
+                "const": "hide",
+                "description": "Seen from behind, the card draws nothing, in any scene.",
+                "type": "string"
+              }
+            ]
+          },
           "Crop": {
             "description": "How many source pixels an item cuts off each edge before it is transformed.\n\nWhole pixels of the source's own frame, so every value is valid; cropping more than\nthe source's size leaves nothing to draw.",
             "properties": {
@@ -22035,6 +22233,17 @@ source: crates/jstream-mcp/src/tests.rs
               "size": {
                 "$ref": "#/$defs/Size",
                 "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
+              },
+              "surface": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Surface"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "How a card's own surface is drawn in a 3D scene (ADR-0151 decision 10): lit by the\nscene's lights, and whether its back shows. Absent draws it as every card was\ndrawn before: unlit, its back shown. A model ignores it."
               },
               "tilt_deg": {
                 "$ref": "#/$defs/Finite32",
@@ -22685,6 +22894,41 @@ source: crates/jstream-mcp/src/tests.rs
           "SourceId": {
             "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
             "type": "string"
+          },
+          "Surface": {
+            "description": "A card's surface (ADR-0151 decision 10): [`ItemGeometry::surface`].\n\nOn the wire every field may be omitted for its default, which today's cards behave\nas. [`ItemGeometry::check_drawable`] bounds the numbers.",
+            "properties": {
+              "back": {
+                "$ref": "#/$defs/CardBack",
+                "default": "show",
+                "description": "Whether the card's back, its picture mirrored, is drawn where the camera sees it.\nDefault [`CardBack::Show`]."
+              },
+              "emissive": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "How much of its own picture a lit card adds back unlit, 0 to 4, so a screen still\nglows in a dark set. Default 0."
+              },
+              "lit": {
+                "description": "Whether the scene's lights light the card in a 3D scene: its picture is the base\ncolour of a flat glTF quad, shaded by the lights, their shadows and the scene's\nenvironment. With no light of any type, or in a 2D scene, it draws as an unlit\ncard. Default `false`.",
+                "type": "boolean"
+              },
+              "metalness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "As a model material's metalness, 0 to 1. Default 0."
+              },
+              "roughness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "As a model material's roughness, 0 to 1. Default 1."
+              },
+              "shadows": {
+                "default": true,
+                "description": "Whether a lit card receives the shadows of the scene's lights. Default `true`.",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
           },
           "TransitionEffect": {
             "description": "How an item without a partner appears or disappears.",
@@ -25696,6 +25940,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "CardBack": {
+            "description": "Whether a card's back is drawn (ADR-0151 decision 10).",
+            "oneOf": [
+              {
+                "const": "show",
+                "description": "Seen from behind, the card shows its picture mirrored.",
+                "type": "string"
+              },
+              {
+                "const": "hide",
+                "description": "Seen from behind, the card draws nothing, in any scene.",
+                "type": "string"
+              }
+            ]
+          },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n- Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since\n  0.104, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,\n  or each 120 units of high-resolution wheel delta, so it can only be bound to an\n  action that takes one step ([`Action::takes_steps`]).\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
             "type": "string"
@@ -28595,6 +28854,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Size",
                 "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
               },
+              "surface": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Surface"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "How a card's own surface is drawn in a 3D scene (ADR-0151 decision 10): lit by the\nscene's lights, and whether its back shows. Absent draws it as every card was\ndrawn before: unlit, its back shown. A model ignores it."
+              },
               "tilt_deg": {
                 "$ref": "#/$defs/Finite32",
                 "default": 0.0,
@@ -29828,6 +30098,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "Surface": {
+            "description": "A card's surface (ADR-0151 decision 10): [`ItemGeometry::surface`].\n\nOn the wire every field may be omitted for its default, which today's cards behave\nas. [`ItemGeometry::check_drawable`] bounds the numbers.",
+            "properties": {
+              "back": {
+                "$ref": "#/$defs/CardBack",
+                "default": "show",
+                "description": "Whether the card's back, its picture mirrored, is drawn where the camera sees it.\nDefault [`CardBack::Show`]."
+              },
+              "emissive": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "How much of its own picture a lit card adds back unlit, 0 to 4, so a screen still\nglows in a dark set. Default 0."
+              },
+              "lit": {
+                "description": "Whether the scene's lights light the card in a 3D scene: its picture is the base\ncolour of a flat glTF quad, shaded by the lights, their shadows and the scene's\nenvironment. With no light of any type, or in a 2D scene, it draws as an unlit\ncard. Default `false`.",
+                "type": "boolean"
+              },
+              "metalness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "As a model material's metalness, 0 to 1. Default 0."
+              },
+              "roughness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "As a model material's roughness, 0 to 1. Default 1."
+              },
+              "shadows": {
+                "default": true,
+                "description": "Whether a lit card receives the shadows of the scene's lights. Default `true`.",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
           },
           "TimelineCue": {
             "description": "One timed action.",
@@ -35541,6 +35846,21 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "CardBack": {
+            "description": "Whether a card's back is drawn (ADR-0151 decision 10).",
+            "oneOf": [
+              {
+                "const": "show",
+                "description": "Seen from behind, the card shows its picture mirrored.",
+                "type": "string"
+              },
+              {
+                "const": "hide",
+                "description": "Seen from behind, the card draws nothing, in any scene.",
+                "type": "string"
+              }
+            ]
+          },
           "Chord": {
             "description": "A key chord: zero or more modifiers then one key, joined by `+`, such as `Ctrl+KeyA`,\n`Ctrl+Shift+Digit1`, `F1` or `Pause`.\n\n- The modifiers are `Ctrl`, `Alt`, `Shift` and `Meta` (the Windows or Command key),\n  each at most once, in that order. A chord has exactly one spelling, so two chords\n  are the same keys exactly when their strings are equal.\n- The key is a W3C UI Events `KeyboardEvent.code` value from [`Chord::KEYS`]: the\n  physical key, whatever the keyboard layout, as browsers and the desktop host's\n  global-shortcut API both report it. Modifier keys themselves are not keys here.\n- Or the key is the mouse wheel, [`Chord::WHEEL`]: `WheelUp` or `WheelDown` (since\n  0.104, ADR-0112 §3), such as `Ctrl+WheelUp`. A wheel chord runs once for each notch,\n  or each 120 units of high-resolution wheel delta, so it can only be bound to an\n  action that takes one step ([`Action::takes_steps`]).\n\nOn the wire it is a plain string. The protocol layer doesn't check it: the engine\nrejects one that isn't valid with `invalid_argument`, giving [`Chord::problem`]'s\nreason.",
             "type": "string"
@@ -38444,6 +38764,17 @@ source: crates/jstream-mcp/src/tests.rs
                 "$ref": "#/$defs/Size",
                 "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
               },
+              "surface": {
+                "anyOf": [
+                  {
+                    "$ref": "#/$defs/Surface"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "description": "How a card's own surface is drawn in a 3D scene (ADR-0151 decision 10): lit by the\nscene's lights, and whether its back shows. Absent draws it as every card was\ndrawn before: unlit, its back shown. A model ignores it."
+              },
               "tilt_deg": {
                 "$ref": "#/$defs/Finite32",
                 "default": 0.0,
@@ -39683,6 +40014,41 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               }
             ]
+          },
+          "Surface": {
+            "description": "A card's surface (ADR-0151 decision 10): [`ItemGeometry::surface`].\n\nOn the wire every field may be omitted for its default, which today's cards behave\nas. [`ItemGeometry::check_drawable`] bounds the numbers.",
+            "properties": {
+              "back": {
+                "$ref": "#/$defs/CardBack",
+                "default": "show",
+                "description": "Whether the card's back, its picture mirrored, is drawn where the camera sees it.\nDefault [`CardBack::Show`]."
+              },
+              "emissive": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "How much of its own picture a lit card adds back unlit, 0 to 4, so a screen still\nglows in a dark set. Default 0."
+              },
+              "lit": {
+                "description": "Whether the scene's lights light the card in a 3D scene: its picture is the base\ncolour of a flat glTF quad, shaded by the lights, their shadows and the scene's\nenvironment. With no light of any type, or in a 2D scene, it draws as an unlit\ncard. Default `false`.",
+                "type": "boolean"
+              },
+              "metalness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 0.0,
+                "description": "As a model material's metalness, 0 to 1. Default 0."
+              },
+              "roughness": {
+                "$ref": "#/$defs/Finite32",
+                "default": 1.0,
+                "description": "As a model material's roughness, 0 to 1. Default 1."
+              },
+              "shadows": {
+                "default": true,
+                "description": "Whether a lit card receives the shadows of the scene's lights. Default `true`.",
+                "type": "boolean"
+              }
+            },
+            "type": "object"
           },
           "TimelineCue": {
             "description": "One timed action.",

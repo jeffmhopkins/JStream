@@ -46,6 +46,13 @@ struct Frame {
     lights: array<Light, MAX_LIGHTS>,
     shadows: array<Shadow, MAX_SHADOWS>,
     environment: Environment,
+    // A floor the model is cut at (ADR-0151 decision 4): a fragment whose dot(xyz, seen)
+    // + w is at or above 0 is at or below it, and isn't drawn. (0, 0, 0, -1) cuts nothing.
+    cut: vec4<f32>,
+}
+
+fn below_floor(seen: vec3<f32>) -> bool {
+    return dot(frame.cut.xyz, seen) + frame.cut.w >= 0.0;
 }
 
 // The scene's sky (ADR-0151 decision 9).
@@ -155,13 +162,10 @@ fn sky_dir(dir: vec3<f32>) -> vec3<f32> {
 fn panorama(d: vec3<f32>) -> vec3<f32> {
     let u = 0.5 + atan2(d.x, -d.z) / (2.0 * PI);
     let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, 0.001, 0.999);
-    var c = textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(u, v), 0.0);
-    let mode = frame.environment.ground.w;
-    if mode > 2.5 {
-        c = vec4<f32>(c.rgb, 1.0);
-    } else if mode > 0.5 && mode < 1.5 {
-        c = vec4<f32>(c.rgb * c.a, c.a);
-    }
+    let c = to_premul_linear(
+        textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(u, v), 0.0),
+        frame.environment.ground.w,
+    );
     return c.rgb * frame.environment.down.w;
 }
 
@@ -333,6 +337,9 @@ fn env_brdf(f0: vec3<f32>, roughness: f32, n_dot_v: f32) -> vec3<f32> {
 
 @fragment
 fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    if below_floor(in.seen) {
+        discard;
+    }
     let facing = front_facing != (frame.params.y > 0.5);
     let double_sided = material.flags.z > 0.5;
     if !facing && !double_sided {
@@ -437,6 +444,9 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
 // with perspective (a camera) is drawn here.
 @fragment
 fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
+    if below_floor(in.seen) {
+        discard;
+    }
     let base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
     let mode = material.flags.x;
     var alpha = 1.0;

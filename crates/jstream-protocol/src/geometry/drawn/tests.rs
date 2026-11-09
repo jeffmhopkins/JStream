@@ -501,3 +501,44 @@ fn a_3d_item_with_an_input_past_the_bound_is_refused() {
     flat.fit_mode = FitMode::Fit;
     flat.check_drawable().expect("neutral 3D isn't bounded");
 }
+
+/// ADR-0151 decision 10: a card whose back is hidden draws nothing seen from behind,
+/// with or without a camera, and draws as before from the front; its back shows by
+/// default.
+#[test]
+fn a_hidden_back_draws_nothing_from_behind() {
+    use crate::geometry::{CameraView, Canvas, CardBack, SceneCamera, Surface};
+    let hidden = Some(Surface {
+        back: CardBack::Hide,
+        ..Surface::DEFAULT
+    });
+    let canvas = Canvas {
+        width: 960,
+        height: 540,
+    };
+    let framing = SceneCamera::framing(canvas);
+    let view: CameraView = framing.view(canvas).expect("the framing camera has a view");
+    let whole = |g: ItemGeometry, view: Option<&CameraView>| {
+        let content = g
+            .content(400, 300, Crop::default())
+            .expect("content")
+            .expect("some content");
+        g.drawn_polygon_seen(view, &content).expect("draws or not")
+    };
+    for (turn, p) in [(150.0, Some(1000.0)), (180.0, None)] {
+        let back = geometry(0.0, turn, 0.0, 0.0, p);
+        assert!(whole(back, None).is_some(), "the back shows by default");
+        let hide = ItemGeometry {
+            surface: hidden,
+            ..back
+        };
+        assert!(whole(hide, None).is_none(), "turned {turn}: no back");
+        assert!(whole(hide, Some(&view)).is_none(), "through a camera");
+        let front = ItemGeometry {
+            turn_deg: finite(turn - 180.0),
+            ..hide
+        };
+        assert!(whole(front, None).is_some(), "its front still draws");
+        assert!(whole(front, Some(&view)).is_some());
+    }
+}

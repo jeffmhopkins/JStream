@@ -2147,7 +2147,7 @@ source: crates/jstream-core/src/kinds.rs
         "alpha": false,
         "default": "#ffffff",
         "label": "Color",
-        "description": "The light's colour.",
+        "description": "The light's colour. An environment ignores it: its sky colours or its image are its colour.",
         "live": true
       },
       {
@@ -2268,7 +2268,7 @@ source: crates/jstream-core/src/kinds.rs
         "media": "video",
         "default": null,
         "label": "Image",
-        "description": "A source whose picture is the sky instead of the colours, as an equirectangular panorama: an HDRI still, or any live source.",
+        "description": "A source whose picture is the sky instead of the colours, as an equirectangular panorama: an HDRI still, or any live source. A display, window or camera capture lights the sky only while an item also shows it.",
         "visible_if": {
           "param": "type",
           "equals": "environment"

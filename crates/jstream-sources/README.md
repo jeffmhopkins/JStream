@@ -339,7 +339,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 9) is the
   sky around the whole scene, shown with `sky_color`, `horizon_color` and `ground_color`
   (defaults `#9cc2e8`, white and `#3a3a3a`) and `image` (a video source whose picture is
-  the sky instead, as an equirectangular panorama; null for none), which
+  the sky instead, as an equirectangular panorama; null for none; a capture lights it
+  only while an item also shows it), which
   `ShownLight::environment` carries as a `ShownEnvironment` (settings saved without
   them read as their defaults). Its frame is one transparent pixel: it
   draws nothing, and `Source::light` hands the engine its settings, which the item that

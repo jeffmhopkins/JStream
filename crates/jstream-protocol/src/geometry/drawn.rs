@@ -249,6 +249,15 @@ impl ItemGeometry {
         if plane.facing().abs() < EDGE_ON {
             return Ok(None);
         }
+        // A card whose back is hidden draws nothing seen from behind (ADR-0151 decision
+        // 10).
+        if plane.facing() < 0.0
+            && self
+                .surface
+                .is_some_and(|surface| surface.back == super::CardBack::Hide)
+        {
+            return Ok(None);
+        }
         let half_w = self.size.width.get() * 0.5;
         let half_h = self.size.height.get() * 0.5;
         let left = content.left.max(-half_w);
@@ -285,6 +294,24 @@ impl ItemGeometry {
             *vertex = drawn_vertex(&plane, content, x, y, plane.w(x, y).max(NEAR_W))?;
         }
         Ok((signed_area(polygon.vertices()).abs() > MIN_AREA).then_some(polygon))
+    }
+
+    /// The box's four corners in the scene's space (ADR-0094): its centre at
+    /// `depth_px`, its local axes turned by its rotations. A 3D scene places a card
+    /// there; the mirrored floor pass (ADR-0151 decision 4) leaves out a card lying in
+    /// or below its floor by them.
+    pub fn corners_in_scene(self) -> [[f64; 3]; 4] {
+        let (ax, ay) = axes(self);
+        let origin = item_origin(self);
+        let (half_w, half_h) = (
+            f64::from(self.size.width.get()) * 0.5,
+            f64::from(self.size.height.get()) * 0.5,
+        );
+        [(-1.0, -1.0), (1.0, -1.0), (1.0, 1.0), (-1.0, 1.0)].map(|(sx, sy)| {
+            [0, 1, 2].map(|c| {
+                origin[c] + f64::from(ax[c]) * sx * half_w + f64::from(ay[c]) * sy * half_h
+            })
+        })
     }
 
     /// Whether the compositor can draw this geometry, so an edit may store it (ADR-0022:

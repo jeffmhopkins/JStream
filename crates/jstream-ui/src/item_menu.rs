@@ -381,7 +381,7 @@ impl Carry {
         if ItemGeometry::covering_canvas(canvas.width, canvas.height).ok() == Some(g) {
             return Ok(None);
         }
-        if !g.is_neutral_3d() || g.flip_h || g.flip_v || g.billboard {
+        if !g.is_neutral_3d() || g.flip_h || g.flip_v || g.billboard || g.surface.is_some() {
             return Err(Kept::Look);
         }
         let (w, h) = (canvas.width as f32, canvas.height as f32);

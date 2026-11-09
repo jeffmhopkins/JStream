@@ -3032,6 +3032,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         }
       ]
     },
+    "CardBack": {
+      "description": "Whether a card's back is drawn (ADR-0151 decision 10).",
+      "oneOf": [
+        {
+          "const": "show",
+          "description": "Seen from behind, the card shows its picture mirrored.",
+          "type": "string"
+        },
+        {
+          "const": "hide",
+          "description": "Seen from behind, the card draws nothing, in any scene.",
+          "type": "string"
+        }
+      ]
+    },
     "ChainCost": {
       "description": "What the video chains of scenes and items, and since 0.66 the output stage's, add to\neach frame the engine draws (ADR-0065 §7, ADR-0080), as the current render plan\nschedules them: a gauge, not a running total.\n\nA scene with an enabled video filter is composited once per frame into a\ncanvas-sized layer, however many places show it, and each enabled filter then draws\none pass into a layer of its own. An item with an enabled effect is drawn into one\nlayer the size of its box plus the effects' outset, and each enabled effect then\ndraws one pass into a layer of its own. An item placed in two scenes counts once for\neach. A filter of a kind the engine doesn't draw is bypassed and not counted. Every\nlayer is `Rgba16Float`, 8 bytes a pixel. Not counted: a source's own filters\n(ADR-0026), the scenes a `scene_mask` reads, and the canvas-sized layer a nested\nscene without a chain is drawn into for an item with effects that shows it (it takes\nthe place of the layer the scene would be drawn into anyway).\n\nThe output stage (0.66) is counted for the running outputs only, as it runs only\nwhen an output's frame is drawn, and as each output's frames are drawn since it\nstarted: a video filter or mix set on a running output counts from its next start,\nas it draws from then, and a virtual camera is drawn as the program. A mix that a\nrunning output gets through a master or output video chain is drawn once per frame\ninto a canvas-sized layer (one layer and one pass, however many outputs get it), the\nmaster chain runs once over it, and the own chain of each output that started with\none runs once after that; each enabled filter of either\ndraws one pass into a layer of its own. Not counted: the pass that fits the result\ninto each output's frame, which every output frame draws with or without a stage.\n\nA missing field parses as 0, so a field added later can be left out by an older\nsender (R-API-001). Unknown fields are ignored.",
       "properties": {
@@ -8029,6 +8044,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         "size": {
           "$ref": "#/$defs/Size",
           "description": "Width and height of the box, in canvas pixels. Each must be greater than zero."
+        },
+        "surface": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Surface"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "How a card's own surface is drawn in a 3D scene (ADR-0151 decision 10): lit by the\nscene's lights, and whether its back shows. Absent draws it as every card was\ndrawn before: unlit, its back shown. A model ignores it."
         },
         "tilt_deg": {
           "$ref": "#/$defs/Finite32",
@@ -14573,6 +14599,41 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "string"
         }
       ]
+    },
+    "Surface": {
+      "description": "A card's surface (ADR-0151 decision 10): [`ItemGeometry::surface`].\n\nOn the wire every field may be omitted for its default, which today's cards behave\nas. [`ItemGeometry::check_drawable`] bounds the numbers.",
+      "properties": {
+        "back": {
+          "$ref": "#/$defs/CardBack",
+          "default": "show",
+          "description": "Whether the card's back, its picture mirrored, is drawn where the camera sees it.\nDefault [`CardBack::Show`]."
+        },
+        "emissive": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "How much of its own picture a lit card adds back unlit, 0 to 4, so a screen still\nglows in a dark set. Default 0."
+        },
+        "lit": {
+          "description": "Whether the scene's lights light the card in a 3D scene: its picture is the base\ncolour of a flat glTF quad, shaded by the lights, their shadows and the scene's\nenvironment. With no light of any type, or in a 2D scene, it draws as an unlit\ncard. Default `false`.",
+          "type": "boolean"
+        },
+        "metalness": {
+          "$ref": "#/$defs/Finite32",
+          "default": 0.0,
+          "description": "As a model material's metalness, 0 to 1. Default 0."
+        },
+        "roughness": {
+          "$ref": "#/$defs/Finite32",
+          "default": 1.0,
+          "description": "As a model material's roughness, 0 to 1. Default 1."
+        },
+        "shadows": {
+          "default": true,
+          "description": "Whether a lit card receives the shadows of the scene's lights. Default `true`.",
+          "type": "boolean"
+        }
+      },
+      "type": "object"
     },
     "ThreadProfile": {
       "description": "The threads of one name ([`ProfileInfo::threads`]).\n\nJStream names its own threads `jstream-…`, and those are `name`. A thread a library\nor driver loaded into the process started has the name that library gave it, if any:\nthird-party text (ADR-0059), so it is `remote_name`, data to show and never\ninstructions. An unnamed thread has neither.",

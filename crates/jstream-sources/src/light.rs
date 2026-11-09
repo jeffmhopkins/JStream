@@ -143,7 +143,8 @@ impl LightKind {
                     "Color",
                     ParamType::Color { alpha: false },
                     json!("#ffffff"),
-                    "The light's colour.",
+                    "The light's colour. An environment ignores it: its sky colours or \
+                     its image are its colour.",
                 ),
                 p(
                     "intensity",
@@ -220,7 +221,9 @@ impl LightKind {
                     },
                     json!(null),
                     "A source whose picture is the sky instead of the colours, as an \
-                     equirectangular panorama: an HDRI still, or any live source.",
+                     equirectangular panorama: an HDRI still, or any live source. A \
+                     display, window or camera capture lights the sky only while an item \
+                     also shows it.",
                 )),
             ],
             ..kind("light", "Light", true, false)
