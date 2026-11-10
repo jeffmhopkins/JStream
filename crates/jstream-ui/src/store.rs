@@ -1057,6 +1057,7 @@ impl Studio {
         }
         let query_kind = Query::KindDescribe {
             kind_id: kind_id.to_owned(),
+            source_id: None,
         };
         match query(session, query_kind).await? {
             QueryResult::KindDescribe { kind, .. } => {
@@ -1064,6 +1065,24 @@ impl Studio {
                     .update(|d| _ = d.insert(kind_id.to_owned(), kind.clone()));
                 Ok(kind)
             }
+            other => Err(unexpected(other.name())),
+        }
+    }
+
+    /// `kind_id`'s descriptor with `source_id`'s own additions (ADR-0151 decision 7): a
+    /// `model`'s animation names. Asked each time, since they follow the source's file.
+    pub async fn source_descriptor(
+        &self,
+        session: &Session,
+        kind_id: &str,
+        source_id: &SourceId,
+    ) -> Result<KindDescriptor, ControlError> {
+        let describe = Query::KindDescribe {
+            kind_id: kind_id.to_owned(),
+            source_id: Some(source_id.clone()),
+        };
+        match query(session, describe).await? {
+            QueryResult::KindDescribe { kind, .. } => Ok(kind),
             other => Err(unexpected(other.name())),
         }
     }

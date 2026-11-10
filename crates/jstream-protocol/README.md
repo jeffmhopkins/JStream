@@ -343,7 +343,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.119 because a card has a surface: `ItemGeometry`'s `surface`
+`PROTOCOL_VERSION` is 0.123 because `kind.describe` takes an optional `source_id`
+whose own additions the descriptor takes, a `model`'s animation names
+([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 7, #1497);
+0.119 because a card has a surface: `ItemGeometry`'s `surface`
 (`Surface` and `CardBack`, lit by its 3D scene and its back hidden,
 [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 10, #1231);
 0.118 because a box can face the camera: `ItemGeometry`'s
@@ -954,8 +957,12 @@ never a type per kind.
 - `kind.list` returns a `KindSummary` per kind (ID, category, name, version), ordered by
   ID. `kind.describe { kind_id }` returns the `KindDescriptor` and a JSON Schema of its
   settings generated from it (`settings_schema`), or `invalid_argument` on `kind_id` for
-  a kind the engine doesn't have. Kinds are not collection state, so neither result
-  carries `rev`.
+  a kind the engine doesn't have. With a `source_id` (0.123,
+  [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 7) the
+  descriptor takes that source's own additions: a `model` source's `animation`
+  description names the animations its file holds. An unknown source is `not_found`,
+  one of another kind `invalid_argument` on `source_id`. Kinds are not collection state,
+  so neither result carries `rev`.
 - A `ParamDescriptor` has an `id`, a `type` with its constraints flattened into the same
   object (`bool`; `int` and `float` with `min`, `max`, `step`, `unit`; `enum` with
   `options`; `color` with `alpha`; `string` with `multiline` and `max_len`; `asset` with

@@ -138,6 +138,7 @@ pub async fn transition_kinds(control: &dyn Control) -> Vec<KindDescriptor> {
     {
         let describe = Query::KindDescribe {
             kind_id: summary.kind_id,
+            source_id: None,
         };
         if let Ok(QueryResult::KindDescribe { kind, .. }) = query(control, describe).await {
             described.push(kind);

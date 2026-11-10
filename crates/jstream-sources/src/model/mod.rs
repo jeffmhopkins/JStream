@@ -596,6 +596,29 @@ impl Source for ModelSource {
         Ok(())
     }
 
+    /// The `animation` setting's description names the file's animations.
+    fn describe(&self, descriptor: &mut KindDescriptor) {
+        let Some(Base::File(model)) = &self.base else {
+            return;
+        };
+        let names: Vec<&str> = model
+            .rig()
+            .map(|r| r.clips().iter().map(|c| c.name.as_str()).collect())
+            .unwrap_or_default();
+        let Some(param) = descriptor.params.iter_mut().find(|p| p.id == "animation") else {
+            return;
+        };
+        let note = if names.is_empty() {
+            "This file has no animations.".to_owned()
+        } else {
+            format!("This file's animations: {}.", names.join(", "))
+        };
+        param.description = Some(match param.description.take() {
+            Some(text) => format!("{text} {note}"),
+            None => note,
+        });
+    }
+
     fn model(&self) -> Option<ShownModel> {
         self.shown.clone()
     }

@@ -130,6 +130,13 @@ pub enum Query {
     KindDescribe {
         /// The kind to describe, as `kind.list` reports it.
         kind_id: String,
+        /// A source of the kind whose own additions the descriptor takes (since 0.123,
+        /// ADR-0151 decision 7): a `model`'s `animation` setting names the animations
+        /// its file holds. Fails with `not_found` on `source_id` if there is no such
+        /// source, and `invalid_argument` if it is of another kind. Omitted describes
+        /// the kind alone.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_id: Option<SourceId>,
     },
     /// Lists the collection's outputs, ordered by ID, with what each is and where it
     /// sends. Outputs have no display order of their own.

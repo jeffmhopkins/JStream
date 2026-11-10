@@ -495,6 +495,7 @@ fn scanned_clap_plugins_are_audio_filter_kinds() {
         &control,
         Query::KindDescribe {
             kind_id: "clap/org.example.gain".into(),
+            source_id: None,
         },
     ) else {
         panic!("kind.describe");
@@ -1054,6 +1055,7 @@ fn kinds_are_described_and_settings_checked() {
     let Ok(QueryResult::KindDescribe { kind, .. }) = query(
         &control,
         Query::KindDescribe {
+            source_id: None,
             kind_id: "color".into(),
         },
     ) else {
@@ -7535,5 +7537,54 @@ fn plugin_list_is_empty_until_a_plugin_is_installed() {
         QueryResult::PluginList {
             plugins: Vec::new()
         }
+    );
+}
+
+/// `kind.describe` with a `source_id` (ADR-0151 decision 7): the source must exist and
+/// be of the kind, and a kind with nothing of its own to add describes as it would alone.
+#[test]
+fn a_kind_is_described_for_one_of_its_sources() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    batch(
+        &control,
+        Batch::single(Edit::SourceCreate {
+            source_id: SourceId::new("bg"),
+            name: "Background".into(),
+            kind: SourceKind::Builtin {
+                kind: "color".into(),
+            },
+            settings: serde_json::from_value(serde_json::json!({})).expect("a settings map"),
+            duplicated_from: None,
+        }),
+    )
+    .expect("created");
+    let describe = |kind_id: &str, source_id: &str| {
+        query(
+            &control,
+            Query::KindDescribe {
+                kind_id: kind_id.into(),
+                source_id: Some(SourceId::new(source_id)),
+            },
+        )
+    };
+    let alone = query(
+        &control,
+        Query::KindDescribe {
+            kind_id: "color".into(),
+            source_id: None,
+        },
+    )
+    .expect("kind.describe");
+    assert_eq!(describe("color", "bg").expect("kind.describe"), alone);
+    let missing = describe("color", "nope").expect_err("no such source");
+    assert!(
+        matches!(missing.protocol(), Some(ProtocolError::NotFound { .. })),
+        "{missing:?}"
+    );
+    let other = describe("model", "bg").expect_err("another kind");
+    assert!(
+        matches!(other.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field == "source_id"),
+        "{other:?}"
     );
 }

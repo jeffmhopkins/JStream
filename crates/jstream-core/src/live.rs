@@ -916,6 +916,18 @@ impl LiveSources {
         }
     }
 
+    /// Adds what `source_id`'s running instance knows of its own settings to its kind's
+    /// `descriptor` (ADR-0151 decision 7); a source that isn't running adds nothing.
+    pub(crate) fn describe(
+        &self,
+        source_id: &SourceId,
+        descriptor: &mut jstream_protocol::KindDescriptor,
+    ) {
+        if let Some(running) = self.entries.get(source_id).and_then(|e| e.running.as_ref()) {
+            running.source.describe(descriptor);
+        }
+    }
+
     /// The size `source.sizes` reports for `source_id`'s live instance, if it runs and
     /// has made a frame.
     pub(crate) fn size(&self, source_id: &SourceId) -> Option<FrameSize> {

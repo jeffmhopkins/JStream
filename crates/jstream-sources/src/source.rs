@@ -146,6 +146,13 @@ pub trait Source: Send {
         None
     }
 
+    /// Adds what this source knows of its own settings to its kind's `descriptor`, for
+    /// `kind.describe` with a `source_id` (ADR-0151 decision 7): a `model`'s
+    /// `animation` names the animations its file holds. The default adds nothing.
+    fn describe(&self, descriptor: &mut KindDescriptor) {
+        let _ = descriptor;
+    }
+
     /// The 3D model this source shows (ADR-0107), for the `model` kind: when it is
     /// `Some`, the engine draws the model where an item places the source, and
     /// [`frame`](Self::frame) is only a transparent stand-in of the model's size. `None`
