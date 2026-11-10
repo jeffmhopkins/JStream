@@ -8,7 +8,7 @@
 
 use std::sync::Arc;
 
-use jstream_media::model::{AlphaMode, Model, ModelTexture, TextureColor, TextureRef};
+use jstream_media::model::{AlphaMode, Model, ModelTexture, TextureColor, TextureRef, rig};
 use jstream_protocol::{Canvas, ItemGeometry, SceneCamera, Solid, SolidBounds};
 use wgpu::util::DeviceExt;
 
@@ -67,6 +67,9 @@ struct Uploaded {
     bounds: SolidBounds,
     primitives: Vec<GpuPrimitive>,
     materials: Vec<GpuMaterial>,
+    /// A rigged model's palette (ADR-0151 decision 7): its buffer, which
+    /// [`crate::Compositor::pose_model`] writes, its bind group and its slot count.
+    pose: Option<(wgpu::Buffer, wgpu::BindGroup, usize)>,
 }
 
 struct GpuPrimitive {
@@ -251,6 +254,10 @@ pub struct SceneLight {
 pub(crate) struct ModelRuntime {
     material_layout: wgpu::BindGroupLayout,
     frame_layout: wgpu::BindGroupLayout,
+    /// A rig's palette (ADR-0151 decision 7), read by the vertex shader.
+    pose_layout: wgpu::BindGroupLayout,
+    /// The palette of a model without a rig: one identity, which no vertex weighs.
+    rest_pose: wgpu::BindGroup,
     /// The frame bind group with the shadow maps and environment picture of the last
     /// draw that had any, and their textures, so a steady frame makes no bind group
     /// (ADR-0151 decisions 3 and 9).
@@ -338,6 +345,20 @@ impl ModelRuntime {
                 texture_entry(6),
             ],
         });
+        let pose_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("jstream-render-model-pose"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::VERTEX,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Storage { read_only: true },
+                    has_dynamic_offset: false,
+                    min_binding_size: wgpu::BufferSize::new(64),
+                },
+                count: None,
+            }],
+        });
+        let rest_pose = pose_bind(gpu, &pose_layout, &[IDENTITY_MAT4]).1;
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-model"),
             // The filters' colour helpers, so a picture decodes as every pass decodes it.
@@ -351,7 +372,11 @@ impl ModelRuntime {
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("jstream-render-model"),
-            bind_group_layouts: &[Some(&frame_layout), Some(&material_layout)],
+            bind_group_layouts: &[
+                Some(&frame_layout),
+                Some(&material_layout),
+                Some(&pose_layout),
+            ],
             immediate_size: 0,
         });
         let pipeline = |blended: bool| {
@@ -375,6 +400,8 @@ impl ModelRuntime {
                             2 => Float32x4,
                             3 => Float32x2,
                             4 => Float32x4,
+                            5 => Uint16x4,
+                            6 => Float32x4,
                         ],
                     })],
                 },
@@ -432,6 +459,8 @@ impl ModelRuntime {
                         2 => Float32x4,
                         3 => Float32x2,
                         4 => Float32x4,
+                        5 => Uint16x4,
+                        6 => Float32x4,
                     ],
                 })],
             },
@@ -510,6 +539,8 @@ impl ModelRuntime {
         Self {
             material_layout,
             frame_layout,
+            pose_layout,
+            rest_pose,
             shadow_bind: None,
             opaque,
             blended,
@@ -631,6 +662,7 @@ impl ModelRuntime {
                 blended: matches!(m.alpha_mode, AlphaMode::Blend),
             });
         }
+        let rest = model.rig().map(|r| r.rest()).unwrap_or_default();
         let mut primitives = Vec::with_capacity(model.primitives().len());
         for p in model.primitives() {
             if p.indices.is_empty() {
@@ -650,9 +682,17 @@ impl ModelRuntime {
                 {
                     bytes.extend_from_slice(&value.to_le_bytes());
                 }
+                for joint in v.joints {
+                    bytes.extend_from_slice(&joint.to_le_bytes());
+                }
+                for weight in v.weights {
+                    bytes.extend_from_slice(&weight.to_le_bytes());
+                }
+                // Where the rest pose stands it, which a blended primitive sorts by.
+                let at = rig::skin(&rest, v.joints, v.weights, v.position);
                 for c in 0..3 {
-                    min[c] = min[c].min(v.position[c]);
-                    max[c] = max[c].max(v.position[c]);
+                    min[c] = min[c].min(at[c]);
+                    max[c] = max[c].max(at[c]);
                 }
             }
             let vertices = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -688,8 +728,23 @@ impl ModelRuntime {
                 },
                 primitives,
                 materials,
+                pose: (!rest.is_empty()).then(|| {
+                    let (buffer, bind) = pose_bind(gpu, &self.pose_layout, &rest);
+                    (buffer, bind, rest.len())
+                }),
             }),
         })
+    }
+
+    /// Writes `palette` as `model`'s pose for its next draws (ADR-0151 decision 7). A
+    /// model without a rig, or a palette of another length, is left as it is.
+    pub(crate) fn pose(gpu: &Gpu, model: &GpuModel, palette: &[rig::Mat4]) {
+        if let Some((buffer, _, slots)) = &model.inner.pose
+            && *slots == palette.len()
+        {
+            let bytes: Vec<u8> = palette.iter().flatten().flat_map(|v| v.to_le_bytes()).collect();
+            gpu.queue.write_buffer(buffer, 0, &bytes);
+        }
     }
 
     /// The frame bind group for a draw with shadow maps `maps`: the plain one with none,
@@ -842,6 +897,7 @@ impl ModelRuntime {
                     // Drawn as it is: its texels replace the cleared layer's.
                     blended: false,
                 }],
+                pose: None,
             }),
         };
         let draw = ModelDraw {
@@ -891,6 +947,9 @@ impl ModelRuntime {
                 1.0,
             ];
             bytes.extend(f32_bytes(&vertex));
+            // No joints and no weights: it stands where it is.
+            bytes.extend([0u8; 8]);
+            bytes.extend(f32_bytes(&[0.0; 4]));
         }
         let vertices = gpu
             .device
@@ -1060,6 +1119,7 @@ impl ModelRuntime {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &frame_bind, &[]);
+            pass.set_bind_group(2, model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1), &[]);
             let draw_one = |pass: &mut wgpu::RenderPass<'_>, p: &GpuPrimitive| {
                 let Some(material) = model.materials.get(p.material) else {
                     return;
@@ -1158,6 +1218,7 @@ impl ModelRuntime {
             });
             pass.set_pipeline(&self.depth_only);
             pass.set_bind_group(0, &self.frame_bind, &[]);
+            pass.set_bind_group(2, model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1), &[]);
             for p in &model.primitives {
                 let Some(material) = model.materials.get(p.material) else {
                     continue;
@@ -1537,6 +1598,35 @@ fn floor_cut(floor: Option<f32>, view: Option<&jstream_protocol::CameraView>) ->
 
 fn f32_bytes(values: &[f32]) -> Vec<u8> {
     values.iter().flat_map(|v| v.to_le_bytes()).collect()
+}
+
+const IDENTITY_MAT4: rig::Mat4 = [
+    1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+];
+
+/// A palette's storage buffer, holding `palette`, and its bind group.
+fn pose_bind(
+    gpu: &Gpu,
+    layout: &wgpu::BindGroupLayout,
+    palette: &[rig::Mat4],
+) -> (wgpu::Buffer, wgpu::BindGroup) {
+    let bytes: Vec<u8> = palette.iter().flatten().flat_map(|v| v.to_le_bytes()).collect();
+    let buffer = gpu
+        .device
+        .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("jstream-render-model-pose"),
+            contents: &bytes,
+            usage: wgpu::BufferUsages::STORAGE | wgpu::BufferUsages::COPY_DST,
+        });
+    let bind = gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+        label: Some("jstream-render-model-pose"),
+        layout,
+        entries: &[wgpu::BindGroupEntry {
+            binding: 0,
+            resource: buffer.as_entire_binding(),
+        }],
+    });
+    (buffer, bind)
 }
 
 fn upload_texture(gpu: &Gpu, texture: &ModelTexture) -> Result<wgpu::TextureView, RenderError> {
