@@ -663,7 +663,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:469e300ae477e5ef", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:a68714291ae0b226", by = "agent:ptz-builder", note = "PTZ bullet now says profile.get's ptz_cameras (0.122) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots" }
+stamp = { hash = "b3:c2eee1d07e46328a", by = "agent:ptz-builder", note = "PTZ bullet says profile.get's ptz_cameras (0.121) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["ARCH#protocol"."dep:crates/jstream-protocol/README.md#compatibility"]
 stamp = { hash = "b3:b7d5b2a09a619446", by = "agent:claude-settings", note = "#1230: canvas.set_blending added beside canvas.set_frame_rate (0.98 placeholder); the mock keeps the space and undoes it. | merge: Merged wave/alpha5: it brought protocol 0.96 to 0.100 (controller bindings, the pairing network listener, 2D/3D moves, keyframe timing and easings, hotkey and timeline labels) and collection schema 8 to 11. This branch is renumbered on top: protocol 0.101 and schema 12 (v11_to_v12 migration, v12.json fixture, the since-0.101 notes). Its blending text stands beside the wave's, and nothing in the wave touches blend modes or the blending space. | kept from the merged side: This PR: item.set_timing, the timing override field and the three easings at 0.99. The protocol files and the compatibility section gained the merge's #1272, #1280, #1281, #1289, #1299, #1307, #1314, #1315, #1316, #1329, #1364, #1366, #1368 and #1374 (0.95 to 0.98). The body's account holds. | kept from the merged side: Added binding.set/clear, removed_bindings, delete.plan's bindings and the collection's bindings at schema 8 for controller bindings (ADR-0122, protocol 0.96) | merge: Merged wave/alpha5 (page API schema 8, projects 0.94, collection tool, #1272's crates): re-read for what it changed here; the binding text holds beside it | kept from the merged side: Added the Projects bullet for 0.93: the three actions, collection.info, collection.file_changed, what an open does, the path rules, unsupported without a file, no plugin or hotkey. | merge: the merge brought wave/alpha5's #1287 (ADR-0124 page API checkboxes and warnings, protocol 0.93, collection schema Version 8); the projects bullet now says protocol 0.94; 0.93 is ADR-0124's descriptor warning" }
@@ -714,10 +714,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:8db3d20c255dae8e", by = "agent:ptz-builder", note = "PTZ bullet now says profile.get's ptz_cameras (0.122) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots" }
+stamp = { hash = "b3:86fef6a60ad669a7", by = "agent:ptz-builder", note = "PTZ bullet says profile.get's ptz_cameras (0.121) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:f0c7ef92f9808129", by = "agent:ptz-builder", note = "PTZ bullet now says profile.get's ptz_cameras (0.122) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots" }
+stamp = { hash = "b3:f5b810eb2bd3dcde", by = "agent:ptz-builder", note = "PTZ bullet says profile.get's ptz_cameras (0.121) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:7db55527ae06155a", by = "agent:claude", note = "Re-read Control protocol against the PR's whole change: the queries list gained activity.list (0.51, ADR-0083), backed by the new activity.rs (ActivityEntry, MAX_ACTIVITY_ENTRIES 100, MAX_ACTIVITY_SUMMARY_CHARS 256), query.rs's variants, the snapshots and the mock's empty answer with its test; no event is added, so the events line holds. | merge: Merged main's #930 (stats.tick load, 0.48), #933 (preview.subscribe of a draft source, 0.49) and #932 (the capture_target parameter type, 0.50): the events line gains stats.tick's load (#930) and the queries line keeps this PR's activity.list (0.51); the protocol versions now run 0.48, 0.49, 0.50 from main, then 0.51 for activity.list, with version.rs, the README history and both snapshots regenerated at 0.51." }
@@ -831,7 +831,7 @@ stamp = { hash = "b3:4ef7c387f9b650f1", by = "agent:ptz-builder", note = "#1181 
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "profile.get line now mentions 0.92 streams/mixer and 0.103 views via preview.report (ADR-0132) | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/profile.rs"]
-stamp = { hash = "b3:a68af47ee9e69e7a", by = "agent:ptz-builder", note = "PTZ bullet now says profile.get's ptz_cameras (0.122) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots" }
+stamp = { hash = "b3:69d09b3aa8241038", by = "agent:ptz-builder", note = "PTZ bullet says profile.get's ptz_cameras (0.121) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/ptz.rs"]
 stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumbered per the wave queue: the PTZ ADR is now ADR-0146 (0138 went to pulse, #1417), protocol 0.110 becomes 0.111 and collection schema 13 becomes 14; re-read: this section's PTZ text and links now name ADR-0146, and any number it gives matches | merge: merged wave/alpha5, which brought #1334/#1338 agent approval (0.108), #1417 pulse motion-driven effect settings (0.109, schema 13, ADR-0138), #1424 quality.probe (0.110), #1410 H.264 decoder, #1419 Linux desktop window and #1415 JTunnel MIDI; re-read: the PTZ text in this section holds beside them, at protocol 0.111 and schema 14" }
@@ -858,7 +858,7 @@ stamp = { hash = "b3:66b0e04dc862cd93", by = "agent:claude", note = "This PR: it
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:17cfc8f9c922da97", by = "agent:ptz-builder", note = "PTZ bullet now says profile.get's ptz_cameras (0.122) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots" }
+stamp = { hash = "b3:f2822a9144b2d47c", by = "agent:ptz-builder", note = "PTZ bullet says profile.get's ptz_cameras (0.121) reports how each head's link is doing, ADR-0154; matches profile.rs, the fixture and the snapshots; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1548,7 +1548,7 @@ stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Ed
 stamp = { hash = "b3:a4787462bf51ebef", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; the mock checks the aim actions with camera_aim_check and the scene's camera, and answers the home aim; added that; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a68714291ae0b226", by = "agent:ptz-builder", note = "ARCH#protocol only gained profile.get's ptz_cameras sentence; the control client passes queries through unchanged" }
+stamp = { hash = "b3:c2eee1d07e46328a", by = "agent:ptz-builder", note = "ARCH#protocol only gained profile.get's ptz_cameras sentence (0.121); the control client passes queries through unchanged" }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -2031,7 +2031,7 @@ stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a68714291ae0b226", by = "agent:ptz-builder", note = "ARCH#protocol gained the ptz_cameras sentence; profile.get stays a read of engine state, so the core design still holds" }
+stamp = { hash = "b3:c2eee1d07e46328a", by = "agent:ptz-builder", note = "ARCH#protocol gained the ptz_cameras (0.121) sentence; profile.get stays a read of engine state, so the core design still holds" }
 
 ["CRATE-jstream-core#design"."dep:docs/adr/0013-command-model.md"]
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
@@ -2070,7 +2070,7 @@ stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:5226cfa0323700e5", by = "agent:claude", note = "Port of #1429 to wave/alpha5: at_ms counts from State::switched_at, the transition's start, else the sheet's own start; matches engine.rs and SheetFrame::at_ms's doc" }
 
 ["CRATE-jstream-core#frame-sheets"."dep:crates/jstream-protocol/README.md#queries"]
-stamp = { hash = "b3:fb0c7d80b775d4d4", by = "agent:ptz-builder", note = "protocol queries gained the profile.get ptz_cameras paragraph only; frame sheets are untouched" }
+stamp = { hash = "b3:e9b40f0f0da2dcd9", by = "agent:ptz-builder", note = "protocol queries gained the profile.get ptz_cameras paragraph only (0.121); frame sheets are untouched" }
 
 ["CRATE-jstream-core#frame-sheets"."file:crates/jstream-core/src/frames.rs"]
 stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "Shared::sample now pins each slot's frame (Shot::pin) and draw_sheet draws through View.pinned, so a painted source's tile shows it as taken; the text says so, and at_ms is again the time each tile shows (new test a_sheet_shows_a_painted_source_as_each_picture_was_taken)." }
@@ -4083,19 +4083,19 @@ stamp = { hash = "b3:b7d5b2a09a619446", by = "agent:claude-settings", note = "#1
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:8db3d20c255dae8e", by = "agent:ptz-builder", note = "ptz_cameras is a new optional field with serde default, so minor additive per R-API-001; snapshots regenerated" }
+stamp = { hash = "b3:86fef6a60ad669a7", by = "agent:ptz-builder", note = "ptz_cameras is a new optional field with serde default, so minor additive per R-API-001; snapshots regenerated at 0.121 and show only the new field, type and version" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:f0c7ef92f9808129", by = "agent:ptz-builder", note = "ptz_cameras is a new optional field with serde default, so minor additive per R-API-001; snapshots regenerated" }
+stamp = { hash = "b3:f5b810eb2bd3dcde", by = "agent:ptz-builder", note = "ptz_cameras is a new optional field with serde default, so minor additive per R-API-001; snapshots regenerated at 0.121 and show only the new field, type and version" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:17cfc8f9c922da97", by = "agent:ptz-builder", note = "ptz_cameras is a new optional field with serde default, so minor additive per R-API-001; snapshots regenerated" }
+stamp = { hash = "b3:f2822a9144b2d47c", by = "agent:ptz-builder", note = "ptz_cameras is a new optional field with serde default, so minor additive per R-API-001; snapshots regenerated at 0.121 and show only the new field, type and version" }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
-stamp = { hash = "b3:b6e99a6da80fd602", by = "agent:ptz-builder", note = "profile.get's list of shapes now adds PtzCameraProfile since 0.122, matching profile.rs" }
+stamp = { hash = "b3:c7494d335535c1a0", by = "agent:ptz-builder", note = "profile.get's list of shapes now adds PtzCameraProfile since 0.121, matching profile.rs; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:7db55527ae06155a", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**" }
@@ -4116,7 +4116,7 @@ stamp = { hash = "b3:4ef7c387f9b650f1", by = "agent:ptz-builder", note = "#1181 
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "Preview streams entry now names ViewCounts, check_view_label and the limits; profile.get's shapes list ViewProfile; plugin.rs places preview.report under never | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: The protocol number moved from 0.90 to 0.97, the release queue's slot for this PR; nothing else changed | merge: Merged wave/alpha5 (#1271 stream profiles, #1287 page-API warnings, #1269 projects, #1286 main sync): both sides kept; this PR's preview-rate change and 0.95 still hold" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/profile.rs"]
-stamp = { hash = "b3:a68af47ee9e69e7a", by = "agent:ptz-builder", note = "profile.get's list of shapes now adds PtzCameraProfile since 0.122, matching profile.rs" }
+stamp = { hash = "b3:69d09b3aa8241038", by = "agent:ptz-builder", note = "profile.get's list of shapes now adds PtzCameraProfile since 0.121, matching profile.rs; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/quality.rs"]
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
@@ -4152,7 +4152,7 @@ stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:17cfc8f9c922da97", by = "agent:ptz-builder", note = "version bump to 0.122 adds no error code" }
+stamp = { hash = "b3:f2822a9144b2d47c", by = "agent:ptz-builder", note = "version bump to 0.121 adds no error code" }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:8d628078ea55f277", by = "agent:claude", note = "Added ItemGeometry::light_pose (centre at depth_px, back normal), checked against solid.rs and its camera test." }
@@ -4230,7 +4230,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:a9eb484b78224bee", by = "agent:ptz-builder", note = "minor bump for an additive optional field, omitted when empty; design unchanged" }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:17cfc8f9c922da97", by = "agent:ptz-builder", note = "minor bump for an additive optional field, omitted when empty; design unchanged" }
+stamp = { hash = "b3:f2822a9144b2d47c", by = "agent:ptz-builder", note = "minor bump to 0.121 for an additive optional field, omitted when empty; design unchanged" }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -4473,7 +4473,7 @@ stamp = { hash = "b3:4ef7c387f9b650f1", by = "agent:ptz-builder", note = "#1181 
 stamp = { hash = "b3:6f1d758bee8932a6", by = "agent:claude-perf-suite", note = "contents still accurate after adding ViewCounts, ViewProfile and preview.report | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/profile.rs"]
-stamp = { hash = "b3:a68af47ee9e69e7a", by = "agent:ptz-builder", note = "adds PtzCameraProfile in profile.rs, exported from lib.rs, its fixture, and minor 122; the purpose and layer-1 rules still hold" }
+stamp = { hash = "b3:69d09b3aa8241038", by = "agent:ptz-builder", note = "adds PtzCameraProfile in profile.rs, exported from lib.rs, its fixture, and minor 121; the purpose and layer-1 rules still hold; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/ptz.rs"]
 stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumbered per the wave queue: the PTZ ADR is now ADR-0146 (0138 went to pulse, #1417), protocol 0.110 becomes 0.111 and collection schema 13 becomes 14; re-read: this section's PTZ text and links now name ADR-0146, and any number it gives matches | merge: merged wave/alpha5, which brought #1334/#1338 agent approval (0.108), #1417 pulse motion-driven effect settings (0.109, schema 13, ADR-0138), #1424 quality.probe (0.110), #1410 H.264 decoder, #1419 Linux desktop window and #1415 JTunnel MIDI; re-read: the PTZ text in this section holds beside them, at protocol 0.111 and schema 14" }
@@ -4500,7 +4500,7 @@ stamp = { hash = "b3:66b0e04dc862cd93", by = "agent:claude", note = "This PR: it
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:17cfc8f9c922da97", by = "agent:ptz-builder", note = "adds PtzCameraProfile in profile.rs, exported from lib.rs, its fixture, and minor 122; the purpose and layer-1 rules still hold" }
+stamp = { hash = "b3:f2822a9144b2d47c", by = "agent:ptz-builder", note = "adds PtzCameraProfile in profile.rs, exported from lib.rs, its fixture, and minor 121; the purpose and layer-1 rules still hold; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -4512,13 +4512,13 @@ stamp = { hash = "b3:83762eebb87f7e1a", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to pack.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#queries"."body"]
-stamp = { hash = "b3:fb0c7d80b775d4d4", by = "agent:ptz-builder", note = "profile.get paragraph now describes ptz_cameras since 0.122: omitted with no PTZ camera, list order, camera, address, transport, reachable and the sent, replies, dropped, resent, unanswered, refused and busy counts from the thread's start, as PtzCameraProfile defines" }
+stamp = { hash = "b3:e9b40f0f0da2dcd9", by = "agent:ptz-builder", note = "profile.get paragraph describes ptz_cameras since 0.121: omitted with no PTZ camera, list order, camera, address, transport, reachable and the sent, replies, dropped, resent, unanswered, refused and busy counts from the thread's start, as PtzCameraProfile defines; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:7db55527ae06155a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to query.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/profile.rs"]
-stamp = { hash = "b3:a68af47ee9e69e7a", by = "agent:ptz-builder", note = "profile.get paragraph now describes ptz_cameras since 0.122: omitted with no PTZ camera, list order, camera, address, transport, reachable and the sent, replies, dropped, resent, unanswered, refused and busy counts from the thread's start, as PtzCameraProfile defines" }
+stamp = { hash = "b3:69d09b3aa8241038", by = "agent:ptz-builder", note = "profile.get paragraph describes ptz_cameras since 0.121: omitted with no PTZ camera, list order, camera, address, transport, reachable and the sent, replies, dropped, resent, unanswered, refused and busy counts from the thread's start, as PtzCameraProfile defines; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/quality.rs"]
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
@@ -4554,13 +4554,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:52549f9a98549ab2", by = "agent:ptz-builder", note = "opens on 0.122 because profile.get counts each PTZ camera's link (ptz_cameras, ADR-0154, #1423), then keeps 0.120 and earlier; 0.121 is lane D's slot for #1495, whose reason goes in when it lands" }
+stamp = { hash = "b3:ada695a7c9535e08", by = "agent:ptz-builder", note = "opens on 0.121 because profile.get counts each PTZ camera's link (ptz_cameras, ADR-0154, #1423), then 0.120's PTZ controller reason and the earlier ones; minor is 121; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout, and #1495 takes 0.122" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:17cfc8f9c922da97", by = "agent:ptz-builder", note = "opens on 0.122 because profile.get counts each PTZ camera's link (ptz_cameras, ADR-0154, #1423), then keeps 0.120 and earlier; 0.121 is lane D's slot for #1495, whose reason goes in when it lands" }
+stamp = { hash = "b3:f2822a9144b2d47c", by = "agent:ptz-builder", note = "opens on 0.121 because profile.get counts each PTZ camera's link (ptz_cameras, ADR-0154, #1423), then 0.120's PTZ controller reason and the earlier ones; minor is 121; slot swapped with #1495 at lane D's word, so 0.122 became 0.121 throughout, and #1495 takes 0.122" }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
@@ -5433,7 +5433,7 @@ stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "This branch
 stamp = { hash = "b3:a4787462bf51ebef", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; re-read: nothing in this section names what changed (the new actions, query, endpoints or flags), and it still holds; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a68714291ae0b226", by = "agent:ptz-builder", note = "ARCH#protocol only gained the ptz_cameras sentence; the server just relays profile.get" }
+stamp = { hash = "b3:c2eee1d07e46328a", by = "agent:ptz-builder", note = "ARCH#protocol only gained the ptz_cameras (0.121) sentence; the server just relays profile.get" }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the server's Host, Origin and token checks are unchanged" }
@@ -7164,7 +7164,7 @@ stamp = { hash = "b3:cff01f3b41e04a7a", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:262798cb2a522b06", by = "agent:claude", note = "Protocol 0.117 (ADR-0150): studio.set_warm gains an optional gpu_mib (0 for none, at most MAX_WARM_GPU_MIB, left out keeps the limit), studio.get gains warm_gpu_mib and profile.get gains warm (WarmSceneProfile). All additive; the section's account still holds or now names them" }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:a68714291ae0b226", by = "agent:ptz-builder", note = "ARCH#protocol's change is an additive optional field, which the compatibility rule already allows as a minor bump" }
+stamp = { hash = "b3:c2eee1d07e46328a", by = "agent:ptz-builder", note = "ARCH#protocol's change is an additive optional field at 0.121, which the compatibility rule allows as a minor bump" }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:d1ff0b959a53f89d", by = "agent:frame-probe", note = "Re-read R-DEP-002 for ADR-0140's acceptance: it cites ADR-0140 in place of the superseded ADR-0061, and its OpenH264 sentence now says Cisco's binary is also the decoder of the engine's own H.264 streams, as ADR-0140's consequences word it; the openh264 crate bans, deny.toml and lint-deps are unchanged" }

@@ -13665,7 +13665,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The CPU the engine's process used in the window, as a percentage of one core\n(200 is two cores busy), when the host can read it."
             },
             "ptz_cameras": {
-              "description": "The PTZ cameras on this machine's list (since 0.122, ADR-0154), in its order.\nLike `network`, each one's counts run from when its thread started, not over the\nwindow. Omitted when the list is empty.",
+              "description": "The PTZ cameras on this machine's list (since 0.121, ADR-0154), in its order.\nLike `network`, each one's counts run from when its thread started, not over the\nwindow. Omitted when the list is empty.",
               "items": {
                 "$ref": "#/$defs/PtzCameraProfile"
               },
@@ -16072,5 +16072,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.122"
+  "title": "JStream protocol 0.121"
 }

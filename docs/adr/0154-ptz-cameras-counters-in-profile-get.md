@@ -27,7 +27,7 @@ consequence.
 
 <a id="decision"></a>
 ## Decision
-1. **`profile.get` lists the PTZ cameras (protocol 0.122).** `ptz_cameras` gives each
+1. **`profile.get` lists the PTZ cameras (protocol 0.121).** `ptz_cameras` gives each
    camera on the machine's list, in the list's order, as a `PtzCameraProfile`: its name,
    address and port, transport, and whether it answered in the last three seconds.
    It is omitted when the list is empty.
