@@ -208,6 +208,10 @@ pub struct ShownModel {
     pub casts_shadows: bool,
     /// Whether a `scene`-lit model is shadowed by its scene's lights that cast them.
     pub receives_shadows: bool,
+    /// Its rig's palette now (ADR-0151 decision 7), one matrix a slot of
+    /// [`Model::rig`](jstream_media::model::Model::rig); `None` stands it at rest, as
+    /// it is for a model without a rig.
+    pub pose: Option<Arc<[jstream_media::model::rig::Mat4]>>,
 }
 
 /// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.
