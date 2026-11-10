@@ -1146,7 +1146,7 @@ fn measure(
             top: None,
         },
     )? {
-        QueryResult::ProfileGet { profile } => profile,
+        QueryResult::ProfileGet { profile } => *profile,
         _ => ProfileInfo::default(),
     };
     Ok(Ok(Measured {

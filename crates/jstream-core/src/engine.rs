@@ -170,6 +170,9 @@ struct Shared {
     /// folders on the first `font.list` and kept for the engine's life. Never read under
     /// the collection lock: reading them reads every font file.
     fonts: OnceLock<Vec<FontInfo>>,
+    /// The PTZ controller endpoints running (ADR-0153 §2), held weakly so they leave
+    /// `profile.get`'s `ptz_controllers` when their handle drops. Its lock is its own.
+    ptz_controllers: Mutex<Vec<std::sync::Weak<crate::ptz::controller::EndpointStats>>>,
     /// The folders `font.list` reads instead of the OS's, for tests.
     #[cfg(test)]
     font_dirs: Mutex<Option<Vec<PathBuf>>>,
@@ -241,6 +244,7 @@ impl Default for Engine {
                     effect_packs: Mutex::new(None),
                     clap: crate::plugins::scan::ClapScans::default(),
                     fonts: OnceLock::new(),
+                    ptz_controllers: Mutex::new(Vec::new()),
                     #[cfg(test)]
                     font_dirs: Mutex::new(None),
                 }
@@ -1276,6 +1280,27 @@ impl Engine {
         crate::ptz::controller::start(self, setup)
     }
 
+    /// Adds running controller endpoints to `profile.get`'s `ptz_controllers`, and
+    /// forgets the ones that stopped.
+    pub(crate) fn watch_ptz_controllers(
+        &self,
+        endpoints: &[Arc<crate::ptz::controller::EndpointStats>],
+    ) {
+        let mut watched = lock(&self.shared.ptz_controllers);
+        watched.retain(|weak| weak.strong_count() > 0);
+        watched.extend(endpoints.iter().map(Arc::downgrade));
+    }
+
+    /// `profile.get`'s `ptz_controllers`: the endpoints running, in the order they
+    /// opened.
+    fn ptz_controller_profile(&self) -> Vec<jstream_protocol::PtzControllerProfile> {
+        lock(&self.shared.ptz_controllers)
+            .iter()
+            .filter_map(std::sync::Weak::upgrade)
+            .map(|endpoint| endpoint.profile())
+            .collect()
+    }
+
     /// Injects platform backends. `output.start` then runs the media pipeline
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
@@ -2174,8 +2199,11 @@ impl Engine {
             let mut profile = self.shared.profile.profile(*seconds, *top, cpu, inputs);
             profile.network = self.jtunnel_profile();
             profile.warm = lock(&self.shared.state).warm.report().to_vec();
+            profile.ptz_controllers = self.ptz_controller_profile();
             Ok(CallResult::Query {
-                result: QueryResult::ProfileGet { profile },
+                result: QueryResult::ProfileGet {
+                    profile: Box::new(profile),
+                },
             })
         } else if let Call::Action {
             action: action @ (Action::PreviewSubscribe { .. } | Action::PreviewUnsubscribe { .. }),

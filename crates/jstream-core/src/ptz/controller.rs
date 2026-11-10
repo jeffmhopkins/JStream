@@ -14,6 +14,12 @@
 //! Presets live in the endpoint, in memory: "preset set" stores the target camera's aim
 //! now, "preset recall" aims it back there. Nothing a controller sends is stored in the
 //! collection or undone.
+//!
+//! A drive stops when its controller goes quiet (ADR-0153 §1): once the endpoint has
+//! heard nothing from an allowed controller for [`IDLE_STOP`] while an axis it set
+//! moving still moves, it stops those axes, as a TCP endpoint does when its last
+//! connection closes. Each endpoint counts what it answered and dropped, and
+//! `profile.get` reports them (`ptz_controllers`, ADR-0153 §2).
 
 use std::collections::BTreeMap;
 use std::fmt;
@@ -26,13 +32,13 @@ use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::task::{Context, Poll, Waker};
 use std::thread::{self, JoinHandle};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use jstream_control::Control;
 use jstream_protocol::{
     Action, Call, CallResult, CameraAim, CameraAimInfo, Finite32, Hello, MAX_AIM_PAN_DEG,
-    MAX_AIM_TILT_DEG, MAX_AIM_ZOOM, MAX_PTZ_ZOOM_SPEED, PROTOCOL_VERSION, PtzTransport, Query,
-    QueryResult, SceneId,
+    MAX_AIM_TILT_DEG, MAX_AIM_ZOOM, MAX_PTZ_ZOOM_SPEED, PROTOCOL_VERSION, PtzControllerProfile,
+    PtzTransport, Query, QueryResult, SceneId,
 };
 use jstream_visca::{
     Address, Command, Drive, ErrorKind, FocusMode, Inquiry, InquiryValue, Pan, PositionWidth,
@@ -56,6 +62,11 @@ const COUNTS_PER_DEG: f64 = 16.0;
 const MAX_ZOOM_COUNT: f64 = 16384.0;
 /// The zoom step a standard-speed zoom (`8x 01 04 07 02 FF`) drives at, of 1 to 8.
 const STANDARD_ZOOM_STEP: i8 = 4;
+/// How long an endpoint waits, hearing nothing from an allowed controller, before it
+/// stops the drives that controller left moving (ADR-0153 §1). Any message keeps a drive
+/// going, an inquiry included, and a controller that holds its joystick still sends the
+/// next one well inside this.
+pub const IDLE_STOP: Duration = Duration::from_secs(5);
 
 /// What a controller endpoint drives: one scene's camera, or the camera of whatever is
 /// on program or on preview when each command arrives.
@@ -267,12 +278,43 @@ impl PtzControllerSetup {
     }
 }
 
-/// What an endpoint counts: the messages it answered, and the datagrams and connections
-/// it dropped (from an address not allowed, or not VISCA).
+/// What an endpoint counts from when it opened (ADR-0153 §2): the messages it
+/// answered, what it dropped and why, and the drives it stopped for quiet.
 #[derive(Debug, Default)]
 struct Counters {
     answered: AtomicU64,
-    dropped: AtomicU64,
+    unallowed: AtomicU64,
+    malformed: AtomicU64,
+    refused: AtomicU64,
+    idle_stops: AtomicU64,
+}
+
+/// One running endpoint, as `profile.get` reports it: where it listens, what it
+/// drives, and its counts. The engine holds it weakly, so it leaves the report when the
+/// endpoints stop.
+#[derive(Debug)]
+pub(crate) struct EndpointStats {
+    local: SocketAddr,
+    transport: PtzTransport,
+    target: String,
+    counters: Counters,
+}
+
+impl EndpointStats {
+    /// `profile.get`'s entry for it.
+    pub(crate) fn profile(&self) -> PtzControllerProfile {
+        let c = &self.counters;
+        PtzControllerProfile {
+            address: self.local.to_string(),
+            transport: self.transport.name().to_owned(),
+            target: self.target.clone(),
+            answered: c.answered.load(Ordering::Relaxed),
+            unallowed: c.unallowed.load(Ordering::Relaxed),
+            malformed: c.malformed.load(Ordering::Relaxed),
+            refused: c.refused.load(Ordering::Relaxed),
+            idle_stops: c.idle_stops.load(Ordering::Relaxed),
+        }
+    }
 }
 
 /// The running endpoints, from [`Engine::start_ptz_controllers`]. Dropping it closes
@@ -282,7 +324,7 @@ struct Counters {
 pub struct PtzControllers {
     stop: Arc<AtomicBool>,
     threads: Vec<JoinHandle<()>>,
-    endpoints: Vec<(SocketAddr, Arc<Counters>)>,
+    endpoints: Vec<Arc<EndpointStats>>,
 }
 
 impl fmt::Debug for PtzControllers {
@@ -298,7 +340,13 @@ impl PtzControllers {
     /// port 0.
     #[must_use]
     pub fn local_addrs(&self) -> Vec<SocketAddr> {
-        self.endpoints.iter().map(|(addr, _)| *addr).collect()
+        self.endpoints.iter().map(|e| e.local).collect()
+    }
+
+    /// Each endpoint's counts, in the setup's order, as `profile.get` reports them.
+    #[must_use]
+    pub fn profiles(&self) -> Vec<PtzControllerProfile> {
+        self.endpoints.iter().map(|e| e.profile()).collect()
     }
 
     /// How many messages the endpoints answered, in all.
@@ -306,16 +354,22 @@ impl PtzControllers {
     pub fn answered(&self) -> u64 {
         self.endpoints
             .iter()
-            .map(|(_, c)| c.answered.load(Ordering::Relaxed))
+            .map(|e| e.counters.answered.load(Ordering::Relaxed))
             .sum()
     }
 
-    /// How many datagrams and connections the endpoints dropped, in all.
+    /// How many datagrams and connections the endpoints dropped, in all: from an
+    /// address not allowed, not VISCA, or past the connection limit.
     #[must_use]
     pub fn dropped(&self) -> u64 {
         self.endpoints
             .iter()
-            .map(|(_, c)| c.dropped.load(Ordering::Relaxed))
+            .map(|e| {
+                let c = &e.counters;
+                c.unallowed.load(Ordering::Relaxed)
+                    + c.malformed.load(Ordering::Relaxed)
+                    + c.refused.load(Ordering::Relaxed)
+            })
             .sum()
     }
 }
@@ -370,7 +424,12 @@ pub(crate) fn start(
         endpoints: Vec::new(),
     };
     for (c, socket, local) in sockets {
-        let counters = Arc::new(Counters::default());
+        let stats = Arc::new(EndpointStats {
+            local,
+            transport: c.transport,
+            target: c.target.to_string(),
+            counters: Counters::default(),
+        });
         let control = engine.connect();
         ready(control.hello(Hello {
             protocol: PROTOCOL_VERSION,
@@ -380,7 +439,7 @@ pub(crate) fn start(
         let endpoint = Endpoint {
             translator: Translator::new(control, &c),
             allow: Arc::clone(&allow),
-            counters: Arc::clone(&counters),
+            stats: Arc::clone(&stats),
             stop: Arc::clone(&stop),
             transport: c.transport,
         };
@@ -388,8 +447,9 @@ pub(crate) fn start(
             .name("jstream-ptz-in".into())
             .spawn(move || endpoint.run(socket))?;
         running.threads.push(thread);
-        running.endpoints.push((local, counters));
+        running.endpoints.push(stats);
     }
+    engine.watch_ptz_controllers(&running.endpoints);
     Ok(running)
 }
 
@@ -410,7 +470,7 @@ fn ready<F: Future>(future: F) -> F::Output {
 struct Endpoint {
     translator: Translator,
     allow: Arc<[IpAddr]>,
-    counters: Arc<Counters>,
+    stats: Arc<EndpointStats>,
     stop: Arc<AtomicBool>,
     transport: PtzTransport,
 }
@@ -424,8 +484,15 @@ impl Endpoint {
         is_lan(ip) && self.allow.contains(&ip)
     }
 
-    fn drop_one(&self) {
-        self.counters.dropped.fetch_add(1, Ordering::Relaxed);
+    fn count(&self, counter: fn(&Counters) -> &AtomicU64) {
+        counter(&self.stats.counters).fetch_add(1, Ordering::Relaxed);
+    }
+
+    /// Stops the drives a controller left moving once it has been quiet too long.
+    fn check_idle(&mut self) {
+        if self.translator.stop_if_idle(Instant::now()) {
+            self.count(|c| &c.idle_stops);
+        }
     }
 
     fn run(mut self, socket: Socket) {
@@ -440,25 +507,23 @@ impl Endpoint {
         while !self.stop.load(Ordering::Relaxed) {
             let (n, from) = match socket.recv_from(&mut buf) {
                 Ok(got) => got,
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-                    ) =>
-                {
+                Err(_) => {
+                    // A timeout, or a datagram the OS refused: either way, a tick.
+                    self.check_idle();
                     continue;
                 }
-                Err(_) => continue,
             };
             if !self.allowed(from.ip()) {
-                self.drop_one();
+                self.count(|c| &c.unallowed);
+                self.check_idle();
                 continue;
             }
+            self.translator.heard(Instant::now());
             let datagram = &buf[..n];
             let mut out = [0u8; 32];
             if self.transport == PtzTransport::ViscaIp {
                 let Ok(d) = ip::parse(datagram) else {
-                    self.drop_one();
+                    self.count(|c| &c.malformed);
                     continue;
                 };
                 match d.kind {
@@ -470,7 +535,7 @@ impl Endpoint {
                                 let _ = socket.send_to(&out[..len], from);
                             }
                         }
-                        self.counters.answered.fetch_add(1, Ordering::Relaxed);
+                        self.count(|c| &c.answered);
                     }
                     // A controller resets the sequence numbers it sends with; any
                     // number is taken, so there is nothing to reset but the answer.
@@ -483,15 +548,15 @@ impl Endpoint {
                         ) {
                             let _ = socket.send_to(&out[..len], from);
                         }
-                        self.counters.answered.fetch_add(1, Ordering::Relaxed);
+                        self.count(|c| &c.answered);
                     }
-                    _ => self.drop_one(),
+                    _ => self.count(|c| &c.malformed),
                 }
             } else {
                 for reply in self.translator.handle(datagram) {
                     let _ = socket.send_to(reply.as_slice(), from);
                 }
-                self.counters.answered.fetch_add(1, Ordering::Relaxed);
+                self.count(|c| &c.answered);
             }
         }
     }
@@ -500,21 +565,29 @@ impl Endpoint {
         let mut streams: Vec<(TcpStream, Vec<u8>)> = Vec::new();
         while !self.stop.load(Ordering::Relaxed) {
             while let Ok((stream, from)) = listener.accept() {
-                if !self.allowed(from.ip()) || streams.len() >= MAX_CONNECTIONS {
-                    self.drop_one();
+                if !self.allowed(from.ip()) {
+                    self.count(|c| &c.unallowed);
+                    continue;
+                }
+                if streams.len() >= MAX_CONNECTIONS {
+                    self.count(|c| &c.refused);
                     continue;
                 }
                 if stream.set_nonblocking(true).is_ok() {
+                    self.translator.heard(Instant::now());
                     streams.push((stream, Vec::new()));
                 }
             }
             let mut idle = true;
+            let before = streams.len();
+            let mut answered = 0;
             streams.retain_mut(|(stream, pending)| {
                 let mut buf = [0u8; 64];
                 match stream.read(&mut buf) {
                     Ok(0) => return false,
                     Ok(n) => {
                         idle = false;
+                        self.translator.heard(Instant::now());
                         pending.extend_from_slice(&buf[..n]);
                     }
                     Err(e) if e.kind() == io::ErrorKind::WouldBlock => {}
@@ -527,11 +600,21 @@ impl Endpoint {
                             return false;
                         }
                     }
-                    self.counters.answered.fetch_add(1, Ordering::Relaxed);
+                    answered += 1;
                     pending.drain(..len);
                 }
                 true
             });
+            self.stats
+                .counters
+                .answered
+                .fetch_add(answered, Ordering::Relaxed);
+            // The last connection closing is the controller going away: its drives stop
+            // now rather than after the quiet (ADR-0153 §1).
+            if before > 0 && streams.is_empty() && self.translator.stop_drives() {
+                self.count(|c| &c.idle_stops);
+            }
+            self.check_idle();
             if idle {
                 thread::sleep(Duration::from_millis(5));
             }
@@ -551,6 +634,12 @@ struct Translator {
     /// The position width the controller sent last, which position answers use.
     width: PositionWidth,
     presets: BTreeMap<u8, Preset>,
+    /// Each scene whose camera this endpoint's drives left moving, with which of its
+    /// axes (pan, tilt, zoom) still move. A program or preview target can drive one
+    /// scene, then another after a cut, so every one is kept until stopped.
+    driving: BTreeMap<SceneId, [bool; 3]>,
+    /// When an allowed controller was last heard.
+    last_heard: Instant,
 }
 
 /// Why a message wasn't carried out: the reply is "not executable".
@@ -564,7 +653,37 @@ impl Translator {
             visca: Address::new(c.visca).unwrap_or(Address::BROADCAST),
             width: PositionWidth::default(),
             presets: BTreeMap::new(),
+            driving: BTreeMap::new(),
+            last_heard: Instant::now(),
         }
+    }
+
+    /// An allowed controller was heard at `now`.
+    fn heard(&mut self, now: Instant) {
+        self.last_heard = now;
+    }
+
+    /// Stops the axes this endpoint's drive left moving, if its controller has been
+    /// quiet for [`IDLE_STOP`] by `now`. Returns whether it stopped any.
+    fn stop_if_idle(&mut self, now: Instant) -> bool {
+        now.saturating_duration_since(self.last_heard) >= IDLE_STOP && self.stop_drives()
+    }
+
+    /// Stops the axes this endpoint's drives left moving, on every scene's camera.
+    /// Returns whether any were.
+    fn stop_drives(&mut self) -> bool {
+        let driving = std::mem::take(&mut self.driving);
+        let stop = |moving: bool| moving.then_some(0);
+        for (scene_id, [pan, tilt, zoom]) in &driving {
+            // A camera that is gone has nothing left to stop.
+            let _ = self.act(Action::SceneDriveCamera {
+                scene_id: scene_id.clone(),
+                pan: stop(*pan),
+                tilt: stop(*tilt),
+                zoom: stop(*zoom),
+            });
+        }
+        !driving.is_empty()
     }
 
     fn reply(&self, reply: Reply<'_>) -> Option<jstream_visca::Bytes> {
@@ -672,27 +791,52 @@ impl Translator {
     }
 
     fn drive(
-        &self,
+        &mut self,
         pan: Option<i8>,
         tilt: Option<i8>,
         zoom: Option<i8>,
     ) -> Result<(), NotExecutable> {
         let scene_id = self.scene()?;
         self.act(Action::SceneDriveCamera {
-            scene_id,
+            scene_id: scene_id.clone(),
             pan,
             tilt,
             zoom,
-        })
+        })?;
+        self.moved(
+            &scene_id,
+            [pan, tilt, zoom].map(|axis| axis.map(|step| step != 0)),
+        );
+        Ok(())
     }
 
-    fn aim_at(&self, aim: CameraAim, speed: Option<u8>) -> Result<(), NotExecutable> {
+    /// Notes which axes of `scene_id`'s camera now move from this endpoint's drive:
+    /// `Some(true)` an axis it set moving, `Some(false)` one it stopped or aimed, `None`
+    /// one it left alone. Another scene's camera keeps what it had, so a drive left
+    /// moving before a cut still stops (#1496 review N2).
+    fn moved(&mut self, scene_id: &SceneId, axes: [Option<bool>; 3]) {
+        let mut moving = self.driving.remove(scene_id).unwrap_or([false; 3]);
+        for (now, set) in moving.iter_mut().zip(axes) {
+            if let Some(set) = set {
+                *now = set;
+            }
+        }
+        if moving.iter().any(|m| *m) {
+            self.driving.insert(scene_id.clone(), moving);
+        }
+    }
+
+    fn aim_at(&mut self, aim: CameraAim, speed: Option<u8>) -> Result<(), NotExecutable> {
         let scene_id = self.scene()?;
+        let set = [aim.pan_deg, aim.tilt_deg, aim.zoom].map(|axis| axis.is_some().then_some(false));
         self.act(Action::SceneAimCamera {
-            scene_id,
+            scene_id: scene_id.clone(),
             aim,
             speed,
-        })
+        })?;
+        // A glide replaces the drive on the axes it sets, and ends by itself.
+        self.moved(&scene_id, set);
+        Ok(())
     }
 
     fn command(&mut self, command: Command) -> Result<(), NotExecutable> {

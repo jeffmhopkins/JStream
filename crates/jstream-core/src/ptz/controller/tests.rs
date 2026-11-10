@@ -556,3 +556,199 @@ fn endpoints_are_checked_as_the_host_lists_them() {
         "off"
     );
 }
+
+fn ptz_profile(engine: &Engine) -> Vec<PtzControllerProfile> {
+    let control = connected(engine);
+    match block_on(control.call(Call::Query {
+        query: Query::ProfileGet {
+            seconds: None,
+            top: None,
+        },
+    }))
+    .expect("profile.get")
+    .result
+    {
+        CallResult::Query {
+            result: QueryResult::ProfileGet { profile },
+        } => profile.ptz_controllers,
+        other => panic!("{other:?}"),
+    }
+}
+
+/// ADR-0153 §1: a drive stops once its controller has been quiet for `IDLE_STOP`, and
+/// only the axes its own drive left moving stop.
+#[test]
+fn a_quiet_controllers_drive_stops() {
+    let engine = engine();
+    let control = engine.connect();
+    block_on(control.hello(Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: "PTZ controller test".into(),
+    }))
+    .expect("hello");
+    let c = endpoint(
+        PtzTransport::ViscaIp,
+        PtzControllerTarget::Scene(SceneId::new("a")),
+    );
+    let mut t = Translator::new(control, &c);
+    let one = Address::new(1).expect("1");
+    let send = |t: &mut Translator, command: Command| {
+        t.handle(command.encode(one).expect("encodes").as_slice())
+    };
+    let now = Instant::now();
+    t.heard(now);
+    send(
+        &mut t,
+        Command::PanTiltDrive {
+            pan_speed: 1,
+            tilt_speed: 1,
+            pan: Pan::Right,
+            tilt: Tilt::Stop,
+        },
+    );
+    send(&mut t, Command::Zoom(Drive::Plus(Some(0))));
+    assert!(aim_of(&engine, "a").moving);
+    assert!(!t.stop_if_idle(now + IDLE_STOP / 2), "not quiet yet");
+    // An aim on pan and tilt takes those axes over; the zoom drive is still this
+    // endpoint's to stop.
+    send(&mut t, Command::Home);
+    assert_eq!(
+        t.driving,
+        BTreeMap::from([(SceneId::new("a"), [false, false, true])])
+    );
+    assert!(t.stop_if_idle(now + IDLE_STOP), "quiet for IDLE_STOP");
+    let aim = settled(&engine, "a", |_| true);
+    assert!(aim.zoom.get() > 1.0, "{aim:?}");
+    assert!(!t.stop_if_idle(now + IDLE_STOP * 2), "nothing left to stop");
+    // A drive that is stopped by the controller itself leaves nothing to stop either.
+    send(&mut t, Command::Zoom(Drive::Minus(None)));
+    send(&mut t, Command::Zoom(Drive::Stop));
+    assert!(t.driving.is_empty());
+}
+
+/// #1496 review N2: a program target that drives one scene, then another after a cut,
+/// stops both when its controller goes quiet.
+#[test]
+fn a_drive_left_moving_before_a_cut_still_stops() {
+    let engine = engine();
+    let control = engine.connect();
+    block_on(control.hello(Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: "PTZ controller test".into(),
+    }))
+    .expect("hello");
+    let mut t = Translator::new(
+        control,
+        &endpoint(PtzTransport::ViscaIp, PtzControllerTarget::Program),
+    );
+    let one = Address::new(1).expect("1");
+    let pan_right = Command::PanTiltDrive {
+        pan_speed: 1,
+        tilt_speed: 1,
+        pan: Pan::Right,
+        tilt: Tilt::Stop,
+    };
+    let now = Instant::now();
+    t.heard(now);
+    assert_eq!(
+        t.handle(pan_right.encode(one).expect("encodes").as_slice())
+            .iter()
+            .map(|b| b.as_slice().to_vec())
+            .collect::<Vec<_>>(),
+        done()
+    );
+    // Cut: scene `c` (3D, its own camera) goes on program; `a` keeps panning.
+    let studio = connected(&engine);
+    batch(
+        &studio,
+        edits(vec![
+            create("c"),
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("c"),
+                camera: Some(SceneCamera::framing(Canvas::DEFAULT)),
+            },
+        ]),
+    )
+    .expect("scene c");
+    block_on(studio.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("c"),
+            preset_id: None,
+        },
+    }))
+    .expect("cut");
+    assert_eq!(
+        t.handle(pan_right.encode(one).expect("encodes").as_slice())
+            .iter()
+            .map(|b| b.as_slice().to_vec())
+            .collect::<Vec<_>>(),
+        done()
+    );
+    assert!(aim_of(&engine, "a").moving && aim_of(&engine, "c").moving);
+    assert_eq!(t.driving.len(), 2);
+    assert!(t.stop_if_idle(now + IDLE_STOP));
+    assert!(
+        !aim_of(&engine, "a").moving,
+        "the scene cut away from stops too"
+    );
+    assert!(!aim_of(&engine, "c").moving);
+}
+
+/// ADR-0153 §1 and §2: a TCP controller's drive stops when its last connection closes,
+/// and `profile.get` counts each endpoint while it runs.
+#[test]
+fn a_tcp_controllers_drive_stops_when_it_hangs_up_and_profile_get_counts_it() {
+    let engine = engine();
+    assert!(ptz_profile(&engine).is_empty(), "no endpoint yet");
+    let running = start(
+        &engine,
+        vec![endpoint(
+            PtzTransport::Tcp,
+            PtzControllerTarget::Scene(SceneId::new("a")),
+        )],
+        &[LOOPBACK],
+    );
+    let addr = running.local_addrs()[0];
+    let one = Address::new(1).expect("1");
+    let mut tcp = TcpStream::connect(addr).expect("connect");
+    tcp.set_read_timeout(Some(Duration::from_millis(500)))
+        .expect("timeout");
+    let drive = Command::PanTiltDrive {
+        pan_speed: 1,
+        tilt_speed: 1,
+        pan: Pan::Left,
+        tilt: Tilt::Stop,
+    };
+    tcp.write_all(drive.encode(one).expect("encodes").as_slice())
+        .expect("write");
+    let mut got = Vec::new();
+    let until = Instant::now() + Duration::from_secs(2);
+    while got.iter().filter(|&&b| b == 0xFF).count() < 2 {
+        assert!(Instant::now() < until, "replies: {got:?}");
+        let mut buf = [0u8; 16];
+        if let Ok(n) = tcp.read(&mut buf) {
+            got.extend_from_slice(&buf[..n]);
+        }
+    }
+    assert_eq!(got, [0x90, 0x41, 0xFF, 0x90, 0x51, 0xFF]);
+    assert!(aim_of(&engine, "a").moving);
+    drop(tcp);
+    let left = settled(&engine, "a", |_| true);
+    assert!(left.pan_deg.get() < 0.0, "{left:?}");
+    let profile = ptz_profile(&engine);
+    assert_eq!(
+        profile,
+        vec![PtzControllerProfile {
+            address: addr.to_string(),
+            transport: "tcp".into(),
+            target: "scene:a".into(),
+            answered: 1,
+            unallowed: 0,
+            malformed: 0,
+            refused: 0,
+            idle_stops: 1,
+        }]
+    );
+    drop(running);
+    assert!(ptz_profile(&engine).is_empty(), "a stopped endpoint leaves");
+}
