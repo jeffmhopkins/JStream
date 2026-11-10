@@ -22,6 +22,7 @@
 
 mod activity;
 mod activity_log;
+mod aim;
 mod audio;
 mod audio_sources;
 mod audit;
@@ -98,6 +99,7 @@ pub use plugins::supervisor::{
     HostEvent, HostStatus, HostSupervisor, STOP_GRACE, SupervisorPolicy,
 };
 pub use projects::recent_collections;
+pub use ptz::controller::{PtzController, PtzControllerSetup, PtzControllerTarget, PtzControllers};
 pub use ptz::{PtzCamera, PtzSetup};
 pub use runtime::{
     LinkState, LivePublish, OpenPublish, OutputStats, PublishError, RecordingPublish, RtmpPublish,
