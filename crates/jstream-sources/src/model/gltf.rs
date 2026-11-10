@@ -5,8 +5,11 @@
 //! images are `data:` URIs or files beside it in the same asset root, and builds a static
 //! [`Model`] of the default scene: every mesh instance with its node's world transform
 //! baked in, in the scene's axes (glTF's y up becomes y down, and each triangle's winding
-//! is swapped to match). Skins, morph targets, animations, cameras and lights are ignored
-//! (each kind logged once); a required extension the loader lacks is an error naming it.
+//! is swapped to match). A file with skins or animations is rigged instead (ADR-0151
+//! decision 7): its meshes stay in their nodes' or skins' own space, placed by a
+//! [`Rig`]'s palette, with its animations as the rig's clips. Morph targets, cameras and
+//! lights are ignored (each kind logged once); a required extension the loader lacks is
+//! an error naming it.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;

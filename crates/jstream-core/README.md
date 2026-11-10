@@ -1946,6 +1946,16 @@ the maps for that run (`shadows_of`), and every receiving model of the scene dra
 them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
 (`a_card_shadows_a_scene_lit_wall`).
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
+A rigged model ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+decision 7) is posed before it is drawn: `pose` writes its source's `ShownModel::pose`
+to the upload with `Compositor::pose_model`, before its layer, its reflection and its
+view depth or shadow-map draws, so all of them show the same pose. A frame's
+`model_key` counts the pose, so a plan whose only change is the next pose of a clip is
+a new shot, and the wake the source asks for (the next program frame while a clip
+moves) replans it (`golden_a_posed_model_draws_where_its_pose_places_it`). The model's
+box is fitted to its rest pose's bounds, so an animation moves within it and never
+rescales it. `Look::Frame` holds its frame boxed, which keeps a look small now a frame
+carries a pose.
 Without effects the layer is shown as drawn (`GpuKey::ItemBox`); with them it is their
 input, as for canvas space, so they run over the canvas. The item is placed as
 `Placement::Layer`, flat at the canvas's top-left, sorting in a 3D scene by the model's

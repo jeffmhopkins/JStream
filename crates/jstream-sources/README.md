@@ -306,7 +306,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `serde_json`: the default scene's node transforms baked into one mesh, triangles,
   strips and fans, the metallic-roughness material with its five textures (only
   `TEXCOORD_0`), `KHR_materials_unlit` and `KHR_materials_emissive_strength`, with
-  normals and tangents made where the file has none. Skins, morph targets, animations,
+  normals and tangents made where the file has none. A file with skins or animations
+  is rigged ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 7)
+  when its scene is a tree of at most 4096 nodes: each mesh's vertices stay in their
+  node's own space, placed by the node's palette slot, and a skinned mesh's in its bind
+  space, placed by its joints' slots (`JOINTS_0` and `WEIGHTS_0`, the weights scaled to
+  sum to 1; a skin's inverse bind matrices are a MAT4 accessor). The file's animations
+  are the rig's clips, by their names (`animation <n>` for an unnamed one). A joint
+  outside the scene, more than 256 joints, or more than 4096 slots is an error; a scene
+  that isn't a tree is drawn as before, its skins and animations ignored. Morph targets,
   cameras and lights are ignored with an `info` log; a required extension it doesn't
   know, sparse accessors and a URL are errors, `SourceError::Model` naming the file. A
   file the model names must pass `check_asset_path` as a relative path (no `..`, no
@@ -325,7 +333,15 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   or `scene`, lit by the `light` sources of its 3D scene), and `casts_shadows` and
   `receives_shadows` (both default on,
   [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3; settings
-  saved without them read as on) are live. Its frame is a transparent stand-in at the model's bounds, the
+  saved without them read as on) are live, and so are `animation` (a clip by its name,
+  empty for none; a name the file lacks is refused with the names it has),
+  `animation_speed` (0 to 8, default 1) and `animation_loop` (default on; off holds the
+  last frame), ADR-0151 decision 7, which settings saved without them read as none, 1
+  and on. A playing clip poses the model at `t × animation_speed` seconds of the media
+  clock since the source started, looped over the clip or held at its end, so every
+  machine shows the same pose at the same time and a restart starts it again;
+  `ShownModel::pose` is that palette, the rest pose's while no clip plays, and
+  `next_change` asks for the next program frame while it moves. Its frame is a transparent stand-in at the model's bounds, the
   longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
   `Source::model` hands the engine the model, which an item draws in the stand-in's
   place (`jstream-core`'s README).

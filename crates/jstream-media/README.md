@@ -47,7 +47,21 @@ Contents:
   built-in plane, cube, sphere, cylinder and cone, a unit across, and `compute_tangents`
   fills tangents from texture coordinates. `Lighting` (`studio`, `unlit` or `scene`, by
   the lights of its 3D scene, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)) is how a model
-  is lit, which the `model` source sets and the renderer draws.
+  is lit, which the `model` source sets and the renderer draws. A vertex also names up
+  to four palette slots with weights (`joints`, `weights`; 88 bytes on the GPU,
+  `VERTEX_BYTES`), all zero for a model without a rig.
+- **Rigs** (`model::rig`, [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 7): a `Rig` is a node tree (parents first, each node's rest translation,
+  rotation and scale or a fixed matrix), palette `Slot`s (a node, times an inverse bind
+  matrix for a skin's joint) and named `Clip`s of `Channel`s (translation, rotation or
+  scale, with step, linear or cubic-spline keys). `Rig::new` checks parents, nodes and
+  keys against their times, and the caps: 256 joints a skin, 4096 nodes, 4096 slots,
+  16 Mi key values. `Rig::pose(clip, seconds)` works out the palette for a time (a
+  rotation slerped, the short way), and `Rig::rest` the rest pose's, both in the scene's
+  axes: kept in glTF's y up, each slot turned by the flip on both sides. `rig::skin`
+  places one vertex as the GPU does. `Model::rigged` builds a model with its rig, its
+  bounds those of its rest pose, and refuses a weighted vertex naming a slot it hasn't
+  (`ModelError::Joint`), so a model without a rig weighs nothing.
 - **Packets:** `Packet` (codec, keyframe flag, pts, dts no later than pts, non-empty
   shared payload). `Codec` covers the [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)
   baseline, H.264 and AAC, plus HEVC and AV1, the video codecs enhanced RTMP carries

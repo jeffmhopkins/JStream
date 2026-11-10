@@ -680,7 +680,20 @@ face needs it turned over though that cross product isn't, and the raw flag is f
 either alone and true with both. A material with no normal map keeps the interpolated
 normal as it is.
 `upload_model` refuses a primitive whose vertex or index buffer would pass the
-adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl`
+adapter's `max_buffer_size` (wgpu panics there rather than failing). A vertex is 88
+bytes: position, normal, tangent, UV and colour as `f32`s, then four joints as `u16`s
+and four weights.
+
+**Skinning** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
+7). A rigged model's upload holds its palette in a storage buffer (bind group 2, read by
+the vertex shader), its rest pose until `Compositor::pose_model` writes another; a model
+without a rig, and a lit card, bind one shared identity that no vertex weighs. In `vs` a
+vertex with any weight stands at the weighted sum of its joints' matrices times its
+position, its normal turned by that matrix's cofactors (its inverse transpose times its
+determinant, whose sign keeps the normal outward) and its tangent by the matrix, so
+every draw of it (its layer, a view depth, a shadow map) takes the same pose. A
+blended primitive sorts by the middle of its rest pose
+(`golden_model_a_pose_turns_a_rigged_model_on_the_gpu`). `model.wgsl`
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
