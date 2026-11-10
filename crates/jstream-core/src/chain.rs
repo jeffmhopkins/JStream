@@ -864,6 +864,7 @@ impl Chains {
                 }),
             };
             if let Err(error) = drawn {
+                eprintln!("DIAG filter {id} ({kind}) failed: {error}");
                 if !*warned {
                     *warned = true;
                     tracing::warn!(
