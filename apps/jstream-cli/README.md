@@ -87,9 +87,10 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `scene switch <scene-id> [--preset <preset-id>]` | action `scene.switch` (to that scene, with the preset's transition, else the one the engine resolves) |
 | `studio get` | query `studio.get` (the scenes on program and preview) |
 | `studio set-preview <scene-id>` | action `studio.set_preview` |
-| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name, and the webcams a `webcam`'s `device` can, each with its formats on the lines below it) |
+| `capture targets` | query `capture.targets` (the displays and windows a `display` or `window` source's `target` can name, and the webcams a `webcam`'s `device` can, each with its formats, then its camera controls (name, value, range, step, default, and whether the camera sets it itself), on the lines below it) |
 | `font list` | query `font.list` (the installed fonts, each printed as family, style and path, [ADR-0092](../../docs/adr/0092-installed-fonts-query.md)) |
 | `profile get [<seconds>]` | query `profile.get` (where the engine's time went over the last 5, or up to 60, seconds: per drawing thread, unit of drawing work, source and thread, printed as JSON, [ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)) |
+| `quality probe <output-id> [<frames>]` | query `quality.probe` (PSNR and SSIM of a running output's next 3, or up to 10, encoded frames against the frames its encoder was given, printed as JSON, [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)) |
 | `source list` | query `source.list` |
 | `item list <scene-id>` | query `item.list` |
 | `item show\|hide\|toggle <item-id> [--scene <scene-id>]` | action `item.show`, `item.hide` or `item.toggle` (the item's own placement, or the one a keyframe `--scene` overrides, [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)) |
@@ -99,7 +100,10 @@ Global options come before the command: `--json`, `--url <url>`, `--token-file <
 | `output start <id>`, `output stop <id>` | action `output.start`, `output.stop` |
 | `output set-key <id> [--key-file <path>]` | action `output.set_key`, with the key read from the file or stdin |
 | `output clear-key <id>` | action `output.clear_key` |
-| `pair` | action `pairing.start`: prints a one-time code to enter on the device |
+| `collection info` | query `collection.info` (the project file the engine saves to, and the recent ones, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)) |
+| `collection open <path>`, `collection new <path>` | action `collection.open`, `collection.new` (an absolute path on the engine's machine; outputs stop and undo is cleared) |
+| `collection save-as <path>` | action `collection.save_as`; never replaces a file |
+| `pair` | action `pairing.start`: prints a one-time code to enter on the device, and, when the server listens on the network, its addresses and certificate fingerprint |
 | `device list` | query `device.list` |
 | `device revoke <device-id>` | action `device.revoke` (also closes the device's connections) |
 | `edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...` | one batch |
@@ -131,7 +135,8 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   any 3D it can draw from protocol 0.34. It sends no flip (`flip_h` and `flip_v` false):
   the command has no flip argument yet.
   `canvas.set_size <width> <height>` sets the canvas, and
-  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119). Groups
+  `canvas.set_frame_rate <30|60>` sets the base frame rate (ADR-0119), and
+  `canvas.set_blending <srgb|linear>` the space every blend mode mixes in (ADR-0126). Groups
   ([ADR-0024](../../docs/adr/0024-scene-structure.md)) are
   `scene.set_role <scene-id> scene|group` and `item.move <item-id> <scene-id>
   <index>`, and `scene.create` takes an optional trailing `role:group` or `role:scene`:
@@ -151,15 +156,15 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
   its box or over the canvas after it is placed (protocol 0.76).
   `item.set_opacity <item-id> <0..4>` and `item.set_blend <item-id> <mode>` set an
   item's opacity (above 1 a gain on its light, protocol 0.83) and blend mode; the engine
-  draws every mode (protocol 0.47), and `normal_srgb` and `additive_srgb` (0.75) blend
-  as a browser does.
+  draws every mode (protocol 0.47), in the collection's blending space.
   `hotkey.set <chord> <action> <id>` binds a chord (`Ctrl+Shift+KeyS`, `F1`) to
   `scene.switch`, `output.start`, `output.stop` or `output.clear_key` on that scene or
   output, and `hotkey.clear <chord>` unbinds it; any other action is a usage error.
   A `scene.switch` bound here names no transition preset (MCP and the WebSocket API
   can bind one), and the `hotkeys:` table lists a bound preset after the scene.
   Applying a batch prints `removed hotkey <chord>` for each binding its deletes
-  removed, and `dropped the overrides of item <item-id> in scene <scene-id>` for each
+  removed, `removed binding <trigger>` (`MIDI note 36 on channel 10 from Pads`) for
+  each controller binding (the CLI has no command to bind one yet), and `dropped the overrides of item <item-id> in scene <scene-id>` for each
   keyframe override it dropped. Several edits on one line go as **one atomic batch**: one new
   `rev`, or nothing applied. A source kind is `builtin:<kind>` or `scene:<scene-id>`.
   `output.create <output-id> <rtmp-url>` and `output.set_target <output-id>
@@ -228,7 +233,11 @@ Every command except `version`, `help` and `mcp` sends `hello` first, as client
 - **Pairing** ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md)): `pair`
   prints `pairing code: XXXX-XXXX` and how long it stays open; the user enters it on the
   device, which posts it to the server's `/api/v1/pair` for a device token of its own
-  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). The code is
+  ([jstream-server › Design](../../crates/jstream-server/README.md#design)). When the
+  server also listens on the local network, `pair` then prints the pairing page on each
+  of its addresses (`open on the device: <url>/pair`), the certificate's fingerprint, and that the
+  certificate warning is to be passed only if the fingerprint matches
+  ([ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)). The code is
   printed because it is the answer, and is never logged. `device list` prints a table
   of `ID`, `NAME` and when each was paired and last used (Unix seconds), or `no paired
   devices`; `device revoke <id>` prints `device <id> revoked (<request>)`. The server
@@ -280,21 +289,40 @@ for example:
 connects to and judges the run, so a change to the render, encode or output path can be
 measured the same way on every machine (#1220).
 
-- **Scenarios** use only built-in sources that need no hardware, so every run draws the
-  same thing. `basic` is two scenes, each a solid colour and a running timer. `layered`
-  is two scenes of an animated backdrop, three shapes blended over it with transparency,
-  a nested scene tilted in 3D and a timer. `--scenario all` (the default) runs both, one
-  after the other. Every ID the bench creates starts `bench_<scenario>_<pid>_`.
+- **Scenarios.** Three use only built-in sources that need no hardware, so every run
+  draws the same thing. `basic` is two scenes, each a solid colour and a running timer.
+  `layered` is two scenes of an animated backdrop, three shapes blended over it with
+  transparency, a nested scene tilted in 3D and a timer. `small_2d` is two scenes of 48
+  small items each (a tenth of the canvas, in an 8 by 6 grid), drawn from 8 animated
+  backdrops and 8 timers, so each item rebuilds its mip chain whenever its source
+  changes. Four show one outside source, full canvas in the first scene and smaller,
+  turned, over a colour in the second
+  ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)): `media`
+  loops the file `--media <file>` names (on the engine's machine), `browser` shows an
+  animated page the bench writes to `<dir>/bench-page.html`, `display` the primary
+  display and `webcam` the first webcam. Each of the four is skipped, with its reason in
+  the summary and the report, when the engine lists no such source kind, when `media`
+  has no `--media`, or when its source shows no picture within 10 seconds of the
+  recording's start (no display, no camera, no browser runtime). A skipped scenario
+  passes. `--scenario` takes a comma-separated list of names. `all`, the default, runs
+  every scenario except `display` and `webcam`, in that order. Those two capture the
+  machine's screen and camera into the recording and the frame sheets, so they run only
+  when named, as in `--scenario all,display,webcam`. Every ID the bench creates starts `bench_<scenario>_<pid>_`.
 - **A run** creates its scenes and sources in one batch, puts the first scene on program
   with a cut, and starts an MP4 recording of the program to
   `<dir>/bench-<scenario>.mp4`. The measured window opens on the first `stats.tick` with
-  a recorded frame (within 20 seconds, or the run fails) and lasts `--seconds` (5 to 60,
-  default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
+  a recorded frame (within 20 seconds, or the run fails), or for a scenario with an
+  outside source once that source shows a picture, counting from the latest tick then,
+  and lasts `--seconds` (5 to 60, default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
   switches to the other scene with `scene.switch_and_watch` and the `--preset`
-  transition (default `fade`), saving the frame sheet as `<dir>/switch-<n>.png`. At the
+  transition (default `fade`), saving the frame sheet as `<dir>/<scenario>-switch-<n>.png`, then
+  probes the recording's stream with `quality.probe` (three frames, protocol 0.110,
+  [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). At the
   end it waits for one more `stats.tick`, reads `profile.get` over the window, then
   stops and deletes the recording, puts back the scene that was on program, and deletes
   what it created. It cleans up after a failure too.
+- **Kinds.** A scenario that needs a source kind is skipped when `kind.list` fails or
+  lists nothing.
 - **Gates.** Every count is over the window, except two that only make the gates
   stricter: the recording's own dropped frames and packets are its run's totals, so
   they include its start before the first recorded frame, and `profile.get` covers the
@@ -302,16 +330,32 @@ measured the same way on every machine (#1220).
   default (the alpha.5 bar) a run fails on any dropped frame or packet at any stage of
   `stats.tick`'s drop counts or the recording's own, a skipped render tick, a program
   frame over its budget, a recording under 98% of the program's frame rate, or a
-  switch without a frame sheet. `--gates
+  switch without a frame sheet. From `profile.get` (protocol 0.103,
+  [ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)) it also fails
+  on any encoded stream's dropped or late frame (`streams`, outputs and preview streams
+  alike), the mixer's late block or skipped frame, an audio input's underrun or drop
+  (`mixer`), and a client view's placeholder, blank, skipped frame or decode error
+  (`views`; a view's reopens are listed, not gated, since a scene switch reopens the
+  canvas's stream). The view gates read what the clients connected to the engine
+  reported, such as the desktop app's canvas and projectors, and only the views already
+  reported as the window opens: one a client opens or reloads during the run is listed,
+  marked as opened during the run, and not gated, since its first "Starting…" is no
+  regression. With no view, they pass, and the summary says no client reported a view. The probe
+  gates fail a switch whose probe the engine couldn't take (the summary says why), and
+  the worst frame of every probe under 35 dB luma PSNR or 0.95 luma SSIM. `--gates
   <file>` reads a JSON object that overrides the limits it names: the counts
   `capture_frames`, `audio_frames`, `render_ticks`, `encode_frames`, `encode_blocks`,
-  `output_packets`, `recording_dropped_frames`, `recording_dropped_packets` and
-  `failed_switches`, `min_fps_ratio` (the share of the program's rate, 0.98) and
-  `max_over_budget_pct` (0). An unknown field is a usage error.
+  `output_packets`, `recording_dropped_frames`, `recording_dropped_packets`,
+  `failed_switches`, `stream_dropped_frames`, `stream_late_frames`,
+  `mixer_late_blocks`, `mixer_skipped_frames`, `mixer_underrun_frames`,
+  `mixer_dropped_frames`, `view_placeholders`, `view_blanks`, `view_skipped` and
+  `view_decode_errors` and `failed_probes` (each 0), `min_fps_ratio` (the share of the
+  program's rate, 0.98), `max_over_budget_pct` (0), `min_probe_psnr_y` (35) and
+  `min_probe_ssim_y` (0.95). An unknown field is a usage error.
 - **Output.** It prints and writes `<dir>/summary.md`, a table per scenario of each
-  gate's measured value, limit and verdict, and writes `<dir>/report.json` with
+  gate's measured value, limit and verdict after a line per reported view, and writes `<dir>/report.json` with
   everything measured: the drops, the recording's frames, rate, bit rate and drops, the
-  switches and the window's whole `profile.get`. It exits 0 when every gate passed and 4
+  switches with their probes, and the window's whole `profile.get`. It exits 0 when every gate passed and 4
   when one failed (the files are written either way). It exits 5 when a run couldn't
   finish: the recording sent no frame within 20 seconds (on an engine with no H.264
   encoder, say), or the engine answered with something the bench can't read. An engine
@@ -321,9 +365,7 @@ measured the same way on every machine (#1220).
   (not a Windows `\\?\` one, which the engine refuses). So the engine must be able to
   write there: it runs on the same machine, or the path is one both share. Otherwise
   its recording fails to start and the run exits 5.
-- **Not yet:** media, browser, display and webcam scenarios; per-output and preview
-  stream stats in `profile.get`; the clients' received frame rate; an image-quality
-  probe; a CI job (#1220).
+- **Not yet:** a probe of a preview stream (#1220).
 
 **Exit codes.** Provisional until the maintainer confirms the scheme
 ([open question 4](#design)); after that, a released code keeps its meaning.
@@ -413,7 +455,8 @@ depends_on = ["crates/jstream-control/README.md#design"]
   their own edits, so the protocol's `item.add` doc tells them to send the same
   geometry.
 - **The bench is a client like the rest.** It measures only what the protocol reports
-  (`stats.tick`, `profile.get`, `scene.switch_and_watch`), so it runs against any engine
+  (`stats.tick`, `profile.get`, `scene.switch_and_watch`, `quality.probe`, and
+  `kind.list` for which scenarios can run), so it runs against any engine
   the CLI can reach that can write to `--out`, and needs no engine code. It reads events between its calls by
   polling the stream with a no-op waker, which never blocks, and decodes the frame
   sheets' base64 PNG by hand rather than adding a crate for it. Its tests run it on the

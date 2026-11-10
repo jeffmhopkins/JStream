@@ -10,6 +10,7 @@
 mod captures;
 mod devices;
 mod gpu;
+pub(crate) mod pass_guard;
 mod pipeline;
 mod publish;
 mod render;
@@ -23,8 +24,9 @@ pub(crate) use captures::{RenderCaptures, SizeChange, spawn as spawn_captures};
 pub(crate) use captures::{format_fps, pixel_format_name, readable as readable_format};
 pub(crate) use devices::SharedVideoDevices;
 pub(crate) use gpu::SharedGpu;
-pub(crate) use pipeline::DeviceLoss;
+pub(crate) use pass_guard::{PassGuard, SlowPass};
 pub use pipeline::OutputStats;
+pub(crate) use pipeline::{DeviceLoss, GpuEvent};
 #[cfg(test)]
 pub(crate) use pipeline::{DrawError, DrawFn, STOP_DRAIN, gpu_draw, open_capture};
 #[cfg(test)]

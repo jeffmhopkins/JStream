@@ -148,6 +148,7 @@ pub(crate) fn descriptors() -> Vec<KindDescriptor> {
                 float("release_ms", "Release", 0.0, 5000.0, comp.release_ms, "ms"),
                 float("makeup_db", "Makeup gain", 0.0, 24.0, comp.makeup_db, "dB"),
                 ParamDescriptor {
+                    warning: None,
                     id: KEY.into(),
                     ty: ParamType::Source {
                         media: Some(Media::Audio),
@@ -769,6 +770,7 @@ fn filter(id: &str, name: &str, params: Vec<ParamDescriptor>) -> KindDescriptor 
 /// A live number from `min` to `max`, in `unit`.
 fn float(id: &str, label: &str, min: f64, max: f64, default: f32, unit: &str) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty: ParamType::Float {
             min: Some(min),

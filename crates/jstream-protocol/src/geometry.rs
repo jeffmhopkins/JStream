@@ -127,6 +127,92 @@ pub struct ItemGeometry {
     /// local frame, after crop and fit and before rotation. Default `false`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub flip_v: bool,
+    /// In a 3D scene, the box turns about its centre to face the camera (ADR-0151
+    /// decision 2): its `turn_deg` and `tilt_deg` are replaced by the ones that point its
+    /// front at the camera's position, and `rotation_deg` still rolls it. Nothing in a
+    /// 2D scene.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub billboard: bool,
+    /// How a card's own surface is drawn in a 3D scene (ADR-0151 decision 10): lit by the
+    /// scene's lights, and whether its back shows. Absent draws it as every card was
+    /// drawn before: unlit, its back shown. A model ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub surface: Option<Surface>,
+}
+
+/// A card's surface (ADR-0151 decision 10): [`ItemGeometry::surface`].
+///
+/// On the wire every field may be omitted for its default, which today's cards behave
+/// as. [`ItemGeometry::check_drawable`] bounds the numbers.
+#[derive(Clone, Copy, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct Surface {
+    /// Whether the scene's lights light the card in a 3D scene: its picture is the base
+    /// colour of a flat glTF quad, shaded by the lights, their shadows and the scene's
+    /// environment. With no light of any type, or in a 2D scene, it draws as an unlit
+    /// card. Default `false`.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub lit: bool,
+    /// As a model material's roughness, 0 to 1. Default 1.
+    #[serde(default = "Surface::default_roughness")]
+    pub roughness: Finite32,
+    /// As a model material's metalness, 0 to 1. Default 0.
+    #[serde(default)]
+    pub metalness: Finite32,
+    /// How much of its own picture a lit card adds back unlit, 0 to 4, so a screen still
+    /// glows in a dark set. Default 0.
+    #[serde(default)]
+    pub emissive: Finite32,
+    /// Whether the card's back, its picture mirrored, is drawn where the camera sees it.
+    /// Default [`CardBack::Show`].
+    #[serde(default)]
+    pub back: CardBack,
+    /// Whether a lit card receives the shadows of the scene's lights. Default `true`.
+    #[serde(default = "Surface::default_shadows")]
+    pub shadows: bool,
+}
+
+impl Surface {
+    /// The surface every card had before [`ItemGeometry::surface`]: unlit, rough, not
+    /// metal, emitting nothing, its back shown, receiving shadows once lit.
+    pub const DEFAULT: Self = Self {
+        lit: false,
+        roughness: Finite32::ONE,
+        metalness: Finite32::ZERO,
+        emissive: Finite32::ZERO,
+        back: CardBack::Show,
+        shadows: true,
+    };
+
+    fn default_roughness() -> Finite32 {
+        Finite32::ONE
+    }
+
+    fn default_shadows() -> bool {
+        true
+    }
+
+    /// Whether its numbers are in range: roughness and metalness 0 to 1, emissive 0 to 4.
+    pub fn in_range(&self) -> bool {
+        let within = |value: Finite32, high: f32| (0.0..=high).contains(&value.get());
+        within(self.roughness, 1.0) && within(self.metalness, 1.0) && within(self.emissive, 4.0)
+    }
+}
+
+impl Default for Surface {
+    fn default() -> Self {
+        Self::DEFAULT
+    }
+}
+
+/// Whether a card's back is drawn (ADR-0151 decision 10).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum CardBack {
+    /// Seen from behind, the card shows its picture mirrored.
+    #[default]
+    Show,
+    /// Seen from behind, the card draws nothing, in any scene.
+    Hide,
 }
 
 /// The collection's canvas: every scene's coordinate space, in whole pixels.
@@ -201,6 +287,10 @@ pub enum GeometryError {
     /// A scene camera's `blur_px` is outside 0 to 64 (ADR-0108).
     #[error("blur_px must be from 0 to 64")]
     Blur,
+    /// A card's `surface` has a roughness or metalness outside 0 to 1, or an emissive
+    /// outside 0 to 4 (ADR-0151 decision 10).
+    #[error("surface roughness and metalness must be from 0 to 1, and emissive from 0 to 4")]
+    Surface,
 }
 
 /// A point in canvas pixels, x right and y down.
@@ -308,6 +398,8 @@ impl ItemGeometry {
             perspective_px: None,
             flip_h: false,
             flip_v: false,
+            billboard: false,
+            surface: None,
         };
         geometry.validate()?;
         Ok(geometry)
@@ -531,6 +623,8 @@ impl ItemGeometry {
             perspective_px: None,
             flip_h: dest_w < 0.0,
             flip_v: dest_h < 0.0,
+            billboard: false,
+            surface: None,
         };
         Ok(Some(LegacyBox {
             geometry,

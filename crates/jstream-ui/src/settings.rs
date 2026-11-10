@@ -2,11 +2,16 @@
 //! settings that belong to the application rather than to a scene or a selected item,
 //! with its pages listed on the left, as OBS's Settings has them.
 //!
-//! - **General** holds "Check for updates at launch" (`updates.rs`).
+//! - **General** holds "Check for updates at launch" (`updates.rs`), whether to ask
+//!   before a new agent connects (`agents.rs`) and "Warm scenes" (`warm.rs`).
 //! - **Plugins** is the WASM automation plugins' list, install and permissions
 //!   (`plugins.rs`).
+//! - **Audio plugins** is where the engine looks for CLAP audio effects, what it found
+//!   and Rescan (`clap_plugins.rs`).
 //! - **Devices** pairs remote browsers and lists the paired devices (`pairing.rs`),
-//!   when a server in front of the engine pairs them.
+//!   when a server in front of the engine pairs them. In the desktop app it starts with
+//!   "Allow devices on my network", then "Receive from JTunnel senders" (`jtunnel.rs`),
+//!   then "Accept a PTZ controller" (`ptz_controllers.rs`).
 //!
 //! The shell provides [`SettingsDialog`] as a context, so a menu item or a notice can
 //! open the dialog on the page it is about. The dialog shows one page at a time; a page
@@ -14,8 +19,9 @@
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
+use crate::clap_plugins::ClapPlugins;
 use crate::dialog::Modal;
-use crate::pairing::Pairing;
+use crate::pairing::{NetworkAccessSetting, Pairing};
 use crate::plugins::Plugins;
 use crate::updates::LaunchCheckSetting;
 use leptos::prelude::*;
@@ -27,15 +33,18 @@ pub enum SettingsPage {
     General,
     /// The WASM automation plugins.
     Plugins,
+    /// The CLAP audio plugins the engine scans for.
+    AudioPlugins,
     /// Pairing remote browsers, and the paired devices.
     Devices,
 }
 
 impl SettingsPage {
     /// Every page, in the order the dialog lists them.
-    pub const ALL: [SettingsPage; 3] = [
+    pub const ALL: [SettingsPage; 4] = [
         SettingsPage::General,
         SettingsPage::Plugins,
+        SettingsPage::AudioPlugins,
         SettingsPage::Devices,
     ];
 
@@ -44,6 +53,7 @@ impl SettingsPage {
         match self {
             SettingsPage::General => "General",
             SettingsPage::Plugins => "Plugins",
+            SettingsPage::AudioPlugins => "Audio plugins",
             SettingsPage::Devices => "Devices",
         }
     }
@@ -53,6 +63,7 @@ impl SettingsPage {
         match self {
             SettingsPage::General => "general",
             SettingsPage::Plugins => "plugins",
+            SettingsPage::AudioPlugins => "audio-plugins",
             SettingsPage::Devices => "devices",
         }
     }
@@ -168,9 +179,20 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                 >
                     <h3 class="settings-page-title">{move || page().title()}</h3>
                     {move || match page() {
-                        SettingsPage::General => view! { <LaunchCheckSetting /> }.into_any(),
+                        SettingsPage::General => view! {
+                            <LaunchCheckSetting />
+                            <crate::agents::AskAgentsSetting />
+                            <crate::warm::WarmScenesSetting />
+                        }.into_any(),
                         SettingsPage::Plugins => view! { <Plugins /> }.into_any(),
-                        SettingsPage::Devices => view! { <Pairing /> }.into_any(),
+                        SettingsPage::AudioPlugins => view! { <ClapPlugins /> }.into_any(),
+                        SettingsPage::Devices => view! {
+                            <NetworkAccessSetting />
+                            <crate::jtunnel::JtunnelSettingView />
+                            <crate::ptz_controllers::PtzControllerSettingView />
+                            <Pairing />
+                            <crate::agents::ApprovedAgents />
+                        }.into_any(),
                     }}
                 </div>
             </div>
@@ -199,6 +221,7 @@ mod tests {
     #[test]
     fn the_pages_step_in_order_and_wrap() {
         assert_eq!(SettingsPage::General.step(true), SettingsPage::Plugins);
+        assert_eq!(SettingsPage::Plugins.step(true), SettingsPage::AudioPlugins);
         assert_eq!(SettingsPage::Devices.step(true), SettingsPage::General);
         assert_eq!(SettingsPage::General.step(false), SettingsPage::Devices);
         assert_eq!(SettingsPage::Plugins.step(false), SettingsPage::General);

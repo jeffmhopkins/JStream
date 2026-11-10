@@ -30,12 +30,23 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, Settings…, Video settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (the connection's details, the open project with New project…, Open project…, Save
+  project as… and Open recent, Settings…, Video settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
+- **Projects** (`project.rs`, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)):
+  `OpenProject`, the open project and the recent ones from `collection.info`, which the
+  header reads at start and again on `collection.file_changed` and `events.dropped`, so a
+  switch any client or agent makes shows at once; `None` while the engine has no
+  collection file (`unsupported`). `ProjectDialog` is the New, Open and Save as dialog:
+  a path on the engine's machine, typed or picked with Browse… (`browse.rs`), sent as
+  `collection.new`, `collection.open` or `collection.save_as`, with what an open or new
+  stops. `collection_folder` is the folder Browse… places `collection` assets under: the
+  open project's, or the one the desktop app named at start. Its logic (names, suggested
+  paths, the warning) is tested natively.
 - **About** (`about.rs`): `About`, the About dialog (the app icon, the version and build
   the UI was built as, the engine's protocol, the licence and links, and each installed
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
@@ -43,8 +54,10 @@ Contents ([Design](#design) explains the choices):
   workspace's `repository`. Tested natively.
 - **Video settings** (`video_settings.rs`): File › Video settings… sets the
   collection's base resolution (the canvas, from presets or typed) and its base frame
-  rate, 30 or 60 fps, as OBS's Video settings do. Apply sends only what changed, as one
-  batch of `canvas.set_size` and `canvas.set_frame_rate`, so it is one undo step. Each
+  rate, 30 or 60 fps, as OBS's Video settings do, and its blending space, Browser-style
+  (sRGB) or Linear light (ADR-0126). Apply sends only what changed, as one batch of
+  `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
+  undo step. Each
   output's video mix scales from that picture. Tested natively.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
@@ -65,6 +78,9 @@ Contents ([Design](#design) explains the choices):
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
   the dock the browser kept.
+- **Views** (`views.rs`): `ViewTally`, a view's running counts, `label`, and
+  `report_every_second`, which sends them as `preview.report`
+  ([Views report back](#views)). Tested natively.
 - **Projectors** (`projector.rs`): `Projector`, the page a projector window shows (the
   program, one scene, one source alone or a multiview, filling the window), `Request`
   (what a projector page's query asks for, and its window name), `open`, `pop_out` (a
@@ -73,8 +89,16 @@ Contents ([Design](#design) explains the choices):
 - **Host detection** (`host.rs`): `desktop()`, the engine URL and token the desktop
   app hands the page through the `__JSTREAM_DESKTOP__` global (its own, or its
   same-origin opener's for a projector window), if the page runs there,
-  `desktop_vcam()`, what that global says about the virtual camera, and `browse`,
-  which calls the global's `browse` to open a native dialog. `same_engine` says
+  `desktop_vcam()`, what that global says about the virtual camera,
+  `desktop_wheel_focus_only()`, whether the app hears wheel chords only while it has
+  the focus (macOS without Accessibility, Wayland, or no hotkey listener), `on_macos()`,
+  which picks the wording of a wheel chord's "focus only" note, `browse`,
+  which calls the global's `browse` to open a native dialog, and `desktop_network()`
+  and `allow_network`, which read and save the app's "Allow devices on my network",
+  and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
+  JTunnel senders" as a `JtunnelSetting` (its JSON tested natively), and `desktop_ptz()`
+  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
+  `same_engine` says
   whether the open session is that app's own engine.
 - **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
   file is stored (`place_asset`, tested natively): under the collection folder as a
@@ -99,14 +123,37 @@ Contents ([Design](#design) explains the choices):
   and the kind descriptors read so far, the last failed call, the toast's confirmation
   (`notify`, `apply_noting`), and `keys_changed`, which the outputs panel bumps when a stream key
   is set or cleared. `enable_effect` sends `effect.enable` for a quarantined effect-pack
-  kind and reads `kind.list` again, as a `gpu.device_lost` that quarantined kinds does,
-  since no event reports a quarantine's change. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
+  kind and reads `kind.list` again, as a `gpu.device_lost` or `gpu.effect_slow` that
+  quarantined kinds does. `kinds.changed` (0.107), from a CLAP scan or the effect packs,
+  perhaps another client's, and `events.dropped` read it again too. Also the call helpers (`query`, `apply`, `list_kinds`, `plan_delete`),
   `plan_summary`, `reset_edits` (a keyframe's Reset) and `fresh_id`.
 - **Hotkeys** (`hotkeys.rs`): `Hotkeys`, which runs the collection's hotkey bindings
   while the page has the focus and no dialog or menu is open, and the chord of a key
   press, its label and the edits that bind a chord to an action (a scene's
   `scene.switch`, an item's `item.toggle`, `item.show` or `item.hide`;
-  `Collection::chords_for` lists a row's chords), tested natively.
+  `Collection::chords_for` lists a row's chords), tested natively. A wheel chord
+  (`Ctrl+WheelUp`, ADR-0112 §3) runs once per notch while the page has the focus:
+  `WheelNotches` turns `WheelEvent` deltas into notches (120 pixels, 3 lines or a page
+  each): an event of half a notch or more counts on its own, rounded, so Chromium's
+  notch is one step whether it reports 120 pixels (Linux, at every devicePixelRatio,
+  measured under Xvfb) or 100 (Windows), and smaller events, from a touchpad, add up
+  (#1346 tracks the webviews not measured yet; `wheel-chords.spec.js` drives it in
+  Chromium at a devicePixelRatio of 1 and 2),
+  with Shift held reading the sideways delta browsers report then (`wheel_delta`). The
+  window's non-passive wheel listener prevents the browser's own use of a bound chord,
+  such as Ctrl+wheel zooming the page, only when the direction turned is bound. A hotkey
+  row's Set key, for an action that takes steps, also binds the next turn of the wheel
+  over it with a modifier held (`wheel_chord`; a bare turn still scrolls), and a Follow pointer filter's pane offers
+  the default `Ctrl+WheelUp`/`Ctrl+WheelDown` zoom bindings while neither chord is bound
+  (`default_zoom_edits`, ADR-0112 §4). The desktop
+  app also hears wheel chords on X11 while a follow camera is live
+  ([jstream-desktop › Design](../../apps/jstream-desktop/README.md#design)). In the desktop app,
+  the Settings dialog's General page also holds "Hear hotkeys while another app has the focus", kept as
+  the UI setting `hotkeys.global` (`ui_settings::GLOBAL_HOTKEYS_KEY`, on unless it is
+  `false`), which the desktop app reads to register the bound chords with the OS
+  ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §6). A chord it
+  registers reaches JStream as a hotkey even while the page has the focus, so the page
+  doesn't see that key press.
 - **Menus, dialogs and icons**: `menu.rs` (`ContextMenu`, the right-click menu, and
   `Menus`, the context that opens it with a list of `Entry`s, each with an optional
   check, colour swatch, hint or submenu), `item_menu.rs` (the
@@ -127,8 +174,10 @@ Contents ([Design](#design) explains the choices):
   the sources list (`sources.rs`), what those two share (`tree.rs`: the search box, the
   favourites and labels filter, the star, the tool bar and drag reordering, with the matching and the drop's index
   tested natively), labels (`labels.rs`: the chips, the tag button and its popover, the label manager
-  and the `LabelManager` context that opens it in the Scenes or Sources panel,
-  with the edits they send to a scene or a source tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
+  and the `LabelManager` context that opens it in the Scenes or Sources panel, and each
+  label's Actions view (ADR-0133: its keyframes with a one-batch preset change, and every
+  hotkey and timeline with a check for the label),
+  with the edits they send to a scene, a source, a hotkey or a timeline tested natively), the Inspector (`inspector.rs`: the selected item's box, fit, 3D, crop,
   blending, scene switches and hotkeys in the tabs `Tab` lists, with the stored tab and the
   arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
@@ -141,9 +190,9 @@ Contents ([Design](#design) explains the choices):
   are tested natively), the scene
   Properties dialog (`scene_properties.rs`: `SceneProperties` and the `SceneDialog`
   context that opens it, with the edits OK sends and the hotkey chords tested
-  natively, and its Follow pointer and Camera motion in `camera_moves.rs`: `CameraMoves`,
-  with the followable items, the follow fields and adding a camera modifier tested
-  natively), the Filters
+  natively, and its Follow pointer note and Camera motion in `camera_moves.rs`:
+  `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
+  modifier tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
   Properties dialogs' list and pane, and `FilterUndo`, what the Filters window and the
   Properties dialogs opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
@@ -156,7 +205,11 @@ Contents ([Design](#design) explains the choices):
   field the panels share (`number.rs`: `NumberField`, which can sit inline with a short
   caption and without steppers, and `AxisRow`, a row of such fields under one label, as
   the Inspector's Position, Size and Scale and the scene camera's rows are, #1219,
-  #1214), the Inspector's Motion section (`motion.rs`: its
+  #1214), the custom curve editor the Inspector and the
+  preset form share (`curve.rs`, a point's range, the drawing's path and its frame, which grows to take in
+  an overshoot, tested natively),
+  the keyframe timing fields (`keyframe_timing.rs`, the edit each change sends tested
+  natively), the Inspector's Motion section (`motion.rs`: its
   pure list helpers, adding with a free ID, each kind's fields (a shake's envelope too)
   and switching kind, an audio row's fields, measure switch and what it hears, tested
   natively) and the delete confirmation they and the mixer share (`confirm.rs`); `outputs.rs`: `Outputs`, the outputs panel
@@ -186,12 +239,50 @@ Contents ([Design](#design) explains the choices):
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
-  Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Devices)
+  Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Audio
+  plugins, Devices)
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
+- **Warm scenes** (`warm.rs`, ADR-0117 §7): `WarmScenesSetting`, the General page's
+  "Warm scenes" choice, from "Only the Preview scene" to `MAX_WARM_SCENES` scenes. It
+  reads the budget with `studio.get` each time the page opens and sets it with
+  `studio.set_warm`, putting the old choice back with an error if the engine refuses;
+  it hides for an engine that reports no budget. Beside it, "Warm scenes' GPU memory"
+  ([ADR-0150](../../docs/adr/0150-the-warm-scenes-gpu-byte-budget.md)) offers No limit
+  and 512 MB to 16 GB, and the engine's own value when it is none of those; it sends
+  `studio.set_warm` with the count and `gpu_mib`, and hides for an engine older than
+  0.117, which reports no `warm_gpu_mib`. Setting the count alone leaves `gpu_mib` out,
+  so the limit holds. `budget`, `read`, `set_budget`, `choice_label` and `gpu_label`
+  are tested natively.
+- **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
+  plugins page: the CLAP scan's folders, the effects found and the files that failed
+  (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with
+  its `summary` and `install_folder`, tested natively. Add filter (`panels/filters.rs`)
+  links to it from an audio chain's empty Plugins group.
 - **Pairing** (`pairing.rs`): `Pairing`, the pairing panel on the Settings dialog's
   Devices page, which says no device can pair unless the server pairs devices (start pairing and show the code, list and
-  revoke devices), and the calls behind it, tested natively against `MockEngine` and a
+  revoke devices), `NetworkAccessSetting`, the desktop app's "Allow devices on my
+  network" switch above it, and the calls behind them, tested natively against `MockEngine` and a
   stub that answers them as the server does.
+- **JTunnel** (`jtunnel.rs`): `JtunnelSettingView`, the desktop app's "Receive from
+  JTunnel senders" switch, accepted senders and the senders heard on the network
+  (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
+  check, and `accepts`, whether a heard sender is on the list, tested natively. The
+  store's `jtunnel_changed` counts `jtunnel.senders_changed`.
+- **PTZ controllers** (`ptz_controllers.rs`): `PtzControllerSettingView`, the desktop
+  app's "Accept a PTZ controller" switch, endpoints and allowed controllers on the
+  Devices page, and `with_endpoint`, `with_allowed` and `target_label`, the add rows'
+  checks and how a target reads, tested natively with the setting's JSON.
+- **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
+  `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
+  holds a new agent's hello (Deny, Allow once, Always allow), on
+  `agent.approval_requested` and gone on `agent.approval_resolved`. Closing it leaves
+  the agent waiting and shows the next request in the queue. It holds no session of its
+  own, so Disconnect still closes the socket;
+  `AskAgentsSetting`, the General page's "Ask before a new agent connects" (the UI
+  setting `agents.ask`); and `ApprovedAgents`, the Devices page's list of always-allowed
+  agents with Remove. Each shows only where the server asks (`agent.approved`'s
+  `asking`, answered `unsupported` elsewhere). The calls behind them and the texts are
+  tested natively; the flow end to end in `tests/e2e/specs/agents.spec.js`.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section on the
   Settings dialog's Plugins page, with its install and grant dialogs (drawn over it at the
   page's top level), the calls behind
@@ -226,8 +317,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the upgrade ([ADR-0047](../../docs/adr/0047-browser-pairing-page-and-device-cookie.md),
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
-  app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection` and
-  `browse`) before the page loads,
+  app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
+  `network`, `networkOpen`, `wheelFocusOnly`, `browse`, `allowNetwork`, `jtunnel`,
+  `setJtunnel`, `ptz` and `setPtz`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -270,7 +362,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   trees (spec-panels.md 1 and 2; the prototype calls the second Scene objects), each
   with OBS's tool bar under its rows (`tree.rs`'s `ToolBar`: add, remove, properties,
   filters, one step up and one down), which stays at the panel's foot while the rows
-  scroll. The scene list shows each
+  scroll. A `browser` source whose page is granted the page API has an "API" badge on
+  its Sources row, whose tooltip names what it is granted (`page_api_grant`, ADR-0124).
+  The scene list shows each
   folder level's folders in folder order, then its scenes in display order (ADR-0064),
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
@@ -314,8 +408,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   favourites (the star, `scene.set_meta` or `source.set_meta`), applied in the page; each
   filter also keeps the rows carrying any checked label, and its "Edit labels…" opens
   the label manager over that panel's rows, which renames, recolours, gives icons to,
-  adds (`label.create`) and deletes labels; a delete takes the label off every source
-  and scene that carries it in the same batch;
+  adds (`label.create`) and deletes labels; a delete takes the label off every source,
+  scene, hotkey and timeline that carries it in the same batch; and opens each label's
+  Actions view, which lists the keyframes carrying it and sets the move preset of the
+  ticked ones in one batch (`scene.set_transitions`, one undo step), and puts the label on
+  any hotkey (`hotkey.set_labels`) or timeline (`timeline.set`) or takes it off
+  ([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md));
   rows drag before or after each other (`scene.reorder`, `folder.reorder`,
   `item.reorder`, counted in the whole list so a hidden row doesn't shift the index) with
   pointer events, but not while a filter is on, and a drop on a folder row's middle half
@@ -341,7 +439,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Rename, Transition in and out, Properties…, New scene, New keyframe, New folder and
   Delete scene work, as do a folder's own menu's, and Edit filters… shows the scene's
   chain in the Filters panel; Pop out opens the scene in a projector window, Show in
-  multiview toggles the scene's flag (`scene.set_meta`), Copy and Paste scene do what
+  multiview toggles the scene's flag (`scene.set_meta`), Keep warm toggles its
+  `keep_warm` option (`scene.set_options` with its other options kept, disabled on a
+  keyframe scene, [ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)), Copy and Paste scene do what
   Ctrl+C and Ctrl+V do, and Duplicate scene sends `clipboard.rs`'s copy of it). A
   Sources row's menu for one item starts with Rename, as F2. The
   Transition in and out submenus,
@@ -443,8 +543,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   with `scene_id` for a scene and `source_id` for a source alone, 0.56) on the session's one binary channel, which `Channels`
   reads and hands out by channel number, each picture taking a number never used
   before on the page; a picture falls back to JPEG as the canvas does, says why when its
-  stream ends (a deleted scene), and unsubscribes when it goes. One picture asks for the
-  screen's size in device pixels, at most 1920×1080, at 30 fps. The multiview shows
+  stream ends (a deleted scene), and unsubscribes when it goes. Each picture reports what
+  it did with its pictures as its own view ([Views report back](#views)). One picture asks for the
+  screen's size in device pixels, at most 1920×1080, at the collection's base rate
+  (`canvas::preview::live_fps`, 30 until the collection is read), and opens again when
+  that rate changes. The multiview shows
   program (with preview beside it while the page's studio mode, read from the browser's
   storage and followed as the workspace changes it, is on) over up to 8 scenes that are not groups and are marked "Show in
   multiview" (in the scene Properties dialog), red-framed on program and green on preview. A double click fills the
@@ -474,13 +577,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   shows the prototype's 1200 px while the item has none, and the first change that puts
   the item in 3D sets it, since without one the engine draws 3D orthographically, where
   Depth has no effect), Crop
-  (`item.set_crop`, in source pixels), Blending (the eleven modes, `item.set_blend`, each drawn by
-  the engine since 0.47, with `normal_srgb` and `additive_srgb` since 0.75 shown as
-  "Normal (browser)" and "Additive (browser)", and Opacity, `item.set_opacity`).
+  (`item.set_crop`, in source pixels), Blending (the nine modes, `item.set_blend`, each drawn by
+  the engine since 0.47 in the project's blending space, which File › Video settings…
+  sets, and Opacity, `item.set_opacity`).
   Behaviour holds Scene switches (the item's delay, easing, glide and appear and disappear
   effects, each change one `item.set_transition` with the whole settings, "customised"
-  while they differ from the defaults; not shown in a keyframe, whose items switch as
-  the parent's) and Hotkeys (Toggle, Show and Hide rows, each the chords bound to
+  while they differ from the defaults, and for a custom curve its drawing and four
+  points, kept to x 0 to 1 and y −2 to 3; not shown in a keyframe, whose items switch as
+  the parent's), in a keyframe scene Timing into this keyframe in its place (the
+  keyframe's own delay, easing and duration of the item in moves into it, each blank
+  while it follows the item's or the preset's, with a reset per field and Clear timing,
+  sent as `item.set_timing` or `item.clear_override`, ADR-0129), and Hotkeys (Toggle, Show and Hide rows, each the chords bound to
   the item's `item.toggle`, `item.show` or `item.hide`, naming the keyframe in a keyframe
   scene, as a scene's Hotkey row is,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md)). The Motion tab holds the Motion section (with the modifier count as its hint while folded: a row per motion
@@ -492,7 +599,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   audio), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
-  in a keyframe its override, ADR-0099). A scene shows its object
+  in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
+  (ADR-0138, set over the protocol or MCP) shows "Effect setting" as what it moves, and
+  picking a placement property for it drops its effect target; the section doesn't add
+  one yet). A scene shows its object
   count, the scenes that use it as a source, its Hotkey row (the chords bound to its
   `scene.switch`, an × that unbinds one, and Set key, which binds the next chord pressed
   and takes it from whatever it ran), and its Transition in and out (`scene.set_transitions`, with the
@@ -540,7 +650,18 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `resolution`, `fps` and `pixel_format`) lists "Auto" and what the formats listed for
   the chosen device offer with the other two parts chosen (sizes largest first, rates
   fastest first), and keeps a value the device doesn't offer as "<value> (not
-  offered)". A font setting (an `asset` that takes
+  offered)". A `camera_controls` (a `webcam`'s, protocol 0.105) is a row per control the
+  chosen device lists: its name ("White balance" for `white_balance`), a slider and a
+  number over the control's range, and an Auto box for a control the device can set
+  itself, which disables the slider while ticked. Each change sends the whole object
+  with that control's entry set; a control the setting leaves out shows what the
+  device reports, and `"auto"` stored for a control with no automatic mode shows as
+  manual, so the slider takes it back. Until the list arrives it says it is listing the
+  controls, a device with none says so, and a failed listing says so and asks again when
+  clicked; focusing a control asks again too. The rows are keyed on each control's identity
+  (`control_identity`: everything but the value and auto state the device reports, which
+  each row reads from the latest list), so a re-list after a set redraws none and a
+  slider keeps its focus; only another device or another set of controls does. A font setting (an `asset` that takes
   `ttf` or `otf` and only font types, `takes_fonts`) is a list from `font.list`
   ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)): "Bundled font" (none), each installed font by family and style
   (stored as an `absolute` asset of its path), and "Other file…", which shows the
@@ -554,7 +675,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`place_asset`, tested natively). App assets have no button. A browser page renders
   none. Connected to another engine, the button is disabled and says why. Fields
   come in the descriptor's order, grouped by `group`, advanced
-  ones collapsed, and hidden while their `visible_if` doesn't hold. A type this UI
+  ones collapsed, and hidden while their `visible_if` doesn't hold or names a field that
+  is itself hidden. A field's `warning` (protocol 0.93) shows as a line under it, not only
+  in its tooltip. A type this UI
   doesn't know is shown read-only. A change is checked with the descriptor's own check,
   then sent as a one-parameter `source.set_settings` patch, and Reset sends `null` for
   the default. The descriptor's or the engine's reason shows under the field. A
@@ -594,13 +717,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **The scene Properties dialog** (`scene_properties.rs`) opens from a double click on a
   scene row, the row menu's Properties…, the canvas margin's Scene properties… and a
   nested scene's item. It edits a draft of the name, Transition in and out, the
-  hotkey, the Background color, Show in multiview, Include its audio when nested and the
-  camera: the hotkey field takes the next key press as a chord (the modifiers in the
+  hotkey, the Background color, Show in multiview, Include its audio when nested, Keep
+  warm (hidden on a keyframe scene) and the camera: the hotkey field takes the next key press as a chord (the modifiers in the
   protocol's order, then the key's `code`; Backspace or Delete clears it, Tab,
   Escape and Enter keep their dialog meaning). OK sends what changed as one batch:
   `scene.rename`, `scene.set_transitions`, `scene.set_meta` (the scene's labels, icon,
   colour and favourite kept as the collection has them at OK), `scene.set_options` (the
-  nested audio switch and the background, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
+  nested audio switch, the background and Keep warm, [ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)),
   and `hotkey.clear` of the old chord before
   `hotkey.set` of the new one, bound to a `scene.switch` with the preset the old binding
   named (none for a first hotkey). A chord bound already, or a background that isn't
@@ -614,26 +737,25 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   and Nearest on top as fields in one column under Camera and Rendering headings (each
   label on the row of its control, the check in front of its text); OK sends it as `scene.set_camera`, refused first when
   `SceneCamera::validate` would refuse it. On a keyframe scene the check is Own camera,
-  an override that starts from the parent's camera, offered only while the parent has
-  one (`camera_start`). A note warns when items already have depth or angles
+  an override that starts from the parent's camera, or from the framing camera when the
+  parent is 2D (`camera_start`, [ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)). A note warns when items already have depth or angles
   (`has_3d_items`). Under the camera, a Depth of field check (`depth_of_field`) focuses
   on the camera's target with a 6 px blur and shows Focus distance and Blur, and Focus
   on selection (`focus_on`) sets the focus to the selected item's distance along the
   view ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)).
   With a camera on, a scene's own dialog shows `CameraMoves`
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): Follow pointer,
-  offered while the scene places a display or window capture (`followable`), its fields
-  shown only while it is on and indented under the check, one row each for the
-  item it follows, its zoom, angle, lean and smoothing, and Zoom in and Zoom out
-  hotkey rows (the Inspector's `HotkeyRow`, bound at once to `scene.zoom_camera`); and
+  a note (`follow_note`) naming the capture whose `follow_pointer` filter moves the
+  camera, with Open its filter, or saying how to add one, with Add Follow pointer…, which
+  opens Add filter on the scene's first display or window capture (`followable`)
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)); and
   Camera motion, under its own heading, a list of the camera's modifiers with the Inspector's kinds but audio (a camera hears nothing) and fields
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
-  on the position's x. Both are draft fields, which OK sends as
-  `scene.set_camera_follow` and `scene.set_camera_motion`, refused first when
-  `CameraFollow::check` or `check_camera_motion` would refuse them. A keyframe scene
-  shows neither, since it draws its parent's.
-  Duplicate scene copies the scene's options and camera with it, and its camera motion
-  and follow camera, the follow on the copy of the item it follows. As in the source Properties dialog
+  on the position's x. The list is a draft field, which OK sends as
+  `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
+  A keyframe scene shows neither, since it draws its parent's.
+  Duplicate scene copies the scene's options and camera with it, and its camera motion;
+  the follow camera, a filter on the item it follows, goes with the copy of that item. As in the source Properties dialog
   (`PropertiesAndFilters`), the left side lists a Properties entry, then the scene's
   video chain (a keyframe shows its parent's), whose rows pick a filter whose settings
   then take the right side; filter edits apply at once and Cancel puts them back.
@@ -920,7 +1042,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   disabled, titled with the outputs that use it, while any does, as the engine refuses
   it then. The dialog also offers a codec the engine can download on a person's request
   (`codec.downloads`, `codec_downloads.rs`,
-  [ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), over the
+  [ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), over the
   encoder editor or when nothing is picked: on Linux, Cisco's OpenH264, when it isn't
   installed and the machine has no hardware encoder for H.264 or a profile asks for
   software H.264, and the encoder form offers it under the hardware choice while the
@@ -951,12 +1073,48 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   an engine with no camera at all ("no virtual camera": not running on Windows, or the
   desktop app's `--no-vcam`) gets that, with no registration advice; on Windows 10 the
   sink's own reason ("it needs Windows 11") is shown as it is.
-- **Pairing.** The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
+- **Pairing.** In the desktop app the Devices page starts with "Allow devices on my
+  network" ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md) decision 1),
+  shown only when the global has `network` and `allowNetwork`. It saves through
+  `allowNetwork`, the app's own command, not `ui_settings.set`, so no engine client can
+  turn it on; a failed save puts the box back and says so, and while the box differs
+  from the setting the app started with it says to restart JStream. When the setting
+  was on but the listener didn't open (`networkOpen` false: its port taken), it says
+  devices can't connect. Its note says Windows may ask about its firewall. Below it,
+  "Receive from JTunnel senders" ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
+  decisions 1 and 3), shown only when the global has `jtunnel` and `setJtunnel`: the
+  switch, the accepted senders (name and `address:port`, each with Remove) and an add
+  row. Each change saves the whole setting through `setJtunnel`, the app's own command,
+  never a protocol call; a refused change is undone and the app's reason shown (the
+  page itself only asks for a name, an address and a name no other sender has), and
+  while it differs from the setting the app started with it says to restart JStream.
+  Below them, while the engine's receiver runs, "Senders on this network" lists what
+  `jtunnel.senders` answers, read when the page opens and again on each
+  `jtunnel.senders_changed`, each sender's name (its own text, shown as text) and
+  address, with "Accepted" or Accept…. Accept… asks first, naming the sender and its
+  address and what accepting lets it do (ADR-0123 §3: the first use is explicit), and
+  only Accept in that prompt adds it, through the same save. With the receiver off it
+  says senders show while receiving is on.
+  Below it, "Accept a PTZ controller"
+  ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
+  §3), shown only when the global has `ptz` and `setPtz`: the switch, the endpoints
+  (address and port, transport, VISCA address and what each drives, each with Remove)
+  with an add row whose target picks Program, Preview or a scene of the open
+  collection, and the allowed controller addresses with their own add row. Each change
+  saves the whole setting through `setPtz`, the app's own command, never a protocol
+  call; a refused change is undone and the app's reason shown, and while it differs
+  from the setting the app started with it says to restart JStream.
+  The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
   calls `device.list` when it opens and shows its controls only if that is served: a
   session with no server in front answers `unsupported`, and the Devices page then says
   no device can pair with this session. "Pair a device"
   calls `pairing.start` and shows the code, large, with a countdown from its
-  `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address). The
+  `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address).
+  When the answer carries `network` (a server that also listens on the local network,
+  [ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)), the panel lists
+  the pairing page on each of its addresses (`<url>/pair`) and the certificate's
+  fingerprint, and says to continue past the
+  browser's certificate warning only if the fingerprint matches. The
   code shows until the countdown ends or a device pairs: every 3 seconds the panel
   re-reads `device.list`, and a device ID that wasn't listed when the code was drawn
   means the code was used. A newer code replaces the shown one. Each device shows its
@@ -992,6 +1150,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   when it asks for folders, a box of absolute paths, one a line. Its OK sends
   `plugin.grant` with the ticked choices; for a plugin off as `needs_grant` it reads
   "Grant and turn on" and sends `plugin.enable` after it.
+- **Audio plugins** ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md),
+  protocol 0.106). The Settings dialog's Audio plugins page reads `plugin.clap_scan` each
+  time it opens. It names the first folder searched as where to put a `.clap` file, lists
+  every folder with whether it exists, the effects found and the files that failed with
+  the host's reason (paths and names are shown as data), and a summary line. Rescan
+  sends `plugin.clap_rescan`, which answers once the scan ends, then re-reads `kind.list`
+  (`Studio::relist_kinds`) and the scan. While it runs the button reads "Scanning…" and
+  ignores presses, and it keeps the focus, so Escape still closes the dialog. An engine
+  that hosts no CLAP plugins gets its reason and no Rescan. Add filter shows an audio
+  chain's Plugins group even with no CLAP kind, unless a search is typed: "No CLAP audio
+  plugins found." with a link that opens the page (`SettingsDialog`).
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
   The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
   in Live) reads the scenes (groups left out) and presets with
@@ -1020,7 +1189,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The editor sends each change at once, as a `transition.update` naming only what
   changed (after a kind change, the patch is against the new kind's defaults, as the
   engine applies it): Name, the kind as a Cut / Fade / Move / Stinger segmented control, and for
-  every kind but a cut the duration, the kind's parameters and the easing. Under them a
+  every kind but a cut the duration, the kind's parameters and the easing (a custom
+  curve with its drawing and four points, `curve.rs`). Under them a
   note counts the scenes that override with it ("Overrides: N in, M out."), and Make
   default and Delete show for every preset but the default. The engine's preset wins:
   each change it reports resets the fields to it. The kind's parameters come from
@@ -1169,7 +1339,9 @@ browser, and `mod.rs` is the component.
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
-  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at 30 fps and as
+  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at the
+  collection's base rate (30 or 60, `live_fps`; 30 until the collection is read, and a
+  new stream of the same picture when the rate changes) and as
   sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
@@ -1185,7 +1357,9 @@ browser, and `mod.rs` is the component.
   program, so for that moment the canvas wants the new scene on its own; settling keeps
   the program stream, with its transition, through the switch (#1205). Until a new
   stream's first frame, the last picture stays on the canvas; only a canvas that has
-  shown no picture yet, or whose stream had ended, says the preview is starting. WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
+  shown no picture yet, or whose stream had ended, says the preview is starting. The
+  canvas reports what it did with its pictures as the view `canvas`
+  ([Views report back](#views)). WebCodecs is reached through `js_sys::Reflect`, because `web-sys` has it only
   behind the `web_sys_unstable_apis` build flag. A drag's live values (below) reach
   the output as it moves, so the preview follows the drag.
 - **Selecting and dragging.** A press selects the topmost box under the pointer and
@@ -1291,6 +1465,37 @@ browser, and `mod.rs` is the component.
   run time (`style=move || …`, `attr:style`); a style computed at run time uses a Leptos
   `style:` binding, which sets it through the CSSOM. A test fails on any `style`
   attribute in the crate's sources outside test modules, or in `index.html`.
+
+<a id="views"></a>
+## Views report back
+<!-- @section
+covers = ["crates/jstream-ui/src/views.rs", "crates/jstream-ui/src/canvas/screen.rs"]
+depends_on = ["docs/adr/0132-bench-gates-views-and-quality-probe.md"]
+-->
+
+The canvas and each projector picture are *views* of preview streams, and each tells the
+engine what it did with its pictures, so `profile.get`'s `views` and `jstream bench` see
+what a person saw ([ADR-0132](../../docs/adr/0132-bench-gates-views-and-quality-probe.md)).
+`views.rs` holds a view's `ViewTally`, its running `ViewCounts`, and sends them as
+`preview.report` every second (`REPORT_EVERY`) while they change; a refused report only
+leaves the view unreported. The canvas reports as `canvas`; a projector picture as
+`projector#<channel>:<scene>`, `projector#<channel>:program` or
+`projector#<channel>:source:<source>`, cut to 64 characters: the channel keeps two
+pictures of one scene apart. The Properties dialog's device picture keeps a tally it never reports: it
+is not a view of the show.
+
+- `received` and `shown`: `Screen::show` counts every frame of the view's channel, and
+  its painter every picture it draws.
+- `skipped`: an H.264 frame the feed drops (before the first keyframe, or past the
+  decoder's backlog), and a JPEG that a newer one replaced while it waited.
+- `decode_errors`: the decoder's error callback, a `configure` the browser refused, and
+  a JPEG `createImageBitmap` rejected.
+- `placeholders` and `blanks`: an effect on the view's state counts each change to
+  "Starting…" (the view's first included) and each change to why it has no picture.
+  A scene switch that keeps the last picture until the new stream draws (#1205) counts
+  no placeholder.
+- `reopens`: every `preview.subscribe` for the view after its first, on a scene switch or
+  the JPEG fallback.
 
 <a id="build"></a>
 ## Build

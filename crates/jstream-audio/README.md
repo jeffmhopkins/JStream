@@ -50,7 +50,7 @@ rustdoc: `cargo doc -p jstream-audio --open`. In outline:
 
 | Entry point | What it does |
 |---|---|
-| `Mixer`, `MixerConfig` | the mixer: engine rate, block size (1024 frames), latency (30 ms) and ring size; `poll(now, out)` mixes the next block once the clock has passed it, `mix` mixes a given block |
+| `Mixer`, `MixerConfig` | the mixer: engine rate, block size (1024 frames), latency (30 ms) and ring size; `poll(now, out)` mixes the next block once the clock has passed it, `next_due` says when that is, `mix` mixes a given block |
 | `MixerControl` | adds inputs, buses, output taps and monitors from another thread while `poll` runs, through a command queue the mixer applies without allocating |
 | `InputProducer` | a device stream's `AudioInputHandler`, for `AudioIo::open_input` |
 | `InputControl`, `BusControl` | fader, mute, sends (inputs into buses, post-fader), activity gain, filter chains, meters and `InputStats` / `BusStats` |

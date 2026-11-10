@@ -224,6 +224,7 @@ fn a_batch_reports_the_overrides_it_drops_and_undo_restores_them() {
     );
     let o = ItemOverride {
         motion: Default::default(),
+        timing: None,
         transform: None,
         item_id: ItemId::new("a1"),
         geometry: None,
@@ -1232,6 +1233,7 @@ fn drift_x(
         motion: vec![jstream_protocol::MotionModifier {
             modifier_id: "drift".into(),
             property: jstream_protocol::MotionProperty::X,
+            effect: None,
             kind: jstream_protocol::MotionKind::Drift {
                 rate_per_s: Finite32::new(rate).expect("finite"),
                 wrap: None,
@@ -1358,6 +1360,7 @@ fn pulse(item: &str, scene: Option<&str>) -> Edit {
         motion: vec![jstream_protocol::MotionModifier {
             modifier_id: "pulse".into(),
             property: jstream_protocol::MotionProperty::Opacity,
+            effect: None,
             kind: jstream_protocol::MotionKind::Audio {
                 audio: None,
                 audio_source: None,
@@ -1519,6 +1522,7 @@ fn jolt_and_drift() -> Edit {
             MotionModifier {
                 modifier_id: "jolt".into(),
                 property: MotionProperty::Y,
+                effect: None,
                 kind: MotionKind::Impulse {
                     amplitude: f(40.0),
                     frequency_hz: f(2.0),
@@ -1531,6 +1535,7 @@ fn jolt_and_drift() -> Edit {
             MotionModifier {
                 modifier_id: "drift".into(),
                 property: MotionProperty::X,
+                effect: None,
                 kind: MotionKind::Drift {
                     rate_per_s: f(100.0),
                     wrap: None,
@@ -1615,4 +1620,500 @@ fn a_fire_names_an_item_and_a_well_formed_modifier() {
     }
     // A modifier the item doesn't hold is no error: a keyframe can override its list.
     trigger(&control, "a1", Some("elsewhere")).expect("fires nothing");
+}
+
+/// `item.set_timing` of `item` in keyframe `scene`: its delay, easing and duration in
+/// moves into it (ADR-0129).
+fn timing(
+    scene: &str,
+    item: &str,
+    delay_ms: u32,
+    easing: jstream_protocol::ItemEasing,
+    duration_ms: Option<u32>,
+) -> Edit {
+    Edit::ItemSetTiming {
+        scene_id: SceneId::new(scene),
+        item_id: ItemId::new(item),
+        timing: jstream_protocol::KeyframeTiming {
+            delay_ms: Some(delay_ms),
+            easing: Some(easing),
+            duration_ms,
+        },
+    }
+}
+
+/// Each track's delay, duration and easing, in the shot's order.
+fn timings(engine: &Engine) -> Vec<(f32, f32, Easing)> {
+    let hub = engine.render_hub().load();
+    hub.shot()
+        .tracks()
+        .expect("a transition runs")
+        .iter()
+        .map(|track| match track {
+            Track::Pair { timing, .. } => (timing.delay_ms, timing.duration_ms, timing.easing),
+            other => panic!("every item glides: {other:?}"),
+        })
+        .collect()
+}
+
+/// Two keyframes of one scene stagger its items in opposite orders (ADR-0129): a Move
+/// into `k1` starts `a1` first and `a2` last, a Move into `k2` the other way round, and
+/// each keyframe's easing and duration replace the item's and the preset's only in moves
+/// into it. A Move back into the parent uses the items' own timing.
+#[test]
+fn two_keyframes_stagger_the_same_items_in_opposite_orders() {
+    use jstream_protocol::ItemEasing;
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            variant("k2", "a"),
+            geometry("a1", Some("k"), 300.0),
+            geometry("a2", Some("k"), 700.0),
+            geometry("a1", Some("k2"), 200.0),
+            geometry("a2", Some("k2"), 600.0),
+            timing("k", "a1", 0, ItemEasing::EaseIn, None),
+            timing("k", "a2", 300, ItemEasing::EaseIn, Some(200)),
+            timing("k2", "a1", 300, ItemEasing::Hold, Some(200)),
+            timing("k2", "a2", 0, ItemEasing::Hold, None),
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    assert_eq!(
+        timings(&engine),
+        [(0.0, 400.0, Easing::EaseIn), (300.0, 200.0, Easing::EaseIn)]
+    );
+    switch(&control, "k2", Some("move"));
+    assert_eq!(
+        timings(&engine),
+        [(300.0, 200.0, Easing::Hold), (0.0, 400.0, Easing::Hold)]
+    );
+    switch(&control, "a", Some("move"));
+    assert_eq!(
+        timings(&engine),
+        [(0.0, 400.0, Easing::Linear), (0.0, 400.0, Easing::Linear)]
+    );
+}
+
+/// `item.set_timing` is undone by the edit it returns, a timing with no field clears the
+/// override, and the item's own scene or an out-of-range curve is refused.
+#[test]
+fn a_keyframe_timing_is_undone_cleared_and_checked() {
+    use jstream_protocol::{Bezier, ItemEasing, KeyframeTiming};
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![timing("k", "a1", 120, ItemEasing::Hold, Some(50))],
+    );
+    let override_of =
+        |control: &dyn Control| match super::query(control, jstream_protocol::Query::StateGet)
+            .expect("state")
+        {
+            jstream_protocol::QueryResult::StateGet { scenes, .. } => scenes
+                .into_iter()
+                .find(|scene| scene.scene_id == SceneId::new("k"))
+                .and_then(|scene| scene.overrides.into_iter().next())
+                .and_then(|o| o.timing),
+            other => panic!("not a state: {other:?}"),
+        };
+    let undo = |control: &dyn Control| {
+        let call = jstream_protocol::HistoryCall::new(jstream_protocol::HistoryOp::Undo);
+        block_on(control.call(Call::History(call))).expect("undoes");
+    };
+    let set = override_of(&control);
+    assert_eq!(
+        set.map(|t| (t.delay_ms, t.duration_ms)),
+        Some((Some(120), Some(50)))
+    );
+    apply(
+        &control,
+        vec![Edit::ItemSetTiming {
+            scene_id: SceneId::new("k"),
+            item_id: ItemId::new("a1"),
+            timing: KeyframeTiming::default(),
+        }],
+    );
+    assert_eq!(override_of(&control), None, "an empty timing clears it");
+    undo(&control);
+    assert_eq!(override_of(&control), set, "undo writes it back");
+    undo(&control);
+    assert_eq!(override_of(&control), None, "undo clears what it set");
+    let refused = |timing: KeyframeTiming, scene: &str| {
+        block_on(control.call(Call::Batch(edits(vec![Edit::ItemSetTiming {
+            scene_id: SceneId::new(scene),
+            item_id: ItemId::new("a1"),
+            timing,
+        }]))))
+        .err()
+        .and_then(|error| error.protocol().cloned())
+    };
+    let own = refused(
+        KeyframeTiming {
+            delay_ms: Some(10),
+            ..KeyframeTiming::default()
+        },
+        "a",
+    );
+    assert!(
+        matches!(&own, Some(jstream_protocol::ProtocolError::InvalidArgument { field, .. }) if field.ends_with("scene_id")),
+        "{own:?}"
+    );
+    let f = |v: f32| jstream_protocol::Finite32::new(v).expect("finite");
+    let curve = refused(
+        KeyframeTiming {
+            easing: Some(ItemEasing::CubicBezier(Bezier {
+                x1: f(1.5),
+                y1: f(0.0),
+                x2: f(0.5),
+                y2: f(1.0),
+            })),
+            ..KeyframeTiming::default()
+        },
+        "k",
+    );
+    assert!(
+        matches!(&curve, Some(jstream_protocol::ProtocolError::InvalidArgument { field, .. }) if field.ends_with("timing.easing.cubic_bezier.x1")),
+        "{curve:?}"
+    );
+}
+
+/// The framing camera for the default canvas, turned 20° about the canvas centre so it
+/// looks down at it from above.
+fn tilted_20() -> jstream_protocol::SceneCamera {
+    let framing = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas::DEFAULT);
+    let target = framing.target;
+    let distance = framing.position.z.get() - target.z.get();
+    let (sin, cos) = 20f32.to_radians().sin_cos();
+    jstream_protocol::SceneCamera {
+        position: jstream_protocol::Vec3 {
+            x: target.x,
+            y: Finite32::new(target.y.get() - distance * sin).expect("finite"),
+            z: Finite32::new(target.z.get() + distance * cos).expect("finite"),
+        },
+        ..framing
+    }
+}
+
+/// A Move from a 2D keyframe family's parent to its keyframe with a camera tilted 20°
+/// glides (ADR-0128): every item pairs, and the tracks are seen through a camera moving
+/// from the framing camera, which draws the 2D side as 2D does, to the tilted one.
+#[test]
+fn a_move_from_2d_to_a_tilted_keyframe_glides() {
+    use jstream_protocol::{Canvas, SceneCamera};
+    let engine = family();
+    let control = connected(&engine);
+    let tilted = tilted_20();
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let shot = hub.shot();
+    let tracks = shot.tracks().expect("a transition runs");
+    assert_eq!(tracks.len(), 2);
+    assert!(
+        tracks
+            .iter()
+            .all(|track| matches!(track, Track::Pair { .. })),
+        "every item glides: {tracks:?}"
+    );
+    let framing = SceneCamera::framing(Canvas::DEFAULT);
+    let start = shot.track_cameras(0.0).expect("a transition runs");
+    assert!(
+        start.iter().all(|camera| *camera == Some(framing)),
+        "{start:?}"
+    );
+    // Linear over 400 ms: halfway at 200.
+    let half = jstream_render::transition::lerp_camera(&framing, &tilted, 0.5);
+    let mid = shot.track_cameras(200.0).expect("a transition runs");
+    assert!(mid.iter().all(|camera| *camera == Some(half)), "{mid:?}");
+    let end = shot.track_cameras(400.0).expect("a transition runs");
+    assert!(end.iter().all(|camera| *camera == Some(tilted)), "{end:?}");
+    // And back: the Move out of 3D ends on the framing camera, then draws 2D.
+    switch(&control, "a", Some("move"));
+    let hub = engine.render_hub().load();
+    let back = hub.shot();
+    let tracks = back.tracks().expect("a transition runs");
+    assert!(
+        tracks
+            .iter()
+            .all(|track| matches!(track, Track::Pair { .. }))
+    );
+    let end = back.track_cameras(400.0).expect("a transition runs");
+    assert!(end.iter().all(|camera| *camera == Some(framing)), "{end:?}");
+}
+
+/// A Move between 2D and 3D fades where the 2D side has an item the framing camera
+/// can't draw as 2D does (ADR-0128): a tilted item with no perspective of its own.
+#[test]
+fn a_move_from_2d_with_a_tilted_item_into_3d_fades() {
+    let engine = family();
+    let control = connected(&engine);
+    let mut tilted_item = at(100.0);
+    tilted_item.tilt_deg = Finite32::new(30.0).expect("finite");
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::ItemSetGeometry {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                geometry: tilted_item,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted_20()),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let tracks = hub.shot().tracks().expect("a transition runs");
+    assert!(
+        !tracks
+            .iter()
+            .any(|track| matches!(track, Track::Pair { .. })),
+        "it fades: {tracks:?}"
+    );
+}
+
+/// A Move between 2D and 3D fades where the 2D side has a billboard (ADR-0151 decision
+/// 2): flat in 2D, it would turn to face the framing camera and snap flat at the end.
+#[test]
+fn a_move_from_2d_with_a_billboard_into_3d_fades() {
+    let engine = family();
+    let control = connected(&engine);
+    let mut billboard = at(100.0);
+    billboard.billboard = true;
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::ItemSetGeometry {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                geometry: billboard,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted_20()),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let tracks = hub.shot().tracks().expect("a transition runs");
+    assert!(
+        !tracks
+            .iter()
+            .any(|track| matches!(track, Track::Pair { .. })),
+        "it fades: {tracks:?}"
+    );
+}
+
+/// An item off the canvas's centre with its own perspective at the framing camera's focal
+/// length still fades (ADR-0128 §2): its perspective projects about its own centre, the
+/// camera's about the canvas's, so gliding would make it jump on the first frame.
+#[test]
+fn a_move_from_2d_with_an_off_centre_item_at_the_framing_focal_length_fades() {
+    use jstream_protocol::{Canvas, SceneCamera};
+    let engine = family();
+    let control = connected(&engine);
+    let focal = SceneCamera::framing(Canvas::DEFAULT)
+        .view(Canvas::DEFAULT)
+        .expect("the framing camera has a view")
+        .focal_px();
+    let mut off_centre = at(100.0);
+    off_centre.tilt_deg = Finite32::new(30.0).expect("finite");
+    off_centre.perspective_px = Some(Finite32::new(focal).expect("finite"));
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::ItemSetGeometry {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                geometry: off_centre,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted_20()),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let tracks = hub.shot().tracks().expect("a transition runs");
+    assert!(
+        !tracks
+            .iter()
+            .any(|track| matches!(track, Track::Pair { .. })),
+        "it fades: {tracks:?}"
+    );
+}
+
+// Motion that drives an effect's settings (ADR-0138).
+
+/// `a1`'s motion: a sine of `amplitude` over one second on its `halo` glow's `param`.
+fn pulse_halo(param: &str, amplitude: f32) -> Edit {
+    Edit::ItemSetMotion {
+        item_id: ItemId::new("a1"),
+        scene_id: None,
+        motion: vec![jstream_protocol::MotionModifier {
+            modifier_id: "pulse".into(),
+            property: jstream_protocol::MotionProperty::Effect,
+            effect: Some(jstream_protocol::MotionEffect {
+                filter_id: jstream_protocol::FilterId::new("halo"),
+                param: param.into(),
+            }),
+            kind: jstream_protocol::MotionKind::Oscillate {
+                shape: jstream_protocol::MotionShape::Sine,
+                amplitude: Finite32::new(amplitude).expect("finite"),
+                period_ms: 1000,
+                phase: Finite32::ZERO,
+            },
+            clock: jstream_protocol::MotionClock::Engine,
+            enabled: true,
+        }],
+    }
+}
+
+/// `a1`'s `halo` glow, at radius 4.
+fn halo() -> Edit {
+    use jstream_protocol::{FilterChain, FilterId, FilterOwner};
+    Edit::FilterAdd {
+        owner: FilterOwner::Item {
+            item_id: ItemId::new("a1"),
+        },
+        chain: FilterChain::Video,
+        filter_id: FilterId::new("halo"),
+        kind: "glow".into(),
+        settings: serde_json::from_value(json!({"radius": 4.0})).expect("settings"),
+        enabled: None,
+        index: None,
+    }
+}
+
+/// The settings of `a1`'s effects in scene `a` as drawn at `at`.
+fn drawn_effects(engine: &Engine, at: jstream_media::MediaTime) -> Vec<Settings> {
+    let owner = crate::chain::ChainOwner::Item(SceneId::new("a"), ItemId::new("a1"));
+    engine
+        .render_hub()
+        .load()
+        .shot()
+        .drawn_settings(&owner, at)
+        .expect("a1's effects run")
+}
+
+/// A modifier on an effect's setting moves it each frame, kept within the range its
+/// kind gives it, leaves the item's box where it is, and pads the layer for the most
+/// it reaches (ADR-0138).
+#[test]
+fn a_modifier_drives_an_effect_setting_within_its_range() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![halo(), pulse_halo("radius", 20.0)]);
+    let radius = |at: f64| {
+        drawn_effects(&engine, secs(at))[0]
+            .get("radius")
+            .and_then(serde_json::Value::as_f64)
+            .expect("a number")
+    };
+    // A quarter period in, the sine is at its top: 4 + 20.
+    assert!((radius(0.25) - 24.0).abs() < 1e-3, "{}", radius(0.25));
+    // Three quarters in, at its bottom: 4 - 20, kept at the glow's least radius, 0.
+    assert_eq!(radius(0.75), 0.0);
+    // On the period, it adds 0 and the chain draws its own settings.
+    assert!((radius(1.0) - 4.0).abs() < 1e-3);
+    // The box doesn't move.
+    let x = moved_x(&engine, "a", secs(0.25));
+    let still = {
+        apply(
+            &control,
+            vec![Edit::ItemSetMotion {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                motion: Vec::new(),
+            }],
+        );
+        moved_x(&engine, "a", secs(0.25))
+    };
+    assert_eq!(x, still);
+    // The layer holds radius 24, rounded up to 32, not the 16 radius 4 needs.
+    apply(&control, vec![pulse_halo("radius", 20.0)]);
+    let hub = engine.render_hub().load();
+    let pad = hub
+        .shot()
+        .item_chain(&SceneId::new("a"), &ItemId::new("a1"))
+        .and_then(|chain| chain.pad);
+    assert_eq!(pad, Some((0, 32)));
+}
+
+/// A modifier on a colour setting lightens or darkens its red, green and blue, and one
+/// naming a setting the effect's kind doesn't have adds nothing (ADR-0138).
+#[test]
+fn a_modifier_moves_a_colour_and_one_on_a_missing_setting_adds_nothing() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![halo(), pulse_halo("color", 0.5)]);
+    // Three quarters in, the sine is at -0.5: white darkens to half.
+    let drawn = drawn_effects(&engine, secs(0.75));
+    let color = drawn[0].get("color").and_then(serde_json::Value::as_str);
+    assert!(
+        matches!(color, Some(c) if c.starts_with("#808080")),
+        "{color:?}"
+    );
+    apply(&control, vec![pulse_halo("missing", 20.0)]);
+    let drawn = drawn_effects(&engine, secs(0.25));
+    assert_eq!(drawn[0].get("radius"), Some(&json!(4.0)));
+    assert_eq!(drawn[0].get("missing"), None);
+}
+
+/// #1417 review B1: an edit that adds, then removes, only an effect modifier reaches the
+/// renderer, though it changes nothing else of the shot.
+#[test]
+fn an_edit_to_an_effect_modifier_alone_is_drawn() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    apply(&control, vec![halo()]);
+    let color = |engine: &Engine| {
+        drawn_effects(engine, secs(0.75))[0]
+            .get("color")
+            .and_then(serde_json::Value::as_str)
+            .map(str::to_owned)
+    };
+    let white = color(&engine);
+    apply(&control, vec![pulse_halo("color", 0.5)]);
+    let dimmed = color(&engine);
+    assert!(
+        dimmed.as_deref().is_some_and(|c| c.starts_with("#808080")),
+        "{dimmed:?}"
+    );
+    apply(
+        &control,
+        vec![Edit::ItemSetMotion {
+            item_id: ItemId::new("a1"),
+            scene_id: None,
+            motion: Vec::new(),
+        }],
+    );
+    assert_eq!(color(&engine), white, "the pulse stops with its modifier");
 }

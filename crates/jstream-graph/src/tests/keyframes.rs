@@ -205,6 +205,7 @@ fn writes_and_clears_have_the_inverses_adr_0049_gives() {
         overrides(&graph, "k"),
         [ItemOverride {
             motion: Default::default(),
+            timing: None,
             transform: None,
             item_id: ItemId::new("i1"),
             geometry: Some(geometry(5.0)),
@@ -346,6 +347,7 @@ fn removing_or_moving_an_item_out_drops_its_overrides_and_undo_restores_them() {
     };
     let none = |item: &str| ItemOverride {
         motion: Default::default(),
+        timing: None,
         transform: None,
         item_id: ItemId::new(item),
         geometry: None,
@@ -663,6 +665,30 @@ fn a_background_is_checked_and_a_keyframe_has_none_of_its_own() {
     assert!(field.ends_with("background"), "{field}");
     let (field, reason) = invalid_reason(apply_err(&mut graph, vec![background("k", "#000000")]));
     assert!(field.ends_with("background"), "{field}");
+    assert!(reason.contains("parent"), "{reason}");
+}
+
+/// A scene is kept warm through its options (ADR-0117 §7); a keyframe scene is shown
+/// through its parent, so it can't be kept warm itself.
+#[test]
+fn a_scene_is_kept_warm_but_not_a_keyframe() {
+    let mut graph = family();
+    let warm = |scene: &str| Edit::SceneSetOptions {
+        scene_id: SceneId::new(scene),
+        options: jstream_protocol::SceneOptions {
+            keep_warm: true,
+            ..jstream_protocol::SceneOptions::default()
+        },
+    };
+    apply_ok(&mut graph, vec![warm("a")]);
+    assert!(
+        graph
+            .state()
+            .scene(&SceneId::new("a"))
+            .is_some_and(|s| s.options().keep_warm)
+    );
+    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![warm("k")]));
+    assert!(field.ends_with("keep_warm"), "{field}");
     assert!(reason.contains("parent"), "{reason}");
 }
 
@@ -1163,6 +1189,7 @@ fn wiggle(id: &str, amplitude: f32) -> jstream_protocol::MotionModifier {
     jstream_protocol::MotionModifier {
         modifier_id: id.into(),
         property: jstream_protocol::MotionProperty::X,
+        effect: None,
         kind: jstream_protocol::MotionKind::Wiggle {
             amplitude: Finite32::new(amplitude).expect("finite"),
             frequency_hz: Finite32::ONE,

@@ -16,6 +16,7 @@
 use crate::about::{REPOSITORY, VERSION};
 use crate::dialog::Modal;
 use crate::host;
+use crate::ui_settings::{self, GLOBAL_HOTKEYS_KEY, Kept, global_hotkeys_on};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use serde_json::Value;
@@ -441,10 +442,41 @@ pub fn UpdateDialog(
     }
 }
 
-/// The Settings dialog's General page: "Check for updates at launch" (`settings.rs`).
+/// The Settings dialog's General page (`settings.rs`): "Check for updates at launch" and,
+/// in the desktop app, whether hotkeys are heard while another application has the focus.
 #[component]
 pub fn LaunchCheckSetting() -> impl IntoView {
     let on = RwSignal::new(kept_launch_check());
+    // Global hotkeys, in the desktop app only: the server keeps the switch, which the
+    // desktop app reads (ADR-0112 §6).
+    let session = host::desktop().and_then(|_| {
+        use_context::<crate::app::SessionContext>().and_then(|context| context.get())
+    });
+    let global = RwSignal::new(None::<bool>);
+    if let Some(session) = &session {
+        let control = session.control.clone();
+        spawn_local(async move {
+            if let Ok(kept) = ui_settings::get(&*control, GLOBAL_HOTKEYS_KEY).await
+                && kept != Kept::Unserved
+            {
+                global.try_set(Some(global_hotkeys_on(&kept)));
+            }
+        });
+    }
+    let control = StoredValue::new_local(session.map(|session| session.control));
+    let keep_global = move |checked: bool| {
+        global.set(Some(checked));
+        let Some(control) = control.get_value() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(error) =
+                ui_settings::set(&*control, GLOBAL_HOTKEYS_KEY, Value::Bool(checked)).await
+            {
+                leptos::logging::warn!("the hotkeys setting could not be kept: {error}");
+            }
+        });
+    };
     view! {
         <label class="settings-check">
             <input
@@ -464,6 +496,22 @@ pub fn LaunchCheckSetting() -> impl IntoView {
                 </span>
             </span>
         </label>
+        <Show when=move || global.get().is_some()>
+            <label class="settings-check">
+                <input
+                    type="checkbox"
+                    aria-label="Hear hotkeys while another app has the focus"
+                    prop:checked=move || global.get().unwrap_or(true)
+                    on:change=move |event| keep_global(event_target_checked(&event))
+                />
+                <span>
+                    <span class="settings-check-label">"Hear hotkeys while another app has the focus"</span>
+                    <span class="settings-check-note">
+                        "When on, the desktop app listens for the keys you've bound, and only those, while you work in another app. A key another app already holds is heard only while JStream has the focus. On until you turn it off."
+                    </span>
+                </span>
+            </label>
+        </Show>
     }
 }
 

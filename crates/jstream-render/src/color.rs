@@ -3,6 +3,7 @@
 
 use crate::error::RenderError;
 use crate::scene::Color;
+use jstream_protocol::Blending;
 
 /// Converts one sRGB channel in `0..=1` to linear light.
 pub(crate) fn srgb_channel_to_linear(c: f32) -> f32 {
@@ -66,10 +67,52 @@ pub(crate) fn premultiplied_linear(color: Color) -> [f32; 4] {
     ]
 }
 
+/// `color` premultiplied, its straight sRGB values kept: the clear colour of a target
+/// that holds sRGB-encoded colour (ADR-0126 §3).
+pub(crate) fn premultiplied_srgb(color: Color) -> [f32; 4] {
+    let a = color.a;
+    [color.r * a, color.g * a, color.b * a, a]
+}
+
+/// Straight sRGB from premultiplied sRGB-encoded RGBA, the inverse of
+/// [`premultiplied_srgb`]. Transparent is [`Color::TRANSPARENT`].
+pub(crate) fn from_premultiplied_srgb([r, g, b, a]: [f32; 4]) -> Color {
+    if a <= 0.0 {
+        return Color::TRANSPARENT;
+    }
+    let channel = |c: f32| (c / a).clamp(0.0, 1.0);
+    Color {
+        r: channel(r),
+        g: channel(g),
+        b: channel(b),
+        a: a.min(1.0),
+    }
+}
+
+/// `color` premultiplied in the `blending` space the compositor mixes in.
+pub(crate) fn premultiplied_in(color: Color, blending: Blending) -> [f32; 4] {
+    if blending == Blending::Srgb {
+        premultiplied_srgb(color)
+    } else {
+        premultiplied_linear(color)
+    }
+}
+
+/// Straight sRGB from premultiplied RGBA in the `blending` space, the inverse of
+/// [`premultiplied_in`].
+pub(crate) fn from_premultiplied_in(color: [f32; 4], blending: Blending) -> Color {
+    if blending == Blending::Srgb {
+        from_premultiplied_srgb(color)
+    } else {
+        from_premultiplied_linear(color)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{linear_channel_to_srgb, premultiplied_linear, srgb_channel_to_linear, validate};
     use crate::scene::Color;
+    use jstream_protocol::Blending;
 
     fn close(a: Color, b: Color) -> bool {
         [a.r - b.r, a.g - b.g, a.b - b.b, a.a - b.a]
@@ -86,27 +129,48 @@ mod tests {
     }
 
     #[test]
-    fn a_background_over_black_is_opaque_and_darkened_in_linear_light() {
+    fn a_background_over_black_is_opaque_and_darkened_in_the_blending_space() {
         let red = Color::rgb(1.0, 0.0, 0.0);
-        assert!(close(red.over_black(), red));
-        assert!(close(Color::TRANSPARENT.over_black(), Color::BLACK));
-        let half = Color { a: 0.5, ..red }.over_black();
-        assert_eq!(half.a, 1.0);
+        for blending in Blending::ALL {
+            assert!(close(red.over_black(blending), red));
+            assert!(close(Color::TRANSPARENT.over_black(blending), Color::BLACK));
+        }
+        let half = Color { a: 0.5, ..red };
+        assert_eq!(half.over_black(Blending::Linear).a, 1.0);
         assert!(close(
-            half,
+            half.over_black(Blending::Linear),
             Color::rgb(linear_channel_to_srgb(0.5), 0.0, 0.0)
+        ));
+        // Browser-style, the encoded value is darkened as a browser would: half.
+        assert!(close(
+            half.over_black(Blending::Srgb),
+            Color::rgb(0.5, 0.0, 0.0)
         ));
     }
 
     #[test]
-    fn colours_mix_premultiplied() {
+    fn colours_mix_premultiplied_in_the_blending_space() {
         let red = Color::rgb(1.0, 0.0, 0.0);
-        assert!(close(red.mix(Color::BLACK, 0.0), red));
-        assert!(close(red.mix(Color::BLACK, 1.0), Color::BLACK));
-        // Fading out to transparent keeps the colour and lowers the alpha.
-        let fading = red.mix(Color::TRANSPARENT, 0.25);
-        assert!(close(fading, Color { a: 0.75, ..red }));
-        assert!(close(red.mix(Color::BLACK, f32::NAN), Color::BLACK));
+        for blending in Blending::ALL {
+            assert!(close(red.mix(Color::BLACK, 0.0, blending), red));
+            assert!(close(red.mix(Color::BLACK, 1.0, blending), Color::BLACK));
+            // Fading out to transparent keeps the colour and lowers the alpha.
+            let fading = red.mix(Color::TRANSPARENT, 0.25, blending);
+            assert!(close(fading, Color { a: 0.75, ..red }));
+            assert!(close(
+                red.mix(Color::BLACK, f32::NAN, blending),
+                Color::BLACK
+            ));
+        }
+        // Halfway from red to black: half the light, or half the encoded value.
+        assert!(close(
+            red.mix(Color::BLACK, 0.5, Blending::Linear),
+            Color::rgb(linear_channel_to_srgb(0.5), 0.0, 0.0)
+        ));
+        assert!(close(
+            red.mix(Color::BLACK, 0.5, Blending::Srgb),
+            Color::rgb(0.5, 0.0, 0.0)
+        ));
         assert!(close(
             Color::from_rgba8([255, 0, 0, 51]),
             Color { a: 0.2, ..red }

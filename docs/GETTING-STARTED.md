@@ -47,6 +47,11 @@ JStream keeps its settings, scenes and logs in `%APPDATA%\JStream`. To keep them
 JStream folder instead (to run it from a USB stick), create an empty file named
 `portable`, with no extension, next to `jstream.exe`: they then go in its `data` folder.
 
+Your scenes, sources and outputs are one project file. **File › Save project as…** saves
+them to a new file, **File › Open project…** and **Open recent** switch to another, and
+**File › New project…** starts an empty one. JStream opens the last project at start.
+Opening one stops any output that is running, and each project keeps its own stream keys.
+
 <a id="scene"></a>
 ## Your first scene
 <!-- @section
@@ -59,6 +64,9 @@ on **program**, drawn on the canvas in the middle.
 The canvas starts at 1920×1080 and 30 fps. **File › Video settings…** changes its
 resolution (a preset such as 1280×720 or 3840×2160, a vertical 1080×1920, or any size
 you type) and its frame rate, 30 or 60 fps. Each output scales from that picture.
+**Blending** there sets how semi-transparent items and blend modes mix: Browser-style,
+the default, matches a web page or a design tool, and Linear light mixes light as it
+adds, which makes soft glows and veils brighter.
 
 1. In **Scenes**, click **+** under the list (or right-click and choose **New scene**),
    then type its name.
@@ -72,7 +80,9 @@ you type) and its frame rate, 30 or 60 fps. Each output scales from that picture
    **Create**
    (or pick an existing source to reuse it); its properties open, so you can choose the
    display or window from the list of those open now, the device (and, for a webcam,
-   its resolution, frame rate and video format, or Auto) or the file. In the
+   its resolution, frame rate and video format, or Auto, and under **Camera** its
+   brightness, exposure, white balance and the other controls the camera offers, each
+   a slider with **Auto** where the camera can set it itself) or the file. In the
    desktop app a file field has a **Browse…** button; a browser page keeps the path as
    text. A display,
    window or webcam shows its live picture at the top of the dialog as you pick it,
@@ -220,14 +230,20 @@ can look at the program with snapshots. Agents can't connect until you turn this
 
    Other MCP clients that speak streamable HTTP can use `http://127.0.0.1:4455/mcp`
    with the token file's contents as a bearer token.
-3. **Restart the agent's app** with JStream running. It lists JStream's tools, such as
-   `scene`, `source` and `batch`. Ask it to build a scene, then watch the window: what it
+3. **Restart the agent's app** with JStream running. The first time it connects,
+   JStream's window asks **Agent wants to connect**: choose **Always allow** (or **Allow
+   once** to be asked again next time). If nobody answers within two minutes, the agent
+   is turned away. **File › Settings…** lists the agents you always allow on its
+   **Devices** page, and its **General** page can turn asking off. The agent then lists
+   JStream's tools, such as `scene`, `source` and `batch`. Ask it to build a scene, then watch the window: what it
    changes shows there, and **Agent activity** lists each change. Your agent may ask
    before going live, changing a stream key or other steps undo can't take back. It can
    undo its own edits, and asking it to is the way back: your **Undo** steps through
    your edits only.
 
-Treat the `token` file like a password: anyone with it controls JStream. To change it,
+Treat the `token` file like a password: anyone with it controls JStream. Asking before
+an agent connects lets you notice and turn away one you didn't expect, but a program
+that can read the file can still get in. To change it,
 close JStream, delete the file and start JStream again, then restart the agent's app.
 
 <a id="trouble"></a>

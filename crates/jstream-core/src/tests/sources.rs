@@ -1115,6 +1115,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("t"),
                     name: String::new(),
                     duration_ms: 2_000,
@@ -1130,6 +1131,7 @@ fn a_restart_cue_on_a_late_tick_starts_the_file_at_the_cue() {
             Edit::TimelineSet {
                 scene_id: SceneId::new("a"),
                 timeline: TimelineInfo {
+                    labels: Vec::new(),
                     timeline_id: TimelineId::new("kicker"),
                     name: String::new(),
                     duration_ms: 2_000,
@@ -1435,6 +1437,12 @@ fn a_video_filters_asset_is_loaded_for_its_chain() {
     )
     .expect("created");
     let first = chain_asset(&engine, "pic").expect("the table is loaded");
+    // Installing an asset keeps what else plans read, the MIDI clock among it, so a
+    // border in beats doesn't stop at beat 0 (ADR-0148, #1453 review B1).
+    assert!(
+        engine.render_hub().load().shot().follows_tempo(),
+        "the plan still follows the tempo"
+    );
 
     let point = |path: &str| {
         batch(

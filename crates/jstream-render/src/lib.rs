@@ -23,6 +23,7 @@ mod model;
 mod place;
 mod readback;
 mod scene;
+mod timer;
 pub mod transition;
 mod wipe;
 
@@ -31,17 +32,21 @@ pub use compositor::Compositor;
 pub use convert::{Nv12Converter, Nv12Pass, Nv12Planes, Nv12Target};
 pub use error::{NO_ADAPTER_HINT, RenderError};
 pub use filter::{
-    ExternalFilter, ExternalProgram, FIRST_INPUT_BINDING, FilterClock, Lut, LutError,
-    MAX_PROGRAM_BYTES, PRELUDE as FILTER_PRELUDE, PROGRAM_AUDIO_BANDS, PROGRAM_MAX_INPUTS,
-    PROGRAM_MAX_PASSES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio, ProgramImage,
-    ProgramInput, ProgramPass, VideoFilter, ViewDepth,
+    DepthReflection, DepthShadow, ExternalFilter, ExternalProgram, FIRST_INPUT_BINDING,
+    FilterClock, Lut, LutError, MAX_PROGRAM_BYTES, PRELUDE as FILTER_PRELUDE, PROGRAM_AUDIO_BANDS,
+    PROGRAM_MAX_INPUTS, PROGRAM_MAX_PASSES, PROGRAM_PARAMS_BINDING, PROGRAM_PRELUDE, ProgramAudio,
+    ProgramImage, ProgramInput, ProgramPass, VideoFilter, ViewDepth,
     depth_descriptors as depth_filter_descriptors, descriptors as video_filter_descriptors,
     lut_image, outset as video_filter_outset, reads_depth as video_filter_reads_depth,
+    reads_shadows as video_filter_reads_shadows, reflection_floor as video_filter_reflection_floor,
 };
 pub use gpu::{OpenOptions, adapter_available, context_lost};
 pub use image::Image;
 pub use jstream_protocol::BlendMode;
-pub use model::{GpuModel, LightKind, Lighting, MAX_SCENE_LIGHTS, ModelDraw, SceneLight};
+pub use model::{
+    CardDraw, Environment, GpuModel, LightKind, Lighting, MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS,
+    ModelDraw, SHADOW_MAP_PX, SceneLight, ShadowMap,
+};
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 

@@ -19,7 +19,9 @@ The headless engine host ([ARCH › Shape](../../docs/ARCHITECTURE.md#shape)): i
 `jstream-core` `Engine` and serves it through `jstream-server`'s authenticated WebSocket
 API on `127.0.0.1`, so `jstream-cli --url …` and the stdio MCP proxy `jstream-cli mcp`
 can drive it, with `--lan` also on a TLS-only network listener for paired devices
-([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)), and turns on the server's MCP transport over streamable HTTP at `/mcp`, so
+([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)) and with
+`--jtunnel-accept` receiving JTunnel senders' audio
+([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and turns on the server's MCP transport over streamable HTTP at `/mcp`, so
 an agent can connect without the proxy. Like every host it only wires the engine to its interfaces
 ([ADR-0001](../../docs/adr/0001-library-first-engine.md)): each connection and each MCP
 session gets its own `InProcessControl` session through the server's `Connector`. Layer 6, an app that links
@@ -125,7 +127,7 @@ reconnects, and `ffmpeg -listen 1` as the server, which writes the stream to FLV
 binary on its own Linux backends, with nothing faked, against the same receiver.
 
 The H.264 encoder is Cisco's OpenH264, Linux's software encoder
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)), when
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), when
 `JSTREAM_E2E_OPENH264` asks for it. `cargo xtask e2e-stream --openh264-download`, which
 CI runs, sets it to `download`: the harness installs the pinned release from Cisco's
 server through `OpenH264Store::install`, as the app does, into one store the run's tests
@@ -210,7 +212,11 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
 | `--lan` | Also listens for devices on the network ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)): a second listener, TLS only, that admits paired devices and never the control token. Its certificate is made on first use (see **Network access** below). Default: off. |
 | `--lan-port <port>` | With `--lan`: the network listener's port, 1 to 65535. Default `4456`. |
 | `--lan-bind <addr>` | With `--lan`: listen on this one address (not a loopback one) instead of every interface. Default: every interface. |
+| `--jtunnel-accept <name@address:port>` | Receives from this JTunnel sender ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)): a DAW plugin's tunnel name (1 to 31 bytes, no white space at either end) and the IPv4 LAN address and port it sends from, loopback, private or link-local. Repeatable, each name and each address and port once. A `network_audio` source naming the sender records its audio. Default: off, no JTunnel socket open. |
 | `--lan-renew` | With `--lan`: make a new key and certificate before serving, for when the machine's names or addresses changed. Every paired device then checks the new fingerprint, and a native client that pinned the old one pairs again. |
+| `--ptz-camera <spec>` | Lets this machine control a PTZ camera over VISCA ([ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)), repeatable: `name@address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the camera's VISCA address (1 to 7, default 1), as in `wide@192.168.1.40:52381`. The address must be on the LAN ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and names and addresses must not repeat. Default: none, so no PTZ socket is open. |
+| `--ptz-controller <spec>` | Lets a PTZ controller drive a scene camera over VISCA ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)), repeatable: `address:port`, then optionally `/visca_ip` (the default), `/udp` or `/tcp`, and `#n` for the VISCA address it answers as (1 to 7, default 1), then `=program`, `=preview` or `=scene:<scene id>` for what it drives, as in `192.168.1.10:52381=program`. The address is the one LAN interface it listens on, never every interface (ADR-0123 §5). Needs `--ptz-controller-allow`. Default: none, so no controller socket is open. |
+| `--ptz-controller-allow <ip>` | A controller address the `--ptz-controller` endpoints answer, on the LAN, repeatable. Every other address is dropped and counted. |
 | `--output <id>` | Adds a stopped placeholder output (repeatable), so `output start`, `output stop` and `output status` have something to act on. Where the daemon is live (Windows, macOS and 64-bit Linux) it has no target, so starting it fails: create outputs with `output.create` instead. |
 | `--log-dir <dir>` | Where the log files, crash reports and the audit log go, created (with its parents) if missing. Default: `logs` in the platform data directory (see **Log files** below). |
 | `--log-level <spec>` | The log filter, in `RUST_LOG`'s syntax, which it overrides. |
@@ -257,6 +263,33 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   and macOS the first start can raise the firewall's prompt. A certificate file that
   can't be read or made, or that other users may access, is a startup failure (exit 1),
   and so is a network port that can't be bound.
+- **JTunnel** (`--jtunnel-accept`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)).
+  Off unless a sender is accepted. With one or more, the daemon starts the engine's
+  JTunnel receiver after the backends (arrivals are stamped on the media clock), on one
+  UDP socket on any interface and a port the system picks, and logs that port and the
+  senders at `info`. A sender's address can't be outside loopback, private IPv4 and
+  link-local, and the receiver drops everything not from an accepted sender, but for
+  the answers to its mDNS query, which only list senders in `jtunnel.senders`
+  ([jstream-core › JTunnel receiver](../../crates/jstream-core/README.md#contents-sources)).
+  A sender is accepted per machine, on the command line, never from the collection.
+- **PTZ cameras** (`--ptz-camera`, [ADR-0146](../../docs/adr/0146-ptz-cameras-shots-and-actions.md)).
+  Off unless a camera is listed. With one or more, the daemon starts the engine's PTZ
+  control after the backends, one thread and socket per camera, and logs how many at
+  `info`. A camera's address can't be outside the LAN ranges, two cameras can't share a
+  name or an address and VISCA address, and replies from anywhere else are dropped
+  ([jstream-core › PTZ cameras](../../crates/jstream-core/README.md#contents-media)).
+  The cameras are listed per machine, on the command line, never from the collection,
+  which names them only by name. A camera a drive left moving is sent a stop when its
+  client disconnects and, best effort, when the engine shuts down; a daemon that is
+  killed outright sends none.
+- **PTZ controllers** (`--ptz-controller`, `--ptz-controller-allow`,
+  [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)). Off unless
+  an endpoint is listed, and an endpoint needs at least one allowed controller address.
+  With one or more, the daemon opens them once the engine is built, each a thread and
+  a socket on its one LAN address and a session of its own, logs how many at `info`, and
+  keeps them until it stops serving. An endpoint answers only allowed addresses, and
+  turns a controller's VISCA into `scene.drive_camera` and `scene.aim_camera` for its
+  target ([jstream-core › PTZ controllers](../../crates/jstream-core/README.md#contents-media)).
 - **UI settings.** What the web UI keeps on the engine, its dock and saved layouts, is
   in `ui-settings.json` in the platform data directory, the desktop app's file too, so a
   browser and the desktop app show the same workspace
@@ -329,12 +362,15 @@ JSTREAM_TOKEN_FILE=~/.config/jstream/token jstream-cli --url ws://127.0.0.1:4460
   server URL, then `output.set_key` (stored in Windows Credential Manager, the login
   keychain on macOS, or on Linux the Secret Service, else the `0600` file
   `~/.config/jstream/secrets`, [ADR-0071](../../docs/adr/0071-linux-secret-store.md)),
-  then `output.start` connects and streams. A start fails with `action_failed` and a
+  then `output.start` connects and streams. The publish opener reads the key under the
+  name the engine gives it (`Engine::stream_key_name`, scoped to the open collection
+  file, [ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)). The daemon
+  keeps no recent-projects list. A start fails with `action_failed` and a
   reason that says what to fix when the output has no target (a `--output`
   placeholder), no stream key, or the key can't be read. On Linux it also fails, naming
   both ways to get one, when the machine has no H.264 encoder: neither VA-API nor
   Cisco's OpenH264, which is downloaded on the user's request
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Elsewhere
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Elsewhere
   (32-bit Linux and other Unixes), `output.start` only steps the placeholder state
   machine and `output.set_key` fails: there is no key store.
 - **Media Foundation (Windows).** On a Windows without Media Foundation (an N or KN
@@ -431,11 +467,15 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   starts, or for the capture and video-device backends, when a preview shows a display,
   window or webcam (a webcam's one open is shared with the output's). A `jstream-clap-scan` thread then scans the CLAP plugins with
   `WindowsPluginHosts` (`Engine::scan_clap_plugins`), so they appear in `kind.list` as
-  audio-filter kinds once found, and logs each file it couldn't scan; the daemon
-  serves meanwhile. The engine keeps the hosts, and from then on starts a
+  audio-filter kinds once found, and the engine logs each file it couldn't scan; the
+  daemon serves meanwhile. The engine keeps the hosts, rescans with them on
+  `plugin.clap_rescan`, and from then on starts a
   `jstream-plugin-host.exe` for each CLAP filter in an audio chain (a source's, the
   master's or an output's). Without
   `jstream-plugin-host.exe` beside the daemon every file fails to scan, and is logged.
+  When the hosts can't be set up, the daemon tells the engine why
+  (`Engine::set_clap_unavailable`), and `plugin.clap_scan` reports it. On macOS and
+  Linux the daemon tells the engine CLAP plugins are hosted on Windows only so far.
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,
@@ -479,7 +519,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
 
   H.264 comes from VA-API, else from Cisco's OpenH264 in the data directory's
   `codecs/openh264` once the user has downloaded it
-  ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)). Until one of
+  ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). Until one of
   them is there, `output.start` fails with the platform's reason, which names both. AAC
   is JStream's own encoder. Creating the backends lists the audio devices and probes
   the VA-API render nodes, and opens nothing else: the portal is asked when a pipeline
@@ -672,6 +712,10 @@ folder another process is using, so the daemon couldn't start pages while the ap
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)). With no data
   directory the settings live in memory. The server owns the file, as it owns the device
   file.
+- **The warm scenes file** (`serve.rs`). The engine keeps the warm budget
+  (`studio.set_warm`, ADR-0117 §7) in `warm-scenes.json` in the data directory
+  (`jstream_platform::paths::WARM_SCENES_FILE`, `Engine::with_warm_file`), the file the
+  desktop app names too. With no data directory it lives in memory.
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`
@@ -761,7 +805,8 @@ folder another process is using, so the daemon couldn't start pages while the ap
 - **Argument parsing is hand-rolled**, for the reasons `jstream-cli` gives
   ([jstream-cli › Design](../jstream-cli/README.md#design)): a handful of options
   (`--token-file`, `--port`, `--output`, `--collection`, `--plugin-dir`, `--ui-dir`,
-  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--log-dir`,
+  `--lan`, `--lan-port`, `--lan-bind`, `--lan-renew`, `--ptz-camera`, `--ptz-controller`,
+  `--ptz-controller-allow`, `--jtunnel-accept`, `--log-dir`,
   `--log-level`, `--youtube-client`, `--register-vcam`, `--unregister-vcam`) don't pay for a
   parser crate.
 - **Dependencies.** `jstream-core` and `jstream-server` with its `tls` feature (what a host links; `tls` for `--lan`),

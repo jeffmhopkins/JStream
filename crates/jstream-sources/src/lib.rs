@@ -1,4 +1,4 @@
-//! Source kinds (ADR-0061, ADR-0025). A [`Registry`] holds every kind by ID: its
+//! Source kinds (ADR-0140, ADR-0025). A [`Registry`] holds every kind by ID: its
 //! [`KindDescriptor`](jstream_protocol::KindDescriptor), which the engine reports through
 //! `kind.list` and `kind.describe` and validates settings against, and how to create its
 //! sources. A [`Source`] produces video frames on request, for snapshots and tests.
@@ -16,7 +16,9 @@
 //! which the host sets through the context's [`ChatFeature`]), `timer` (a countdown,
 //! stopwatch or clock, drawn as text in a box of one size), and `display`, `window`
 //! and `webcam` (a webcam or capture card), which say what the platform captures
-//! ([`CaptureSpec`]). The audio-only kinds (`audio_input`, `desktop_audio` and
+//! ([`CaptureSpec`]). `midi_keyboard`, `midi_piano_roll`, `midi_pads`, `midi_particles`
+//! and `midi_cc` (ADR-0137) draw a MIDI input's notes and controllers, and `midi_beat` its clock's
+//! beat, from the [`MidiInputs`] in [`Context::midi`]. The audio-only kinds (`audio_input`, `desktop_audio`, `network_audio` and
 //! `app_audio`) make no frames: the engine records the [`AudioTarget`] their settings
 //! name. `jstream-core` drives sources from its `jstream-sources` thread
 //! through [`Registry::create`], [`Source::frame`], [`Source::next_change`],
@@ -24,7 +26,7 @@
 //!
 //! [`MediaDecoders`]: jstream_platform::MediaDecoders
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-sources/README.md#purpose, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/security/threat-model.md#browser
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-sources/README.md#purpose, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0137-midi-visualization-sources.md, docs/security/threat-model.md#browser
 
 #![forbid(unsafe_code)]
 
@@ -40,6 +42,7 @@ mod fonts;
 mod image;
 mod light;
 mod media;
+mod midi;
 mod model;
 mod page_api;
 mod registry;
@@ -51,9 +54,11 @@ mod text;
 mod timer;
 mod youtube_chat;
 
-pub use audio::AudioTarget;
+pub use audio::{AudioTarget, LATENCY_MS, MAX_SENDER_NAME, Transport};
 pub use browser::opens_browser;
-pub use capture::{CaptureSpec, DeviceFormatWant, fps_centi, webcam_device};
+pub use capture::{
+    CameraControlSetting, CaptureSpec, DeviceFormatWant, fps_centi, webcam_controls, webcam_device,
+};
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
 pub use error::SourceError;
 pub use fonts::{InstalledFont, installed_fonts, system_font_dirs};
@@ -61,8 +66,11 @@ pub use image::{StillImage, decode_still};
 /// The browser engine seam `browser` sources open their pages through, which the host
 /// injects into the engine (ADR-0021).
 pub use jstream_browser::BrowserBackend;
-pub use light::{LightType, ShownLight};
+pub use light::{LightType, ShownEnvironment, ShownLight};
 pub use media::MediaAudio;
+pub use midi::{
+    CLOCK_TIMEOUT_MS, MAX_INPUTS, MidiFeed, MidiInputs, MidiState, NoteEvent, TempoReading,
+};
 pub use model::ModelKind;
 pub use page_api::{BusLevels, PageView};
 pub use registry::Registry;

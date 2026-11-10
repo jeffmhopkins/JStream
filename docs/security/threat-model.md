@@ -79,7 +79,7 @@ shown by the menu item. Nothing is downloaded or installed. That read is not tel
                collection, asset files ──────┘   └── helper processes: browser pages, CLAP hosts
 ```
 
-Every arrow into the engine crosses one of five boundaries:
+Every arrow into the engine crosses one of six boundaries:
 
 1. **The control API** (WebSocket, MCP over HTTP, static UI files): one gate for all of
    them. See [Control server](#server).
@@ -90,6 +90,8 @@ Every arrow into the engine crosses one of five boundaries:
 5. **The network out**: streaming servers, Google, and, when the user asks or has turned
    the launch check on, GitHub's releases API (see [Assets](#assets)). See
    [Secrets](#secrets).
+6. **LAN inputs outside TLS**: JTunnel senders, once the person turns receiving on
+   and accepts one. See [LAN inputs](#lan-inputs).
 
 <a id="server"></a>
 ## Control server
@@ -120,15 +122,22 @@ a stolen token, local denial of service.
   must be that host or a configured extra, so a foreign page's WebSocket upgrade is
   refused; then the token, as a bearer token, a Basic password or a WebSocket
   subprotocol ([R-SEC-002](../RULES.md#R-SEC-002)). The token may also be a paired
-  device's, accepted only on loopback or a TLS listener. `POST /api/v1/pair` is the one
-  request answered without one, only while a pairing code is open (see
-  [Pairing](#pairing)).
+  device's, accepted only on loopback or a TLS listener, or the host UI's own token
+  (`ServerConfig::ui_token`, ADR-0131), which the desktop app makes at launch and keeps
+  only in memory; it grants what the control token does, and the network listener
+  refuses it as it refuses the control token. `POST /api/v1/pair` is the one request
+  answered without one, only while a pairing code is open (see [Pairing](#pairing)).
 - The server keeps only a BLAKE3 digest of the token and compares digests in constant
   time. Tokens are 32 bytes from the OS random source. Header values are never logged.
 - The daemon's own listener binds `127.0.0.1`, with no flag to bind it elsewhere.
   **Network access** ([ADR-0104](../adr/0104-network-listener-over-tls.md)) is a second
-  listener the person turns on with `--lan` (the server's `tls` feature,
-  `ServerConfig::network`); it is off by default:
+  listener the person turns on with `--lan`, or in the desktop app with Settings ›
+  Devices › "Allow devices on my network" (the server's `tls` feature,
+  `ServerConfig::network`); it is off by default. The desktop app keeps that switch in
+  its data folder and saves it only through its own window's command, never through
+  the control API, so no agent, plugin or paired device can turn it on. Turning it off
+  applies at the app's next start and doesn't revoke the paired devices, which are
+  admitted again if it is turned back on; revoking them ends their access:
   - **TLS only**, with rustls on the ring provider: TLS 1.3 and 1.2 with rustls' default
     suites for them, ALPN `http/1.1`, no client certificates. Plain HTTP gets no answer.
   - **A self-signed certificate made on the host**: an ECDSA P-256 key, made on first use
@@ -138,12 +147,14 @@ a stolen token, local denial of service.
     the machine's addresses. It is never renewed silently: when today's names aren't all
     on it, the daemon says so at startup, and `--lan-renew` makes a new key.
   - **Trust by fingerprint.** The daemon prints the certificate's SHA-256 fingerprint
-    with the listener's addresses. A native client pins it after the person compares it.
+    with the listener's addresses, and `pairing.start` answers both, so the host UI's
+    pairing panel and `jstream pair` show them beside the code. A native client pins it after the person compares it.
     A browser keeps no pin, so a new certificate warning on a paired host means continue
     only if the fingerprint matches the one the host shows
     ([ADR-0130](../adr/0130-browsers-keep-no-certificate-pin-v2.md), which supersedes
     ADR-0114). The `/pair` page says the same next to its code field.
-  - **Device tokens only.** The control token is refused there, however it is presented.
+  - **Device tokens only.** The control token, and the host UI's own token, are refused
+    there, however they are presented.
     `Host` must be the listener's port with a name the certificate carries or the
     address the connection arrived on, and `Origin`, when present, `https://` and that
     host. Configured extra origins don't apply.
@@ -202,6 +213,33 @@ It can't mark the copy concealed, so a clipboard manager may keep it, and any pr
 the user's desktop session can read it while it is there. Failed tokens are not delayed or locked out:
 256 bits can't be guessed, and a lockout would let any local process shut out the real
 clients.
+
+The daemon's `--ptz-camera` (ADR-0123, [ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md))
+is the one way to make it send VISCA to a camera: the protocol can't add, change or
+remove a camera, so a client with the token, an agent or a paired device can move only
+the heads the person listed, by name. An address outside the LAN ranges is refused at
+startup, and a reply from anywhere but the camera's own address and port, or one that
+isn't VISCA, is dropped and counted; a reply can change only the pose and status
+`ptz.list` shows.
+
+The daemon's `--ptz-controller` and `--ptz-controller-allow` (ADR-0123 §5,
+[ADR-0152](../adr/0152-a-ptz-controller-drives-scene-cameras.md)), and the desktop app's
+"Accept a PTZ controller", saved only by the app's own command
+([ADR-0153](../adr/0153-ptz-controller-idle-stop-counters-and-setting.md) §3), are the
+ways to make it listen for a PTZ controller: the protocol can't open an endpoint or
+change the allowlist. Each endpoint binds one LAN address the person gives, never every
+interface, and needs at least one allowed controller address on the LAN; a datagram or
+connection from any other address, or one that isn't VISCA, is dropped and counted.
+An endpoint is a session of its own on the engine, not a control listener
+([R-SEC-002](../RULES.md#R-SEC-002)): what a controller sends becomes only
+`scene.drive_camera` and `scene.aim_camera` for the endpoint's target, and the queries
+it needs to answer (`studio.get`, `scene.camera_aim`). It moves a scene camera's live
+aim, which is never stored or undone; its presets stay in its memory. A drive it
+started stops once its controller has been quiet for 5 seconds, or when a TCP
+controller's last connection closes (ADR-0153 §1), and `profile.get` counts what each
+endpoint answered and dropped (§2). **Accepted:** a
+host on the LAN that spoofs an allowed controller's address can move the endpoint's
+scene camera within those bounds (ADR-0123 §6).
 
 **Gaps:** #546's Windows hardware pass reported the token file and the daemon's logs
 user-only with no inheritance. Still to run on hardware: the devices file after a real
@@ -357,8 +395,15 @@ location removes it.
 
 **Built** ([ADR-0102](../adr/0102-page-api-for-browser-sources.md)): a source may opt
 its page in to a read-only `window.jstream` with the engine animation clock and the
-page's own visibility, and, per further setting, the program and preview scenes, named
-shared values, and one bus's levels and bands (never its samples). The renderer
+page's own visibility, and, per further checkbox, the program and preview scenes, named
+shared values, one bus's levels and bands (never its samples), the engine's tempo, and
+one MIDI input's held notes, controllers and recent note-ons (never raw bytes or SysEx,
+[ADR-0147](../adr/0147-midi-tempo-and-state-for-pages.md)). The tempo has a checkbox
+of its own, as ADR-0124 decision 7 asks: the `tempo.*` values never reach a page through
+the shared values grant, and a MIDI reading carries a tempo only with it. Each checkbox shows
+its warning beside it, and the Sources panel badges a source whose page is granted
+anything ([ADR-0124](../adr/0124-page-api-read-review.md), which also lists what no
+setting ever grants). The renderer
 defines the API only in the main frame, and only while it shows the source's own
 document: the source's web origin exactly, its file's folder or below, or the origin of
 its own a page given as HTML loads from. Data flows one way: the engine filters it to the
@@ -369,7 +414,8 @@ page has no path to the engine. A compromised renderer holds only what the sourc
 sharing its renderer were granted; each granted page gets a request context of its own,
 which should keep it alone in its renderer, not yet checked on a run. Whatever a page is
 granted, a web page can send off the machine: preview scene names matter most, and a
-microphone bus's bands, which follow the shape of speech. The engine has no studio mode to leave, so a page
+microphone bus's bands, which follow the shape of speech, and a MIDI input's notes,
+which are the performance itself. The engine has no studio mode to leave, so a page
 granted the scenes always gets the preview scene's name.
 
 <a id="files"></a>
@@ -471,13 +517,17 @@ with its dialog open, or grants with a list unanswered, acknowledges its latest 
   kind ID that draws the same WGSL (the quarantine keeps each blamed module's digest,
   ADR-0097), until a person re-enables them (`effect.enable`, which no MCP tool, plugin
   or hotkey carries), the whole pack after a second blame in a run, and reported in `gpu.device_lost` (protocol
-  0.61). Not built yet: the GPU-time guard against long loops, which would turn an
-  effect off before the OS resets the device.
+  0.61). The GPU-time guard turns an effect off before the OS resets the device: where
+  the GPU has timestamp queries, a pack kind whose pass runs over half the frame budget
+  for 30 frames running on the program stage is quarantined the same way and reported
+  in `gpu.effect_slow` (protocol 0.102). A GPU without timestamp queries, a shader that
+  hangs the GPU at once, and the preview's drawing have only the device-loss guard.
+  Not run yet: a forced TDR on Windows hardware.
 
 <a id="mcp"></a>
 ## MCP agents
 <!-- @section
-depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
+depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/adr/0131-ask-before-a-new-agent-connects.md", "docs/adr/0036-mcp-events-polling-tool.md", "docs/adr/0059-mcp-annotations-and-remote-text.md", "docs/adr/0085-capture-target-names-marked-as-remote-text.md", "docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md"]
 -->
 
 **Threats:** an agent following instructions hidden in text it reads (prompt
@@ -505,6 +555,15 @@ output, sets or clears its key, goes live or stops, steps through its undo histo
 revokes a device, starts a pairing or replaces the UI's settings (#346). Other edits,
 deletes of scenes, sources and items included, are undoable and unannounced
 ([ADR-0098](../adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)).
+
+**Notice, not a control:** in the desktop app with `--mcp`, the person is asked before
+a new agent's first connection, and can allow it once, always, or deny it
+([ADR-0131](../adr/0131-ask-before-a-new-agent-connects.md)). It is a notice with a
+veto, and nothing may rely on it as a control: approval is keyed by the name a client
+gives itself, so a client can pass by naming itself after an approved one, and any
+process of the user can read the token file and write the approved list. Approved
+clients are trusted no differently from any other token holder. Agents get no tool to
+answer a request.
 
 **Accepted:** full access, with no tiers and no confirmation step
 ([ADR-0006](../adr/0006-mcp-full-access.md)). An agent sees the program through
@@ -631,6 +690,68 @@ A DLL registered by hand with `regsvr32` is registered where it is.
 **Gaps:** the copy's DACL and Frame Server loading it are not yet checked on Windows
 hardware (#563).
 
+<a id="lan-inputs"></a>
+## LAN inputs
+<!-- @section
+covers = ["crates/jstream-core/src/jtunnel/**"]
+depends_on = ["docs/adr/0123-lan-inputs-jtunnel-and-visca.md", "docs/RULES.md#R-SEC-002"]
+-->
+
+**Threats:** a host on the LAN, or beyond it, injecting audio into a show, or flooding
+the socket; a sender answering for another; JStream announcing itself or sending
+somewhere it shouldn't.
+
+**Controls on main** ([ADR-0123](../adr/0123-lan-inputs-jtunnel-and-visca.md)):
+- The JTunnel receiver is off unless the host turns it on with the senders it accepts:
+  the daemon's `--jtunnel-accept name@address:port`, each a LAN address, or the desktop
+  app's "Receive from JTunnel senders", saved only by the app's own command (never a
+  protocol call), where a sender heard on the network is added only after the person
+  confirms it by name and address. Off, no socket is open.
+- It sends only subscribe and bye packets, only to accepted senders' addresses, which
+  must be loopback, private IPv4 or link-local, and every 10 s one mDNS PTR query for
+  `_jtunnel._udp.local` to mDNS's link-local group, 224.0.0.251:5353, from the same
+  socket (a legacy unicast query, so senders answer that socket; no socket joins the
+  group or binds port 5353). It never announces itself and never sends audio or MIDI.
+- It drops and counts every datagram from outside those ranges, from an address it
+  didn't subscribe to, longer than a packet may be, or that `jstream-jtunnel`'s parser
+  refuses (fuzzed on its own). The socket is IPv4: an accepted sender's address is IPv4
+  (or IPv4 mapped into IPv6, taken as itself), and no two accepted senders share an
+  address and port, since datagrams are told apart by where they come from.
+  Parsing and playout allocate nothing, nor does reading an mDNS answer about anything
+  but a JTunnel instance, however its records repeat a long name (only a JTunnel
+  instance's name is copied, once it matches; a message declaring more than 256 records
+  is refused unread, so one costs at most a few tens of thousands of steps); a sender's audio goes only to the
+  `network_audio` source that names it, and its MIDI only to the MIDI state of its own
+  name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
+  doesn't trigger bindings (ADR-0142 §2).
+- An mDNS answer from a LAN address's port 5353 only lists a sender in
+  `jtunnel.senders` (its name as `remote_name`, text from the LAN): listing trusts it
+  with nothing, since only accepted senders are subscribed to and only their datagrams
+  are taken. The list holds at most 64 senders, at most 8 from one IP address, each
+  forgotten 35 s after it last answered, so answers can't grow it without bound; an answer it can't read is counted
+  as malformed. Plugins can't read the list.
+- The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
+  receives reaches the protocol.
+- PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) and PTZ
+  controller endpoints and their allowlist
+  ([ADR-0152](../adr/0152-a-ptz-controller-drives-scene-cameras.md)) pass the same LAN
+  check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server) for
+  what they may send and receive. Unlike the JTunnel socket, a controller endpoint binds
+  only the one address the person gives.
+
+**Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
+inject audio into the source that records it, or notes into what its MIDI sources draw
+(ADR-0123 §6), as with JTunnel anywhere.
+Off by default, LAN only and accepted one sender at a time bound it to someone on the
+same network who already targets this machine. The check is of the source address a
+datagram claims, and the socket is bound to every IPv4 interface: a host beyond the LAN
+that can deliver a datagram with a spoofed private source, and guesses an accepted
+sender's address and port, gets past it. Binding only the interface that routes to the
+accepted senders would narrow that, and is still to come. A host on the LAN can also
+answer the query with made-up senders, or say goodbye for a real one, which changes only
+what the list shows; a person accepts a sender by name and address, so a made-up one is
+accepted only if they pick it.
+
 <a id="gaps"></a>
 ## Known gaps
 <!-- @section
@@ -645,7 +766,7 @@ Each is a GitHub issue. Severity is this model's estimate of impact on a default
 | #345 | Files | `absolute` asset paths accept UNC and device paths | Medium |
 | #347 | Browser | Permissions Chromium grants without a prompt; Chromium's local network checks not yet confirmed on Windows hardware | Low |
 | #348 | WASM | ADR-0069's capability checks on a plugin's calls, installing and granting plugins, disabling a failing plugin and untrusted-output handling are decided but not built; the protocol's command classes, `PluginGrant` and `forbidden` error are (#642), and so are the host's CPU and memory limits, command cap and event queue | Medium |
-| #349 | WGSL | A hanging shader can still reset the GPU: the engine survives a lost device (#604), and quarantines the pack effect blamed for it, but the GPU-time guard that would stop a hang before the reset is not built, and a forced TDR hasn't run on Windows hardware | Medium |
+| #349 | WGSL | A shader that hangs the GPU in one frame can still reset it: the engine survives a lost device (#604) and quarantines the pack effect blamed for it, and the GPU-time guard quarantines one that runs over half the frame budget for 30 frames before a reset, but only where the GPU has timestamp queries and only on the program stage. A forced TDR hasn't run on Windows hardware | Medium |
 | #355 | Files | A recording can replace a file created just before its rename | Low |
 | #356 | Virtual camera | A pre-created control mapping keeps its own DACL | Low |
 | #273 | Server | A hung engine hello escapes the handshake deadline | Low |

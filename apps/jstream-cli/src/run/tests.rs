@@ -344,7 +344,7 @@ fn state_get_golden() {
         run_on(&engine, &["--json", "--mock", "state", "get"]),
         ok(&format!(
             "{}{}{},{}{}{}\n",
-            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"canvas":{"width":1920,"height":1080},"#,
+            r#"{"id":"req_1","result":{"kind":"query","result":{"type":"state.get","rev":2,"canvas":{"width":1920,"height":1080},"blending":"srgb","#,
             r#""sources":[{"source_id":"cam","name":"Camera","kind":{"type":"builtin","kind":"webcam"}}],"scenes":[{"scene_id":"main","name":"Main","items":["#,
             item("cam_2"),
             item("cam_1"),
@@ -885,7 +885,7 @@ fn program_scene_golden() {
         run_on(&engine, &["--json", "--mock", "studio", "get"]),
         ok(concat!(
             r#"{"id":"req_1","result":{"kind":"query","result":{"type":"studio.get","#,
-            r#""program_scene":"brb","preview_scene":"main"}}}"#,
+            r#""program_scene":"brb","preview_scene":"main","warm_scenes":3,"warm_gpu_mib":0}}}"#,
             "\n"
         ))
     );
@@ -910,7 +910,9 @@ fn capture_targets_prints_each_target() {
              window mock:window (Mock window) 1280x720\n\
              device mock:webcam (Mock webcam)\n\
              \x20 1920x1080 30 fps mjpeg\n\
-             \x20 1280x720 60 fps nv12\n")
+             \x20 1280x720 60 fps nv12\n\
+             \x20 brightness 128 (0 to 255, step 1, default 128)\n\
+             \x20 exposure -6 (-11 to -2, step 1, default -6), auto\n")
     );
 }
 
@@ -1552,8 +1554,8 @@ impl Control for Pairing {
 
     fn call(&self, call: Call) -> BoxFuture<'_, Result<Response, ControlError>> {
         use jstream_control::protocol::{
-            Action, ActionResult, CallResult, DeviceId, DeviceInfo, Query, QueryResult, RequestId,
-            SecretString,
+            Action, ActionResult, CallResult, DeviceId, DeviceInfo, NetworkAccess, Query,
+            QueryResult, RequestId, SecretString,
         };
         let result = match call {
             Call::Action {
@@ -1562,6 +1564,10 @@ impl Control for Pairing {
                 result: Some(ActionResult::PairingStart {
                     code: SecretString::new("7K3M-9QXA"),
                     expires_in_secs: 120,
+                    network: Some(NetworkAccess {
+                        urls: vec!["https://studio.local:4456/".into()],
+                        fingerprint: "AB:CD".into(),
+                    }),
                 }),
             },
             Call::Query {
@@ -1599,7 +1605,13 @@ fn pairing_golden() {
     };
     assert_eq!(
         run_with(&connector, &["pair"]),
-        ok("pairing code: 7K3M-9QXA\nenter it on the device within 120 s; it works once\n")
+        ok(concat!(
+            "pairing code: 7K3M-9QXA\n",
+            "enter it on the device within 120 s; it works once\n",
+            "open on the device: https://studio.local:4456/pair\n",
+            "certificate fingerprint: AB:CD\n",
+            "continue past the certificate warning only if the fingerprint matches\n",
+        ))
     );
     let json = run_with(&connector, &["--json", "pair"]);
     assert_eq!(json.code, exit::OK);

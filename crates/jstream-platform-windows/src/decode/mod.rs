@@ -1,4 +1,4 @@
-//! Media files (ADR-0061): the [`MediaDecoders`](jstream_platform::MediaDecoders)
+//! Media files (ADR-0140): the [`MediaDecoders`](jstream_platform::MediaDecoders)
 //! backend on the Media Foundation Source Reader (`reader`), which demuxes and decodes a
 //! local file with the OS's own containers and codecs. Video comes out on the CPU as
 //! packed RGBA or BGRA, converted from the reader's RGB32 (`convert`); frames on the GPU
@@ -9,7 +9,7 @@
 //!
 //! **`MfMediaDecoders`** (`MediaDecoders`), local media files through the Media
 //! Foundation Source Reader (`decode/`,
-//! ADR-0061):
+//! ADR-0140):
 //! - **Opening:** `MFCreateSourceReaderFromURL` on the file's host path, with the
 //!   `\\?\` prefix `canonicalize` adds removed, since the source resolver would read it
 //!   as a URL scheme. Advanced video processing is on, so the reader converts the

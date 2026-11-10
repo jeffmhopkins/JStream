@@ -384,7 +384,10 @@ fn a_source_draws_its_program_on_the_test_adapter() {
     // `speed` 2 makes `boost` a no-op: the trail's green, at the source's size.
     let mut filter = source.video_filter(&settings(&[("width", json!(16)), ("height", json!(16))]));
     let stand_in = compositor.upload_rgba8(1, 1, &[0; 4]).expect("upload");
-    let clock = jstream_render::FilterClock { seconds: 0.0 };
+    let clock = jstream_render::FilterClock {
+        seconds: 0.0,
+        beat: 0.0,
+    };
     let out = compositor
         .apply_filter(&mut filter, &stand_in, clock)
         .expect("draws");
@@ -522,7 +525,10 @@ fn a_shader_source_from_the_editor_loads_and_draws() {
     let compositor = &mut opened.compositor;
     let mut filter = source.video_filter(&settings(&[("width", json!(16)), ("height", json!(16))]));
     let stand_in = compositor.upload_rgba8(1, 1, &[0; 4]).expect("upload");
-    let clock = jstream_render::FilterClock { seconds: 0.0 };
+    let clock = jstream_render::FilterClock {
+        seconds: 0.0,
+        beat: 0.0,
+    };
     let out = compositor
         .apply_filter(&mut filter, &stand_in, clock)
         .expect("draws");

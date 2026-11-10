@@ -78,6 +78,13 @@ impl Default for History {
 }
 
 impl History {
+    /// Drops every client's stacks and the conflict log: the collection they undo was
+    /// replaced (ADR-0121 §3). The limit stays.
+    pub(crate) fn clear(&mut self) {
+        self.clients.clear();
+        self.log.clear();
+    }
+
     /// Sets how many steps each client keeps, dropping the oldest of any client over it.
     pub(crate) fn set_limit(&mut self, limit: usize) {
         self.limit = limit;

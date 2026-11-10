@@ -8,7 +8,7 @@ use jstream_platform::fake::FakeThreads;
 use jstream_protocol::{Drawer, ItemId, ProfileUnit, SceneId, SourceId};
 
 use super::meter::{BUCKETS, bucket_top, histogram_bucket};
-use super::{Phase, Profiler, SourceMeters};
+use super::{InputTotals, Phase, Profiler, SourceMeters};
 use crate::chain::ChainOwner;
 
 fn ms(n: u64) -> Duration {
@@ -58,7 +58,7 @@ fn a_window_ranks_the_units_of_a_drawer() {
         meter.skip(u64::from(frame == 3));
         meter.end_frame(took, start + ms(1000 * frame), drop);
     }
-    let info = profiler.profile(Some(5), None, None);
+    let info = profiler.profile(Some(5), None, None, InputTotals::default());
     let program = info
         .drawers
         .iter()
@@ -105,11 +105,11 @@ fn windows_subtract_the_earlier_reading() {
     meter.pass(&scene, ms(4));
     meter.end_frame(ms(5), start + ms(1000), drop);
     // The earlier reading: two frames.
-    profiler.sample(None);
+    profiler.sample(None, InputTotals::default());
     std::thread::sleep(ms(10));
     meter.pass(&scene, ms(8));
     meter.end_frame(ms(9), start + ms(2000), drop);
-    let info = profiler.profile(Some(1), None, None);
+    let info = profiler.profile(Some(1), None, None, InputTotals::default());
     let program = &info.drawers[0];
     assert_eq!(
         program.frames, 1,
@@ -122,7 +122,7 @@ fn windows_subtract_the_earlier_reading() {
     again.end_frame(ms(3), start, drop);
     again.pass(&scene, ms(2));
     again.end_frame(ms(3), start + ms(1000), drop);
-    let info = profiler.profile(Some(1), None, None);
+    let info = profiler.profile(Some(1), None, None, InputTotals::default());
     assert_eq!(info.drawers[0].frames, 2, "{info:?}");
 }
 
@@ -144,7 +144,7 @@ fn the_longest_frame_is_exact_and_a_failed_frame_is_forgotten() {
     meter.pass(&scene, ms(4));
     meter.phase(Phase::Passes, ms(4));
     meter.end_frame(ms(5), start + ms(1000), drop);
-    let info = profiler.profile(Some(5), None, None);
+    let info = profiler.profile(Some(5), None, None, InputTotals::default());
     let program = &info.drawers[0];
     assert!(
         (program.frame_max_ms.get() - 2000.0).abs() < 0.01,
@@ -179,7 +179,7 @@ fn threads_are_summed_by_name() {
         thread(3, "jstream-media-file", 0),
         thread(4, "nvidia-worker", 0),
     ]));
-    profiler.sample(None);
+    profiler.sample(None, InputTotals::default());
     std::thread::sleep(ms(100));
     threads.set(Some(vec![
         thread(1, "jstream-render", 50),
@@ -188,7 +188,7 @@ fn threads_are_summed_by_name() {
         thread(4, "nvidia-worker", 5),
         thread(5, "", 1),
     ]));
-    let info = profiler.profile(Some(1), Some(3), None);
+    let info = profiler.profile(Some(1), Some(3), None, InputTotals::default());
     assert!(info.thread_cpu);
     assert_eq!(info.threads.len(), 3, "cut at top: {info:?}");
     let render = &info.threads[0];
@@ -217,7 +217,7 @@ fn sources_and_plans_are_counted() {
     meters.built(&text, ms(12));
     meters.planned(ms(2));
     meters.planned(ms(6));
-    let info = profiler.profile(None, None, None);
+    let info = profiler.profile(None, None, None, InputTotals::default());
     assert_eq!(info.plan.plans, 2);
     assert!((info.plan.ms.get() - 4.0).abs() < 0.01);
     assert!((info.plan.recent_max_ms.get() - 6.0).abs() < 0.01);
@@ -228,7 +228,7 @@ fn sources_and_plans_are_counted() {
     assert_eq!(wave_info.paints, 2);
     assert!((wave_info.paint_ms.get() - 4.0).abs() < 0.01);
     meters.retain(|id| *id != text);
-    let info = profiler.profile(None, None, None);
+    let info = profiler.profile(None, None, None, InputTotals::default());
     assert!(info.sources.iter().all(|s| s.source_id != text));
 }
 
@@ -237,11 +237,11 @@ fn sources_and_plans_are_counted() {
 #[test]
 fn an_empty_profile_parses_its_arguments() {
     let profiler = Profiler::new(ms(33), Arc::new(SourceMeters::default()));
-    let info = profiler.profile(Some(0), Some(0), Some(ms(10)));
+    let info = profiler.profile(Some(0), Some(0), Some(ms(10)), InputTotals::default());
     assert!(info.drawers.is_empty());
     assert!(info.units.is_empty());
     assert!(!info.thread_cpu);
     assert!(info.process_cpu_pct.is_some());
-    let info = profiler.profile(Some(1000), Some(1000), None);
+    let info = profiler.profile(Some(1000), Some(1000), None, InputTotals::default());
     assert!(info.seconds.get() < 60.0);
 }

@@ -30,6 +30,8 @@ pub struct Collection {
     pub canvas: Canvas,
     /// The base frame rate, 30 or 60 (ADR-0119).
     pub base_fps: u32,
+    /// The space every blend mode mixes in (ADR-0126).
+    pub blending: jstream_control::protocol::Blending,
     /// Every source, ordered by ID.
     pub sources: Vec<SourceInfo>,
     /// Every scene with its items, in display order. A keyframe scene's `items` are its
@@ -66,6 +68,7 @@ impl Collection {
                 rev,
                 canvas,
                 base_fps,
+                blending,
                 sources,
                 scenes,
                 outputs,
@@ -106,6 +109,7 @@ impl Collection {
                     rev,
                     canvas,
                     base_fps,
+                    blending,
                     sources,
                     scenes,
                     keyframe_children,
@@ -682,6 +686,9 @@ pub struct Studio {
     /// Bumped when an output's stream key was set or cleared, which no event reports, so
     /// the header re-reads the outputs Go Live may start.
     pub keys_changed: RwSignal<u64>,
+    /// Bumped by each `jtunnel.senders_changed` (0.114), so the JTunnel setting re-reads
+    /// the senders heard on the LAN.
+    pub jtunnel_changed: RwSignal<u64>,
     /// Whether a `state.get` is in flight, and whether another is due after it.
     refresh: StoredValue<(bool, bool)>,
     /// Bumped by each `studio.changed`, so a `studio.get` answer that an event
@@ -710,6 +717,7 @@ impl Studio {
             problem: RwSignal::new(None),
             toast: RwSignal::new(None),
             keys_changed: RwSignal::new(0),
+            jtunnel_changed: RwSignal::new(0),
             refresh: StoredValue::new((false, false)),
             studio_seq: StoredValue::new(0),
             next_id: StoredValue::new(0),
@@ -832,7 +840,7 @@ impl Studio {
                     self.refresh(session);
                 }
             }
-            // A dropped `studio.changed` is recovered too.
+            // A dropped `studio.changed` or `kinds.changed` is recovered too.
             Event::EventsDropped { .. } => {
                 self.refresh(session);
                 let studio = *self;
@@ -840,6 +848,7 @@ impl Studio {
                 spawn_local(async move {
                     studio.read_studio(&session).await;
                     studio.read_sizes(&session).await;
+                    studio.relist_kinds(&session).await;
                 });
             }
             Event::SourceSizeChanged { source_id, size } => self.sizes.update(|sizes| match size {
@@ -851,8 +860,19 @@ impl Studio {
                 preview_scene,
                 ..
             } => self.studio_changed(program_scene.clone(), preview_scene.clone()),
+            // A CLAP scan or an effect pack changed the kinds (0.107), perhaps from
+            // another client.
+            // The JTunnel senders heard on the LAN changed (0.114).
+            Event::JtunnelSendersChanged {} => self.jtunnel_changed.update(|n| *n += 1),
+            Event::KindsChanged { .. } => {
+                let studio = *self;
+                let session = session.clone();
+                spawn_local(async move { studio.relist_kinds(&session).await });
+            }
             // The kinds it quarantined are marked in `kind.list` now.
-            Event::GpuDeviceLost { quarantined, .. } if !quarantined.is_empty() => {
+            Event::GpuDeviceLost { quarantined, .. } | Event::GpuEffectSlow { quarantined, .. }
+                if !quarantined.is_empty() =>
+            {
                 let studio = *self;
                 let session = session.clone();
                 spawn_local(async move { studio.relist_kinds(&session).await });
@@ -1037,6 +1057,7 @@ impl Studio {
         }
         let query_kind = Query::KindDescribe {
             kind_id: kind_id.to_owned(),
+            source_id: None,
         };
         match query(session, query_kind).await? {
             QueryResult::KindDescribe { kind, .. } => {
@@ -1044,6 +1065,24 @@ impl Studio {
                     .update(|d| _ = d.insert(kind_id.to_owned(), kind.clone()));
                 Ok(kind)
             }
+            other => Err(unexpected(other.name())),
+        }
+    }
+
+    /// `kind_id`'s descriptor with `source_id`'s own additions (ADR-0151 decision 7): a
+    /// `model`'s animation names. Asked each time, since they follow the source's file.
+    pub async fn source_descriptor(
+        &self,
+        session: &Session,
+        kind_id: &str,
+        source_id: &SourceId,
+    ) -> Result<KindDescriptor, ControlError> {
+        let describe = Query::KindDescribe {
+            kind_id: kind_id.to_owned(),
+            source_id: Some(source_id.clone()),
+        };
+        match query(session, describe).await? {
+            QueryResult::KindDescribe { kind, .. } => Ok(kind),
             other => Err(unexpected(other.name())),
         }
     }
@@ -1250,6 +1289,8 @@ mod tests {
             preview_scene: None,
             timelines: Vec::new(),
             keyframes: Vec::new(),
+            warm_scenes: None,
+            warm_gpu_mib: None,
         };
         assert_eq!(Collection::from_result(other), None);
     }

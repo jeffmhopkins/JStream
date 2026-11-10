@@ -46,6 +46,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
 /// A live reference parameter (`null` by default) of type `ty`.
 fn reference_param(id: &str, label: &str, ty: ParamType) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default: Value::Null,

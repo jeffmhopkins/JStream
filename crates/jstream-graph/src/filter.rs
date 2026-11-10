@@ -26,8 +26,9 @@ use crate::apply::{
 use crate::deps::{self, Node};
 use crate::model::{Chains, Filter, Item, MAX_CHAIN_FILTERS, Output, Scene, Source, State};
 use jstream_protocol::{
-    Edit, EntityKind, FilterChain, FilterId, FilterOwner, ItemId, KindCategory, KindDescriptor,
-    ProtocolError, Reference, SceneId, Settings, SourceId, SourceKind,
+    Edit, EntityKind, FOLLOW_POINTER_KIND, FilterChain, FilterId, FilterOwner, ItemId,
+    KindCategory, KindDescriptor, ProtocolError, Reference, SceneId, Settings, SourceId,
+    SourceKind,
 };
 use serde_json::Value;
 
@@ -561,6 +562,9 @@ fn add(
         ));
     }
     let descriptor = filter_kind(kinds, kind, chain, at)?;
+    if kind == FOLLOW_POINTER_KIND {
+        check_follows(state, owner, at)?;
+    }
     check_no_references(owner, settings, at, "settings")?;
     let settings = complete_settings(state, kinds, descriptor, owner.source_id(), settings, at)?;
     let position = match index {
@@ -582,6 +586,34 @@ fn add(
         owner: owner.clone(),
         filter_id: filter_id.clone(),
     }])
+}
+
+/// Refuses a follow camera's filter (ADR-0120) anywhere but an item's own effects, on an
+/// item that shows a display or window capture, with `invalid_argument` on `owner`: it
+/// follows the pointer over that capture and drives the item's scene's camera.
+fn check_follows(state: &State, owner: &FilterOwner, at: usize) -> Result<(), ProtocolError> {
+    let FilterOwner::Item { item_id } = owner else {
+        return Err(invalid(
+            at,
+            "owner",
+            format!(
+                "a `{FOLLOW_POINTER_KIND}` filter goes on a display or window capture item's \
+                 own effects"
+            ),
+        ));
+    };
+    match state.item(item_id) {
+        Some((_, item)) if crate::camera::followable(state, &item.source_id) => Ok(()),
+        Some(_) => Err(invalid(
+            at,
+            "owner",
+            format!(
+                "item `{item_id}` doesn't show a display or window capture, so there is no \
+                 pointer to follow"
+            ),
+        )),
+        None => Err(not_found(EntityKind::Item, item_id.as_str())),
+    }
 }
 
 /// The chain and index of `filter_id` on `owner`, or `not_found`.

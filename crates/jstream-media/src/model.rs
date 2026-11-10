@@ -7,8 +7,10 @@
 //! A front face's vertices `a`, `b`, `c` wind so that `(b − a) × (c − a)` points out of
 //! it, which is clockwise on the y-down canvas when it faces the viewer.
 
+pub mod rig;
 pub mod shapes;
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use thiserror::Error;
@@ -96,6 +98,17 @@ pub enum ModelError {
     /// The model has no triangles.
     #[error("the model has no triangles")]
     Empty,
+    /// A weighted vertex names a palette slot the rig doesn't have, or the model has no
+    /// rig.
+    #[error("primitive {primitive} names joint {joint} of {slots}")]
+    Joint {
+        /// The primitive.
+        primitive: usize,
+        /// The palette slot.
+        joint: u16,
+        /// How many slots the rig has, 0 with none.
+        slots: usize,
+    },
 }
 
 /// One vertex of a mesh, in the model's own space.
@@ -112,6 +125,11 @@ pub struct ModelVertex {
     pub uv: [f32; 2],
     /// Vertex colour, linear and straight, multiplying the base colour.
     pub color: [f32; 4],
+    /// The rig's palette slots that place it (ADR-0151 decision 7), with `weights`.
+    pub joints: [u16; 4],
+    /// How much each of `joints` places it. All zero for a vertex of a model without a
+    /// rig, which stands where `position` says.
+    pub weights: [f32; 4],
 }
 
 impl ModelVertex {
@@ -123,6 +141,8 @@ impl ModelVertex {
             tangent: [1.0, 0.0, 0.0, 1.0],
             uv,
             color: [1.0; 4],
+            joints: [0; 4],
+            weights: [0.0; 4],
         }
     }
 }
@@ -416,6 +436,7 @@ pub struct Model {
     materials: Vec<Material>,
     textures: Vec<ModelTexture>,
     bounds: Bounds,
+    rig: Option<Arc<rig::Rig>>,
     version: u64,
 }
 
@@ -430,6 +451,22 @@ impl Model {
         materials: Vec<Material>,
         textures: Vec<ModelTexture>,
     ) -> Result<Self, ModelError> {
+        Self::rigged(primitives, materials, textures, None)
+    }
+
+    /// Checks and builds a model whose vertices `rig` places (ADR-0151 decision 7): its
+    /// bounds are those of its rest pose.
+    ///
+    /// # Errors
+    /// As [`Self::new`], and [`ModelError::Joint`] for a weighted vertex that names a
+    /// slot the rig doesn't have, or any weighted vertex with no rig.
+    pub fn rigged(
+        primitives: Vec<Primitive>,
+        materials: Vec<Material>,
+        textures: Vec<ModelTexture>,
+        rig: Option<Arc<rig::Rig>>,
+    ) -> Result<Self, ModelError> {
+        let rest = rig.as_ref().map(|r| r.rest()).unwrap_or_default();
         if textures.len() > MAX_TEXTURES {
             return Err(too_large(
                 "textures",
@@ -481,13 +518,29 @@ impl Model {
                 });
             }
             for v in &p.vertices {
-                if !v.position.iter().all(|c| c.is_finite()) {
+                if !v.position.iter().all(|c| c.is_finite())
+                    || !v.weights.iter().all(|c| c.is_finite())
+                {
                     return Err(ModelError::NotFinite { primitive });
                 }
+                if let Some((&joint, _)) = v
+                    .joints
+                    .iter()
+                    .zip(&v.weights)
+                    .find(|&(&j, &w)| w != 0.0 && usize::from(j) >= rest.len())
+                {
+                    return Err(ModelError::Joint {
+                        primitive,
+                        joint,
+                        slots: rest.len(),
+                    });
+                }
             }
-            // Only vertices that a triangle uses count toward the bounds.
+            // Only vertices that a triangle uses count toward the bounds, where the rest
+            // pose places them.
             for &i in &p.indices {
-                let at = p.vertices[i as usize].position;
+                let v = &p.vertices[i as usize];
+                let at = rig::skin(&rest, v.joints, v.weights, v.position);
                 for c in 0..3 {
                     min[c] = min[c].min(at[c]);
                     max[c] = max[c].max(at[c]);
@@ -510,6 +563,7 @@ impl Model {
             materials,
             textures,
             bounds: Bounds { min, max },
+            rig,
             version: NEXT_VERSION.fetch_add(1, Ordering::Relaxed),
         })
     }
@@ -532,6 +586,11 @@ impl Model {
     /// The box around the vertices its triangles use.
     pub fn bounds(&self) -> Bounds {
         self.bounds
+    }
+
+    /// Its rig, for a model that can be posed (ADR-0151 decision 7).
+    pub fn rig(&self) -> Option<&Arc<rig::Rig>> {
+        self.rig.as_ref()
     }
 
     /// New for every model built: what a GPU upload is cached by.
@@ -618,8 +677,9 @@ pub fn compute_tangents(primitive: &mut Primitive) {
     }
 }
 
-/// The bytes one vertex takes on the GPU: 16 `f32`s.
-pub const VERTEX_BYTES: u64 = 64;
+/// The bytes one vertex takes on the GPU: 16 `f32`s, then its four joints as `u16`s and
+/// its four weights as `f32`s.
+pub const VERTEX_BYTES: u64 = 88;
 
 fn too_large(what: &'static str, got: u64, limit: u64) -> ModelError {
     ModelError::TooLarge { what, got, limit }
@@ -708,5 +768,53 @@ mod tests {
         let rgba = vec![255, 0, 0, 0, 0, 0, 255, 255];
         let texture = ModelTexture::new(2, 1, rgba, TextureColor::Linear).unwrap();
         assert_eq!(texture.levels()[1], vec![0, 0, 255, 128]);
+    }
+
+    #[test]
+    fn a_rigged_model_is_bounded_where_its_rest_pose_places_it() {
+        use rig::{Rest, Rig, RigNode, Slot};
+        let mut moved = [0.0f64; 16];
+        for i in [0, 5, 10, 15] {
+            moved[i] = 1.0;
+        }
+        // The node stands 2 up (glTF's y up), so the scene's y is -2.
+        let rig = Rig::new(
+            vec![RigNode {
+                parent: None,
+                rest: Rest::Trs {
+                    translation: [0.0, 2.0, 0.0],
+                    rotation: [0.0, 0.0, 0.0, 1.0],
+                    scale: [1.0; 3],
+                },
+            }],
+            vec![Slot {
+                node: 0,
+                inverse_bind: moved,
+            }],
+            vec![],
+        )
+        .unwrap();
+        let mut p = triangle(0);
+        for v in &mut p.vertices {
+            v.weights = [1.0, 0.0, 0.0, 0.0];
+        }
+        let rigged = Model::rigged(
+            vec![p.clone()],
+            vec![Material::default()],
+            vec![],
+            Some(Arc::new(rig)),
+        )
+        .unwrap();
+        assert_eq!(rigged.bounds().min, [0.0, -2.0, 0.0]);
+        assert_eq!(rigged.bounds().max, [1.0, -1.0, 0.0]);
+        // A weighted vertex with no rig names a slot that doesn't exist.
+        assert_eq!(
+            Model::new(vec![p], vec![Material::default()], vec![]),
+            Err(ModelError::Joint {
+                primitive: 0,
+                joint: 0,
+                slots: 0
+            })
+        );
     }
 }

@@ -33,23 +33,28 @@ struct Args {
     ui_dir: PathBuf,
     /// The control token; the browser presents it as its `Basic` password.
     token: String,
+    /// With it, the agents' control token, and `token` the UI's own (ADR-0131).
+    agent_token: Option<String>,
 }
 
 fn parse_args() -> Result<Args> {
     let mut ui_dir = None;
     let mut token = None;
+    let mut agent_token = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or(format!("`{arg}` needs a value"));
         match arg.as_str() {
             "--ui-dir" => ui_dir = Some(PathBuf::from(value()?)),
             "--token" => token = Some(value()?),
+            "--agent-token" => agent_token = Some(value()?),
             other => return Err(format!("unknown argument `{other}`").into()),
         }
     }
     Ok(Args {
         ui_dir: ui_dir.ok_or("`--ui-dir <dist>` is required")?,
         token: token.ok_or("`--token <token>` is required")?,
+        agent_token,
     })
 }
 
@@ -196,7 +201,18 @@ async fn main() -> Result<()> {
         .await
         .map_err(|error| format!("seeding the mock engine: {error}"))?;
 
-    let mut config = ServerConfig::new(Token::new(args.token)?);
+    // With `--agent-token`, the server asks before a new agent connects, as the desktop
+    // app does with `--mcp` (ADR-0131): the agents' token is the control token, and the
+    // browser's is the UI's own.
+    let mut config = match args.agent_token {
+        None => ServerConfig::new(Token::new(args.token)?),
+        Some(agent_token) => {
+            let mut config = ServerConfig::new(Token::new(agent_token)?);
+            config.ui_token = Some(Token::new(args.token)?);
+            config.ask_agents = true;
+            config
+        }
+    };
     config.ui_dir = Some(args.ui_dir);
     let sessions = engine.clone();
     let connector: Connector = Arc::new(move || Box::new(sessions.connect()));

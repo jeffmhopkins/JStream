@@ -10,9 +10,9 @@
 use crate::deps::{self, Node};
 use crate::model::Graph;
 use jstream_protocol::{
-    DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, HotkeyBinding, ItemId, MixInput,
-    OutputId, ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind,
-    TransitionPresetId, VideoMix, VideoMixId,
+    Binding, DeleteTarget, Edit, EntityKind, FilterId, FilterOwner, ItemId, MixInput, OutputId,
+    ProtocolError, QueryResult, SceneId, Settings, SourceId, SourceKind, TransitionPresetId,
+    VideoMix, VideoMixId,
 };
 use serde_json::Value;
 use std::collections::BTreeMap;
@@ -47,7 +47,8 @@ impl Graph {
     /// - `scene.delete` for each keyframe scene of a deleted scene;
     /// - the delete of the target.
     ///
-    /// It also lists, ordered by chord, the hotkey bindings those deletes remove.
+    /// It also lists, ordered by chord, the hotkey bindings those deletes remove, and,
+    /// ordered by trigger, the controller bindings.
     ///
     /// A folder's plan moves the scenes and folders in it up to its parent
     /// (`scene.set_folder`, then `folder.set_parent`), then deletes it. A label's plan
@@ -83,6 +84,7 @@ impl Graph {
                     rev: self.rev,
                     edits: crate::organise::folder_plan(state, folder_id)?,
                     hotkeys: Vec::new(),
+                    bindings: Vec::new(),
                 });
             }
             DeleteTarget::Label { label_id } => {
@@ -90,6 +92,7 @@ impl Graph {
                     rev: self.rev,
                     edits: crate::organise::label_plan(state, label_id)?,
                     hotkeys: Vec::new(),
+                    bindings: Vec::new(),
                 });
             }
             DeleteTarget::Bus { bus_id } => {
@@ -364,30 +367,41 @@ impl Graph {
             let mut hotkeys = applied.removed_hotkeys;
             hotkeys.sort_by(|a, b| a.chord.cmp(&b.chord));
             hotkeys.dedup_by(|a, b| a.chord == b.chord);
+            let mut bindings = applied.removed_bindings;
+            bindings.sort_by(|a, b| a.trigger.cmp(&b.trigger));
+            bindings.dedup_by(|a, b| a.trigger == b.trigger);
             return Ok(QueryResult::DeletePlan {
                 rev: self.rev,
                 edits,
                 hotkeys,
+                bindings,
             });
         }
-        let hotkeys = state
-            .hotkeys()
-            .filter(|(_, action)| {
-                action.named_objects().iter().any(|&(entity, id)| {
-                    deleted.iter().any(|node| match node {
-                        Node::Scene(s) => entity == EntityKind::Scene && s.as_str() == id,
-                        Node::Source(s) => entity == EntityKind::Source && s.as_str() == id,
-                        // No action names a bus, so no binding can.
-                        Node::Bus(_) => false,
-                    })
+        let names_deleted = |action: &jstream_protocol::Action| {
+            action.named_objects().iter().any(|&(entity, id)| {
+                deleted.iter().any(|node| match node {
+                    Node::Scene(s) => entity == EntityKind::Scene && s.as_str() == id,
+                    Node::Source(s) => entity == EntityKind::Source && s.as_str() == id,
+                    // No action names a bus, so no binding can.
+                    Node::Bus(_) => false,
                 })
             })
-            .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+        };
+        let hotkeys = state
+            .hotkeys()
+            .filter(|(_, action)| names_deleted(action))
+            .map(|(chord, action)| state.binding(chord, action))
+            .collect();
+        let bindings = state
+            .bindings()
+            .filter(|(_, action)| names_deleted(action))
+            .map(|(trigger, action)| Binding::new(trigger.clone(), action))
             .collect();
         Ok(QueryResult::DeletePlan {
             rev: self.rev,
             edits,
             hotkeys,
+            bindings,
         })
     }
 }
@@ -456,6 +470,7 @@ mod tests {
                     scene_id: SceneId::new("a"),
                 }],
                 hotkeys: vec![],
+                bindings: vec![],
             })
         );
     }

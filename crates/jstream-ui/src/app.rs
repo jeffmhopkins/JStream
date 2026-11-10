@@ -274,6 +274,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
     provide_context(crate::clipboard::FilterClip(RwSignal::new(None)));
     provide_context(crate::clipboard::TransformClip(RwSignal::new(None)));
     provide_context(AddSourceDialog::new());
+    provide_context(crate::project::OpenProject::new());
     provide_context(PropertiesDialog::new());
     provide_context(SceneDialog::new());
     provide_context(FilterDialogs::new());
@@ -305,6 +306,7 @@ fn Shell(info: RwSignal<SessionInfo>, disconnect: impl Fn() + 'static) -> impl I
             <FilterSettings />
             <AddFilter />
             <crate::settings::Settings />
+            <crate::agents::AgentPrompt />
             <ContextMenu />
         </div>
     }

@@ -28,24 +28,40 @@ path = "src/main.rs"
 cef = ["dep:jstream-browser", "jstream-browser/cef"]
 # Compile-checks the CEF wiring without building CEF, for CI's clippy.
 dox = ["cef", "jstream-browser/dox"]
+# The window on Linux: Tauri on WebKitGTK 4.1, which needs its development packages
+# (`libwebkit2gtk-4.1-dev`) to build. Off by default, so the rest of Linux CI builds the
+# workspace without GTK; CI's `desktop-linux` job turns it on, as Linux packages will
+# (ADR-0141). Without it the Linux binary says to use the daemon. Builds
+# nothing elsewhere: Windows always has its window.
+webkitgtk = ["dep:tauri", "dep:tauri-build"]
 
 [dependencies]
 anyhow.workspace = true
+# The global hotkeys' session reads the engine's events (ADR-0112).
+futures-util.workspace = true
 # The control token and the UI's CSP nonces, from the OS.
 getrandom.workspace = true
 jstream-core.workspace = true
+# The `Control` trait the global hotkeys' session on the engine speaks.
+jstream-control.workspace = true
 # Local, redacted crash reports (ADR-0067).
 jstream-crash.workspace = true
 # The data folder (`paths`, ADR-0020) and, on Windows, the backend traits.
 jstream-platform.workspace = true
 # On Windows, the output kinds the publish opener reads.
 jstream-protocol.workspace = true
-jstream-server.workspace = true
+# `tls` for the network listener, "Allow devices on my network" (ADR-0104).
+jstream-server = { workspace = true, features = ["tls"] }
 # The update check's one GET of GitHub's releases list (R-DEP-006: rustls with ring).
 rustls.workspace = true
 rustls-native-certs.workspace = true
-# The runtime the server runs on; `sync` for its shutdown signal, `time` to bound it.
-tokio = { workspace = true, features = ["rt-multi-thread", "sync", "time"] }
+# The JTunnel setting's file and the page's `setJtunnel` argument (ADR-0123).
+serde.workspace = true
+# Reads the global hotkeys' off switch, a UI setting (ADR-0084).
+serde_json.workspace = true
+# The runtime the server runs on; `sync` for its shutdown signal, `time` to bound it,
+# `macros` for the global hotkeys' loop.
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "sync", "time"] }
 tracing.workspace = true
 # The log file's subscriber, filtered by `RUST_LOG`.
 tracing-subscriber.workspace = true
@@ -64,6 +80,25 @@ jstream-platform-windows.workspace = true
 jstream-sources.workspace = true
 tauri.workspace = true
 
-# Generates the Tauri context from `tauri.conf.json` and embeds the icon and manifest.
-[target.'cfg(windows)'.build-dependencies]
+# The window (WKWebView) and the live engine on macOS (ADR-0144): the platform backends,
+# stream keys in the Keychain, the Browse panels, and the global hotkeys' Carbon and
+# event-tap listener.
+[target.'cfg(target_os = "macos")'.dependencies]
+jstream-platform-macos.workspace = true
+tauri.workspace = true
+
+# On Linux, the live engine's backends and stream key store (as the daemon's), the file
+# dialog's portal, and the global hotkeys' listeners and the session kind that picks one
+# (ADR-0112); with `webkitgtk`, the window (Tauri on WebKitGTK).
+[target.'cfg(target_os = "linux")'.dependencies]
+jstream-platform-linux.workspace = true
+tauri = { workspace = true, optional = true }
+
+# Generates the Tauri context from `tauri.conf.json` and embeds the icon and manifest
+# (on macOS, `Info.plist` too).
+[target.'cfg(any(windows, target_os = "macos"))'.build-dependencies]
 tauri-build.workspace = true
+
+# The same on Linux, with `webkitgtk`.
+[target.'cfg(target_os = "linux")'.build-dependencies]
+tauri-build = { workspace = true, optional = true }

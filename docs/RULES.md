@@ -324,7 +324,7 @@ running unless the error is fatal and reported.
 <a id="dependencies"></a>
 ## Dependencies
 <!-- @section
-depends_on = ["docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0072-linux-media-file-decoding.md"]
+depends_on = ["docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0072-linux-media-file-decoding.md"]
 -->
 
 <a id="R-DEP-001"></a>
@@ -348,16 +348,16 @@ status = "active"
 enforced_by = ["deny:bans", "ci:lint-deps"]
 applies_to = ["Cargo.toml", "deny.toml"]
 -->
-Per [ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md) and
+Per [ADR-0140](adr/0140-source-types-and-decoding-scope-v3.md) and
 [ADR-0072](adr/0072-linux-media-file-decoding.md). Known binding crates are banned in
 `deny.toml`. lint-deps also checks every crate with a `links =` key or a build script
 that compiles C against an allowlist. Non-media C dependencies (e.g. `ring`) are
 allowed only through that allowlist. The media exceptions are three. The prebuilt CEF
 runtime's internal media stack decodes in-page audio and video only; no JStream crate calls
 its codecs ([ADR-0021](adr/0021-browser-source.md)). On Linux, Cisco's prebuilt OpenH264
-binary is a software H.264 encoder that JStream downloads from Cisco on the user's request
-and loads at run time; JStream never ships or builds it, so the `openh264` crates stay
-banned ([ADR-0061](adr/0061-source-types-and-decoding-scope-v2.md)). On Linux, the
+binary is a software H.264 encoder, and the decoder of the engine's own H.264 streams, that
+JStream downloads from Cisco on the user's request and loads at run time; JStream never
+ships or builds it, so the `openh264` crates stay banned ([ADR-0140](adr/0140-source-types-and-decoding-scope-v3.md)). On Linux, the
 media-file source may decode through the system's FFmpeg libraries (`libavformat`,
 `libavcodec`, `libavutil`, `libswresample`) as a fallback, for a file that VA-API and the
 pure-Rust crates can't read. They are loaded at run time through hand-written
@@ -644,7 +644,7 @@ A skipped job reports a `skipped` check, which a required check accepts, but a s
 job reports under its bare name (`clippy`, `test`), so the required `clippy (…)` and `test (…)`
 contexts never report on a draft head. That is what keeps auto-merge from firing on a draft
 whose checks were all skipped.
-`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist` and `macos` are in
+`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist`, `dist-linux` and `macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
 the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
@@ -666,6 +666,7 @@ The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
+| `dist-linux` | `cargo xtask dist-linux` on Linux: the desktop app's `.deb` and AppImage ([ADR-0141](adr/0141-desktop-app-on-linux.md)), uploaded as artifacts, with the web UI the `dist-ui` job builds for release | no | now |
 | `release` | On a `v*` tag, or run by hand on `main`: builds the portable zip from a clean build and publishes it as a GitHub release ([release runbook](runbooks/release.md)) | n/a | now |
 | `e2e-stream` | `cargo xtask e2e-stream` on Linux: streams to a local `ffmpeg` RTMP server and checks the received file with `ffprobe` ([jstream-daemon › Real-receiver end to end](../apps/jstream-daemon/README.md#receiver-e2e)) | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |

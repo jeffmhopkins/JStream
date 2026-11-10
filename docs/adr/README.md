@@ -74,7 +74,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0058](0058-youtube-sign-in-with-a-jstream-client.md) | YouTube sign-in with JStream's own OAuth client, for people only | accepted | maintainer |  |
 | [ADR-0059](0059-mcp-annotations-and-remote-text.md) | MCP tool annotations, and third-party text marked as data | accepted | agent |  |
 | [ADR-0060](0060-linux-platform-support.md) | Linux platform support: portal and PipeWire capture, VA-API encode | accepted | maintainer |  |
-| [ADR-0061](0061-source-types-and-decoding-scope-v2.md) | Source types and decoding scope v2: Linux's software H.264 and AAC | accepted | maintainer |  |
+| [ADR-0061](0061-source-types-and-decoding-scope-v2.md) | Source types and decoding scope v2: Linux's software H.264 and AAC | superseded | maintainer | [ADR-0140](0140-source-types-and-decoding-scope-v3.md) |
 | [ADR-0062](0062-aac-lc-encoder-patent-check.md) | AAC-LC encoder patent check: may JStream ship its own encoder? | accepted | maintainer |  |
 | [ADR-0063](0063-macos-platform-support.md) | macOS platform support: ScreenCaptureKit, Core Audio taps, VideoToolbox | accepted | maintainer |  |
 | [ADR-0064](0064-nested-scene-folders.md) | Nested scene folders | accepted | agent |  |
@@ -118,7 +118,7 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0102](0102-page-api-for-browser-sources.md) | Browser source pages can opt in to reading the engine through window.jstream | accepted | maintainer |  |
 | [ADR-0103](0103-per-item-performance-profile.md) | A performance profile per item, source and thread, readable over the protocol and MCP | accepted | agent |  |
 | [ADR-0104](0104-network-listener-over-tls.md) | Devices on the network reach JStream over TLS, with a self-signed certificate they pin | accepted | maintainer |  |
-| [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | accepted | agent |  |
+| [ADR-0105](0105-browser-matching-srgb-blend-modes.md) | Blend modes that mix in sRGB-encoded values, to match a browser | superseded | agent | [ADR-0126](0126-one-set-of-blend-modes-and-a-blending-space.md) |
 | [ADR-0106](0106-item-effects-in-canvas-space.md) | An item's effects can run over the canvas, after it is placed | accepted | agent |  |
 | [ADR-0107](0107-3d-models.md) | 3D models: meshes, materials and live textures in a scene | accepted | agent |  |
 | [ADR-0108](0108-camera-depth-of-field.md) | Depth of field for scene cameras | accepted | agent |  |
@@ -133,16 +133,39 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0117](0117-real-time-video-thread-model.md) | Real-time video thread model: a compositor-only render thread, producers that hand it GPU-ready frames, and one always-on stage | accepted | agent |  |
 | [ADR-0118](0118-placed-keyframes-on-the-graph.md) | Placed keyframes live on the engine's graph, not on a copy rebuilt each batch | accepted | agent |  |
 | [ADR-0119](0119-base-frame-rate-option.md) | The base frame rate stays 30 fps, and 60 fps is an option | accepted | agent |  |
+| [ADR-0120](0120-follow-pointer-is-a-filter.md) | Follow pointer is a filter on a capture, with a safe margin | accepted | agent |  |
+| [ADR-0121](0121-projects-open-new-and-save-as.md) | Projects: open, new and save as, over the protocol | accepted | agent |  |
 | [ADR-0122](0122-controller-input-midi-and-one-binding-system.md) | Controller input: MIDI and JTunnel, one binding system for every trigger | accepted | agent |  |
 | [ADR-0123](0123-lan-inputs-jtunnel-and-visca.md) | LAN inputs without TLS: JTunnel senders and VISCA, opt-in and accepted one peer at a time | accepted | maintainer |  |
 | [ADR-0124](0124-page-api-read-review.md) | What a page may read: one checkbox and one warning per kind of data | accepted | maintainer |  |
 | [ADR-0125](0125-item-effects-layer-grows-where-it-is-needed.md) | An item's effects layer grows at the first effect that draws past the box | accepted | agent |  |
+| [ADR-0126](0126-one-set-of-blend-modes-and-a-blending-space.md) | One set of blend modes, and a project setting for the space they mix in | accepted | agent |  |
 | [ADR-0127](0127-moves-interpolate-effect-settings.md) | A Move blends the settings of effects that differ only in their settings | accepted | agent |  |
+| [ADR-0128](0128-moves-between-2d-and-3d-glide.md) | A Move between a 2D side and a 3D one glides through the framing camera | accepted | agent |  |
+| [ADR-0129](0129-keyframe-timing-and-more-easings.md) | A keyframe times its items in moves into it, and three more easings | accepted | agent |  |
 | [ADR-0130](0130-browsers-keep-no-certificate-pin-v2.md) | A paired browser keeps no certificate pin, so a new warning on its host means checking the fingerprint again | accepted | agent |  |
 | [ADR-0131](0131-ask-before-a-new-agent-connects.md) | The desktop app asks the person before a new agent's first connection | accepted | agent |  |
+| [ADR-0132](0132-bench-gates-views-and-quality-probe.md) | Release gates from the profile: the client's views report back, a quality probe, and the bench's gates | accepted | agent |  |
+| [ADR-0133](0133-labels-on-hotkeys-and-timelines.md) | Labels on hotkeys and timelines, and a label's members | accepted | agent |  |
 | [ADR-0134](0134-html-pages-load-from-an-origin-of-their-own.md) | A page given as HTML loads from an origin of its own | accepted | agent |  |
 | [ADR-0135](0135-a-shader-source-from-add-source.md) | A shader source is written from Add source | accepted | agent |  |
 | [ADR-0136](0136-an-effects-outset-follows-its-settings.md) | An effect's outset follows its settings | accepted | agent |  |
+| [ADR-0137](0137-midi-visualization-sources.md) | MIDI visualization sources draw a lock-free per-input state on the CPU | accepted | agent |  |
+| [ADR-0138](0138-motion-drives-effect-settings.md) | Motion modifiers drive an effect's number and colour settings | accepted | agent |  |
+| [ADR-0140](0140-source-types-and-decoding-scope-v3.md) | Source types and decoding scope v3: Linux decodes the engine's own H.264 through Cisco's OpenH264 | accepted | maintainer |  |
+| [ADR-0141](0141-desktop-app-on-linux.md) | The desktop app on Linux: Tauri on WebKitGTK, behind a feature | accepted | maintainer |  |
+| [ADR-0142](0142-feeding-the-midi-sources-and-their-beat.md) | The engine feeds the MIDI sources on the media clock, with each input's tempo | accepted | agent |  |
 | [ADR-0143](0143-scene-lights-and-depth-aware-scene-filters.md) | Scene lights and depth-aware scene filters | accepted | agent |  |
+| [ADR-0144](0144-the-desktop-app-on-macos.md) | The desktop app on macOS, as an unsigned app bundle | accepted | maintainer |  |
+| [ADR-0145](0145-the-quality-probe-reads-back-the-compositor.md) | The quality probe compares the compositor's readback with the decoded stream | accepted | agent |  |
+| [ADR-0146](0146-ptz-cameras-shots-and-actions.md) | PTZ cameras: per-machine heads, ptz actions, and shots that scenes and keyframes fire | accepted | agent |  |
+| [ADR-0147](0147-midi-tempo-and-state-for-pages.md) | The engine's tempo as shared values, and page grants for the tempo and one MIDI input | accepted | agent |  |
+| [ADR-0148](0148-a-borders-speed-in-beats.md) | A border's speed in beats, from the engine's MIDI clock | accepted | agent |  |
+| [ADR-0149](0149-where-warm-scenes-are-pinned.md) | Where a warm scene is pinned, and which scenes count as bound | accepted | agent |  |
+| [ADR-0150](0150-the-warm-scenes-gpu-byte-budget.md) | The warm scenes' GPU-byte budget, and how it is estimated | accepted | agent |  |
+| [ADR-0151](0151-the-rest-of-richer-3d-scenes.md) | Shadows, reflections, occlusion, volumetric fog, depth-aware bloom, a scene environment, lit cards, billboards and model animation | accepted | agent |  |
+| [ADR-0152](0152-a-ptz-controller-drives-scene-cameras.md) | A PTZ controller drives scene cameras: a live aim, its actions, and VISCA endpoints | accepted | agent |  |
+| [ADR-0153](0153-ptz-controller-idle-stop-counters-and-setting.md) | A PTZ controller's idle stop, its counters, the desktop app's setting, and a resent command | accepted | agent |  |
 | [ADR-0154](0154-a-carried-pass-compares-against-the-reviewed-base.md) | A carried review pass compares the reviewed head against the base it was reviewed on | accepted | agent |  |
+| [ADR-0155](0155-ptz-cameras-counters-in-profile-get.md) | The PTZ cameras' counters in profile.get | accepted | agent |  |
 <!-- @generated end adr-index -->

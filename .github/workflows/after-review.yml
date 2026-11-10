@@ -283,6 +283,113 @@ jobs:
           RESULT: ${{ job.status }}
         run: bash .github/after-review-status.sh
 
+  # The Linux desktop app's .deb (ADR-0141 decision 5): `cargo xtask dist-linux` with the
+  # release UI from `dist-ui`, the release binaries built with the `webkitgtk` window and
+  # `cef` browser sources, and the browser helper's folder (CEF downloaded by its build,
+  # ADR-0095), packed by `dpkg-deb` (ARCH › Packaging). The step fails unless
+  # `chrome-sandbox` is packed setuid root. It builds the AppImage from the same build too,
+  # with linuxdeploy, its GTK plugin and the AppImage type 2 runtime, each pinned and
+  # checked against its SHA-256 here, as trunk is in `ui-e2e`. Both are uploaded as they
+  # are, so each download is the file a user runs. Not required (R-GIT-003).
+  dist-linux:
+    needs: dist-ui
+    runs-on: ubuntu-latest
+    env:
+      LINUXDEPLOY_VERSION: 1-alpha-20251107-1
+      LINUXDEPLOY_SHA256: c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d
+      LINUXDEPLOY_GTK_COMMIT: 7a3fbc31a9e5075073ff8790f26effbac5f84453
+      LINUXDEPLOY_GTK_SHA256: b0f4cbc684a0103a9651f0955b635eaea0096b3a66c0f5a2c2aa337960375171
+      APPIMAGE_RUNTIME_VERSION: "20251108"
+      APPIMAGE_RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: dist-linux
+          RESULT: pending
+        run: bash .github/after-review-status.sh
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+      - name: linuxdeploy, its GTK plugin and the AppImage runtime
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/appimage-tools"
+          mkdir -p "$tools"
+          cd "$tools"
+          curl -sSLf -o linuxdeploy-x86_64.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/${LINUXDEPLOY_VERSION}/linuxdeploy-x86_64.AppImage"
+          echo "${LINUXDEPLOY_SHA256}  linuxdeploy-x86_64.AppImage" | sha256sum -c -
+          curl -sSLf -o linuxdeploy-plugin-gtk.sh "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/${LINUXDEPLOY_GTK_COMMIT}/linuxdeploy-plugin-gtk.sh"
+          echo "${LINUXDEPLOY_GTK_SHA256}  linuxdeploy-plugin-gtk.sh" | sha256sum -c -
+          curl -sSLf -o runtime-x86_64 "https://github.com/AppImage/type2-runtime/releases/download/${APPIMAGE_RUNTIME_VERSION}/runtime-x86_64"
+          echo "${APPIMAGE_RUNTIME_SHA256}  runtime-x86_64" | sha256sum -c -
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jstream-ui
+          path: ui-dist
+      # Named after the commit tested, as `dist` is.
+      - shell: bash
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/appimage-tools"
+          cargo xtask dist-linux --ui-dir ui-dist --out dist --revision "${SHA::10}" \
+            --linuxdeploy "$tools/linuxdeploy-x86_64.AppImage" \
+            --appimage-runtime "$tools/runtime-x86_64"
+          for deb in dist/*.deb; do
+            dpkg-deb --info "$deb"
+            dpkg-deb --contents "$deb"
+            dpkg-deb --contents "$deb" \
+              | grep -E '^-rwsr-xr-x root/root .* \./usr/lib/jstream/browser/chrome-sandbox$'
+          done
+          # The AppImage's files, read back without running it: the program, its UI and
+          # browser helper, and WebKitGTK's web process where the patched library looks.
+          for image in dist/*.AppImage; do
+            ls -l "$image"
+            (cd "$RUNNER_TEMP" && "$GITHUB_WORKSPACE/$image" --appimage-extract > /dev/null)
+            root="$RUNNER_TEMP/squashfs-root"
+            for file in AppRun AppRun.wrapped usr/bin/jstream usr/bin/ui/index.html \
+              usr/bin/browser/jstream-browser-helper usr/bin/browser/libcef.so \
+              usr/lib/libwebkit2gtk-4.1.so.0 \
+              usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess \
+              usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess; do
+              test -e "$root/$file" || { echo "::error::the AppImage holds no $file"; exit 1; }
+            done
+            if grep -q -a '/usr/lib/x86_64-linux-gnu/webkit2gtk-4.1' "$root/usr/lib/libwebkit2gtk-4.1.so.0"; then
+              echo "::error::the bundled WebKitGTK still names its processes' system folder"
+              exit 1
+            fi
+            rm -rf "$root"
+          done
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: dist/*.deb
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: dist/*.AppImage
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: dist-linux
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
+
   # Required from M3 (R-GIT-003, ADR-0063 §14).
   macos:
     runs-on: macos-latest
@@ -311,5 +418,77 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CONTEXT: macos
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
+
+  # The desktop app on macOS (ADR-0144): lints it natively, builds the release binary,
+  # bundles JStream.app and the disk image (ad-hoc signed; scripts/mac/bundle-app.sh), then
+  # starts the app from the bundle with a fresh home folder and waits for its window's UI
+  # to finish the engine's handshake, which only the webview's page makes. The image is
+  # uploaded as is (`archive: false`). Not required (R-GIT-003).
+  macos-app:
+    needs: dist-ui
+    runs-on: macos-latest
+    continue-on-error: true
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: macos-app
+          RESULT: pending
+        run: bash .github/after-review-status.sh
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - run: cargo clippy -p jstream-desktop --all-targets --locked -- -D warnings
+      - run: cargo build --release -p jstream-desktop --locked
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jstream-ui
+          path: ui-dist
+      - name: Bundle JStream.app and the disk image
+        env:
+          SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bash scripts/mac/bundle-app.sh --exe target/release/jstream --ui-dir ui-dist --out dist --revision "${SHA::10}"
+      # The window's page connects over the engine's WebSocket and says hello; the server
+      # logs "handshake done" for it. Nothing else connects to an app started without
+      # `--mcp`, so that line is the UI running in WKWebView.
+      - name: The app starts and its window loads the UI
+        run: |
+          set -euo pipefail
+          home="$RUNNER_TEMP/home"
+          mkdir -p "$home"
+          log="$home/Library/Application Support/JStream/logs/jstream-desktop.log"
+          HOME="$home" dist/JStream.app/Contents/MacOS/jstream --no-vcam &
+          app=$!
+          ok=0
+          for _ in $(seq 1 600); do
+            if [ -f "$log" ] && grep -q 'handshake done' "$log"; then ok=1; break; fi
+            kill -0 "$app" 2>/dev/null || break
+            sleep 0.1
+          done
+          kill -TERM "$app" 2>/dev/null || true
+          wait "$app" 2>/dev/null || true
+          if [ "$ok" != 1 ]; then
+            echo "::error::the app's window didn't load the UI within 60 seconds"
+            [ -f "$log" ] && cat "$log"
+            exit 1
+          fi
+          grep -q 'engine serving the webview' "$log"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          path: dist/*.dmg
+          archive: false
+          if-no-files-found: error
+          retention-days: 30
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: macos-app
           RESULT: ${{ job.status }}
         run: bash .github/after-review-status.sh

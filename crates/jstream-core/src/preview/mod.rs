@@ -90,8 +90,8 @@ use jstream_platform::{
     CodecRole, Codecs, HardwarePreference, RateControl, VideoEncoderConfig, VideoSurface,
 };
 use jstream_protocol::{
-    BinaryFrame, BinaryHeader, KeyframeGate, PreviewCodec, PreviewSettings, ProtocolError, Rev,
-    SceneId, SourceId, StreamKind,
+    BinaryFrame, BinaryHeader, KeyframeGate, PreviewCodec, PreviewSettings, ProfileStream,
+    ProtocolError, Rev, SceneId, SourceId, StreamKind,
 };
 use jstream_render::{Compositor, OpenOptions, ResourceCache};
 
@@ -99,7 +99,7 @@ use jstream_platform::Capture;
 
 use crate::chain::Chains;
 use crate::lock;
-use crate::profile::DrawMeter;
+use crate::profile::{self, DrawMeter, StreamGuard, StreamMeter, StreamRegistry, StreamTotals};
 use crate::runtime::{
     CaptureBackends, PictureOutput, Program, RenderCaptures, RenderSnapshot, SharedGpu,
     output_size, picture_queue, spawn_captures,
@@ -254,21 +254,23 @@ impl BinaryQueue {
         !self.closed && self.frames.len() < BINARY_BUFFER
     }
 
-    /// Queues `frame` unless the gate drops it. Returns whether its channel now waits
-    /// for a keyframe (the frame or one before it was dropped), and the waker to wake.
-    fn push(&mut self, frame: BinaryFrame) -> (bool, Option<Waker>) {
+    /// Queues `frame` unless the gate drops it. Returns whether it was queued, whether
+    /// its channel now waits for a keyframe (the frame or one before it was dropped),
+    /// and the waker to wake.
+    fn push(&mut self, frame: BinaryFrame) -> (bool, bool, Option<Waker>) {
         if self.closed {
-            return (false, None);
+            return (false, false, None);
         }
         let channel = frame.header.channel;
         let room = self.frames.len() < BINARY_BUFFER;
-        let waker = if self.gate.admit(&frame.header, room) {
+        let admitted = self.gate.admit(&frame.header, room);
+        let waker = if admitted {
             self.frames.push_back(frame);
             self.waker.take()
         } else {
             None
         };
-        (self.gate.is_waiting(channel), waker)
+        (admitted, self.gate.is_waiting(channel), waker)
     }
 
     fn close(&mut self) -> Option<Waker> {
@@ -319,6 +321,9 @@ pub(crate) struct Opening {
     /// What a stream of a source the collection doesn't hold draws ([`plan_draft`]),
     /// in place of the program mix or a scene.
     pub(crate) draft: Option<Arc<RenderSnapshot>>,
+    /// Where its H.264 sessions are metered for `profile.get` (protocol 0.92); `None`
+    /// counts them for no one.
+    pub(crate) streams: Option<StreamRegistry>,
 }
 
 /// One session's binary channel and preview streams.
@@ -383,6 +388,8 @@ impl SessionPreviews {
             keyframe: AtomicBool::new(true),
             closed: AtomicBool::new(false),
             ended: AtomicBool::new(false),
+            counts: Arc::default(),
+            streams: opening.streams,
         });
         {
             // The checks and the insert under one lock, so two subscriptions in
@@ -472,6 +479,91 @@ pub(crate) struct PreviewStream {
     closed: AtomicBool,
     /// The engine ended it and sent its end frame.
     ended: AtomicBool,
+    /// The pictures it sent and lost, for `profile.get`.
+    counts: Arc<SentCounts>,
+    /// Where its H.264 sessions are metered.
+    streams: Option<StreamRegistry>,
+}
+
+/// The pictures a stream queued for its client and those its queue refused, as running
+/// totals.
+#[derive(Debug, Default)]
+struct SentCounts {
+    sent: AtomicU64,
+    bytes: AtomicU64,
+    lost: AtomicU64,
+}
+
+impl SentCounts {
+    fn count(&self, admitted: bool, bytes: usize) {
+        if admitted {
+            self.sent.fetch_add(1, Ordering::Relaxed);
+            self.bytes
+                .fetch_add(u64::try_from(bytes).unwrap_or(u64::MAX), Ordering::Relaxed);
+        } else {
+            self.lost.fetch_add(1, Ordering::Relaxed);
+        }
+    }
+
+    fn read(&self) -> (u64, u64, u64) {
+        (
+            self.sent.load(Ordering::Relaxed),
+            self.bytes.load(Ordering::Relaxed),
+            self.lost.load(Ordering::Relaxed),
+        )
+    }
+}
+
+/// Meters an H.264 session of `stream` in `profile.get`, counting from
+/// now: its encoder's frames, then the pictures the stream queued and lost. A session
+/// reopened at a new size is a new meter.
+fn meter_h264(stream: &PreviewStream, session: &VideoSession) -> Option<StreamGuard> {
+    let streams = stream.streams.as_ref()?;
+    let (fps, target_kbps) = profile::streams::encoder_target(session.info(), None);
+    let handle = session.stats_handle();
+    let counts = Arc::clone(&stream.counts);
+    let base = handle.stats().unwrap_or_default();
+    let (base_sent, base_bytes, base_lost) = counts.read();
+    let last = Mutex::new(base);
+    Some(streams.add(StreamMeter {
+        stream: ProfileStream::Preview {
+            channel: stream.channel,
+            scene_id: stream.scene.clone(),
+            source_id: stream.source_id.clone(),
+        },
+        fps,
+        target_kbps,
+        read: Box::new(move || {
+            let video = match handle.stats() {
+                Some(stats) => {
+                    *lock(&last) = stats;
+                    stats
+                }
+                None => *lock(&last),
+            };
+            let (sent, bytes, lost) = counts.read();
+            let since = |now: u64, then: u64| now.saturating_sub(then);
+            let encoder_drops = |stats: &jstream_encode::SessionStats| {
+                stats
+                    .dropped_queue_full
+                    .saturating_add(stats.dropped_encoder_busy)
+                    .saturating_add(stats.subscriber_drops)
+            };
+            StreamTotals {
+                frames_in: since(
+                    video.received.saturating_add(video.dropped_queue_full),
+                    base.received.saturating_add(base.dropped_queue_full),
+                ),
+                encoded: since(video.encoded, base.encoded),
+                frames_out: since(sent, base_sent),
+                dropped: since(encoder_drops(&video), encoder_drops(&base))
+                    .saturating_add(since(lost, base_lost)),
+                late: since(video.late, base.late),
+                encode_nanos: since(video.encode_nanos, base.encode_nanos),
+                bytes: since(bytes, base_bytes),
+            }
+        }),
+    }))
 }
 
 impl PreviewStream {
@@ -493,7 +585,7 @@ impl PreviewStream {
         tracing::info!(channel = self.channel, reason, "preview stream ended");
         if !self.closed.load(Ordering::Acquire) {
             let frame = BinaryFrame::end(StreamKind::Preview, self.channel, rev, reason);
-            let (_, waker) = lock(&self.sink).push(frame);
+            let (_, _, waker) = lock(&self.sink).push(frame);
             wake(waker);
         }
     }
@@ -503,8 +595,10 @@ impl PreviewStream {
         if self.closed.load(Ordering::Acquire) {
             return;
         }
-        let (waiting, waker) = lock(&self.sink).push(frame);
+        let bytes = frame.payload.len();
+        let (admitted, waiting, waker) = lock(&self.sink).push(frame);
         wake(waker);
+        self.counts.count(admitted, bytes);
         if waiting {
             self.keyframe.store(true, Ordering::Release);
         }
@@ -554,6 +648,8 @@ struct H264 {
     /// The presentation time (µs) and `rev` of each picture pushed and not yet seen
     /// back as a packet.
     pending: VecDeque<(i64, Rev)>,
+    /// Its meter in `profile.get`, dropped with it.
+    profiled: Option<StreamGuard>,
 }
 
 impl Work {
@@ -613,6 +709,7 @@ impl H264 {
             packets,
             size,
             pending: VecDeque::new(),
+            profiled: None,
         })
     }
 }
@@ -682,6 +779,8 @@ struct Staged {
     codec: PreviewCodec,
     size: FrameSize,
     stage: Weak<Program>,
+    /// Its meter in `profile.get`, dropped with it.
+    _profiled: Option<StreamGuard>,
 }
 
 impl Staged {
@@ -695,10 +794,14 @@ impl Staged {
         rev: &Arc<AtomicU64>,
         clock: StreamClock,
     ) -> Result<Self, String> {
+        // The stage draws every `divisor`th base tick, so the encoder is told the rate
+        // it gets: never above the base rate, which a 60 fps ask of a 30 fps stage is.
+        let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
+        let fps = (stage.base_fps / divisor).max(1);
         let H264 {
             session, packets, ..
-        } = H264::open(codecs, size.width(), size.height(), stream.settings.fps)?;
-        let divisor = (stage.base_fps / stream.settings.fps.max(1)).max(1);
+        } = H264::open(codecs, size.width(), size.height(), fps)?;
+        let profiled = meter_h264(stream, &session);
         stage.attach_preview(size, divisor, stream.scene.clone(), session.input());
         let closing = Arc::new(AtomicBool::new(false));
         let sender = {
@@ -720,6 +823,7 @@ impl Staged {
             codec: PreviewCodec::H264,
             size,
             stage: Arc::downgrade(stage),
+            _profiled: profiled,
         })
     }
 
@@ -756,6 +860,7 @@ impl Staged {
             codec,
             size,
             stage: Arc::downgrade(stage),
+            _profiled: None,
         })
     }
 
@@ -1060,6 +1165,18 @@ impl PreviewHub {
 
     fn next_id(&self) -> u64 {
         self.inner.next_id.fetch_add(1, Ordering::Relaxed)
+    }
+
+    /// The rate of each live stream, for tests of the engine's cap.
+    #[cfg(test)]
+    pub(crate) fn rates(&self) -> Vec<u32> {
+        lock(&self.inner.state)
+            .streams
+            .iter()
+            .filter_map(Weak::upgrade)
+            .filter(|stream| stream.live())
+            .map(|stream| stream.settings.fps)
+            .collect()
     }
 
     /// The scenes the live streams show, which the engine plans for them.
@@ -1550,7 +1667,10 @@ fn serve(
     // can a video filter (a scroll, a video delay) and a capture. The slots' stamp is
     // read before the draw: a frame a slot takes during it is drawn again next time.
     let slots = snapshot.shot().slot_stamp();
+    // So does a scene camera's live aim while a drive or a glide moves it (ADR-0152),
+    // which the parameter channel doesn't republish as it moves.
     let changed = snapshot.shot().changes_with_time()
+        || live.aims_move()
         || frames.is_some_and(|frames| work.frames != frames)
         || slots != work.slots
         || !work
@@ -1669,12 +1789,14 @@ fn open_h264(stream: &PreviewStream, work: &mut Work, size: FrameSize) -> Result
         .codecs
         .as_ref()
         .ok_or("this engine has no H.264 encoder")?;
-    work.h264 = Some(H264::open(
+    let mut h264 = H264::open(
         codecs.as_ref(),
         size.width(),
         size.height(),
         stream.settings.fps,
-    )?);
+    )?;
+    h264.profiled = meter_h264(stream, &h264.session);
+    work.h264 = Some(h264);
     Ok(())
 }
 

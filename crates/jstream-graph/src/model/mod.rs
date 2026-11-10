@@ -52,7 +52,8 @@
 //! - Every send's source is an audio source that is not a `scene` source, and its bus
 //!   exists. Sends only run from sources into buses, so the audio graph has no cycle.
 //! - Every hotkey binding's chord is valid, its action can be bound, and every object
-//!   its action names exists (ADR-0024 §5, ADR-0040 §3).
+//!   its action names exists (ADR-0024 §5, ADR-0040 §3). So does every controller
+//!   binding's, with a valid trigger in place of the chord (ADR-0122).
 //! - Folder and label IDs are non-empty and unique within their kind. Every scene's
 //!   folder and every folder's parent exists, and no folder sits inside itself. Every
 //!   label a source carries exists (ADR-0024 §3 and §4).
@@ -72,14 +73,15 @@ use jstream_protocol::{
     Action, BlendMode, BusId, BusMonitor, CameraFollow, CameraMotionModifier, Canvas, Chord, Crop,
     Easing, EncoderProfile, EncoderProfileId, FilterChain, FilterId, Finite32, FolderId,
     INITIAL_PRESET, ItemGeometry, ItemId, ItemTransform, ItemTransition, KindDescriptor, LabelId,
-    OutputId, OutputKind, PlacementForm, Rev, SceneCamera, SceneId, SceneMeta, SceneOptions,
-    SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
-    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, VideoMix as MixSpec, VideoMixId,
-    builtin_transition_kinds, initial_preset,
+    OutputId, OutputKind, PlacementForm, PtzShot, Rev, SceneCamera, SceneId, SceneMeta,
+    SceneOptions, SceneRole, Settings, SourceAudio, SourceId, SourceKind, TimelineId, TimelineInfo,
+    TransitionPresetId, TransitionPresetInfo, TransitionsInfo, Trigger, VideoMix as MixSpec,
+    VideoMixId, builtin_transition_kinds, initial_preset,
 };
 use std::borrow::Cow;
 use std::collections::{BTreeMap, BTreeSet};
 
+use jstream_protocol::KeyframeTiming;
 pub use jstream_protocol::MAX_CHAIN_FILTERS;
 
 /// A keyframe scene's overrides of its parent's items (ADR-0049 §1): per item, the
@@ -87,8 +89,9 @@ pub use jstream_protocol::MAX_CHAIN_FILTERS;
 /// [`Placement::Geometry`]. Overridden effects are [`Chains`] whose audio chain is
 /// always empty, which the keyframe draws in place of the item's own (ADR-0088).
 /// Overridden motion is a whole [`MotionList`], moved with in place of the item's own
-/// (ADR-0099).
-pub type Overrides = jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList>;
+/// (ADR-0099). An overridden timing applies to transitions into the keyframe (ADR-0129).
+pub type Overrides =
+    jstream_anim::Keyframe<ItemId, Placement, Crop, Chains, MotionList, KeyframeTiming>;
 
 /// An item's motion modifiers (ADR-0099), in order, checked by `item.set_motion`.
 pub type MotionList = Vec<jstream_protocol::MotionModifier>;
@@ -172,6 +175,14 @@ impl Graph {
     pub fn state(&self) -> &State {
         &self.state
     }
+
+    /// This graph at revision `rev`, with its state unchanged: a collection the engine
+    /// opens in place of another keeps its revisions increasing (ADR-0121 §3).
+    #[must_use]
+    pub fn with_rev(mut self, rev: Rev) -> Self {
+        self.rev = rev;
+        self
+    }
 }
 
 /// The largest canvas side this engine accepts, in pixels. ADR-0022 asks for at least
@@ -188,6 +199,8 @@ pub struct State {
     pub(crate) canvas: Canvas,
     /// The base frame rate, 30 or 60 (ADR-0119). A new collection is 30.
     pub(crate) base_fps: u32,
+    /// The space every blend mode mixes in (ADR-0126). A new collection is `srgb`.
+    pub(crate) blending: jstream_protocol::Blending,
     pub(crate) sources: BTreeMap<SourceId, Source>,
     pub(crate) scenes: Vec<Scene>,
     pub(crate) outputs: BTreeMap<OutputId, Output>,
@@ -202,6 +215,11 @@ pub struct State {
     /// The master stage's chains (ADR-0080 §1).
     pub(crate) master: Chains,
     pub(crate) hotkeys: BTreeMap<Chord, Action>,
+    /// The labels each binding carries (ADR-0133), ordered by ID. A chord with none has
+    /// no entry, and a cleared binding takes its entry with it.
+    pub(crate) hotkey_labels: BTreeMap<Chord, BTreeSet<LabelId>>,
+    /// The controller bindings (ADR-0122), ordered by trigger.
+    pub(crate) bindings: BTreeMap<Trigger, Action>,
     /// In folder order.
     pub(crate) folders: Vec<Folder>,
     /// In label order.
@@ -221,6 +239,7 @@ impl Default for State {
         Self {
             canvas: Canvas::default(),
             base_fps: jstream_protocol::DEFAULT_BASE_FPS,
+            blending: jstream_protocol::Blending::Srgb,
             sources: BTreeMap::new(),
             scenes: Vec::new(),
             outputs: BTreeMap::new(),
@@ -231,6 +250,8 @@ impl Default for State {
             sends: BTreeMap::new(),
             master: Chains::default(),
             hotkeys: BTreeMap::new(),
+            hotkey_labels: BTreeMap::new(),
+            bindings: BTreeMap::new(),
             folders: Vec::new(),
             labels: Vec::new(),
             placed_keyframes: BTreeMap::new(),
@@ -250,6 +271,11 @@ impl State {
     /// The collection's base frame rate, 30 or 60 (ADR-0119).
     pub fn base_fps(&self) -> u32 {
         self.base_fps
+    }
+
+    /// The space every blend mode mixes in (ADR-0126).
+    pub fn blending(&self) -> jstream_protocol::Blending {
+        self.blending
     }
 
     /// Every source, ordered by ID. Sources have no display order of their own.
@@ -386,6 +412,35 @@ impl State {
     /// The action bound to this chord.
     pub fn hotkey(&self, chord: &Chord) -> Option<&Action> {
         self.hotkeys.get(chord)
+    }
+
+    /// The labels the binding of this chord carries, ordered by ID: none for a chord
+    /// with no binding (ADR-0133).
+    pub fn hotkey_labels(&self, chord: &Chord) -> Vec<LabelId> {
+        self.hotkey_labels
+            .get(chord)
+            .map(|labels| labels.iter().cloned().collect())
+            .unwrap_or_default()
+    }
+
+    /// The binding of `chord` to `action` as the wire reports it, with its labels.
+    pub fn binding(&self, chord: &Chord, action: &Action) -> jstream_protocol::HotkeyBinding {
+        jstream_protocol::HotkeyBinding::new(chord.clone(), action)
+            .with_labels(self.hotkey_labels(chord))
+    }
+
+    /// Every binding as the wire reports it, ordered by chord, with its labels.
+    pub fn hotkey_bindings(&self) -> Vec<jstream_protocol::HotkeyBinding> {
+        self.hotkeys
+            .iter()
+            .map(|(chord, action)| self.binding(chord, action))
+            .collect()
+    }
+
+    /// Every controller binding (ADR-0122), ordered by trigger: the trigger and the
+    /// action it runs.
+    pub fn bindings(&self) -> impl ExactSizeIterator<Item = (&Trigger, &Action)> {
+        self.bindings.iter()
     }
 
     /// Every folder of the scene list, in folder order.
@@ -817,9 +872,9 @@ pub struct Scene {
     /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
     /// parent's.
     pub(crate) camera_motion: Vec<CameraMotionModifier>,
-    /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
-    /// item no longer in the scene, which leaves it inert.
-    pub(crate) camera_follow: Option<CameraFollow>,
+    /// Its PTZ shots (ADR-0146 §6). On a keyframe scene, only its own, which replace
+    /// its parent's for the same cameras; [`State::effective_ptz_shots`] merges them.
+    pub(crate) ptz_shots: Vec<PtzShot>,
     /// Its timelines (ADR-0115), by ID.
     pub(crate) timelines: BTreeMap<TimelineId, TimelineInfo>,
     pub(crate) items: Vec<Item>,
@@ -886,10 +941,22 @@ impl Scene {
         &self.camera_motion
     }
 
-    /// Its follow camera (ADR-0113); always `None` for a keyframe scene. It may name an
-    /// item no longer in the scene, which leaves it inert.
-    pub fn camera_follow(&self) -> Option<&CameraFollow> {
-        self.camera_follow.as_ref()
+    /// Its own PTZ shots (ADR-0146 §6), which `scene.set_ptz_shots` sets. On a keyframe
+    /// scene they replace its parent's for the same cameras;
+    /// [`State::effective_ptz_shots`] gives what the scene sends.
+    pub fn ptz_shots(&self) -> &[PtzShot] {
+        &self.ptz_shots
+    }
+
+    /// Its follow camera (ADR-0113, ADR-0120): the first enabled
+    /// [`FOLLOW_POINTER_KIND`](jstream_protocol::FOLLOW_POINTER_KIND) filter on its items'
+    /// effects, in stacking order, read as a [`CameraFollow`] of that item. `None` when
+    /// none is on, and always for a keyframe scene, which draws its parent's.
+    pub fn camera_follow(&self) -> Option<CameraFollow> {
+        if self.variant_of.is_some() {
+            return None;
+        }
+        self.items.iter().find_map(Item::follow)
     }
 
     /// Its timelines (ADR-0115), ordered by ID.
@@ -1065,6 +1132,17 @@ impl Item {
     /// placement's cropped, fitted box, before its opacity and blend.
     pub fn effects(&self) -> &[Filter] {
         &self.effects.video
+    }
+
+    /// The follow camera its first enabled
+    /// [`FOLLOW_POINTER_KIND`](jstream_protocol::FOLLOW_POINTER_KIND) effect sets
+    /// (ADR-0120), or `None`.
+    pub fn follow(&self) -> Option<CameraFollow> {
+        self.effects
+            .video
+            .iter()
+            .find(|f| f.enabled && f.kind == jstream_protocol::FOLLOW_POINTER_KIND)
+            .map(|f| CameraFollow::from_settings(self.id.clone(), &f.settings))
     }
 
     /// Where its effects run (ADR-0106): over its box before it is placed, or over the

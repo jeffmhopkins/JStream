@@ -1,6 +1,6 @@
 // The Transitions panel: the studio-mode bar (putting a scene on preview, taking it to
 // program, and swapping the old program scene back onto preview), shown only in studio
-// mode, and the preset editor. The seed puts `Main` on program. The mock engine has only
+// mode, and the preset editor, with a custom curve's points. The seed puts `Main` on program. The mock engine has only
 // the initial `cut` preset and can't change presets, so the editor's changes are checked
 // by what the page sends.
 import { test, expect, connect, showPanel, recordCalls } from '../fixtures.js';
@@ -77,4 +77,26 @@ test('the preset picker edits the default and adds a preset', async ({ page, dae
     duration_ms: 500,
     easing: 'ease_in_out',
   });
+});
+
+test('a preset\'s custom curve shows its points, which are sent as its easing', async ({ page, daemon, consoleErrors }) => {
+  const calls = await recordCalls(page);
+  await connect(page, daemon);
+  await showPanel(page, 'Transitions');
+  const presets = page.locator('section.presets');
+  // The mock refuses preset edits, after the page has sent them.
+  consoleErrors.allow(/transition/);
+  await presets.getByRole('radio', { name: 'Fade' }).check({ force: true });
+  await expect(presets.locator('.curve-editor')).toHaveCount(0);
+  await presets.getByLabel('Easing', { exact: true }).selectOption({ label: 'Custom curve' });
+  const editor = presets.locator('.curve-editor');
+  await expect(editor.getByRole('img', { name: 'The custom curve' })).toBeVisible();
+
+  // A point past its range is kept to it, and sent as the preset's easing.
+  const x1 = editor.getByRole('textbox', { name: 'x1', exact: true });
+  await x1.fill('1.7');
+  await x1.press('Enter');
+  await expect.poll(() => calls.sent('transition.update').filter((c) => c.easing?.cubic_bezier).length).toBeGreaterThan(1);
+  const sent = calls.sent('transition.update').filter((c) => c.easing?.cubic_bezier);
+  expect(sent.at(-1).easing.cubic_bezier).toMatchObject({ x1: 1 });
 });

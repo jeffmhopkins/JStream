@@ -11,7 +11,7 @@
 //! # Behaviour
 //!
 //! **`MfVideoDevices`** (`VideoDevices`), webcams and capture cards through Media
-//! Foundation's source reader (ADR-0061):
+//! Foundation's source reader (ADR-0140):
 //! - **Devices:** the video capture devices Media Foundation enumerates. A device's
 //!   `DeviceId` is its symbolic link (its device interface path), which stays the same
 //!   across reboots and replugging into the same port; its name is the friendly name.
@@ -58,9 +58,11 @@
 
 // Platform-independent, so they are tested on every platform.
 #[cfg(any(windows, test))]
+mod controls;
+#[cfg(any(windows, test))]
 mod convert;
 #[cfg(any(windows, test))]
-mod format;
+pub(crate) mod format;
 #[cfg(windows)]
 mod mjpeg;
 #[cfg(any(windows, test))]
@@ -80,11 +82,12 @@ pub use mjpeg::MfMjpegDecoder;
 mod backend {
     use jstream_platform::media::PixelFormat;
     use jstream_platform::{
-        CaptureDecoder, CaptureEncoding, CaptureStream, DeviceId, PlatformError, VideoDeviceFormat,
-        VideoDeviceInfo, VideoDevices,
+        CameraControlId, CameraControlInfo, CameraControlValue, CaptureDecoder, CaptureEncoding,
+        CaptureStream, DeviceId, PlatformError, VideoDeviceFormat, VideoDeviceInfo, VideoDevices,
     };
     use windows::Win32::Media::MediaFoundation::MF_SOURCE_READER_ALL_STREAMS;
 
+    use super::controls::{Controls, open_source, register};
     use super::convert::Layout;
     use super::format::color;
     use super::pairing::paired;
@@ -140,6 +143,36 @@ mod backend {
             let _mf = MfStarted::start()?;
             let opened = source::find(device)?.open()?;
             Ok(opened.natives()?.into_iter().map(|n| n.format).collect())
+        }
+
+        /// Read on the media source of the device's running capture when there is one,
+        /// else on a source activated for the call.
+        fn controls(&self, device: &DeviceId) -> Result<Vec<CameraControlInfo>, PlatformError> {
+            let _com = Com::init()?;
+            let _mf = MfStarted::start()?;
+            if let Some(running) = open_source(device.as_str()) {
+                return Ok(Controls::of(&running).list());
+            }
+            let opened = source::find(device)?.open()?;
+            Ok(Controls::of(opened.source()).list())
+        }
+
+        /// Set on the media source of the device's running capture when there is one,
+        /// so the stream keeps running in the new setting; else on a source activated for
+        /// the call, whose setting the camera keeps after it closes.
+        fn set_control(
+            &self,
+            device: &DeviceId,
+            control: CameraControlId,
+            value: CameraControlValue,
+        ) -> Result<(), PlatformError> {
+            let _com = Com::init()?;
+            let _mf = MfStarted::start()?;
+            if let Some(running) = open_source(device.as_str()) {
+                return Controls::of(&running).apply(control, value, device.as_str());
+            }
+            let opened = source::find(device)?.open()?;
+            Controls::of(opened.source()).apply(control, value, device.as_str())
         }
 
         fn open(
@@ -210,6 +243,7 @@ mod backend {
                     })?;
             }
             let stream = MfStream::start(Capture {
+                registered: register(&found.link, opened.source()),
                 opened,
                 mf,
                 deliver,
@@ -324,6 +358,37 @@ mod device_tests {
         }
         let (_, formats) = first_device_formats();
         assert!(formats.iter().all(|f| f.size.width() > 0));
+    }
+
+    /// Lists the first device's camera controls, then sets each to its value and, where
+    /// it has one, its automatic mode, both with the device closed and while it captures
+    /// (#1196). Setting a control to the value it has changes nothing on the camera.
+    #[test]
+    #[ignore = "needs a webcam"]
+    fn reads_and_sets_camera_controls_closed_and_open() {
+        use jstream_platform::CameraControlValue;
+        let devices = MfVideoDevices::new();
+        let (id, formats) = first_device_formats();
+        let controls = devices.controls(&id).expect("controls");
+        assert!(!controls.is_empty(), "the webcam lists no camera control");
+        let set_all = || {
+            for c in devices.controls(&id).expect("controls") {
+                assert!(c.min <= c.max && c.step >= 1, "{c:?}");
+                let value = if c.auto == Some(true) {
+                    CameraControlValue::Auto
+                } else {
+                    CameraControlValue::Manual(c.value)
+                };
+                devices.set_control(&id, c.id, value).expect("set_control");
+            }
+        };
+        set_all();
+        let format = formats
+            .iter()
+            .find(|f| !f.encoding.is_compressed())
+            .expect("an uncompressed format");
+        let _stream = devices.open(&id, format, None).expect("open");
+        set_all();
     }
 
     #[test]

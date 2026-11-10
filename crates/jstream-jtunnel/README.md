@@ -56,12 +56,17 @@ Contents:
   its position never reaches the clock. A reordered datagram of the stream a restart
   replaced is late, not a second restart.
 - `dnssd`: the mDNS PTR query for `_jtunnel._udp.local`, `parse_announcements` for the
-  SRV and TXT records senders answer with (DNS name compression followed with a bound),
+  SRV and TXT records senders answer with (DNS name compression followed with a bound,
+  and a message declaring more than 256 questions and records refused unread),
   and `Directory`, the list of senders seen, refreshed by announcements, removed by a
-  goodbye and forgotten 35 s after it was last heard.
+  goodbye and forgotten 35 s after it was last heard, with `len` and `is_empty` so a
+  caller can bound it.
 
 `tests/no_alloc.rs` checks that parsing a packet, walking its events, decoding PCM,
-joining SysEx, tracking sequence numbers and playing frames out allocate nothing.
+joining SysEx, tracking sequence numbers and playing frames out allocate nothing, and
+that `parse_announcements` reads an mDNS answer about other names (a full datagram of
+records that point back at one 126-label name) without allocating: names are walked
+where they lie, and only a JTunnel instance's name is copied.
 `tests/link.rs` runs a sender 150 ppm off this machine's clock over 90 s of simulated
 Wi-Fi (jitter, 60 ms stalls, 2% loss, redundancy on): the drift is found within 20 ppm,
 every frame comes out in order with steps of 2 ms give or take 5%, and after settling

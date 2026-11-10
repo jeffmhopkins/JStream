@@ -8,13 +8,16 @@
 //! libpipewire (`PipeWire`) with audio input, output and loopback through it
 //! (`PipeWireAudio`), ALSA audio input and output as ADR-0060 §4's fallback
 //! (`AlsaAudio`, libasound loaded at run time), libva, VA-API H.264 and HEVC encoding from CPU
-//! frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder,
-//! downloaded only on the user's request and checked against its pin (`OpenH264Store`,
-//! `OpenH264Encoder`, ADR-0061), and AAC encoding on JStream's own AAC-LC encoder
+//! frames behind `VaapiCodecs`, Cisco's OpenH264 binary as the software H.264 encoder
+//! and the decoder of the engine's own H.264 streams, downloaded only on the user's
+//! request and checked against its pin (`OpenH264Store`, `OpenH264Encoder`,
+//! `OpenH264Decoder`, ADR-0140), and AAC encoding on JStream's own AAC-LC encoder
 //! (`RustAacEncoder`, feature `aac-encoder`), which `VaapiCodecs` opens,
 //! the stream-key and OAuth-token store (`LinuxSecrets`, ADR-0071): the Secret
 //! Service, else a `0600` file, the process's CPU time (`LinuxProcessCpu`) and its threads' (`LinuxThreadCpu`), and
-//! `NoMediaDecoders`, the stand-in until ADR-0072's media-file decoders exist. `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
+//! `NoMediaDecoders`, the stand-in until ADR-0072's media-file decoders exist, and
+//! `GlobalHotkeys`, the desktop app's global hotkeys as X11 key grabs (ADR-0112), and its
+//! Browse dialogs through the FileChooser portal (`portal_pick_path`). `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
 //! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and
 //! one of the crates allowed `unsafe` (R-UNSAFE-001): every system call is wrapped here
 //! behind safe APIs.
@@ -24,7 +27,7 @@
 //! on Linux. On other platforms the crate builds empty except for its
 //! platform-independent helpers, which are tested everywhere.
 //!
-//! Docs: crates/jstream-platform-linux/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0060-linux-platform-support.md, docs/adr/0061-source-types-and-decoding-scope-v2.md, docs/adr/0062-aac-lc-encoder-patent-check.md, docs/adr/0014-media-clock.md, docs/adr/0071-linux-secret-store.md
+//! Docs: crates/jstream-platform-linux/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0060-linux-platform-support.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0062-aac-lc-encoder-patent-check.md, docs/adr/0014-media-clock.md, docs/adr/0071-linux-secret-store.md, docs/adr/0112-assignable-camera-zoom-bindings.md
 
 #[cfg(feature = "aac-encoder")]
 mod aac;
@@ -39,6 +42,7 @@ mod dbus;
 mod dl;
 #[cfg(target_os = "linux")]
 mod gpu;
+mod hotkeys;
 #[cfg(target_os = "linux")]
 mod openh264;
 #[cfg(any(target_os = "linux", test))]
@@ -72,11 +76,16 @@ pub use codec::choose_encoder;
 #[cfg(target_os = "linux")]
 pub use gpu::LinuxGpu;
 #[cfg(target_os = "linux")]
+pub use hotkeys::GlobalHotkeys;
+pub use hotkeys::{
+    GrabChord, ModifierMasks, key_code as x11_key_code, parse_chord as parse_x11_chord,
+};
+#[cfg(target_os = "linux")]
 pub use openh264::{
-    Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_DOWNLOAD_ID,
-    OPENH264_ENCODER_NAME, OPENH264_LICENSE_TEXT, OPENH264_LICENSE_URL, OPENH264_NOTICE,
-    OPENH264_PIN, OpenH264Encoder, OpenH264Pin, OpenH264Store, openh264_encoder_info,
-    wants_software,
+    Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_DECODER_NAME,
+    OPENH264_DOWNLOAD_ID, OPENH264_ENCODER_NAME, OPENH264_LICENSE_TEXT, OPENH264_LICENSE_URL,
+    OPENH264_NOTICE, OPENH264_PIN, OpenH264Decoder, OpenH264Encoder, OpenH264Pin, OpenH264Store,
+    openh264_decoder_info, openh264_encoder_info, wants_software,
 };
 #[cfg(target_os = "linux")]
 pub use pairing::PairedAudio;
@@ -85,9 +94,11 @@ pub use pairing::{CardInputs, SoundCard};
 pub use pipewire::{PIPEWIRE_FLOOR, pipewire_version_supported};
 #[cfg(target_os = "linux")]
 pub use pipewire::{PipeWire, PipeWireAudio};
-#[cfg(target_os = "linux")]
-pub use portal::PortalCapture;
 pub use portal::{CursorModes, PersistMode, PortalPick, SourceTypes, handle_token, request_path};
+#[cfg(any(target_os = "linux", test))]
+pub use portal::{FileChoice, FileChoiceKind, filter_extensions, shortcut_trigger};
+#[cfg(target_os = "linux")]
+pub use portal::{PortalCapture, PortalHotkeyEvent, PortalHotkeys, pick_path as portal_pick_path};
 #[cfg(target_os = "linux")]
 pub use process::{LinuxProcessCpu, LinuxThreadCpu};
 #[cfg(target_os = "linux")]

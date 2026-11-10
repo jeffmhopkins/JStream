@@ -46,8 +46,9 @@ pub struct KindSummary {
     /// with.
     pub version: u32,
     /// An effect-pack kind the engine quarantined after a GPU device loss was blamed on
-    /// it (0.61, `gpu.device_lost`): its filters are bypassed until a person re-enables
-    /// it (`effect.enable`). Omitted when `false`.
+    /// it (0.61, `gpu.device_lost`), or after it ran too long on the GPU (0.102,
+    /// `gpu.effect_slow`): its filters are bypassed until a person re-enables it
+    /// (`effect.enable`). Omitted when `false`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub quarantined: bool,
 }
@@ -133,6 +134,10 @@ pub struct ParamDescriptor {
     /// A longer explanation for UIs and agents.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub description: Option<String>,
+    /// One line a client shows beside the control, not only in a tooltip: what setting
+    /// it gives away (0.93, ADR-0124). A client that predates it ignores it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub warning: Option<String>,
     /// UI hint: the group to show it in.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub group: Option<String>,
@@ -258,6 +263,17 @@ pub enum ParamType {
         /// [`ParamType::CaptureTarget`] of kind `device`.
         target: String,
     },
+    /// The camera controls set on a video capture device (exposure, focus, white
+    /// balance and the like), each picked from the controls `capture.targets` lists
+    /// for the device that parameter `target` names, so a UI can offer those with their
+    /// ranges. Since 0.105. Its value is an object from a control's `name` to an
+    /// integer, which sets it by hand, or `"auto"`, which hands it to the device; a
+    /// control not in the object is left as the device has it. Its default is `{}`.
+    CameraControls {
+        /// The ID of the parameter naming the device, a
+        /// [`ParamType::CaptureTarget`] of kind `device`.
+        target: String,
+    },
     /// A type this version of the protocol doesn't know. Never sent; produced only when
     /// parsing a descriptor from a newer server.
     #[serde(other)]
@@ -312,6 +328,50 @@ pub fn parse_resolution(value: &str) -> Option<Option<(u32, u32)>> {
             .filter(|n| (1..=MAX_CAPTURE_SIDE).contains(n))
     };
     Some(Some((side(w)?, side(h)?)))
+}
+
+/// The most controls a [`ParamType::CameraControls`] value names.
+pub const MAX_CAMERA_CONTROLS: usize = 32;
+
+/// The longest control name a [`ParamType::CameraControls`] value takes, in bytes.
+pub const MAX_CAMERA_CONTROL_NAME: usize = 64;
+
+/// The value of a [`ParamType::CameraControls`] entry that hands a control to the
+/// device.
+pub const CAMERA_CONTROL_AUTO: &str = "auto";
+
+/// Checks a [`ParamType::CameraControls`] value: an object of at most
+/// [`MAX_CAMERA_CONTROLS`] entries, each named by lowercase letters, digits and `_` (at
+/// most [`MAX_CAMERA_CONTROL_NAME`] bytes) and set to a 32-bit integer or `"auto"`.
+/// Names the engine doesn't know pass, so a newer UI's controls stay storable; the
+/// engine leaves them unset.
+fn check_camera_controls(value: &Value) -> Result<(), String> {
+    let Some(object) = value.as_object() else {
+        return Err("must be an object of control names to integers or \"auto\"".into());
+    };
+    if object.len() > MAX_CAMERA_CONTROLS {
+        return Err(format!("names more than {MAX_CAMERA_CONTROLS} controls"));
+    }
+    for (name, v) in object {
+        let named = !name.is_empty()
+            && name.len() <= MAX_CAMERA_CONTROL_NAME
+            && name
+                .bytes()
+                .all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_');
+        if !named {
+            return Err(format!(
+                "has a control name that isn't 1 to {MAX_CAMERA_CONTROL_NAME} lowercase letters, digits or `_`"
+            ));
+        }
+        let ok = v.as_str() == Some(CAMERA_CONTROL_AUTO)
+            || v.as_i64().is_some_and(|n| i32::try_from(n).is_ok());
+        if !ok {
+            return Err(format!(
+                "sets control `{name}` to something other than a 32-bit integer or \"auto\""
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Checks a [`ParamType::CaptureFormat`] value.
@@ -451,6 +511,7 @@ impl ParamDescriptor {
                 Some(_) => Err(not_a_reference("bus")),
             },
             ParamType::CaptureFormat { part, .. } => check_capture_format(*part, value),
+            ParamType::CameraControls { .. } => check_camera_controls(value),
             ParamType::Unknown => Err("has a type this engine can't check".into()),
         }
     }
@@ -524,6 +585,15 @@ impl ParamDescriptor {
                 }
                 CaptureFormatPart::Unknown => json!({}),
             },
+            ParamType::CameraControls { .. } => json!({
+                "type": "object",
+                "maxProperties": MAX_CAMERA_CONTROLS,
+                "propertyNames": {"pattern": "^[a-z0-9_]{1,64}$"},
+                "additionalProperties": {"anyOf": [
+                    {"type": "integer", "minimum": i32::MIN, "maximum": i32::MAX},
+                    {"const": CAMERA_CONTROL_AUTO},
+                ]},
+            }),
             ParamType::Unknown => json!({}),
         };
         if let Some(object) = schema.as_object_mut() {
@@ -713,6 +783,7 @@ mod tests {
 
     fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
         ParamDescriptor {
+            warning: None,
             id: id.into(),
             ty,
             default,

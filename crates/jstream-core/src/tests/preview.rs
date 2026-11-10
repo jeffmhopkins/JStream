@@ -248,7 +248,7 @@ fn subscriptions_are_checked() {
         }) => field,
         other => panic!("expected invalid_argument, got {other:?}"),
     };
-    let too_fast = act(&control, subscribe(1, Some(31), Vec::new())).expect_err("fps");
+    let too_fast = act(&control, subscribe(1, Some(61), Vec::new())).expect_err("fps");
     assert_eq!(field(too_fast), "fps");
     // No H.264 encoder without backends, and the client takes nothing else.
     let h264_only = act(&control, subscribe(1, None, vec![PreviewCodec::H264])).expect_err("codec");
@@ -1035,6 +1035,86 @@ fn the_program_stage_draws_an_h264_program_stream() {
     }
     drop(ticking);
     pump.join().expect("pump");
+}
+
+fn report(view: &str, received: u64, placeholders: u64) -> Call {
+    Call::Action {
+        action: Action::PreviewReport {
+            view: view.to_owned(),
+            counts: jstream_protocol::ViewCounts {
+                received,
+                shown: received,
+                placeholders,
+                ..jstream_protocol::ViewCounts::default()
+            },
+        },
+    }
+}
+
+fn views(control: &dyn Control) -> Vec<jstream_protocol::ViewProfile> {
+    match query(
+        control,
+        Query::ProfileGet {
+            seconds: Some(60),
+            top: None,
+        },
+    )
+    .expect("profile.get")
+    {
+        QueryResult::ProfileGet { profile } => profile.views,
+        other => panic!("not a profile: {other:?}"),
+    }
+}
+
+/// `preview.report` (0.103, ADR-0132): a session's view reports its running totals, and
+/// `profile.get` lists them under the session's client name, an ended session's too
+/// while a window reaches back to its last report; bad labels are refused.
+#[test]
+fn a_views_report_shows_in_the_profile() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    act(&control, report("canvas", 30, 1)).expect("reported");
+    act(&control, report("canvas", 60, 1)).expect("reported again");
+    for bad in [String::new(), "x".repeat(65), "a\nb".to_owned()] {
+        let refused = act(&control, report(&bad, 1, 0)).expect_err("a bad label");
+        assert_eq!(code(&refused), Some("invalid_argument"), "{bad:?}");
+    }
+    drop(control);
+
+    let other = connected(&engine);
+    let seen = views(&other);
+    assert_eq!(seen.len(), 1, "{seen:?}");
+    assert_eq!(seen[0].client, "test");
+    assert_eq!(seen[0].view, "canvas");
+    assert_eq!(seen[0].counts.received, 60);
+    assert_eq!(seen[0].counts.placeholders, 1);
+
+    // The next window grows from that one: a view with no report since is left out.
+    act(&other, report("projector", 5, 1)).expect("another session's view");
+    let seen = views(&other);
+    assert_eq!(seen.len(), 1, "{seen:?}");
+    assert_eq!(seen[0].view, "projector");
+}
+
+/// A stream is never faster than the collection's base rate (ADR-0119): 60 fps asked of
+/// a 30 fps collection is 30, and of a 60 fps one is 60.
+#[test]
+fn a_stream_runs_no_faster_than_the_base_rate() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    let _frames = control.binary();
+    act(&control, subscribe(1, Some(60), Vec::new())).expect("subscribed");
+    assert_eq!(engine.preview_rates(), vec![30]);
+    batch(
+        &control,
+        Batch::single(Edit::CanvasSetFrameRate { fps: 60 }),
+    )
+    .expect("60 fps");
+    act(&control, subscribe(2, Some(60), Vec::new())).expect("subscribed");
+    act(&control, subscribe(3, Some(15), Vec::new())).expect("subscribed");
+    let mut rates = engine.preview_rates();
+    rates.sort_unstable();
+    assert_eq!(rates, vec![15, 30, 60]);
 }
 
 /// A scene stream in H.264 is drawn by the program stage too (ADR-0117 §6): the stage

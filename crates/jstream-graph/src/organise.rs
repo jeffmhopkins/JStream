@@ -10,8 +10,9 @@ use crate::apply::{
 };
 use crate::model::{Folder, Graph, Label, Source, State};
 use jstream_protocol::{
-    Blocker, Edit, EntityKind, FolderId, LabelId, ProtocolError, SceneId, SceneMeta, SceneOptions,
-    SourceId, SourceMeta, check_color, check_icon,
+    Blocker, Edit, EntityKind, FolderId, LabelId, LabelMembers, LabelledScene, LabelledTimeline,
+    ProtocolError, QueryResult, SceneId, SceneMeta, SceneOptions, SourceId, SourceMeta,
+    TimelineInfo, check_color, check_icon,
 };
 use std::collections::BTreeSet;
 
@@ -150,8 +151,9 @@ pub(crate) fn folder_blockers(state: &State, id: &FolderId) -> Vec<Blocker> {
     scenes.chain(folders).collect()
 }
 
-/// Everything that stops deleting label `id`: the sources carrying it, by ID, then the
-/// scenes carrying it, in display order.
+/// Everything that stops deleting label `id`: the sources carrying it, by ID, the
+/// scenes carrying it, in display order, the hotkey bindings carrying it, by chord, and
+/// the timelines carrying it, by scene then ID (ADR-0133).
 pub(crate) fn label_blockers(state: &State, id: &LabelId) -> Vec<Blocker> {
     let sources = state
         .sources()
@@ -170,7 +172,94 @@ pub(crate) fn label_blockers(state: &State, id: &LabelId) -> Vec<Blocker> {
             id: s.id.as_str().to_owned(),
             field: "labels".into(),
         });
-    sources.chain(scenes).collect()
+    let hotkeys = state
+        .hotkey_labels
+        .iter()
+        .filter(|(_, labels)| labels.contains(id))
+        .map(|(chord, _)| Blocker {
+            entity: EntityKind::Hotkey,
+            id: chord.as_str().to_owned(),
+            field: "labels".into(),
+        });
+    let timelines = labelled_timelines(state, id).map(|(_, timeline)| Blocker {
+        entity: EntityKind::Timeline,
+        id: timeline.timeline_id.as_str().to_owned(),
+        field: "labels".into(),
+    });
+    sources
+        .chain(scenes)
+        .chain(hotkeys)
+        .chain(timelines)
+        .collect()
+}
+
+impl Graph {
+    /// The `label.members` result for label `id` (ADR-0133): the scenes carrying it,
+    /// keyframe scenes among them, in display order; the sources, by ID; the hotkey
+    /// bindings, by chord; and the timelines, by scene then ID. `not_found` if there is
+    /// no such label.
+    pub fn label_members(&self, id: &LabelId) -> Result<QueryResult, ProtocolError> {
+        let state = &self.state;
+        let label = &state.labels[label_index(state, id)?];
+        let scenes = state
+            .scenes
+            .iter()
+            .filter(|s| s.meta.labels.contains(id))
+            .map(|s| LabelledScene {
+                scene_id: s.id.clone(),
+                name: s.name.clone(),
+                variant_of: s.variant_of.clone(),
+            })
+            .collect();
+        let sources = state
+            .sources()
+            .filter(|s| s.labels.contains(id))
+            .map(|s| s.id.clone())
+            .collect();
+        let hotkeys = state
+            .hotkeys
+            .iter()
+            .filter(|(chord, _)| {
+                state
+                    .hotkey_labels
+                    .get(*chord)
+                    .is_some_and(|l| l.contains(id))
+            })
+            .map(|(chord, action)| state.binding(chord, action))
+            .collect();
+        let timelines = labelled_timelines(state, id)
+            .map(|(scene_id, timeline)| LabelledTimeline {
+                timeline_id: timeline.timeline_id.clone(),
+                name: timeline.name.clone(),
+                scene_id: scene_id.clone(),
+            })
+            .collect();
+        Ok(QueryResult::LabelMembers {
+            rev: self.rev,
+            members: LabelMembers {
+                label: label.to_info(),
+                scenes,
+                sources,
+                hotkeys,
+                timelines,
+            },
+        })
+    }
+}
+
+/// The timelines carrying label `id`, by scene in display order then by ID, each with
+/// the scene that holds it.
+pub(crate) fn labelled_timelines<'a>(
+    state: &'a State,
+    id: &'a LabelId,
+) -> impl Iterator<Item = (&'a SceneId, &'a TimelineInfo)> + 'a {
+    state.scenes.iter().flat_map(move |scene| {
+        scene
+            .timelines
+            .values()
+            .filter(move |t| t.labels.contains(id))
+            .map(move |t| (&scene.id, t))
+    })
 }
 
 /// The `delete.plan` edits for folder `id`: what sits in it moves up to its parent,
@@ -201,7 +290,8 @@ pub(crate) fn folder_plan(state: &State, id: &FolderId) -> Result<Vec<Edit>, Pro
 }
 
 /// The `delete.plan` edits for label `id`: each source, then each scene, carrying it
-/// keeps its other metadata without it, then the label's delete. `not_found` if there
+/// keeps its other metadata without it, each hotkey binding and then each timeline
+/// carrying it keeps its other labels (ADR-0133), then the label's delete. `not_found` if there
 /// is no such label.
 pub(crate) fn label_plan(state: &State, id: &LabelId) -> Result<Vec<Edit>, ProtocolError> {
     label_index(state, id)?;
@@ -228,7 +318,27 @@ pub(crate) fn label_plan(state: &State, id: &LabelId) -> Result<Vec<Edit>, Proto
                 meta,
             }
         });
-    let mut edits: Vec<Edit> = sources.chain(scenes).collect();
+    let hotkeys = state
+        .hotkey_labels
+        .iter()
+        .filter(|(_, labels)| labels.contains(id))
+        .map(|(chord, labels)| Edit::HotkeySetLabels {
+            chord: chord.clone(),
+            labels: labels.iter().filter(|l| *l != id).cloned().collect(),
+        });
+    let timelines = labelled_timelines(state, id).map(|(scene_id, timeline)| {
+        let mut timeline = timeline.clone();
+        timeline.labels.retain(|l| l != id);
+        Edit::TimelineSet {
+            scene_id: scene_id.clone(),
+            timeline,
+        }
+    });
+    let mut edits: Vec<Edit> = sources
+        .chain(scenes)
+        .chain(hotkeys)
+        .chain(timelines)
+        .collect();
     edits.push(Edit::LabelDelete {
         label_id: id.clone(),
     });
@@ -421,6 +531,13 @@ fn set_scene_options(
             "a keyframe scene shows its parent's background",
         ));
     }
+    if options.keep_warm && state.scenes[si].variant_of().is_some() {
+        return Err(invalid(
+            at,
+            "keep_warm",
+            "a keyframe scene is shown through its parent, which is the one kept warm",
+        ));
+    }
     let old = std::mem::replace(&mut state.scenes[si].options, options.clone());
     Ok(vec![Edit::SceneSetOptions {
         scene_id: scene_id.clone(),
@@ -535,10 +652,20 @@ fn delete_label(state: &mut State, id: &LabelId, at: usize) -> Result<Vec<Edit>,
 
 /// The labels `labels` as a set ordered by ID: `not_found` for a label that doesn't
 /// exist, `invalid_argument` for one listed twice.
-fn checked_labels(
+pub(crate) fn checked_labels(
     state: &State,
     labels: &[LabelId],
     at: usize,
+) -> Result<BTreeSet<LabelId>, ProtocolError> {
+    checked_labels_in(state, labels, at, "labels")
+}
+
+/// [`checked_labels`], naming `field` in an `invalid_argument`.
+pub(crate) fn checked_labels_in(
+    state: &State,
+    labels: &[LabelId],
+    at: usize,
+    field: &str,
 ) -> Result<BTreeSet<LabelId>, ProtocolError> {
     let mut set = BTreeSet::new();
     for label in labels {
@@ -546,7 +673,7 @@ fn checked_labels(
         if !set.insert(label.clone()) {
             return Err(invalid(
                 at,
-                "labels",
+                field,
                 format!("label `{label}` is listed more than once"),
             ));
         }
@@ -1025,5 +1152,174 @@ mod tests {
         let copy = graph.state().source(&SourceId::new("sa2")).expect("copied");
         assert_eq!(copy.labels().len(), 2);
         assert!(copy.favourite());
+    }
+
+    /// ADR-0133: hotkey bindings and timelines carry labels, checked as a source's
+    /// are; `label.members` lists everything carrying one; deleting a label is blocked
+    /// by them and its plan clears them; and a binding's labels go and come back with it.
+    #[test]
+    fn hotkeys_and_timelines_carry_labels() {
+        use jstream_protocol::{
+            Action, Chord, HotkeyBinding, LabelledScene, LabelledTimeline, TimelineId,
+            TimelineInfo, TimelineLoop,
+        };
+        let ids = |l: &[&str]| l.iter().map(|l| LabelId::new(*l)).collect::<Vec<_>>();
+        let switch_b = Action::SceneSwitch {
+            scene_id: SceneId::new("b"),
+            preset_id: None,
+        };
+        let set_labels = |chord: &str, labels: &[&str]| Edit::HotkeySetLabels {
+            chord: Chord::new(chord),
+            labels: ids(labels),
+        };
+        let timeline = |labels: &[&str]| Edit::TimelineSet {
+            scene_id: SceneId::new("a"),
+            timeline: TimelineInfo {
+                labels: ids(labels),
+                timeline_id: TimelineId::new("t1"),
+                name: "Cues".into(),
+                duration_ms: 1000,
+                looping: TimelineLoop::Once,
+                cues: Vec::new(),
+            },
+        };
+        let mut graph = fixture();
+        apply_ok(
+            &mut graph,
+            vec![
+                Edit::HotkeySet {
+                    chord: Chord::new("F1"),
+                    action: switch_b.clone(),
+                },
+                set_labels("F1", &["red", "blue"]),
+                timeline(&["red"]),
+                Edit::SceneSetMeta {
+                    scene_id: SceneId::new("a"),
+                    meta: SceneMeta {
+                        labels: ids(&["red"]),
+                        ..SceneMeta::default()
+                    },
+                },
+            ],
+        );
+        let bound =
+            HotkeyBinding::new(Chord::new("F1"), &switch_b).with_labels(ids(&["blue", "red"]));
+        assert_eq!(
+            graph.state().hotkey_bindings(),
+            std::slice::from_ref(&bound)
+        );
+
+        // Checked as a source's labels are.
+        assert_eq!(
+            field(apply_err(
+                &mut graph,
+                vec![set_labels("F1", &["red", "red"])]
+            )),
+            "edits.0.labels"
+        );
+        assert_eq!(
+            field(apply_err(&mut graph, vec![timeline(&["red", "red"])])),
+            "edits.0.timeline.labels"
+        );
+        assert!(matches!(
+            apply_err(&mut graph, vec![set_labels("F1", &["green"])]),
+            ProtocolError::NotFound { .. }
+        ));
+        assert!(matches!(
+            apply_err(&mut graph, vec![timeline(&["green"])]),
+            ProtocolError::NotFound { .. }
+        ));
+        assert!(matches!(
+            apply_err(&mut graph, vec![set_labels("F2", &["red"])]),
+            ProtocolError::NotFound { .. }
+        ));
+
+        let Some(Ok(QueryResult::LabelMembers { members, .. })) =
+            graph.query(&Query::LabelMembers {
+                label_id: LabelId::new("red"),
+            })
+        else {
+            panic!("lists the members");
+        };
+        assert_eq!(
+            members.scenes,
+            [LabelledScene {
+                scene_id: SceneId::new("a"),
+                name: "Scene a".into(),
+                variant_of: None,
+            }]
+        );
+        assert_eq!(members.sources, [SourceId::new("sa")]);
+        assert_eq!(members.hotkeys, std::slice::from_ref(&bound));
+        assert_eq!(
+            members.timelines,
+            [LabelledTimeline {
+                timeline_id: TimelineId::new("t1"),
+                name: "Cues".into(),
+                scene_id: SceneId::new("a"),
+            }]
+        );
+        assert!(matches!(
+            graph.query(&Query::LabelMembers {
+                label_id: LabelId::new("green"),
+            }),
+            Some(Err(ProtocolError::NotFound { .. }))
+        ));
+
+        // Deleting the label is blocked by each, and its plan clears each.
+        let delete_red = Edit::LabelDelete {
+            label_id: LabelId::new("red"),
+        };
+        match apply_err(&mut graph, vec![delete_red.clone()]) {
+            ProtocolError::InvalidArgument { blockers, .. } => {
+                let found: Vec<_> = blockers.iter().map(|b| (b.entity, b.id.as_str())).collect();
+                assert_eq!(
+                    found,
+                    [
+                        (EntityKind::Source, "sa"),
+                        (EntityKind::Scene, "a"),
+                        (EntityKind::Hotkey, "F1"),
+                        (EntityKind::Timeline, "t1"),
+                    ]
+                );
+            }
+            other => panic!("expected blockers, got {other:?}"),
+        }
+        let Ok(QueryResult::DeletePlan { edits, .. }) = graph.delete_plan(&DeleteTarget::Label {
+            label_id: LabelId::new("red"),
+        }) else {
+            panic!("plans");
+        };
+        assert_eq!(edits[2], set_labels("F1", &["blue"]));
+        assert_eq!(edits[3], timeline(&[]));
+        assert_eq!(edits.last(), Some(&delete_red));
+        let mut planned = graph.clone();
+        apply_ok(&mut planned, edits);
+
+        // A cleared binding, or one its target's delete takes, takes its labels with it
+        // and gets them back on undo (`apply_ok` checks the inverse).
+        let mut cleared = graph.clone();
+        apply_ok(
+            &mut cleared,
+            vec![Edit::HotkeyClear {
+                chord: Chord::new("F1"),
+            }],
+        );
+        assert!(cleared.state().hotkey_labels(&Chord::new("F1")).is_empty());
+        let mut deleted = graph.clone();
+        let applied = deleted
+            .apply(
+                &[Edit::SceneDelete {
+                    scene_id: SceneId::new("b"),
+                }],
+                None,
+            )
+            .expect("deletes");
+        assert_eq!(applied.removed_hotkeys, [bound]);
+        deleted.apply(&applied.inverse.edits, None).expect("undoes");
+        assert_eq!(deleted.state(), graph.state());
+        // An empty list removes them.
+        apply_ok(&mut graph, vec![set_labels("F1", &[])]);
+        assert!(graph.state().hotkey_labels(&Chord::new("F1")).is_empty());
     }
 }

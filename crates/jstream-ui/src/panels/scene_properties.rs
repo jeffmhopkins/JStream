@@ -1,19 +1,19 @@
 //! The scene Properties dialog (spec-workspace.md 6.2.5): a scene's name, its
 //! Transition in and out, the hotkey that switches to it, whether a multiview shows it,
 //! its background colour, whether its audio reaches the Mixer when it is nested, and its
-//! 3D camera (ADR-0094), with the camera's Follow pointer and Camera motion (ADR-0113,
-//! [`super::camera_moves`]). Everything is a draft until OK, which sends what changed as
-//! one batch (`scene.rename`, `scene.set_transitions`, `scene.set_meta`,
-//! `scene.set_options`, `scene.set_camera`, `scene.set_camera_follow`,
+//! 3D camera (ADR-0094), with the camera's Follow pointer note and Camera motion
+//! (ADR-0113, ADR-0120, [`super::camera_moves`]). Everything is a draft until OK, which
+//! sends what changed as one batch (`scene.rename`, `scene.set_transitions`,
+//! `scene.set_meta`, `scene.set_options`, `scene.set_camera`,
 //! `scene.set_camera_motion`, `hotkey.clear` and `hotkey.set`); Cancel, Escape and the backdrop
 //! drop it, and Defaults clears the overrides, the hotkey and the background and checks
 //! both switches again, keeping the name and the camera. A keyframe scene's camera is
-//! its override of its parent's, offered only while the parent has one. A keyframe
-//! scene shows its parent's background, which its dialog shows and doesn't edit. The
-//! scene's video chain (FL-06; a keyframe's is its parent's, ADR-0065 §3) is listed
-//! under the Properties entry on the left, as in the source Properties dialog
-//! ([`PropertiesAndFilters`]): a picked filter's settings show on the right, each change
-//! sent at once, and Cancel puts back every filter edit the dialog sent.
+//! its override of its parent's, starting from the framing camera when the parent is
+//! 2D (ADR-0128). A keyframe scene shows its parent's background, which its dialog
+//! shows and doesn't edit. The scene's video chain (FL-06; a keyframe's is its parent's,
+//! ADR-0065 §3) is listed under the Properties entry on the left, as in the source
+//! Properties dialog ([`PropertiesAndFilters`]): a picked filter's settings show on the
+//! right, each change sent at once, and Cancel puts back every filter edit the dialog sent.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -26,8 +26,8 @@ use crate::panels::filters::{FilterUndo, PropertiesAndFilters, scene_owner};
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
-    Action, CameraFollow, CameraMotionModifier, Chord, Edit, FilterId, FilterOwner, Finite32,
-    SceneCamera, SceneId, TransitionPresetId, check_camera_motion, parse_rgba,
+    Action, CameraMotionModifier, Chord, Edit, FilterId, FilterOwner, Finite32, SceneCamera,
+    SceneId, TransitionPresetId, check_camera_motion, parse_rgba,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -71,12 +71,11 @@ pub struct SceneDraft {
     pub include_audio: bool,
     /// Its background colour as typed (`#rrggbb` or `#rrggbbaa`), or none.
     pub background: Option<String>,
+    /// Whether the studio keeps it warm while it is off program (ADR-0117 §7).
+    pub keep_warm: bool,
     /// Its camera, which makes it a 3D scene (ADR-0094); on a keyframe scene its
     /// override of its parent's.
     pub camera: Option<SceneCamera>,
-    /// Its camera's follow camera (ADR-0113), or none; a keyframe scene draws its
-    /// parent's.
-    pub camera_follow: Option<CameraFollow>,
     /// Its camera's motion modifiers (ADR-0113); a keyframe scene draws its parent's.
     pub camera_motion: Vec<CameraMotionModifier>,
 }
@@ -93,21 +92,21 @@ impl SceneDraft {
             show_in_multiview: scene.meta.show_in_multiview,
             include_audio: scene.options.include_audio,
             background: scene.options.background.clone(),
+            keep_warm: scene.options.keep_warm,
             camera: scene.camera,
-            camera_follow: scene.camera_follow.clone(),
             camera_motion: scene.camera_motion.clone(),
         })
     }
 }
 
 /// The camera the dialog's switch starts `scene_id` from when it is turned on (ADR-0094
-/// §6): a keyframe scene's parent's, which its own then overrides, or `None` while that
-/// parent has none, as `scene.set_camera` refuses; any other scene's starts from one that
-/// shows it as it is now.
+/// §6): a keyframe scene's parent's, which its own then overrides; otherwise, and for a
+/// keyframe of a 2D scene (ADR-0128), one that shows it as it is now.
 pub fn camera_start(collection: &Collection, scene_id: &SceneId) -> Option<SceneCamera> {
+    let framing = SceneCamera::framing(collection.canvas);
     match collection.scene(scene_id)?.variant_of {
-        Some(_) => collection.parent_of(scene_id)?.camera,
-        None => Some(SceneCamera::framing(collection.canvas)),
+        Some(_) => Some(collection.parent_of(scene_id)?.camera.unwrap_or(framing)),
+        None => Some(framing),
     }
 }
 
@@ -160,13 +159,20 @@ pub fn scene_edits(
     if background.is_some_and(|b| parse_rgba(b).is_none()) {
         return Err("The background color must be #rrggbb or #rrggbbaa.".into());
     }
-    if (draft.include_audio, background) != (before.include_audio, before.background.as_deref()) {
+    if (draft.include_audio, background, draft.keep_warm)
+        != (
+            before.include_audio,
+            before.background.as_deref(),
+            before.keep_warm,
+        )
+    {
         let mut options = collection
             .scene(scene_id)
             .map(|s| s.options.clone())
             .unwrap_or_default();
         options.include_audio = draft.include_audio;
         options.background = background.map(str::to_owned);
+        options.keep_warm = draft.keep_warm;
         edits.push(Edit::SceneSetOptions {
             scene_id: scene_id.clone(),
             options,
@@ -181,20 +187,6 @@ pub fn scene_edits(
         edits.push(Edit::SceneSetCamera {
             scene_id: scene_id.clone(),
             camera: draft.camera,
-        });
-    }
-    if draft.camera_follow != before.camera_follow {
-        if let Some(follow) = &draft.camera_follow
-            && let Err(problem) = follow.check()
-        {
-            return Err(format!(
-                "Follow pointer: {} {}.",
-                problem.field, problem.reason
-            ));
-        }
-        edits.push(Edit::SceneSetCameraFollow {
-            scene_id: scene_id.clone(),
-            follow: draft.camera_follow.clone(),
         });
     }
     if draft.camera_motion != before.camera_motion {
@@ -230,24 +222,28 @@ pub fn scene_edits(
                 hotkeys::label(chord)
             ));
         }
-        // A rebind keeps the preset the old binding switched with.
-        let preset_id = collection
-            .scene_hotkey(scene_id)
-            .and_then(|b| match b.action() {
-                Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
-                _ => None,
-            });
+        // A rebind keeps the preset the old binding switched with, and its labels
+        // (ADR-0133).
+        let old = collection.scene_hotkey(scene_id);
+        let preset_id = old.and_then(|b| match b.action() {
+            Some(Action::SceneSwitch { preset_id, .. }) => preset_id,
+            _ => None,
+        });
+        let labels = old.map(|b| b.labels.clone()).unwrap_or_default();
         if let Some(chord) = before.hotkey.clone() {
             edits.push(Edit::HotkeyClear { chord });
         }
         if let Some(chord) = draft.hotkey.clone() {
             edits.push(Edit::HotkeySet {
-                chord,
+                chord: chord.clone(),
                 action: Action::SceneSwitch {
                     scene_id: scene_id.clone(),
                     preset_id,
                 },
             });
+            if !labels.is_empty() {
+                edits.push(Edit::HotkeySetLabels { chord, labels });
+            }
         }
     }
     Ok(edits)
@@ -363,8 +359,8 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     let camera_note = move || {
         let on = draft.with(|d| d.camera.is_some());
         match (&parent_name, parent_camera, on) {
-            (Some(parent), None, _) => {
-                format!("Give “{parent}” a camera first; a keyframe scene follows its parent.")
+            (Some(parent), None, false) => {
+                format!("Off, it is 2D like “{parent}”. On, a Move into it glides into 3D.")
             }
             (Some(parent), Some(_), false) => {
                 format!("Off, it follows the camera of “{parent}”. On, it moves the camera when you switch to it.")
@@ -755,6 +751,21 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     />
                     <span class="field-note">"When off, its sources don't reach the Mixer through this scene."</span>
                 </label>
+                <Show when=move || !keyframe>
+                    <label class="field">
+                        <span class="label">"Keep warm"</span>
+                        <input
+                            type="checkbox"
+                            aria-label="Keep warm"
+                            prop:checked=move || draft.with(|d| d.keep_warm)
+                            on:change=move |event| {
+                                let on = event_target_checked(&event);
+                                draft.update(|d| d.keep_warm = on);
+                            }
+                        />
+                        <span class="field-note">"Its videos, pages and cameras keep running while it's off program, so showing it starts nothing. It counts toward Settings › General › Warm scenes."</span>
+                    </label>
+                </Show>
                 <div class="camera-field">
                     <label class="camera-check">
                         <input
@@ -916,7 +927,7 @@ fn with_swatch(background: Option<&str>, picked: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use jstream_control::protocol::{HotkeyBinding, SceneInfo, SceneOptions};
+    use jstream_control::protocol::{HotkeyBinding, LabelId, SceneInfo, SceneOptions};
 
     fn switch(id: &str) -> Action {
         Action::SceneSwitch {
@@ -964,13 +975,15 @@ mod tests {
     fn a_new_hotkey_replaces_the_old_and_a_taken_one_is_refused() {
         let c = Collection {
             hotkeys: vec![
-                HotkeyBinding::new(Chord::new("F1"), &switch("a")),
+                HotkeyBinding::new(Chord::new("F1"), &switch("a"))
+                    .with_labels(vec![LabelId::new("live")]),
                 HotkeyBinding::new(Chord::new("F2"), &switch("b")),
             ],
             ..Collection::default()
         };
         let a = SceneId::new("a");
         let before = draft("A", Some("F1"));
+        // A rebind keeps the old binding's labels (ADR-0133).
         assert_eq!(
             scene_edits(&c, &a, &before, &draft("A", Some("F3"))),
             Ok(vec![
@@ -980,6 +993,10 @@ mod tests {
                 Edit::HotkeySet {
                     chord: Chord::new("F3"),
                     action: switch("a"),
+                },
+                Edit::HotkeySetLabels {
+                    chord: Chord::new("F3"),
+                    labels: vec![LabelId::new("live")],
                 },
             ])
         );
@@ -1028,6 +1045,40 @@ mod tests {
         assert_eq!(meta.color.as_deref(), Some("#ff0000"));
     }
 
+    /// "Keep warm" sends `scene.set_options` with the other options kept (ADR-0117 §7).
+    #[test]
+    fn keep_warm_sends_the_scene_s_options() {
+        let scene: SceneInfo = serde_json::from_value(serde_json::json!({
+            "scene_id": "a",
+            "name": "A",
+            "items": [],
+            "include_audio": false,
+        }))
+        .expect("a scene");
+        let c = Collection {
+            scenes: vec![scene],
+            ..Collection::default()
+        };
+        let a = SceneId::new("a");
+        let before = SceneDraft::of(&c, &a).expect("the scene");
+        assert!(!before.keep_warm);
+        let warm = SceneDraft {
+            keep_warm: true,
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &a, &before, &warm),
+            Ok(vec![Edit::SceneSetOptions {
+                scene_id: a,
+                options: SceneOptions {
+                    include_audio: false,
+                    background: None,
+                    keep_warm: true,
+                },
+            }])
+        );
+    }
+
     /// The nested audio switch sends `scene.set_options`.
     #[test]
     fn the_audio_switch_sends_the_scene_s_options() {
@@ -1056,6 +1107,7 @@ mod tests {
                 options: SceneOptions {
                     include_audio: false,
                     background: None,
+                    keep_warm: false,
                 },
             }])
         );
@@ -1090,6 +1142,7 @@ mod tests {
                 options: SceneOptions {
                     include_audio: false,
                     background: Some("#0F111580".into()),
+                    keep_warm: false,
                 },
             }])
         );
@@ -1100,6 +1153,7 @@ mod tests {
                 options: SceneOptions {
                     include_audio: false,
                     background: None,
+                    keep_warm: false,
                 },
             }])
         );
@@ -1165,11 +1219,10 @@ mod tests {
         );
     }
 
-    /// ADR-0113: Follow pointer and Camera motion send `scene.set_camera_follow` and
-    /// `scene.set_camera_motion` when they change, and a value out of range is refused
-    /// before sending.
+    /// ADR-0113: Camera motion sends `scene.set_camera_motion` when it changes. Follow
+    /// pointer is a filter since ADR-0120, so the dialog sends no follow.
     #[test]
-    fn follow_and_camera_motion_send_their_edits() {
+    fn camera_motion_sends_its_edit() {
         let scene: SceneInfo = serde_json::from_value(serde_json::json!({
             "scene_id": "a",
             "name": "A",
@@ -1182,35 +1235,18 @@ mod tests {
         };
         let a = SceneId::new("a");
         let before = SceneDraft::of(&c, &a).expect("the scene");
-        let follow = CameraFollow::of(jstream_control::protocol::ItemId::new("screen"));
         let motion = crate::panels::camera_moves::with_added(&[]).expect("room");
         let after = SceneDraft {
-            camera_follow: Some(follow.clone()),
             camera_motion: motion.clone(),
             ..before.clone()
         };
         assert_eq!(
             scene_edits(&c, &a, &before, &after),
-            Ok(vec![
-                Edit::SceneSetCameraFollow {
-                    scene_id: a.clone(),
-                    follow: Some(follow.clone()),
-                },
-                Edit::SceneSetCameraMotion {
-                    scene_id: a.clone(),
-                    motion,
-                },
-            ])
+            Ok(vec![Edit::SceneSetCameraMotion {
+                scene_id: a.clone(),
+                motion,
+            }])
         );
-        let too_far = SceneDraft {
-            camera_follow: Some(CameraFollow {
-                zoom: Finite32::new(9.0).expect("finite"),
-                ..follow
-            }),
-            ..before.clone()
-        };
-        let refused = scene_edits(&c, &a, &before, &too_far).expect_err("refused");
-        assert!(refused.contains("follow.zoom"), "{refused}");
     }
 
     /// ADR-0108 decision 7: Depth of field starts focused on the camera's target with a
@@ -1292,10 +1328,10 @@ mod tests {
         assert_eq!((camera.focus_px, camera.blur_px.get()), (None, 0.0));
     }
 
-    /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, and is
-    /// offered only while the parent has one; any other scene starts from the framing.
+    /// ADR-0094 §6: a keyframe scene's Own camera starts from its parent's, or from the
+    /// framing when the parent is 2D (ADR-0128); any other scene starts from the framing.
     #[test]
-    fn a_keyframe_gets_own_camera_only_while_its_parent_has_one() {
+    fn a_keyframe_starts_its_own_camera_from_its_parents_or_the_framing() {
         let scenes: Vec<SceneInfo> = serde_json::from_value(serde_json::json!([
             { "scene_id": "p", "name": "P", "items": [] },
             { "scene_id": "k", "name": "K", "items": [], "variant_of": "p" },
@@ -1309,7 +1345,11 @@ mod tests {
         let k = SceneId::new("k");
         let framing = SceneCamera::framing(c.canvas);
         assert_eq!(camera_start(&c, &p), Some(framing));
-        assert_eq!(camera_start(&c, &k), None, "the parent has no camera");
+        assert_eq!(
+            camera_start(&c, &k),
+            Some(framing),
+            "a 2D parent's keyframe may have one (ADR-0128)"
+        );
         let mut parents = framing;
         CameraField::Position(0).set(&mut parents, 300.0);
         c.scenes[0].camera = Some(parents);

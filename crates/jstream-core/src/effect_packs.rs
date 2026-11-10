@@ -385,8 +385,9 @@ impl Packs {
     }
 
     /// Blames a GPU device loss on the pack kinds in `drawn`, the ones drawn in the
-    /// frames before it: each loaded one is quarantined, and the whole pack of one
-    /// blamed for a second loss in this run. Kinds no loaded pack has are not blamed:
+    /// frames before it, or a pass that ran too long on the one kind it ran (#349):
+    /// each loaded one is quarantined, and the whole pack of one blamed a second time
+    /// in this run. Kinds no loaded pack has are not blamed:
     /// they drew nothing.
     pub(crate) fn blame(&mut self, drawn: &BTreeSet<String>) -> Blame {
         let blamed: Vec<String> = drawn
@@ -419,7 +420,7 @@ impl Packs {
             tracing::warn!(
                 ?blamed,
                 ?quarantined,
-                "GPU device loss blamed on effect-pack kinds; quarantined"
+                "GPU device loss or slow pass blamed on effect-pack kinds; quarantined"
             );
             self.update(Vec::new(), Vec::new())
         });
@@ -428,6 +429,17 @@ impl Packs {
             quarantined: quarantined.into_iter().collect(),
             update,
         }
+    }
+
+    /// Blames a pass that ran too long on the GPU on `kind_id` (#349), as [`Self::blame`]
+    /// does, unless it is quarantined already: `None` then. The render thread draws a
+    /// kind for a tick or two after reporting it, so a late report of a kind the first
+    /// one quarantined would otherwise count as a second blame and take its pack.
+    pub(crate) fn blame_slow(&mut self, kind_id: &str) -> Option<Blame> {
+        if self.holds(kind_id) {
+            return None;
+        }
+        Some(self.blame(&BTreeSet::from([kind_id.to_owned()])))
     }
 
     /// Lifts the quarantine of `kind_id`, and of its pack, and every quarantine whose
@@ -912,6 +924,33 @@ mod tests {
         );
         let lifted = packs.enable(KIND).expect("enable").expect("lifted");
         assert!(lifted.effects.contains_key(KIND) && lifted.quarantined.is_empty());
+    }
+
+    /// #349: a slow pass is blamed like a loss, but a report of a kind already
+    /// quarantined (one the render thread drew again before the quarantine reached it)
+    /// is no second blame, so it doesn't take the whole pack.
+    #[test]
+    fn a_late_slow_report_is_not_a_second_blame() {
+        let temp = Temp::new("slow-blame");
+        test_pack::write(&temp.pack(), test_pack::MUL);
+        let mut packs = Packs::new(temp.0.clone());
+        packs.poll().expect("the pack loads");
+
+        let first = packs.blame_slow(KIND).expect("blamed");
+        assert_eq!(first.quarantined, [KIND.to_owned()]);
+        assert!(packs.blame_slow(KIND).is_none(), "already quarantined");
+        assert!(
+            !packs.quarantine.packs.contains("tint"),
+            "not the whole pack"
+        );
+
+        // Once a person re-enables it, a new report is a second blame in the run.
+        packs.enable(KIND).expect("enable");
+        packs.blame_slow(KIND).expect("blamed again");
+        assert!(
+            packs.quarantine.packs.contains("tint"),
+            "blamed twice in one run"
+        );
     }
 
     /// The `tint` pack's manifest and shader under another pack ID, `copy`.

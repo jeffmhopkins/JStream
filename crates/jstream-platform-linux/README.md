@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0061-source-types-and-decoding-scope-v2.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md", "docs/adr/0141-desktop-app-on-linux.md"]
 -->
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -25,8 +25,8 @@ This README is the crate's map. How each backend behaves (formats, timing, error
 mapping, threads) is in its module's rustdoc, next to the code:
 `cargo doc -p jstream-platform-linux --document-private-items --open`.
 
-**System libraries are loaded at run time** (ADR-0060 §8). libpipewire, libva and
-libasound are opened with `dlopen` through `libloading` when a backend first needs them,
+**System libraries are loaded at run time** (ADR-0060 §8). libpipewire, libva,
+libasound and libxcb are opened with `dlopen` through `libloading` when a backend first needs them,
 and only the functions the crate calls are declared, each with its C signature in a
 `SAFETY` comment. Nothing is linked, so the crate builds and tests on any machine, CI
 included, without their headers. This departs from
@@ -47,12 +47,15 @@ platform-independent helpers, which are tested on every platform.
 | `LinuxSecrets` | `StreamKeyStore`, `OAuthTokenStore` | `secrets.rs` | the Secret Service, else a `0600` file ([ADR-0071](../../docs/adr/0071-linux-secret-store.md), [R-SEC-001](../../docs/RULES.md#R-SEC-001)) |
 | `PipeWireAudio` | `AudioIo` | `pipewire/` | devices, input, output and loopback on PipeWire (ADR-0060 §4) |
 | `AlsaAudio` | `AudioIo` | `alsa.rs` | the fallback without a PipeWire daemon; no loopback |
-| `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path |
+| `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path, and their camera controls (`VIDIOC_QUERYCTRL`, `VIDIOC_S_CTRL`) |
 | `LinuxBackends` | | `backends.rs` | the backend set, with ADR-0060 §4's audio choice made once |
 | `NoMediaDecoders` | `MediaDecoders` | `unbuilt.rs` | refuses every file, naming [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) |
+| `portal_pick_path`, `FileChoice` | | `portal/file_chooser.rs` | the desktop app's Browse dialogs through the FileChooser portal: open, save or folder, answered only by the portal's own bus connection, a local `file://` path or nothing ([ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)) |
+| `GlobalHotkeys` | | `hotkeys.rs` | X11 only: the collection's bound chords heard while another app has the focus, grabbed on the root window with `xcb_grab_key`, and wheel chords as buttons 4 and 5 with `xcb_grab_button` ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6); Wayland has no grab |
+| `PortalHotkeys` | | `portal/global_shortcuts.rs` | Wayland's global hotkeys: the GlobalShortcuts portal binds one shortcut per chord (its id the chord, its preferred trigger the same keys in the shortcuts format) and reports each activation, answered only by the portal's own bus connection; wheel chords can't be shortcuts ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5) |
 | `LinuxProcessCpu`, `LinuxThreadCpu` | `ProcessCpu`, `ThreadCpu` | `process.rs` | the process's and each thread's CPU time |
 | `VaapiCodecs` | `Codecs` | `vaapi/`, `codec.rs` | VA-API H.264 and HEVC encoders, on CPU frames or the context's encode targets |
-| `OpenH264Store`, `OpenH264Encoder` | `VideoEncoder` | `openh264/` | Cisco's OpenH264, the software H.264 encoder, downloaded only on the user's request and checked against its pin ([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)) |
+| `OpenH264Store`, `OpenH264Encoder`, `OpenH264Decoder` | `VideoEncoder`, `VideoDecoder` | `openh264/` | Cisco's OpenH264, the software H.264 encoder and the decoder of the engine's own H.264 streams (the quality probe's), downloaded only on the user's request and checked against its pin ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)) |
 | `RustAacEncoder` | `AudioEncoder` | `aac.rs` | [`jstream-aac`](../jstream-aac/README.md#purpose) behind the `aac-encoder` feature, within [ADR-0062](../../docs/adr/0062-aac-lc-encoder-patent-check.md)'s limits |
 
 JStream never ships or builds OpenH264. The stored file's SHA-256 is checked again before
@@ -74,5 +77,6 @@ adapter where there is no GPU. Three kinds are opt-in:
 - the `hw-tests` feature holds `#[ignore]`d tests run by hand against a real desktop,
   GPU, PipeWire daemon, Secret Service, sound card or webcam;
 - the `openh264-download` feature and `--ignored` run the one test that downloads from
-  Cisco, which is how the pin is recorded (CI's `e2e-stream` job runs it);
+  Cisco, which is how the pin is recorded, and round-trips a stream through Cisco's
+  encoder and decoder, luma and both chroma planes (CI's `e2e-stream` job runs it);
 - DMA-BUF import and export need a GPU driver, so they are covered only by `hw-tests`.

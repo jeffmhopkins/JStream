@@ -13,9 +13,15 @@
 //
 // With scene lights (ADR-0143 decision 3) the rig is replaced by the scene's point, spot
 // and directional lights, placed in the same viewing frame on the CPU, and the
-// environment is scaled by the scene's ambient light.
+// environment is scaled by the scene's ambient light. A scene's environment light
+// (ADR-0151 decision 9) replaces the studio gradient with its sky, in the scene's space:
+// a gradient from its ground through its horizon to its sky straight up, or its
+// picture as an equirectangular panorama, spun about the vertical by its turn. A rough
+// reflection, and the diffuse light, read the panorama over a ring of taps around the
+// direction, wider the rougher. With no ambient light the sky lights a model on its own.
 
 const MAX_LIGHTS: u32 = 8u;
+const MAX_SHADOWS: u32 = 2u;
 
 struct Light {
     // xyz: position in the viewing frame; w: kind (0 point, 1 spot, 2 directional).
@@ -38,6 +44,43 @@ struct Frame {
     // rgb: the scene's ambient light; w: how many of `lights` are set.
     ambient: vec4<f32>,
     lights: array<Light, MAX_LIGHTS>,
+    shadows: array<Shadow, MAX_SHADOWS>,
+    environment: Environment,
+    // A floor the model is cut at (ADR-0151 decision 4): a fragment whose dot(xyz, seen)
+    // + w is at or above 0 is at or below it, and isn't drawn. (0, 0, 0, -1) cuts nothing.
+    cut: vec4<f32>,
+}
+
+fn below_floor(seen: vec3<f32>) -> bool {
+    return dot(frame.cut.xyz, seen) + frame.cut.w >= 0.0;
+}
+
+// The scene's sky (ADR-0151 decision 9).
+struct Environment {
+    // rgb: straight up, linear light times intensity; w: 1 when there is one.
+    sky: vec4<f32>,
+    // rgb: at the horizon; w: its turn about the vertical, in radians.
+    horizon: vec4<f32>,
+    // rgb: below the horizon; w: how its picture stores alpha, -1 for no picture.
+    ground: vec4<f32>,
+    // xyz: the camera's right axis in the scene; w: 1 when an ambient light scales it.
+    right: vec4<f32>,
+    // xyz: its down axis; w: the intensity the picture is scaled by.
+    down: vec4<f32>,
+    // xyz: its forward axis.
+    forward: vec4<f32>,
+}
+
+// One light's shadow map (ADR-0151 decision 3), in the viewing frame.
+struct Shadow {
+    // xyz: the light's position; w: the light slot it shadows, -1 for none.
+    at: vec4<f32>,
+    // xyz: the light view's right axis; w: its focal length in map pixels.
+    right: vec4<f32>,
+    // xyz: its down axis; w: its principal point, both coordinates.
+    down: vec4<f32>,
+    // xyz: its forward axis; w: the filter's radius in map pixels.
+    forward: vec4<f32>,
 }
 
 struct Material {
@@ -48,9 +91,16 @@ struct Material {
     surface: vec4<f32>,
     // alpha mode (0 opaque, 1 mask, 2 blend), cutoff, double-sided, unlit.
     flags: vec4<f32>,
+    // x: 1 for a lit card (ADR-0151 decision 10), whose base and emissive textures are
+    // its picture in premultiplied linear light, so it emits its own colour.
+    card: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
+@group(0) @binding(1) var shadow0: texture_2d<f32>;
+@group(0) @binding(2) var shadow1: texture_2d<f32>;
+@group(0) @binding(3) var sky_tex: texture_2d<f32>;
+@group(0) @binding(4) var sky_sampler: sampler;
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var tex_sampler: sampler;
 @group(1) @binding(2) var base_tex: texture_2d<f32>;
@@ -58,6 +108,15 @@ struct Material {
 @group(1) @binding(4) var normal_tex: texture_2d<f32>;
 @group(1) @binding(5) var occlusion_tex: texture_2d<f32>;
 @group(1) @binding(6) var emissive_tex: texture_2d<f32>;
+// A rigged model's palette (ADR-0151 decision 7): a vertex stands at the weighted sum of
+// its joints' matrices times its position. A model without a rig weighs none of it.
+@group(2) @binding(0) var<storage, read> pose: array<mat4x4<f32>>;
+
+// The matrix that places a vertex: its joints' palette matrices, weighed.
+fn skin_matrix(joints: vec4<u32>, weights: vec4<f32>) -> mat4x4<f32> {
+    return pose[joints.x] * weights.x + pose[joints.y] * weights.y
+        + pose[joints.z] * weights.z + pose[joints.w] * weights.w;
+}
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
@@ -70,12 +129,28 @@ struct VsOut {
 
 @vertex
 fn vs(
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
-    @location(2) tangent: vec4<f32>,
+    @location(0) bound: vec3<f32>,
+    @location(1) bound_normal: vec3<f32>,
+    @location(2) bound_tangent: vec4<f32>,
     @location(3) uv: vec2<f32>,
     @location(4) color: vec4<f32>,
+    @location(5) joints: vec4<u32>,
+    @location(6) weights: vec4<f32>,
 ) -> VsOut {
+    var position = bound;
+    var normal = bound_normal;
+    var tangent = bound_tangent;
+    if (any(weights != vec4<f32>(0.0))) {
+        let m = skin_matrix(joints, weights);
+        let a = m[0].xyz;
+        let b = m[1].xyz;
+        let c = m[2].xyz;
+        // det × the inverse transpose, for the normal; its sign keeps it outward.
+        let side = select(1.0, -1.0, dot(a, cross(b, c)) < 0.0);
+        position = (m * vec4<f32>(bound, 1.0)).xyz;
+        normal = normalize(mat3x3<f32>(cross(b, c), cross(c, a), cross(a, b)) * bound_normal) * side;
+        tangent = vec4<f32>(normalize(mat3x3<f32>(a, b, c) * bound_tangent.xyz), bound_tangent.w * side);
+    }
     var out: VsOut;
     out.clip = frame.clip * vec4<f32>(position, 1.0);
     out.seen = (frame.view * vec4<f32>(position, 1.0)).xyz;
@@ -96,6 +171,56 @@ fn environment(dir: vec3<f32>) -> vec3<f32> {
     let sky = mix(vec3<f32>(0.62, 0.64, 0.68), vec3<f32>(0.42, 0.47, 0.56), max(up, 0.0));
     let floor = mix(vec3<f32>(0.30, 0.28, 0.26), vec3<f32>(0.16, 0.15, 0.14), max(-up, 0.0));
     return select(floor, sky, up >= 0.0);
+}
+
+// `dir`, in the viewing frame, as a direction in the scene's space spun by the sky's
+// turn: x right, y down, z toward where the camera looks from.
+fn sky_dir(dir: vec3<f32>) -> vec3<f32> {
+    let e = frame.environment;
+    let d = normalize(e.right.xyz * dir.x + e.down.xyz * dir.y - e.forward.xyz * dir.z);
+    let c = cos(e.horizon.w);
+    let s = sin(e.horizon.w);
+    return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
+}
+
+// The panorama's light along `d`, a scene direction: its centre ahead along -z.
+fn panorama(d: vec3<f32>) -> vec3<f32> {
+    let u = 0.5 + atan2(d.x, -d.z) / (2.0 * PI);
+    let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, 0.001, 0.999);
+    let c = to_premul_linear(
+        textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(u, v), 0.0),
+        frame.environment.ground.w,
+    );
+    return c.rgb * frame.environment.down.w;
+}
+
+// The scene's sky along `dir` (in the viewing frame), blurred over `spread`: 0 a single
+// sample, 1 a ring about 45 degrees out.
+fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
+    let e = frame.environment;
+    let d = sky_dir(dir);
+    if e.ground.w < 0.0 {
+        let up = clamp(-d.y, -1.0, 1.0);
+        if up >= 0.0 {
+            return mix(e.horizon.rgb, e.sky.rgb, sqrt(up));
+        }
+        return mix(e.horizon.rgb, e.ground.rgb, min(-up * 4.0, 1.0));
+    }
+    if spread <= 0.01 {
+        return panorama(d);
+    }
+    var side = vec3<f32>(0.0, 1.0, 0.0);
+    if abs(d.y) > 0.99 {
+        side = vec3<f32>(1.0, 0.0, 0.0);
+    }
+    let t = normalize(cross(d, side));
+    let b = cross(d, t);
+    var sum = panorama(d);
+    for (var k = 0u; k < 8u; k++) {
+        let a = f32(k) * PI * 0.25;
+        sum += panorama(normalize(d + spread * (t * cos(a) + b * sin(a))));
+    }
+    return sum / 9.0;
 }
 
 fn ggx(n_dot_h: f32, alpha: f32) -> f32 {
@@ -166,6 +291,65 @@ fn scene_light(source: Light, seen: vec3<f32>, n: vec3<f32>, v: vec3<f32>, diffu
     return light(n, v, l, strength, diffuse, f0, roughness) * source.color.rgb;
 }
 
+// The 1 / w shadow map `s` holds at `px`, 0 (nothing) outside it.
+fn shadow_texel(s: u32, px: vec2<i32>) -> f32 {
+    var size: vec2<u32>;
+    if s == 0u {
+        size = textureDimensions(shadow0);
+    } else {
+        size = textureDimensions(shadow1);
+    }
+    if any(px < vec2<i32>(0)) || any(px >= vec2<i32>(size)) {
+        return 0.0;
+    }
+    if s == 0u {
+        return textureLoad(shadow0, px, 0).r;
+    }
+    return textureLoad(shadow1, px, 0).r;
+}
+
+// How much of light slot `light` reaches `seen`, with the surface normal `n`
+// (ADR-0151 decision 3): 1 for a light that casts no shadow. The point is pushed off
+// the surface by a map pixel's size there, projected into the light's view, and
+// compared with the map over a disc of 12 samples rotated per pixel: a sample is lit
+// when nothing nearer to the light than the point (by a small bias) is stored there.
+fn visibility(light: u32, seen: vec3<f32>, n: vec3<f32>, pixel: vec2<f32>) -> f32 {
+    for (var s = 0u; s < MAX_SHADOWS; s++) {
+        let sh = frame.shadows[s];
+        if sh.at.w < 0.0 || u32(sh.at.w) != light {
+            continue;
+        }
+        let focal = sh.right.w;
+        let d0 = dot(seen - sh.at.xyz, sh.forward.xyz);
+        if d0 <= 0.0 || focal <= 0.0 {
+            return 1.0;
+        }
+        let p = seen + n * (1.5 * d0 / focal);
+        let rel = p - sh.at.xyz;
+        let d = dot(rel, sh.forward.xyz);
+        if d <= 0.0 {
+            return 1.0;
+        }
+        let at = vec2<f32>(dot(rel, sh.right.xyz), dot(rel, sh.down.xyz)) * focal / d
+            + vec2<f32>(sh.down.w);
+        let inverse_w = focal / d;
+        let spin = fract(52.9829189 * fract(dot(pixel, vec2<f32>(0.06711056, 0.00583715))))
+            * 6.2831853;
+        var lit = 0.0;
+        for (var k = 0u; k < 12u; k++) {
+            let r = sqrt((f32(k) + 0.5) / 12.0) * sh.forward.w;
+            let angle = f32(k) * 2.3999632 + spin;
+            let tap = at + vec2<f32>(cos(angle), sin(angle)) * r;
+            let stored = shadow_texel(s, vec2<i32>(floor(tap)));
+            if stored <= inverse_w * 1.002 {
+                lit += 1.0;
+            }
+        }
+        return lit / 12.0;
+    }
+    return 1.0;
+}
+
 // Karis's analytic fit of the split-sum environment BRDF.
 fn env_brdf(f0: vec3<f32>, roughness: f32, n_dot_v: f32) -> vec3<f32> {
     let c0 = vec4<f32>(-1.0, -0.0275, -0.572, 0.022);
@@ -178,12 +362,20 @@ fn env_brdf(f0: vec3<f32>, roughness: f32, n_dot_v: f32) -> vec3<f32> {
 
 @fragment
 fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4<f32> {
+    if below_floor(in.seen) {
+        discard;
+    }
     let facing = front_facing != (frame.params.y > 0.5);
     let double_sided = material.flags.z > 0.5;
     if !facing && !double_sided {
         discard;
     }
     var base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
+    let card = material.card.x > 0.5;
+    if card {
+        // A card's picture is premultiplied: its colour is what it holds over its alpha.
+        base = vec4<f32>(select(vec3<f32>(0.0), base.rgb / base.a, base.a > 1e-6), base.a);
+    }
     let mode = material.flags.x;
     if mode > 0.5 && mode < 1.5 {
         if base.a < material.flags.y {
@@ -193,7 +385,10 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
     } else if mode < 0.5 {
         base.a = 1.0;
     }
-    let emitted = material.emissive.rgb * textureSample(emissive_tex, tex_sampler, in.uv).rgb;
+    var emitted = material.emissive.rgb * textureSample(emissive_tex, tex_sampler, in.uv).rgb;
+    if card {
+        emitted = material.emissive.rgb * base.rgb;
+    }
     var color: vec3<f32>;
     if frame.params.z > 0.5 || material.flags.w > 0.5 {
         color = base.rgb + emitted;
@@ -234,8 +429,15 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         if frame.params.w > 0.5 {
             ambient = frame.ambient.rgb;
             let count = min(u32(frame.ambient.w), MAX_LIGHTS);
+            var surface_n = normalize(in.normal);
+            if !facing {
+                surface_n = -surface_n;
+            }
             for (var i = 0u; i < count; i++) {
-                lit += scene_light(frame.lights[i], in.seen, n, v, diffuse, f0, roughness);
+                let seen_by = visibility(i, in.seen, surface_n, in.clip.xy);
+                if seen_by > 0.0 {
+                    lit += seen_by * scene_light(frame.lights[i], in.seen, n, v, diffuse, f0, roughness);
+                }
             }
         } else {
             lit += light(n, v, normalize(vec3<f32>(-0.45, -0.65, 0.62)), 2.6, diffuse, f0, roughness);
@@ -245,7 +447,16 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         let r = reflect(-v, n);
         // The gradient is smooth, so a rough reflection samples it nearer the normal.
         let blurred = normalize(mix(r, n, roughness * roughness));
-        lit += ambient * (diffuse * environment(n) + environment(blurred) * env_brdf(f0, roughness, n_dot_v));
+        if frame.params.w > 0.5 && frame.environment.sky.w > 0.5 {
+            // The scene's sky, scaled by its ambient light when it has one.
+            if frame.environment.right.w < 0.5 {
+                ambient = vec3<f32>(1.0);
+            }
+            let reflected = sky(blurred, roughness * roughness);
+            lit += ambient * (diffuse * sky(n, 1.0) + reflected * env_brdf(f0, roughness, n_dot_v));
+        } else {
+            lit += ambient * (diffuse * environment(n) + environment(blurred) * env_brdf(f0, roughness, n_dot_v));
+        }
         let occlusion = mix(1.0, textureSample(occlusion_tex, tex_sampler, in.uv).r, material.surface.w);
         color = lit * occlusion + emitted;
     }
@@ -258,6 +469,9 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
 // with perspective (a camera) is drawn here.
 @fragment
 fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
+    if below_floor(in.seen) {
+        discard;
+    }
     let base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
     let mode = material.flags.x;
     var alpha = 1.0;

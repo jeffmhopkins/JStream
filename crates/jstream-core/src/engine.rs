@@ -19,6 +19,7 @@ use crate::forget::ForgetSources;
 use crate::frames;
 use crate::gesture::{Ended, Gestures};
 use crate::history::History;
+use crate::jtunnel::JtunnelSetup;
 use crate::live::{Built, LiveHost, LiveSources, LoadedAsset};
 use crate::load::LoadMeter;
 use crate::lock;
@@ -52,12 +53,13 @@ use jstream_platform::{
 };
 use jstream_protocol::{
     Action, ActionResult, Batch, Call, CallResult, CaptureFormatInfo, CaptureTargetKind, ClientId,
-    DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind, Event,
-    FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
-    IdempotencyKey, LiveOutcome, OutputHealth, OutputId, OutputKind, OutputState, OutputStatsInfo,
-    PixelSize, PreviewSettings, ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev,
-    RtmpTarget, SceneId, SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted,
-    VideoMixId, YoutubeAuth,
+    CollectionCause, DropCounts, Edit, EncoderProfile, EncoderSessionInfo, EngineLoad, EntityKind,
+    Event, FilterChain, FontInfo, FrameSheet, FrameStrip, GestureId, HistoryCall, HistoryDirection,
+    IdempotencyKey, KindsCause, LiveOutcome, MAX_WARM_GPU_MIB, MAX_WARM_SCENES, OutputHealth,
+    OutputId, OutputKind, OutputState, OutputStatsInfo, PixelSize, PreviewSettings, ProbeStream,
+    ProtocolError, Query, QueryResult, RecordContainer, RequestId, Rev, RtmpTarget, SceneId,
+    SecretString, SourceId, SourceSize, TransitionPresetId, TransitionStarted, VideoMixId,
+    YoutubeAuth,
 };
 use jstream_sources::AudioScopes;
 use std::collections::{BTreeMap, BTreeSet};
@@ -109,6 +111,9 @@ struct Shared {
     gpu: Arc<SharedGpu>,
     /// How many frame sheets are being taken (#1061), at most [`frames::MAX_SHEETS`].
     sheets: AtomicUsize,
+    /// Whether the `jstream-tempo` thread has started: once per engine, however often
+    /// JTunnel starts again (ADR-0147 §1).
+    tempo: AtomicBool,
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
@@ -117,6 +122,17 @@ struct Shared {
     /// Where the collection is saved, if the host named a file. Taken before the
     /// collection lock, never while holding it, so the disk write happens outside it.
     collection_file: Mutex<Option<CollectionFile>>,
+    /// The projects opened most recently, once the host names their file (ADR-0121 §6).
+    /// Taken after the collection file's lock, never with the collection lock.
+    recent: Mutex<Option<crate::projects::Recent>>,
+    /// The warm budget's file (ADR-0117 §7), once the host names it. Taken before the
+    /// collection lock: `studio.set_warm` holds it while it sets the budget and then
+    /// writes the file with the collection lock released, so writes land in order.
+    warm_file: Mutex<Option<PathBuf>>,
+    /// The open collection file's stream-key scope (ADR-0121 §5), derived from its path,
+    /// or `None` without a file. Set whenever the file changes; a leaf lock, taken alone
+    /// or last.
+    key_scope: Mutex<Option<String>>,
     /// The latest audio of the program mix and of every bus a source draws: the mixer
     /// thread pushes each block, and the `waveform` and `spectrum` sources draw it.
     audio_scopes: Arc<AudioScopes>,
@@ -146,10 +162,17 @@ struct Shared {
     /// The effect packs and their quarantine, once `watch_effect_packs` runs. On its own
     /// lock, never taken with the collection lock held: a poll reads files under it.
     effect_packs: Mutex<Option<crate::effect_packs::Packs>>,
+    /// The CLAP plugin hosts and the last scan, for `plugin.clap_scan` and
+    /// `plugin.clap_rescan` (0.106). Its locks are its own, never taken with the
+    /// collection lock held: a scan runs plugin host processes.
+    clap: crate::plugins::scan::ClapScans,
     /// The installed fonts `font.list` reports (ADR-0092), read from the OS's font
     /// folders on the first `font.list` and kept for the engine's life. Never read under
     /// the collection lock: reading them reads every font file.
     fonts: OnceLock<Vec<FontInfo>>,
+    /// The PTZ controller endpoints running (ADR-0153 §2), held weakly so they leave
+    /// `profile.get`'s `ptz_controllers` when their handle drops. Its lock is its own.
+    ptz_controllers: Mutex<Vec<std::sync::Weak<crate::ptz::controller::EndpointStats>>>,
     /// The folders `font.list` reads instead of the OS's, for tests.
     #[cfg(test)]
     font_dirs: Mutex<Option<Vec<PathBuf>>>,
@@ -193,15 +216,22 @@ impl Default for Engine {
                 state.live = LiveSources::new(host);
                 state.shared = shared.clone();
                 state.live.set_audio_scopes(Arc::clone(&audio_scopes));
+                state
+                    .live
+                    .set_midi(Arc::new(jstream_sources::MidiInputs::new()));
                 let profile = Profiler::new(frame_budget(), state.live.meters());
                 Shared {
                     state: Mutex::new(state),
                     snapshots: SnapshotWorker::new(Arc::clone(&gpu)),
                     gpu,
                     sheets: AtomicUsize::new(0),
+                    tempo: AtomicBool::new(false),
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
+                    recent: Mutex::new(None),
+                    warm_file: Mutex::new(None),
+                    key_scope: Mutex::new(None),
                     audio_scopes,
                     youtube: Mutex::new(None),
                     previews: PreviewHub::default(),
@@ -212,7 +242,9 @@ impl Default for Engine {
                     #[cfg(feature = "wasm-plugins")]
                     automation: crate::plugins::automation::Registry::default(),
                     effect_packs: Mutex::new(None),
+                    clap: crate::plugins::scan::ClapScans::default(),
                     fonts: OnceLock::new(),
+                    ptz_controllers: Mutex::new(Vec::new()),
                     #[cfg(test)]
                     font_dirs: Mutex::new(None),
                 }
@@ -283,7 +315,139 @@ impl Engine {
     #[must_use]
     pub fn with_key_store(self, store: Arc<dyn StreamKeyStore>) -> Self {
         *lock(&self.shared.keys) = Some(store);
+        self.scope_startup_keys();
         self
+    }
+
+    /// Keeps the projects opened most recently in the file at `path` (ADR-0121 §6):
+    /// `collection.info` lists them, and every `collection.open`, `collection.new` and
+    /// `collection.save_as` puts its file first. The open collection file goes first now.
+    /// A file that can't be read is logged and replaced on the next change.
+    #[must_use]
+    pub fn with_recent_collections(self, path: impl Into<PathBuf>) -> Self {
+        *lock(&self.shared.recent) = Some(crate::projects::Recent::load(path.into()));
+        self.note_recent();
+        self
+    }
+
+    /// Keeps the warm budget (`studio.set_warm`, ADR-0117 §7) in the file at `path`:
+    /// the budget it holds applies now, and every change is saved there. A file that
+    /// can't be read is logged and replaced on the next change.
+    #[must_use]
+    pub fn with_warm_file(self, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        if let Some(budget) = crate::warm_file::load(&path) {
+            let mut state = lock(&self.shared.state);
+            let scenes = state.studio.set_budget(budget.scenes as usize);
+            if state.studio.set_gpu_mib(budget.gpu_mib) | scenes {
+                state.publish_warm();
+            }
+        }
+        *lock(&self.shared.warm_file) = Some(path);
+        self
+    }
+
+    /// `studio.set_warm` (0.115, ADR-0117 §7; `gpu_mib` since 0.117, ADR-0150), or
+    /// `None` for any other call.
+    fn warm_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        let Call::Action {
+            action: Action::StudioSetWarm { scenes, gpu_mib },
+        } = call
+        else {
+            return None;
+        };
+        let scenes = *scenes;
+        if scenes > MAX_WARM_SCENES {
+            return Some(Err(ProtocolError::invalid_argument(
+                "scenes",
+                format!("at most {MAX_WARM_SCENES} scenes are kept warm"),
+            )));
+        }
+        if gpu_mib.is_some_and(|mib| mib > MAX_WARM_GPU_MIB) {
+            return Some(Err(ProtocolError::invalid_argument(
+                "gpu_mib",
+                format!("the GPU limit is at most {MAX_WARM_GPU_MIB} MiB"),
+            )));
+        }
+        let file = lock(&self.shared.warm_file);
+        let saved = {
+            let mut state = lock(&self.shared.state);
+            let mut changed = state.studio.set_budget(scenes as usize);
+            if let Some(mib) = *gpu_mib {
+                changed |= state.studio.set_gpu_mib(mib);
+            }
+            if changed {
+                state.publish_warm();
+            }
+            changed.then(|| crate::warm_file::Budget {
+                scenes,
+                gpu_mib: state.studio.gpu_mib(),
+            })
+        };
+        if let Some(budget) = saved
+            && let Some(path) = file.as_ref()
+        {
+            crate::warm_file::save(path, budget);
+        }
+        Some(Ok(CallResult::action()))
+    }
+
+    /// The name the key store holds `output_id`'s stream key under in the open
+    /// collection (ADR-0121 §5): `<scope>/<output_id>`, where the scope is derived from
+    /// the collection file's path, or the bare output ID when the host named no file. A
+    /// host's publish opener reads the key under it.
+    pub fn stream_key_name(&self, output_id: &OutputId) -> String {
+        crate::projects::key_name(lock(&self.shared.key_scope).as_deref(), output_id)
+    }
+
+    /// Moves the startup collection's stream keys from their bare output IDs, where they
+    /// were stored before projects, to its scope once the engine has both a collection
+    /// file and a key store (ADR-0121 §5). Each bare key is copied to its scoped name,
+    /// unless one is there already, and then removed. A store failure leaves that key
+    /// where it was and is logged; the next start tries again.
+    fn scope_startup_keys(&self) {
+        let Some(store) = self.key_store() else {
+            return;
+        };
+        let Some(scope) = lock(&self.shared.key_scope).clone() else {
+            return;
+        };
+        let outputs: Vec<OutputId> = lock(&self.shared.state)
+            .graph
+            .state()
+            .outputs()
+            .map(|o| o.id().clone())
+            .collect();
+        for output_id in outputs {
+            let scoped = crate::projects::key_name(Some(&scope), &output_id);
+            let moved = store.get(output_id.as_str()).and_then(|bare| match bare {
+                None => Ok(false),
+                Some(_) if store.is_set(&scoped)? => Ok(true),
+                Some(key) => store.set(&scoped, &key).map(|()| true),
+            });
+            match moved {
+                Ok(true) => {
+                    if let Err(err) = store.clear(output_id.as_str()) {
+                        tracing::warn!(output_id = %output_id, "an unscoped stream key was not removed: {err}");
+                    }
+                }
+                Ok(false) => {}
+                Err(err) => {
+                    tracing::warn!(output_id = %output_id, "a stream key was not scoped: {err}");
+                }
+            }
+        }
+    }
+
+    /// Puts the open collection file first in the recent list, when the host named
+    /// both.
+    fn note_recent(&self) {
+        let path = lock(&self.shared.collection_file)
+            .as_ref()
+            .map(|file| crate::projects::path_text(&crate::projects::absolute(file.path())));
+        if let (Some(path), Some(recent)) = (path, lock(&self.shared.recent).as_mut()) {
+            recent.push(path);
+        }
     }
 
     /// Scans the CLAP search directories with `hosts` (ADR-0035) and adds each audio
@@ -293,25 +457,114 @@ impl Engine {
     /// this can take seconds: call it from a worker thread. The engine's locks are held
     /// only to add the kinds, after the scan.
     ///
+    /// The engine keeps `hosts`, so `plugin.clap_rescan` (0.106) can scan again, and the
+    /// scan, which `plugin.clap_scan` reports. A scan that starts while another runs
+    /// waits for it.
+    ///
     /// From then on a source's audio chain runs its CLAP filters, each in a host process
     /// `hosts` starts. A collection may hold CLAP filters before the scan that
     /// describes their kinds (it loads before the scan runs): they are bypassed until
     /// then.
     pub fn scan_clap_plugins(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        self.shared.clap.set_hosts(Arc::clone(&hosts));
+        self.rescan_clap(hosts)
+    }
+
+    /// Records why this engine hosts no CLAP plugins, for `plugin.clap_scan` to report,
+    /// when the host couldn't set up its plugin hosts. Ignored once it has given some.
+    pub fn set_clap_unavailable(&self, reason: impl Into<String>) {
+        self.shared.clap.set_unavailable(reason.into());
+    }
+
+    /// One scan with `hosts`, after any scan running now.
+    fn rescan_clap(&self, hosts: Arc<dyn PluginHosts>) -> ClapScan {
+        let _running = self.shared.clap.begin();
+        let _one_at_a_time = lock(&self.shared.clap.scan_lock);
         let scan = clap_kinds::scan(hosts.as_ref());
-        let mut state = lock(&self.shared.state);
-        state.graph = std::mem::take(&mut state.graph)
-            .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
-        state.audio.add_clap_plugins(
-            hosts,
-            scan.kinds.iter().map(|k| {
-                (
-                    k.descriptor.kind_id.clone(),
-                    (k.file.clone(), k.plugin_id.clone()),
-                )
-            }),
-        );
+        let mut wake = Vec::new();
+        {
+            let mut state = lock(&self.shared.state);
+            // Only a kind that is new, or described differently, changes `kind.list`.
+            let changed = scan
+                .kinds
+                .iter()
+                .any(|k| state.graph.kind(&k.descriptor.kind_id) != Some(&k.descriptor));
+            state.graph = std::mem::take(&mut state.graph)
+                .with_kinds(scan.kinds.iter().map(|k| k.descriptor.clone()));
+            state.audio.add_clap_plugins(
+                hosts,
+                scan.kinds.iter().map(|k| {
+                    (
+                        k.descriptor.kind_id.clone(),
+                        (k.file.clone(), k.plugin_id.clone()),
+                    )
+                }),
+            );
+            if changed {
+                state.subscribers.emit(
+                    &Event::KindsChanged {
+                        cause: KindsCause::ClapScan,
+                    },
+                    &mut wake,
+                );
+            }
+        }
+        wake_all(wake);
+        self.shared.clap.finished(&scan);
+        for (file, error) in &scan.failed {
+            tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
+        }
+        tracing::info!(found = scan.kinds.len(), "scanned the CLAP plugins");
         scan
+    }
+
+    /// `plugin.clap_scan` and `plugin.clap_rescan` (0.106), or `None` for another call.
+    fn clap_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        match call {
+            Call::Query {
+                query: Query::PluginClapScan,
+            } => Some(Ok(CallResult::Query {
+                result: QueryResult::PluginClapScan {
+                    scan: self.shared.clap.info(),
+                },
+            })),
+            _ => None,
+        }
+    }
+
+    /// `plugin.clap_rescan` (0.106): scans on a `jstream-clap-scan` thread, as the startup
+    /// scan runs, and answers once it ends. Each plugin file is scanned in its own host
+    /// process, so a scan can take seconds; the session that asked keeps its events,
+    /// frames and other answers meanwhile. The call is audited when it answers.
+    fn clap_rescan(
+        &self,
+        audit: audit::Pending,
+        client_id: &ClientId,
+        request_id: &RequestId,
+    ) -> SnapshotReply {
+        let (reply, waiting) = snapshot::reply_pair();
+        let Some(hosts) = self.shared.clap.hosts() else {
+            let result = Err(ProtocolError::Unsupported {
+                call: "plugin.clap_rescan".into(),
+            });
+            self.record(audit.finish(client_id, request_id, &result));
+            reply.send(result);
+            return waiting;
+        };
+        let engine = self.clone();
+        let (client_id, request_id) = (client_id.clone(), request_id.clone());
+        let spawned = thread::Builder::new()
+            .name("jstream-clap-scan".into())
+            .spawn(move || {
+                engine.rescan_clap(hosts);
+                let result = Ok(CallResult::action());
+                engine.record(audit.finish(&client_id, &request_id, &result));
+                reply.send(result);
+            });
+        if let Err(error) = spawned {
+            tracing::warn!(%error, "could not start a thread to rescan the CLAP plugins");
+        }
+        waiting
     }
 
     /// Loads the WGSL effect packs in `root`, a folder of pack folders (ADR-0035), and
@@ -466,6 +719,12 @@ impl Engine {
         }
     }
 
+    /// The rate of each live preview stream.
+    #[cfg(test)]
+    pub(crate) fn preview_rates(&self) -> Vec<u32> {
+        self.shared.previews.rates()
+    }
+
     /// Installs a pack update as the watcher, a blame or `effect.enable` does.
     #[cfg(test)]
     pub(crate) fn install_effects(&self, update: crate::effect_packs::Update) {
@@ -475,17 +734,22 @@ impl Engine {
     /// The body of the program stage's `jstream-device-losses` thread: for each GPU
     /// device the render thread lost (#349), with the pack kinds the frames before the
     /// loss drew, blames and quarantines them, re-plans without them, and sends
-    /// `gpu.device_lost`. The render thread hands the loss over a channel, so it takes
-    /// no lock and writes no file itself (R-RT-003). It ends once the render thread
-    /// drops its sender, and holds the shared collection like the capture-sizes thread.
+    /// `gpu.device_lost`; for each pack kind whose pass ran too long on the GPU, does
+    /// the same for that kind and sends `gpu.effect_slow`. The render thread hands them
+    /// over a channel, so it takes no lock and writes no file itself (R-RT-003). It ends
+    /// once the render thread drops its sender, and holds the shared collection like
+    /// the capture-sizes thread.
     pub(crate) fn device_loss_watch(
         &self,
-        losses: Receiver<crate::runtime::DeviceLoss>,
+        events: Receiver<crate::runtime::GpuEvent>,
     ) -> impl FnOnce() + Send + 'static {
         let shared = Arc::clone(&self.shared);
         move || {
-            for loss in losses {
-                shared.device_lost(loss);
+            for event in events {
+                match event {
+                    crate::runtime::GpuEvent::Lost(loss) => shared.device_lost(loss),
+                    crate::runtime::GpuEvent::Slow(slow) => shared.effect_slow(slow),
+                }
             }
         }
     }
@@ -592,7 +856,7 @@ impl Engine {
             state.outputs.sync(state.graph.state());
             // Program is not saved: the loaded collection's first scene goes on it, with
             // no event, as no client is connected yet (ADR-0030).
-            state.studio = Studio::default();
+            state.studio = state.studio.fresh();
             state.studio.reconcile(state.graph.state());
             // `collection` asset references are relative to the file's folder.
             state
@@ -600,14 +864,18 @@ impl Engine {
                 .set_collection_folder(opened.folder().map(Path::to_path_buf));
             state.live.sync(state.graph.state());
             state.audio.sync(state.graph.state(), state.live.audio());
+            state.camera_controls.sync(state.graph.state());
             state.route_audio();
             // The loaded collection is what the program mix draws now.
             state.publish_render();
             // No client is connected yet, so nobody is woken.
             state.sync_sizes(&mut Vec::new());
             state.feed_pages();
+            *lock(&self.shared.key_scope) = Some(crate::projects::key_scope(opened.path()));
             *file = Some(opened);
         }
+        self.scope_startup_keys();
+        self.note_recent();
         Ok(self)
     }
 
@@ -617,6 +885,334 @@ impl Engine {
     /// saves happen one at a time and a late one never overwrites a newer collection.
     fn save_collection(&self) {
         self.shared.save_collection();
+    }
+
+    /// [`save_collection`](Self::save_collection) to `file`, whose lock the caller holds.
+    ///
+    /// # Errors
+    /// The file could not be written.
+    fn save_to(&self, file: &mut CollectionFile) -> std::io::Result<()> {
+        self.shared.save_to(file)
+    }
+
+    /// `collection.open`, `collection.new`, `collection.save_as` and `collection.info`
+    /// (ADR-0121), or `None` for any other call. They run with the collection file's lock
+    /// held for the whole call, so no save lands between the switch's steps.
+    fn collection_call(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        call: &Call,
+        previews: &SessionPreviews,
+    ) -> Option<Result<CallResult, ProtocolError>> {
+        Some(match call {
+            Call::Action {
+                action: action @ (Action::CollectionOpen { path } | Action::CollectionNew { path }),
+            } => {
+                let cause = if matches!(action, Action::CollectionNew { .. }) {
+                    CollectionCause::New
+                } else {
+                    CollectionCause::Open
+                };
+                self.collection_switch(client_id, request_id, path, cause, previews)
+                    .map(|()| CallResult::action())
+            }
+            Call::Action {
+                action: Action::CollectionSaveAs { path },
+            } => self
+                .collection_save_as(client_id, request_id, path)
+                .map(|()| CallResult::action()),
+            Call::Query {
+                query: Query::CollectionInfo,
+            } => self.collection_info(),
+            _ => return None,
+        })
+    }
+
+    /// `collection.info`: the open file and the recent list.
+    fn collection_info(&self) -> Result<CallResult, ProtocolError> {
+        let path = lock(&self.shared.collection_file)
+            .as_ref()
+            .map(|file| crate::projects::path_text(&crate::projects::absolute(file.path())))
+            .ok_or_else(|| unsupported("collection.info"))?;
+        let recent = lock(&self.shared.recent)
+            .as_ref()
+            .map(|recent| recent.list().to_vec())
+            .unwrap_or_default();
+        Ok(CallResult::Query {
+            result: QueryResult::CollectionInfo { path, recent },
+        })
+    }
+
+    /// `collection.open` and `collection.new` (ADR-0121 §3): loads the new collection,
+    /// saves the open one and writes the new file before anything stops, so a file that
+    /// can't be read, loaded or written, or an open project that can't be saved, leaves
+    /// the open project as it was. Then every output that isn't stopped stops, and the
+    /// collection is replaced. `collection.new` only ever makes a new file, and removes
+    /// it again if the switch fails after that.
+    fn collection_switch(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        path: &str,
+        cause: CollectionCause,
+        previews: &SessionPreviews,
+    ) -> Result<(), ProtocolError> {
+        let new = cause == CollectionCause::New;
+        let name = if new {
+            "collection.new"
+        } else {
+            "collection.open"
+        };
+        let target = crate::projects::checked_path(path)?;
+        let mut file = lock(&self.shared.collection_file);
+        let Some(current) = file.as_mut() else {
+            return Err(unsupported(name));
+        };
+        let empty = Graph::new().with_kinds(lock(&self.shared.state).graph.kinds().cloned());
+        let graph = if new {
+            if fs_exists(&target) {
+                return Err(file_exists(path));
+            }
+            empty.with_sample_labels()
+        } else {
+            CollectionFile::read(&target, empty).map_err(|err| ProtocolError::ActionFailed {
+                reason: err.to_string(),
+            })?
+        };
+        // The open project keeps every change made before the switch, or stays open.
+        self.save_to(current)
+            .map_err(|err| ProtocolError::ActionFailed {
+                reason: format!(
+                    "the open project could not be saved to {}, so it stays open: {err}",
+                    current.path().display()
+                ),
+            })?;
+        // Written now so a path that can't be written fails before anything stops; it
+        // is written again below if the switch gives it a later `rev`. An open writes
+        // back the project file it just read; a new project never replaces a file.
+        let created = if new {
+            CollectionFile::create_new(target.clone(), &graph)
+        } else {
+            CollectionFile::create(target.clone(), &graph)
+        };
+        let mut opened = created.map_err(|err| written_error(&err, path, &target))?;
+        // Removed under the old project's scope, which names them.
+        let stale: Vec<OutputId> = lock(&self.shared.state)
+            .stale_keys
+            .iter()
+            .cloned()
+            .collect();
+        self.remove_stale_keys(stale);
+        self.stop_every_output(client_id, request_id, previews);
+        let mut wake = Vec::new();
+        let swapped = {
+            let mut state = lock(&self.shared.state);
+            let running = state.outputs.running();
+            if let Some(output_id) = running.first() {
+                Err(ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` did not stop, so the project was not switched: \
+                         stop it and try again"
+                    ),
+                })
+            } else {
+                state.replace_collection(client_id, request_id, graph, opened.folder(), &mut wake);
+                *lock(&self.shared.key_scope) = Some(crate::projects::key_scope(&target));
+                Ok((state.graph.rev(), state.graph.to_collection_json()))
+            }
+        };
+        wake_all(wake);
+        let (rev, json) = match swapped {
+            Ok(saved) => saved,
+            Err(err) => {
+                if new && let Err(removed) = std::fs::remove_file(opened.path()) {
+                    tracing::warn!(path = %opened.path().display(), error = %removed, "a new project file was not removed");
+                }
+                return Err(err);
+            }
+        };
+        if rev > opened.saved()
+            && let Err(err) = opened.save(rev, &json)
+        {
+            tracing::error!(path = %opened.path().display(), error = %err, "collection not saved");
+        }
+        *current = opened;
+        drop(file);
+        self.switched(client_id, request_id, &target, cause);
+        Ok(())
+    }
+
+    /// Stops every output that isn't stopped, as an `output.stop` from this client
+    /// would, with its events and audit entry. A stop that fails is logged; the switch
+    /// then finds the output still running and refuses.
+    fn stop_every_output(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        previews: &SessionPreviews,
+    ) {
+        let running = lock(&self.shared.state).outputs.running();
+        for output_id in running {
+            let stop = Call::Action {
+                action: Action::OutputStop {
+                    output_id: output_id.clone(),
+                },
+            };
+            if let Executed::Ready(result) = self.execute(client_id, request_id, stop, previews)
+                && let Err(error) = *result
+            {
+                tracing::warn!(output_id = %output_id, %error, "output not stopped for a project switch");
+            }
+        }
+    }
+
+    /// `collection.save_as` (ADR-0121 §4). It only ever makes a new file.
+    fn collection_save_as(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        path: &str,
+    ) -> Result<(), ProtocolError> {
+        let target = crate::projects::checked_path(path)?;
+        let mut file = lock(&self.shared.collection_file);
+        let Some(current) = file.as_mut() else {
+            return Err(unsupported("collection.save_as"));
+        };
+        if fs_exists(&target) {
+            return Err(file_exists(path));
+        }
+        let scope = crate::projects::key_scope(&target);
+        let copied = self.copy_keys(&scope)?;
+        let from = crate::projects::absolute(current.folder().unwrap_or(Path::new(".")));
+        let to = target
+            .parent()
+            .map_or_else(|| PathBuf::from("."), Path::to_path_buf);
+        let mut wake = Vec::new();
+        let saved = {
+            // The file is written under the collection lock, so no batch lands between
+            // the copy written and the one kept: a save as is rare, and the real-time
+            // threads never take this lock.
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            let mut json: serde_json::Value =
+                serde_json::from_str(&state.graph.to_collection_json())
+                    .expect("invariant: the collection serializes to JSON");
+            let moved = crate::projects::move_collection_assets(&mut json, &from, &to);
+            let graph = if moved == 0 {
+                Ok(state.graph.clone())
+            } else {
+                let rev = state.graph.rev().next().unwrap_or(state.graph.rev());
+                Graph::new()
+                    .with_kinds(state.graph.kinds().cloned())
+                    .with_collection_json(&json.to_string())
+                    .map(|graph| graph.with_rev(rev))
+                    .map_err(|err| ProtocolError::Internal {
+                        reason: format!("the moved asset references did not load: {err}"),
+                    })
+            };
+            graph.and_then(|graph| {
+                let opened = CollectionFile::create_new(target.clone(), &graph)
+                    .map_err(|err| written_error(&err, path, &target))?;
+                state.rebase_collection(
+                    client_id,
+                    request_id,
+                    graph,
+                    moved > 0,
+                    opened.folder(),
+                    &mut wake,
+                );
+                *lock(&self.shared.key_scope) = Some(scope);
+                Ok(opened)
+            })
+        };
+        wake_all(wake);
+        match saved {
+            Ok(saved) => *current = saved,
+            Err(err) => {
+                // No file holds the copies, so they must not wait for one at that path.
+                self.clear_keys(&copied);
+                return Err(err);
+            }
+        }
+        drop(file);
+        self.switched(client_id, request_id, &target, CollectionCause::SaveAs);
+        Ok(())
+    }
+
+    /// Copies each output's stream key from the open collection's scope to `scope`, for
+    /// a save as (ADR-0121 §5), and returns the names it wrote. Without a key store
+    /// there is nothing to copy. A failure removes the copies made so far.
+    fn copy_keys(&self, scope: &str) -> Result<Vec<String>, ProtocolError> {
+        let Some(store) = self.key_store() else {
+            return Ok(Vec::new());
+        };
+        let outputs: Vec<OutputId> = lock(&self.shared.state)
+            .graph
+            .state()
+            .outputs()
+            .map(|o| o.id().clone())
+            .collect();
+        let mut copied = Vec::new();
+        for output_id in outputs {
+            let name = crate::projects::key_name(Some(scope), &output_id);
+            let result = store
+                .get(&self.stream_key_name(&output_id))
+                .and_then(|key| match key {
+                    Some(key) => store.set(&name, &key).map(|()| true),
+                    None => Ok(false),
+                });
+            match result {
+                Ok(true) => copied.push(name),
+                Ok(false) => {}
+                Err(err) => {
+                    self.clear_keys(&copied);
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!("the credential store did not copy the stream keys: {err}"),
+                    });
+                }
+            }
+        }
+        Ok(copied)
+    }
+
+    /// Removes the stream keys stored under `names`, logging any the store keeps.
+    fn clear_keys(&self, names: &[String]) {
+        let Some(store) = self.key_store() else {
+            return;
+        };
+        for name in names {
+            if let Err(err) = store.clear(name) {
+                tracing::warn!(key = %name, "a copied stream key was not removed: {err}");
+            }
+        }
+    }
+
+    /// After a switch or save as: the file goes first in the recent list, and every
+    /// client gets `collection.file_changed`.
+    fn switched(
+        &self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        target: &Path,
+        cause: CollectionCause,
+    ) {
+        let path = crate::projects::path_text(&crate::projects::absolute(target));
+        if let Some(recent) = lock(&self.shared.recent).as_mut() {
+            recent.push(path.clone());
+        }
+        let mut wake = Vec::new();
+        lock(&self.shared.state).subscribers.emit(
+            &Event::CollectionFileChanged {
+                path,
+                cause,
+                client_id: client_id.clone(),
+                request_id: Some(request_id.clone()),
+            },
+            &mut wake,
+        );
+        wake_all(wake);
+        tracing::info!(path = %target.display(), cause = ?cause, "collection file changed");
     }
 
     /// What an output in the collection is and where it sends, or `None` if the
@@ -654,6 +1250,57 @@ impl Engine {
             .map(|pending| pending.kind.clone())
     }
 
+    /// Drives the PTZ cameras `setup` lists (ADR-0146, ADR-0123 §4): a socket and a
+    /// thread for each, which the `ptz.*` actions, `ptz.list` and the scenes' shots use.
+    /// Replaces the cameras of an earlier call, whose threads stop; an empty setup stops
+    /// them all. Without a call the engine drives no camera and opens no socket.
+    ///
+    /// # Errors
+    /// When a camera's socket can't be opened or its thread can't start; the cameras
+    /// running before are kept then.
+    pub fn start_ptz(&self, setup: &crate::ptz::PtzSetup) -> std::io::Result<()> {
+        let ptz = crate::ptz::Ptz::start(setup)?;
+        lock(&self.shared.state).ptz = ptz;
+        Ok(())
+    }
+
+    /// Opens the PTZ controller endpoints `setup` lists (ADR-0152, ADR-0123 §5): a
+    /// socket, a thread and a session for each, which turn a controller's VISCA into
+    /// `scene.drive_camera` and `scene.aim_camera` for its target's camera. They run
+    /// until the returned handle is dropped, which closes them and stops their drives.
+    /// Without a call no controller socket is open.
+    ///
+    /// # Errors
+    /// When an endpoint's socket can't be opened (its port in use, say) or its thread
+    /// can't start; nothing is left listening then.
+    pub fn start_ptz_controllers(
+        &self,
+        setup: &crate::ptz::controller::PtzControllerSetup,
+    ) -> std::io::Result<crate::ptz::controller::PtzControllers> {
+        crate::ptz::controller::start(self, setup)
+    }
+
+    /// Adds running controller endpoints to `profile.get`'s `ptz_controllers`, and
+    /// forgets the ones that stopped.
+    pub(crate) fn watch_ptz_controllers(
+        &self,
+        endpoints: &[Arc<crate::ptz::controller::EndpointStats>],
+    ) {
+        let mut watched = lock(&self.shared.ptz_controllers);
+        watched.retain(|weak| weak.strong_count() > 0);
+        watched.extend(endpoints.iter().map(Arc::downgrade));
+    }
+
+    /// `profile.get`'s `ptz_controllers`: the endpoints running, in the order they
+    /// opened.
+    fn ptz_controller_profile(&self) -> Vec<jstream_protocol::PtzControllerProfile> {
+        lock(&self.shared.ptz_controllers)
+            .iter()
+            .filter_map(std::sync::Weak::upgrade)
+            .map(|endpoint| endpoint.profile())
+            .collect()
+    }
+
     /// Injects platform backends. `output.start` then runs the media pipeline
     /// instead of the placeholder state machine. Configure this before
     /// [`connect`](Self::connect); clones made earlier do not see it.
@@ -673,6 +1320,10 @@ impl Engine {
             let mut state = lock(&self.shared.state);
             let state = &mut *state;
             state.live.set_clock(Arc::clone(&backends.clock));
+            // MIDI is stamped on the media clock, and the sources draw against it.
+            if let Some(midi) = state.live.midi() {
+                midi.set_clock(Arc::clone(&backends.clock));
+            }
             state
                 .live
                 .set_media(Arc::clone(&backends.media), state.graph.state());
@@ -681,6 +1332,14 @@ impl Engine {
         // A webcam or capture card opens once, shared by the program stage's capture of
         // it and the preview's.
         backends.video_devices = Arc::new(SharedVideoDevices::new(backends.video_devices));
+        {
+            let mut state = lock(&self.shared.state);
+            let state = &mut *state;
+            let drawn = state.shown.as_ref().unwrap_or(&state.graph);
+            state
+                .camera_controls
+                .set_devices(Arc::clone(&backends.video_devices), drawn.state());
+        }
         // One GPU context for the whole engine (ADR-0117 §5): every stage, the preview
         // and snapshots open on it, and the browser engine paints on it.
         self.shared.gpu.set_interop(backends.gpu);
@@ -737,6 +1396,74 @@ impl Engine {
         *lock(&host.vcam) = vcam;
         *lock(&host.backends) = Some(backends);
         self
+    }
+
+    /// Turns on receiving from JTunnel senders (ADR-0122, ADR-0123): binds the receive
+    /// socket and starts the thread that subscribes to each sender `setup` accepts, so
+    /// `network_audio` sources naming one record its audio. Off, the default, no socket
+    /// is open; starting again replaces the receiver. Requires
+    /// [`with_backends`](Self::with_backends) first, for the media clock arrivals are
+    /// stamped with. Returns the address it receives on.
+    ///
+    /// # Errors
+    /// No backends yet, or the socket could not be bound or the thread started.
+    pub fn start_jtunnel(&self, setup: &JtunnelSetup) -> std::io::Result<std::net::SocketAddr> {
+        let clock = self
+            .media
+            .as_ref()
+            .and_then(|host| lock(&host.backends).as_ref().map(|b| Arc::clone(&b.clock)))
+            .ok_or_else(|| std::io::Error::other("JTunnel needs the platform's backends first"))?;
+        let (wanted, midi) = {
+            let state = lock(&self.shared.state);
+            (state.audio.wanted(), state.live.midi())
+        };
+        // One waiting message stands for any number of changes (`Receiver::start`).
+        let (changed, heard) = std::sync::mpsc::sync_channel(1);
+        let receiver = Arc::new(crate::jtunnel::Receiver::start(
+            setup,
+            clock,
+            midi.clone(),
+            Some(changed),
+        )?);
+        spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
+        let local = receiver.local_addr();
+        wanted.set_jtunnel(Some(receiver));
+        if let Some(midi) = midi
+            && !self.shared.tempo.swap(true, Ordering::Relaxed)
+            && !spawn_tempo(Arc::downgrade(&self.shared), midi)
+        {
+            // The next start tries again.
+            self.shared.tempo.store(false, Ordering::Relaxed);
+        }
+        Ok(local)
+    }
+
+    /// What the JTunnel receiver has dropped and played, while it is on.
+    #[must_use]
+    pub fn jtunnel_stats(&self) -> Option<crate::jtunnel::JtunnelStats> {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        wanted.jtunnel_receiver().map(|receiver| receiver.stats())
+    }
+
+    /// `jtunnel.senders`: the senders heard on the LAN, while the receiver is on.
+    fn jtunnel_senders(&self) -> QueryResult {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        match wanted.jtunnel_receiver() {
+            Some(receiver) => QueryResult::JtunnelSenders {
+                on: true,
+                senders: receiver.heard(),
+            },
+            None => QueryResult::JtunnelSenders {
+                on: false,
+                senders: Vec::new(),
+            },
+        }
+    }
+
+    /// `profile.get`'s `network`: the JTunnel receiver's senders, while it is on.
+    fn jtunnel_profile(&self) -> Option<jstream_protocol::NetworkProfile> {
+        let wanted = lock(&self.shared.state).audio.wanted();
+        wanted.jtunnel_receiver().map(|receiver| receiver.profile())
     }
 
     /// Gives `browser` sources and their `youtube_chat` preset the browser engine they
@@ -1199,12 +1926,18 @@ impl Engine {
     /// Drops `client_id`'s undo and redo history and expires its open gestures: its
     /// session ended (ADR-0032). Each gesture's parameters show their collection values
     /// again, `live.ended` (`expired`) goes out after any values not sent yet, and each
-    /// gets an audit entry. What `plugin.list` showed it is forgotten too.
+    /// gets an audit entry. A PTZ camera or a scene camera's live aim its drive left moving
+    /// stops. What `plugin.list` showed it is forgotten too.
     pub(crate) fn forget_client(&self, client_id: &ClientId) {
+        self.shared.profile.end_views(client_id);
         let mut wake = Vec::new();
         let (ended, rev, client_name) = {
             let mut state = lock(&self.shared.state);
             state.history.forget(client_id);
+            // A camera its drive left moving stops (ADR-0146 §3).
+            state.ptz.forget_client(client_id);
+            // So does a scene camera's live aim (ADR-0152).
+            state.forget_aims(client_id);
             for gesture_id in state.gestures.of_client(client_id) {
                 state.end_gesture(
                     client_id,
@@ -1307,9 +2040,10 @@ impl Engine {
     /// sessions. Only names, IDs and error codes are logged, never a command's arguments
     /// (R-SEC-001).
     ///
-    /// Every call but `video.snapshot` runs to completion here. A snapshot is queued
-    /// for the snapshot thread and comes back [`Executed::Pending`], with its span; its
-    /// outcome is logged when it completes.
+    /// Every call but `video.snapshot`, `video.frames`, `quality.probe`, `scene.switch_and_watch` and
+    /// `plugin.clap_rescan` runs to completion here. Those are answered from another
+    /// thread and come back [`Executed::Pending`], with their span; their outcome is
+    /// logged when they complete.
     pub(crate) fn execute(
         &self,
         client_id: &ClientId,
@@ -1332,6 +2066,23 @@ impl Engine {
         ) {
             drop(_entered);
             return Executed::Pending(self.video_snapshot(), span);
+        }
+        if matches!(
+            call,
+            Call::Action {
+                action: Action::PluginClapRescan
+            }
+        ) {
+            let audit = self.audit_context(client_id, &call);
+            drop(_entered);
+            return Executed::Pending(self.clap_rescan(audit, client_id, request_id), span);
+        }
+        if let Call::Query {
+            query: Query::QualityProbe { stream, frames },
+        } = &call
+        {
+            drop(_entered);
+            return Executed::Pending(self.quality_probe(stream, *frames), span);
         }
         if let Call::Query {
             query: Query::VideoFrames { strip, scene_id },
@@ -1394,6 +2145,12 @@ impl Engine {
             result
         } else if let Some(result) = self.pack_call(client_id, &call) {
             result
+        } else if let Some(result) = self.clap_call(&call) {
+            result
+        } else if let Some(result) = self.warm_call(&call) {
+            result
+        } else if let Some(result) = self.collection_call(client_id, request_id, &call, previews) {
+            result
         } else if let Call::Action {
             action: Action::EffectEnable { kind_id },
         } = &call
@@ -1426,14 +2183,30 @@ impl Engine {
         ) {
             Ok(self.font_list())
         } else if let Call::Query {
+            query: Query::JtunnelSenders,
+        } = &call
+        {
+            Ok(CallResult::Query {
+                result: self.jtunnel_senders(),
+            })
+        } else if let Call::Query {
             query: Query::ProfileGet { seconds, top },
         } = &call
         {
             // Outside the collection lock: reading the threads makes system calls.
             let cpu = self.shared.load.cpu_time();
+            let inputs = drops::lock_ledger(&self.drops).input_totals();
+            let mut profile = self.shared.profile.profile(*seconds, *top, cpu, inputs);
+            profile.network = self.jtunnel_profile();
+            {
+                let state = lock(&self.shared.state);
+                profile.warm = state.warm.report().to_vec();
+                profile.ptz_cameras = state.ptz.profile();
+            }
+            profile.ptz_controllers = self.ptz_controller_profile();
             Ok(CallResult::Query {
                 result: QueryResult::ProfileGet {
-                    profile: self.shared.profile.profile(*seconds, *top, cpu),
+                    profile: Box::new(profile),
                 },
             })
         } else if let Call::Action {
@@ -1441,6 +2214,11 @@ impl Engine {
         } = call
         {
             self.preview_action(previews, action)
+        } else if let Call::Action {
+            action: Action::PreviewReport { view, counts },
+        } = &call
+        {
+            self.preview_report(client_id, view, *counts)
         } else if self.backends_ready()
             && matches!(
                 call,
@@ -1615,6 +2393,26 @@ impl Engine {
         })
     }
 
+    /// `preview.report` (ADR-0132): records the view's counts for `profile.get`. Only
+    /// reads the client's name from the collection state; changes nothing in it.
+    fn preview_report(
+        &self,
+        client_id: &ClientId,
+        view: &str,
+        counts: jstream_protocol::ViewCounts,
+    ) -> Result<CallResult, ProtocolError> {
+        jstream_protocol::check_view_label(view)?;
+        let client = lock(&self.shared.state)
+            .client_names
+            .get(client_id)
+            .cloned()
+            .unwrap_or_default();
+        self.shared
+            .profile
+            .report_view(client_id, &client, view, counts)?;
+        Ok(CallResult::Action { result: None })
+    }
+
     /// `preview.subscribe` and `preview.unsubscribe`, on the calling session's
     /// previews. Nothing here holds the collection lock past reading `rev`.
     fn preview_action(
@@ -1633,7 +2431,7 @@ impl Engine {
                 source,
                 source_id,
             } => {
-                let settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
+                let mut settings = PreviewSettings::resolve(max_width, max_height, fps, &codecs)?;
                 // `source_id` first, so the error names the later field however many
                 // of the three are given.
                 if source_id.is_some() && (scene_id.is_some() || source.is_some()) {
@@ -1666,6 +2464,9 @@ impl Engine {
                             id: source_id.as_str().to_owned(),
                         });
                     }
+                    // No faster than the program: a 60 fps ask of a 30 fps collection
+                    // gets 30, on the hub as on the program stage.
+                    settings.fps = settings.fps.min(state.graph.state().base_fps().max(1));
                     // Only the kinds and the canvas: the draft is planned unlocked.
                     let kinds = source
                         .as_ref()
@@ -1695,6 +2496,7 @@ impl Engine {
                         scene: scene_id.clone(),
                         source_id: source_id.clone(),
                         draft,
+                        streams: Some(self.shared.profile.stream_registry()),
                     },
                 )?;
                 if scene_id.is_some() || source_id.is_some() {
@@ -1753,7 +2555,10 @@ impl Engine {
                 }
                 let store = self.key_store().ok_or_else(no_key_store)?;
                 store
-                    .set(output_id.as_str(), &Secret::new(key.expose()))
+                    .set(
+                        &self.stream_key_name(&output_id),
+                        &Secret::new(key.expose()),
+                    )
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not store the key: {err}"),
                     })?;
@@ -1763,7 +2568,7 @@ impl Engine {
             Action::OutputClearKey { output_id } => {
                 let store = self.key_store().ok_or_else(no_key_store)?;
                 store
-                    .clear(output_id.as_str())
+                    .clear(&self.stream_key_name(&output_id))
                     .map_err(|err| ProtocolError::ActionFailed {
                         reason: format!("the credential store did not remove the key: {err}"),
                     })?;
@@ -1788,7 +2593,7 @@ impl Engine {
         let store = self.key_store();
         for output_id in stale {
             let removed = match &store {
-                Some(store) => store.clear(output_id.as_str()),
+                Some(store) => store.clear(&self.stream_key_name(&output_id)),
                 None => Ok(()),
             };
             match removed {
@@ -1827,13 +2632,11 @@ impl Engine {
         };
         let (encoder, encoder_sessions, hardware_sessions) = self.encoder_status(&output_id);
         let key_set = match self.key_store() {
-            Some(store) => {
-                store
-                    .is_set(output_id.as_str())
-                    .map_err(|err| ProtocolError::Internal {
-                        reason: format!("reading the credential store: {err}"),
-                    })?
-            }
+            Some(store) => store
+                .is_set(&self.stream_key_name(&output_id))
+                .map_err(|err| ProtocolError::Internal {
+                    reason: format!("reading the credential store: {err}"),
+                })?,
             None => false,
         };
         Ok(CallResult::Query {
@@ -1990,6 +2793,58 @@ impl Engine {
         Ok(CallResult::Query {
             result: QueryResult::CaptureTargets { targets },
         })
+    }
+
+    /// `quality.probe` (ADR-0132 §3, ADR-0145): PSNR and SSIM of a running output's
+    /// stream against the frames its encoder was given, measured on a thread of its own
+    /// ([`quality`](crate::quality)). Checks the call and finds the session under the
+    /// locks, which it lets go of before the probe starts.
+    fn quality_probe(&self, stream: &ProbeStream, frames: Option<u32>) -> SnapshotReply {
+        let job = (|| {
+            let frames = jstream_protocol::probe_frames(frames)?;
+            let ProbeStream::Output { output_id } = stream else {
+                return Err(ProtocolError::invalid_argument(
+                    "stream",
+                    "this engine probes only an output's stream",
+                ));
+            };
+            if lock(&self.shared.state)
+                .graph
+                .state()
+                .output(output_id)
+                .is_none()
+            {
+                return Err(ProtocolError::NotFound {
+                    entity: EntityKind::Output,
+                    id: output_id.to_string(),
+                });
+            }
+            let not_running = || ProtocolError::ActionFailed {
+                reason: format!("output `{output_id}` is not running, so it has no stream"),
+            };
+            let codecs = self.codecs().ok_or_else(not_running)?;
+            let host = self.media.as_ref().ok_or_else(not_running)?;
+            let gate = lock(&host.gate);
+            let encoders = gate
+                .running
+                .get(output_id)
+                .ok_or_else(not_running)?
+                .encoders()
+                .ok_or_else(|| ProtocolError::ActionFailed {
+                    reason: format!(
+                        "output `{output_id}` sends no video, so there is none to probe"
+                    ),
+                })?;
+            Ok(encoders.probe_job(codecs, frames))
+        })();
+        match job {
+            Ok(job) => crate::quality::start(job),
+            Err(error) => {
+                let (reply, waiting) = snapshot::reply_pair();
+                reply.send(Err(error));
+                waiting
+            }
+        }
     }
 
     /// The codec backend, when the engine has media backends.
@@ -3307,7 +4162,8 @@ fn emit_sampled(shared: &Shared, ledger: &Mutex<DropLedger>) {
     // And the outputs' meters, whose lock is never taken with the collection's.
     let outputs = lock(&shared.output_meters).sample(Instant::now());
     // A profile reading too (ADR-0103), whose locks are its own.
-    shared.profile.sample(cpu);
+    let inputs = drops::lock_ledger(ledger).input_totals();
+    shared.profile.sample(cpu, inputs);
     let mut wake = Vec::new();
     {
         let mut state = lock(&shared.state);
@@ -3384,33 +4240,72 @@ fn command_name(call: &Call) -> &'static str {
 /// The captures and sources of the scenes the studio keeps warm (ADR-0117 §7), planned
 /// again only when the collection's revision, its placed keyframes (which are no
 /// revision, ADR-0118), the warm scenes or a running source changed: a plan of the
-/// program mix, which may run every frame, rarely has to plan them.
+/// program mix, which may run every frame, rarely has to plan them. The GPU-byte limit
+/// (ADR-0150) is applied to what was planned on every update, since the sizes it reads
+/// change without a new plan.
 #[derive(Default)]
 struct WarmCaptures {
-    /// What `captures` and `sources` were planned at.
+    /// What `planned` was planned at.
     of: Option<WarmKey>,
+    /// What each scene the count picked draws, in the studio's warm order.
+    planned: Vec<WarmScene>,
+    /// Which of `planned` the GPU-byte limit keeps warm, as `captures` and `sources`
+    /// were gathered.
+    kept: Vec<bool>,
     captures: Arc<BTreeSet<CaptureKey>>,
     /// Every source the warm scenes draw, which the live sources keep from resting.
     sources: BTreeSet<SourceId>,
+    /// The size each source's frame last had, so a source that stopped or rests is
+    /// still estimated at it.
+    seen: BTreeMap<SourceId, [u32; 2]>,
+    /// What each of `planned` is estimated to hold, for `profile.get`'s `warm`.
+    report: Vec<jstream_protocol::WarmSceneProfile>,
+}
+
+/// What one scene the warm count picked draws, as [`WarmCaptures`] planned it.
+struct WarmScene {
+    id: SceneId,
+    captures: BTreeSet<CaptureKey>,
+    /// The sources it draws, nested scenes' included, each once, in the order it
+    /// reached them.
+    sources: Vec<SourceId>,
+}
+
+/// What [`WarmCaptures::update`] reads besides the plan: the GPU-byte limit and the
+/// sizes its estimate is made from (ADR-0150).
+struct WarmLimit<'a> {
+    /// The limit in bytes, `None` for none.
+    bytes: Option<u64>,
+    /// The Preview scene, which no limit leaves cold.
+    preview: Option<&'a SceneId>,
+    /// The frames stored with `set_source_frame`.
+    frames: &'a BTreeMap<SourceId, Frame>,
 }
 
 /// The revision, the warm scenes, the live sources' installs and the placed keyframes
 /// [`WarmCaptures`] planned at.
 type WarmKey = (Rev, Vec<SceneId>, u64, BTreeMap<SceneId, SceneId>);
 
+/// The bytes one RGBA8 frame of `size` holds (ADR-0150 decision 1).
+fn frame_bytes([width, height]: [u32; 2]) -> u64 {
+    u64::from(width) * u64::from(height) * 4
+}
+
 impl WarmCaptures {
     /// The captures of `scenes` in `graph`, as the running sources of `live` capture
-    /// them, and the sources they draw, planned again when what they depend on changed.
-    /// Only the captures are looked up, so the plan reaches no source and makes none
-    /// shown or heard (ADR-0028); the sources it asks for are noted.
+    /// them, and the sources they draw, planned again when what they depend on changed,
+    /// less the scenes `limit` leaves cold. Only the captures are looked up, so the plan
+    /// reaches no source and makes none shown or heard (ADR-0028); the sources it asks
+    /// for are noted.
     fn update(
         &mut self,
         graph: &Graph,
         scenes: Vec<SceneId>,
         live: &LiveSources,
         assets: &crate::filter_assets::FilterAssets,
+        limit: &WarmLimit<'_>,
     ) -> &Arc<BTreeSet<CaptureKey>> {
-        if self
+        let fresh = self
             .of
             .as_ref()
             .is_some_and(|(rev, warm, installs, placed)| {
@@ -3418,54 +4313,152 @@ impl WarmCaptures {
                     && *warm == scenes
                     && *installs == live.installs()
                     && placed == graph.placed_keyframes()
-            })
-        {
-            return &self.captures;
+            });
+        if !fresh {
+            self.plan(graph, scenes, live, assets);
         }
+        let kept = self.trim(graph, live, limit);
+        if !fresh || kept != self.kept {
+            let mut captures = BTreeSet::new();
+            let mut sources = BTreeSet::new();
+            for (scene, _) in self.planned.iter().zip(&kept).filter(|(_, kept)| **kept) {
+                captures.extend(scene.captures.iter().cloned());
+                sources.extend(scene.sources.iter().cloned());
+            }
+            if *self.captures != captures {
+                self.captures = Arc::new(captures);
+            }
+            self.sources = sources;
+            self.kept = kept;
+        }
+        &self.captures
+    }
+
+    /// Plans what each of `scenes` draws.
+    fn plan(
+        &mut self,
+        graph: &Graph,
+        scenes: Vec<SceneId>,
+        live: &LiveSources,
+        assets: &crate::filter_assets::FilterAssets,
+    ) {
         let key = (
             graph.rev(),
             scenes,
             live.installs(),
             graph.placed_keyframes().clone(),
         );
-        let mut captures = BTreeSet::new();
-        let mut sources = BTreeSet::new();
-        for scene_id in &key.1 {
-            if graph.state().scene(scene_id).is_none() {
-                continue;
-            }
-            let planning = snapshot::plan_scene(
-                graph,
-                scene_id,
-                &mut |id| {
-                    sources.insert(id.clone());
-                    live.capture_key(id).map(Look::Capture)
-                },
-                assets,
-            );
-            // A scene that draws nothing asks for the primary display, which only an
-            // output without a program scene shows.
-            let primary = CaptureKey::primary();
-            captures.extend(
-                planning
+        // A scene that draws nothing asks for the primary display, which only an
+        // output without a program scene shows.
+        let primary = CaptureKey::primary();
+        self.planned = key
+            .1
+            .iter()
+            .filter(|scene_id| graph.state().scene(scene_id).is_some())
+            .map(|scene_id| {
+                let mut sources = Vec::new();
+                let planning = snapshot::plan_scene(
+                    graph,
+                    scene_id,
+                    &mut |id| {
+                        if !sources.contains(id) {
+                            sources.push(id.clone());
+                        }
+                        live.capture_key(id).map(Look::Capture)
+                    },
+                    assets,
+                );
+                let captures = planning
                     .shot
                     .captures()
                     .iter()
                     .filter(|capture| **capture != primary)
-                    .cloned(),
-            );
-        }
-        if *self.captures != captures {
-            self.captures = Arc::new(captures);
-        }
-        self.sources = sources;
+                    .cloned()
+                    .collect();
+                WarmScene {
+                    id: scene_id.clone(),
+                    captures,
+                    sources,
+                }
+            })
+            .collect();
+        self.seen.retain(|id, _| graph.state().source(id).is_some());
         self.of = Some(key);
-        &self.captures
     }
 
-    /// The sources the warm scenes draw, as last planned.
+    /// Which planned scenes `limit` keeps warm (ADR-0150 decision 3), with the report
+    /// of what each is estimated to hold.
+    fn trim(&mut self, graph: &Graph, live: &LiveSources, limit: &WarmLimit<'_>) -> Vec<bool> {
+        let canvas = graph.state().canvas();
+        let mut counted = BTreeSet::new();
+        let mut total = 0u64;
+        let mut full = false;
+        let mut kept = Vec::with_capacity(self.planned.len());
+        let mut report = Vec::with_capacity(self.planned.len());
+        for scene in &self.planned {
+            let mut bytes = 0u64;
+            let mut new = Vec::new();
+            for id in &scene.sources {
+                // A source a mix draws anyway, or a warm scene before it, costs nothing
+                // more.
+                if live.reached(id) || counted.contains(id) {
+                    continue;
+                }
+                new.push(id);
+                let size = limit
+                    .frames
+                    .get(id)
+                    .map(Frame::pixel_size)
+                    .or_else(|| live.size(id).map(|size| [size.width(), size.height()]));
+                let size = match size {
+                    Some(size) => {
+                        self.seen.insert(id.clone(), size);
+                        size
+                    }
+                    None => self
+                        .seen
+                        .get(id)
+                        .copied()
+                        .unwrap_or([canvas.width, canvas.height]),
+                };
+                bytes = bytes.saturating_add(frame_bytes(size));
+            }
+            let preview = limit.preview == Some(&scene.id);
+            if !preview
+                && limit
+                    .bytes
+                    .is_some_and(|most| total.saturating_add(bytes) > most)
+            {
+                // The budget evicts from the bottom (ADR-0117 §7): this scene and every
+                // one after it.
+                full = true;
+            }
+            let cold = full && !preview;
+            if !cold {
+                total = total.saturating_add(bytes);
+                counted.extend(new);
+            }
+            kept.push(!cold);
+            report.push(jstream_protocol::WarmSceneProfile {
+                scene_id: scene.id.clone(),
+                gpu_bytes: bytes,
+                cold,
+            });
+        }
+        if self.report != report {
+            self.report = report;
+        }
+        kept
+    }
+
+    /// The sources the warm scenes draw, as last planned and trimmed.
     fn sources(&self) -> &BTreeSet<SourceId> {
         &self.sources
+    }
+
+    /// What each scene the warm count picked is estimated to hold, for `profile.get`.
+    fn report(&self) -> &[jstream_protocol::WarmSceneProfile] {
+        &self.report
     }
 }
 
@@ -3508,6 +4501,10 @@ struct State {
     live: LiveSources,
     /// The audio-only sources the program stage records, one mixer input each (C5).
     audio: AudioSources,
+    /// Each `webcam`'s camera controls, set on its device as they change (#1196).
+    camera_controls: crate::camera_controls::CameraControls,
+    /// The PTZ cameras this machine drives (ADR-0146): none until the host starts them.
+    ptz: crate::ptz::Ptz,
     /// The program mix the render thread and `video.snapshot` draw, republished after
     /// every change to the graph or a stored frame (it only becomes a new generation when
     /// what it draws changed).
@@ -3549,6 +4546,11 @@ struct State {
     /// since the engine started (ADR-0113 §4), which the render thread's follow cameras
     /// take through the parameter channel. Never stored.
     camera_zooms: BTreeMap<SceneId, i64>,
+    /// Each scene family's live aim (ADR-0152): what `scene.drive_camera` and
+    /// `scene.aim_camera` gave its camera since the engine started or the collection
+    /// was replaced, which the render thread takes through the parameter channel.
+    /// Never stored.
+    camera_aims: BTreeMap<SceneId, crate::aim::Aim>,
     /// The collection with the open gestures' source settings applied (ADR-0091), which
     /// the live sources, the audio mix and the render plan follow instead of `graph`
     /// while any is open. The clone carries the graph's switched keyframes. `None`
@@ -3698,6 +4700,7 @@ impl State {
         let result = CallResult::Batch {
             rev: applied.rev,
             removed_hotkeys: applied.removed_hotkeys,
+            removed_bindings: applied.removed_bindings,
             dropped_overrides: applied.dropped_overrides,
         };
         if let Some(keyed) = keyed {
@@ -3849,6 +4852,7 @@ impl State {
             let drawn = self.shown.as_ref().unwrap_or(&self.graph);
             self.live.sync(drawn.state());
             self.audio.sync(drawn.state(), self.live.audio());
+            self.camera_controls.sync(drawn.state());
         }
         for edit in edits {
             if let Edit::SourceDelete { source_id } = edit
@@ -3897,6 +4901,108 @@ impl State {
         // After `state.changed`, so a deleted source's size goes after its deletion.
         self.sync_sizes(wake);
         self.feed_pages();
+    }
+
+    /// Puts `graph`, a collection opened or created in place of this one, in its place
+    /// (ADR-0121 §3). Its `rev` becomes one past the current one when the file's is not
+    /// later, so no `expected_rev` from before matches. Open gestures are cancelled and
+    /// playing timelines stop, each with its event; every client's undo history and
+    /// idempotency keys go; the first scene goes on program and preview; and sources
+    /// restart from the new collection, with `folder` behind `collection` assets. Then
+    /// what follows any change runs, with `state.changed`, and `studio.changed` follows.
+    fn replace_collection(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        graph: Graph,
+        folder: Option<&Path>,
+        wake: &mut Vec<Waker>,
+    ) {
+        let next = self.graph.rev().next().unwrap_or(self.graph.rev());
+        let rev = graph.rev().max(next);
+        let graph = graph.with_rev(rev);
+        for open in self.gestures.list() {
+            self.end_gesture(
+                &open.client_id,
+                &open.gesture_id,
+                LiveOutcome::Cancelled,
+                None,
+                wake,
+            );
+        }
+        for timeline_id in self.timelines.ids() {
+            if let Some(playing) = self.timelines.stop(&timeline_id) {
+                self.subscribers.emit(
+                    &Event::TimelineChanged {
+                        timeline_id,
+                        scene_id: playing.scene_id,
+                        change: jstream_protocol::TimelineChange::Stopped,
+                        playing: false,
+                        position_ms: 0,
+                        pass: playing.pass,
+                    },
+                    wake,
+                );
+            }
+        }
+        let old: Vec<SourceId> = self
+            .graph
+            .state()
+            .sources()
+            .map(|s| s.id().clone())
+            .collect();
+        self.graph = graph;
+        for source_id in old {
+            if self.graph.state().source(&source_id).is_none() {
+                self.frames.remove(&source_id);
+                if let Some(forget) = &self.forget {
+                    forget.forget(source_id);
+                }
+            }
+        }
+        self.history.clear();
+        self.applied.clear();
+        self.stale_keys.clear();
+        self.source_copies.clear();
+        self.camera_zooms.clear();
+        self.camera_aims.clear();
+        self.shown_since = crate::motion::ShownSince::default();
+        self.fired = crate::motion::Fired::default();
+        self.studio = self.studio.fresh();
+        self.live
+            .set_collection_folder(folder.map(Path::to_path_buf));
+        let rev = self.graph.rev();
+        self.changed(client_id, request_id, &[], rev, None, wake);
+        if self.studio.program().is_none() {
+            // `changed` reported no move: the new collection has no scene.
+            self.emit_studio(client_id, request_id, None, wake);
+        }
+    }
+
+    /// Keeps `graph`, the same collection saved as another file, in this one's place
+    /// (ADR-0121 §4), with `folder` behind `collection` assets. When `rewritten`, its
+    /// asset references moved and its `rev` is new: every client's undo history and
+    /// idempotency keys go, since an inverse would bring back an old relative path, and
+    /// what follows any change runs, with `state.changed`.
+    fn rebase_collection(
+        &mut self,
+        client_id: &ClientId,
+        request_id: &RequestId,
+        graph: Graph,
+        rewritten: bool,
+        folder: Option<&Path>,
+        wake: &mut Vec<Waker>,
+    ) {
+        self.graph = graph;
+        self.live
+            .set_collection_folder(folder.map(Path::to_path_buf));
+        if rewritten {
+            self.history.clear();
+            self.applied.clear();
+            self.source_copies.clear();
+            let rev = self.graph.rev();
+            self.changed(client_id, request_id, &[], rev, None, wake);
+        }
     }
 
     /// Fires `item_id`'s `triggered` motion modifiers (#1107): the one `modifier_id`
@@ -4429,9 +5535,8 @@ impl State {
             .place_keyframe(scene_id.clone(), keyframe_id.clone());
         self.refresh_shown();
         if let Some(((from, shared), program, mut run)) = started {
-            let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);
-            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+            if shared.is_err() {
                 run.pairs = false;
             }
             self.studio.switch(
@@ -4466,6 +5571,14 @@ impl State {
         action: Action,
         wake: &mut Vec<Waker>,
     ) -> Result<CallResult, ProtocolError> {
+        if let Some(done) = self.ptz.act(client_id, &action) {
+            done?;
+            return Ok(CallResult::action());
+        }
+        if jstream_protocol::camera_aim_scene(&action).is_some() {
+            self.aim_camera(client_id, &action)?;
+            return Ok(CallResult::action());
+        }
         let (output_id, start) = match action {
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -4580,8 +5693,17 @@ impl State {
             }
             other @ (Action::PairingStart
             | Action::DeviceRevoke { .. }
+            | Action::AgentApprove { .. }
+            | Action::AgentForget { .. }
             | Action::UiSettingsSet { .. }) => {
                 return Err(served_by_the_server(other.name()));
+            }
+            // `Engine::execute` answers it before taking the collection lock, so it
+            // only gets here from a path that isn't a client's call, which can't set it.
+            other @ Action::StudioSetWarm { .. } => {
+                return Err(ProtocolError::Unsupported {
+                    call: other.name().into(),
+                });
             }
             // Built without the `wasm-plugins` feature, the engine can't run a plugin, so
             // none is ever installed. With it, `Engine::execute` answers these before
@@ -4628,6 +5750,39 @@ impl State {
                 }
                 QueryResult::KindList { kinds }
             }
+            // A source's own additions to its kind (ADR-0151 decision 7).
+            Some(Ok(QueryResult::KindDescribe {
+                mut kind,
+                settings_schema,
+            })) => {
+                if let Query::KindDescribe {
+                    kind_id,
+                    source_id: Some(source_id),
+                } = query
+                {
+                    let source = self.graph.state().source(source_id).ok_or_else(|| {
+                        ProtocolError::NotFound {
+                            entity: jstream_protocol::EntityKind::Source,
+                            id: source_id.to_string(),
+                        }
+                    })?;
+                    let same = matches!(
+                        source.kind(),
+                        jstream_protocol::SourceKind::Builtin { kind } if kind == kind_id
+                    );
+                    if !same {
+                        return Err(ProtocolError::invalid_argument(
+                            "source_id",
+                            format!("source `{source_id}` is not a `{kind_id}`"),
+                        ));
+                    }
+                    self.live.describe(source_id, &mut kind);
+                }
+                QueryResult::KindDescribe {
+                    kind,
+                    settings_schema,
+                }
+            }
             Some(result) => result?,
             None => match query {
                 // `key_set` and the encoder session are filled in after the lock is
@@ -4648,9 +5803,27 @@ impl State {
                 Query::LiveList => QueryResult::LiveList {
                     gestures: self.gestures.list(),
                 },
+                Query::PtzList => QueryResult::PtzList {
+                    cameras: self.ptz.list(),
+                },
+                Query::SceneCameraAim { scene_id } => {
+                    let family = self.camera_family(scene_id)?;
+                    let now = self.live.now();
+                    QueryResult::SceneCameraAim {
+                        aim: self.camera_aims.get(&family).map_or_else(
+                            || crate::aim::Aim::default().info(now),
+                            |aim| aim.info(now),
+                        ),
+                    }
+                }
                 Query::StudioGet => QueryResult::StudioGet {
                     program_scene: self.studio.program().cloned(),
                     preview_scene: self.studio.preview().cloned(),
+                    warm_scenes: Some(
+                        u32::try_from(self.studio.budget())
+                            .expect("invariant: the budget is at most MAX_WARM_SCENES"),
+                    ),
+                    warm_gpu_mib: Some(self.studio.gpu_mib()),
                     timelines: self
                         .timelines
                         .report(crate::timelines::ns(self.live.now()), |id| {
@@ -4667,7 +5840,7 @@ impl State {
                         })
                         .collect(),
                 },
-                Query::DeviceList | Query::UiSettingsGet { .. } => {
+                Query::DeviceList | Query::AgentApproved | Query::UiSettingsGet { .. } => {
                     return Err(served_by_the_server(query.name()));
                 }
                 // Built without the `wasm-plugins` feature, no plugin is ever installed.
@@ -4741,7 +5914,7 @@ impl State {
                             running,
                             now,
                             &mut |id| match frames.get(id) {
-                                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                                Some(frame) => Some(Look::frame(frame.clone(), None)),
                                 None => live.look(id, now, frame_versions),
                             },
                             &assets,
@@ -4758,9 +5931,8 @@ impl State {
                     transition::From::OnScreen(visuals) => transition::shared_camera(visuals),
                     transition::From::Scene(scene) => Ok(transition::camera_of(&self.graph, scene)),
                 };
-                let to_camera = transition::camera_of(&self.graph, &scene_id);
                 let from_camera = shared.unwrap_or(None);
-                if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+                if shared.is_err() {
                     run.pairs = false;
                 }
                 Some(transition::Running {
@@ -4882,9 +6054,8 @@ impl State {
             (self.graph.state().visible_in(&item_id, Some(program)) != shown).then_some(from)
         });
         if let (Some((program, mut run)), Some((from, shared))) = (run, from) {
-            let to_camera = transition::camera_of(&self.graph, &program);
             let from_camera = shared.unwrap_or(None);
-            if shared.is_err() || from_camera.is_some() != to_camera.is_some() {
+            if shared.is_err() {
                 run.pairs = false;
             }
             self.studio.switch(
@@ -4948,7 +6119,7 @@ impl State {
             running,
             now,
             &mut |id| match frames.get(id) {
-                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                Some(frame) => Some(Look::frame(frame.clone(), None)),
                 None => live.look_quiet(id, now, frame_versions),
             },
             &assets,
@@ -4966,6 +6137,13 @@ impl State {
         transition: Option<TransitionStarted>,
         wake: &mut Vec<Waker>,
     ) {
+        // The heads follow what the studio shows (ADR-0146 §7).
+        self.ptz.follow(
+            self.graph.state(),
+            self.studio.program(),
+            self.studio.preview(),
+            transition.as_ref().map_or(0, |t| t.duration_ms),
+        );
         self.subscribers.emit(
             &Event::StudioChanged {
                 program_scene: self.studio.program().cloned(),
@@ -5049,7 +6227,7 @@ impl State {
             graph,
             scene_id,
             &mut |id| match frames.get(id) {
-                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                Some(frame) => Some(Look::frame(frame.clone(), None)),
                 None => live.look_quiet(id, now, frame_versions),
             },
             &assets,
@@ -5085,9 +6263,18 @@ impl State {
     fn publish_warm(&mut self) {
         let graph: &Graph = self.shown.as_ref().unwrap_or(&self.graph);
         let assets = self.live.filter_assets();
-        let warm = self
-            .warm
-            .update(graph, self.studio.warm(), &self.live, &assets);
+        let limit = WarmLimit {
+            bytes: self.studio.gpu_limit(),
+            preview: self.studio.preview(),
+            frames: &self.frames,
+        };
+        let warm = self.warm.update(
+            graph,
+            self.studio.warm(graph.state()),
+            &self.live,
+            &assets,
+            &limit,
+        );
         self.render.publish_warm(warm);
         self.live.set_warm(self.warm.sources());
         // A source that left the warm scenes rests now if nothing drew it in the
@@ -5127,7 +6314,7 @@ impl State {
             studio.program(),
             studio.running().map(|running| (running, now)),
             &mut |id| match frames.get(id) {
-                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                Some(frame) => Some(Look::frame(frame.clone(), None)),
                 None => live.look(id, now, frame_versions),
             },
             &assets,
@@ -5162,7 +6349,7 @@ impl State {
                 graph,
                 &scene_id,
                 &mut |id| match frames.get(id) {
-                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                    Some(frame) => Some(Look::frame(frame.clone(), None)),
                     None => live.look_quiet(id, now, frame_versions),
                 },
                 &assets,
@@ -5183,7 +6370,12 @@ impl State {
         render.publish_scenes(scene_shots);
         // And keeps the warm scenes' captures running, so showing one starts nothing;
         // their other sources keep producing too.
-        render.publish_warm(warm.update(graph, studio.warm(), live, &assets));
+        let limit = WarmLimit {
+            bytes: studio.gpu_limit(),
+            preview: studio.preview(),
+            frames,
+        };
+        render.publish_warm(warm.update(graph, studio.warm(graph.state()), live, &assets, &limit));
         live.set_warm(warm.sources());
         // Each previewed source alone, after the program's plan too.
         let mut shots = BTreeMap::new();
@@ -5206,7 +6398,7 @@ impl State {
                 graph,
                 &source_id,
                 &mut |id| match frames.get(id) {
-                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                    Some(frame) => Some(Look::frame(frame.clone(), None)),
                     None => live.look_quiet(id, now, frame_versions),
                 },
                 &assets,
@@ -5352,14 +6544,54 @@ impl State {
             shown,
             live,
             audio,
+            camera_controls,
             ..
         } = self;
         let drawn = shown.as_ref().unwrap_or(graph);
         live.sync(drawn.state());
         audio.sync(drawn.state(), live.audio());
+        camera_controls.sync(drawn.state());
         self.route_audio();
         self.publish_render();
         self.feed_pages();
+    }
+
+    /// Sets the `tempo.*` shared values the MIDI clock gave (ADR-0147), credited to the
+    /// client `engine`, and tells the pages and clients that read them. Returns whether
+    /// every change was set: a refused one is tried again at the next look.
+    fn publish_tempo(
+        &mut self,
+        changes: &[(&str, Option<serde_json::Value>)],
+        wake: &mut Vec<Waker>,
+    ) -> bool {
+        let mut any = false;
+        let mut all = true;
+        for (name, value) in changes {
+            match self.values.set(name, value.clone()) {
+                Ok(true) => {
+                    any = true;
+                    self.subscribers.emit(
+                        &Event::ValuesChanged {
+                            name: (*name).to_owned(),
+                            value: value.clone(),
+                            client_id: ClientId::new("engine"),
+                            request_id: None,
+                        },
+                        wake,
+                    );
+                }
+                Ok(false) => {}
+                // Only a full store refuses one; the next look tries again.
+                Err(error) => {
+                    all = false;
+                    tracing::debug!(name, %error, "a tempo value wasn't set");
+                }
+            }
+        }
+        if any {
+            self.feed_pages();
+        }
+        all
     }
 
     /// Tells each page granted the page API what it may read now (ADR-0102): its
@@ -5388,8 +6620,75 @@ impl State {
 
     /// Publishes the gestures' live values on the render parameter channel.
     fn publish_live(&self) {
-        self.render
-            .publish_live(self.gestures.params().with_zooms(self.camera_zooms.clone()));
+        self.render.publish_live(
+            self.gestures
+                .params()
+                .with_zooms(self.camera_zooms.clone())
+                .with_aims(self.camera_aims.clone()),
+        );
+    }
+
+    /// The scene family whose camera `scene_id` draws through, for the live aim
+    /// (ADR-0152): `not_found` for a scene that doesn't exist, and `action_failed` for
+    /// one that draws through no camera (a 2D scene with no follow camera).
+    fn camera_family(&self, scene_id: &SceneId) -> Result<SceneId, ProtocolError> {
+        let state = self.graph.state();
+        let scene = state
+            .scene(scene_id)
+            .ok_or_else(|| ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: scene_id.as_str().to_owned(),
+            })?;
+        let family = scene.variant_of().unwrap_or(scene.id()).clone();
+        let parent = state.scene(&family);
+        let has_camera = scene.camera().is_some()
+            || parent.is_some_and(|parent| {
+                parent.camera().is_some() || parent.camera_follow().is_some()
+            });
+        if !has_camera {
+            return Err(ProtocolError::ActionFailed {
+                reason: format!("scene `{scene_id}` draws through no camera"),
+            });
+        }
+        Ok(family)
+    }
+
+    /// `scene.drive_camera` and `scene.aim_camera` (ADR-0152): drives or aims the live
+    /// aim of `action`'s scene family's camera from now, which the render thread takes
+    /// on its next frame.
+    fn aim_camera(&mut self, client_id: &ClientId, action: &Action) -> Result<(), ProtocolError> {
+        if let Some((field, reason)) = jstream_protocol::camera_aim_check(action) {
+            return Err(ProtocolError::invalid_argument(field, reason));
+        }
+        let scene_id = jstream_protocol::camera_aim_scene(action)
+            .expect("invariant: the caller checked it is a camera aim action");
+        let family = self.camera_family(scene_id)?;
+        let now = self.live.now();
+        let aim = self.camera_aims.entry(family).or_default();
+        match action {
+            Action::SceneDriveCamera {
+                pan, tilt, zoom, ..
+            } => {
+                aim.drive(now, (*pan, *tilt, *zoom), client_id);
+            }
+            Action::SceneAimCamera { aim: to, speed, .. } => aim.aim(now, to, *speed),
+            _ => unreachable!("invariant: camera_aim_scene names only the camera aim actions"),
+        }
+        self.publish_live();
+        Ok(())
+    }
+
+    /// Stops the live aims `client_id`'s drives left moving: its session ended
+    /// (ADR-0152).
+    fn forget_aims(&mut self, client_id: &ClientId) {
+        let now = self.live.now();
+        let mut stopped = false;
+        for aim in self.camera_aims.values_mut() {
+            stopped |= aim.forget(now, client_id);
+        }
+        if stopped {
+            self.publish_live();
+        }
     }
 
     /// `scene.zoom_camera` (ADR-0113 §4): `steps` zoom steps for the follow camera of
@@ -5554,21 +6853,25 @@ impl Shared {
         let Some(file) = file.as_mut() else {
             return;
         };
+        if let Err(err) = self.save_to(file) {
+            tracing::error!(path = %file.path().display(), error = %err, "collection not saved");
+        }
+    }
+
+    /// Saves the collection to `file`, whose lock the caller holds, unless the file
+    /// already holds this `rev` or a later one.
+    ///
+    /// # Errors
+    /// The file could not be written.
+    fn save_to(&self, file: &mut CollectionFile) -> std::io::Result<()> {
         let (rev, json) = {
             let state = lock(&self.state);
             if state.graph.rev() <= file.saved() {
-                return;
+                return Ok(());
             }
             (state.graph.rev(), state.graph.to_collection_json())
         };
-        if let Err(err) = file.save(rev, &json) {
-            tracing::error!(
-                path = %file.path().display(),
-                rev = %rev,
-                error = %err,
-                "collection not saved"
-            );
-        }
+        file.save(rev, &json)
     }
 
     /// Applies a change to the effect packs: their kinds to `kind.list`, their effects
@@ -5589,6 +6892,9 @@ impl Shared {
                 return;
             }
             state.effects_seq = update.seq;
+            let changed = !update.removed.is_empty()
+                || !update.described.is_empty()
+                || state.quarantined != update.quarantined;
             // The version each changed kind had, for the filters stored by it.
             let before: BTreeMap<String, Option<u32>> = update
                 .described
@@ -5643,6 +6949,14 @@ impl Shared {
                 save = true;
             }
             state.quarantined = update.quarantined;
+            if changed {
+                state.subscribers.emit(
+                    &Event::KindsChanged {
+                        cause: KindsCause::EffectPacks,
+                    },
+                    &mut wake,
+                );
+            }
             state.live.set_effects(update.effects, update.sources);
             state.publish_render();
             state.sync_sizes(&mut wake);
@@ -5652,6 +6966,54 @@ impl Shared {
         if save {
             self.save_collection();
         }
+    }
+
+    /// A pack kind that ran too long on the program stage's GPU (#349): quarantines it
+    /// as a kind blamed for a device loss is, re-plans without it, then sends
+    /// `gpu.effect_slow`.
+    fn effect_slow(&self, slow: crate::runtime::SlowPass) {
+        let crate::runtime::SlowPass {
+            kind_id,
+            took,
+            limit,
+        } = slow;
+        tracing::warn!(
+            kind = %kind_id,
+            ?took,
+            ?limit,
+            "an effect-pack kind ran too long on the GPU"
+        );
+        // Under the packs' lock, as for a device loss. A late report of a kind already
+        // quarantined is dropped: it is no second blame (`blame_slow`).
+        let mut packs = lock(&self.effect_packs);
+        let quarantined = match packs.as_mut().map(|packs| packs.blame_slow(&kind_id)) {
+            Some(Some(crate::effect_packs::Blame {
+                quarantined,
+                update,
+                ..
+            })) => {
+                if let Some(update) = update {
+                    self.install_effects(update);
+                }
+                quarantined
+            }
+            Some(None) => return,
+            None => Vec::new(),
+        };
+        drop(packs);
+        let micros =
+            |time: std::time::Duration| u64::try_from(time.as_micros()).unwrap_or(u64::MAX);
+        let mut wake = Vec::new();
+        lock(&self.state).subscribers.emit(
+            &Event::GpuEffectSlow {
+                kind_id,
+                took_us: micros(took),
+                limit_us: micros(limit),
+                quarantined,
+            },
+            &mut wake,
+        );
+        wake_all(wake);
     }
 
     /// A GPU device loss on the program stage (#349): blames the pack kinds it drew,
@@ -5755,6 +7117,67 @@ impl Drop for State {
 /// How often the live ticker checks whether the render thread has caught up with a
 /// committed gesture's snapshot.
 const RELEASE_POLL: Duration = Duration::from_millis(4);
+
+/// Sends `jtunnel.senders_changed` for each change the JTunnel receiver reports on
+/// `heard`, until that receiver stops (its sender is dropped with it) or the engine goes.
+/// The receiver's thread never takes the engine's lock: this one does.
+fn spawn_jtunnel_events(shared: Weak<Shared>, heard: std::sync::mpsc::Receiver<()>) {
+    let started = thread::Builder::new()
+        .name("jstream-jtunnel-events".into())
+        .spawn(move || {
+            while heard.recv().is_ok() {
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let mut wake = Vec::new();
+                lock(&engine.state)
+                    .subscribers
+                    .emit(&Event::JtunnelSendersChanged {}, &mut wake);
+                drop(engine);
+                wake_all(wake);
+            }
+        });
+    if let Err(error) = started {
+        tracing::warn!(%error, "the JTunnel senders' events could not start; `jtunnel.senders` still answers");
+    }
+}
+
+/// Starts the `jstream-tempo` thread: it publishes the every-input MIDI tempo as the
+/// `tempo.*` shared values (ADR-0147) until the engine is gone. Returns whether it
+/// started.
+fn spawn_tempo(shared: Weak<Shared>, midi: Arc<jstream_sources::MidiInputs>) -> bool {
+    let started = thread::Builder::new()
+        .name("jstream-tempo".into())
+        .spawn(move || {
+            let mut published = crate::tempo::Published::default();
+            loop {
+                thread::sleep(crate::tempo::EVERY);
+                let Some(engine) = shared.upgrade() else {
+                    return;
+                };
+                let Some((reading, now_ms)) = crate::tempo::read(&midi) else {
+                    continue;
+                };
+                let next = published.next(reading.as_ref(), now_ms);
+                if next == published {
+                    continue;
+                }
+                let mut wake = Vec::new();
+                let all = lock(&engine.state).publish_tempo(&next.changes(&published), &mut wake);
+                drop(engine);
+                wake_all(wake);
+                // A refused value stays unpublished, so the next look tries it again; the
+                // ones set this time are then unchanged and send nothing.
+                if all {
+                    published = next;
+                }
+            }
+        });
+    if let Err(error) = &started {
+        tracing::warn!(%error, "the tempo values could not start");
+    }
+    started.is_ok()
+}
 
 /// Starts `jstream-live`, which runs [`State::live_tick`] when it is next due, until
 /// nothing is left to send or release or the engine is gone. Returns whether it
@@ -5886,12 +7309,13 @@ fn capture_target_info(info: CaptureTargetInfo) -> Option<jstream_protocol::Capt
         }),
         primary: info.primary,
         formats: Vec::new(),
+        controls: Vec::new(),
     })
 }
 
 /// A video device as `capture.targets` reports it, with the formats the engine reads
-/// of it: MJPEG among them, as every platform's codecs decode it. A device whose
-/// formats can't be read is listed without them.
+/// of it (MJPEG among them, as every platform's codecs decode it) and its camera
+/// controls. A device whose formats or controls can't be read is listed without them.
 fn device_target_info(
     devices: &dyn VideoDevices,
     device: VideoDeviceInfo,
@@ -5914,6 +7338,24 @@ fn device_target_info(
             Vec::new()
         }
     };
+    let controls = match devices.controls(&device.id) {
+        Ok(controls) => controls
+            .into_iter()
+            .map(|c| jstream_protocol::CameraControlInfo {
+                name: c.id.name().to_owned(),
+                min: c.min,
+                max: c.max,
+                step: c.step,
+                default: c.default,
+                value: c.value,
+                auto: c.auto,
+            })
+            .collect(),
+        Err(err) => {
+            tracing::warn!(device = %device.id, error = %err, "listing the video device's camera controls");
+            Vec::new()
+        }
+    };
     jstream_protocol::CaptureTargetInfo {
         kind: CaptureTargetKind::Device,
         target: device.id.as_str().to_owned(),
@@ -5921,6 +7363,7 @@ fn device_target_info(
         size: None,
         primary: false,
         formats,
+        controls,
     }
 }
 
@@ -5987,6 +7430,38 @@ fn action_field(error: ProtocolError) -> ProtocolError {
 /// ADR-0084), so one that reaches the engine came from a client with no server between.
 fn served_by_the_server(call: &str) -> ProtocolError {
     ProtocolError::Unsupported { call: call.into() }
+}
+
+/// `unsupported` for `call`: the host named no collection file (ADR-0121).
+fn unsupported(call: &str) -> ProtocolError {
+    ProtocolError::Unsupported { call: call.into() }
+}
+
+/// Whether anything is at `path`, a dangling link included.
+fn fs_exists(path: &Path) -> bool {
+    std::fs::symlink_metadata(path).is_ok()
+}
+
+/// `already_exists` for the file at `path`: a project is only ever made as a new file.
+fn file_exists(path: &str) -> ProtocolError {
+    ProtocolError::AlreadyExists {
+        entity: EntityKind::File,
+        id: path.to_owned(),
+    }
+}
+
+/// The error for a project file at `target` that could not be written: `already_exists`
+/// when another file took the path first.
+fn written_error(err: &std::io::Error, path: &str, target: &Path) -> ProtocolError {
+    if err.kind() == std::io::ErrorKind::AlreadyExists {
+        return file_exists(path);
+    }
+    ProtocolError::ActionFailed {
+        reason: format!(
+            "cannot write the collection file {}: {err}",
+            target.display()
+        ),
+    }
 }
 
 fn not_implemented(what: &str) -> ProtocolError {

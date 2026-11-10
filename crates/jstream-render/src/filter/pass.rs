@@ -82,6 +82,13 @@ pub(crate) trait Pass: Send {
     /// transparent, as when it is shown again. Other kinds ignore it.
     fn restart(&mut self) {}
 
+    /// The kind to time this filter's GPU work under, for an effect pack's filter or
+    /// shader source (#349): the guard turns a pack effect off when it runs too long.
+    /// `None`, the default, for the built-in kinds, which are not timed.
+    fn timed(&self) -> Option<&str> {
+        None
+    }
+
     /// How far, in input pixels, what this filter draws can reach past its input's
     /// non-transparent texels, for a kind that draws transparent everywhere farther from
     /// them, keeps its input's size, and draws each pass over the whole frame at that

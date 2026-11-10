@@ -95,6 +95,9 @@ fn draw_lit(
                 camera,
                 lighting,
                 lights,
+                shadows: &[],
+                environment: None,
+                floor: None,
             },
             &layer,
         )
@@ -429,6 +432,9 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     camera: Some(camera),
                     lighting: Lighting::Unlit,
                     lights: None,
+                    shadows: &[],
+                    environment: None,
+                    floor: None,
                 },
                 &layer,
             )
@@ -467,6 +473,9 @@ fn a_model_from_another_compositor_is_refused() {
             camera: None,
             lighting: Lighting::Studio,
             lights: None,
+            shadows: &[],
+            environment: None,
+            floor: None,
         },
         &layer,
     );
@@ -563,6 +572,9 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     camera: None,
                     lighting: Lighting::Unlit,
                     lights: None,
+                    shadows: &[],
+                    environment: None,
+                    floor: None,
                 },
                 &layer,
             )
@@ -867,4 +879,453 @@ fn golden_model_lights_are_ignored_without_a_camera_or_unlit() {
         Some(&lights),
     );
     assert_near(rgb(&unlit, 50, 50), [188, 188, 188], (50, 50));
+}
+
+/// ADR-0151 decision 3: a `scene`-lit wall behind a cube, lit by a directional light
+/// from the left, is shadowed where the cube's shadow map puts the cube between it and
+/// the light, and lit elsewhere and without the map; a card's map, drawn as the view
+/// depth draws cards, shadows it the same way.
+#[test]
+fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = SceneCamera::framing(canvas());
+    let white = |shape: Shape| {
+        shape
+            .model(Material {
+                base_color: [1.0; 4],
+                roughness: 1.0,
+                ..Material::default()
+            })
+            .expect("the shape builds")
+    };
+    let wall = compositor
+        .upload_model(&white(Shape::Plane))
+        .expect("uploads");
+    let cube = compositor
+        .upload_model(&white(Shape::Cube))
+        .expect("uploads");
+    let mut wall_at = boxed(80.0, 50.0, 200.0);
+    wall_at.fit_mode = jstream_protocol::FitMode::Stretch;
+    wall_at.depth_px = finite(-60.0);
+    let cube_at = boxed(60.0, 50.0, 20.0);
+    // Shining right and into the scene at 45°: the cube's shadow falls 60 px to its
+    // right on the wall, at x = 120 there, which the camera sees nearer the centre, at
+    // about x = 105, since the wall is behind the canvas plane.
+    let aim = [1.0f64, 0.0, -1.0].map(|c| c / 2f64.sqrt());
+    let light = SceneLight {
+        kind: LightKind::Directional,
+        position: [0.0; 3],
+        aim,
+        color: Color::rgb(1.0, 1.0, 1.0),
+        intensity: 2.0,
+        range_px: 0.0,
+        cone_deg: 45.0,
+        softness: 0.0,
+    };
+    let lights = [light];
+    let centre = [80.0f32, 50.0, -30.0];
+    let from = [0, 1, 2].map(|i| centre[i] - aim[i] as f32 * 600.0);
+    let light_camera = SceneCamera {
+        position: Vec3::new(from[0], from[1], from[2]).expect("finite"),
+        target: Vec3::new(centre[0], centre[1], centre[2]).expect("finite"),
+        fov_deg: finite(30.0),
+        roll_deg: Finite32::ZERO,
+        depth_sort: false,
+        focus_px: None,
+        blur_px: Finite32::ZERO,
+    };
+    let map = compositor.layer(256, 256).expect("a map");
+    let clear = Scene {
+        canvas: FrameSize::new(256, 256).expect("non-zero"),
+        background: Color::rgb(0.0, 0.0, 0.0),
+        items: &[],
+    };
+    compositor
+        .render_view_depth(&clear, &map)
+        .expect("the map clears");
+    compositor
+        .draw_model_depth(
+            &ModelDraw {
+                model: &cube,
+                geometry: cube_at,
+                camera: Some(light_camera),
+                lighting: Lighting::Scene,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+            },
+            &map,
+        )
+        .expect("the cube casts");
+    let card = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let card_map = compositor.layer(256, 256).expect("a map");
+    let mut card_at = boxed(60.0, 50.0, 20.0);
+    card_at.fit_mode = jstream_protocol::FitMode::Stretch;
+    let cards = [Item {
+        camera: Some(light_camera),
+        ..crate::tests::item(&card, Placement::Geometry(card_at), Crop::NONE, 1.0)
+    }];
+    compositor
+        .render_view_depth(
+            &Scene {
+                canvas: FrameSize::new(256, 256).expect("non-zero"),
+                background: Color::rgb(0.0, 0.0, 0.0),
+                items: &cards,
+            },
+            &card_map,
+        )
+        .expect("the card casts");
+    let card_shadows = [super::ShadowMap {
+        light: 0,
+        image: &card_map,
+        camera: light_camera,
+        softness: 0.0,
+    }];
+    let shadows = [super::ShadowMap {
+        light: 0,
+        image: &map,
+        camera: light_camera,
+        softness: 0.0,
+    }];
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let mut shot = |shadows: &[super::ShadowMap<'_>]| {
+        compositor
+            .draw_model(
+                &ModelDraw {
+                    model: &wall,
+                    geometry: wall_at,
+                    camera: Some(camera),
+                    lighting: Lighting::Scene,
+                    lights: Some(&lights),
+                    shadows,
+                    environment: None,
+                    floor: None,
+                },
+                &layer,
+            )
+            .expect("the wall draws");
+        let items = [Item {
+            camera: Some(camera),
+            ..crate::tests::item(&layer, Placement::Layer(wall_at), Crop::NONE, 1.0)
+        }];
+        render(compositor, &items)
+    };
+    let lit = shot(&[]);
+    let shadowed = shot(&shadows);
+    let carded = shot(&card_shadows);
+    let luma = |p: [u8; 3]| p.iter().map(|&c| u32::from(c)).sum::<u32>();
+    let (open_lit, open_shadowed) = (luma(rgb(&lit, 20, 50)), luma(rgb(&shadowed, 20, 50)));
+    let (under_lit, under) = (luma(rgb(&lit, 105, 50)), luma(rgb(&shadowed, 105, 50)));
+    assert!(under_lit > 150, "the wall is lit: {under_lit}");
+    assert!(
+        open_lit.abs_diff(open_shadowed) <= 6,
+        "out of the shadow nothing changes: {open_lit} against {open_shadowed}"
+    );
+    assert!(
+        under + 100 < under_lit,
+        "the cube's shadow darkens the wall: {under} against {under_lit}"
+    );
+    let under_card = luma(rgb(&carded, 105, 50));
+    assert!(
+        under_card + 100 < under_lit,
+        "a card's shadow darkens the wall: {under_card} against {under_lit}"
+    );
+}
+
+/// Draws the grey sphere as [`lit_sphere`] does, lit by `lights` and `environment`.
+fn sky_sphere(
+    compositor: &mut Compositor,
+    lights: &[SceneLight],
+    environment: super::Environment<'_>,
+) -> Snapshot {
+    let uploaded = compositor
+        .upload_model(&grey_sphere())
+        .expect("the model uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera,
+                lighting: Lighting::Scene,
+                lights: Some(lights),
+                shadows: &[],
+                environment: Some(environment),
+                floor: None,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    render(compositor, &items)
+}
+
+/// ADR-0151 decision 9: a scene's environment lights a scene-lit model on its own: a
+/// blue sky over a black ground lights the sphere's top blue and leaves its underside
+/// dark; a panorama red above and green below lights the top red and the bottom green;
+/// an ambient light at 0 scales the sky to nothing.
+#[test]
+fn golden_model_an_environment_lights_a_model_from_its_sky() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let black = Color {
+        r: 0.0,
+        g: 0.0,
+        b: 0.0,
+        a: 1.0,
+    };
+    let gradient = super::Environment {
+        sky: Color {
+            r: 0.0,
+            g: 0.0,
+            b: 1.0,
+            a: 1.0,
+        },
+        horizon: black,
+        ground: black,
+        intensity: 2.0,
+        turn_deg: 0.0,
+        image: None,
+    };
+    let shot = sky_sphere(&mut opened.compositor, &[], gradient);
+    let (top, bottom) = (rgb(&shot, 80, 16), rgb(&shot, 80, 86));
+    assert!(
+        top[2] > 40 && top[2] > top[0] + 30,
+        "the sky lights the top: {top:?}"
+    );
+    assert!(
+        luma(bottom) < luma(top) / 2,
+        "the ground leaves the bottom dark: {bottom:?}"
+    );
+    let dark = sky_sphere(&mut opened.compositor, &[ambient(0.0)], gradient);
+    assert!(luma(rgb(&dark, 80, 16)) < 6, "{:?}", rgb(&dark, 80, 16));
+    let mut rgba = Vec::new();
+    for y in 0..4 {
+        for _ in 0..8 {
+            rgba.extend_from_slice(if y < 2 {
+                &[255, 0, 0, 255]
+            } else {
+                &[0, 255, 0, 255]
+            });
+        }
+    }
+    let picture = opened
+        .compositor
+        .upload_rgba8(8, 4, &rgba)
+        .expect("the panorama uploads");
+    let panorama = super::Environment {
+        image: Some(&picture),
+        ..gradient
+    };
+    let shot = sky_sphere(&mut opened.compositor, &[], panorama);
+    let (top, bottom) = (rgb(&shot, 80, 16), rgb(&shot, 80, 86));
+    assert!(top[0] > top[1] + 30, "red above: {top:?}");
+    assert!(bottom[1] > bottom[0] + 30, "green below: {bottom:?}");
+}
+
+/// A panorama imported as premultiplied sRGB code values, as a GPU-painted page is, is
+/// decoded as an upload of the same colour is: a mid-grey code lights the model as dimly
+/// as the uploaded grey, not as if its code value were linear light.
+#[test]
+fn golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let grey = super::Environment {
+        sky: Color::WHITE,
+        horizon: Color::WHITE,
+        ground: Color::WHITE,
+        intensity: 1.0,
+        turn_deg: 0.0,
+        image: None,
+    };
+    let uploaded = opened
+        .compositor
+        .upload_rgba8(8, 4, &[128, 128, 128, 255].repeat(32))
+        .expect("the panorama uploads");
+    let texture = crate::tests::unorm_texture(&opened.compositor, 8, 4, [128, 128, 128, 255]);
+    let painted = opened
+        .compositor
+        .import_premultiplied(texture, None)
+        .expect("a Unorm texture imports premultiplied");
+    let lit_by = |compositor: &mut Compositor, image| {
+        let shot = sky_sphere(
+            compositor,
+            &[],
+            super::Environment {
+                image: Some(image),
+                ..grey
+            },
+        );
+        rgb(&shot, 80, 16)
+    };
+    let from_upload = lit_by(&mut opened.compositor, &uploaded);
+    let from_page = lit_by(&mut opened.compositor, &painted);
+    assert!(
+        luma(from_upload) > 10,
+        "the grey lights it: {from_upload:?}"
+    );
+    for c in 0..3 {
+        assert!(
+            from_upload[c].abs_diff(from_page[c]) <= 3,
+            "{from_upload:?} vs {from_page:?}"
+        );
+    }
+}
+
+/// ADR-0151 decision 4: a model cut at a floor draws nothing at or below it, in its
+/// picture or its view depth, so a scene drawn mirrored in its floor shows only what
+/// stands above it. The cube spans y 30 to 70; a floor at 50 keeps its upper half.
+#[test]
+fn golden_model_a_floor_cuts_what_is_below_it() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let camera = SceneCamera::framing(canvas());
+    let draw = ModelDraw {
+        model: &uploaded,
+        geometry: boxed(80.0, 50.0, 40.0),
+        camera: Some(camera),
+        lighting: Lighting::Unlit,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: Some(50.0),
+    };
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model(&draw, &layer)
+        .expect("the model draws");
+    let items = [Item {
+        camera: Some(camera),
+        ..crate::tests::item(&layer, Placement::Layer(draw.geometry), Crop::NONE, 1.0)
+    }];
+    let shot = render(compositor, &items);
+    assert_near(rgb(&shot, 80, 40), FRONT, (80, 40));
+    assert_near(rgb(&shot, 80, 60), [0, 0, 0], (80, 60));
+    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model_depth(&draw, &depth)
+        .expect("the depth draws");
+    let read = |compositor: &mut Compositor| {
+        let items = [crate::tests::item(
+            &depth,
+            Placement::IDENTITY,
+            Crop::NONE,
+            1.0,
+        )];
+        render(compositor, &items)
+    };
+    let seen = read(compositor);
+    assert!(rgb(&seen, 80, 40)[0] > 0, "the upper half has depth");
+    assert_eq!(rgb(&seen, 80, 60)[0], 0, "the lower half has none");
+}
+
+/// ADR-0151 decision 7: a rigged model is drawn where its pose places it. At rest its
+/// one slot is the identity and the cube shows its front; posed half a turn about the
+/// vertical, its back faces the viewer, lit the right way out, in the same box (a pose
+/// never rescales it, since the box fits the rest pose).
+#[test]
+fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
+    use jstream_media::model::rig::{Rest, Rig, RigNode, Slot};
+    use std::sync::Arc;
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let cube = coloured_cube();
+    let mut primitive = cube.primitives()[0].clone();
+    for v in &mut primitive.vertices {
+        v.weights = [1.0, 0.0, 0.0, 0.0];
+    }
+    let identity = [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    let rig = Rig::new(
+        vec![RigNode {
+            parent: None,
+            rest: Rest::Matrix(identity),
+        }],
+        vec![Slot {
+            node: 0,
+            inverse_bind: identity,
+        }],
+        vec![],
+    )
+    .expect("a rig");
+    let rigged = Model::rigged(
+        vec![primitive],
+        cube.materials().to_vec(),
+        vec![],
+        Some(Arc::new(rig)),
+    )
+    .expect("the cube builds");
+    let compositor = &mut opened.compositor;
+    let uploaded = compositor.upload_model(&rigged).expect("the model uploads");
+    let geometry = boxed(80.0, 50.0, 40.0);
+    let shoot = |compositor: &mut Compositor| {
+        let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+        compositor
+            .draw_model(
+                &ModelDraw {
+                    model: &uploaded,
+                    geometry,
+                    camera: None,
+                    lighting: Lighting::Studio,
+                    lights: None,
+                    shadows: &[],
+                    environment: None,
+                    floor: None,
+                },
+                &layer,
+            )
+            .expect("the model draws");
+        let items = [crate::tests::item(
+            &layer,
+            Placement::Layer(geometry),
+            Crop::NONE,
+            1.0,
+        )];
+        render(compositor, &items)
+    };
+    let rest = shoot(compositor);
+    assert_near(rgb(&rest, 80, 50), FRONT, (80, 50));
+    let half_turn: [f32; 16] = [
+        -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    compositor.pose_model(&uploaded, &[half_turn]);
+    let turned = shoot(compositor);
+    for at in [(62, 32), (80, 50), (97, 67)] {
+        assert_near(rgb(&turned, at.0, at.1), BACK, at);
+    }
+    let back = count(&turned, BACK);
+    assert!(
+        (1520..=1680).contains(&back),
+        "{back} back pixels, want about 1600"
+    );
+    // A palette of another length is ignored.
+    compositor.pose_model(&uploaded, &[identity_f32(), identity_f32()]);
+    assert_near(rgb(&shoot(compositor), 80, 50), BACK, (80, 50));
+}
+
+fn identity_f32() -> [f32; 16] {
+    [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ]
 }

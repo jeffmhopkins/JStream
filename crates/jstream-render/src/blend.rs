@@ -1,6 +1,8 @@
 //! How each blend mode is drawn (ADR-0082): a fixed-function blend state where one is
 //! exact for premultiplied colour at any alpha, and otherwise a shader that reads a copy
-//! of what is below the item, the backdrop.
+//! of what is below the item, the backdrop. Each set of pipelines draws into a target of
+//! one space (ADR-0126 §3): premultiplied linear light, or premultiplied sRGB-encoded
+//! colour, where the same blend states give a browser's composite.
 
 use jstream_protocol::BlendMode;
 
@@ -8,14 +10,12 @@ use crate::error::RenderError;
 
 /// The modes whose shader reads the backdrop, in the order of their pipelines and
 /// fragment entry points.
-const BACKDROP_MODES: [(BlendMode, &str); 7] = [
+const BACKDROP_MODES: [(BlendMode, &str); 5] = [
     (BlendMode::Darken, "fs_darken"),
     (BlendMode::Lighten, "fs_lighten"),
     (BlendMode::Overlay, "fs_overlay"),
     (BlendMode::Difference, "fs_difference"),
     (BlendMode::Exclusion, "fs_exclusion"),
-    (BlendMode::NormalSrgb, "fs_normal_srgb"),
-    (BlendMode::AdditiveSrgb, "fs_additive_srgb"),
 ];
 
 /// One pipeline per way of drawing an item.
@@ -47,6 +47,8 @@ pub(crate) struct Layouts<'a> {
     pub(crate) backdrop: &'a wgpu::BindGroupLayout,
     /// The composite shader.
     pub(crate) shader: &'a wgpu::ShaderModule,
+    /// Whether the target holds sRGB-encoded colour: the shader's `ENCODED`.
+    pub(crate) encoded: bool,
 }
 
 impl BlendPipelines {
@@ -217,7 +219,10 @@ fn pipeline(
         fragment: Some(wgpu::FragmentState {
             module: layouts.shader,
             entry_point: Some(entry),
-            compilation_options: Default::default(),
+            compilation_options: wgpu::PipelineCompilationOptions {
+                constants: &[("ENCODED", if layouts.encoded { 1.0 } else { 0.0 })],
+                ..Default::default()
+            },
             targets: &[Some(wgpu::ColorTargetState {
                 format: wgpu::TextureFormat::Rgba16Float,
                 blend,

@@ -26,6 +26,7 @@
 #![forbid(unsafe_code)]
 
 mod admitted;
+mod approvals;
 mod config;
 mod devices;
 mod envelope;
@@ -47,6 +48,7 @@ pub mod token_file;
 mod ui;
 mod ui_settings;
 
+pub use approvals::ASK_SETTING;
 pub use config::{ServerConfig, Token};
 pub use error::ServerError;
 pub use jstream_control::WS_PATH;
@@ -55,6 +57,7 @@ pub use mcp::MCP_PATH;
 pub use network::NetworkConfig;
 pub use pair::PAIR_PATH;
 pub use pair_page::PAIR_PAGE_PATH;
+pub use ui_settings::UiSettingsView;
 
 use admitted::Admitted;
 use axum::Router;
@@ -66,6 +69,7 @@ use axum::routing::{any, get};
 use devices::Devices;
 use gate::{Credential, Gate, Refusal};
 use jstream_control::{Control, WS_PROTOCOL};
+use jstream_protocol::AgentTransport;
 use listener::{Accepted, Limited};
 use mcp::Mcp;
 use std::future::Future;
@@ -142,8 +146,13 @@ struct App {
     tls: bool,
     /// Whether the server pairs devices at all (`ServerConfig::pairing`).
     pairing: bool,
+    /// Where a device on the network reaches the network listener, while it is on:
+    /// `pairing.start` answers with it (0.97).
+    network_access: Option<jstream_protocol::NetworkAccess>,
     /// The UI settings it keeps for its clients (ADR-0084).
     ui_settings: Arc<UiSettings>,
+    /// The agent approvals (ADR-0131).
+    approvals: Arc<approvals::Approvals>,
 }
 
 impl App {
@@ -153,15 +162,31 @@ impl App {
     }
 
     /// A new session from the connector, admitted by `credential`.
-    fn open(&self, credential: Credential) -> Box<dyn Control> {
+    fn open(&self, credential: Credential, transport: AgentTransport) -> Box<dyn Control> {
         Box::new(Admitted::new(
             (self.connector)(),
             credential,
-            Arc::clone(&self.devices),
-            self.pairing_offered,
-            self.pairing,
-            Arc::clone(&self.ui_settings),
+            transport,
+            admitted::Served {
+                devices: Arc::clone(&self.devices),
+                pairing_offered: self.pairing_offered,
+                serves_devices: self.pairing,
+                network: self.network_access.clone(),
+                ui_settings: Arc::clone(&self.ui_settings),
+                approvals: Arc::clone(&self.approvals),
+            },
         ))
+    }
+
+    /// How long a connection admitted by `credential` has to complete its handshake: the
+    /// handshake timeout, and for one the person may be asked about (ADR-0131), the
+    /// approval timeout too.
+    fn handshake_time(&self, credential: &Credential) -> Duration {
+        if matches!(credential, Credential::Control) && self.approvals.enabled() {
+            self.handshake_timeout + self.approvals.timeout()
+        } else {
+            self.handshake_timeout
+        }
     }
 }
 
@@ -178,6 +203,12 @@ impl Server {
         let ui = config.ui_dir.as_deref().map(Ui::new).transpose()?;
         let devices = Arc::new(Devices::load(config.device_file.clone())?);
         let ui_settings = Arc::new(UiSettings::load(config.ui_settings_file.clone()));
+        let approvals = Arc::new(approvals::Approvals::load(
+            config.ask_agents,
+            config.approvals_file.clone(),
+            config.approval_timeout,
+            Arc::clone(&ui_settings),
+        )?);
         let bind_error = |source| ServerError::Bind {
             addr: config.bind,
             source,
@@ -211,6 +242,15 @@ impl Server {
                 (Some(network), gate)
             }
         };
+        #[cfg(feature = "tls")]
+        let network_access = network
+            .as_ref()
+            .map(|network| jstream_protocol::NetworkAccess {
+                urls: network_urls(&network.identity, network.local_addr.port()),
+                fingerprint: network.identity.fingerprint().to_owned(),
+            });
+        #[cfg(not(feature = "tls"))]
+        let network_access = None;
         let (shutdown, stopping) = watch::channel(false);
         let mcp = config.mcp.then(|| Mcp::new(&config));
         let app = Arc::new(App {
@@ -232,7 +272,9 @@ impl Server {
             pairing_offered: local_addr.ip().is_loopback() || config.tls,
             tls: config.tls,
             pairing: config.pairing,
+            network_access,
             ui_settings,
+            approvals,
         });
         Ok(Server {
             listener,
@@ -244,6 +286,11 @@ impl Server {
             app,
             shutdown,
         })
+    }
+
+    /// The UI settings this server keeps (ADR-0084), for the app that runs it to read.
+    pub fn ui_settings(&self) -> UiSettingsView {
+        UiSettingsView(Arc::clone(&self.app.ui_settings))
     }
 
     /// The address the server listens on (with the actual port if `0` was asked for).
@@ -292,19 +339,10 @@ impl Server {
     /// checks the certificate's fingerprint and pairs (`GET /pair` for a browser).
     #[cfg(feature = "tls")]
     pub fn network_urls(&self) -> Vec<String> {
-        let Some(network) = &self.network else {
-            return Vec::new();
-        };
-        let port = network.local_addr.port();
-        network
-            .identity
-            .names()
-            .iter()
-            .map(|name| match name.parse::<std::net::Ipv6Addr>() {
-                Ok(v6) => format!("https://[{v6}]:{port}/"),
-                Err(_) => format!("https://{name}:{port}/"),
-            })
-            .collect()
+        match &self.network {
+            Some(network) => network_urls(&network.identity, network.local_addr.port()),
+            None => Vec::new(),
+        }
     }
 
     /// The network listener's certificate fingerprint (SHA-256, `AB:CD:…`), when it is
@@ -455,7 +493,7 @@ async fn upgrade(
     // The request is accepted: the header-read deadline no longer applies, the
     // handshake deadline does.
     accepted.request_read();
-    let hello_by = accepted.at + app.handshake_timeout;
+    let hello_by = accepted.at + app.handshake_time(&credential);
     let number = app.connections.fetch_add(1, Ordering::Relaxed) + 1;
     let span = tracing::info_span!("connection", id = number, peer = %peer);
     // Opened inside the span, so a session span the connector creates nests under it.
@@ -465,7 +503,7 @@ async fn upgrade(
             Some(device_id) => tracing::info!(device_id = %device_id, "connection accepted"),
             None => tracing::info!("connection accepted"),
         }
-        app.open(credential)
+        app.open(credential, AgentTransport::Websocket)
     });
     let shutdown = app.shutdown.clone();
     let liveness = app.liveness;
@@ -506,4 +544,18 @@ fn rejects_missing_token() {
 fn rejects_foreign_origin() {
     tests::check_rejects_foreign_origin();
     tests::check_mcp_rejects_foreign_origin();
+}
+
+/// The network listener's URLs on `port`, one per name or address `identity`'s
+/// certificate carries; an IPv6 address in brackets.
+#[cfg(feature = "tls")]
+fn network_urls(identity: &identity::Identity, port: u16) -> Vec<String> {
+    identity
+        .names()
+        .iter()
+        .map(|name| match name.parse::<std::net::Ipv6Addr>() {
+            Ok(v6) => format!("https://[{v6}]:{port}/"),
+            Err(_) => format!("https://{name}:{port}/"),
+        })
+        .collect()
 }

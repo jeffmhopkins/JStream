@@ -327,10 +327,10 @@ checked_note = "Re-read the README's description of libva as the VA-API implemen
 [[external]]
 id = "openh264-binary-license"
 url = "https://www.openh264.org/BINARY_LICENSE.txt"
-relied_on = "Cisco's MPEG LA patent license covers only the Cisco-provided OpenH264 binary, when it is separately downloaded to the end user's device and not integrated with third-party software before that download (ADR-0060 question 1, answered by ADR-0061)"
+relied_on = "Cisco's MPEG LA patent license covers only the Cisco-provided OpenH264 binary, when it is separately downloaded to the end user's device and not integrated with third-party software before that download (ADR-0060 question 1, answered by ADR-0061); for personal use it covers (i) encoding AVC video and (ii) decoding AVC video that was encoded by a consumer engaged in a personal activity, which is how the engine decodes its own streams (ADR-0140)"
 review_every = "180d"
 status = "ok"
-checked_note = "Re-read the conditions for the Cisco-provided binary"
+checked_note = "Re-read the page: the four conditions for the Cisco-provided binary, and the portfolio notice's clauses (i) encode and (ii) decode of video encoded by a consumer; it matches the copy in crates/jstream-platform-linux/src/openh264/BINARY_LICENSE.txt apart from typographic quotes and trailing spaces"
 
 [[external]]
 id = "ubuntu-release-cycle"
@@ -787,3 +787,43 @@ relied_on = "VISCA command, inquiry and reply bytes (pan-tilt drive and position
 review_every = "180d"
 status = "unverified"
 checked_note = "The maintainer's reference for #1182 and #1181. The builder sandbox's fetch was refused (HTTP 403), so the crate follows the command bytes those issues list; re-read it against crates/jstream-visca"
+
+[[external]]
+id = "tauri-linux-prerequisites"
+url = "https://v2.tauri.app/start/prerequisites/#linux"
+relied_on = "Tauri 2 on Linux builds against WebKitGTK 4.1 (Debian/Ubuntu: libwebkit2gtk-4.1-dev), which the desktop app's webkitgtk feature and the desktop-linux CI job install (ADR-0141)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: the Debian/Ubuntu list names libwebkit2gtk-4.1-dev"
+
+[[external]]
+id = "portal-file-chooser"
+url = "https://flatpak.github.io/xdg-desktop-portal/docs/doc-org.freedesktop.portal.FileChooser.html"
+relied_on = "OpenFile and SaveFile take (parent_window s, title s, options a{sv}) with handle_token, modal, directory (OpenFile, version 3), filters a(sa(us)), current_folder ay and current_name (SaveFile); the Response's results carry the picked files as uris (ADR-0141)"
+review_every = "180d"
+status = "ok"
+checked_note = "Re-read: OpenFile and SaveFile options include handle_token, directory, filters, current_folder and current_name; results carry uris"
+
+[[external]]
+id = "linuxdeploy"
+url = "https://github.com/linuxdeploy/linuxdeploy"
+relied_on = "linuxdeploy copies the libraries an AppDir's usr/bin programs and usr/lib libraries link into usr/lib (keeping files already there, skipping its excludelist), points their rpaths at it, gives the programs in ADDITIONAL_BIN_DIRS an rpath to usr/lib, keeps a --custom-apprun as AppRun.wrapped behind a wrapper that sources apprun-hooks, runs input plugins it finds beside itself or on PATH, and its bundled appimage output plugin passes LDAI_OUTPUT, LDAI_RUNTIME_FILE and LDAI_NO_APPSTREAM to appimagetool (ARCH › Packaging)"
+review_every = "180d"
+status = "unverified"
+checked_note = "Read in the source at tag 1-alpha-20251107-1 (src/core/appdir.cpp, src/core/appdir_root_setup.cpp, src/plugin/plugin.cpp) and linuxdeploy-plugin-appimage's src/main.cpp; the AppImage isn't yet run outside CI"
+
+[[external]]
+id = "linuxdeploy-plugin-gtk"
+url = "https://github.com/linuxdeploy/linuxdeploy-plugin-gtk"
+relied_on = "linuxdeploy-plugin-gtk.sh, with DEPLOY_GTK_VERSION=3, copies GTK 3's modules, GLib schemas, typelibs and pixbuf loaders into the AppDir and writes an apprun-hooks script that points GTK and GLib at them and sets GDK_BACKEND=x11; it doesn't handle WebKitGTK's processes (ARCH › Packaging)"
+review_every = "180d"
+status = "unverified"
+checked_note = "Read the script at commit 7a3fbc31a9e5075073ff8790f26effbac5f84453"
+
+[[external]]
+id = "appimage-type2-runtime"
+url = "https://github.com/AppImage/type2-runtime"
+relied_on = "The static type 2 runtime an AppImage starts with: it mounts the image with FUSE, or extracts it with --appimage-extract or APPIMAGE_EXTRACT_AND_RUN, sets APPDIR and OWD, and runs AppRun (ARCH › Packaging)"
+review_every = "180d"
+status = "unverified"
+checked_note = "Release 20251108's runtime-x86_64 is pinned in after-review.yml by its SHA-256; the page itself was not re-read"

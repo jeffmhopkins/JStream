@@ -458,12 +458,37 @@ fn lerp_geometry(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> ItemGeometry {
         fit_mode: if later { b.fit_mode } else { a.fit_mode },
         flip_h: if later { b.flip_h } else { a.flip_h },
         flip_v: if later { b.flip_v } else { a.flip_v },
+        billboard: if later { b.billboard } else { a.billboard },
+        surface: lerp_surface(a.surface, b.surface, k, later),
         rotation_deg: angle(a.rotation_deg, b.rotation_deg),
         tilt_deg: angle(a.tilt_deg, b.tilt_deg),
         turn_deg: angle(a.turn_deg, b.turn_deg),
         depth_px: num(a.depth_px, b.depth_px),
         perspective_px,
     }
+}
+
+/// A card's surface between `a` and `b` (ADR-0151 decision 10): its numbers glide, an
+/// absent one gliding from or to the default, and its switches change at the midpoint
+/// as the geometry's do.
+fn lerp_surface(
+    a: Option<jstream_protocol::Surface>,
+    b: Option<jstream_protocol::Surface>,
+    k: f32,
+    later: bool,
+) -> Option<jstream_protocol::Surface> {
+    if a.is_none() && b.is_none() {
+        return None;
+    }
+    let (sa, sb) = (a.unwrap_or_default(), b.unwrap_or_default());
+    let num = |x: Finite32, y: Finite32| finite(lerp(x.get(), y.get(), k));
+    let switched = if later { sb } else { sa };
+    Some(jstream_protocol::Surface {
+        roughness: num(sa.roughness, sb.roughness),
+        metalness: num(sa.metalness, sb.metalness),
+        emissive: num(sa.emissive, sb.emissive),
+        ..switched
+    })
 }
 
 fn lerp_crop(a: Crop, b: Crop, k: f32, source: Option<[u32; 2]>) -> Crop {

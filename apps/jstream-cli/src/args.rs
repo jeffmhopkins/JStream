@@ -8,9 +8,10 @@
 use crate::bench::{self, BenchOptions, Scenario};
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32, FitMode,
-    IdempotencyKey, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind, Query, Rev,
-    RtmpTarget, SceneId, SceneRole, Size, SourceId, SourceKind, TransitionPresetId, Vec2,
+    Action, Batch, BlendMode, Blending, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32,
+    FitMode, IdempotencyKey, ItemGeometry, ItemId, ItemTransform, OutputId, OutputKind,
+    ProbeStream, Query, Rev, RtmpTarget, SceneId, SceneRole, Size, SourceId, SourceKind,
+    TransitionPresetId, Vec2,
 };
 
 /// The help text, printed by `help`, `--help` and `-h`.
@@ -50,6 +51,10 @@ Commands:
   profile get [<seconds>]          where the engine's time went over the last 5 (or
                                    <seconds>, up to 60) seconds: per drawing thread,
                                    item, source and thread, as JSON (query profile.get)
+  quality probe <output-id> [<frames>]
+                                   PSNR and SSIM of a running output's next 3 (or
+                                   <frames>, up to 10) encoded frames against what its
+                                   encoder was given, as JSON (query quality.probe)
   source list                      list the sources (query source.list)
   item list <scene-id>             list a scene's items, bottom first (query item.list)
   item show|hide|toggle <item-id> [--scene <scene-id>]
@@ -72,11 +77,20 @@ Commands:
   device list                      list the paired devices (query device.list)
   device revoke <device-id>        revoke a paired device and close its
                                    connections (action device.revoke)
+  collection info                  the project file the engine saves to, and the
+                                   recent ones (query collection.info)
+  collection open <path>           open a project; outputs stop and undo is
+                                   cleared (action collection.open)
+  collection new <path>            create an empty project and open it (action
+                                   collection.new)
+  collection save-as <path>        save the project to a new file and keep
+                                   saving there (action collection.save_as)
   edit [--expected-rev <rev>] [--idempotency-key <key>] <edit>...
                                    apply the edits as one atomic batch
   events [--count <n>]             print events as they arrive; stop after <n>
-  bench --out <dir> [--scenario basic|layered|all] [--seconds <n>]
+  bench --out <dir> [--scenario <name>,...] [--seconds <n>]
         [--switch-every <ms>] [--preset <preset-id>] [--gates <file>]
+        [--media <file>]
                                    run a standard load on the engine for <n>
                                    seconds (default 20, 5 to 60): record the
                                    program to <dir>, switch scenes every <ms>
@@ -328,6 +342,19 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
             seconds: Some(number(seconds, "seconds")?),
             top: None,
         }),
+        ["quality", "probe", id, rest @ ..] => {
+            let frames = match rest {
+                [] => None,
+                [frames] => Some(number(frames, "frames")?),
+                _ => return Err(usage("quality probe takes an output ID and a frame count")),
+            };
+            Command::Query(Query::QualityProbe {
+                stream: ProbeStream::Output {
+                    output_id: OutputId::new(*id),
+                },
+                frames,
+            })
+        }
         ["source", "list"] => Command::Query(Query::SourceList),
         ["item", "list", id] => Command::Query(Query::ItemList {
             scene_id: SceneId::new(*id),
@@ -360,6 +387,16 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["output", "clear-key", id] => Command::Action(Action::OutputClearKey {
             output_id: OutputId::new(*id),
         }),
+        ["collection", "info"] => Command::Query(Query::CollectionInfo),
+        ["collection", "open", path] => Command::Action(Action::CollectionOpen {
+            path: (*path).to_owned(),
+        }),
+        ["collection", "new", path] => Command::Action(Action::CollectionNew {
+            path: (*path).to_owned(),
+        }),
+        ["collection", "save-as", path] => Command::Action(Action::CollectionSaveAs {
+            path: (*path).to_owned(),
+        }),
         ["pair"] => Command::Action(Action::PairingStart),
         ["device", "list"] => Command::Query(Query::DeviceList),
         ["device", "revoke", id] => Command::Action(Action::DeviceRevoke {
@@ -371,8 +408,23 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["mcp"] => Command::Mcp,
         [word, ..] => {
             let known = [
-                "help", "version", "hello", "state", "scene", "source", "item", "output", "video",
-                "studio", "edit", "events", "mcp", "pair", "device", "bench",
+                "help",
+                "version",
+                "hello",
+                "state",
+                "scene",
+                "source",
+                "item",
+                "output",
+                "video",
+                "studio",
+                "edit",
+                "events",
+                "mcp",
+                "pair",
+                "device",
+                "collection",
+                "bench",
             ];
             return Err(if known.contains(word) {
                 usage(format!(
@@ -428,6 +480,7 @@ fn parse_bench(mut args: &[&str]) -> Result<Command, CliError> {
         preset: bench::DEFAULT_PRESET.into(),
         out: String::new(),
         gates: None,
+        media: None,
     };
     let mut out = None;
     while let Some((&option, rest)) = args.split_first() {
@@ -438,7 +491,11 @@ fn parse_bench(mut args: &[&str]) -> Result<Command, CliError> {
             "--out" => out = Some((*value).to_owned()),
             "--scenario" => {
                 options.scenarios = Scenario::parse(value).ok_or_else(|| {
-                    usage(format!("unknown scenario `{value}`: basic, layered or all"))
+                    let names: Vec<&str> = Scenario::EVERY.iter().map(|s| s.name()).collect();
+                    usage(format!(
+                        "unknown scenario `{value}`: {} or all",
+                        names.join(", ")
+                    ))
                 })?;
             }
             "--seconds" => {
@@ -454,6 +511,7 @@ fn parse_bench(mut args: &[&str]) -> Result<Command, CliError> {
             "--switch-every" => options.switch_ms = number(value, "--switch-every")?,
             "--preset" => options.preset = (*value).to_owned(),
             "--gates" => options.gates = Some((*value).to_owned()),
+            "--media" => options.media = Some((*value).to_owned()),
             _ => return Err(usage(format!("unexpected `{option}` after `bench`"))),
         }
         args = rest;
@@ -731,6 +789,8 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 // No flip argument yet: the command sets an unflipped box.
                 flip_h: false,
                 flip_v: false,
+                billboard: false,
+                surface: None,
             },
         },
         ("canvas.set_size", [width, height]) => Edit::CanvasSetSize {
@@ -739,6 +799,13 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
         },
         ("canvas.set_frame_rate", [fps]) => Edit::CanvasSetFrameRate {
             fps: number(fps, "fps")?,
+        },
+        ("canvas.set_blending", [blending]) => Edit::CanvasSetBlending {
+            blending: Blending::from_name(blending).ok_or_else(|| {
+                usage(format!(
+                    "`canvas.set_blending` takes srgb or linear, not `{blending}`"
+                ))
+            })?,
         },
         ("output.create", [id, url]) => Edit::OutputCreate {
             output_id: OutputId::new(*id),
@@ -866,8 +933,8 @@ mod tests {
     use crate::exit::CliError;
     use jstream_control::protocol::{
         Action, Batch, BlendMode, Chord, Crop, DeviceId, Edit, EffectsSpace, Finite32, FitMode,
-        IdempotencyKey, ItemId, OutputId, OutputKind, Query, Rev, RtmpTarget, SceneId, SceneRole,
-        SourceId, SourceKind, TransitionPresetId,
+        IdempotencyKey, ItemId, OutputId, OutputKind, ProbeStream, Query, Rev, RtmpTarget, SceneId,
+        SceneRole, SourceId, SourceKind, TransitionPresetId,
     };
 
     fn args(line: &[&str]) -> Vec<String> {
@@ -1051,6 +1118,50 @@ mod tests {
             })
         );
         assert!(err(&["profile", "get", "ten"]).contains("seconds"));
+        let probe = |frames| {
+            Command::Query(Query::QualityProbe {
+                stream: ProbeStream::Output {
+                    output_id: OutputId::new("rec"),
+                },
+                frames,
+            })
+        };
+        assert_eq!(ok(&["quality", "probe", "rec"]).command, probe(None));
+        assert_eq!(
+            ok(&["quality", "probe", "rec", "5"]).command,
+            probe(Some(5))
+        );
+        assert!(err(&["quality", "probe", "rec", "five"]).contains("frames"));
+    }
+
+    #[test]
+    fn collection_commands_map_to_the_project_calls() {
+        assert_eq!(
+            ok(&["collection", "info"]).command,
+            Command::Query(Query::CollectionInfo)
+        );
+        assert_eq!(
+            ok(&["collection", "open", "/p/show.json"]).command,
+            Command::Action(Action::CollectionOpen {
+                path: "/p/show.json".into()
+            })
+        );
+        assert_eq!(
+            ok(&["collection", "new", "/p/new.json"]).command,
+            Command::Action(Action::CollectionNew {
+                path: "/p/new.json".into()
+            })
+        );
+        assert_eq!(
+            ok(&["collection", "save-as", "/p/copy.json"]).command,
+            Command::Action(Action::CollectionSaveAs {
+                path: "/p/copy.json".into()
+            })
+        );
+        assert!(
+            err(&["collection", "save-as", "/p/c.json", "--force"]).contains("wrong arguments")
+        );
+        assert!(err(&["collection", "open"]).contains("wrong arguments"));
     }
 
     #[test]
@@ -1559,6 +1670,7 @@ mod tests {
                 preset: "fade".into(),
                 out: "runs".into(),
                 gates: None,
+                media: None,
             })
         );
         assert_eq!(
@@ -1574,6 +1686,8 @@ mod tests {
                 "cut",
                 "--gates",
                 "g.json",
+                "--media",
+                "/clips/loop.mp4",
                 "--out",
                 "o",
             ])
@@ -1585,6 +1699,7 @@ mod tests {
                 preset: "cut".into(),
                 out: "o".into(),
                 gates: Some("g.json".into()),
+                media: Some("/clips/loop.mp4".into()),
             })
         );
         assert_eq!(err(&["bench"]), "`bench` needs `--out <dir>`");
@@ -1593,8 +1708,8 @@ mod tests {
             "`--seconds` is 5 to 60"
         );
         assert_eq!(
-            err(&["bench", "--out", "o", "--scenario", "webcam"]),
-            "unknown scenario `webcam`: basic, layered or all"
+            err(&["bench", "--out", "o", "--scenario", "tv"]),
+            "unknown scenario `tv`: basic, layered, small_2d, media, browser, display, webcam or all"
         );
         assert_eq!(err(&["bench", "--out"]), "unexpected `--out` after `bench`");
     }
@@ -1688,8 +1803,7 @@ mod tests {
         assert_eq!(
             err(&["edit", "item.set_blend", "i", "dissolve"]),
             "`item.set_blend` takes one of normal, additive, multiply, screen, overlay, \
-             darken, lighten, difference, exclusion, normal_srgb, additive_srgb, not \
-             `dissolve`"
+             darken, lighten, difference, exclusion, not `dissolve`"
         );
         assert_eq!(
             err(&["edit", "scene.set_role", "s", "folder"]),

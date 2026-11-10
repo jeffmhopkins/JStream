@@ -66,6 +66,10 @@ pub fn engine(
     secrets: &Secrets,
 ) -> anyhow::Result<Arc<Engine>> {
     let mut engine = Engine::new().with_audit(audit);
+    // The warm budget is kept in the data folder, where the desktop app keeps it too.
+    if let Some(dir) = jstream_platform::paths::data_dir() {
+        engine = engine.with_warm_file(dir.join(jstream_platform::paths::WARM_SCENES_FILE));
+    }
     if let Some(path) = &options.collection {
         // The error names the file and what is wrong with it.
         engine = engine
@@ -124,6 +128,20 @@ pub fn engine(
         all(target_os = "linux", target_pointer_width = "64")
     )))]
     let engine = Arc::new(engine);
+    if !options.jtunnel.is_empty() {
+        // After the backends: arrivals are stamped on the media clock.
+        let setup =
+            jstream_core::JtunnelSetup::new(options.jtunnel.clone()).map_err(anyhow::Error::msg)?;
+        let local = engine
+            .start_jtunnel(&setup)
+            .context("could not start receiving from JTunnel senders")?;
+        let senders: Vec<String> = options
+            .jtunnel
+            .iter()
+            .map(|s| format!("{}@{}", s.name(), s.addr()))
+            .collect();
+        tracing::info!(%local, senders = ?senders, "receiving from JTunnel senders");
+    }
     if let Some(dir) = &options.plugin_dir {
         // Last, once the engine is built: a saved plugin keeps a handle to the engine as
         // it is now, so it sees the loaded collection and acts through the backends.
@@ -132,8 +150,17 @@ pub fn engine(
     if let Some(dir) = &options.effects_dir {
         engine.watch_effect_packs(dir);
     }
+    if !options.ptz.is_empty() {
+        let setup = jstream_core::PtzSetup::new(options.ptz.clone()).map_err(anyhow::Error::msg)?;
+        engine
+            .start_ptz(&setup)
+            .map_err(|err| anyhow::anyhow!("starting PTZ control: {err}"))?;
+        tracing::info!(cameras = setup.cameras().len(), "PTZ control on (ADR-0146)");
+    }
     #[cfg(windows)]
     scan_clap_plugins(&engine);
+    #[cfg(not(windows))]
+    engine.set_clap_unavailable("CLAP plugins are hosted on Windows only so far");
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
     #[cfg(windows)]
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
@@ -157,7 +184,36 @@ pub fn engine(
 
 /// Scans the CLAP plugins on a worker thread, so they appear in `kind.list` as audio
 /// filter kinds once found (ADR-0035). Each plugin file gets its own short-lived
-/// `jstream-plugin-host.exe`; the daemon serves meanwhile.
+/// `jstream-plugin-host.exe`; the daemon serves meanwhile. The engine keeps the hosts
+/// for `plugin.clap_rescan`.
+/// Opens the PTZ controller endpoints `options` lists (ADR-0152), or none. They run
+/// until the handle is dropped.
+///
+/// # Errors
+/// When an endpoint's socket can't be opened, its port in use say.
+pub fn ptz_controllers(
+    engine: &Engine,
+    options: &Options,
+) -> anyhow::Result<Option<jstream_core::PtzControllers>> {
+    if options.ptz_controllers.is_empty() {
+        return Ok(None);
+    }
+    let setup = jstream_core::PtzControllerSetup::new(
+        options.ptz_controllers.clone(),
+        options.ptz_controller_allow.clone(),
+    )
+    .map_err(anyhow::Error::msg)?;
+    let running = engine
+        .start_ptz_controllers(&setup)
+        .map_err(|err| anyhow::anyhow!("starting PTZ controller input: {err}"))?;
+    tracing::info!(
+        endpoints = setup.controllers().len(),
+        allowed = setup.allow().len(),
+        "PTZ controller input on (ADR-0152)"
+    );
+    Ok(Some(running))
+}
+
 #[cfg(windows)]
 fn scan_clap_plugins(engine: &Arc<Engine>) {
     let hosts: Arc<dyn jstream_platform::PluginHosts> =
@@ -165,6 +221,7 @@ fn scan_clap_plugins(engine: &Arc<Engine>) {
             Ok(hosts) => Arc::new(hosts),
             Err(e) => {
                 tracing::warn!(error = %e, "CLAP plugins are unavailable");
+                engine.set_clap_unavailable(format!("the plugin host couldn't be set up: {e}"));
                 return;
             }
         };
@@ -172,11 +229,8 @@ fn scan_clap_plugins(engine: &Arc<Engine>) {
     let spawned = std::thread::Builder::new()
         .name("jstream-clap-scan".into())
         .spawn(move || {
-            let scan = engine.scan_clap_plugins(hosts);
-            for (file, error) in &scan.failed {
-                tracing::warn!(file = %file.display(), %error, "a CLAP plugin file could not be scanned");
-            }
-            tracing::info!(found = scan.kinds.len(), "scanned the CLAP plugins");
+            // The engine logs what the scan found and each file that failed.
+            engine.scan_clap_plugins(hosts);
         });
     if let Err(e) = spawned {
         tracing::warn!(error = %e, "could not start the CLAP plugin scan");

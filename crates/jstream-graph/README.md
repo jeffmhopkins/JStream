@@ -28,8 +28,11 @@ protocol's types (`Overrides`).
   sources against. The engine supplies them (`Graph::with_kinds`, and
   `Graph::without_kinds` for an effect pack that's gone); they are not
   collection state, and `Graph::new()` describes only the built-in transition kinds
-  (`cut`, `fade`, `move`), which every graph has.
-- `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the `sources`, keyed by ID, the `scenes`
+  (`cut`, `fade`, `move`), which every graph has. `Graph::with_rev` sets the `rev` of a
+  collection the engine opens in another's place
+  ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)).
+- `State`: the `canvas` (default 1920×1080), the `base_fps` (30, or 60, ADR-0119), the
+  `blending` space (`srgb`, or `linear`, ADR-0126), the `sources`, keyed by ID, the `scenes`
   in display order, the `outputs`, keyed by ID, the `encoders` (encoder profiles),
   keyed by ID, the `video_mixes`, keyed by ID, the `buses`, keyed by ID and always
   holding the master, the `sends`, keyed by bus and source, the master stage's filter
@@ -38,8 +41,12 @@ protocol's types (`Overrides`).
   and `labels`, each in its own order, the
   `hotkeys`: each `Chord` bound to the protocol `Action` it fires
   ([ADR-0040](../../docs/adr/0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)
-  §3), and the `transitions`: the presets, keyed by ID, and the default. A binding
-  always names objects that exist. A new state holds one preset, `cut`, as its default.
+  §3), with the labels each binding carries beside them (`hotkey_labels`,
+  [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), the `bindings`:
+  each controller `Trigger` bound to the `Action` it fires
+  ([ADR-0122](../../docs/adr/0122-controller-input-midi-and-one-binding-system.md)),
+  and the `transitions`: the presets, keyed by ID, and the default. A hotkey or
+  controller binding always names objects that exist. A new state holds one preset, `cut`, as its default.
   Each `Output` has its own `Chains` too: a video chain, and an audio chain when it
   carries audio.
 - `Source`: a single shared instance with an ID, a name, a `SourceKind` (`builtin` by
@@ -59,10 +66,13 @@ protocol's types (`Overrides`).
 - `Scene`: a name, a `role` (`scene` or `group`, ADR-0024 §1; it changes no behaviour
   here), its `transition_in` and `transition_out` overrides, the folder it is filed in,
   if any, its `SceneMeta`, its `camera` if it is a 3D scene (ADR-0094; a keyframe
-  scene's is an override of its parent's), its camera's `camera_motion` and
-  `camera_follow` (ADR-0113, a family's only), its `timelines` ordered by ID
+  scene's is an override of its parent's), its camera's `camera_motion` (ADR-0113, a
+  family's only; its follow camera, `Scene::camera_follow`, is read from its items'
+  `follow_pointer` effects, ADR-0120), its `timelines` ordered by ID
   (ADR-0115), and its items in stacking order, bottom
-  first. A keyframe
+  first, and its PTZ `ptz_shots` (ADR-0146: a preset or a pose per named camera, where a
+  keyframe scene's shot for a camera replaces its parent's and
+  `State::effective_ptz_shots` reads the result). A keyframe
   scene has `variant_of`, naming its parent, its `Overrides` and no items;
   `State::shown_items` gives the items any scene draws, a keyframe scene's being its
   parent's at their effective values. A scene's `filters` (ADR-0065) are `Chains` whose
@@ -146,13 +156,13 @@ that does not want to change the graph it has.
   encoder and mix choices, a profile's encoding, a mix's spec, each audio field a
   `source.set_audio` or `bus.set_fader` sets, a bus's monitor, a send's gain, a preset's fields, a
   scene's transition overrides and options, an item's transition settings), and whether the
-  scenes' order, the canvas size, the base frame rate or the default preset was set. A send is an object of its own, so two sources'
+  scenes' order, the canvas size, the base frame rate, the blending space or the default preset was set. A send is an object of its own, so two sources'
   sends into one bus don't conflict, and deleting a bus conflicts with every change to
   its sends. An edit it doesn't know marks the set as conflicting with
   everything. `conflicts_with` is the undo rule the engine's history applies to other
   clients' later batches: one set creates or deletes an object the other touches, both
-  set the same property, both set the scenes' order, both set the canvas size, both set the base frame rate, or both
-  set the default preset.
+  set the same property, both set the scenes' order, both set the canvas size, both set the base frame rate, both set the
+  blending space, or both set the default preset.
 - **Settings** ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   `source.create` of a `builtin` source needs a source kind the graph describes (a
   filter or transition kind, such as a scanned CLAP plugin's, is `invalid_argument` on
@@ -196,9 +206,10 @@ that does not want to change the graph it has.
   `item.add`'s `opacity` accept 0 to `MAX_OPACITY` (4; above 1 a gain on the item's
   light, #1101), as do keyframe overrides; `item.set_blend` and `item.add`'s `blend`
   accept every mode, which the compositor draws
-  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md),
-  [ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)). Each is undone by
-  the previous value, and removing an item restores both.
+  ([ADR-0082](../../docs/adr/0082-blend-modes-drawn.md)). Each is undone by
+  the previous value, and removing an item restores both. `canvas.set_blending` sets the
+  collection's blending space, `srgb` in a new one, undone by the previous space
+  ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)).
 - **Filters** (`filter.rs`, [ADR-0026](../../docs/adr/0026-source-filter-chains.md)):
   every filter edit first refuses a keyframe scene as a `scene` owner (`invalid_argument`
   on `owner`: it shows its parent's filters). The `keyframe` owner, an item's effects as
@@ -389,22 +400,31 @@ that does not want to change the graph it has.
   ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)): `include_audio`,
   which the engine reads when it follows nesting for audio, and `background`, checked as
   a colour (`SceneOptions::problem`) and refused on a keyframe scene, which shows its
-  parent's. A deleted scene's inverse restores them.
+  parent's, and `keep_warm` (ADR-0149), refused on a keyframe scene too, since its
+  parent is the scene kept warm. A deleted scene's inverse restores them.
   `scene.set_camera` (`camera.rs`) sets or removes a scene's camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), checked by `SceneCamera::validate`
   (field `camera.fov_deg`, `camera.target` when it is on the position, else `camera`). On a keyframe scene it writes
-  the variant's override, refused while the parent has no camera, and `State::effective_camera`
-  reads the override or the parent's. Removing a parent's camera drops its variants'
-  overrides, and the inverse restores them; a deleted scene's inverse restores its camera.
-  `scene.set_camera_motion` and `scene.set_camera_follow` (`camera.rs`,
-  [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)) write the whole
-  motion list (checked by `check_camera_motion`, field `motion…`) and the follow camera
-  (checked by `CameraFollow::check`, field `follow.…`, its `item_id` an item of the scene
-  whose source is a built-in `display` or `window`), each undone by the old value and
-  refused on a keyframe scene (`invalid_argument`), since they belong to the family. A
-  scene keeps both while it has no camera, and a follow whose item later leaves the
-  scene stays, inert; a deleted scene's inverse restores them after its items
-  (`camera::restore`). `camera_anim_modifiers` turns a motion list into
+  the variant's override, which a keyframe of a 2D scene may have too
+  ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)), and
+  `State::effective_camera` reads the override or the parent's. Removing a parent's camera
+  drops its variants' overrides, and the inverse restores them; a removal on a parent that
+  has none drops nothing; a deleted scene's inverse restores its camera.
+  `scene.set_camera_motion` (`camera.rs`,
+  [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)) writes the whole
+  motion list (checked by `check_camera_motion`, field `motion…`), undone by the old
+  value. A follow camera is a `follow_pointer` filter on an item's own effects
+  ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)): `filter.add` refuses
+  it on any other owner, or on an item whose source isn't a built-in `display` or
+  `window` (`owner`), and `Item::follow` and `Scene::camera_follow` read it, the first
+  enabled one in stacking order. `scene.set_camera_follow` (checked by
+  `CameraFollow::check`, field `follow.…`, its `item_id` an item of the scene showing
+  a capture) is a shortcut that sets that item's filter, adding it as
+  `follow-pointer` when it has none, and removes the scene's other ones, undone by
+  those filter edits' inverses. Both are refused on a keyframe scene
+  (`invalid_argument`), since they belong to the family. A scene keeps its motion while
+  it has no camera; a follow goes with its item. A deleted scene's inverse restores its
+  motion after its items (`camera::restore`), and its follow with their effects. `camera_anim_modifiers` turns a motion list into
   `jstream-anim`'s for the engine.
 - **Timelines** (`timeline.rs`, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
   `timeline.set` stores a timeline in a scene (the scene `not_found`, then
@@ -415,9 +435,11 @@ that does not want to change the graph it has.
   checked, and no delete edits a timeline: a cue naming a deleted object stays, inert. A
   deleted scene's inverse restores its timelines (`timeline::restore`).
   `folder.delete` is refused while a scene (`folder`) or folder (`parent`) sits in the
-  folder, and `label.delete` while a source, then a scene (`labels`), carries the label,
-  listing them as `blockers`; their `delete.plan` moves what the folder holds up to its
-  parent, or takes the label off those sources and scenes. Every
+  folder, and `label.delete` while a source, a scene, a hotkey binding or a timeline
+  (`labels`, in that order) carries the label, listing them as `blockers`; their
+  `delete.plan` moves what the folder holds up to its parent, or takes the label off
+  each of those. `timeline.set` checks a timeline's labels as `source.set_meta` checks a
+  source's, at `timeline.labels`, and stores them ordered by ID (ADR-0133). Every
   edit is undone by the previous value; a delete by the create, then a reorder back
   unless it was last. `scene.delete` and `source.delete` undo the folder and metadata
   too. None of it is a dependency edge.
@@ -428,20 +450,38 @@ that does not want to change the graph it has.
   (`Action::bind_problem`: `output.set_key`, whose key is never stored, and the
   session-only (preview and live), server-answered and YouTube actions, and a
   `values.set` whose name or value the call would refuse, at `action.name` or
-  `action.value`), and the objects the action names
+  `action.value`), a wheel chord (`Chord::is_wheel`, ADR-0112 §3) bound to an action
+  that doesn't take steps (`Action::takes_steps`; `invalid_argument` on `action.type`),
+  and the objects the action names
   (`not_found`). Each is undone by the other. A rebind is `hotkey.clear` then
-  `hotkey.set` in one batch. Deleting a scene, source, output, encoder profile or
+  `hotkey.set` in one batch. `hotkey.set_labels` (ADR-0133) sets a binding's labels,
+  whole: the binding must exist, then each label, each once (`checked_labels`); an
+  empty list removes them, and the inverse sets the old ones. Clearing or removing a
+  binding takes its labels with it, and its inverse is `hotkey.set` then
+  `hotkey.set_labels`. Deleting a scene, source, output, encoder profile or
   transition preset (a `scene.switch` may name one) removes the bindings that name it, and
   any edit that takes away an item an `item.show`, `item.hide` or `item.toggle` names,
   or a timeline a `timeline.play`, `timeline.stop` or `timeline.seek` names, removes
   those bindings too (`remove_missing_items`,
   [ADR-0101](../../docs/adr/0101-item-show-hide-actions.md),
   [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), so none dangles: the result's `removed_hotkeys` lists them,
-  and the edit's inverse ends with a `hotkey.set` for each, after the object is back.
+  and the edit's inverse ends with a `hotkey.set` for each, with its labels, after the
+  object is back.
   `delete.plan` lists the bindings by applying its plan to a copy.
   `State::visible_in` reads a placement's visibility as `item.set_visible` with that
   `scene_id` would change it, for `item.toggle`.
-  The touched set names the hotkey, and the objects a `hotkey.set` action names as used.
+  The touched set names the hotkey, and the objects a `hotkey.set` action names as used;
+  `hotkey.set_labels` and `timeline.set` use the labels they name.
+- **Controller bindings** (`hotkey.rs`, ADR-0122): `binding.set` and `binding.clear`
+  bind a MIDI `Trigger` (a note, a controller or a program, on one channel or any, from
+  one input or any) to an action and unbind it, with the hotkeys' checks in the same
+  order: the trigger's `Trigger::problem` (`invalid_argument` at `trigger.<field>`),
+  whether it is already bound (`already_exists`) or bound at all (`not_found`, entity
+  `binding`), `Action::bind_problem`, and the objects the action names. Deleting what
+  a binding's action names removes it as it removes a hotkey: the result's
+  `removed_bindings` lists them after `removed_hotkeys`, the inverse ends with a
+  `binding.set` for each after the hotkeys', and `delete.plan` lists them, ordered by
+  trigger. The touched set names the binding and the objects its action names.
 - **No cycles** (`deps.rs`). One function lists every dependency edge: a scene depends
   on the sources its items place, a keyframe scene on its parent and on what its
   overridden effects refer to, a `scene` source on its
@@ -461,22 +501,24 @@ collection (`state.get`, with the folders and labels in their orders, `scene.lis
 `bus.list`)
 with the protocol's result shapes, at the current `rev`, and the kind queries
 (`kind.list`, `kind.describe`, which fails with `invalid_argument` on `kind_id` for an
-unknown kind), and `delete.plan` (`plan.rs`,
+unknown kind), `label.members` (`Graph::label_members`, ADR-0133: everything that
+carries a label, in the orders the protocol gives), and `delete.plan` (`plan.rs`,
 [ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). It returns `None` for a query the graph doesn't hold the answer to (`output.status`, `video.snapshot` and `video.frames` read runtime state), and fails only with
-`not_found` for an `item.list` of a missing scene or a `delete.plan` of a missing
-target. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
+`not_found` for an `item.list` of a missing scene, a `delete.plan` of a missing
+target or a `label.members` of a missing label. `Graph::delete_plan` builds the plan from the same `deps::blockers` the delete
 check uses: a scene's plan also deletes the `scene` sources that show it, the items
 placing any deleted source are removed, settings references to anything deleted are set
 to `null` (one `source.set_settings` per source, one `transition.update` per transition
 preset, and one `filter.set_settings` per filter), the video mixes that show a deleted scene are pointed at the program
 (`video_mix.update`), and the target's own delete comes last. The plan also lists the
-hotkey bindings those deletes remove. A bus's plan clears references and moves the
+hotkey and controller bindings those deletes remove. A bus's plan clears references and moves the
 outputs that carry the bus to the master (`output.set_audio_buses`; its
 `bus.delete` takes its sends); the master's is `invalid_argument`.
 Sources come ordered by ID, scenes in
 display order, items bottom first, outputs, encoder profiles, video mixes and buses
 ordered by ID, and sends by bus and then source. `state.get` carries the canvas, the
-buses, the sends, the hotkey bindings ordered by chord, and the transition presets
+buses, the sends, the hotkey bindings ordered by chord, the controller bindings
+ordered by trigger (omitted while there are none), and the transition presets
 (ordered by ID) with the default, and an audio source's info its `audio`; `kind.list`
 lists the transition kinds beside the source and filter kinds. A geometry item reads its `geometry`, and the deprecated `transform` view the
 protocol computes from it (`ItemGeometry::transform_view`); a legacy item reads its
@@ -490,7 +532,8 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 6), `rev`, the `canvas`, scenes in display order (a group with
+(`SCHEMA_VERSION`, now 14), `rev`, the `canvas`, the `blending` space (ADR-0126,
+`schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
 its own form, a legacy `transform` or a `geometry`, exactly one of them, then its crop
@@ -508,8 +551,9 @@ there are none, `buses` (omitted while the master is the only one and at its def
 each bus's `monitor` omitted for none)
 and `sends`, written whenever there is a send or a source with a channel of its own (so
 an empty list means every master send was removed) and omitted otherwise, the `master`
-with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, omitted
-when there are none, and `transitions` (each preset with its `kind_version`, and the
+with its `filters`, omitted while it has none, the `hotkeys` ordered by chord, each with its
+`labels` (omitted for none), omitted when there are none, the `bindings` (each a `trigger`
+and an `action`) ordered by trigger, omitted when there are none, and `transitions` (each preset with its `kind_version`, and the
 default), omitted while it is the initial `cut` alone (so no `schema_version` bump: an
 older file has none of these). A scene writes `transition_in` and `transition_out`
 when set, and an item its `transition` when not the default, `locked` when locked
@@ -525,9 +569,16 @@ bump either. An override's `effects` (ADR-0088), written with each filter's
 `kind_version` and omitted while the keyframe follows the item, is `schema_version` 3,
 an item's or an override's `motion` (ADR-0099), each omitted while absent, is
 `schema_version` 4, and a scene's `camera_motion` and `camera_follow` (ADR-0113), each
-omitted while absent, are `schema_version` 5; a follow whose item has left the scene
-isn't written, so reloading never refuses it. A scene's `timelines` (ADR-0115), ordered
-by ID and omitted while empty, are `schema_version` 6. Loading creates the folders top level first, then
+omitted while absent, are `schema_version` 5. A scene's `timelines` (ADR-0115), ordered
+by ID and omitted while empty, are `schema_version` 6. Version 7 (ADR-0120) writes no
+`camera_follow`: a follow camera is its item's `follow_pointer` effect. Version 8
+(ADR-0124) gives a `browser` source's page API a checkbox per kind of data, and a collection's
+`bindings` (ADR-0122) are `schema_version` 9. An override's `timing` (ADR-0129), omitted
+while absent, is `schema_version` 10. Version 11 (ADR-0133) adds a hotkey binding's and a
+timeline's `labels`. Version 13 (ADR-0138) adds motion modifiers with `property`
+`effect` and their `effect` target, which drive an effect's setting. A scene's `ptz_shots` (ADR-0146), omitted
+while empty, are `schema_version` 14, and a scene's `keep_warm` (ADR-0149), omitted
+while `false`, is `schema_version` 15. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -539,14 +590,27 @@ the engine's; this crate does no I/O.
   2 adds scene `filters` and item `effects`, which a version 1 file has none of, so it
   changes nothing and refuses a version 1 file that holds either, 2 to 3 adds a
   keyframe override's `effects` the same way, 3 to 4 an item's and an override's
-  `motion`, 4 to 5 a scene's `camera_motion` and `camera_follow`, and 5 to 6 a scene's
-  `timelines`),
+  `motion`, 4 to 5 a scene's `camera_motion` and `camera_follow`, 5 to 6 a scene's
+  `timelines`, and 6 to 7 moves a scene's `camera_follow` onto the item it follows as a
+  `follow_pointer` effect, last in its `effects`, dropping one whose item has left the
+  scene or whose effects are full, and 7 to 8 turns on a `browser` source's
+  `page_api_shared_values` or `page_api_audio` where its `page_api_values` or
+  `page_api_bus` already grant something, so rebuilding it with its kind's defaults
+  takes nothing away, 8 to 9 adds `bindings`, refusing a version 8 file that
+  holds them, 9 to 10 adds an override's `timing`, refusing one in a version 9
+  file, and 10 to 11 refuses a binding's `labels`, as version 10 did, and drops a
+  timeline's, as version 10 ignored them, and 11 to 12 the `blending` space: it refuses a
+  `blending` in a version 11 file, turns its items' `normal_srgb` and `additive_srgb`
+  into `normal` and `additive`, and sets `linear` when any item used another mode, the
+  default `normal` included, so only a file of `_srgb` items, or of none, loads as
+  `srgb`, and 12 to 13 refuses a version 12 modifier that drives an effect setting,
+  and 13 to 14 refuses a scene's `ptz_shots` in a version 13 file),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
 - **A loaded collection passes every edit check.** Rather than trust the file, loading
   rebuilds the state by applying the edits that create it, one at a time, to an empty
-  graph with the caller's kinds: the canvas size, folders and labels, scenes with their
+  graph with the caller's kinds: the canvas size, the base frame rate and the blending space, folders and labels, scenes with their
   roles, folders and metadata (keyframe scenes after every other, then `scene.reorder`s
   to the file's order if that moved one, so a variant may come before its parent), then
   the buses (the master renamed or faded as saved) and their monitors,
@@ -554,7 +618,8 @@ the engine's; this crate does no I/O.
   settings refer to, then its labels and favourite), then every source's filters, then
   items in their placement form with their crop and visibility, opacity, blend,
   transition settings and motion, then the keyframe scenes' overrides as placement edits
-  addressed to them (then `item.set_motion` for their motion and `item.set_effects` for
+  addressed to them (then `item.set_motion` for their motion, `item.set_timing` for
+  their timing and `item.set_effects` for
   their effects, keeping a filter of an unknown
   kind as an item's own effect keeps one), then encoder profiles, then the presets and the default (the
   initial `cut` is updated in place when the file has it, and deleted when it doesn't;
@@ -564,8 +629,9 @@ the engine's; this crate does no I/O.
   and filters, then the master's filters, then each source's audio and the sends (with a
   `send.remove` of a default master send the file doesn't list; a file without `sends`,
   such as one saved before sends existed, keeps every default master send), then each
-  scene's camera motion and follow camera (once every item exists, which a follow
-  names), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline. A
+  scene's camera motion (once every item exists), then each scene's PTZ shots
+  (`scene.set_ptz_shots`), then timelines, then hotkeys (`` hotkey `F1` ``), which may name a timeline, then controller bindings
+(`` binding `MIDI note 36 on channel 10` ``). A
   dangling reference, a cycle, settings that don't fit the kind, an unknown kind or a
   URL with a credential fails as `LoadError::Invalid`, naming the object
   (`` item `i1` ``) and the protocol error (boxed, so `Result`s carrying a
@@ -637,7 +703,8 @@ duplicate's audio and a delete's restore, a bus deleted with its sends and undon
 exactly, bus references (#362: `a_bus_reference_must_name_a_bus`,
 `a_drawn_bus_is_deleted_only_with_its_references_cleared`, and in `persist/tests.rs`
 `a_source_drawing_a_bus_round_trips`), hotkey checks, rebinds and the bindings
-deletes remove (and restore on undo), a `scene.switch` binding that names a preset
+deletes remove (and restore on undo), the same for controller bindings
+(`controller_bindings_follow_the_hotkeys_rules`), a `scene.switch` binding that names a preset
 (`a_switch_naming_a_preset_follows_the_preset`), the transition edits (in
 `transition.rs`: the initial `cut`, kind and settings checks, a source refusing a
 transition kind, patches and kind changes, the default's delete refused and a delete
@@ -696,7 +763,10 @@ existed) loading with those chains empty and the sources' filters intact; a remo
 master send's round trip, a webcam's among them (its audio on, no send back); a profile's round trip; a geometry's flip loading back and a file without one loading unflipped; a virtual camera's round trip;
 transitions' round trip (with the initial `cut` deleted, or kept but changed), the
 old stock Cut loading at duration 0 while a retimed cut keeps its duration, and a
-preset of another kind version refused; hotkeys' round trip, and a file whose binding
+preset of another kind version refused; hotkeys' round trip; the parity collection
+with two controller bindings saving exactly as `persist/fixtures/v9.json` and that
+fixture loading exactly, and a version 8 file holding `bindings` refused by its
+migration; a file whose hotkey binding
 names a missing scene refused; a clone's
 link surviving a round trip after its original is deleted; a source of an unknown kind
 loaded as saved; the migration runner over stand-in

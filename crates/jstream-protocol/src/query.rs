@@ -2,8 +2,12 @@
 
 use crate::activity::ActivityEntry;
 use crate::audio::{BusInfo, SendInfo, SourceAudio};
+use crate::binding::Binding;
 use crate::camera_motion::{CameraFollow, CameraMotionModifier};
-use crate::command::{BlendMode, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind};
+use crate::clap::ClapScanInfo;
+use crate::command::{
+    BlendMode, Blending, Crop, Edit, EffectsSpace, ItemTransform, SceneRole, SourceKind,
+};
 use crate::encoder::{CodecDownloadInfo, EncoderProfileInfo, EncoderSessionInfo};
 use crate::event::OutputState;
 use crate::filter::{FilterChains, FilterInfo};
@@ -21,7 +25,7 @@ use crate::live::GestureInfo;
 use crate::mix::DEFAULT_BASE_FPS;
 use crate::mix::VideoMixInfo;
 use crate::motion::MotionModifier;
-use crate::organise::{FolderInfo, LabelInfo, SceneMeta, SourceMeta};
+use crate::organise::{FolderInfo, LabelInfo, LabelMembers, SceneMeta, SourceMeta};
 use crate::output::OutputInfo;
 use crate::plugin::PluginInfo;
 use crate::profile::ProfileInfo;
@@ -34,6 +38,10 @@ use crate::youtube::{
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+
+fn legacy_blending() -> Blending {
+    Blending::Linear
+}
 
 fn default_base_fps() -> u32 {
     DEFAULT_BASE_FPS
@@ -122,6 +130,13 @@ pub enum Query {
     KindDescribe {
         /// The kind to describe, as `kind.list` reports it.
         kind_id: String,
+        /// A source of the kind whose own additions the descriptor takes (since 0.123,
+        /// ADR-0151 decision 7): a `model`'s `animation` setting names the animations
+        /// its file holds. Fails with `not_found` on `source_id` if there is no such
+        /// source, and `invalid_argument` if it is of another kind. Omitted describes
+        /// the kind alone.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_id: Option<SourceId>,
     },
     /// Lists the collection's outputs, ordered by ID, with what each is and where it
     /// sends. Outputs have no display order of their own.
@@ -199,6 +214,15 @@ pub enum Query {
         /// What to delete.
         target: DeleteTarget,
     },
+    /// Lists everything that carries a label (ADR-0133, since 0.100): its scenes,
+    /// keyframe scenes among them, its sources, its hotkey bindings with their actions,
+    /// and its timelines, so a client or an agent sees a label's action group in one
+    /// call. `not_found` for a label that doesn't exist.
+    #[serde(rename = "label.members")]
+    LabelMembers {
+        /// The label.
+        label_id: LabelId,
+    },
     /// Lists the displays, windows and video capture devices the engine can capture now:
     /// what a `display` or `window` source's `target` setting, or a `webcam` source's
     /// `device` setting (since 0.90), can name. A device comes with the formats it
@@ -210,6 +234,29 @@ pub enum Query {
     /// the result holds what did.
     #[serde(rename = "capture.targets")]
     CaptureTargets,
+    /// Lists the PTZ cameras on this machine's list (ADR-0146 §4), in the order the host
+    /// gave them: each one's address, whether it answered lately, its last pose and its
+    /// last error. Runtime state, so no `rev`. Empty when the machine controls no PTZ
+    /// cameras, which is the default (ADR-0123 §1).
+    #[serde(rename = "ptz.list")]
+    PtzList,
+    /// Lists the JTunnel senders heard on the LAN (0.114, ADR-0123 §3): each sender that
+    /// answered the receiver's mDNS query for `_jtunnel._udp.local` in the last 35 s,
+    /// ordered by name, then address, with whether this machine accepts it. Runtime
+    /// state, so no `rev`. `on` is false, and the list empty, while the receiver is off,
+    /// which is the default (ADR-0123 §1). `jtunnel.senders_changed` says when the list
+    /// changes.
+    #[serde(rename = "jtunnel.senders")]
+    JtunnelSenders,
+    /// A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom
+    /// `scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether
+    /// one is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its
+    /// home, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.
+    #[serde(rename = "scene.camera_aim")]
+    SceneCameraAim {
+        /// The scene whose camera to read: a keyframe scene reads its family's.
+        scene_id: crate::SceneId,
+    },
     /// Lists the fonts installed on the engine's machine (0.68, ADR-0092): each font file
     /// in the OS's font folders that parses, as a family and style to show and the
     /// absolute path an `asset` setting names it by. Runtime state, so no `rev`. The
@@ -255,6 +302,10 @@ pub enum Query {
     /// `unsupported`.
     #[serde(rename = "device.list")]
     DeviceList,
+    /// The approved list and the requests still open (0.108, ADR-0131). Runtime state,
+    /// so no `rev`. Answered by the server that admits clients, like `device.list`.
+    #[serde(rename = "agent.approved")]
+    AgentApproved,
     /// Lists the engine's recent activity (0.51, ADR-0083): what each client's batches,
     /// undos, redos and actions did, newest first. The engine keeps the last 100
     /// ([`MAX_ACTIVITY_ENTRIES`](crate::MAX_ACTIVITY_ENTRIES)), in memory, so a restarted
@@ -290,6 +341,14 @@ pub enum Query {
     /// plugins lists none.
     #[serde(rename = "plugin.list")]
     PluginList,
+    /// Reads the CLAP audio plugin scan (0.106, ADR-0035): whether this engine hosts CLAP
+    /// plugins, the folders it searches (with whether each exists), the effects its last
+    /// scan found and the files it couldn't scan, with why. A client shows it so a person
+    /// can see where to install a plugin and why one is missing. For a person only, like
+    /// `plugin.clap_rescan`: no plugin is granted it and no MCP tool carries it, since it
+    /// names files on the machine. Runtime state, so no `rev`.
+    #[serde(rename = "plugin.clap_scan")]
+    PluginClapScan,
     /// Lists the codec libraries the engine can download on a person's request (0.69,
     /// ADR-0061): on Linux, Cisco's OpenH264, the software H.264 encoder, which Cisco's
     /// patent licence covers only when Cisco's own binary is downloaded to the machine.
@@ -300,6 +359,11 @@ pub enum Query {
     /// whose platform downloads no codec, or that has no codec backend, lists none.
     #[serde(rename = "codec.downloads")]
     CodecDownloads,
+    /// Reads which project (collection file) the engine saves to, and the projects
+    /// opened most recently (0.94, ADR-0121). Not collection state, so no `rev`. Fails
+    /// with `unsupported` when the host named no collection file.
+    #[serde(rename = "collection.info")]
+    CollectionInfo,
     /// Reads where the engine's time went over the last `seconds` (0.73, ADR-0103): per
     /// drawing thread, per unit of drawing work and its owner (a source's upload or
     /// chain, a scene's chain or pass, an item's effects, an output's chain), per
@@ -317,6 +381,25 @@ pub enum Query {
         /// ([`MAX_PROFILE_TOP`](crate::MAX_PROFILE_TOP)), 200.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         top: Option<u32>,
+    },
+    /// Measures how close a stream's decoded pictures are to the frames its encoder was
+    /// given (0.110, ADR-0132 §3, ADR-0145): the engine keeps the next `frames` frames
+    /// the stream's encoder takes, from the next keyframe on, decodes the packets it
+    /// makes of them with the platform's decoder, and answers PSNR and SSIM for each.
+    /// Nothing is copied or decoded unless a probe is waiting. It waits for those frames
+    /// (a still stream still sends them, at its frame rate) and answers within about
+    /// ten seconds. Fails with `not_found` for an output that doesn't exist,
+    /// `invalid_argument` on `frames` outside 1 to 10, and `action_failed` when the
+    /// output isn't running, the platform has no decoder for its codec, or the frames
+    /// didn't arrive in time. Runtime state: the result carries no `rev`.
+    #[serde(rename = "quality.probe")]
+    QualityProbe {
+        /// The stream.
+        stream: crate::quality::ProbeStream,
+        /// The frames to compare, from 1 to 10
+        /// ([`MAX_PROBE_FRAMES`](crate::MAX_PROBE_FRAMES)). Omitted, 3.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        frames: Option<u32>,
     },
 }
 
@@ -380,17 +463,25 @@ impl Query {
             Query::YoutubeStats => "youtube.stats",
             Query::BusList => "bus.list",
             Query::DeletePlan { .. } => "delete.plan",
+            Query::LabelMembers { .. } => "label.members",
             Query::CaptureTargets => "capture.targets",
+            Query::PtzList => "ptz.list",
+            Query::JtunnelSenders => "jtunnel.senders",
+            Query::SceneCameraAim { .. } => "scene.camera_aim",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
             Query::PackRead { .. } => "pack.read",
             Query::ValuesList { .. } => "values.list",
             Query::DeviceList => "device.list",
+            Query::AgentApproved => "agent.approved",
             Query::ActivityList { .. } => "activity.list",
             Query::UiSettingsGet { .. } => "ui_settings.get",
             Query::PluginList => "plugin.list",
+            Query::PluginClapScan => "plugin.clap_scan",
             Query::CodecDownloads => "codec.downloads",
+            Query::CollectionInfo => "collection.info",
             Query::ProfileGet { .. } => "profile.get",
+            Query::QualityProbe { .. } => "quality.probe",
         }
     }
 }
@@ -476,6 +567,10 @@ pub enum QueryResult {
             skip_serializing_if = "is_default_base_fps"
         )]
         base_fps: u32,
+        /// The space every blend mode mixes in (ADR-0126, since 0.101). Missing, from an
+        /// older server, parses as `linear`, the only space it drew.
+        #[serde(default = "legacy_blending")]
+        blending: Blending,
         /// Every source, ordered by ID.
         sources: Vec<SourceInfo>,
         /// Every scene with its items, in display order.
@@ -508,6 +603,11 @@ pub enum QueryResult {
         /// 0.25) parses as empty.
         #[serde(default)]
         hotkeys: Vec<HotkeyBinding>,
+        /// Every controller binding (ADR-0122), ordered by trigger. Kept apart from
+        /// `hotkeys`, which lists key chords only. Omitted when there are none, and
+        /// missing (from a server older than 0.96) parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        bindings: Vec<Binding>,
         /// The transition presets and which one is the default (ADR-0029). Missing
         /// (from a server older than 0.30) parses as the one `cut` preset every
         /// collection starts with.
@@ -582,6 +682,14 @@ pub enum QueryResult {
         /// (ADR-0116, since 0.88), ordered by scene. Omitted when none is.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         keyframes: Vec<PlacedKeyframe>,
+        /// How many scenes besides the program the studio keeps warm, which
+        /// `studio.set_warm` sets (ADR-0117 §7, since 0.115). Omitted by an older server.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        warm_scenes: Option<u32>,
+        /// The limit on the warm scenes' estimated GPU memory in MiB, 0 for none, which
+        /// `studio.set_warm` sets (ADR-0150, since 0.117). Omitted by an older server.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        warm_gpu_mib: Option<u32>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]
@@ -671,6 +779,19 @@ pub enum QueryResult {
         /// are none, and missing (from a server older than 0.25) parses as empty.
         #[serde(default, skip_serializing_if = "Vec::is_empty")]
         hotkeys: Vec<HotkeyBinding>,
+        /// The controller bindings the batch removes the same way, ordered by trigger.
+        /// Omitted when there are none, and missing (from a server older than 0.96)
+        /// parses as empty.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        bindings: Vec<Binding>,
+    },
+    /// The result of `label.members` (since 0.100).
+    #[serde(rename = "label.members")]
+    LabelMembers {
+        /// The revision it was read at.
+        rev: Rev,
+        /// The label and what carries it.
+        members: LabelMembers,
     },
     /// The result of `source.sizes`. Runtime state, so it carries no `rev`.
     #[serde(rename = "source.sizes")]
@@ -683,6 +804,27 @@ pub enum QueryResult {
     CaptureTargets {
         /// The displays, then the windows, in the order the OS lists them.
         targets: Vec<CaptureTargetInfo>,
+    },
+    /// The result of `ptz.list`.
+    #[serde(rename = "ptz.list")]
+    PtzList {
+        /// The cameras, in the order the host listed them.
+        cameras: Vec<crate::ptz::PtzCameraInfo>,
+    },
+    /// The result of `scene.camera_aim`.
+    #[serde(rename = "scene.camera_aim")]
+    SceneCameraAim {
+        /// The aim.
+        #[serde(flatten)]
+        aim: crate::camera_aim::CameraAimInfo,
+    },
+    /// The result of `jtunnel.senders`.
+    #[serde(rename = "jtunnel.senders")]
+    JtunnelSenders {
+        /// Whether the JTunnel receiver runs, and so whether it asks the LAN for senders.
+        on: bool,
+        /// The senders heard, ordered by name, then address.
+        senders: Vec<crate::JtunnelSenderInfo>,
     },
     /// The result of `font.list`.
     #[serde(rename = "font.list")]
@@ -716,6 +858,18 @@ pub enum QueryResult {
         /// The paired devices, ordered by ID.
         devices: Vec<DeviceInfo>,
     },
+    /// The result of `agent.approved` (0.108).
+    #[serde(rename = "agent.approved")]
+    AgentApproved {
+        /// Whether this server asks before a new agent connects: the desktop app with
+        /// MCP on and its setting on. Off, nothing is held, and the list is kept for when
+        /// it is on again.
+        asking: bool,
+        /// The approved list, ordered by client name, then transport.
+        approved: Vec<crate::ApprovedAgent>,
+        /// The requests still open, oldest first.
+        pending: Vec<crate::AgentApproval>,
+    },
     /// The result of `activity.list` (0.51).
     #[serde(rename = "activity.list")]
     ActivityList {
@@ -736,12 +890,29 @@ pub enum QueryResult {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         value: Option<serde_json::Value>,
     },
+    /// The result of `collection.info` (0.94). Not collection state, so it carries no
+    /// `rev`.
+    #[serde(rename = "collection.info")]
+    CollectionInfo {
+        /// The absolute path of the collection file the engine saves to.
+        path: String,
+        /// Up to ten collection files opened, created or saved as, most recent first,
+        /// `path` among them. A file may have moved or gone since.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        recent: Vec<String>,
+    },
     /// The result of `plugin.list` (0.58). Installed plugins are not collection state, so
     /// it carries no `rev`.
     #[serde(rename = "plugin.list")]
     PluginList {
         /// The installed plugins, ordered by ID.
         plugins: Vec<PluginInfo>,
+    },
+    /// The result of `plugin.clap_scan` (0.106). Runtime state, so it carries no `rev`.
+    #[serde(rename = "plugin.clap_scan")]
+    PluginClapScan {
+        /// The scan.
+        scan: ClapScanInfo,
     },
     /// The result of `codec.downloads` (0.69). Runtime state, so it carries no `rev`.
     #[serde(rename = "codec.downloads")]
@@ -752,9 +923,16 @@ pub enum QueryResult {
     /// The result of `profile.get` (0.73). Runtime state, so it carries no `rev`.
     #[serde(rename = "profile.get")]
     ProfileGet {
-        /// Where the time went.
+        /// Where the time went. Boxed: it is far larger than the other results.
         #[serde(flatten)]
-        profile: ProfileInfo,
+        profile: Box<ProfileInfo>,
+    },
+    /// The result of `quality.probe` (0.110). Runtime state, so it carries no `rev`.
+    #[serde(rename = "quality.probe")]
+    QualityProbe {
+        /// The measurement.
+        #[serde(flatten)]
+        probe: crate::quality::QualityProbeInfo,
     },
 }
 
@@ -783,18 +961,26 @@ impl QueryResult {
             QueryResult::YoutubeStats { .. } => "youtube.stats",
             QueryResult::BusList { .. } => "bus.list",
             QueryResult::DeletePlan { .. } => "delete.plan",
+            QueryResult::LabelMembers { .. } => "label.members",
             QueryResult::SourceSizes { .. } => "source.sizes",
             QueryResult::CaptureTargets { .. } => "capture.targets",
+            QueryResult::PtzList { .. } => "ptz.list",
+            QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
+            QueryResult::SceneCameraAim { .. } => "scene.camera_aim",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",
             QueryResult::PackRead { .. } => "pack.read",
             QueryResult::ValuesList { .. } => "values.list",
             QueryResult::DeviceList { .. } => "device.list",
+            QueryResult::AgentApproved { .. } => "agent.approved",
             QueryResult::ActivityList { .. } => "activity.list",
             QueryResult::UiSettingsGet { .. } => "ui_settings.get",
             QueryResult::PluginList { .. } => "plugin.list",
+            QueryResult::PluginClapScan { .. } => "plugin.clap_scan",
             QueryResult::CodecDownloads { .. } => "codec.downloads",
+            QueryResult::CollectionInfo { .. } => "collection.info",
             QueryResult::ProfileGet { .. } => "profile.get",
+            QueryResult::QualityProbe { .. } => "quality.probe",
         }
     }
 }
@@ -857,6 +1043,37 @@ pub struct CaptureTargetInfo {
     /// window, and for a device whose formats couldn't be read.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub formats: Vec<CaptureFormatInfo>,
+    /// For a device, the camera controls it offers, with their ranges and values now
+    /// (since 0.105). Omitted when empty: always for a display or a window, and for a
+    /// device with none or whose controls couldn't be read.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub controls: Vec<CameraControlInfo>,
+}
+
+/// One camera control a video capture device offers, in a `capture.targets` result:
+/// what a `webcam` source's `camera_controls` setting takes for it (since 0.105).
+/// Values are in the platform's own units, from `min` to `max` in steps of `step`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct CameraControlInfo {
+    /// The control's name, the key it takes in the setting: `brightness`, `contrast`,
+    /// `saturation`, `hue`, `sharpness`, `gamma`, `gain`, `white_balance`,
+    /// `backlight_compensation`, `power_line_frequency`, `exposure`, `focus`, `zoom`,
+    /// `pan`, `tilt` or `iris`. A later engine may list others.
+    pub name: String,
+    /// The lowest value.
+    pub min: i32,
+    /// The highest value.
+    pub max: i32,
+    /// The step between values; at least 1.
+    pub step: i32,
+    /// The device's default value.
+    pub default: i32,
+    /// The value now; while `auto` is `true`, as the device last reported it.
+    pub value: i32,
+    /// Whether the device can set it itself, and is now: omitted when it can't, else
+    /// `true` while it does.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto: Option<bool>,
 }
 
 /// One format a video capture device captures in, in a `capture.targets` result: the
@@ -1028,8 +1245,8 @@ pub struct SceneInfo {
     #[serde(default, skip_serializing_if = "FilterChains::is_empty")]
     pub filters: FilterChains,
     /// Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,
-    /// its override of its parent's camera; the keyframe shows the parent's camera where
-    /// it has none. Omitted for none, so missing (also from an older server) parses as a
+    /// its override of its parent's camera, which a keyframe of a 2D scene may have too
+    /// (ADR-0128); the keyframe shows the parent's camera where it has none. Omitted for none, so missing (also from an older server) parses as a
     /// 2D scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCamera>,
@@ -1038,9 +1255,16 @@ pub struct SceneInfo {
     /// Omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub camera_motion: Vec<CameraMotionModifier>,
+    /// Its PTZ shots (ADR-0146 §6): the physical camera framings it sends when it goes
+    /// on program or preview. On a keyframe scene, only its own, which replace its
+    /// parent's for the same cameras. Omitted when empty.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub ptz_shots: Vec<crate::ptz::PtzShot>,
     /// Its follow camera (ADR-0113, since 0.85), which glides after the pointer over a capture. It
     /// belongs to the family, so a keyframe scene reports none and draws its parent's.
-    /// Omitted for none.
+    /// Since 0.91 it is read from its items' effects (ADR-0120): the first enabled
+    /// `follow_pointer` filter in stacking order, as a follow of that item. Omitted for
+    /// none.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera_follow: Option<CameraFollow>,
     /// Its timelines (ADR-0115, since 0.87), ordered by ID: timed cues that
@@ -1074,6 +1298,13 @@ pub struct SceneOptions {
     /// draws none: it is part of the scene that holds it.
     #[serde(skip_serializing_if = "Option::is_none")]
     pub background: Option<String>,
+    /// Whether the studio keeps it warm while it is off program (ADR-0117 §7, since
+    /// 0.116): its sources keep running, so showing it starts nothing. A kept-warm scene
+    /// ranks after the Preview scene and before the scenes shown most recently, within
+    /// the warm budget (`studio.set_warm`). A keyframe scene is shown through its parent,
+    /// so `scene.set_options` refuses it there. Omitted for `false`, the default.
+    #[serde(skip_serializing_if = "is_false")]
+    pub keep_warm: bool,
 }
 
 impl Default for SceneOptions {
@@ -1081,6 +1312,7 @@ impl Default for SceneOptions {
         SceneOptions {
             include_audio: true,
             background: None,
+            keep_warm: false,
         }
     }
 }
@@ -1113,6 +1345,10 @@ impl SceneOptions {
 
 fn is_true(value: &bool) -> bool {
     *value
+}
+
+fn is_false(value: &bool) -> bool {
+    !*value
 }
 
 /// One item, a placement of a source in a scene, as `item.list` and `state.get` report

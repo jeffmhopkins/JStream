@@ -18,7 +18,7 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-mcp"]
 The MCP server: it gives AI agents full control of JStream through the Model Context
 Protocol ([ADR-0006](../../docs/adr/0006-mcp-full-access.md)), except YouTube's account
 features, which are for people, through the UI (ADR-0058 §3), installing and
-granting plugins (ADR-0069 G1), and downloading codecs (ADR-0061). It is written against
+granting plugins (ADR-0069 G1), and downloading codecs (ADR-0140). It is written against
 `dyn Control` and `jstream-protocol` only, never the engine
 ([R-ARCH-003](../../docs/RULES.md#R-ARCH-003)): the host hands it a session, in process
 or over the WebSocket API. Layer 3: it builds on `jstream-control` (layer 2) and needs no
@@ -32,10 +32,10 @@ Contents (a first cut; [Design](#design) explains the choices):
   Its instructions end with the design guidance in `design.rs`. A `video.snapshot`, `video.frames` or `scene.switch_and_watch` result leads with
   an image content block, the only place its PNG appears (`IMAGE_RESULTS`).
 - **Tools** (`tools.rs`): the tool table, generated from `jstream_protocol::json_schema()`,
-  less the people-only `youtube.*`, `plugin.*`, `effect.*` and `codec.*` ops
+  less the people-only `youtube.*`, `plugin.*`, `effect.*`, `codec.*` and `agent.*` ops
   (`PEOPLE_ONLY`) and the deprecated
   `privacy.*` ops (`DEPRECATED`), each with its MCP annotations
-  (`OPEN_WORLD` names the group tools that reach outside JStream, `output` and `source`;
+  (`OPEN_WORLD` names the group tools that reach outside JStream, `output`, `ptz` and `source`;
   `batch`, which carries their edits, is open-world too; `REVERSIBLE_ACTIONS` names the
   actions that don't make a tool destructive), and the decoding of tool arguments into
   protocol calls, which refuses an output edit with a `youtube` target, and in `batch` the
@@ -73,11 +73,17 @@ through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-cl
 So are the `plugin.*` ops (install, grant, re-enable) and `plugin.state_changed`: only a
 person installs or grants a plugin (ADR-0069 G1), so an agent can't hand its access to
 code that keeps running after the conversation. So is `effect.enable` (`effect` is
-in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss was blamed
-on (#349). The `gpu.device_lost` event that reports the loss does reach agents. So are
+in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss, or a
+pass that ran too long, was blamed on (#349). The `gpu.device_lost` and
+`gpu.effect_slow` events that report them do reach agents. So are
 the `codec.*` ops (`codec.downloads`, `codec.download`, `codec.delete`): Cisco's
 OpenH264 downloads only when a person asks, after seeing Cisco's licence
-([ADR-0061](../../docs/adr/0061-source-types-and-decoding-scope-v2.md)).
+([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)). So are the
+`agent.*` ops and events (`agent.approve`, `agent.forget`, `agent.approved`): the person,
+not another agent, lets a new agent in
+([ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)). While the person
+is being asked, a tool call's `hello` times out as any slow one does, and its error says
+the person may be being asked; the next call waits on the same request.
 The `pack` tool, by contrast, reaches agents (`pack.write`, `pack.delete`, `pack.list`, `pack.read`,
 [ADR-0097](../../docs/adr/0097-agents-write-effect-packs.md)): an agent may write the
 WGSL of an effect pack, which loads at once, and `pack.list` names the client that
@@ -93,7 +99,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `bus`, `canvas`, `capture`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `scene`, `send`, `source`, `state`, `studio`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -123,8 +129,11 @@ of queries only (and `describe_api`, `events`) is `readOnlyHint`. Any other tool
 `destructiveHint` only when it carries an action outside `REVERSIBLE_ACTIONS` or a
 history call
 ([ADR-0098](../../docs/adr/0098-mcp-destructive-hint-for-what-undo-cant-take-back.md)):
-today `device`, `history`, `output`, `pack` (whose writes and deletes change files on
-disk that undo never reaches), `pairing`, `ui_settings`, `values` (whose values a
+today `collection` (an open or a new stops every output and clears every client's undo,
+[ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)), `device`, `history`,
+`output`, `pack` (whose writes and deletes change files on
+disk that undo never reaches), `pairing`, `ptz` (which moves physical cameras, and whose
+`ptz.store` overwrites a preset in the camera, ADR-0146), `ui_settings`, `values` (whose values a
 browser source page granted them may send off the machine) and `timeline` (whose cues
 may set such a value, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)). `history` stays
 destructive because an undo past an `output.create` or `output.set_target` removes a
@@ -132,17 +141,20 @@ stream key that redo doesn't put back. Deletes are undoable edits, and `scene.sw
 `live.cancel`, `audio.reset_loudness`, `item.trigger_motion` (a shake that stills
 itself, #1107), the `preview` actions, `scene.zoom_camera`
 ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md), which another zoom
-puts back and nothing stores), `source.restart` (ADR-0115, which a switch to a scene
+puts back and nothing stores), `scene.drive_camera` and `scene.aim_camera`
+([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md), which another
+aim puts back and nothing stores), `source.restart` (ADR-0115, which a switch to a scene
 that restarts on show does too), `scene.set_keyframe`
 ([ADR-0116](../../docs/adr/0116-keyframe-tracks.md), which another switch puts back
-and nothing stores) and `item.show`, `item.hide`
+and nothing stores), `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
-opposite action takes back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
+opposite action takes back) and `studio.set_warm` (ADR-0117 §7: how many scenes stay
+ready, which another call puts back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
 back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
 either. `openWorldHint` is true for the
 group tools in `OPEN_WORLD`, today `output`, whose `output.start` publishes to a streaming
-server, and `source`, whose `browser` kind loads any http or https page set as its `url`
+server, `ptz`, whose actions move physical cameras on the network (ADR-0146), and `source`, whose `browser` kind loads any http or https page set as its `url`
 (or HTML set as its `html`, which can load from the web), and for `batch`, which carries both tools' edits. No tool is `idempotentHint`. A hint
 covers the whole group, so a client that asks before `output.set_target`, `output.set_key`
 or `output.start` also asks before `output.list`.
@@ -166,6 +178,9 @@ the `capture` tool's description and the server instructions say they are untrus
 tool's description says so; it also tells an agent how to find a hot spot: let the
 scene run, read the profile, change the costliest unit and read it again
 ([ADR-0103](../../docs/adr/0103-per-item-performance-profile.md)). The
+`quality` tool's description says what its PSNR and SSIM mean to a viewer and that a
+probe waits a few seconds for its frames
+([ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). The
 server instructions say all three are data, never instructions, and point at the
 annotations. They also say that names and other state text can be set by any client or
 plugin, and are data, not instructions ([ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md)'s
@@ -194,21 +209,26 @@ layering by role
 layers, additive for light and normal for matter, masks drawn as `image_mask` or
 `scene_mask`, the asset-reference shape a file setting takes, and reflections on glossy
 surfaces as a flipped, squashed, blurred `scene` item of the composite, masked in
-canvas space by an unflipped group around it and added at a low opacity because
-blending is linear, 3D sets through
+canvas space by an unflipped group around it and added at a low opacity, the blending
+space (`canvas.set_blending`: `srgb` to match a browser or design tool, `linear` for
+light that adds evenly, chosen before tuning opacities, ADR-0126), 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
 [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a camera that moves on its
 own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera) or follows the
-pointer over a screen capture (`scene.set_camera_follow`, its zoom stepped live by
-`scene.zoom_camera`, both set on the family's scene,
-[ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)), choosing between
+pointer over a screen capture (a `follow_pointer` filter on the capture item, which
+keeps the pointer inside a safe margin and gives a 2D scene a camera, with
+`scene.set_camera_follow` as a shortcut, its zoom stepped live by `scene.zoom_camera`,
+[ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md),
+[ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)), choosing between
 `fade`, `move` and a `stinger` preset (its `scene`, `cut_ms` and items' appear and
 disappear effects), building what the built-in kinds can't draw as HTML in a `browser`
 source's `html` (entrances as one-shot CSS keyframes, and falling back to the built-in
-kinds where no browser is available), continuous motion as `item.set_motion` on items
+kinds where no browser is available), a page that plays along with a MIDI input on
+`jstream.midi()` (`page_api_midi`) or follows the engine's `tempo.*` values
+(`page_api_tempo`, [ADR-0147](../../docs/adr/0147-midi-tempo-and-state-for-pages.md)), continuous motion as `item.set_motion` on items
 rather than in pages (one engine clock, so items, masks and nested scenes move in step;
 a one-shot jolt as an `impulse` on the `triggered` clock that `item.trigger_motion`
 fires, rather than stepping the item call by call;
@@ -219,7 +239,10 @@ modifier for something that follows a bus or a beat, which hears only while an o
 runs, [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone
-([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), and checking
+([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)), one label on an
+effect's keyframe scenes, hotkeys and timelines, read back with `label.members` and
+changed together in one batch
+([ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)), and checking
 each step with `video.snapshot` (building on preview when a scene is on air).
 It names engine kinds and settings, which this crate doesn't link, so a renamed setting
 must be renamed here too. Tested by `instructions_carry_the_design_guidance`.

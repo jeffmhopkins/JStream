@@ -146,6 +146,13 @@ pub trait Source: Send {
         None
     }
 
+    /// Adds what this source knows of its own settings to its kind's `descriptor`, for
+    /// `kind.describe` with a `source_id` (ADR-0151 decision 7): a `model`'s
+    /// `animation` names the animations its file holds. The default adds nothing.
+    fn describe(&self, descriptor: &mut KindDescriptor) {
+        let _ = descriptor;
+    }
+
     /// The 3D model this source shows (ADR-0107), for the `model` kind: when it is
     /// `Some`, the engine draws the model where an item places the source, and
     /// [`frame`](Self::frame) is only a transparent stand-in of the model's size. `None`
@@ -204,6 +211,14 @@ pub struct ShownModel {
     pub model: Arc<jstream_media::model::Model>,
     /// How it is lit.
     pub lighting: jstream_media::model::Lighting,
+    /// Whether it casts its scene's shadows (ADR-0151 decision 3).
+    pub casts_shadows: bool,
+    /// Whether a `scene`-lit model is shadowed by its scene's lights that cast them.
+    pub receives_shadows: bool,
+    /// Its rig's palette now (ADR-0151 decision 7), one matrix a slot of
+    /// [`Model::rig`](jstream_media::model::Model::rig): its rest pose until a clip
+    /// plays. `None` for a model without a rig.
+    pub pose: Option<Arc<[jstream_media::model::rig::Mat4]>>,
 }
 
 /// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.
@@ -284,7 +299,7 @@ pub struct Context {
     /// The audio the `waveform` and `spectrum` sources draw: the program mix's scope
     /// and each bus's, looked up by their `audio` setting. `None` draws silence.
     pub audio: Option<Arc<AudioScopes>>,
-    /// The platform's media files (ADR-0061): what the `media` kind demuxes and decodes
+    /// The platform's media files (ADR-0140): what the `media` kind demuxes and decodes
     /// with. `None` until the host injects the platform's backends; `media` sources
     /// then fail with [`SourceError::NoBackend`].
     pub media: Option<Arc<dyn MediaDecoders>>,
@@ -294,6 +309,9 @@ pub struct Context {
     pub browser: Option<Arc<dyn BrowserBackend>>,
     /// The featured chat message `chat_message` sources draw. Clones share it.
     pub chat: crate::ChatFeature,
+    /// The MIDI the `midi_*` kinds draw (ADR-0137): every input's state, by name.
+    /// `None` draws no notes.
+    pub midi: Option<Arc<crate::MidiInputs>>,
     /// The program's base frame rate (`canvas.set_frame_rate`), which a `browser` page
     /// with an `fps` of 0 paints at (#1405). 0 until the host sets it, read as
     /// [`jstream_protocol::DEFAULT_BASE_FPS`].
@@ -320,6 +338,7 @@ impl std::fmt::Debug for Context {
             .field("media", &self.media.as_ref().map(|_| "MediaDecoders"))
             .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
             .field("chat", &self.chat)
+            .field("midi", &self.midi)
             .field("frame_rate", &self.frame_rate)
             .finish()
     }

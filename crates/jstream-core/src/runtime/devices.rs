@@ -43,8 +43,9 @@ use std::collections::BTreeMap;
 use std::sync::{Arc, Mutex, TryLockError, Weak};
 
 use jstream_platform::{
-    CaptureDecoder, CaptureStats, CaptureStream, DeviceId, GpuContext, PlatformError,
-    VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoSurface,
+    CameraControlId, CameraControlInfo, CameraControlValue, CaptureDecoder, CaptureStats,
+    CaptureStream, DeviceId, GpuContext, PlatformError, VideoDeviceFormat, VideoDeviceInfo,
+    VideoDevices, VideoSurface,
 };
 
 use crate::lock;
@@ -80,6 +81,23 @@ impl VideoDevices for SharedVideoDevices {
 
     fn formats(&self, device: &DeviceId) -> Result<Vec<VideoDeviceFormat>, PlatformError> {
         self.inner.formats(device)
+    }
+
+    /// The backend's: camera controls belong to the device, on whichever path it is
+    /// open (#1196).
+    fn controls(&self, device: &DeviceId) -> Result<Vec<CameraControlInfo>, PlatformError> {
+        self.inner.controls(device)
+    }
+
+    /// The backend's, which applies to a running stream without reopening it, so every
+    /// reader of a shared device sees it.
+    fn set_control(
+        &self,
+        device: &DeviceId,
+        control: CameraControlId,
+        value: CameraControlValue,
+    ) -> Result<(), PlatformError> {
+        self.inner.set_control(device, control, value)
     }
 
     /// Another reader of `device` when it is open and not lost, after switching it to

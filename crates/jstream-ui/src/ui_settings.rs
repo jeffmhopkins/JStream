@@ -13,6 +13,16 @@ use serde_json::Value;
 /// The key the dock is kept under.
 pub const DOCK_KEY: &str = "workspace.dock";
 
+/// The key the desktop app reads to hear hotkeys while another application has the
+/// focus (ADR-0112 §6). The desktop app's `hotkeys.rs` names the same key.
+pub const GLOBAL_HOTKEYS_KEY: &str = "hotkeys.global";
+
+/// Whether hotkeys are heard while another application has the focus: on unless the
+/// server keeps `false`.
+pub fn global_hotkeys_on(kept: &Kept) -> bool {
+    !matches!(kept, Kept::Value(Value::Bool(false)))
+}
+
 /// What the server holds under a key.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Kept {
@@ -105,7 +115,7 @@ fn unsupported(error: &ControlError) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{DOCK_KEY, FirstStep, Kept, Theirs, first_step, get, set};
+    use super::{DOCK_KEY, FirstStep, Kept, Theirs, first_step, get, global_hotkeys_on, set};
     use jstream_control::{BoxFuture, Control, ControlError, EventStream, MockEngine};
     use jstream_protocol::{
         Action, Call, CallResult, Hello, PROTOCOL_VERSION, Query, QueryResult, RequestId, Response,
@@ -250,5 +260,13 @@ mod tests {
             first_step(Theirs::Unreadable, &a, Some(&b)),
             FirstStep::Send
         );
+    }
+
+    #[test]
+    fn global_hotkeys_are_on_unless_kept_off() {
+        assert!(global_hotkeys_on(&Kept::Nothing));
+        assert!(global_hotkeys_on(&Kept::Unserved));
+        assert!(global_hotkeys_on(&Kept::Value(serde_json::json!(true))));
+        assert!(!global_hotkeys_on(&Kept::Value(serde_json::json!(false))));
     }
 }

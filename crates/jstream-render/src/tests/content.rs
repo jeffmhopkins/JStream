@@ -209,7 +209,15 @@ fn filtered(opened: &mut Opened, filter: &mut VideoFilter, input: &Image) -> Ima
         .expect("layer");
     opened
         .compositor
-        .apply_filter_into(filter, input, &output, FilterClock { seconds: 0.0 })
+        .apply_filter_into(
+            filter,
+            input,
+            &output,
+            FilterClock {
+                seconds: 0.0,
+                beat: 0.0,
+            },
+        )
         .expect("apply the filter");
     output
 }
@@ -491,7 +499,15 @@ fn a_bounded_filter_drawn_again_keeps_nothing_of_the_last_frame() {
         moved(&mut opened.compositor, &input, 60.0, 50.0);
         opened
             .compositor
-            .apply_filter_into(&mut reused, &input, &output, FilterClock { seconds: 0.0 })
+            .apply_filter_into(
+                &mut reused,
+                &input,
+                &output,
+                FilterClock {
+                    seconds: 0.0,
+                    beat: 0.0,
+                },
+            )
             .expect("apply the filter again");
         let fresh = filtered(&mut opened, &mut filter(kind, settings), &input);
         let (again, once) = (whole(&mut opened, &output), whole(&mut opened, &fresh));

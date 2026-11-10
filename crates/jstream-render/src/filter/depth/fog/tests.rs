@@ -62,7 +62,14 @@ fn white_fog(overrides: Value) -> crate::VideoFilter {
 fn apply(opened: &mut Opened, fog: &mut crate::VideoFilter, input: &Image) -> Snapshot {
     let output = opened
         .compositor
-        .apply_filter(fog, input, FilterClock { seconds: 0.0 })
+        .apply_filter(
+            fog,
+            input,
+            FilterClock {
+                seconds: 0.0,
+                beat: 0.0,
+            },
+        )
         .expect("apply_filter");
     read(opened, &output)
 }
@@ -93,10 +100,7 @@ fn known_depth(opened: &Opened) -> ViewDepth {
     let texels = [0.5, 0.25, 0.0, 1.0].map(|r| [r, 0.0, 0.0, if r > 0.0 { 1.0 } else { 0.0 }]);
     let image = image::upload_unit_f16(&opened.compositor.maker(), 4, 1, &texels)
         .expect("the depth uploads");
-    ViewDepth {
-        image: Arc::new(image),
-        focal_px: 1000.0,
-    }
+    ViewDepth::new(Arc::new(image), 1000.0)
 }
 
 /// ADR-0143 decision 6: linear fog from 1000 to 3000 is half at 2000 and full at 4000;
@@ -241,10 +245,7 @@ fn fogged(opened: &mut Opened, items: &[Item<'_>], models: &[ModelDraw<'_>]) -> 
     let mut fog = white_fog(json!({
         "mode": "linear", "start_px": f, "end_px": 3.0 * f, "background": false
     }));
-    fog.set_depth(Some(ViewDepth {
-        image: Arc::new(depth),
-        focal_px: f,
-    }));
+    fog.set_depth(Some(ViewDepth::new(Arc::new(depth), f)));
     apply(opened, &mut fog, &black)
 }
 
@@ -349,6 +350,9 @@ fn golden_view_depth_takes_a_models_own_depth() {
         camera: Some(camera()),
         lighting: Lighting::Unlit,
         lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
     };
     let layer = opened.compositor.layer(W, H).expect("a layer");
     let image = solid(&opened.compositor, 4, 4, WHITE);

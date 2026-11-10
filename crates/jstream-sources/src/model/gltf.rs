@@ -5,12 +5,19 @@
 //! images are `data:` URIs or files beside it in the same asset root, and builds a static
 //! [`Model`] of the default scene: every mesh instance with its node's world transform
 //! baked in, in the scene's axes (glTF's y up becomes y down, and each triangle's winding
-//! is swapped to match). Skins, morph targets, animations, cameras and lights are ignored
-//! (each kind logged once); a required extension the loader lacks is an error naming it.
+//! is swapped to match). A file with skins or animations is rigged instead (ADR-0151
+//! decision 7): its meshes stay in their nodes' or skins' own space, placed by a
+//! [`Rig`]'s palette, with its animations as the rig's clips. Morph targets, cameras and
+//! lights are ignored (each kind logged once); a required extension the loader lacks is
+//! an error naming it.
 
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
+use std::sync::Arc;
 
+use jstream_media::model::rig::{
+    self, Channel, Clip, Interpolation, Path, Rest, Rig, RigNode, Slot,
+};
 use jstream_media::model::{
     AlphaMode, MAX_MODEL_BYTES, MAX_TEXTURE_SIDE, MAX_TEXTURES, MAX_TRIANGLES, Material, Model,
     ModelTexture, ModelVertex, Primitive, TextureColor, TextureRef, VERTEX_BYTES, compute_tangents,
@@ -78,9 +85,9 @@ struct Document {
     #[serde(default)]
     images: Vec<Image>,
     #[serde(default)]
-    skins: Vec<serde_json::Value>,
+    skins: Vec<SkinDef>,
     #[serde(default)]
-    animations: Vec<serde_json::Value>,
+    animations: Vec<AnimationDef>,
     #[serde(default)]
     cameras: Vec<serde_json::Value>,
 }
@@ -107,6 +114,48 @@ struct Node {
     scale: Option<[f64; 3]>,
     #[serde(default)]
     weights: Option<Vec<f64>>,
+    #[serde(default)]
+    skin: Option<usize>,
+}
+
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct SkinDef {
+    #[serde(default)]
+    joints: Vec<usize>,
+    #[serde(default)]
+    inverse_bind_matrices: Option<usize>,
+}
+
+#[derive(Deserialize, Default)]
+struct AnimationDef {
+    #[serde(default)]
+    name: Option<String>,
+    #[serde(default)]
+    channels: Vec<ChannelDef>,
+    #[serde(default)]
+    samplers: Vec<SamplerDef>,
+}
+
+#[derive(Deserialize, Default)]
+struct ChannelDef {
+    sampler: usize,
+    target: TargetDef,
+}
+
+#[derive(Deserialize, Default)]
+struct TargetDef {
+    #[serde(default)]
+    node: Option<usize>,
+    path: String,
+}
+
+#[derive(Deserialize, Default)]
+struct SamplerDef {
+    input: usize,
+    output: usize,
+    #[serde(default)]
+    interpolation: Option<String>,
 }
 
 #[derive(Deserialize, Default)]
@@ -315,12 +364,6 @@ pub(crate) fn load(bytes: &[u8], resources: &mut dyn Resources) -> Result<(Model
         )));
     }
     let mut ignored = Ignored::default();
-    if !doc.skins.is_empty() {
-        ignored.0.insert("skins");
-    }
-    if !doc.animations.is_empty() {
-        ignored.0.insert("animations");
-    }
     if !doc.cameras.is_empty() {
         ignored.0.insert("cameras");
     }
@@ -332,6 +375,20 @@ pub(crate) fn load(bytes: &[u8], resources: &mut dyn Resources) -> Result<(Model
         ignored.0.insert("extensions");
     }
     let buffers = load_buffers(&doc, bin, resources)?;
+    let roots = roots(&doc)?;
+    // A file with skins or animations is rigged (ADR-0151 decision 7), when its scene
+    // is a tree small enough for a rig.
+    let rig = if doc.skins.is_empty() && doc.animations.is_empty() {
+        None
+    } else {
+        let tree = tree(&doc, &roots);
+        if tree.is_none() {
+            ignored
+                .0
+                .insert("skins and animations of a scene too large or not a tree");
+        }
+        tree
+    };
     let mut builder = Builder {
         doc: &doc,
         buffers: &buffers,
@@ -345,38 +402,110 @@ pub(crate) fn load(bytes: &[u8], resources: &mut dyn Resources) -> Result<(Model
         triangles: 0,
         bytes: 0,
         visits: 0,
-    };
-    let roots: Vec<usize> = match doc
-        .scene
-        .or(if doc.scenes.is_empty() { None } else { Some(0) })
-    {
-        Some(scene) => doc
-            .scenes
-            .get(scene)
-            .ok_or_else(|| LoadError::new(format!("the default scene {scene} doesn't exist")))?
-            .nodes
-            .clone(),
-        // No scene: every node no other node names as a child.
-        None => {
-            let children: BTreeSet<usize> =
-                doc.nodes.iter().flat_map(|n| n.children.clone()).collect();
-            (0..doc.nodes.len())
-                .filter(|i| !children.contains(i))
-                .collect()
-        }
+        rig,
     };
     for root in roots {
         builder.node(root, IDENTITY, 0)?;
     }
+    let rig = match builder.rig.take() {
+        Some(tree) => Some(Arc::new(builder.finish_rig(tree)?)),
+        None => None,
+    };
     let Builder {
         textures,
         material_list,
         primitives,
         ..
     } = builder;
-    let model = Model::new(primitives, material_list, textures)
+    let model = Model::rigged(primitives, material_list, textures, rig)
         .map_err(|err| LoadError::new(err.to_string()))?;
     Ok((model, ignored))
+}
+
+/// The default scene's root nodes.
+fn roots(doc: &Document) -> Result<Vec<usize>> {
+    Ok(
+        match doc
+            .scene
+            .or(if doc.scenes.is_empty() { None } else { Some(0) })
+        {
+            Some(scene) => doc
+                .scenes
+                .get(scene)
+                .ok_or_else(|| LoadError::new(format!("the default scene {scene} doesn't exist")))?
+                .nodes
+                .clone(),
+            // No scene: every node no other node names as a child.
+            None => {
+                let children: BTreeSet<usize> =
+                    doc.nodes.iter().flat_map(|n| n.children.clone()).collect();
+                (0..doc.nodes.len())
+                    .filter(|i| !children.contains(i))
+                    .collect()
+            }
+        },
+    )
+}
+
+/// A rig being built: the scene's nodes, parents first, and the palette slots handed
+/// out so far.
+struct Tree {
+    nodes: Vec<RigNode>,
+    /// Each glTF node's place in `nodes`, for those in the scene.
+    rig_of: Vec<Option<usize>>,
+    slots: Vec<Slot>,
+    /// The slot of each mesh node that isn't skinned, by its glTF index.
+    node_slot: BTreeMap<usize, u16>,
+    /// The first slot of each skin's joints, by the skin's index.
+    skin_base: BTreeMap<usize, u16>,
+}
+
+/// The scene's nodes as a rig's tree, parents first: `None` when a node is reached
+/// twice (the scene isn't a tree), it holds a node that doesn't exist, or it has more
+/// nodes than a rig may.
+fn tree(doc: &Document, roots: &[usize]) -> Option<Tree> {
+    let mut nodes = Vec::new();
+    let mut rig_of = vec![None; doc.nodes.len()];
+    let mut stack: Vec<(usize, Option<usize>, usize)> =
+        roots.iter().rev().map(|&r| (r, None, 0)).collect();
+    while let Some((index, parent, depth)) = stack.pop() {
+        let node = doc.nodes.get(index)?;
+        if rig_of[index].is_some() || depth > MAX_DEPTH || nodes.len() >= rig::MAX_NODES {
+            return None;
+        }
+        let here = nodes.len();
+        rig_of[index] = Some(here);
+        let rest = match node.matrix {
+            Some(m) => Rest::Matrix(m),
+            None => Rest::Trs {
+                translation: node.translation.unwrap_or([0.0; 3]),
+                rotation: node.rotation.unwrap_or([0.0, 0.0, 0.0, 1.0]),
+                scale: node.scale.unwrap_or([1.0; 3]),
+            },
+        };
+        nodes.push(RigNode { parent, rest });
+        for &child in node.children.iter().rev() {
+            stack.push((child, Some(here), depth + 1));
+        }
+    }
+    Some(Tree {
+        nodes,
+        rig_of,
+        slots: Vec::new(),
+        node_slot: BTreeMap::new(),
+        skin_base: BTreeMap::new(),
+    })
+}
+
+/// Where a mesh's vertices are kept.
+#[derive(Clone, Copy)]
+enum Placed {
+    /// In the model's space, its node's world transform baked in.
+    Baked,
+    /// In its node's own space, placed by the node's palette slot.
+    Rigid(u16),
+    /// In its skin's bind space, placed by the joints' slots from this one on.
+    Skinned { base: u16, joints: usize },
 }
 
 /// Reads every buffer once: two entries that name the same file share its bytes, and all
@@ -532,6 +661,8 @@ fn multiply(a: &Mat4, b: &Mat4) -> Mat4 {
     })
 }
 
+const UNIT: [f64; 9] = [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0];
+
 fn local(node: &Node) -> Mat4 {
     if let Some(m) = node.matrix {
         return m;
@@ -641,6 +772,8 @@ struct Builder<'a> {
     /// Node instances visited: a hierarchy that names the same children many times fans
     /// out, and every instance of every mesh costs time even when it adds nothing.
     visits: usize,
+    /// The rig, for a file with skins or animations.
+    rig: Option<Tree>,
 }
 
 /// The most node and primitive instances a scene may expand to.
@@ -671,7 +804,8 @@ impl Builder<'_> {
         }
         let world = multiply(&parent, &local(node));
         if let Some(mesh) = node.mesh {
-            self.mesh(mesh, &world)?;
+            let placed = self.placed(index, node.skin)?;
+            self.mesh(mesh, &world, placed)?;
         }
         for &child in &node.children {
             self.node(child, world, depth + 1)?;
@@ -691,7 +825,153 @@ impl Builder<'_> {
         Ok(())
     }
 
-    fn mesh(&mut self, index: usize, world: &Mat4) -> Result<()> {
+    /// Where the mesh of node `index`, maybe skinned by `skin`, keeps its vertices,
+    /// handing out its palette slots the first time.
+    fn placed(&mut self, index: usize, skin: Option<usize>) -> Result<Placed> {
+        let Some(tree) = self.rig.as_mut() else {
+            if skin.is_some() {
+                self.ignored.0.insert("skins");
+            }
+            return Ok(Placed::Baked);
+        };
+        let too_many = || {
+            LoadError::new(format!(
+                "the model's rig needs more than {} palette slots",
+                rig::MAX_SLOTS
+            ))
+        };
+        if let Some(skin) = skin {
+            let def = self
+                .doc
+                .skins
+                .get(skin)
+                .ok_or_else(|| LoadError::new(format!("skin {skin} doesn't exist")))?;
+            if def.joints.len() > rig::MAX_JOINTS {
+                return Err(LoadError::new(format!(
+                    "skin {skin} has {} joints, more than the {} a skin may have",
+                    def.joints.len(),
+                    rig::MAX_JOINTS
+                )));
+            }
+            if let Some(&base) = tree.skin_base.get(&skin) {
+                return Ok(Placed::Skinned {
+                    base,
+                    joints: def.joints.len(),
+                });
+            }
+            let inverse = match def.inverse_bind_matrices {
+                Some(accessor) => {
+                    let values = self.read(accessor, 16, false)?;
+                    if values.len() < def.joints.len() * 16 || values.iter().any(|v| !v.is_finite())
+                    {
+                        return Err(LoadError::new(format!(
+                            "skin {skin}'s inverse bind matrices don't match its joints"
+                        )));
+                    }
+                    values
+                }
+                None => IDENTITY.repeat(def.joints.len()),
+            };
+            let tree = self.rig.as_mut().expect("a rig");
+            let base = u16::try_from(tree.slots.len()).map_err(|_| too_many())?;
+            for (j, &joint) in def.joints.iter().enumerate() {
+                let node = tree.rig_of.get(joint).copied().flatten().ok_or_else(|| {
+                    LoadError::new(format!(
+                        "skin {skin} names node {joint}, which isn't in the scene"
+                    ))
+                })?;
+                tree.slots.push(Slot {
+                    node,
+                    inverse_bind: std::array::from_fn(|i| inverse[j * 16 + i]),
+                });
+            }
+            if tree.slots.len() > rig::MAX_SLOTS {
+                return Err(too_many());
+            }
+            tree.skin_base.insert(skin, base);
+            return Ok(Placed::Skinned {
+                base,
+                joints: def.joints.len(),
+            });
+        }
+        if let Some(&slot) = tree.node_slot.get(&index) {
+            return Ok(Placed::Rigid(slot));
+        }
+        let node = tree.rig_of[index].expect("a node in the scene's tree");
+        let slot = u16::try_from(tree.slots.len()).map_err(|_| too_many())?;
+        if usize::from(slot) >= rig::MAX_SLOTS {
+            return Err(too_many());
+        }
+        tree.slots.push(Slot {
+            node,
+            inverse_bind: IDENTITY,
+        });
+        tree.node_slot.insert(index, slot);
+        Ok(Placed::Rigid(slot))
+    }
+
+    /// The rig, with the file's animations as its clips.
+    fn finish_rig(&mut self, tree: Tree) -> Result<Rig> {
+        let mut clips = Vec::new();
+        for (a, animation) in self.doc.animations.iter().enumerate() {
+            let mut channels = Vec::new();
+            for c in &animation.channels {
+                let path = match c.target.path.as_str() {
+                    "translation" => Path::Translation,
+                    "rotation" => Path::Rotation,
+                    "scale" => Path::Scale,
+                    _ => {
+                        self.ignored.0.insert("morph targets");
+                        continue;
+                    }
+                };
+                // A channel on a node outside the scene moves nothing drawn.
+                let Some(node) = c
+                    .target
+                    .node
+                    .and_then(|n| tree.rig_of.get(n).copied().flatten())
+                else {
+                    continue;
+                };
+                let sampler = animation.samplers.get(c.sampler).ok_or_else(|| {
+                    LoadError::new(format!(
+                        "animation {a} names sampler {} it doesn't have",
+                        c.sampler
+                    ))
+                })?;
+                let interpolation = match sampler.interpolation.as_deref() {
+                    None | Some("LINEAR") => Interpolation::Linear,
+                    Some("STEP") => Interpolation::Step,
+                    Some("CUBICSPLINE") => Interpolation::CubicSpline,
+                    Some(other) => {
+                        return Err(LoadError::new(format!(
+                            "animation {a} has the interpolation {other}"
+                        )));
+                    }
+                };
+                let width = if path == Path::Rotation { 4 } else { 3 };
+                channels.push(Channel {
+                    node,
+                    path,
+                    interpolation,
+                    times: self.floats(sampler.input, 1)?,
+                    values: self.floats(sampler.output, width)?,
+                });
+            }
+            clips.push(Clip {
+                name: animation
+                    .name
+                    .clone()
+                    .filter(|n| !n.is_empty())
+                    .unwrap_or_else(|| format!("animation {a}")),
+                channels,
+                duration: 0.0,
+            });
+        }
+        Rig::new(tree.nodes, tree.slots, clips).map_err(|err| LoadError::new(err.to_string()))
+    }
+
+    fn mesh(&mut self, index: usize, world: &Mat4, placed: Placed) -> Result<()> {
         let mesh = self
             .doc
             .meshes
@@ -699,8 +979,9 @@ impl Builder<'_> {
             .ok_or_else(|| LoadError::new(format!("mesh {index} doesn't exist")))?;
         let linear = linear(world);
         let normals = normal_matrix(&linear);
-        // A mirroring transform turns triangles inside out; swap them back.
-        let mirrored = determinant(&linear) < 0.0;
+        // A mirroring transform turns triangles inside out; swap them back. A skin's
+        // joints place its mesh, not its node.
+        let mirrored = !matches!(placed, Placed::Skinned { .. }) && determinant(&linear) < 0.0;
         for p in &mesh.primitives {
             self.visit()?;
             if p.targets.as_ref().is_some_and(|t| !t.is_empty()) {
@@ -756,9 +1037,31 @@ impl Builder<'_> {
                 Some(&a) => Some(self.colors(a)?),
                 None => None,
             };
-            if p.attributes.contains_key("JOINTS_0") {
-                self.ignored.0.insert("skins");
-            }
+            let skin = match placed {
+                Placed::Skinned { base, joints } => {
+                    let (Some(&j), Some(&w)) =
+                        (p.attributes.get("JOINTS_0"), p.attributes.get("WEIGHTS_0"))
+                    else {
+                        return Err(LoadError::new(format!(
+                            "a skinned primitive of mesh {index} has no JOINTS_0 or WEIGHTS_0"
+                        )));
+                    };
+                    let names = self.read(j, 4, false)?;
+                    let weights = self.floats(w, 4)?;
+                    if names.len() != count * 4 || weights.len() != count * 4 {
+                        return Err(LoadError::new(format!(
+                            "a primitive of mesh {index} has a JOINTS_0 or WEIGHTS_0 of another length than its POSITION"
+                        )));
+                    }
+                    if let Some(bad) = names.iter().find(|&&n| n < 0.0 || n as usize >= joints) {
+                        return Err(LoadError::new(format!(
+                            "a primitive of mesh {index} names joint {bad} of its skin's {joints}"
+                        )));
+                    }
+                    Some((base, names, weights))
+                }
+                _ => None,
+            };
             // Every attribute has one element per vertex.
             for (name, data, n) in [
                 ("NORMAL", &normal_data, 3),
@@ -799,10 +1102,12 @@ impl Builder<'_> {
                     fn at(data: &[f32], i: usize, n: usize) -> &[f32] {
                         &data[i * n..i * n + n]
                     }
-                    let pos = point(
-                        world,
-                        [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]],
-                    );
+                    let raw = [positions[i * 3], positions[i * 3 + 1], positions[i * 3 + 2]];
+                    // A rigged mesh keeps its own space: its palette slots place it.
+                    let (pos, normals, linear, mirrored) = match placed {
+                        Placed::Baked => (point(world, raw), normals, linear, mirrored),
+                        _ => (raw.map(f64::from), UNIT, UNIT, false),
+                    };
                     let normal = normal_data
                         .as_ref()
                         .map(|d| {
@@ -820,6 +1125,21 @@ impl Builder<'_> {
                         let w = if mirrored { -t[3] } else { t[3] };
                         [flipped[0], flipped[1], flipped[2], w]
                     });
+                    let (joints, weights) = match (&placed, &skin) {
+                        (Placed::Rigid(slot), _) => ([*slot, 0, 0, 0], [1.0, 0.0, 0.0, 0.0]),
+                        (_, Some((base, names, weights))) => {
+                            let w = at(weights, i, 4);
+                            let sum: f32 = w.iter().sum();
+                            let joints = std::array::from_fn(|k| base + names[i * 4 + k] as u16);
+                            if sum > 0.0 {
+                                (joints, std::array::from_fn(|k| w[k] / sum))
+                            } else {
+                                // No weight at all: the first joint holds it.
+                                (joints, [1.0, 0.0, 0.0, 0.0])
+                            }
+                        }
+                        _ => ([0; 4], [0.0; 4]),
+                    };
                     let uv = uv_data
                         .as_ref()
                         .map_or([0.0, 0.0], |d| [at(d, i, 2)[0], at(d, i, 2)[1]]);
@@ -833,6 +1153,8 @@ impl Builder<'_> {
                         tangent,
                         uv,
                         color,
+                        joints,
+                        weights,
                     }
                 })
                 .collect();
@@ -890,6 +1212,7 @@ impl Builder<'_> {
             "VEC2" => 2,
             "VEC3" => 3,
             "VEC4" => 4,
+            "MAT4" => 16,
             other => return Err(LoadError::new(format!("accessor {index} is a {other}"))),
         };
         if have != components && !(widen && components == 4 && have == 3) {

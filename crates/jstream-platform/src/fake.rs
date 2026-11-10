@@ -20,14 +20,15 @@ use jstream_media::{
 use crate::{
     AudioDeviceInfo, AudioDirection, AudioEncoder, AudioEncoderConfig, AudioInputHandler,
     AudioInputTarget, AudioIo, AudioOutputHandler, AudioOutputTarget, AudioPacket,
-    AudioPacketFlags, AudioProcess, AudioRenderBuffer, AudioStream, Backends, Capture,
-    CaptureDecoder, CaptureEncoding, CaptureStats, CaptureStream, CaptureTarget, CaptureTargetInfo,
-    CodecInfo, CodecRole, Codecs, CompressedFrame, DeviceId, GpuContext, GpuFrame, GpuInterop,
-    HardwarePreference, MediaAudioInfo, MediaClock, MediaDecoder, MediaDecoderConfig,
-    MediaDecoders, MediaInfo, MediaVideoInfo, OAuthTokenStore, PlatformError, ProcessCpu,
-    RaisedThread, Secret, StreamKeyStore, ThreadCpu, ThreadPriority, ThreadRole, ThreadTime,
-    VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig, VideoDeviceFormat, VideoDeviceInfo,
-    VideoDevices, VideoEncoder, VideoEncoderConfig, VideoSurface,
+    AudioPacketFlags, AudioProcess, AudioRenderBuffer, AudioStream, Backends, CameraControlId,
+    CameraControlInfo, CameraControlValue, Capture, CaptureDecoder, CaptureEncoding, CaptureStats,
+    CaptureStream, CaptureTarget, CaptureTargetInfo, CodecInfo, CodecRole, Codecs, CompressedFrame,
+    DeviceId, GpuContext, GpuFrame, GpuInterop, HardwarePreference, MediaAudioInfo, MediaClock,
+    MediaDecoder, MediaDecoderConfig, MediaDecoders, MediaInfo, MediaVideoInfo, OAuthTokenStore,
+    PlatformError, ProcessCpu, RaisedThread, Secret, StreamKeyStore, ThreadCpu, ThreadPriority,
+    ThreadRole, ThreadTime, VcamFormat, VcamSink, VideoDecoder, VideoDecoderConfig,
+    VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig,
+    VideoSurface,
 };
 
 /// A full set of fake backends on `clock`: a 320x180 display, a stereo 48 kHz
@@ -238,6 +239,8 @@ struct VideoDeviceState {
     /// Open streams, by stream ID, with the device each one captures.
     streams: BTreeMap<u64, DeviceId>,
     unplugged: Vec<DeviceId>,
+    /// The camera controls set, by device and control: the value and whether auto is on.
+    controls: BTreeMap<(DeviceId, CameraControlId), (i32, Option<bool>)>,
 }
 
 impl FakeVideoDevices {
@@ -275,6 +278,35 @@ impl FakeVideoDevices {
                 name: "Fake capture card".into(),
                 audio: None,
             },
+        ]
+    }
+
+    /// The webcam's camera controls as they start: a brightness with no automatic mode,
+    /// and a white balance and an exposure in theirs. The capture card has none.
+    fn control_defaults(id: &DeviceId) -> Vec<CameraControlInfo> {
+        if id.as_str() != FAKE_WEBCAM {
+            return Vec::new();
+        }
+        let control = |id, min, max, step, default, auto| CameraControlInfo {
+            id,
+            min,
+            max,
+            step,
+            default,
+            value: default,
+            auto,
+        };
+        vec![
+            control(CameraControlId::Brightness, 0, 255, 1, 128, None),
+            control(
+                CameraControlId::WhiteBalance,
+                2800,
+                6500,
+                10,
+                4600,
+                Some(true),
+            ),
+            control(CameraControlId::Exposure, -11, -2, 1, -6, Some(true)),
         ]
     }
 
@@ -318,6 +350,49 @@ impl VideoDevices for FakeVideoDevices {
         } else {
             Ok(vec![format(1280, 720, 60, nv12)?])
         }
+    }
+
+    fn controls(&self, device: &DeviceId) -> Result<Vec<CameraControlInfo>, PlatformError> {
+        self.present(device)?;
+        let state = lock(&self.state);
+        Ok(Self::control_defaults(device)
+            .into_iter()
+            .map(|mut c| {
+                if let Some(&(value, auto)) = state.controls.get(&(device.clone(), c.id)) {
+                    c.value = value;
+                    c.auto = auto;
+                }
+                c
+            })
+            .collect())
+    }
+
+    fn set_control(
+        &self,
+        device: &DeviceId,
+        control: CameraControlId,
+        value: CameraControlValue,
+    ) -> Result<(), PlatformError> {
+        let current = self
+            .controls(device)?
+            .into_iter()
+            .find(|c| c.id == control)
+            .ok_or_else(|| PlatformError::Unsupported {
+                what: format!("the {} control on {device}", control.name()),
+            })?;
+        let set = match value {
+            CameraControlValue::Manual(v) => (current.snap(v), current.auto.map(|_| false)),
+            CameraControlValue::Auto if current.auto.is_some() => (current.value, Some(true)),
+            CameraControlValue::Auto => {
+                return Err(PlatformError::Unsupported {
+                    what: format!("automatic {} on {device}", control.name()),
+                });
+            }
+        };
+        lock(&self.state)
+            .controls
+            .insert((device.clone(), control), set);
+        Ok(())
     }
 
     fn open(

@@ -30,11 +30,15 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   audio sources no scene shows (`Mic · ES-9 Line`, an `audio_input`, at −3 dB and
   `Desktop audio`, a `desktop_audio`, at −8.5 dB; the mock is told both kinds produce
   audio, so they get mixer channels), and the encoder profile `High quality`. It has no outputs. It stops
-  when its standard input closes. It is a crate of its own because `jstream-ui` (layer
+  when its standard input closes. Given `--agent-token <token>`, it serves as the
+  desktop app does with agents on: the page's `--token` is the window's token, the
+  agent token is the one an agent presents, and the server asks before a new agent
+  connects, keeping the always-allowed ones in memory. It is a crate of its own because `jstream-ui` (layer
   3) may not depend on `jstream-server` (layer 4), not even for tests
   ([R-ARCH-002](../../../../docs/RULES.md#R-ARCH-002)). Nothing ships it.
 - **One daemon per test** (`fixtures.js`): each test starts its own, with a random
-  token, so tests share no state and run in parallel. The browser signs in with HTTP
+  token, so tests share no state and run in parallel. A spec passes the daemon extra
+  arguments with `test.use({ daemonArgs: [...] })`. The browser signs in with HTTP
   Basic, the token as the password, as a person's browser does when the daemon serves
   the UI; the connect form's token field can then stay empty. `connect` opens the page
   and connects; `disconnect` disconnects through the header's File menu;
@@ -69,6 +73,9 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   (or the directory `JSTREAM_E2E_DIST` names). It does not run trunk.
 - **The browser** is Playwright's Chromium, or the executable `JSTREAM_E2E_CHROMIUM`
   names. `@playwright/test` is pinned exactly in `package.json` and `package-lock.json`.
+  A test that needs a browser flag (`wheel-chords.spec.js`'s real devicePixelRatio)
+  launches a browser of its own from the same executable and fails on console errors
+  itself.
   Headless Chromium can hold a page that is not in front to about one animation frame a
   second, so a test with a second client calls `bringToFront()` on the page it drives
   with drags or clicks that wait on frames.
@@ -79,6 +86,13 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
 covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 -->
 
+- **Agents** (`agents.spec.js`, the mock daemon with `--agent-token`): an agent's hello,
+  sent over its own WebSocket with the agent token, waits while the page shows "Agent
+  wants to connect" naming it; Always allow lets it in, and a second connection is
+  welcomed without asking. The General page shows "Ask before a new agent connects"
+  ticked, and the Devices page lists the agent under "Approved agents" until Remove.
+  Deny turns the agent away with `not_allowed`. The two-minute timeout is tested in
+  `jstream-server`, not here.
 - **Browse** (`browse.spec.js`): with the desktop global stubbed, an image file's
   Browse… stores a path under the collection folder as a collection path and a path
   outside it as absolute, hides the button for app assets, and leaves the field when
@@ -168,8 +182,16 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row then names what is asked for and not granted. A plugin off as `needs_grant` is
   granted a class and a folder and turned on in one step. The Inspector holds neither
   plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
-  between General, Plugins and Devices, and the install dialog opens centred over a
-  moved Settings dialog and closes alone on Escape.
+  between General, Plugins, Audio plugins and Devices, and the install dialog opens
+  centred over a moved Settings dialog and closes alone on Escape.
+- **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
+  answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter
+  on the program output's chain shows Plugins with "No CLAP audio plugins found." (gone
+  while a search is typed), whose link opens Settings on Audio plugins: the install
+  folder, each folder searched or missing, the summary and the file that failed. Rescan
+  sends one `plugin.clap_rescan`, then lists the plugin it found, Escape still closes
+  the dialog, and Add filter offers the plugin under Plugins. Against the mock engine
+  itself, the page gives its reason and no Rescan.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
@@ -458,14 +480,19 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   a click opens the group's scene at its own box), and Reset to “Main” brings it back.
   The Inspector's Hotkey row binds F1 to Intro (which a second client
   sees), F1 on the canvas then puts Intro on program on both clients, binding F1 to
-  Main takes it from Intro, Escape cancels a capture and × unbinds.
+  Main takes it from Intro, Escape cancels a capture and × unbinds. In the keyframe,
+  the Backdrop's Timing into this keyframe shows an unset Delay blank, a typed delay
+  sends `item.set_timing` naming the item, and Clear timing sends `item.clear_override`
+  of `timing` and blanks the field again.
 - **Studio mode** (`studio.spec.js`, on the Transitions tab): in studio mode a scene
   picked for preview goes to program with Transition, and the old program scene comes
   back on preview; Transition and Cut are off while preview is the program scene; the
   studio bar shows only in studio mode; the preset picker lists the default with its
   kind and "+ New preset…", the default's editor has no duration, Delete or Make
   default and counts its overrides, and choosing Fade and "+ New preset…" send their
-  `transition.update` and `transition.create`. The mock engine refuses preset edits,
+  `transition.update` and `transition.create`; a Fade's Custom curve easing shows the
+  curve's drawing and points, and an x1 past 1 is sent as 1 in the easing's
+  `transition.update`. The mock engine refuses preset edits,
   so the panel after an edit is tested natively.
 - **Scene transitions** (`transitions.spec.js`): a scene row's Transition in submenu
   checks "Default (Cut)", lists the Cut preset with its kind, and sends
@@ -475,16 +502,31 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   back by the dialog (the swatch showing the colour without its alpha); the canvas margin's Scene properties… opens it for the shown scene; the
   Inspector's Scene switches, open in its Behaviour tab, send `item.set_transition` with the whole settings. The
   mock engine refuses the transition edits after the page has sent them.
+- **Wheel chords** (`wheel-chords.spec.js`, ADR-0112 §3, #1346): with `Ctrl+WheelUp`
+  and `Ctrl+WheelDown` bound to Main's zoom by another client, each notch runs
+  `scene.zoom_camera` once, whether a notch is 120 pixels or 100, two coalesced into one
+  event are two, and six 20-pixel touchpad deltas are one, in a browser of its own at a
+  devicePixelRatio of 1 and of 2 (`--force-device-scale-factor`, since an emulated one
+  scales the deltas the page sees); every such turn is prevented, and a turn whose
+  direction has no binding isn't and runs nothing. With `Shift+WheelDown` bound, a
+  Shift turn reported in `deltaX` runs it, and the unbound way still scrolls. The
+  mock has no follow camera, so it refuses each zoom, and the test allows that error.
+  With a display capture placed in Main by another client and a Follow pointer effect
+  added to it (`kind.list` and `kind.describe` answered by the route), the Filters
+  window's keys offer the default `Ctrl+WheelUp`/`Ctrl+WheelDown` zoom (ADR-0112 §4),
+  bind both in one click, and drop the offer; Zoom out's Set key ignores a bare turn and
+  binds `Alt+WheelDown` from a turn with Alt held.
 - **3D scenes** (`scene-cameras.spec.js`): the shown scene's Properties turns on its 3D
   camera, which starts from the framing camera (Position X 960, Target Z 0, Nearest on
   top), and OK sends `scene.set_camera` with a moved Position Z, which the dialog reads
   back and which draws the box smaller; Alt-drag on the canvas shows the camera's
   readout, sends live values, and commits one `scene.set_camera` with a moved camera as
   one revision, which one undo puts back. With a window capture in the scene, the
-  camera, Depth of field and Follow pointer on, and a camera-motion row added, the
-  settings column's `scrollWidth` stays within its `clientWidth` at the dialog's width
-  and when a 720-wide viewport clamps the dialog; the Nearest on top check sits in
-  front of its text, and the From the right stepper keeps room for its number.
+  camera and Depth of field on, Follow pointer offering Add Follow pointer… (a filter on
+  the capture, ADR-0120), and a camera-motion row added, the settings column's
+  `scrollWidth` stays within its `clientWidth` at the dialog's width and when a
+  720-wide viewport clamps the dialog; the Nearest on top check sits in front of its
+  text, and the Roll field keeps room for its number.
 - **Projectors** (`projectors.spec.js`): the View menu's Program in a window opens a
   page of its own at `?projector=program`, titled for it, with one picture and the
   toast on the workspace, and Escape closes it; Intro's row's Pop out submenu offers the
@@ -496,10 +538,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   it, Main framed as on program, and turns to studio mode when the workspace does. The mock engine sends no preview streams, so no test
   checks a picture: the engine's tests check the frames.
 - **Video settings** (`video-settings.spec.js`): File › Video settings… opens on
-  1920×1080 at 30 fps; a preset fills both sides, a typed side of 0 turns the preset to
-  Custom and is refused in the dialog; 1280×720 at 60 fps applies as one revision and
-  reopens with those values; Apply with nothing changed sends nothing; and one Undo
-  takes back both.
+  1920×1080 at 30 fps with Browser-style blending; a preset fills both sides, a typed
+  side of 0 turns the preset to Custom and is refused in the dialog; 1280×720 at 60 fps
+  in Linear light applies as one revision and reopens with those values; Apply with
+  nothing changed sends nothing; and one Undo takes back all three.
 
 <a id="running"></a>
 ## Running them

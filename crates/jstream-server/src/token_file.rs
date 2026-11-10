@@ -52,6 +52,14 @@ pub fn device_file(token_file: &Path) -> PathBuf {
     PathBuf::from(name)
 }
 
+/// The file beside the token file that keeps the approved agents (ADR-0131): the token
+/// file's name with `.agents` added. The server reads it and creates it user-only.
+pub fn approvals_file(token_file: &Path) -> PathBuf {
+    let mut name = token_file.as_os_str().to_owned();
+    name.push(".agents");
+    PathBuf::from(name)
+}
+
 /// Reads the token in `path`, or creates the file with a new token if there is none.
 ///
 /// An existing file must hold a valid token (visible ASCII, after trimming whitespace)

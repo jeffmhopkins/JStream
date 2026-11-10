@@ -11,7 +11,7 @@ use crate::model::{
     State, VideoMix,
 };
 use jstream_protocol::{
-    BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo, HotkeyBinding,
+    Binding, BusInfo, EncoderProfileInfo, EntityKind, FilterChains, FilterInfo, FolderInfo,
     ItemInfo, KindDescriptor, LabelInfo, MasterInfo, OutputInfo, ProtocolError, Query, QueryResult,
     SceneId, SceneInfo, SceneSummary, SendInfo, SourceInfo, VideoMixInfo,
 };
@@ -22,7 +22,7 @@ impl Graph {
     /// doesn't know.
     ///
     /// Fails only with `not_found`, for an `item.list` of a missing scene or a
-    /// `delete.plan` of a missing target, and with `invalid_argument` on `kind_id`, for a
+    /// `delete.plan` of a missing target or a `label.members` of a missing label, and with `invalid_argument` on `kind_id`, for a
     /// `kind.describe` of a kind it doesn't have.
     pub fn query(&self, query: &Query) -> Option<Result<QueryResult, ProtocolError>> {
         Some(match query {
@@ -31,12 +31,13 @@ impl Graph {
             Query::ItemList { scene_id } => self.item_list(scene_id),
             Query::StateGet => Ok(self.state_get()),
             Query::KindList => Ok(self.kind_list()),
-            Query::KindDescribe { kind_id } => self.kind_describe(kind_id),
+            Query::KindDescribe { kind_id, .. } => self.kind_describe(kind_id),
             Query::OutputList => Ok(self.output_list()),
             Query::EncoderList => Ok(self.encoder_list()),
             Query::VideoMixList => Ok(self.video_mix_list()),
             Query::BusList => Ok(self.bus_list()),
             Query::DeletePlan { target } => self.delete_plan(target),
+            Query::LabelMembers { label_id } => self.label_members(label_id),
             _ => return None,
         })
     }
@@ -166,6 +167,7 @@ impl Graph {
             rev: self.rev,
             canvas: self.state.canvas(),
             base_fps: self.state.base_fps(),
+            blending: self.state.blending(),
             sources: self
                 .state
                 .sources()
@@ -181,10 +183,11 @@ impl Graph {
             master: Box::new(MasterInfo {
                 filters: self.state.master().to_info(),
             }),
-            hotkeys: self
+            hotkeys: self.state.hotkey_bindings(),
+            bindings: self
                 .state
-                .hotkeys()
-                .map(|(chord, action)| HotkeyBinding::new(chord.clone(), action))
+                .bindings()
+                .map(|(trigger, action)| Binding::new(trigger.clone(), action))
                 .collect(),
             folders: self.state.folders().iter().map(Folder::to_info).collect(),
             labels: self.state.labels().iter().map(Label::to_info).collect(),
@@ -328,7 +331,8 @@ impl Scene {
             items: self.items.iter().map(Item::to_info).collect(),
             camera: self.camera,
             camera_motion: self.camera_motion.clone(),
-            camera_follow: self.camera_follow.clone(),
+            ptz_shots: self.ptz_shots.clone(),
+            camera_follow: self.camera_follow(),
             timelines: self.timelines.values().cloned().collect(),
         }
     }
@@ -439,6 +443,7 @@ mod tests {
                 rev: Rev(0),
                 canvas: jstream_protocol::Canvas::DEFAULT,
                 base_fps: jstream_protocol::DEFAULT_BASE_FPS,
+                blending: jstream_protocol::Blending::Srgb,
                 sources: vec![],
                 scenes: vec![],
                 outputs: vec![],
@@ -455,6 +460,7 @@ mod tests {
                 sends: vec![],
                 master: Default::default(),
                 hotkeys: vec![],
+                bindings: vec![],
                 folders: Vec::new(),
                 labels: Vec::new(),
             }
@@ -490,7 +496,12 @@ mod tests {
             .collect();
         expected.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
         assert_eq!(kinds, expected);
-        let describe = |id: &str| graph.query(&Query::KindDescribe { kind_id: id.into() });
+        let describe = |id: &str| {
+            graph.query(&Query::KindDescribe {
+                kind_id: id.into(),
+                source_id: None,
+            })
+        };
         let Some(Ok(QueryResult::KindDescribe {
             kind,
             settings_schema,

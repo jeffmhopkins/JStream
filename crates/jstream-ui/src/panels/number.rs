@@ -129,6 +129,11 @@ pub fn NumberField(
     /// The committed value; `None` disables the field.
     #[prop(into)]
     value: Signal<Option<f64>>,
+    /// While true the field shows no number, only a dash, though the steppers, arrow
+    /// keys and a drag still start from `value`: for a field that follows another
+    /// value until it is set.
+    #[prop(optional, into)]
+    blank: Option<Signal<bool>>,
     /// What a stepper, an arrow key or [`SCRUB_PX`] of drag adds.
     step: f64,
     /// The decimal places values are rounded to and shown with.
@@ -154,9 +159,10 @@ pub fn NumberField(
     let input = NodeRef::<leptos::html::Input>::new();
 
     let shown = move || {
+        let blank = blank.is_some_and(|b| b.get());
         dragged
             .get()
-            .or_else(|| value.get())
+            .or_else(|| value.get().filter(|_| !blank))
             .map_or_else(String::new, |v| format_number(v, decimals, fixed))
     };
     let text = move || {
@@ -310,6 +316,7 @@ pub fn NumberField(
                 title="Drag to change · Shift: fine · Ctrl: coarse · or type a value"
                 node_ref=input
                 disabled=disabled
+                placeholder=move || blank.map(|_| "—")
                 prop:value=text
                 on:change=on_change
                 on:keydown=on_key

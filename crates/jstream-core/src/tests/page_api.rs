@@ -21,6 +21,7 @@ fn granted_page(id: &str) -> Edit {
         ("url", json!("https://example.com/")),
         ("page_api", json!(true)),
         ("page_api_scenes", json!(true)),
+        ("page_api_shared_values", json!(true)),
         ("page_api_values", json!("status.*")),
     ]
     .into_iter()
@@ -56,6 +57,7 @@ struct Seen {
     source: Option<Value>,
     scenes: Option<Value>,
     levels: Option<Value>,
+    midi: Option<Value>,
     values: BTreeMap<String, Option<Value>>,
     clock: bool,
 }
@@ -67,6 +69,7 @@ impl Seen {
             source,
             scenes,
             levels,
+            midi,
             values,
         } in page.take_data()
         {
@@ -80,6 +83,9 @@ impl Seen {
             }
             if let Some(levels) = levels {
                 self.levels = Some(parse(levels));
+            }
+            if let Some(midi) = midi {
+                self.midi = Some(parse(midi));
             }
             for (name, value) in values {
                 self.values.insert(name, value.map(parse));
@@ -251,6 +257,7 @@ fn a_page_given_a_bus_reads_its_levels_while_the_mixer_runs() {
     let settings: BTreeMap<String, Value> = [
         ("url", json!("https://example.com/")),
         ("page_api", json!(true)),
+        ("page_api_audio", json!(true)),
         ("page_api_bus", json!({"type": "bus", "bus_id": "vod"})),
     ]
     .into_iter()

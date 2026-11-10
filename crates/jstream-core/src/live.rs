@@ -347,6 +347,23 @@ impl LiveSources {
         self.ctx.audio = Some(scopes);
     }
 
+    /// The MIDI inputs the `midi_*` sources draw (ADR-0137), which the JTunnel receiver
+    /// feeds.
+    pub(crate) fn set_midi(&mut self, midi: Arc<jstream_sources::MidiInputs>) {
+        // Their clock moves the filters that follow the tempo (ADR-0148).
+        self.loaded = Arc::new(
+            (*self.loaded)
+                .clone()
+                .with_tempo(crate::tempo::Tempo(Arc::clone(&midi))),
+        );
+        self.ctx.midi = Some(midi);
+    }
+
+    /// The MIDI inputs the `midi_*` sources draw.
+    pub(crate) fn midi(&self) -> Option<Arc<jstream_sources::MidiInputs>> {
+        self.ctx.midi.clone()
+    }
+
     /// The platform's media files, which `media` sources play through. Sources built
     /// before have none, so they are built again now, from `state`, the collection's:
     /// one loaded before the host injected backends would otherwise wait for its next
@@ -655,23 +672,16 @@ impl LiveSources {
         })
     }
 
-    /// Rebuilds what plans read from the loaded assets, keeping the pack effects and
-    /// shader sources.
+    /// Rebuilds what plans read from the loaded assets, keeping everything else they
+    /// read: the pack effects and shader sources, the audio scopes and the MIDI inputs
+    /// (#1453 review B1).
     fn share_assets(&mut self) {
-        let effects = self.loaded.effects().clone();
-        let sources = self.loaded.sources().clone();
-        let heard = Arc::clone(self.loaded.heard());
-        let motion_heard = Arc::clone(self.loaded.motion_heard());
-        self.loaded = Arc::new(
-            self.assets
-                .iter()
-                .filter_map(|(key, entry)| Some((key.clone(), Arc::clone(entry.loaded.as_ref()?))))
-                .collect::<FilterAssets>()
-                .with_effects(effects)
-                .with_sources(sources)
-                .with_heard(heard)
-                .with_motion_heard(motion_heard),
-        );
+        let images = self
+            .assets
+            .iter()
+            .filter_map(|(key, entry)| Some((key.clone(), Arc::clone(entry.loaded.as_ref()?))))
+            .collect();
+        self.loaded = Arc::new((*self.loaded).clone().with_images(images));
     }
 
     /// Hands plans the effect packs' effects and shader sources as now loaded
@@ -906,10 +916,32 @@ impl LiveSources {
         }
     }
 
+    /// Adds what `source_id`'s running instance knows of its own settings to its kind's
+    /// `descriptor` (ADR-0151 decision 7); a source that isn't running adds nothing.
+    pub(crate) fn describe(
+        &self,
+        source_id: &SourceId,
+        descriptor: &mut jstream_protocol::KindDescriptor,
+    ) {
+        if let Some(running) = self.entries.get(source_id).and_then(|e| e.running.as_ref()) {
+            running.source.describe(descriptor);
+        }
+    }
+
     /// The size `source.sizes` reports for `source_id`'s live instance, if it runs and
     /// has made a frame.
     pub(crate) fn size(&self, source_id: &SourceId) -> Option<FrameSize> {
         self.entries.get(source_id)?.running.as_ref()?.size
+    }
+
+    /// Whether a mix (the program's, a video mix's or a preview's) looked at
+    /// `source_id`'s running instance in the latest plan: it is drawn anyway, so a warm
+    /// scene that draws it holds nothing more for it (ADR-0150).
+    pub(crate) fn reached(&self, source_id: &SourceId) -> bool {
+        self.entries
+            .get(source_id)
+            .and_then(|entry| entry.running.as_ref())
+            .is_some_and(|running| running.looked == self.plan)
     }
 
     /// How many builds have been installed: it changes whenever a running source does.
@@ -1037,7 +1069,7 @@ impl LiveSources {
                         frame
                     }
                 };
-                return Some(Look::Frame(frame, next));
+                return Some(Look::frame(frame, next));
             }
             if jstream_sources::opens_browser(&entry.kind) {
                 // Not painted yet: the stand-in, until a re-plan finds the first paint.
@@ -1046,11 +1078,11 @@ impl LiveSources {
                 let (frame, own) =
                     Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
                 let next = if running.slot.is_some() { own } else { next };
-                return Some(Look::Frame(frame, next));
+                return Some(Look::frame(frame, next));
             }
         }
         let (frame, next) = Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
-        Some(Look::Frame(frame, next))
+        Some(Look::frame(frame, next))
     }
 
     /// [`Self::look`]'s frame from the source's CPU frame at `at`, its own time.

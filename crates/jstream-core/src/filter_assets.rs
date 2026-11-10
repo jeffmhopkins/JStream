@@ -83,11 +83,19 @@ pub(crate) struct FilterAssets {
     heard: Arc<BTreeMap<SourceId, Arc<AudioScope>>>,
     /// The audio scope each audio motion modifier hears (ADR-0100).
     motion_heard: crate::reactive::HeardScopes,
+    /// The engine's MIDI inputs, whose clock moves a border's speed in beats (ADR-0148).
+    tempo: Option<crate::tempo::Tempo>,
 }
 
 impl FilterAssets {
     pub(crate) fn new() -> Self {
         Self::default()
+    }
+
+    /// These assets with `images` as the loaded assets, and all else they hold kept.
+    #[must_use]
+    pub(crate) fn with_images(self, images: HashMap<AssetKey, Arc<FilterAsset>>) -> Self {
+        Self { images, ..self }
     }
 
     /// These assets with `effects` as the loaded pack effects.
@@ -147,6 +155,20 @@ impl FilterAssets {
     pub(crate) fn motion_heard(&self) -> &crate::reactive::HeardScopes {
         &self.motion_heard
     }
+
+    /// These assets with `tempo` as the MIDI inputs whose clock gives the song's position.
+    #[must_use]
+    pub(crate) fn with_tempo(self, tempo: crate::tempo::Tempo) -> Self {
+        Self {
+            tempo: Some(tempo),
+            ..self
+        }
+    }
+
+    /// The MIDI inputs whose clock gives the song's position (ADR-0148).
+    pub(crate) fn tempo(&self) -> Option<&crate::tempo::Tempo> {
+        self.tempo.as_ref()
+    }
 }
 
 impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
@@ -157,6 +179,7 @@ impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
             sources: PackSources::default(),
             heard: Arc::default(),
             motion_heard: Arc::default(),
+            tempo: None,
         }
     }
 }

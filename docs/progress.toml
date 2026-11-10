@@ -83,16 +83,16 @@ title = "A thread model that uses more cores: CPU frame work off the render thre
 priority = 1
 status = "planned"
 issues = [1221]
-prs = [1235, 1236, 1462, 1463, 1464]
+prs = [1235, 1236, 1462, 1463, 1464, 1470, 1471, 1473]
 note = "measured, then decided in an ADR; no further preview fix is built until it lands"
 
 [[target]]
 release = "alpha.5"
 title = "jstream bench: standard scenes on real hardware that pass or fail on frame rate, drops, preview restarts and picture quality"
 priority = 1
-status = "planned"
+status = "hardware"
 issues = [1220, 1140]
-prs = [1260, 1315]
+prs = [1260, 1315, 1336, 1339]
 note = "each Windows run opens with it, and a fail blocks the release"
 
 [[target]]
@@ -134,6 +134,8 @@ title = "Save and load projects: File › New, Open, Save As and Open recent"
 priority = 4
 status = "planned"
 issues = [1218]
+prs = [1269]
+note = "#1269 is the protocol and engine part (ADR-0121); the File menu follows"
 
 [[target]]
 release = "alpha.5"
@@ -155,9 +157,9 @@ prs = [1264]
 release = "alpha.5"
 title = "Follow pointer as a filter on a capture that keeps the cursor in view, a working 3D camera section, and hotkeys heard while another app has the focus"
 status = "planned"
-issues = [1225, 1216, 1214, 1188]
-prs = [1251]
-note = "#1251 lays out the 3D camera section (#1214); #1225, #1216 and #1188 remain"
+issues = [1225, 1216, 1214, 1188, 1325, 1346]
+prs = [1251, 1270, 1278, 1329, 1343, 1398, 1399, 1402]
+note = "#1251 lays out the 3D camera section (#1214); #1270 makes Follow pointer a filter with a safe margin (#1225, #1216); #1278 hears bound hotkeys while another app has the focus (#1188), and #1329 does on Linux under X11 (#1325); #1343 adds wheel chords such as Ctrl+WheelUp, heard in the page (ADR-0112 §3); #1398 counts a notch at Chromium's measured 120 px (#1346); #1399 hears wheel chords on X11 while a follow camera is live, binds them from Set key and offers the Ctrl+wheel defaults (ADR-0112 §3–§5); #1402 hears them on Windows with a WH_MOUSE_LL hook while a follow camera is live"
 
 [[target]]
 release = "alpha.5"
@@ -177,8 +179,8 @@ release = "alpha.5"
 title = "Filters: a Glow that shows on opaque items, Bloom, a Vignette that is easy to tune, a full set of borders, and a Custom shader filter"
 status = "planned"
 issues = [1226, 1227, 1232, 1295]
-prs = [1281, 1289, 1296, 1331, 1351, 1352, 1395, 1401]
-note = "#1281 brings Glow past the box, Bloom and the Vignette (#1226); #1296 adds the full set of borders (#1227) and #1352 its 9-slice image frame (#1294); #1289 is the first part of the Custom shader (#1232), #1331 colours its editor, #1351 adds Save as pack and setting renames, #1395 a shader source from Add source, and #1401 its browser click-through (#1295)"
+prs = [1281, 1289, 1296, 1331, 1351, 1352, 1395, 1401, 1417, 1453]
+note = "#1281 brings Glow past the box, Bloom and the Vignette (#1226); #1296 adds the full set of borders (#1227), #1352 its 9-slice image frame (#1294) and #1417 a pulse from motion or audio on any effect setting (#1294, #1404) and #1453 its speed in beats from the MIDI clock (#1294); #1289 is the first part of the Custom shader (#1232), #1331 colours its editor, #1351 adds Save as pack and setting renames, #1395 a shader source from Add source, and #1401 its browser click-through (#1295)"
 
 [[target]]
 release = "alpha.5"
@@ -189,8 +191,9 @@ issues = [1228, 1060]
 [[target]]
 release = "alpha.5"
 title = "Webcam Properties: a device picker, resolution, frame rate and format, and camera controls"
-status = "planned"
+status = "review"
 issues = [1195, 1196]
+prs = [1262, 1348, 1393, 1396]
 
 [[target]]
 release = "alpha.5"
@@ -201,8 +204,9 @@ issues = [1229]
 [[target]]
 release = "alpha.5"
 title = "Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects"
-status = "planned"
+status = "done"
 issues = [1231]
+prs = [1400, 1413, 1458, 1460, 1483, 1484, 1485, 1487, 1488, 1489, 1490, 1491, 1492, 1495, 1498, 1500]
 note = "finishes roadmap item 3D3"
 
 [[target]]
@@ -210,12 +214,14 @@ release = "alpha.5"
 title = "MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources"
 status = "planned"
 issues = [1222, 1223, 1224]
+prs = [1272, 1273, 1299, 1374, 1375, 1415, 1427, 1428, 1444, 1446, 1447, 1466, 1476]
 
 [[target]]
 release = "alpha.5"
 title = "PTZ cameras over VISCA-over-IP, with their presets in keyframes"
 status = "planned"
 issues = [1182, 1181]
+prs = [1423, 1486, 1496, 1499]
 
 [[target]]
 release = "beta.1"
@@ -1350,7 +1356,7 @@ needs = ["build", "hardware"]
 [[item]]
 id = "LNX2"
 milestone = "M3"
-title = "Linux OpenH264 download (ADR-0061)"
+title = "Linux OpenH264 download (ADR-0140)"
 status = "done"
 prs = [536, 1015, 1041]
 note = "store, check, loader and encoder (#536, landed with wave/m3-2, #663); the pin's two SHA-256 values recorded from Cisco's server, and CI's e2e-stream job downloads OpenH264 and streams on it (#1015); the UI offers the download in Encoders, with Cisco's notice, licence link and full licence text, through protocol 0.69's codec.downloads, codec.download and codec.delete (#1041)"
@@ -1359,7 +1365,7 @@ needs = ["build"]
 [[item]]
 id = "LNX3"
 milestone = "M3"
-title = "AAC-LC encoder in Rust, patent check first (ADR-0061)"
+title = "AAC-LC encoder in Rust, patent check first (ADR-0140)"
 status = "planned"
 prs = [508, 518, 723, 727, 799]
 note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) landed with wave/m3-3 (#786); intensity stereo (#799) landed with wave/m3-4 (#827); before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
@@ -1533,6 +1539,14 @@ release = "alpha.4"
 gate = true
 prs = [1146,  1178]
 note = "Merged; step 5f of the alpha.4 Windows run checks it on Windows (#1147)"
+
+[[item]]
+id = "PA4"
+milestone = "M3"
+title = "Page API read review: a checkbox and a visible warning per kind of data, and a badge (ADR-0124)"
+status = "done"
+release = "alpha.5"
+prs = [1287]
 
 [[item]]
 id = "PA3"

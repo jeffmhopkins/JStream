@@ -56,6 +56,286 @@ pub struct ProfileInfo {
     pub process_cpu_pct: Option<Finite32>,
     /// The process's threads, those of one name added together, busiest first.
     pub threads: Vec<ThreadProfile>,
+    /// What happened to the frames past the drawers (since 0.92): each output's and
+    /// each H.264 preview stream's, from its encoder to where it sends them, most
+    /// frames lost first. A stream that ran in none of the window is left out.
+    pub streams: Vec<StreamProfile>,
+    /// The audio mixer and its inputs in the window (since 0.92). Omitted when the
+    /// mixer didn't run in it.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mixer: Option<MixerProfile>,
+    /// What the clients' views did with their preview streams in the window, as they
+    /// reported it with `preview.report` (since 0.103, ADR-0132): one per view a session
+    /// reported in the window, the session's that has ended included while the window
+    /// reaches back to its last report.
+    pub views: Vec<ViewProfile>,
+    /// The JTunnel receiver's senders and what it dropped (since 0.113, #1223). Omitted
+    /// while the receiver is off.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub network: Option<NetworkProfile>,
+    /// The scenes the warm count picked (since 0.117, ADR-0150), in the studio's warm
+    /// order, each with what it is estimated to hold on the GPU. Like `network`, the
+    /// state now, not the window's. Omitted when no scene besides the program is warm.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub warm: Vec<WarmSceneProfile>,
+    /// The PTZ controller endpoints the host opened (since 0.120, ADR-0153), in its
+    /// order. Like `network`, each one's counts run from when it opened, not over the
+    /// window. Omitted when none is open.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ptz_controllers: Vec<PtzControllerProfile>,
+    /// The PTZ cameras on this machine's list (since 0.121, ADR-0155), in its order.
+    /// Like `network`, each one's counts run from when its thread started, not over the
+    /// window. Omitted when the list is empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ptz_cameras: Vec<PtzCameraProfile>,
+}
+
+/// One PTZ camera ([`ProfileInfo::ptz_cameras`], ADR-0146, ADR-0155): how its link to
+/// the head is doing, counted from when its thread started.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct PtzCameraProfile {
+    /// Its name, as `ptz.*` actions and shots take it.
+    pub camera: String,
+    /// The LAN address and port it is reached at, as `192.168.1.30:52381`.
+    pub address: String,
+    /// Its transport's name: `visca_ip`, `udp` or `tcp`.
+    pub transport: String,
+    /// Whether it answered in the last three seconds.
+    pub reachable: bool,
+    /// Messages sent to it, commands and inquiries.
+    pub sent: u64,
+    /// Replies read from it.
+    pub replies: u64,
+    /// Datagrams dropped: from another address or port, or not a VISCA reply.
+    pub dropped: u64,
+    /// Commands sent again because nothing answered in time (ADR-0153 §4).
+    pub resent: u64,
+    /// Commands nothing answered even when sent again.
+    pub unanswered: u64,
+    /// Commands the head refused with an error.
+    pub refused: u64,
+    /// Times the head's command buffers were full, so a command waited for one to free.
+    pub busy: u64,
+}
+
+/// One PTZ controller endpoint ([`ProfileInfo::ptz_controllers`], ADR-0152, ADR-0153):
+/// what it answered and what it dropped, counted from when it opened.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct PtzControllerProfile {
+    /// The address and port it listens on, as `192.168.1.20:52381`.
+    pub address: String,
+    /// Its transport's name: `visca_ip`, `udp` or `tcp`.
+    pub transport: String,
+    /// What it drives: `program`, `preview` or `scene:<scene id>`.
+    pub target: String,
+    /// VISCA messages it answered.
+    pub answered: u64,
+    /// Datagrams and connections from an address it doesn't allow, which it dropped.
+    pub unallowed: u64,
+    /// Datagrams that aren't VISCA over IP, which it dropped.
+    pub malformed: u64,
+    /// Connections it refused because it already held as many as it takes.
+    pub refused: u64,
+    /// Drives it stopped because its controller went quiet (ADR-0153 §1).
+    pub idle_stops: u64,
+}
+
+/// A scene the warm count picked ([`ProfileInfo::warm`], ADR-0117 §7, ADR-0150).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct WarmSceneProfile {
+    /// The scene.
+    pub scene_id: SceneId,
+    /// The GPU bytes its sources are estimated to hold beyond what a mix draws anyway
+    /// and what the warm scenes kept before it hold: each source's frame as RGBA8,
+    /// counted once. For a cold scene, what keeping it warm would add.
+    pub gpu_bytes: u64,
+    /// Whether the GPU-byte limit left it cold. Omitted while it is warm.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub cold: bool,
+}
+
+/// A JTunnel sender heard on the LAN (`jtunnel.senders`, 0.114, ADR-0123 §3): it
+/// answered the receiver's mDNS query. Listing it trusts it with nothing.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct JtunnelSenderInfo {
+    /// Its tunnel name, as it announces it: text from the LAN, so `remote_` (ADR-0059).
+    /// A host that accepts it accepts this name.
+    pub remote_name: String,
+    /// The address and port it sends from, as `192.168.1.5:9000`: where its answer came
+    /// from, with the port its announcement names.
+    pub address: String,
+    /// Whether this machine accepts it: a sender the host accepts has this name and this
+    /// address and port.
+    pub accepted: bool,
+}
+
+/// The JTunnel receiver ([`ProfileInfo::network`], ADR-0122, ADR-0123). Unlike the rest
+/// of the profile, its counts run from when the receiver started, not over the window.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct NetworkProfile {
+    /// Each sender the receiver accepts, in the order the host gave them.
+    pub inputs: Vec<NetworkInputProfile>,
+    /// Datagrams from outside the LAN ranges.
+    pub outside_lan: u64,
+    /// Datagrams from a LAN address it doesn't subscribe to.
+    pub unaccepted: u64,
+    /// Datagrams that aren't a JTunnel packet it accepts, or longer than one may be.
+    pub malformed: u64,
+    /// Audio packets in a codec it can't decode yet (Opus).
+    pub unsupported: u64,
+    /// MIDI messages it handed to the MIDI inputs.
+    pub midi: u64,
+}
+
+/// One accepted JTunnel sender ([`NetworkProfile::inputs`]).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct NetworkInputProfile {
+    /// Its tunnel name, as a `network_audio` source's `sender` names it.
+    pub sender: String,
+    /// Its stream's sample rate; 0 before anything has arrived from it.
+    pub sample_rate: u32,
+    /// Whether a source records it now.
+    pub recording: bool,
+    /// How far ahead of now its held audio reaches, in milliseconds: the buffer's
+    /// fill, which JTunnel shows as its latency.
+    pub latency_ms: Finite32,
+    /// How long past its jitter-free arrival each frame is held, in milliseconds: the
+    /// recording source's `latency_ms`.
+    pub lead_ms: Finite32,
+    /// The drift between its clock and this machine's, in parts per million, once
+    /// enough of its stream has arrived; omitted before. Positive: its clock runs slow.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub drift_ppm: Option<Finite32>,
+    /// Frames played with their audio.
+    pub played: u64,
+    /// Frames concealed with silence because they didn't come in time.
+    pub concealed: u64,
+    /// Frames that came after their turn, and were dropped.
+    pub late: u64,
+    /// Redundant copies and repeated datagrams.
+    pub repeats: u64,
+    /// Times its stream restarted.
+    pub restarts: u64,
+}
+
+/// One client view's preview pictures in the window ([`ProfileInfo::views`]), as its
+/// client reported them.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct ViewProfile {
+    /// The name the session's client gave in `hello`: third-party text (ADR-0059).
+    pub client: String,
+    /// The view's label, as the client reported it: third-party text.
+    pub view: String,
+    /// Each count's growth over the window.
+    #[serde(default)]
+    pub counts: crate::ViewCounts,
+    /// Frames that arrived, a second.
+    #[serde(default)]
+    pub received_fps: Finite32,
+    /// Pictures drawn, a second.
+    #[serde(default)]
+    pub shown_fps: Finite32,
+}
+
+/// One encoded stream's frames in the window ([`ProfileInfo::streams`]): what reached
+/// its encoder, what left it, and what was lost or late on the way.
+///
+/// An output's frames are its program feed's, from the video encoder to the muxer or
+/// publish target; a preview stream's go from its encoder to the client's socket. An
+/// encoder two outputs share counts for both, so `frames_in`, `encoded`, `late` and
+/// `encode_ms` repeat; what each sends and loses after it is its own.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct StreamProfile {
+    /// Which stream.
+    pub stream: ProfileStream,
+    /// The frame rate it is encoded at.
+    #[serde(default)]
+    pub fps: Finite32,
+    /// The video frames handed to its encoder, dropped ones included.
+    #[serde(default)]
+    pub frames_in: u64,
+    /// The video frames its encoder took.
+    #[serde(default)]
+    pub encoded: u64,
+    /// The video frames it sent: to the muxer or publish target for an output, to the
+    /// client for a preview stream.
+    #[serde(default)]
+    pub frames_out: u64,
+    /// The video frames lost between its encoder's input and where it sends them: a
+    /// full encoder queue, a busy encoder, a full packet queue, or a dropped link.
+    #[serde(default)]
+    pub dropped: u64,
+    /// The video frames its encoder took more than a frame period after they were
+    /// handed over: a stream falls behind before it drops.
+    #[serde(default)]
+    pub late: u64,
+    /// The average time its encoder spent on a frame, in milliseconds. A hardware
+    /// encoder that works asynchronously spends only the time to submit it.
+    #[serde(default)]
+    pub encode_ms: Finite32,
+    /// The bit rate it sent at over the window, in kilobits a second: video and audio
+    /// for an output, video for a preview stream.
+    #[serde(default)]
+    pub kbps: u32,
+    /// The bit rate its encoders are set to, in kilobits a second, the same way.
+    #[serde(default)]
+    pub target_kbps: u32,
+}
+
+/// An encoded stream, by what it feeds ([`StreamProfile::stream`]).
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(tag = "type", rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum ProfileStream {
+    /// An output's program feed.
+    Output {
+        /// The output.
+        output_id: OutputId,
+    },
+    /// An H.264 preview stream.
+    Preview {
+        /// The stream's channel on its connection.
+        channel: u32,
+        /// The scene it shows; omitted with `source_id` for the program.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        scene_id: Option<SceneId>,
+        /// The source it shows alone.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source_id: Option<SourceId>,
+    },
+    /// A stream this version of the protocol doesn't know. Never sent; produced only
+    /// when parsing a result from a newer server.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
+/// The audio mixer and its inputs in the window ([`ProfileInfo::mixer`]). Every count is
+/// in engine sample frames (48 000 a second) or mixer blocks.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct MixerProfile {
+    /// The blocks the mixer mixed.
+    pub blocks: u64,
+    /// The blocks whose mix took longer than the audio they hold: the mixer can't keep
+    /// up with the clock while this grows.
+    pub late_blocks: u64,
+    /// The longest mix of a block, in milliseconds.
+    pub block_max_ms: Finite32,
+    /// The length of a block, in milliseconds: what a mix must stay under.
+    pub block_ms: Finite32,
+    /// Frames the mixer skipped because it fell more than half its ring behind the clock.
+    pub skipped_frames: u64,
+    /// Frames the inputs had no audio for when the mixer read them, played as silence:
+    /// a device or source that delivers late or not at all.
+    pub underrun_frames: u64,
+    /// Frames the inputs dropped: arrived after the mixer had passed them, or
+    /// overwritten before it read them.
+    pub dropped_frames: u64,
 }
 
 /// A thread that draws shots ([`ProfileInfo::drawers`]).

@@ -3,13 +3,17 @@
 //! (side effects); queries read; events push changes; errors carry stable codes. The JSON
 //! Schema is generated from these types. Layer 1: plain data, WASM-safe, no I/O.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion, crates/jstream-protocol/README.md#codec-downloads, crates/jstream-protocol/README.md#timelines, docs/adr/0115-timelines-on-the-wire.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, docs/ARCHITECTURE.md#protocol, crates/jstream-protocol/README.md#purpose, crates/jstream-protocol/README.md#contents-commands, crates/jstream-protocol/README.md#contents-state, crates/jstream-protocol/README.md#contents-calls, crates/jstream-protocol/README.md#contents-errors, crates/jstream-protocol/README.md#contents-geometry, crates/jstream-protocol/README.md#versions, crates/jstream-protocol/README.md#contents-schema, crates/jstream-protocol/README.md#design, crates/jstream-protocol/README.md#calls, crates/jstream-protocol/README.md#placement, crates/jstream-protocol/README.md#audio, crates/jstream-protocol/README.md#kinds, crates/jstream-protocol/README.md#filters, crates/jstream-protocol/README.md#outputs, crates/jstream-protocol/README.md#encoder-profiles, crates/jstream-protocol/README.md#hotkeys, crates/jstream-protocol/README.md#bindings, crates/jstream-protocol/README.md#ptz, crates/jstream-protocol/README.md#camera-aim, crates/jstream-protocol/README.md#agent-approval, crates/jstream-protocol/README.md#organisation, crates/jstream-protocol/README.md#video-mixes, crates/jstream-protocol/README.md#transitions, crates/jstream-protocol/README.md#batches, crates/jstream-protocol/README.md#queries, crates/jstream-protocol/README.md#undo, crates/jstream-protocol/README.md#live-values, crates/jstream-protocol/README.md#events, crates/jstream-protocol/README.md#youtube, crates/jstream-protocol/README.md#plugins, crates/jstream-protocol/README.md#quarantine, crates/jstream-protocol/README.md#errors, crates/jstream-protocol/README.md#compatibility, crates/jstream-protocol/README.md#geometry, crates/jstream-protocol/README.md#binary-streams, docs/adr/0013-command-model.md, docs/adr/0022-item-transform-and-canvas.md, docs/adr/0025-typed-settings-kind-descriptors.md, docs/adr/0058-youtube-sign-in-with-a-jstream-client.md, crates/jstream-protocol/README.md#shared-values, crates/jstream-protocol/README.md#motion, crates/jstream-protocol/README.md#codec-downloads, crates/jstream-protocol/README.md#timelines, docs/adr/0115-timelines-on-the-wire.md
 
 #![forbid(unsafe_code)]
 
 mod activity;
+mod agent;
 mod audio;
+mod binding;
+mod camera_aim;
 mod camera_motion;
+mod clap;
 mod command;
 mod encoder;
 mod envelope;
@@ -35,6 +39,8 @@ pub mod parity;
 mod plugin;
 mod preview;
 mod profile;
+mod ptz;
+mod quality;
 mod query;
 mod schema;
 mod settings;
@@ -45,30 +51,39 @@ mod version;
 mod youtube;
 
 pub use activity::{ActivityEntry, MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS};
+pub use agent::{AgentApproval, AgentTransport, ApprovalDecision, ApprovalOutcome, ApprovedAgent};
 pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,
     MAX_MONITOR_DEVICE_LEN, MIN_GAIN_DB, MonitorTap, SendInfo, SourceAudio, SourceMeter,
     gain_db_problem,
 };
-pub use camera_motion::{
-    CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_ZOOM_RANGE, FOLLOW_ZOOM_STEP,
-    check_camera_motion,
+pub use binding::{Binding, MAX_INPUT_NAME_LEN, Trigger};
+pub use camera_aim::{
+    CameraAim, CameraAimInfo, MAX_AIM_PAN_DEG, MAX_AIM_TILT_DEG, MAX_AIM_ZOOM, camera_aim_check,
+    camera_aim_scene,
 };
+pub use camera_motion::{
+    CameraFollow, CameraMotionModifier, CameraProperty, FOLLOW_POINTER_KIND, FOLLOW_ZOOM_RANGE,
+    FOLLOW_ZOOM_STEP, MAX_FOLLOW_MARGIN_PCT, check_camera_motion, follow_pointer_descriptor,
+};
+pub use clap::{ClapFailed, ClapFolder, ClapFound, ClapScanInfo};
 pub use command::{
-    Action, Batch, BlendMode, Command, CommandClass, Crop, Edit, EffectsSpace, ItemTransform,
-    MAX_LEGACY_SCALE, MAX_OPACITY, SceneRole, SourceKind, Vec2,
+    Action, Batch, BlendMode, Blending, Command, CommandClass, Crop, DEFAULT_WARM_SCENES, Edit,
+    EffectsSpace, ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, MAX_WARM_GPU_MIB, MAX_WARM_SCENES,
+    SceneRole, SourceKind, Vec2,
 };
 pub use encoder::{
     AudioCodec, AudioEncoding, CodecDownloadInfo, EncoderProfile, EncoderProfileInfo,
     EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,
 };
 pub use envelope::{
-    ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello, Request,
-    Response, ServerMessage, Welcome,
+    ActionResult, Call, CallResult, ClientMessage, ErrorResponse, EventMessage, Hello,
+    NetworkAccess, Request, Response, ServerMessage, Welcome,
 };
 pub use error::{Blocker, EntityKind, ProtocolError, WireError};
 pub use event::{
-    ChainCost, DropCounts, EngineLoad, Event, OutputHealth, OutputState, OutputStatsInfo,
+    ChainCost, CollectionCause, DropCounts, EngineLoad, Event, KindsCause, OutputHealth,
+    OutputState, OutputStatsInfo,
 };
 pub use filter::{FilterChain, FilterChains, FilterInfo, FilterOwner, MAX_CHAIN_FILTERS};
 pub use finite::Finite32;
@@ -76,10 +91,11 @@ pub use frames::{
     FrameSheet, FrameStrip, MAX_SHEET_FRAMES, MAX_SHEET_SPAN_MS, MIN_SHEET_INTERVAL_MS, SheetFrame,
 };
 pub use geometry::{
-    CameraView, Canvas, CanvasPoint, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon, DrawnVertex,
-    FitMode, Focus, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint, MAX_BLUR_PX,
-    MAX_DRAWN_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed, PlacementForm,
-    ProjectedQuad, SceneCamera, Size, Solid, SolidBounds, Vec3, legacy_quad,
+    CameraView, Canvas, CanvasPoint, CardBack, ContentRect, DEFAULT_FOV_DEG, DrawnPolygon,
+    DrawnVertex, FitMode, Focus, GeometryError, ItemGeometry, LegacyBox, LegacyQuad, LocalPoint,
+    MAX_BLUR_PX, MAX_DRAWN_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W, Placed,
+    PlacementForm, ProjectedQuad, SceneCamera, Size, Solid, SolidBounds, Surface, Vec3,
+    legacy_quad,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};
@@ -90,9 +106,10 @@ pub use id::{
 };
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField, PlacedKeyframe};
 pub use kind::{
-    CaptureFormatPart, EnumOption, KindCategory, KindDescriptor, KindSummary, MAX_CAPTURE_FPS,
-    MAX_CAPTURE_SIDE, Media, PIXEL_FORMATS, ParamDescriptor, ParamType, VisibleIf,
-    check_asset_path, not_a_reference, parse_resolution,
+    CAMERA_CONTROL_AUTO, CaptureFormatPart, EnumOption, KindCategory, KindDescriptor, KindSummary,
+    MAX_CAMERA_CONTROL_NAME, MAX_CAMERA_CONTROLS, MAX_CAPTURE_FPS, MAX_CAPTURE_SIDE, Media,
+    PIXEL_FORMATS, ParamDescriptor, ParamType, VisibleIf, check_asset_path, not_a_reference,
+    parse_resolution,
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,
@@ -102,11 +119,13 @@ pub use mix::{
     allowed_base_fps,
 };
 pub use motion::{
-    MAX_MOTION_ID_LEN, MAX_MOTION_MODIFIERS, MotionClock, MotionCurve, MotionKind, MotionMeasure,
-    MotionModifier, MotionProblem, MotionProperty, MotionShape, check_motion, check_motion_id,
+    MAX_MOTION_ID_LEN, MAX_MOTION_MODIFIERS, MAX_MOTION_PARAM_LEN, MotionClock, MotionCurve,
+    MotionEffect, MotionKind, MotionMeasure, MotionModifier, MotionProblem, MotionProperty,
+    MotionShape, check_motion, check_motion_id,
 };
 pub use organise::{
-    FolderInfo, LabelInfo, MAX_ICON_LEN, SceneMeta, SourceMeta, check_color, check_icon, parse_rgba,
+    FolderInfo, LabelInfo, LabelMembers, LabelledScene, LabelledTimeline, MAX_ICON_LEN, SceneMeta,
+    SourceMeta, check_color, check_icon, parse_rgba,
 };
 pub use output::{
     OutputInfo, OutputKind, RecordContainer, RtmpTarget, SecretString,
@@ -123,17 +142,30 @@ pub use plugin::{
 };
 pub use preview::{
     BINARY_HEADER_LEN, BINARY_VERSION, BinaryError, BinaryFrame, BinaryHeader, KeyframeGate,
-    PreviewCodec, PreviewDraft, PreviewSettings, StreamKind,
+    MAX_SESSION_VIEWS, MAX_VIEW_LABEL_CHARS, PreviewCodec, PreviewDraft, PreviewSettings,
+    StreamKind, ViewCounts, check_view_label,
 };
 pub use profile::{
-    DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, MAX_PROFILE_SECONDS,
-    MAX_PROFILE_TOP, PhaseProfile, PlanProfile, ProfileInfo, ProfileUnit, SourceProfile,
-    ThreadProfile, UnitProfile,
+    DEFAULT_PROFILE_SECONDS, DEFAULT_PROFILE_TOP, Drawer, DrawerProfile, JtunnelSenderInfo,
+    MAX_PROFILE_SECONDS, MAX_PROFILE_TOP, MixerProfile, NetworkInputProfile, NetworkProfile,
+    PhaseProfile, PlanProfile, ProfileInfo, ProfileStream, ProfileUnit, PtzCameraProfile,
+    PtzControllerProfile, SourceProfile, StreamProfile, ThreadProfile, UnitProfile, ViewProfile,
+    WarmSceneProfile,
+};
+pub use ptz::{
+    MAX_PTZ_CAMERA_NAME, MAX_PTZ_PAN, MAX_PTZ_PAN_SPEED, MAX_PTZ_PRESET, MAX_PTZ_SHOTS,
+    MAX_PTZ_TILT, MAX_PTZ_TILT_SPEED, MAX_PTZ_ZOOM_SPEED, PtzCameraInfo, PtzFocus, PtzPose,
+    PtzShot, PtzTransport, camera_name_problem as ptz_camera_name_problem, check_ptz_shots,
+    ptz_action_check,
+};
+pub use quality::{
+    DEFAULT_PROBE_FRAMES, FrameQuality, MAX_PROBE_FRAMES, MAX_PSNR_DB, ProbeStream,
+    QualityProbeInfo, probe_frames,
 };
 pub use query::{
-    CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget, DeviceInfo, FontInfo,
-    ItemInfo, MasterInfo, PixelSize, Query, QueryResult, SceneInfo, SceneOptions, SceneSummary,
-    SourceInfo, SourceSize,
+    CameraControlInfo, CaptureFormatInfo, CaptureTargetInfo, CaptureTargetKind, DeleteTarget,
+    DeviceInfo, FontInfo, ItemInfo, MasterInfo, PixelSize, Query, QueryResult, SceneInfo,
+    SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
@@ -143,10 +175,10 @@ pub use timeline::{
     check_timeline_id,
 };
 pub use transition::{
-    CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, MAX_DELAY_MS,
-    MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER, TransitionEffect, TransitionPresetInfo,
-    TransitionStarted, TransitionsInfo, builtin_kinds as builtin_transition_kinds,
-    check_preset_timing, initial_preset,
+    Bezier, CUT, Easing, FADE, Glide, INITIAL_PRESET, ItemEasing, ItemTransition, KeyframeTiming,
+    MAX_BEZIER_OVERSHOOT, MAX_DELAY_MS, MAX_DURATION_MS, MAX_STAGGER_MS, MOVE, STINGER,
+    TransitionEffect, TransitionPresetInfo, TransitionStarted, TransitionsInfo,
+    builtin_kinds as builtin_transition_kinds, check_preset_timing, initial_preset,
 };
 pub use values::{
     MAX_VALUE_BYTES, MAX_VALUE_NAME_BYTES, MAX_VALUES, SharedValue, check_value_name,

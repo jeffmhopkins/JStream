@@ -14,6 +14,7 @@ use std::collections::BTreeSet;
 
 fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
     ParamDescriptor {
+        warning: None,
         id: id.into(),
         ty,
         default,
@@ -29,7 +30,8 @@ fn param(id: &str, ty: ParamType, default: Value) -> ParamDescriptor {
 /// The kinds the tests create: `color`, a video kind with a scalar, a reference of each
 /// sort, and an asset; `tone`, an audio kind with no parameters; `scope`, a video kind
 /// that draws a bus (as `waveform` and `spectrum` do); and the filter kinds `tint`
-/// (video, with a scene reference) and `gain` (audio).
+/// (video, with a scene reference), `follow_pointer` (the follow camera, ADR-0120) and
+/// `gain` (audio).
 fn kinds() -> Vec<KindDescriptor> {
     vec![
         KindDescriptor {
@@ -129,6 +131,7 @@ fn kinds() -> Vec<KindDescriptor> {
                 json!(0.0),
             )],
         },
+        jstream_protocol::follow_pointer_descriptor(),
     ]
 }
 
@@ -1774,6 +1777,7 @@ mod property {
                         1 => Some(color(rng).into()),
                         _ => Some("none".into()),
                     },
+                    keep_warm: false,
                 },
             },
             65 => Edit::SourceSetMeta {
@@ -3484,6 +3488,34 @@ fn the_base_frame_rate_defaults_to_30_and_60_is_an_option() {
     assert!(!saved.contains("base_fps"), "{saved}");
 }
 
+/// ADR-0126 §2: a new collection blends browser-style, `linear` is one edit away and
+/// undoes back, and the file names the space only when it is `linear`.
+#[test]
+fn the_blending_space_defaults_to_srgb_and_linear_is_an_option() {
+    use jstream_protocol::Blending;
+    let mut graph = fixture();
+    assert_eq!(graph.state().blending(), Blending::Srgb);
+    let applied = apply_ok(
+        &mut graph,
+        vec![Edit::CanvasSetBlending {
+            blending: Blending::Linear,
+        }],
+    );
+    assert_eq!(graph.state().blending(), Blending::Linear);
+    assert_eq!(
+        applied.inverse.edits,
+        vec![Edit::CanvasSetBlending {
+            blending: Blending::Srgb
+        }]
+    );
+    let saved = graph.to_collection_json();
+    assert!(saved.contains("\"blending\": \"linear\""), "{saved}");
+    apply_ok(&mut graph, applied.inverse.edits);
+    assert_eq!(graph.state().blending(), Blending::Srgb);
+    let saved = graph.to_collection_json();
+    assert!(!saved.contains("blending"), "{saved}");
+}
+
 #[test]
 fn canvas_set_size_is_checked_and_undone() {
     let mut graph = fixture();
@@ -4664,6 +4696,38 @@ mod hotkeys {
         assert!(chords(&graph).is_empty());
     }
 
+    /// A wheel chord binds an action that takes a step, `scene.zoom_camera`, and
+    /// nothing else (ADR-0112 §3).
+    #[test]
+    fn a_wheel_chord_binds_only_an_action_that_takes_steps() {
+        let mut graph = fixture();
+        let zoom = |steps| Action::SceneZoomCamera {
+            scene_id: SceneId::new("a"),
+            steps,
+        };
+        apply_ok(
+            &mut graph,
+            vec![
+                set("Ctrl+WheelUp", zoom(1)),
+                set("Ctrl+WheelDown", zoom(-1)),
+            ],
+        );
+        assert_eq!(
+            graph.state().hotkey(&Chord::new("Ctrl+WheelDown")),
+            Some(&zoom(-1))
+        );
+        assert_eq!(
+            apply_err(&mut graph, vec![set("Shift+WheelUp", switch("b"))]),
+            ProtocolError::invalid_argument(
+                "edits.0.action.type",
+                "a wheel chord runs once per notch, so it can only be bound to an action \
+                 that takes one step, such as `scene.zoom_camera` (ADR-0112)",
+            )
+        );
+        // A key binds a step action too.
+        apply_ok(&mut graph, vec![set("Equal", zoom(1))]);
+    }
+
     /// Rebinding is a clear then a set, in one batch.
     #[test]
     fn a_bound_chord_is_rebound_by_a_clear_and_a_set() {
@@ -4971,6 +5035,85 @@ mod hotkeys {
         apply_ok(&mut graph, applied.inverse.edits);
         assert_eq!(chords(&graph), ["F5", "F6"]);
         assert_eq!(graph.state().hotkey(&Chord::new("F5")), Some(&with_preset));
+    }
+
+    fn pad(note: u8) -> jstream_protocol::Trigger {
+        jstream_protocol::Trigger::MidiNote {
+            note,
+            channel: Some(10),
+            input: None,
+        }
+    }
+
+    fn bind(trigger: jstream_protocol::Trigger, action: Action) -> Edit {
+        Edit::BindingSet { trigger, action }
+    }
+
+    /// Controller bindings (ADR-0122) follow the hotkeys' rules: one binding per trigger,
+    /// set and clear are inverses, and a delete takes the bindings naming its target with
+    /// it, both kinds in the same edit, and undo restores them after the target.
+    #[test]
+    fn controller_bindings_follow_the_hotkeys_rules() {
+        let mut graph = bound();
+        let applied = apply_ok(&mut graph, vec![bind(pad(36), switch("a"))]);
+        assert_eq!(
+            applied.inverse.edits,
+            vec![Edit::BindingClear { trigger: pad(36) }]
+        );
+        assert_eq!(
+            apply_err(&mut graph, vec![bind(pad(36), switch("b"))]),
+            ProtocolError::AlreadyExists {
+                entity: EntityKind::Binding,
+                id: "MIDI note 36 on channel 10".into(),
+            }
+        );
+        // Any channel is another trigger.
+        let any = jstream_protocol::Trigger::MidiNote {
+            note: 36,
+            channel: None,
+            input: None,
+        };
+        apply_ok(
+            &mut graph,
+            vec![bind(any, switch("b")), bind(pad(37), start("yt"))],
+        );
+        assert_eq!(graph.state().bindings().len(), 3);
+
+        let applied = apply_ok(&mut graph, delete_scene("a"));
+        assert_eq!(
+            applied.removed_bindings,
+            vec![jstream_protocol::Binding::new(pad(36), &switch("a"))]
+        );
+        assert_eq!(applied.removed_hotkeys.len(), 2);
+        let names: Vec<_> = applied.inverse.edits.iter().map(Edit::name).collect();
+        assert_eq!(
+            names,
+            [
+                "scene.create",
+                "scene.reorder",
+                "hotkey.set",
+                "hotkey.set",
+                "binding.set",
+                "source.create"
+            ]
+        );
+        apply_ok(&mut graph, applied.inverse.edits);
+        assert_eq!(graph.state().bindings().len(), 3);
+
+        // delete.plan lists them beside the hotkeys.
+        let Some(Ok(jstream_protocol::QueryResult::DeletePlan { bindings, .. })) =
+            graph.query(&jstream_protocol::Query::DeletePlan {
+                target: DeleteTarget::Scene {
+                    scene_id: SceneId::new("a"),
+                },
+            })
+        else {
+            panic!("a plan");
+        };
+        assert_eq!(
+            bindings,
+            vec![jstream_protocol::Binding::new(pad(36), &switch("a"))]
+        );
     }
 }
 

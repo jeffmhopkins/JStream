@@ -706,9 +706,10 @@ impl jstream_browser::BrowserPage for PaintedPage {
 
 /// On the GPU path a browser page paints on the engine's GPU context, which the program
 /// stage draws on (ADR-0117 §5), and the render thread samples its texture there as
-/// premultiplied sRGB: half-transparent red over the black canvas reads back as linear
-/// red one half, not the darker red reading it as straight alpha would give. The browser
-/// gets the context once, when it is set, and keeps it when the stage stops.
+/// premultiplied sRGB: half-transparent red over the black canvas reads back, in a new
+/// collection's browser-style blending (ADR-0126), as red 128, half the encoded value,
+/// not the darker red reading it as straight alpha would give (64). The browser gets
+/// the context once, when it is set, and keeps it when the stage stops.
 #[test]
 fn a_browser_page_is_composited_from_its_gpu_frames() {
     let _gpu = one_gpu_test_at_a_time();
@@ -730,9 +731,8 @@ fn a_browser_page_is_composited_from_its_gpu_frames() {
     show_a_page(&control);
     block_on(control.call(output_call("yt", true))).expect("output.start");
 
-    // Linear red 128/255, premultiplied over black, encoded back to sRGB.
-    let half = 128.0_f32 / 255.0;
-    let red = (1.055 * half.powf(1.0 / 2.4) - 0.055) * 255.0;
+    // Full red at alpha 128/255 over black, mixed in sRGB-encoded values.
+    let red = 128.0_f32;
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut pixel = None;
     while Instant::now() < deadline {
@@ -782,7 +782,9 @@ fn a_browser_page_is_composited_from_its_gpu_frames() {
 
 /// #1194: with no output running, `video.snapshot` draws a browser page's GPU frames,
 /// because the snapshot compositor opens on the engine's GPU context, the one the page
-/// paints on. It drew the page as nothing on a device of its own.
+/// paints on. It drew the page as nothing on a device of its own. A new collection
+/// blends browser-style (ADR-0126), so half-transparent red over black reads back as
+/// red 128, half the encoded value.
 #[test]
 fn a_snapshot_draws_a_browser_pages_gpu_frames() {
     use crate::snapshot::{decode_base64, decode_png};
@@ -800,8 +802,8 @@ fn a_snapshot_draws_a_browser_pages_gpu_frames() {
     let control = connected(&engine);
     show_a_page(&control);
 
-    let half = 128.0_f32 / 255.0;
-    let red = (1.055 * half.powf(1.0 / 2.4) - 0.055) * 255.0;
+    // Full red at alpha 128/255 over black, mixed in sRGB-encoded values.
+    let red = 128.0_f32;
     let deadline = Instant::now() + Duration::from_secs(20);
     let mut pixel = None;
     while Instant::now() < deadline {
@@ -941,8 +943,14 @@ fn breaking_engine(
 }
 
 /// Advances the clock a tick at a time until `done` holds or 30 s pass; whether it held.
-fn tick_until(clock: &FakeClock, mut done: impl FnMut() -> bool) -> bool {
-    let deadline = Instant::now() + Duration::from_secs(30);
+fn tick_until(clock: &FakeClock, done: impl FnMut() -> bool) -> bool {
+    tick_within(clock, Duration::from_secs(30), done)
+}
+
+/// [`tick_until`] with its own wall-clock bound, for a test whose ticks each draw a
+/// pass meant to be slow.
+fn tick_within(clock: &FakeClock, bound: Duration, mut done: impl FnMut() -> bool) -> bool {
+    let deadline = Instant::now() + bound;
     while Instant::now() < deadline {
         clock.advance(50_000);
         thread::sleep(Duration::from_millis(10));
@@ -1323,6 +1331,130 @@ fn a_device_loss_quarantines_the_pack_effect_that_was_drawing() {
         enable(&control, "tint/none").is_err(),
         "a kind no pack has and no quarantine names"
     );
+}
+
+/// An effect-pack filter whose pass runs longer than half the frame budget on the GPU,
+/// tick after tick, is quarantined before it could hang the device (#349): the device
+/// is not lost, `gpu.effect_slow` names the kind, and `kind.list` marks it. Only where
+/// the GPU has timestamp queries, which lavapipe, the software adapter CI draws on, has.
+#[test]
+fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
+    use crate::effect_packs::test_pack::{self, KIND, Temp};
+    use jstream_protocol::{Event, FilterChain, FilterId, FilterOwner, Query, QueryResult};
+
+    /// Far more than half a 30 fps frame on any adapter, at the size below.
+    const SLOW: &str = "@fragment\nfn fs(in: VsOut) -> @location(0) vec4<f32> {\n    var c = src(in.uv);\n    for (var i = 0; i < 20000; i++) {\n        c = fract(c * 1.0001 + vec4<f32>(0.0001));\n    }\n    return c;\n}\n";
+    const SIZE: u32 = 128;
+
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    // The adapter the render thread opens on: one without timestamp queries times
+    // nothing, and only a device loss guards it.
+    let timed = Compositor::open(OpenOptions::hardware())
+        .map(|mut compositor| compositor.time_passes())
+        .unwrap_or(false);
+    if !timed {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the GPU-time guard test, no timestamp queries"
+        );
+        return;
+    }
+    let temp = Temp::new("slow");
+    test_pack::write(&temp.pack(), SLOW);
+    let clock = FakeClock::new(Timebase::MICROS);
+    let opens = Arc::new(Mutex::new(Vec::new()));
+    // A draw that never loses its device.
+    let engine = losing_engine(
+        &clock,
+        Arc::new(FakeGpuInterop),
+        GpuMode::None,
+        losing_draw(0, 0, Arc::clone(&opens)),
+    );
+    engine.watch_effect_packs(&temp.0);
+    let control = connected(&engine);
+    let mut events = control.events();
+    batch(
+        &control,
+        Batch {
+            edits: vec![
+                create("main"),
+                Edit::SourceCreate {
+                    source_id: SourceId::new("bg"),
+                    name: "bg".into(),
+                    kind: SourceKind::Builtin {
+                        kind: "color".into(),
+                    },
+                    settings: Settings::default(),
+                    duplicated_from: None,
+                },
+                add("main", "item", "bg"),
+                Edit::FilterAdd {
+                    owner: FilterOwner::Source {
+                        source_id: SourceId::new("bg"),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("tint"),
+                    kind: KIND.into(),
+                    settings: Settings::default(),
+                    enabled: None,
+                    index: None,
+                },
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        },
+    )
+    .expect("a scene drawing a pack filter");
+    let pixels = vec![255; (SIZE * SIZE * 4) as usize];
+    engine
+        .set_source_frame(&SourceId::new("bg"), SIZE, SIZE, &pixels)
+        .expect("a frame for bg");
+    block_on(control.call(switch_call("main"))).expect("scene.switch");
+
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let mut event = None;
+    // The guard reports a kind after `SLOW_FRAMES` slow ticks, and each tick here draws
+    // a pass meant to be slow: about 0.4 s on lavapipe and 1.3 s on WARP, where 30
+    // ticks outrun `tick_until`'s 30 s. The bound allows 30 ticks of 4 s.
+    let bound = Duration::from_secs(4 * u64::from(crate::runtime::pass_guard::SLOW_FRAMES));
+    let heard = tick_within(&clock, bound, || {
+        event = event.take().or_else(|| {
+            super::drain(&mut events)
+                .into_iter()
+                .find_map(|event| match event {
+                    Event::GpuEffectSlow {
+                        kind_id,
+                        took_us,
+                        limit_us,
+                        quarantined,
+                    } => Some((kind_id, took_us, limit_us, quarantined)),
+                    _ => None,
+                })
+        });
+        event.is_some()
+    });
+    let stats = engine.output_stats().expect("still running");
+    assert!(heard, "no gpu.effect_slow: {stats:?}");
+    let (kind_id, took_us, limit_us, quarantined) = event.expect("heard");
+    assert_eq!(kind_id, KIND);
+    assert!(took_us > limit_us, "{took_us} µs over {limit_us} µs");
+    assert_eq!(quarantined, vec![KIND.to_owned()]);
+    assert_eq!(stats.gpu_device_losses, 0, "turned off before any loss");
+    let Ok(QueryResult::KindList { kinds }) = super::query(&control, Query::KindList) else {
+        panic!("kind.list");
+    };
+    assert!(
+        kinds
+            .iter()
+            .any(|kind| kind.kind_id == KIND && kind.quarantined),
+        "kind.list marks it"
+    );
+    assert_eq!(output_state(&control, "yt"), OutputState::Active);
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
 
 /// When the platform context's device is lost mid-run, the render thread leaves the GPU

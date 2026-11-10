@@ -13,7 +13,7 @@ source on their own machine and installs it in their home folder, with an entry 
 app menu. Packaging (a tarball, AppImage or Flatpak) is left for later
 ([ADR-0060](../adr/0060-linux-platform-support.md) §9). Building on the tester's machine
 also keeps Cisco's OpenH264 licence simple: the codec is still downloaded by the tester's
-own copy of JStream, on request ([ADR-0061](../adr/0061-source-types-and-decoding-scope-v2.md)).
+own copy of JStream, on request ([ADR-0140](../adr/0140-source-types-and-decoding-scope-v3.md)).
 
 <a id="tester"></a>
 ## For testers

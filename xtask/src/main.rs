@@ -8,8 +8,10 @@
     reason = "xtask is a command-line tool; stderr is its UI"
 )]
 
+mod appimage;
 mod browser_linux;
 mod dist;
+mod dist_linux;
 mod docs;
 mod e2e_stream;
 mod governance;
@@ -36,6 +38,14 @@ fn main() -> ExitCode {
             Ok(false) => ExitCode::FAILURE,
             Err(e) => {
                 eprintln!("xtask dist: {e:#}");
+                ExitCode::from(2)
+            }
+        },
+        Some("dist-linux") => match dist_linux::run(&args[1..], &root) {
+            Ok(true) => ExitCode::SUCCESS,
+            Ok(false) => ExitCode::FAILURE,
+            Err(e) => {
+                eprintln!("xtask dist-linux: {e:#}");
                 ExitCode::from(2)
             }
         },
@@ -89,6 +99,10 @@ fn main() -> ExitCode {
                 (
                     "dist",
                     "the portable Windows zip (ADR-0020): [--ui-dir <dir>] [--out <dir>]",
+                ),
+                (
+                    "dist-linux",
+                    "the Linux desktop app's .deb (ADR-0141): [--ui-dir <dir>] [--out <dir>]",
                 ),
                 ("docs check", "check the documentation graph (docs/DOCS.md)"),
                 (

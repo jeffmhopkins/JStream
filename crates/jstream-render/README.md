@@ -45,7 +45,8 @@ and calls this crate.
   own: `Compositor::upload_model` puts a `jstream-media` `Model` on the GPU once per
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
-  scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md))
+  scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md),
+  and their shadow maps, ADR-0151)
   into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
@@ -94,12 +95,17 @@ and calls this crate.
 - `Item.blend` is its `BlendMode` (re-exported), drawn per
   [ADR-0082](../../docs/adr/0082-blend-modes-drawn.md) (`blend.rs`): `normal`,
   `additive`, `screen` and `multiply` (two draws) with fixed-function blend states;
-  `darken`, `lighten`, `overlay`, `difference`, `exclusion`, `normal_srgb` and
-  `additive_srgb` by reading a backdrop, a copy of the target's texels under the item.
-  Overlay, difference and exclusion mix sRGB-encoded values, and so do the two `_srgb`
-  modes, which composite as a browser does
-  ([ADR-0105](../../docs/adr/0105-browser-matching-srgb-blend-modes.md)); the rest blend
-  in linear light. A layer blends with its own texels only.
+  `darken`, `lighten`, `overlay`, `difference` and `exclusion` by reading a backdrop, a
+  copy of the target's texels under the item. A layer blends with its own texels only.
+- `Compositor::set_blending` picks the space every mode mixes in
+  ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)). In
+  `linear`, a new compositor's, the target holds premultiplied linear light, and
+  overlay, difference and exclusion mix sRGB-encoded values. In `srgb` the target holds
+  premultiplied sRGB-encoded colour while the items draw: each item encodes its colour
+  (the shader's `ENCODED` override), the same blend states then give a browser's
+  composite, and the backdrop modes mix the encoded values as they are. One decode pass
+  after the last item (`resolve.wgsl`'s `fs_decode`, from a backdrop copy of the whole
+  target) leaves premultiplied linear light, so a canvas or a layer is linear either way.
 - Nested scenes are not walked here. The caller composites the inner scene into a
   layer, an `Image` on this compositor, and places that image in the outer scene:
   `render_image` makes a new layer, and `render_into` redraws one the caller keeps
@@ -402,6 +408,14 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    box centre along the viewing axis (`CameraView::depth_of`), stacking order breaking
    ties (ADR-0094 decision 4). No cull, so a negative scale still draws (it flips
    the quad). The viewport clips to the canvas.
+   With `Blending::Srgb` (ADR-0126) the same pass runs on encoded values: the clear is
+   the background premultiplied without the transfer, each fragment's premultiplied
+   linear colour is encoded straight and premultiplied again (pipelines built with the
+   `ENCODED` override), and the backdrop modes mix the encoded colours directly. After
+   the last item the whole target is copied into the backdrop and one fullscreen draw
+   (`resolve.wgsl`'s `fs_decode`) writes it back as premultiplied linear, so steps 4 and
+   on, and a layer's reader, see linear light. The curves are written so that 1 encodes
+   and decodes to exactly 1, so white survives nested scenes' round trips.
 4. **Resolve.** A second pass draws one fullscreen triangle into the sRGB target with
    blending off. It samples the FP16 texel at its centre with a nearest sampler (the
    value a `textureLoad` gives, at about half the cost on llvmpipe, #1449),
@@ -666,7 +680,20 @@ face needs it turned over though that cross product isn't, and the raw flag is f
 either alone and true with both. A material with no normal map keeps the interpolated
 normal as it is.
 `upload_model` refuses a primitive whose vertex or index buffer would pass the
-adapter's `max_buffer_size` (wgpu panics there rather than failing). `model.wgsl`
+adapter's `max_buffer_size` (wgpu panics there rather than failing). A vertex is 88
+bytes: position, normal, tangent, UV and colour as `f32`s, then four joints as `u16`s
+and four weights.
+
+**Skinning** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
+7). A rigged model's upload holds its palette in a storage buffer (bind group 2, read by
+the vertex shader), its rest pose until `Compositor::pose_model` writes another; a model
+without a rig, and a lit card, bind one shared identity that no vertex weighs. In `vs` a
+vertex with any weight stands at the weighted sum of its joints' matrices times its
+position, its normal turned by that matrix's cofactors (its inverse transpose times its
+determinant, whose sign keeps the normal outward) and its tangent by the matrix, so
+every draw of it (its layer, a view depth, a shadow map) takes the same pose. A
+blended primitive sorts by the middle of its rest pose
+(`golden_model_a_pose_turns_a_rigged_model_on_the_gpu`). `model.wgsl`
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
@@ -685,6 +712,58 @@ or spot light by `(1 − (d / range)²)²` (none at range 0) and a spot light by
 `smoothstep` across the outer `softness` of its cone (a hard edge at softness 0), and
 shades each with the studio key light's `light`. Without a camera, or unlit, the lights
 are ignored and the frame is the one ADR-0107 draws.
+
+**Shadows** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
+3). `ModelDraw::shadows` holds up to `MAX_SHADOW_MAPS` (2) `ShadowMap`s: which of the
+lights casts it, the map, the light's view (`SceneCamera`) it was drawn through, and its
+softness. A map is a view depth drawn from the light, as `render_view_depth` draws cards
+and `draw_model_depth` draws models, into a square layer (`SHADOW_MAP_PX`, 2048, as the
+engine draws them), so its red is `1 / w` of the caster nearest the light. The draw
+takes each map's view into the model's viewing frame (`shadow_view`: the light's
+position and axes through `in_view` and `direction_in_view`, its focal length and
+principal point, and a filter radius of 0.75 to 12 map pixels by softness) after the
+lights in the frame uniform, and binds the maps beside it (the frame bind group's
+bindings 1 and 2; white stand-ins without, and one bind group kept per pair of maps, so
+a steady frame makes none). A map whose light isn't packed, or of another compositor, is
+left out. `visibility` in `model.wgsl` pushes the fragment off its surface by a map
+pixel's size there, projects it into the light's view, and counts 12 disc samples,
+rotated per pixel, whose stored `1 / w` isn't nearer the light than the fragment's by
+more than 0.2%; outside the map is lit. A shadowed light's light is scaled by that share
+(`golden_model_a_shadow_map_shadows_a_scene_lit_model`, a cube's and a card's map).
+
+**Environment** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+decision 9). `ModelDraw::environment` is the scene's sky (`Environment`: sky, horizon
+and ground colours, an intensity, a turn about the vertical, and maybe a picture), used
+only with `lights`. It is packed after the shadow maps (`environment_values`: the
+colours as linear light times the intensity, the turn in radians, how the picture
+stores alpha or -1 for none, whether the lights hold an ambient one at any intensity
+(`SceneLighting::has_ambient`), and the camera's axes, which take a viewing-frame
+direction back to the scene's space), and the picture is bound beside the maps (binding
+3, with the model's repeating sampler at 4; white without). In `model.wgsl` it replaces
+the studio gradient for the ambient and reflected terms: `sky` turns the direction into
+the scene's space and spins it by the turn, then reads the gradient (horizon to sky by
+the square root of the height up, horizon to ground over a quarter of the way down) or
+the panorama (`panorama`: its centre ahead along -z, up at its top, read bilinear at
+level 0 and decoded by the filters' `to_premul_linear` from `filter/colour.wgsl`, which
+the model shader is built with, so a page painted as premultiplied sRGB code values reads
+as an upload of the same colour does,
+`golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`), over a ring of 8
+taps around the direction for a spread: the reflection at the square of the roughness,
+the diffuse light at 1. An ambient light scales it; with none it lights the model on its
+own (`golden_model_an_environment_lights_a_model_from_its_sky`).
+
+**Lit cards** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+decision 10). `Compositor::light_card` shades a flat picture by a scene's lights
+(`CardDraw`: the picture, the card's geometry and camera, its roughness, metalness and
+emissive strength, and the same lights, shadow maps and environment a model takes). It
+shades in texture space: the target is the card's own picture size, and it draws the
+unit quad `CARD_BOUNDS` with a clip matrix that spreads it over the whole target, while
+the world matrix places it as the card stands in the scene, so each texel is lit where it
+stands and the engine then places the lit picture as it would the plain one. The
+material is built per call, with the picture as both base and emissive texture and
+`card` set, so `model.wgsl` unpremultiplies the picture (it holds premultiplied linear
+light) and emits the emissive strength times it; the card is double-sided, and lit from
+whichever side the camera sees (`sees_front`).
 
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
@@ -734,7 +813,9 @@ the platform's capture, interop and encoders are D3D11/D3D12 and wgpu's own pick
 Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped, and WARP,
 which D3D12 offers when it has no GPU, is skipped too); then, everywhere, the
 high-performance adapter without `force_fallback_adapter`, then the software adapter,
-then `RenderError::NoAdapter`. A hardware adapter whose device refuses to open (limits
+then `RenderError::NoAdapter`. The device asks for `TIMESTAMP_QUERY` when the adapter
+has it (the pack passes' GPU time, [Filters](#filters)), and no other optional feature.
+A hardware adapter whose device refuses to open (limits
 below the defaults, a removed or hung GPU) falls back to the software adapter too, and
 the error names both when that fails as well. When the pick already was the software
 adapter (no GPU), its device error is returned without a second try. A machine with no
@@ -786,7 +867,9 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
   clock)` draws into a layer the caller keeps (a `ResourceCache` layer), so a chain
   that runs every frame allocates no output; it refuses an output of another size than
   the filter reports, the input itself, or an image that isn't a layer. `clock` is the media-clock time, for filters
-  that move or hold frames. An imported input's `FrameSync`, and that of any image the
+  that move or hold frames, and the song's position on it (`FilterClock::beat`, quarter
+  notes from the engine's MIDI clock, 0 without one, ADR-0148), for those that follow
+  the tempo. An imported input's `FrameSync`, and that of any image the
   filter reads besides it (`Ctx::hold`), is staged once the pass has recorded, right
   before the submit, and the submit hands those textures back in `PRESENT`, as `render`
   does. The prelude's `frame.time` is that time wrapped
@@ -899,6 +982,21 @@ feedback on the pass itself and on a later pass with a restart, images and slots
 audio image, and
 `sys`, and a program over the cap, on the test adapter.
 
+**GPU time of pack passes** (#349, `src/timer.rs`). A pack's WGSL is validated, not
+bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GPU
+before the OS resets the device. `Compositor::time_passes` turns the timing on (it
+reports `false` on a device without `TIMESTAMP_QUERY`, which times nothing; a
+compositor nobody asked times nothing either). Then each external filter or shader
+source application (`Pass::timed`, which returns the kind ID; the built-in kinds
+return `None`) is bracketed by two empty compute passes that write a timestamp each,
+resolved and copied to a small mappable buffer in the same submit, one of 32 slots.
+`Compositor::gpu_times` polls without waiting and hands back each time whose map has
+finished, with its kind, a frame or two after its draw; an application with every slot
+on its way isn't timed. It allocates nothing: a slot's label string is reused. A
+device opened by this crate, or by the platform crates' contexts, asks for
+`TIMESTAMP_QUERY` when the adapter has it. A test times a pack filter on the test
+adapter (lavapipe has the feature) and checks a built-in one isn't timed.
+
 **The kinds.** Each group documents its kinds here as it lands.
 
 The single-pass pack (V1, `src/filter/pack/`): one draw each, keeping the input's
@@ -977,7 +1075,11 @@ premultiplied linear light on the way out.
   a triangle wave so it loops without a seam. `speed` (−2000 to 2000 px/s) moves the
   dashes along the edge and the gradient round it once per perimeter; the distance is
   worked out in `f64` on the CPU and wrapped to the dash period and to one turn, so it
-  stays exact. On a source or scene chain the outer stroke past the frame is cut.
+  stays exact. With `speed_unit` `beats` (default `px_s`), `lap_beats` (−64 to 64,
+  default 4; 0 holds still) replaces it: the pattern goes once round the edge every
+  that many beats of the song, the perimeter × `FilterClock::beat` ÷ `lap_beats`, so it
+  stays on the beat and stops with the song
+  ([ADR-0148](../../docs/adr/0148-a-borders-speed-in-beats.md)). On a source or scene chain the outer stroke past the frame is cut.
   `frame` (an image asset, `null` by default, #1294) draws the inner stroke from an
   image as a 9-slice frame instead of in its style and fill: the image's corners,
   `frame_slice` image px square (1 to 1024, default 16, held to half the image), fill
@@ -1055,8 +1157,11 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
 **Depth-aware kinds** (`src/filter/depth/`,
 [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decisions
 5 and 6). A kind there reads a scene's view depth beside its input:
-`VideoFilter::set_depth(Some(ViewDepth { image, focal_px }))` hands it the image
-`Compositor::render_view_depth` drew and the camera's focal length, and
+`VideoFilter::set_depth(Some(ViewDepth { image, focal_px, view, lights }))` hands it the
+image `Compositor::render_view_depth` drew, the camera's focal length, and the rest of
+the scene view ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+decision 1): the camera's `CameraView` and the scene's lights (`ViewDepth::new` gives
+neither, for a kind that reads only the depth), and
 `VideoFilter::reads_depth` (`video_filter_reads_depth(kind)`) says which kinds want one.
 With none, or one of another size than the input, the kind passes its input through.
 They are built by `VideoFilter::new` but listed by `depth_filter_descriptors()`, not
@@ -1074,6 +1179,83 @@ it out; `filter::testing` reads both lists.
   the premultiplied fog over the pixel source-over at that amount,
   `fog · a + pixel · (1 − fog.alpha · a)`, so a translucent fog colour never thins the
   picture.
+- `ambient_occlusion` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 5, `depth/occlusion.rs`): `radius_px` (1 to 2000, default 48), `strength`
+  (0 to 2, default 1), `color` (default black) and `quality` (`low`, 8 samples a pixel,
+  the default, or `high`, 16). Two draws. The first (`occlusion/sample.wgsl`) reads only
+  the depth: it rebuilds each pixel's point `((px − c) D / f, D)` about the canvas
+  centre, its normal from neighbours two pixels away (each side the one nearer in
+  depth, so an edge doesn't bend it), and counts the hemisphere samples about the
+  normal, rotated per pixel by a 4 × 4 ordered pattern, that land behind a nearer
+  depth by more than a small bias, faded where that occluder is far past the radius.
+  It writes the share and the pixel's `1 / w` into a scratch layer. The second
+  (`occlusion/apply.wgsl`) averages the share over the 4 × 4 tile, keeping to pixels
+  within 1% of the distance (or a quarter of the radius), and lays
+  `c · (1 − k) + color · c.alpha · k`, `k = share · strength` at most 1, so alpha is
+  kept. Where nothing was drawn, at no strength, and without a matching depth, it
+  copies its input.
+- `depth_bloom` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 8, `depth/bloom.rs`): `threshold` (0 to 4 of linear luma, default 0.8),
+  `strength` (0 to 4, default 1), `radius_px` (0 to 100, default 24, its outset),
+  `depth_px` (default 200) and `far_px` (default 0, never). A bright pass
+  (`bloom/bright.wgsl`) keeps each 2 × 2 block's light above the threshold, over a knee
+  of 0.1, into a half-size scratch layer, faded linearly to nothing at `far_px` by the
+  view depth's distance there. Two separable passes (`bloom/blur.wgsl`) blur it there:
+  a Gaussian of half the radius at that size over at most 16 taps a side, normalised by
+  its full weight, each tap's weight falling to nothing as the pixel it glows onto is
+  nearer than the tap by `depth_px` to twice that, so a glow stops at something in front
+  of it; where either has nothing drawn it spreads as plain bloom's does. The glow is
+  added over the picture, read bilinear, its coverage its brightest channel, as
+  `bloom`'s is (`bloom/add.wgsl`). Without a view depth it blooms with no depth test and
+  no fade (`a_glow_stops_at_something_in_front_of_it`).
+- `floor_reflection` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 4, `depth/reflection.rs`): `floor_y_px` (default 1080, the plane in the
+  scene's space, y down), `strength` (0 to 1, default 0.5), `fade_px` (default 0, never)
+  and `blur_px` (0 to 64, default 0). The engine reads the floor
+  (`video_filter_reflection_floor`) and draws the scene mirrored in it into
+  `ViewDepth::reflection` (`DepthReflection`: the picture and its view depth, through
+  the mirrored camera made right-handed, so x runs the other way about the principal
+  point, and the floor it used, which the filter mirrors in; its models are drawn with
+  `ModelDraw::floor`, which `model.wgsl` cuts at in `fs` and `fs_depth` through the
+  frame's `cut` plane, `golden_model_a_floor_cuts_what_is_below_it`). One draw
+  (`reflection/floor.wgsl`, through `Ctx::draw_program` for its four textures) rebuilds
+  each pixel's point from the view depth; one within a footprint of the floor (two
+  pixels at its distance, or the half float's precision there) takes the mirrored
+  picture at `(2 c.x − x, y)`, where the mirrored depth puts the reflected thing on the
+  pixel's own ray, so its height above the floor: at or under the footprint (under the
+  floor, or the floor itself) it shows nothing. It is laid source-over the picture at
+  `strength`, faded linearly to nothing at `fade_px` above the floor, and over a disc of
+  12 taps of radius `blur_px` when that is above 0. Without the view or a reflection it
+  copies its input (`the_floor_takes_the_reflection_of_what_is_above_it`).
+- `volumetric_fog` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 6, `depth/volumetric.rs`): `color` (with alpha, default `#c8ccd2ff`),
+  `density` (0 to 20 per 1000 px, default 0.5), `base_y_px` (default 1080) and
+  `falloff_px` (default 400, 0 even), `start_px` (default 0) and `max_px` (default
+  8000), `noise` (0 to 1, default 0.3) and `noise_scale_px` (default 300), `wind_x_px`,
+  `wind_y_px` and `wind_z_px` (default 20, 0, 0 px a second), `scattering` (0 to 8,
+  default 1) and `quality` (`low` 24, `medium` 48, the default, or `high` 96 steps). It
+  needs the whole scene view: `ViewDepth::view`, the camera as seen on the canvas
+  (`CameraView::position`, `axes` and `principal`), and `ViewDepth::lights`, packed
+  into the shader as a `scene`-lit model's are (`SceneLighting`, the first 8 shading
+  lights, in the model's viewing frame); without the view it copies its input. It also
+  reads `ViewDepth::shadows` (`reads_shadows`), the first 2 lights' shadow maps, packed
+  as a model's are (`shadow_view`). One draw (`volumetric/fog.wgsl`, drawn with the
+  shader-source prelude through `Ctx::draw_program` for its four textures: the picture,
+  the depth and two maps, the depth standing in for a missing map) marches each pixel's ray from `start_px` to its depth, or
+  `max_px` where nothing was drawn, in equal steps of distance, each sampled at a point
+  jittered per pixel and per frame (a seed from the clock's 60ths of a second). At each
+  step the extinction is `density / 1000` per pixel of ray, halving every `falloff_px`
+  above `base_y_px` and as dense below it, times `1 + noise (2n − 1)` for two octaves of
+  value noise that repeat every 256 features, drifted by `wind · seconds` wrapped to
+  that period in `f64` (`drift`). Its light is `color` plus `scattering` times each
+  light reaching the point (range falloff and cone as a model's, no surface; a shadowed
+  light only where one tap of its map has nothing nearer the light, by 0.2%, the
+  steps' jitter softening the edge, so what stands in a beam cuts a shaft through it,
+  `a_shadow_map_cuts_the_light_through_the_fog`; nothing in the march's loops may make FXC, the
+  Direct3D 12 compiler, unroll them, or it refuses the shader: the maps' sizes are read
+  once before the march, and the two maps are tried one by one, not in a loop), with a Henyey-Greenstein phase of `g = 0.4` against an even one. It lays the light scattered
+  toward the camera over the picture times what the fog lets through, scaled by the
+  colour's alpha, source-over as `depth_fog` is.
 
 **Bounds.** Drop shadow, outline (outside), glow and bloom draw within their input's
 frame, as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for
@@ -1419,14 +1601,21 @@ A 1920x1080 frame of 1, 4 and 16 rotated 1280x720 items at 0.8 opacity, with rea
 prices a fixed-function mode's second draw and a backdrop mode's copy and pass), and
 the same items as cards in a 3D scene, turned, at their own depths and seen
 through an off-axis camera, their mips rebuilt each frame as a live source's are
-(`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed
-(`model_1080p`), a scene's view depth and `depth_fog` over the 3D scene's composite for
+(`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed,
+and the sphere lit by a spot light that casts shadows with its 2048² map drawn each frame
+(`model_1080p`, `sphere_shadowed`, ADR-0151), a scene's view depth and `depth_fog` over the 3D scene's composite for
 4 and 16 cards, the scene itself drawn outside the loop (`depth_fog_1080p_camera`,
-ADR-0143), and
+ADR-0143), the same with `ambient_occlusion` at its defaults
+(`ambient_occlusion_1080p_camera`, ADR-0151), the same with `volumetric_fog` at its
+defaults and the camera's view (`volumetric_fog_1080p_camera`), the same with
+`depth_bloom` at its defaults (`depth_bloom_1080p_camera`), and
 refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
 20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
-items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms, and depth with
-fog 31 and 48 ms for 4 and 16 cards. Run them with
+items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms (the shadowed
+sphere 24 ms, its map and lit draw without the placing), and depth with
+fog 31 and 48 ms for 4 and 16 cards, depth with ambient occlusion 47 and 67 ms, and
+with volumetric fog 541 and 545 ms, its 48 steps a pixel dominating on a CPU
+rasterizer, and with depth bloom 95 and 111 ms (criterion's `--quick`). Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the
@@ -1469,8 +1658,9 @@ a hardware GPU.
   each scene's background ([ADR-0089](../../docs/adr/0089-scene-options-and-nested-audio.md)
   §4) as the clear of its pass. `Color::from_rgba8` reads the protocol's RGBA8,
   `Color::over_black` is what a mix shows of one with alpha, and `Color::mix` the fade
-  between two during a transition, both blended premultiplied in linear light as the
-  composite pass blends.
+  between two during a transition, both blended premultiplied in the `Blending` space
+  they are given, as the composite pass blends (ADR-0126): encoded values for `srgb`,
+  linear light for `linear`.
 - **Golden files.** When `cargo xtask golden` exists, WARP renders under
   `tests/golden/` should freeze the cases these tolerance checks and geometry grids
   cover. Until then they are the pixel oracle on both software adapters.

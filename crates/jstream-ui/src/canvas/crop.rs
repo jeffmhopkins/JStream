@@ -542,6 +542,7 @@ mod tests {
             meta: Default::default(),
             options: Default::default(),
             camera_motion: Vec::new(),
+            ptz_shots: Vec::new(),
             camera_follow: None,
             timelines: Vec::new(),
             items: Vec::new(),

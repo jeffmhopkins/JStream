@@ -527,12 +527,19 @@ pub fn duplicate_scene_edits(
         &scene.filters.video,
         fresh,
     ));
-    // The camera's motion, and its follow camera on the copy of the item it follows
-    // (ADR-0113), once the items are placed.
+    // The camera's motion (ADR-0113). Its follow camera is a filter on the item it
+    // follows (ADR-0120), which the copy of that item takes with its effects.
     if !scene.camera_motion.is_empty() {
         edits.push(Edit::SceneSetCameraMotion {
             scene_id: new_id.clone(),
             motion: scene.camera_motion.clone(),
+        });
+    }
+    // The scene's PTZ shots (ADR-0146), which name cameras, not its items.
+    if !scene.ptz_shots.is_empty() {
+        edits.push(Edit::SceneSetPtzShots {
+            scene_id: new_id.clone(),
+            shots: scene.ptz_shots.clone(),
         });
     }
     let mut placed = Vec::new();
@@ -544,19 +551,6 @@ pub fn duplicate_scene_edits(
         fresh,
         &mut placed,
     ));
-    let follow = scene.camera_follow.as_ref().and_then(|follow| {
-        let (_, copy) = placed.iter().find(|(id, _)| *id == follow.item_id)?;
-        Some(jstream_control::protocol::CameraFollow {
-            item_id: copy.clone(),
-            ..follow.clone()
-        })
-    });
-    if let Some(follow) = follow {
-        edits.push(Edit::SceneSetCameraFollow {
-            scene_id: new_id,
-            follow: Some(follow),
-        });
-    }
     edits
 }
 
@@ -622,6 +616,7 @@ mod tests {
             filters: Default::default(),
             camera: None,
             camera_motion: Vec::new(),
+            ptz_shots: Vec::new(),
             camera_follow: None,
             timelines: Vec::new(),
         }
@@ -641,6 +636,7 @@ mod tests {
         jstream_protocol::MotionModifier {
             modifier_id: "sway".into(),
             property: jstream_protocol::MotionProperty::X,
+            effect: None,
             kind: jstream_protocol::MotionKind::Wiggle {
                 amplitude: Finite32::new(3.0).expect("finite"),
                 frequency_hz: Finite32::ONE,
@@ -979,11 +975,12 @@ mod tests {
         assert!(duplicate_scene_edits(&c, &"kf".into(), "k2".into(), &mut counter()).is_empty());
     }
 
-    /// ADR-0113: a duplicate keeps the camera's motion, and its follow camera follows the
-    /// copy of the item the original's follows.
+    /// ADR-0113: a duplicate keeps the camera's motion and its PTZ shots (ADR-0146), and
+    /// its follow camera, a filter on the item it follows (ADR-0120), goes with the copy
+    /// of that item.
     #[test]
     fn duplicating_a_scene_keeps_its_camera_moves_on_its_own_items() {
-        use jstream_control::protocol::{CameraFollow, SceneCamera};
+        use jstream_control::protocol::{FOLLOW_POINTER_KIND, SceneCamera};
         let mut c = collection();
         c.scenes[0].camera = Some(SceneCamera::framing(c.canvas));
         c.scenes[0].camera_motion = vec![jstream_control::protocol::CameraMotionModifier {
@@ -993,8 +990,18 @@ mod tests {
             clock: Default::default(),
             enabled: true,
         }];
-        c.scenes[0].camera_follow = Some(CameraFollow::of(ItemId::new("a")));
+        c.scenes[0].items[0].effects = vec![filter("follow-pointer", FOLLOW_POINTER_KIND)];
+        c.scenes[0].ptz_shots = vec![jstream_control::protocol::PtzShot {
+            camera: "wide".into(),
+            preset: Some(2),
+            pose: Default::default(),
+        }];
         let edits = duplicate_scene_edits(&c, &"main".into(), "copy".into(), &mut counter());
+        // ADR-0146: and its PTZ shots.
+        assert!(edits.iter().any(|e| matches!(
+            e,
+            Edit::SceneSetPtzShots { scene_id, shots } if scene_id.as_str() == "copy" && shots.len() == 1
+        )));
         let copy_of_a = edits
             .iter()
             .find_map(|e| match e {
@@ -1006,19 +1013,18 @@ mod tests {
             e,
             Edit::SceneSetCameraMotion { scene_id, motion } if scene_id.as_str() == "copy" && motion.len() == 1
         )));
-        let follow = edits
-            .iter()
-            .find_map(|e| match e {
-                Edit::SceneSetCameraFollow { scene_id, follow } if scene_id.as_str() == "copy" => {
-                    follow.clone()
-                }
-                _ => None,
-            })
-            .expect("a follow camera");
-        assert_eq!(follow.item_id, copy_of_a);
         assert!(
-            matches!(edits.last(), Some(Edit::SceneSetCameraFollow { .. })),
-            "after the items"
+            edits.iter().any(|e| matches!(
+                e,
+                Edit::FilterAdd { owner: FilterOwner::Item { item_id }, kind, .. }
+                    if *item_id == copy_of_a && kind == FOLLOW_POINTER_KIND
+            )),
+            "{edits:?}"
+        );
+        assert!(
+            !edits
+                .iter()
+                .any(|e| matches!(e, Edit::SceneSetCameraFollow { .. }))
         );
     }
 }

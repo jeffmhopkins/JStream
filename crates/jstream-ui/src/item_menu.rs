@@ -381,7 +381,7 @@ impl Carry {
         if ItemGeometry::covering_canvas(canvas.width, canvas.height).ok() == Some(g) {
             return Ok(None);
         }
-        if !g.is_neutral_3d() || g.flip_h || g.flip_v {
+        if !g.is_neutral_3d() || g.flip_h || g.flip_v || g.billboard || g.surface.is_some() {
             return Err(Kept::Look);
         }
         let (w, h) = (canvas.width as f32, canvas.height as f32);
@@ -1673,6 +1673,7 @@ mod tests {
                 variant_of: None,
                 overrides: Vec::new(),
                 camera_motion: Vec::new(),
+                ptz_shots: Vec::new(),
                 camera_follow: None,
                 timelines: Vec::new(),
                 items,
@@ -1967,6 +1968,7 @@ mod tests {
         };
         let none = |item: &str| ItemOverride {
             motion: Default::default(),
+            timing: None,
             item_id: ItemId::new(item),
             geometry: None,
             transform: None,

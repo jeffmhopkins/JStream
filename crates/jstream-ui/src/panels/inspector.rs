@@ -3,14 +3,17 @@
 //! a tab strip, both pinned while the rest scrolls, over three tabs of foldable sections
 //! ([`Tab`]): Transform holds its box (X, Y, W, H, the size as a % of its source's and
 //! rotation, with a W/H link), 3D, crop and blending (mode and opacity); Motion its
-//! motion modifiers; Behaviour its scene switches and hotkeys. Its source's settings and
-//! filters are in the Properties dialog the header's button opens. With no item selected, the
+//! motion modifiers; Behaviour its scene switches (with a custom curve's points) and
+//! hotkeys, and in a keyframe scene the keyframe's timing of the item (ADR-0129). Its
+//! source's settings and filters are in the Properties dialog the header's button opens. With no item selected, the
 //! selected scene's header over its object count, the scenes that use it as a source,
 //! and its transition overrides. Every field sends its edit when it changes, so the
 //! canvas and the Inspector show the same committed numbers.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#inspector
 
+use super::curve::CurveEditor;
+use super::keyframe_timing::{self, KeyframeTimingFields};
 use super::motion::MotionSection;
 use super::number::{AxisRow, NumberField};
 use super::scene_properties::SceneDialog;
@@ -23,8 +26,8 @@ use crate::panels::labels::{LabelChips, LabelPopover, TagButton, TagPopover, Tag
 use crate::panels::sources::icon_of;
 use crate::store::{Collection, Studio};
 use jstream_control::protocol::{
-    BlendMode, Chord, Crop, Edit, Finite32, FitMode, Glide, ItemEasing, ItemGeometry, ItemId,
-    ItemInfo, ItemTransition, LabelInfo, MAX_DELAY_MS, PlacementForm, SceneId, SourceId,
+    Bezier, BlendMode, Chord, Crop, Edit, Finite32, FitMode, Glide, ItemEasing, ItemGeometry,
+    ItemId, ItemInfo, ItemTransition, LabelInfo, MAX_DELAY_MS, PlacementForm, SceneId, SourceId,
     SourceKind, TransitionEffect, TransitionPresetId, TransitionsInfo,
 };
 use leptos::prelude::*;
@@ -284,15 +287,13 @@ pub fn blend_name(mode: BlendMode) -> &'static str {
         BlendMode::Lighten => "Lighten",
         BlendMode::Difference => "Difference",
         BlendMode::Exclusion => "Exclusion",
-        BlendMode::NormalSrgb => "Normal (browser)",
-        BlendMode::AdditiveSrgb => "Additive (browser)",
         _ => "Normal",
     }
 }
 
 /// A field's value as the box's `f32`. The fields keep values within ±100000, well
 /// inside `f32`'s range.
-fn to_f32(value: f64) -> f32 {
+pub(super) fn to_f32(value: f64) -> f32 {
     #[expect(
         clippy::cast_possible_truncation,
         reason = "field values are clamped to ±100000, well inside f32"
@@ -367,14 +368,37 @@ pub fn transition_options(transitions: &TransitionsInfo) -> Vec<(String, String)
 /// up to [`MAX_DELAY_MS`]).
 pub const SWITCH_DELAY_MAX: u32 = 3_000;
 
-/// The item easings, as `(value, label)`, in the order the select lists them.
-pub const ITEM_EASINGS: [(ItemEasing, &str, &str); 5] = [
+/// The item easings, as `(value, label)`, in the order the select lists them. The
+/// custom curve starts from [`Bezier::BACK_OUT`] (ADR-0129); an item that has another
+/// curve shows as it, and keeps its points until another easing is picked.
+pub const ITEM_EASINGS: [(ItemEasing, &str, &str); 8] = [
     (ItemEasing::Inherit, "inherit", "Inherit"),
     (ItemEasing::EaseInOut, "ease_in_out", "Ease in-out"),
     (ItemEasing::EaseOut, "ease_out", "Ease out"),
+    (ItemEasing::EaseIn, "ease_in", "Ease in"),
     (ItemEasing::Linear, "linear", "Linear"),
     (ItemEasing::Spring, "spring", "Spring"),
+    (ItemEasing::Hold, "hold", "Hold, then jump"),
+    (
+        ItemEasing::CubicBezier(Bezier::BACK_OUT),
+        "cubic_bezier",
+        "Custom curve",
+    ),
 ];
+
+/// The option value of `easing` in [`ITEM_EASINGS`]: every curve is the custom one.
+fn item_easing_value(easing: ItemEasing) -> &'static str {
+    ITEM_EASINGS
+        .iter()
+        .find(|(v, ..)| {
+            *v == easing
+                || matches!(
+                    (v, easing),
+                    (ItemEasing::CubicBezier(_), ItemEasing::CubicBezier(_))
+                )
+        })
+        .map_or("inherit", |(_, n, _)| n)
+}
 
 /// Whether an item may glide, as `(value, label)`.
 pub const GLIDES: [(Glide, &str, &str); 2] = [
@@ -421,10 +445,7 @@ pub fn switch_value(transition: &ItemTransition, field: SwitchField) -> &'static
             .map_or("inherit", |(_, n, _)| *n)
     };
     match field {
-        SwitchField::Easing => ITEM_EASINGS
-            .iter()
-            .find(|(v, ..)| *v == transition.easing)
-            .map_or("inherit", |(_, n, _)| n),
+        SwitchField::Easing => item_easing_value(transition.easing),
         SwitchField::Glide => GLIDES
             .iter()
             .find(|(v, ..)| *v == transition.glide)
@@ -450,7 +471,9 @@ pub fn with_switch(
     };
     match field {
         SwitchField::Easing => {
-            next.easing = ITEM_EASINGS.iter().find(|(_, n, _)| *n == value)?.0;
+            if item_easing_value(next.easing) != value {
+                next.easing = ITEM_EASINGS.iter().find(|(_, n, _)| *n == value)?.0;
+            }
         }
         SwitchField::Glide => next.glide = GLIDES.iter().find(|(_, n, _)| *n == value)?.0,
         SwitchField::Appear => next.appear = effect()?,
@@ -1133,8 +1156,93 @@ fn Placement(
                 max=f64::from(max) send=commit />
         }
     };
+    // Whether the box turns to face a 3D scene's camera (ADR-0151 decision 2).
+    let billboard = Memo::new(move |_| geometry.get().map(|g| g.billboard));
+    let toggle_billboard = move |event: leptos::ev::Event| {
+        let on = event_target_checked(&event);
+        let Some(g) = geometry.get_untracked().filter(|g| g.billboard != on) else {
+            return;
+        };
+        let (item_id, scene) = ids.get_value();
+        send(Edit::ItemSetGeometry {
+            item_id,
+            scene_id: Some(scene),
+            geometry: ItemGeometry { billboard: on, ..g },
+        });
+    };
+    let billboard_field = view! {
+        <label class="check" title="In a 3D scene, the box turns to face the camera, wherever it moves; its rotation still rolls it">
+            <input
+                type="checkbox"
+                class="inline-check"
+                disabled=move || billboard.with(Option::is_none)
+                prop:checked=move || billboard.get().unwrap_or(false)
+                on:change=toggle_billboard
+            />
+            "Face the camera"
+        </label>
+    };
+    // The card's surface (ADR-0151 decision 10): lit by a 3D scene's lights, and its
+    // back hidden. Its numbers are for agents and the API.
+    let surface = Memo::new(move |_| geometry.get().map(|g| g.surface.unwrap_or_default()));
+    let set_surface = move |change: fn(&mut jstream_protocol::Surface, bool), on: bool| {
+        let Some(g) = geometry.get_untracked() else {
+            return;
+        };
+        let mut next = g.surface.unwrap_or_default();
+        change(&mut next, on);
+        if g.surface.unwrap_or_default() == next {
+            return;
+        }
+        let (item_id, scene) = ids.get_value();
+        send(Edit::ItemSetGeometry {
+            item_id,
+            scene_id: Some(scene),
+            geometry: ItemGeometry {
+                surface: (next != jstream_protocol::Surface::DEFAULT).then_some(next),
+                ..g
+            },
+        });
+    };
+    let surface_fields = view! {
+        <label class="check" title="In a 3D scene, the scene's lights, their shadows and its environment light the card, as a flat 3D surface">
+            <input
+                type="checkbox"
+                class="inline-check"
+                disabled=move || surface.with(Option::is_none)
+                prop:checked=move || surface.get().is_some_and(|s| s.lit)
+                on:change=move |event| {
+                    set_surface(|s, on| s.lit = on, event_target_checked(&event));
+                }
+            />
+            "Lit by the scene"
+        </label>
+        <label class="check" title="Seen from behind, the card draws nothing instead of its mirrored picture">
+            <input
+                type="checkbox"
+                class="inline-check"
+                disabled=move || surface.with(Option::is_none)
+                prop:checked=move || {
+                    surface.get().is_some_and(|s| s.back == jstream_protocol::CardBack::Hide)
+                }
+                on:change=move |event| {
+                    set_surface(
+                        |s, on| {
+                            s.back = if on {
+                                jstream_protocol::CardBack::Hide
+                            } else {
+                                jstream_protocol::CardBack::Show
+                            };
+                        },
+                        event_target_checked(&event),
+                    );
+                }
+            />
+            "Hide the back"
+        </label>
+    };
     let depth_hint = Signal::derive(move || {
-        if geometry.get().is_some_and(|g| in_3d(&g)) {
+        if geometry.get().is_some_and(|g| in_3d(&g) || g.billboard) {
             "in use".to_owned()
         } else {
             String::new()
@@ -1286,6 +1394,32 @@ fn Placement(
             </label>
         }
     };
+    // A custom curve's points, edited in place (ADR-0129).
+    let item_curve = Signal::derive(move || match transition.get().map(|t| t.easing) {
+        Some(ItemEasing::CubicBezier(curve)) => Some(curve),
+        _ => None,
+    });
+    let send_item_curve = move |curve: Bezier| {
+        transition.get_untracked().is_some_and(|t| {
+            send_transition(ItemTransition {
+                easing: ItemEasing::CubicBezier(curve),
+                ..t
+            })
+        })
+    };
+    // The keyframe scene's timing of the item, while the scene is a keyframe (ADR-0129).
+    let keyframe_timing = Signal::derive(move || {
+        let (item_id, scene) = ids.get_value();
+        studio.collection.with(|c| {
+            c.as_ref()?
+                .scene(&scene)
+                .and_then(|s| keyframe_timing::timing_of(s, &item_id))
+        })
+    });
+    let timing_scene = Signal::derive(move || ids.get_value().1);
+    let timing_item = Signal::derive(move || ids.get_value().0);
+    let timing_hint_text =
+        Signal::derive(move || keyframe_timing::timing_hint(keyframe_timing.get()));
     let switch_hint = Signal::derive(move || {
         if transition.get().is_some_and(|t| !t.is_default()) {
             "customised".to_owned()
@@ -1326,6 +1460,8 @@ fn Placement(
                 {depth_field(Depth3::Depth)}
                 {depth_field(Depth3::Perspective)}
             </div>
+            {billboard_field}
+            {surface_fields}
         </Fold>
         <Fold title="Crop" open=true hint=crop_hint>
             <div class="axes four">
@@ -1367,9 +1503,9 @@ fn Placement(
         </div>
         <div class="tab-panel" role="tabpanel" aria-label="Behaviour"
             hidden=move || tab.get() != Tab::Behaviour>
-        // A keyframe changes only placement, visibility, opacity and motion (ADR-0049,
-        // ADR-0099), so its
-        // items' switches are the parent's and aren't shown here.
+        // A keyframe changes only placement, visibility, opacity, motion and the timing
+        // of moves into it (ADR-0049, ADR-0099, ADR-0129), so its items' own switch
+        // settings are the parent's and aren't shown here; its timing is, below.
         <Show when=move || keyframe_of.with(Option::is_none)>
             <Fold title="Scene switches" open=true hint=switch_hint>
                 <div class="field-grid">
@@ -1380,6 +1516,23 @@ fn Placement(
                     {switch_select(SwitchField::Appear, "Appear", option_pairs(&EFFECTS))}
                     {switch_select(SwitchField::Disappear, "Disappear", option_pairs(&EFFECTS))}
                 </div>
+                // A custom curve's points (ADR-0129).
+                <Show when=move || item_curve.with(Option::is_some)>
+                    <CurveEditor curve=item_curve send=send_item_curve />
+                </Show>
+            </Fold>
+        </Show>
+        // A keyframe's own timing of the item in moves into it (ADR-0129): in place of
+        // the item's delay and easing, and the preset's duration.
+        <Show when=move || keyframe_of.with(Option::is_some)>
+            <Fold title="Timing into this keyframe" open=true hint=timing_hint_text>
+                <p class="note">
+                    "How the item moves when a switch, a placed keyframe or a hotkey moves \
+                     program into this keyframe. A field left at the item's or the preset's \
+                     follows them."
+                </p>
+                <KeyframeTimingFields timing=keyframe_timing scene_id=timing_scene
+                    item_id=timing_item send=send />
             </Fold>
         </Show>
         // Keys that show and hide the item with its own effects (ADR-0101). In a keyframe
@@ -1589,7 +1742,9 @@ fn SceneSections(scene: SceneId) -> impl IntoView {
 /// A Hotkey row: the chords bound to `action` (a scene's `scene.switch` or
 /// `scene.zoom_camera`, an item's `item.toggle`, `item.show` or `item.hide`), each with a
 /// button that unbinds it, and "Set key", which binds the next chord pressed (Escape
-/// cancels). A binding is sent at once.
+/// cancels). For an action that takes steps (`scene.zoom_camera`), a turn of the wheel
+/// over the button with a modifier held binds that wheel chord, such as `Ctrl+WheelUp`
+/// (ADR-0112 §3). A binding is sent at once.
 #[component]
 pub(crate) fn HotkeyRow(
     label: &'static str,
@@ -1606,10 +1761,20 @@ pub(crate) fn HotkeyRow(
         })
     });
     let capturing = RwSignal::new(false);
+    let takes_steps = id.with_value(jstream_control::protocol::Action::takes_steps);
     let send = move |edits: Vec<Edit>| {
         if let (Some(s), false) = (session.get(), edits.is_empty()) {
             studio.apply(&s, edits);
         }
+    };
+    let bind = move |chord: Chord| {
+        capturing.set(false);
+        let edits = studio.collection.with_untracked(|c| {
+            c.as_ref()
+                .map(|c| hotkeys::bind_edits(c, &id.get_value(), &chord))
+                .unwrap_or_default()
+        });
+        send(edits);
     };
     let on_key = move |event: leptos::ev::KeyboardEvent| {
         if !capturing.get_untracked() {
@@ -1625,20 +1790,42 @@ pub(crate) fn HotkeyRow(
         let Some(chord) = hotkeys::of_event(&event) else {
             return;
         };
-        capturing.set(false);
-        let edits = studio.collection.with_untracked(|c| {
-            c.as_ref()
-                .map(|c| hotkeys::bind_edits(c, &id.get_value(), &chord))
-                .unwrap_or_default()
-        });
-        send(edits);
+        bind(chord);
     };
+    let on_wheel = move |event: leptos::ev::WheelEvent| {
+        if !capturing.get_untracked() || !takes_steps {
+            return;
+        }
+        let shift = event.shift_key();
+        let Some(chord) = hotkeys::wheel_chord(
+            event.ctrl_key(),
+            event.alt_key(),
+            shift,
+            event.meta_key(),
+            hotkeys::wheel_delta(event.delta_x(), event.delta_y(), shift),
+        ) else {
+            return;
+        };
+        // The turn is the capture's: no wheel chord runs, and the page doesn't zoom.
+        event.stop_propagation();
+        event.prevent_default();
+        bind(chord);
+    };
+    let prompt = if takes_steps {
+        "Press a key or Ctrl+wheel…"
+    } else {
+        "Press a key…"
+    };
+    let focus_only = crate::host::desktop_wheel_focus_only();
+    let macos = crate::host::on_macos();
     let chip = move |chord: Chord| {
         let shown = hotkeys::label(&chord);
         let title = format!("Unbind {shown}");
+        let note = hotkeys::chord_note(&chord, focus_only, macos);
         view! {
-            <span class="hotkey-chip">
+            <span class="hotkey-chip" class:focus-only=note.is_some() title=note>
                 <kbd>{shown}</kbd>
+                {note.map(|note| view! { <span class="chip-note" aria-label=note>"focus only"</span> })}
                 <button
                     type="button"
                     class="icon-button"
@@ -1663,9 +1850,10 @@ pub(crate) fn HotkeyRow(
                     class:capturing=move || capturing.get()
                     on:click=move |_| capturing.update(|c| *c = !*c)
                     on:keydown=on_key
+                    on:wheel=on_wheel
                     on:blur=move |_| capturing.set(false)
                 >
-                    {move || if capturing.get() { "Press a key…" } else { "Set key" }}
+                    {move || if capturing.get() { prompt } else { "Set key" }}
                 </button>
             </span>
         </div>
@@ -1881,5 +2069,33 @@ mod tests {
         assert_eq!(with_delay(&t, 152.4).delay_ms, 152);
         assert_eq!(with_delay(&t, 9000.0).delay_ms, SWITCH_DELAY_MAX);
         assert_eq!(with_delay(&t, -5.0).delay_ms, 0);
+    }
+
+    /// ADR-0129's easings: ease in and hold by name, and a custom curve that starts from
+    /// the back-out curve, reads as custom whatever its points, and keeps them when
+    /// picked again.
+    #[test]
+    fn the_easing_select_offers_ease_in_hold_and_a_custom_curve() {
+        let t = ItemTransition::default();
+        let next = with_switch(&t, SwitchField::Easing, "ease_in").expect("an option");
+        assert_eq!(next.easing, ItemEasing::EaseIn);
+        let next = with_switch(&t, SwitchField::Easing, "hold").expect("an option");
+        assert_eq!(switch_value(&next, SwitchField::Easing), "hold");
+        let curve = with_switch(&t, SwitchField::Easing, "cubic_bezier").expect("an option");
+        assert_eq!(curve.easing, ItemEasing::CubicBezier(Bezier::BACK_OUT));
+        let own = ItemTransition {
+            easing: ItemEasing::CubicBezier(Bezier {
+                x1: Finite32::ZERO,
+                y1: Finite32::ONE,
+                x2: Finite32::ONE,
+                y2: Finite32::ZERO,
+            }),
+            ..t
+        };
+        assert_eq!(switch_value(&own, SwitchField::Easing), "cubic_bezier");
+        assert_eq!(
+            with_switch(&own, SwitchField::Easing, "cubic_bezier"),
+            Some(own)
+        );
     }
 }
