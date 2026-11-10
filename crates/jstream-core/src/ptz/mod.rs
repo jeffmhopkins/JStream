@@ -250,7 +250,7 @@ struct Status {
     replies: u64,
     dropped: u64,
     /// Commands sent again for want of a reply, commands still unanswered after that,
-    /// commands the head refused, and times its buffers were full (ADR-0154).
+    /// commands the head refused, and times its buffers were full (ADR-0155).
     resent: u64,
     unanswered: u64,
     refused: u64,
@@ -411,7 +411,7 @@ impl Ptz {
             .collect()
     }
 
-    /// `profile.get`'s `ptz_cameras` (ADR-0154): each camera's link counters, in the
+    /// `profile.get`'s `ptz_cameras` (ADR-0155): each camera's link counters, in the
     /// list's order.
     pub(crate) fn profile(&self) -> Vec<jstream_protocol::PtzCameraProfile> {
         let now = Instant::now();

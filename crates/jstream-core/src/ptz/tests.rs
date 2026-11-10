@@ -621,7 +621,7 @@ fn foreign_replies_are_dropped_and_silence_is_reported() {
     assert!(!info.reachable);
     assert_eq!(info.pose, None);
     assert_eq!(info.error.as_deref(), Some("no reply"));
-    // `profile.get` says why (ADR-0154): the home went twice, and nothing answered.
+    // `profile.get` says why (ADR-0155): the home went twice, and nothing answered.
     let profile = ptz.profile().remove(0);
     assert_eq!(profile.camera, "mute");
     assert_eq!(profile.transport, "udp");

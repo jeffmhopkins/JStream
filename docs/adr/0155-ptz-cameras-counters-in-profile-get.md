@@ -1,12 +1,12 @@
 <!-- @doc
-id = "ADR-0154"
+id = "ADR-0155"
 title = "The PTZ cameras' counters in profile.get"
 kind = "adr"
 status = "accepted"
 tier = "agent"
 -->
 
-# ADR-0154: The PTZ cameras' counters in profile.get
+# ADR-0155: The PTZ cameras' counters in profile.get
 
 <!-- @generated begin adr-status -->
 > **Status:** accepted

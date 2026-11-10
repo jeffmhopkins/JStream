@@ -346,7 +346,7 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 
 `PROTOCOL_VERSION` is 0.121 because `profile.get` counts each PTZ camera's link:
 `ptz_cameras` (`PtzCameraProfile`,
-[ADR-0154](../../docs/adr/0154-ptz-cameras-counters-in-profile-get.md), #1423);
+[ADR-0155](../../docs/adr/0155-ptz-cameras-counters-in-profile-get.md), #1423);
 0.120 because `profile.get` counts each PTZ controller endpoint:
 `ptz_controllers` (`PtzControllerProfile`,
 [ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md), #1181);
@@ -1764,7 +1764,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   `answered`, the datagrams and connections it dropped as `unallowed`, `malformed` or
   `refused` (past its four connections), and its `idle_stops`. Since 0.121, `ptz_cameras`
   (omitted while the machine has no PTZ camera,
-  [ADR-0154](../../docs/adr/0154-ptz-cameras-counters-in-profile-get.md)) lists each
+  [ADR-0155](../../docs/adr/0155-ptz-cameras-counters-in-profile-get.md)) lists each
   camera as a `PtzCameraProfile`, in the list's order: its `camera` name, `address`,
   `transport`, whether it is `reachable` (answered in the last three seconds), and from
   when its thread started the messages `sent`, the `replies` read and the datagrams

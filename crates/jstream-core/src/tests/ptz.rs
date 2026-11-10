@@ -52,7 +52,7 @@ fn preview(control: &dyn Control, scene: &str) {
     call(control, action).expect("studio.set_preview");
 }
 
-/// `profile.get`'s `ptz_cameras` (ADR-0154).
+/// `profile.get`'s `ptz_cameras` (ADR-0155).
 fn ptz_profile(control: &dyn Control) -> Vec<PtzCameraProfile> {
     match query(
         control,
@@ -88,7 +88,7 @@ fn aims(head: &HeadState) -> Vec<(i32, u8)> {
 
 /// Without `start_ptz` the engine controls no camera: an action fails and the list is
 /// empty. With it, actions reach the head, `ptz.list` shows its pose and `profile.get`
-/// counts its link (ADR-0154).
+/// counts its link (ADR-0155).
 #[test]
 fn actions_and_the_list_reach_the_heads_the_host_starts() {
     let engine = Engine::new();

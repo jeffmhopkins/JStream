@@ -462,7 +462,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   counters, and whether it answered in the last three seconds; `profile.get`'s
   `ptz_cameras` reports the same link, with the commands resent, left unanswered,
   refused and met by full buffers
-  ([ADR-0154](../../docs/adr/0154-ptz-cameras-counters-in-profile-get.md)). The control side (`Ptz`)
+  ([ADR-0155](../../docs/adr/0155-ptz-cameras-counters-in-profile-get.md)). The control side (`Ptz`)
   sits under the engine lock and only sends on channels: the `ptz.*` actions (it keeps
   the client whose drive set each camera moving, and `forget_client` stops the camera
   when that session ends), and the
@@ -867,7 +867,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   pose reaching `ptz.list`; actions becoming the VISCA commands ADR-0146 names; a
   queued drive replacing the one before it; the checks and refusals; a reply from
   another address dropped and counted, and a silent head reported, with its resent and
-  unanswered command in `ptz_cameras` (ADR-0154); the daemon's camera
+  unanswered command in `ptz_cameras` (ADR-0155); the daemon's camera
   syntax; the speed curve; and through the engine, the actions, the list and
   `profile.get`'s `ptz_cameras` (listed while the head runs, then gone), program
   switches firing shots (a keyframe scene's over its parent's, a camera not listed

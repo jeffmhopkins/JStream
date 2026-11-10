@@ -83,14 +83,14 @@ pub struct ProfileInfo {
     /// window. Omitted when none is open.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ptz_controllers: Vec<PtzControllerProfile>,
-    /// The PTZ cameras on this machine's list (since 0.121, ADR-0154), in its order.
+    /// The PTZ cameras on this machine's list (since 0.121, ADR-0155), in its order.
     /// Like `network`, each one's counts run from when its thread started, not over the
     /// window. Omitted when the list is empty.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ptz_cameras: Vec<PtzCameraProfile>,
 }
 
-/// One PTZ camera ([`ProfileInfo::ptz_cameras`], ADR-0146, ADR-0154): how its link to
+/// One PTZ camera ([`ProfileInfo::ptz_cameras`], ADR-0146, ADR-0155): how its link to
 /// the head is doing, counted from when its thread started.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
