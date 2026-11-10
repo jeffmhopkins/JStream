@@ -192,9 +192,9 @@ A seamless, full-quality preview on a thread model that uses more cores, proved 
 |  | Page API: audio levels and spectrum bands for HTML visualisers, and a checkbox for each kind of data a page may read | ⏳ planned | #1228, #1060 |  |
 |  | Webcam Properties: a device picker, resolution, frame rate and format, and camera controls | 🔍 in review | #1195, #1196 | #1262, #1348, #1393, #1396 |
 |  | Ask before a new agent connects, with always-allowed agents listed in Settings | ⏳ planned | #1229 |  |
-|  | Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects | ⏳ planned: finishes roadmap item 3D3 | #1231 |  |
+|  | Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects | ⏳ planned: finishes roadmap item 3D3 | #1231 | #1400, #1413, #1458, #1460, #1483, #1484 |
 |  | MIDI and network audio: tempo sync, one binding system for hotkeys, MIDI and controllers, a network audio source, and MIDI visualization sources | ⏳ planned | #1222, #1223, #1224 | #1272, #1273, #1299, #1374, #1375, #1415, #1427, #1428, #1444, #1446, #1447, #1466, #1476 |
-|  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 | #1423 |
+|  | PTZ cameras over VISCA-over-IP, with their presets in keyframes | ⏳ planned | #1182, #1181 | #1423, #1486, #1496 |
 
 <details open>
 <summary><b>Roadmap items in 0.1.0-alpha.5</b>: 2 of 2 merged</summary>

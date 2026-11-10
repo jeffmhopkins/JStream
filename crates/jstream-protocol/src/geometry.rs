@@ -127,6 +127,12 @@ pub struct ItemGeometry {
     /// local frame, after crop and fit and before rotation. Default `false`.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub flip_v: bool,
+    /// In a 3D scene, the box turns about its centre to face the camera (ADR-0151
+    /// decision 2): its `turn_deg` and `tilt_deg` are replaced by the ones that point its
+    /// front at the camera's position, and `rotation_deg` still rolls it. Nothing in a
+    /// 2D scene.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub billboard: bool,
 }
 
 /// The collection's canvas: every scene's coordinate space, in whole pixels.
@@ -308,6 +314,7 @@ impl ItemGeometry {
             perspective_px: None,
             flip_h: false,
             flip_v: false,
+            billboard: false,
         };
         geometry.validate()?;
         Ok(geometry)
@@ -531,6 +538,7 @@ impl ItemGeometry {
             perspective_px: None,
             flip_h: dest_w < 0.0,
             flip_v: dest_h < 0.0,
+            billboard: false,
         };
         Ok(Some(LegacyBox {
             geometry,

@@ -78,6 +78,34 @@ pub struct ProfileInfo {
     /// state now, not the window's. Omitted when no scene besides the program is warm.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub warm: Vec<WarmSceneProfile>,
+    /// The PTZ controller endpoints the host opened (since 0.120, ADR-0153), in its
+    /// order. Like `network`, each one's counts run from when it opened, not over the
+    /// window. Omitted when none is open.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ptz_controllers: Vec<PtzControllerProfile>,
+}
+
+/// One PTZ controller endpoint ([`ProfileInfo::ptz_controllers`], ADR-0152, ADR-0153):
+/// what it answered and what it dropped, counted from when it opened.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct PtzControllerProfile {
+    /// The address and port it listens on, as `192.168.1.20:52381`.
+    pub address: String,
+    /// Its transport's name: `visca_ip`, `udp` or `tcp`.
+    pub transport: String,
+    /// What it drives: `program`, `preview` or `scene:<scene id>`.
+    pub target: String,
+    /// VISCA messages it answered.
+    pub answered: u64,
+    /// Datagrams and connections from an address it doesn't allow, which it dropped.
+    pub unallowed: u64,
+    /// Datagrams that aren't VISCA over IP, which it dropped.
+    pub malformed: u64,
+    /// Connections it refused because it already held as many as it takes.
+    pub refused: u64,
+    /// Drives it stopped because its controller went quiet (ADR-0153 §1).
+    pub idle_stops: u64,
 }
 
 /// A scene the warm count picked ([`ProfileInfo::warm`], ADR-0117 §7, ADR-0150).

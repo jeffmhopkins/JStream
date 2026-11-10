@@ -614,7 +614,7 @@ struct FileScene {
     /// for a keyframe scene.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     camera_motion: Vec<CameraMotionModifier>,
-    /// Its PTZ shots (ADR-0146, schema_version 13), a keyframe scene's own included;
+    /// Its PTZ shots (ADR-0146, schema_version 14), a keyframe scene's own included;
     /// omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     ptz_shots: Vec<PtzShot>,
