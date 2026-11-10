@@ -239,3 +239,86 @@ fn a_scene_light_lights_the_fog() {
     let shot = apply(&mut opened, &mut dark, &input);
     near(&shot, W / 2, H / 2, BLACK, 1);
 }
+
+/// ADR-0151 decisions 3 and 6: a light that casts shadows lights only the fog its map
+/// sees. A map holding a caster just past the light leaves the fog beyond it dark,
+/// where an empty map leaves it as lit as no map does.
+#[test]
+fn a_shadow_map_cuts_the_light_through_the_fog() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let input = solid(&opened.compositor, W, H, BLACK);
+    let camera = view().position();
+    let f = f64::from(view().focal_px());
+    let at = [camera[0], camera[1], camera[2] - f - 500.0];
+    let light = SceneLight {
+        kind: LightKind::Spot,
+        position: at,
+        aim: [0.0, 0.0, -1.0],
+        color: Color {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        },
+        intensity: 4.0,
+        range_px: 0.0,
+        cone_deg: 120.0,
+        softness: 0.0,
+    };
+    let point = |v: f64| jstream_protocol::Finite32::new(v as f32).expect("finite");
+    let from = SceneCamera {
+        position: jstream_protocol::Vec3 {
+            x: point(at[0]),
+            y: point(at[1]),
+            z: point(at[2]),
+        },
+        target: jstream_protocol::Vec3 {
+            x: point(at[0]),
+            y: point(at[1]),
+            z: point(at[2] - 100.0),
+        },
+        fov_deg: jstream_protocol::Finite32::new(90.0).expect("finite"),
+        ..SceneCamera::framing(canvas())
+    };
+    let map = |opened: &Opened, inverse_w: f32| {
+        let texels = vec![[inverse_w, 0.0, 0.0, 1.0]; 16 * 16];
+        image::upload_unit_f16(&opened.compositor.maker(), 16, 16, &texels)
+            .expect("the map uploads")
+    };
+    let black = json!({"color": "#000000ff", "density": 0.5, "scattering": 1.0});
+    let mut fog = even(black);
+    let mut shot = |opened: &mut Opened, shadow: Option<Image>| {
+        let mut depth = depth(opened, (f + 1000.0) as f32, &[light]);
+        depth.shadows = shadow
+            .map(|image| {
+                vec![crate::DepthShadow {
+                    light: 0,
+                    image,
+                    camera: from,
+                }]
+            })
+            .unwrap_or_default()
+            .into();
+        fog.set_depth(Some(depth));
+        apply(opened, &mut fog, &input)
+            .pixel(W / 2, H / 2)
+            .expect("inside")[0]
+    };
+    let unshadowed = shot(&mut opened, None);
+    assert!(unshadowed > 40, "the light reaches the fog: {unshadowed}");
+    // A focal length of 8 over 16 pixels at 90°: 8 / 1 is a caster 1 px from the light.
+    let blocked = map(&opened, 8.0);
+    let empty = map(&opened, 0.0);
+    let shadowed = shot(&mut opened, Some(blocked));
+    assert!(
+        f32::from(shadowed) < f32::from(unshadowed) * 0.5,
+        "the caster shadows the beam: {shadowed} against {unshadowed}"
+    );
+    let clear = shot(&mut opened, Some(empty));
+    assert!(
+        clear.abs_diff(unshadowed) <= 1,
+        "an empty map shadows nothing: {clear} against {unshadowed}"
+    );
+}

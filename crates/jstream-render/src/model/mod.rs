@@ -1024,7 +1024,7 @@ fn frame_bind_group(
 /// position and axes in `view`'s viewing frame, with the packed light it shadows, its
 /// focal length, its principal point and its filter radius in map pixels; `None` when
 /// its light isn't packed or its camera can't be seen.
-fn shadow_view(
+pub(crate) fn shadow_view(
     shadow: &ShadowMap<'_>,
     lighting: &SceneLighting,
     view: &jstream_protocol::CameraView,

@@ -350,6 +350,16 @@ impl Chain {
         })
     }
 
+    /// Whether one of its filters also reads its scene's shadow maps (ADR-0151 decision
+    /// 6), so the scene's composite draws them for it.
+    pub(crate) fn reads_shadows(&self) -> bool {
+        self.filters.iter().any(|filter| {
+            filter.effect.is_none()
+                && filter.program.is_none()
+                && jstream_render::video_filter_reads_shadows(&filter.kind)
+        })
+    }
+
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
     /// sum of what each draws past its input at its settings (ADR-0136), each filter
     /// taking the largest of its own settings' outset and that of each of `also`'s
@@ -888,7 +898,8 @@ impl Chains {
 
     /// Records that scene `scene`'s view depth was drawn into `key` in this run, seen
     /// through `view` and lit by `lights`, for its chain's depth-aware filters to read
-    /// (ADR-0143 decision 5, ADR-0151 decision 1). The lights are copied only when they
+    /// (ADR-0143 decision 5, ADR-0151 decision 1), with this run's shadow maps of the
+    /// scene when `shadows` (decision 6). The lights and maps are copied only when they
     /// change. A layer remade since the last frame (the first, or one at
     /// another size) retires the one it replaces into `cache` (R-RT-003); a steady frame
     /// makes no layer and no new handle to it.
@@ -898,11 +909,40 @@ impl Chains {
         scene: &jstream_protocol::SceneId,
         key: &GpuKey,
         (view, lights): (jstream_protocol::CameraView, &[jstream_render::SceneLight]),
+        shadows: bool,
     ) {
         let (Some(ran), Some(layer)) = (self.ran, cache.get(key)) else {
             return;
         };
         let focal_px = view.focal_px();
+        // This run's maps, as `(light, key, camera)`, and whether `held` already holds
+        // them.
+        let maps = shadows
+            .then(|| self.shadows.get(scene))
+            .flatten()
+            .filter(|(drawn, _)| *drawn == ran)
+            .map_or(&[][..], |(_, maps)| maps.as_slice());
+        let same = |held: &[jstream_render::DepthShadow]| {
+            held.len() == maps.len()
+                && held.iter().zip(maps).all(|(held, map)| {
+                    held.light == map.light
+                        && held.camera == map.camera
+                        && cache
+                            .get(&map.key)
+                            .is_some_and(|image| image.texture() == held.image.texture())
+                })
+        };
+        let owned = |cache: &ResourceCache<GpuKey>| -> Arc<[jstream_render::DepthShadow]> {
+            maps.iter()
+                .filter_map(|map| {
+                    Some(jstream_render::DepthShadow {
+                        light: map.light,
+                        image: cache.get(&map.key)?.clone(),
+                        camera: map.camera,
+                    })
+                })
+                .collect()
+        };
         if let Some((drawn, depth)) = self.depths.get_mut(scene)
             && depth.image.texture() == layer.texture()
         {
@@ -912,11 +952,15 @@ impl Chains {
             if *depth.lights != *lights {
                 depth.lights = Arc::from(lights);
             }
+            if !same(&depth.shadows) {
+                depth.shadows = owned(cache);
+            }
             return;
         }
         let fresh = jstream_render::ViewDepth {
             view: Some(view),
             lights: Arc::from(lights),
+            shadows: owned(cache),
             ..jstream_render::ViewDepth::new(Arc::new(layer.clone()), focal_px)
         };
         if let Some((_, old)) = self.depths.insert(scene.clone(), (ran, fresh)) {
@@ -3219,6 +3263,111 @@ mod tests {
         apply(&mut graph, vec![hide("logo")]);
         let dark = centre(&graph).expect("an adapter");
         assert!(luma(dark) < 6, "no light, no glow: {dark:?}");
+    }
+
+    /// ADR-0151 decision 6: a scene whose chain holds volumetric fog hands it the shadow
+    /// map of a spot light that casts shadows, drawn by the scene's pass when no model
+    /// receives it; a light that casts none hands it no map.
+    #[test]
+    fn volumetric_fog_gets_the_shadow_maps_of_its_scene() {
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        let mut lamp = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(8.0, 8.0).expect("positive"),
+        )
+        .expect("valid");
+        lamp.depth_px = jstream_protocol::Finite32::new(20.0).expect("finite");
+        let fog = Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("main"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("fog"),
+            kind: "volumetric_fog".into(),
+            settings: [("density", serde_json::json!(1.0))].into_iter().collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry: lamp,
+                },
+                fog,
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(canvas)),
+                },
+            ],
+        );
+        let light = |shadows| jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Spot,
+            color: [1.0; 3],
+            intensity: 4.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows,
+            shadow_softness: 0.3,
+        };
+        let black =
+            Frame::new(16, 9, &[0, 0, 0, 255].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
+        let maps = |shadows: bool| {
+            let lamp = Frame::new(1, 1, &[0; 4], 3)
+                .expect("invariant: 1x1 RGBA8")
+                .with_light(Some(light(shadows)));
+            let shot = snapshot::plan_with(
+                &graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |id| {
+                    Some(Look::Frame(
+                        if id.as_str() == "cam" {
+                            black.clone()
+                        } else {
+                            lamp.clone()
+                        },
+                        None,
+                    ))
+                },
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 18)],
+            );
+            let depth = &chains.depths.get(&SceneId::new("main"))?.1;
+            Some(
+                depth
+                    .shadows
+                    .iter()
+                    .map(|map| (map.light, map.image.width()))
+                    .collect::<Vec<_>>(),
+            )
+        };
+        let Some(cast) = maps(true) else {
+            return;
+        };
+        assert_eq!(
+            cast,
+            [(0, jstream_render::SHADOW_MAP_PX)],
+            "the lamp's map reaches the fog"
+        );
+        assert_eq!(maps(false), Some(Vec::new()), "no shadows, no map");
     }
 
     /// ADR-0151 decision 3: a card between a directional light that casts shadows and a

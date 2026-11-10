@@ -4,7 +4,9 @@
 //! taking density from a falloff above `base_y_px` and moving noise, and at each step
 //! the fog's own colour plus the light of each scene light reaching it, with a
 //! forward-scattering phase. The light it scatters toward the camera is added over the
-//! picture times what the fog lets through. Without a view depth and its camera (a 2D
+//! picture times what the fog lets through. A light that casts shadows reaches a step
+//! only where its shadow map sees it (ADR-0151 decision 3), so what stands in a beam
+//! cuts a shaft of shadow through it. Without a view depth and its camera (a 2D
 //! scene, any chain but a scene's) it passes its input through.
 
 use jstream_protocol::{KindDescriptor, ParamDescriptor, Settings};
@@ -13,9 +15,9 @@ use super::ViewDepth;
 use crate::error::RenderError;
 use crate::filter::multipass::copy;
 use crate::filter::params::{Read, Uniforms, choice, color, filter, float};
-use crate::filter::{Blend, Ctx, Draw, FilterClock, Pass, Shader};
+use crate::filter::{Blend, Ctx, FilterClock, Pass, Shader};
 use crate::image::Image;
-use crate::model::SceneLighting;
+use crate::model::{SceneLighting, ShadowMap, shadow_view};
 
 pub(super) const KIND: &str = "volumetric_fog";
 
@@ -24,6 +26,9 @@ const SHADER: Shader = Shader {
     source: include_str!("volumetric/fog.wgsl"),
     blend: Blend::Replace,
 };
+
+/// The shadow maps the shader reads, as a `scene`-lit model does.
+const MAX_SHADOWS: usize = crate::MAX_SHADOW_MAPS;
 
 /// The farthest a distance may be set, in scene pixels: `MAX_DRAWN_PX`.
 const MAX_DISTANCE: f32 = jstream_protocol::MAX_DRAWN_PX;
@@ -46,7 +51,8 @@ pub(super) fn descriptor() -> KindDescriptor {
             ParamDescriptor {
                 description: Some(
                     "Fog with height that drifts and is lit by the scene's lights: a spot \
-                     light through it shows its beam. It works in a scene's filters when \
+                     light through it shows its beam, and what stands in the beam of a light \
+                     that casts shadows cuts a shaft of shadow through it. It works in a scene's filters when \
                      the scene has a camera, best first in the chain; anywhere else it \
                      changes nothing. The fog's own colour, the light it scatters from \
                      everywhere; its alpha thins it."
@@ -221,18 +227,53 @@ fn uniforms(v: &Values, depth: &ViewDepth, clock: FilterClock) -> Option<Vec<u8>
         .vec4([wind[0], wind[1], wind[2], 0.0])
         .u32(v.steps)
         .u32(lights as u32);
+    let block = |out: Uniforms, values: [f32; 16]| {
+        (0..4).fold(out, |out, at| {
+            out.vec4([
+                values[at * 4],
+                values[at * 4 + 1],
+                values[at * 4 + 2],
+                values[at * 4 + 3],
+            ])
+        })
+    };
     for slot in 0..MAX_LIGHTS {
-        let light = lighting.lights.get(slot).copied().unwrap_or([0.0; 16]);
-        for at in 0..4 {
-            out = out.vec4([
-                light[at * 4],
-                light[at * 4 + 1],
-                light[at * 4 + 2],
-                light[at * 4 + 3],
-            ]);
-        }
+        out = block(out, lighting.lights.get(slot).copied().unwrap_or([0.0; 16]));
+    }
+    // An unused map has a negative slot, as `model.wgsl` reads it.
+    let mut unused = [0.0; 16];
+    unused[3] = -1.0;
+    for slot in 0..MAX_SHADOWS {
+        let packed = depth.shadows.get(slot).and_then(|shadow| {
+            shadow_view(
+                &ShadowMap {
+                    light: shadow.light,
+                    image: &shadow.image,
+                    camera: shadow.camera,
+                    softness: 0.0,
+                },
+                &lighting,
+                &view,
+            )
+        });
+        out = block(out, packed.unwrap_or(unused));
     }
     Some(out.finish())
+}
+
+/// The `sys` uniform of the program prelude the shader is drawn with: the sizes, and
+/// how each of its four inputs stores alpha.
+fn system(input: &Image, inputs: &[Image; 4]) -> [u8; 96] {
+    let mut bytes = [0u8; 96];
+    let size = [input.width() as f32, input.height() as f32];
+    for (at, value) in [size[0], size[1], size[0], size[1]].iter().enumerate() {
+        bytes[at * 4..at * 4 + 4].copy_from_slice(&value.to_le_bytes());
+    }
+    for (n, image) in inputs.iter().enumerate() {
+        let at = 48 + n * 4;
+        bytes[at..at + 4].copy_from_slice(&image.alpha().shader_mode().to_le_bytes());
+    }
+    bytes
 }
 
 pub(super) struct VolumetricFog {
@@ -275,13 +316,17 @@ impl Pass for VolumetricFog {
         let (Some(depth), Some(params)) = (depth, params) else {
             return copy(ctx, input, output);
         };
-        ctx.draw(&Draw {
-            shader: SHADER,
-            input,
-            aux: Some(depth.image.as_ref()),
-            params: &params,
-            target: output,
-        })
+        // The input, the depth and two maps; a missing map is the depth again, never
+        // read, since its slot is unused.
+        let map = |slot: usize| {
+            depth
+                .shadows
+                .get(slot)
+                .map_or_else(|| depth.image.as_ref().clone(), |s| s.image.clone())
+        };
+        let inputs = [input.clone(), depth.image.as_ref().clone(), map(0), map(1)];
+        let system = system(input, &inputs);
+        ctx.draw_program(SHADER.into(), &inputs, &system, &params, output)
     }
 }
 

@@ -1157,16 +1157,21 @@ it out; `filter::testing` reads both lists.
   needs the whole scene view: `ViewDepth::view`, the camera as seen on the canvas
   (`CameraView::position`, `axes` and `principal`), and `ViewDepth::lights`, packed
   into the shader as a `scene`-lit model's are (`SceneLighting`, the first 8 shading
-  lights, in the model's viewing frame); without the view it copies its input. One
-  draw (`volumetric/fog.wgsl`) marches each pixel's ray from `start_px` to its depth, or
+  lights, in the model's viewing frame); without the view it copies its input. It also
+  reads `ViewDepth::shadows` (`reads_shadows`), the first 2 lights' shadow maps, packed
+  as a model's are (`shadow_view`). One draw (`volumetric/fog.wgsl`, drawn with the
+  shader-source prelude through `Ctx::draw_program` for its four textures: the picture,
+  the depth and two maps, the depth standing in for a missing map) marches each pixel's ray from `start_px` to its depth, or
   `max_px` where nothing was drawn, in equal steps of distance, each sampled at a point
   jittered per pixel and per frame (a seed from the clock's 60ths of a second). At each
   step the extinction is `density / 1000` per pixel of ray, halving every `falloff_px`
   above `base_y_px` and as dense below it, times `1 + noise (2n − 1)` for two octaves of
   value noise that repeat every 256 features, drifted by `wind · seconds` wrapped to
   that period in `f64` (`drift`). Its light is `color` plus `scattering` times each
-  light reaching the point (range falloff and cone as a model's, no surface), with a
-  Henyey-Greenstein phase of `g = 0.4` against an even one. It lays the light scattered
+  light reaching the point (range falloff and cone as a model's, no surface; a shadowed
+  light only where one tap of its map has nothing nearer the light, by 0.2%, the
+  steps' jitter softening the edge, so what stands in a beam cuts a shaft through it,
+  `a_shadow_map_cuts_the_light_through_the_fog`), with a Henyey-Greenstein phase of `g = 0.4` against an even one. It lays the light scattered
   toward the camera over the picture times what the fog lets through, scaled by the
   colour's alpha, source-over as `depth_fog` is.
 

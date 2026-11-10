@@ -16,7 +16,7 @@ mod volumetric;
 
 use std::sync::Arc;
 
-use jstream_protocol::{CameraView, KindDescriptor, Settings};
+use jstream_protocol::{CameraView, KindDescriptor, SceneCamera, Settings};
 
 use crate::SceneLight;
 
@@ -39,6 +39,21 @@ pub struct ViewDepth {
     pub view: Option<CameraView>,
     /// The scene's lights, as a `scene`-lit model receives them (ADR-0143 decision 3).
     pub lights: Arc<[SceneLight]>,
+    /// The shadow maps of the lights that cast shadows (ADR-0151 decision 3), for the
+    /// kinds that [`reads_shadows`]: at most [`crate::MAX_SHADOW_MAPS`] are read.
+    pub shadows: Arc<[DepthShadow]>,
+}
+
+/// One light's shadow map as a depth-aware filter reads it: what
+/// [`crate::ShadowMap`] holds, with the map kept.
+#[derive(Clone, Debug)]
+pub struct DepthShadow {
+    /// Which of [`ViewDepth::lights`] casts it.
+    pub light: usize,
+    /// The map: red holds `1 / w` of the nearest caster seen from the light.
+    pub image: Image,
+    /// The light's view, seen on the map's canvas.
+    pub camera: SceneCamera,
 }
 
 impl ViewDepth {
@@ -50,6 +65,7 @@ impl ViewDepth {
             focal_px,
             view: None,
             lights: Arc::from([]),
+            shadows: Arc::from([]),
         }
     }
 }
@@ -79,6 +95,13 @@ pub fn reads_depth(kind_id: &str) -> bool {
     [fog::KIND, occlusion::KIND, volumetric::KIND].contains(&kind_id)
 }
 
+/// Whether a filter of `kind_id` also reads its scene's shadow maps, so the engine draws
+/// them for a scene chain that holds one even when no model receives them (ADR-0151
+/// decision 6: a spot light's beam through fog is cut by what stands in it).
+pub fn reads_shadows(kind_id: &str) -> bool {
+    kind_id == volumetric::KIND
+}
+
 #[cfg(test)]
 mod tests {
     use jstream_protocol::Settings;
@@ -94,5 +117,7 @@ mod tests {
             assert!(super::build(id, &Settings::default()).is_some(), "{id}");
         }
         assert!(!super::reads_depth("blur"));
+        assert!(super::reads_shadows("volumetric_fog"));
+        assert!(!super::reads_shadows("depth_fog"));
     }
 }

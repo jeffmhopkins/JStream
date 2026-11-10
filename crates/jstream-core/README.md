@@ -1873,6 +1873,12 @@ draws and allocates no depth. A layer remade at another size retires the old one
 the cache, as a scene a filter reads does
 (`depth_fog_on_a_scene_fogs_cards_and_models_by_their_distance`; the camera and lights
 reaching black volumetric fog, `volumetric_fog_on_a_scene_is_lit_by_its_lights`).
+A chain that also reads the shadow maps (`Chain::reads_shadows`, the render crate's
+`video_filter_reads_shadows`: `volumetric_fog`, ADR-0151 decision 6) marks its pass
+(`Pass::reads_shadows`): after the view depth, the pass draws the scene's maps with
+`draw_shadows` unless a receiving model drew them this run, and `drew_depth` hands them to
+the fog in `ViewDepth::shadows`, made again only when a map, its light or its camera
+changes (`volumetric_fog_gets_the_shadow_maps_of_its_scene`).
 
 In a transition the scene is one picture
 (ADR-0065 §6): one track over the canvas that pairs with nothing, so Fade crossfades
