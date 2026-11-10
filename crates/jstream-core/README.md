@@ -84,7 +84,7 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   against and `kind.list` reports ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)):
   the source kinds of `jstream-sources`' built-in registry, the audio filter kinds,
   `jstream-render`'s video filter kinds, its depth-aware ones (`depth_fog`, ADR-0143, and
-  `ambient_occlusion` and `volumetric_fog`, ADR-0151)
+  `ambient_occlusion`, `volumetric_fog`, `floor_reflection` and `depth_bloom`, ADR-0151)
   included, since the chains draw the view depth they read, and `follow_pointer`, the
   follow camera, which drives its scene's camera and draws nothing
   ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md)). Its test snapshots them all (`schema/kinds.snap`, an `insta` snapshot, as
@@ -1858,7 +1858,8 @@ once per frame however many mixes and places show it, and a disabled or empty ch
 leaves the scene composited as before.
 
 A 3D scene whose chain holds a filter that reads depth (`Chain::reads_depth`, the render
-crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion` and `volumetric_fog`) also gets its view depth
+crate's `video_filter_reads_depth`: `depth_fog`, `ambient_occlusion`, `volumetric_fog`,
+`floor_reflection` and `depth_bloom`) also gets its view depth
 ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decision 4):
 planning gives its composite's pass a `GpuKey::ViewDepth` layer, and right after the
 composite draws, `draw_view_depth` draws the cards' depth as that pass placed them, then

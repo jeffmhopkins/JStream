@@ -1147,6 +1147,20 @@ it out; `filter::testing` reads both lists.
   `c · (1 − k) + color · c.alpha · k`, `k = share · strength` at most 1, so alpha is
   kept. Where nothing was drawn, at no strength, and without a matching depth, it
   copies its input.
+- `depth_bloom` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 8, `depth/bloom.rs`): `threshold` (0 to 4 of linear luma, default 0.8),
+  `strength` (0 to 4, default 1), `radius_px` (0 to 100, default 24, its outset),
+  `depth_px` (default 200) and `far_px` (default 0, never). A bright pass
+  (`bloom/bright.wgsl`) keeps each 2 × 2 block's light above the threshold, over a knee
+  of 0.1, into a half-size scratch layer, faded linearly to nothing at `far_px` by the
+  view depth's distance there. Two separable passes (`bloom/blur.wgsl`) blur it there:
+  a Gaussian of half the radius at that size over at most 16 taps a side, normalised by
+  its full weight, each tap's weight falling to nothing as the pixel it glows onto is
+  nearer than the tap by `depth_px` to twice that, so a glow stops at something in front
+  of it; where either has nothing drawn it spreads as plain bloom's does. The glow is
+  added over the picture, read bilinear, its coverage its brightest channel, as
+  `bloom`'s is (`bloom/add.wgsl`). Without a view depth it blooms with no depth test and
+  no fade (`a_glow_stops_at_something_in_front_of_it`).
 - `floor_reflection` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 4, `depth/reflection.rs`): `floor_y_px` (default 1080, the plane in the
   scene's space, y down), `strength` (0 to 1, default 0.5), `fade_px` (default 0, never)
@@ -1544,14 +1558,15 @@ and the sphere lit by a spot light that casts shadows with its 2048² map drawn 
 4 and 16 cards, the scene itself drawn outside the loop (`depth_fog_1080p_camera`,
 ADR-0143), the same with `ambient_occlusion` at its defaults
 (`ambient_occlusion_1080p_camera`, ADR-0151), the same with `volumetric_fog` at its
-defaults and the camera's view (`volumetric_fog_1080p_camera`), and
+defaults and the camera's view (`volumetric_fog_1080p_camera`), the same with
+`depth_bloom` at its defaults (`depth_bloom_1080p_camera`), and
 refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
 20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
 items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms (the shadowed
 sphere 24 ms, its map and lit draw without the placing), and depth with
 fog 31 and 48 ms for 4 and 16 cards, depth with ambient occlusion 47 and 67 ms, and
 with volumetric fog 541 and 545 ms, its 48 steps a pixel dominating on a CPU
-rasterizer (criterion's `--quick`). Run them with
+rasterizer, and with depth bloom 95 and 111 ms (criterion's `--quick`). Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the

@@ -1607,6 +1607,70 @@ source: crates/jstream-core/src/kinds.rs
     ]
   },
   {
+    "kind_id": "depth_bloom",
+    "category": "video_filter",
+    "name": "Depth bloom",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "threshold",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 0.8,
+        "label": "Threshold",
+        "description": "Bloom whose glow stays with what glows: it doesn't bleed over something in front of it. It works in a scene's filters when the scene has a camera; anywhere else it blooms as Bloom does. How bright, in linear light, a part must be to glow.",
+        "live": true
+      },
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 4.0,
+        "default": 1.0,
+        "label": "Strength",
+        "description": "How bright the glow is.",
+        "live": true
+      },
+      {
+        "id": "radius_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 100.0,
+        "unit": "px",
+        "default": 24.0,
+        "label": "Radius",
+        "description": "How far the glow spreads.",
+        "live": true
+      },
+      {
+        "id": "depth_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 999999986991104.0,
+        "unit": "px",
+        "default": 200.0,
+        "label": "Depth",
+        "description": "How far in front of a glowing thing a nearer one may be before the glow stops at it, in scene pixels.",
+        "live": true
+      },
+      {
+        "id": "far_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 999999986991104.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Farthest",
+        "description": "Distance past which glow fades to nothing, in scene pixels; 0 never fades.",
+        "live": true
+      }
+    ],
+    "max_outset_px": 100
+  },
+  {
     "kind_id": "depth_fog",
     "category": "video_filter",
     "name": "Depth fog",
