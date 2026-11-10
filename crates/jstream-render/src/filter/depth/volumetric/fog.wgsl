@@ -88,24 +88,38 @@ fn shadow_texel(s: u32, px: vec2<i32>) -> f32 {
     return textureLoad(shadow1, px, 0).r;
 }
 
-// Whether light slot `light` reaches `q`: 1 unless a map of its own holds something
-// nearer to the light there (by a small bias). One tap: the steps' jitter softens it.
+// Whether map `s` sees `q`: 1 unless it holds something nearer to its light there (by
+// a small bias), or `q` is behind the light. One tap: the steps' jitter softens it.
+fn seen_by_map(s: u32, q: vec3<f32>) -> f32 {
+    let sh = p.shadows[s];
+    let focal = sh.right.w;
+    let rel = q - sh.at.xyz;
+    let d = dot(rel, sh.forward.xyz);
+    if d <= 0.0 || focal <= 0.0 {
+        return 1.0;
+    }
+    let at = vec2<f32>(dot(rel, sh.right.xyz), dot(rel, sh.down.xyz)) * focal / d
+        + vec2<f32>(sh.down.w);
+    let stored = shadow_texel(s, vec2<i32>(floor(at)));
+    return select(0.0, 1.0, stored <= focal / d * 1.002);
+}
+
+// Whether map `s` shadows light slot `light`.
+fn shadows_light(s: u32, light: u32) -> bool {
+    let w = p.shadows[s].at.w;
+    return w >= 0.0 && u32(w) == light;
+}
+
+// Whether light slot `light` reaches `q`: 1 unless a map of its own doesn't see it.
+// The MAX_SHADOWS (2) maps are tried one by one, not in a loop: a loop that picks a
+// texture by its index can't be unrolled by FXC, the Direct3D 12 compiler, inside the
+// march's loops, and it refuses the whole shader (X3511).
 fn reaches(light: u32, q: vec3<f32>) -> f32 {
-    for (var s = 0u; s < MAX_SHADOWS; s++) {
-        let sh = p.shadows[s];
-        if sh.at.w < 0.0 || u32(sh.at.w) != light {
-            continue;
-        }
-        let focal = sh.right.w;
-        let rel = q - sh.at.xyz;
-        let d = dot(rel, sh.forward.xyz);
-        if d <= 0.0 || focal <= 0.0 {
-            return 1.0;
-        }
-        let at = vec2<f32>(dot(rel, sh.right.xyz), dot(rel, sh.down.xyz)) * focal / d
-            + vec2<f32>(sh.down.w);
-        let stored = shadow_texel(s, vec2<i32>(floor(at)));
-        return select(0.0, 1.0, stored <= focal / d * 1.002);
+    if shadows_light(0u, light) {
+        return seen_by_map(0u, q);
+    }
+    if shadows_light(1u, light) {
+        return seen_by_map(1u, q);
     }
     return 1.0;
 }
