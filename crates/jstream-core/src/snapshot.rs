@@ -150,10 +150,17 @@ impl PartialEq for Frame {
     }
 }
 
-/// What tells two shown models apart: a new version is a new model to upload, and the
-/// lighting is drawn with it. Cheaper than comparing the models.
-fn model_key(model: Option<&ShownModel>) -> Option<(u64, Lighting)> {
-    model.map(|shown| (shown.model.version(), shown.lighting))
+/// What tells two shown models apart: a new version is a new model to upload, the
+/// lighting is drawn with it, and a new pose (ADR-0151 decision 7) is a new frame of its
+/// animation. Cheaper than comparing the models.
+fn model_key(model: Option<&ShownModel>) -> Option<(u64, Lighting, Option<*const u8>)> {
+    model.map(|shown| {
+        (
+            shown.model.version(),
+            shown.lighting,
+            shown.pose.as_ref().map(|p| p.as_ptr().cast::<u8>()),
+        )
+    })
 }
 
 impl Frame {
@@ -1555,7 +1562,7 @@ pub(crate) fn plan(graph: &Graph, frames: &BTreeMap<SourceId, Frame>) -> Shot {
         graph,
         first.as_ref(),
         None,
-        &mut |id| frames.get(id).map(|f| Look::Frame(f.clone(), None)),
+        &mut |id| frames.get(id).map(|f| Look::frame(f.clone(), None)),
         &FilterAssets::default(),
     )
     .shot
@@ -2101,9 +2108,16 @@ fn placed_captures<'a>(
 /// What a source shows, as [`plan_with`] asks for it.
 pub(crate) enum Look {
     /// Its frame now, and when that frame is next replaced.
-    Frame(Frame, Option<MediaTime>),
+    Frame(Box<Frame>, Option<MediaTime>),
     /// What the output pipeline captures for it.
     Capture(CaptureKey),
+}
+
+impl Look {
+    /// [`Look::Frame`]: `frame`, next replaced at `next`.
+    pub(crate) fn frame(frame: Frame, next: Option<MediaTime>) -> Self {
+        Self::Frame(Box::new(frame), next)
+    }
 }
 
 /// What [`plan_with`] asks for each source it reaches; `None` shows nothing.
@@ -3099,7 +3113,7 @@ impl<'a> Planner<'a, '_> {
                 if let Some(next) = next {
                     self.wake = Some(self.wake.map_or(next, |wake| wake.min(next)));
                 }
-                out.frames.insert(source_id.clone(), frame);
+                out.frames.insert(source_id.clone(), *frame);
                 Some(SourceRef::Frame(source_id.clone()))
             }
             Look::Capture(spec) => Some(SourceRef::Capture(spec)),
@@ -5807,6 +5821,19 @@ fn draw_box(
 ///
 /// # Errors
 /// What the compositor reports for drawing into the layer.
+/// Poses a rigged model's upload as its source shows it now (ADR-0151 decision 7), for
+/// every draw that follows: its layer, its reflection, its view depth and the shadow
+/// maps.
+fn pose(
+    compositor: &Compositor,
+    model: &jstream_render::GpuModel,
+    shown: &jstream_sources::ShownModel,
+) {
+    if let Some(palette) = &shown.pose {
+        compositor.pose_model(model, palette);
+    }
+}
+
 fn light_card(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
@@ -5950,6 +5977,9 @@ fn draw_model(
     if let Err(error) = chains.upload_model(compositor, source, &shown.model) {
         chains.fail_box(owner, &error);
         return Ok(());
+    }
+    if let Some(model) = chains.model(source) {
+        pose(compositor, model, shown);
     }
     // A `scene`-lit model in a 3D scene is lit by the scene's lights (ADR-0143
     // decision 3); in a 2D scene it is studio-lit.
@@ -6299,6 +6329,7 @@ fn draw_reflection(
         }) else {
             continue;
         };
+        pose(compositor, model, shown);
         let reflected = GpuKey::ReflectedModel(scene_id.clone(), item_id.clone());
         cache.layer(compositor, &reflected, width, height)?;
         let Some(target) = cache.get(&reflected) else {
@@ -6868,6 +6899,7 @@ fn draw_view_depth(
         if from.is_some_and(|(_, casters, _)| casters) && !shown.casts_shadows {
             continue;
         }
+        pose(compositor, model, shown);
         compositor.draw_model_depth(
             &jstream_render::ModelDraw {
                 model,

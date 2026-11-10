@@ -5881,7 +5881,7 @@ impl State {
                             running,
                             now,
                             &mut |id| match frames.get(id) {
-                                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                                Some(frame) => Some(Look::frame(frame.clone(), None)),
                                 None => live.look(id, now, frame_versions),
                             },
                             &assets,
@@ -6086,7 +6086,7 @@ impl State {
             running,
             now,
             &mut |id| match frames.get(id) {
-                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                Some(frame) => Some(Look::frame(frame.clone(), None)),
                 None => live.look_quiet(id, now, frame_versions),
             },
             &assets,
@@ -6194,7 +6194,7 @@ impl State {
             graph,
             scene_id,
             &mut |id| match frames.get(id) {
-                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                Some(frame) => Some(Look::frame(frame.clone(), None)),
                 None => live.look_quiet(id, now, frame_versions),
             },
             &assets,
@@ -6281,7 +6281,7 @@ impl State {
             studio.program(),
             studio.running().map(|running| (running, now)),
             &mut |id| match frames.get(id) {
-                Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                Some(frame) => Some(Look::frame(frame.clone(), None)),
                 None => live.look(id, now, frame_versions),
             },
             &assets,
@@ -6316,7 +6316,7 @@ impl State {
                 graph,
                 &scene_id,
                 &mut |id| match frames.get(id) {
-                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                    Some(frame) => Some(Look::frame(frame.clone(), None)),
                     None => live.look_quiet(id, now, frame_versions),
                 },
                 &assets,
@@ -6365,7 +6365,7 @@ impl State {
                 graph,
                 &source_id,
                 &mut |id| match frames.get(id) {
-                    Some(frame) => Some(Look::Frame(frame.clone(), None)),
+                    Some(frame) => Some(Look::frame(frame.clone(), None)),
                     None => live.look_quiet(id, now, frame_versions),
                 },
                 &assets,

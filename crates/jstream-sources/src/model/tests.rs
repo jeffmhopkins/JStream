@@ -225,3 +225,96 @@ fn a_file_that_isnt_a_model_names_itself() {
         "{err:?}"
     );
 }
+
+/// A `.gltf` of one triangle on a node that a clip `slide` moves 4 along x over 2 s.
+fn write_sliding(dir: &std::path::Path) {
+    let bin: Vec<u8> = [
+        0.0f32, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 1.0, 0.0, // positions
+        0.0, 2.0, // times
+        0.0, 0.0, 0.0, 4.0, 0.0, 0.0, // translations
+    ]
+    .iter()
+    .flat_map(|v| v.to_le_bytes())
+    .collect();
+    let doc = json!({
+        "asset": { "version": "2.0" },
+        "nodes": [{ "mesh": 0 }],
+        "meshes": [{ "primitives": [{ "attributes": { "POSITION": 0 } }] }],
+        "accessors": [
+            { "bufferView": 0, "componentType": 5126, "count": 3, "type": "VEC3" },
+            { "bufferView": 1, "componentType": 5126, "count": 2, "type": "SCALAR" },
+            { "bufferView": 2, "componentType": 5126, "count": 2, "type": "VEC3" }
+        ],
+        "bufferViews": [
+            { "buffer": 0, "byteLength": 36 },
+            { "buffer": 0, "byteOffset": 36, "byteLength": 8 },
+            { "buffer": 0, "byteOffset": 44, "byteLength": 24 }
+        ],
+        "buffers": [{ "uri": "slide.bin", "byteLength": 68 }],
+        "animations": [{
+            "name": "slide",
+            "samplers": [{ "input": 1, "output": 2 }],
+            "channels": [{ "sampler": 0, "target": { "node": 0, "path": "translation" } }]
+        }]
+    });
+    std::fs::write(
+        dir.join("set/slide.gltf"),
+        serde_json::to_vec(&doc).expect("json"),
+    )
+    .expect("written");
+    std::fs::write(dir.join("set/slide.bin"), bin).expect("written");
+}
+
+#[test]
+fn an_animation_plays_on_the_media_clock_loops_or_holds_and_a_wrong_name_is_refused() {
+    use jstream_media::{MediaTime, Timebase};
+    let temp = folder("slide");
+    write_sliding(&temp.0);
+    let ctx = Context {
+        assets: AssetRoots {
+            collection: Some(temp.0.clone()),
+            app: None,
+        },
+        ..Context::default()
+    };
+    let ms = |t: i64| MediaTime::new(t, Timebase::MILLIS);
+    // Where the clip has slid the node at `t` ms: its slot's translation along x.
+    let slid = |source: &mut Box<dyn Source>, t: i64| {
+        source.frame(ms(t)).expect("a frame");
+        source.model().expect("a model").pose.expect("posed")[0][12]
+    };
+    let mut source = create(
+        json!({ "file": file("set/slide.gltf"), "animation": "slide" }),
+        &ctx,
+    )
+    .expect("loads");
+    assert!((slid(&mut source, 1000) - 2.0).abs() < 1e-5);
+    // Looped: 3 s is 1 s into the second pass.
+    assert!((slid(&mut source, 3000) - 2.0).abs() < 1e-5);
+    assert!(source.next_change(ms(3000)).is_some());
+    // Twice as fast, held at its end.
+    source
+        .update(&settings(json!({
+            "file": file("set/slide.gltf"),
+            "animation": "slide",
+            "animation_speed": 2.0,
+            "animation_loop": false,
+        })))
+        .expect("live");
+    assert!((slid(&mut source, 500) - 2.0).abs() < 1e-5);
+    assert!((slid(&mut source, 5000) - 4.0).abs() < 1e-5);
+    assert_eq!(source.next_change(ms(5000)), None);
+    // No animation stands it at rest.
+    let mut still = create(json!({ "file": file("set/slide.gltf") }), &ctx).expect("loads");
+    still.frame(ms(1000)).expect("a frame");
+    let rest = still.model().expect("a model").pose.expect("at rest");
+    assert_eq!(rest[0][12], 0.0);
+    // A name the file lacks is refused with the names it has.
+    let err = create(
+        json!({ "file": file("set/slide.gltf"), "animation": "walk" }),
+        &ctx,
+    )
+    .err()
+    .expect("refused");
+    assert!(err.to_string().contains("it has slide"), "{err}");
+}

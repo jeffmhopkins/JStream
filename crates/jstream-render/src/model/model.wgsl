@@ -108,6 +108,15 @@ struct Material {
 @group(1) @binding(4) var normal_tex: texture_2d<f32>;
 @group(1) @binding(5) var occlusion_tex: texture_2d<f32>;
 @group(1) @binding(6) var emissive_tex: texture_2d<f32>;
+// A rigged model's palette (ADR-0151 decision 7): a vertex stands at the weighted sum of
+// its joints' matrices times its position. A model without a rig weighs none of it.
+@group(2) @binding(0) var<storage, read> pose: array<mat4x4<f32>>;
+
+// The matrix that places a vertex: its joints' palette matrices, weighed.
+fn skin_matrix(joints: vec4<u32>, weights: vec4<f32>) -> mat4x4<f32> {
+    return pose[joints.x] * weights.x + pose[joints.y] * weights.y
+        + pose[joints.z] * weights.z + pose[joints.w] * weights.w;
+}
 
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
@@ -120,12 +129,28 @@ struct VsOut {
 
 @vertex
 fn vs(
-    @location(0) position: vec3<f32>,
-    @location(1) normal: vec3<f32>,
-    @location(2) tangent: vec4<f32>,
+    @location(0) bound: vec3<f32>,
+    @location(1) bound_normal: vec3<f32>,
+    @location(2) bound_tangent: vec4<f32>,
     @location(3) uv: vec2<f32>,
     @location(4) color: vec4<f32>,
+    @location(5) joints: vec4<u32>,
+    @location(6) weights: vec4<f32>,
 ) -> VsOut {
+    var position = bound;
+    var normal = bound_normal;
+    var tangent = bound_tangent;
+    if (any(weights != vec4<f32>(0.0))) {
+        let m = skin_matrix(joints, weights);
+        let a = m[0].xyz;
+        let b = m[1].xyz;
+        let c = m[2].xyz;
+        // det × the inverse transpose, for the normal; its sign keeps it outward.
+        let side = select(1.0, -1.0, dot(a, cross(b, c)) < 0.0);
+        position = (m * vec4<f32>(bound, 1.0)).xyz;
+        normal = normalize(mat3x3<f32>(cross(b, c), cross(c, a), cross(a, b)) * bound_normal) * side;
+        tangent = vec4<f32>(normalize(mat3x3<f32>(a, b, c) * bound_tangent.xyz), bound_tangent.w * side);
+    }
     var out: VsOut;
     out.clip = frame.clip * vec4<f32>(position, 1.0);
     out.seen = (frame.view * vec4<f32>(position, 1.0)).xyz;

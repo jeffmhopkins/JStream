@@ -721,6 +721,15 @@ impl Compositor {
         errors.close(self.models.upload(&self.gpu, &self.owner, model))
     }
 
+    /// Poses a rigged model for its next draws (ADR-0151 decision 7): `palette` is its
+    /// rig's palette now ([`jstream_media::model::rig::Rig::pose`]), one matrix a slot.
+    /// A model without a rig, or a palette of another length, is left as it is. Every
+    /// draw of the model that follows, in any layer, view depth or shadow map, takes
+    /// this pose, until the next.
+    pub fn pose_model(&self, model: &GpuModel, palette: &[jstream_media::model::rig::Mat4]) {
+        crate::model::ModelRuntime::pose(&self.gpu, model, palette);
+    }
+
     /// Draws a model placed by an item into `target`, a [`Self::layer`] of the canvas
     /// size, replacing what it held (ADR-0107 decision 6): transparent where the model
     /// isn't, the model with its own depth test where it is. A scene then places the

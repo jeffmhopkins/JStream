@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use jstream_media::model::shapes::Shape;
 use jstream_media::model::{Lighting, Material, Model};
-use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
+use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_protocol::{
     AssetRoot, EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings,
 };
@@ -131,6 +131,41 @@ impl ModelKind {
                     ),
                     "Whether, lit by its scene, it is shadowed by the lights that cast them.",
                 )),
+                live(described(
+                    param(
+                        "animation",
+                        "Animation",
+                        ParamType::String {
+                            multiline: false,
+                            max_len: 256,
+                        },
+                        json!(""),
+                    ),
+                    "The file's animation to play, by its name; empty plays none and stands it at rest. A name the file lacks is refused with the names it has.",
+                )),
+                live(described(
+                    param(
+                        "animation_speed",
+                        "Animation speed",
+                        ParamType::Float {
+                            min: Some(0.0),
+                            max: Some(8.0),
+                            step: Some(0.05),
+                            unit: None,
+                        },
+                        json!(1.0),
+                    ),
+                    "How fast it plays: 1 at its own pace, 0 held at its start.",
+                )),
+                live(described(
+                    param(
+                        "animation_loop",
+                        "Loop the animation",
+                        ParamType::Bool,
+                        json!(true),
+                    ),
+                    "Whether it plays again from its start; if not, it holds its last frame.",
+                )),
             ],
             ..kind("model", "3D model", true, false)
         })
@@ -152,6 +187,7 @@ impl SourceKind for ModelKind {
     fn create(&self, settings: &Settings, ctx: &Context) -> Result<Box<dyn Source>, SourceError> {
         let base = build(settings, ctx)?;
         let look = Look::of(settings)?;
+        let play = Play::of(settings, base.as_ref())?;
         let shown = base.as_ref().map(|base| look.apply(base));
         Ok(Box::new(ModelSource {
             descriptor: self.0.clone(),
@@ -159,6 +195,8 @@ impl SourceKind for ModelKind {
             frame: stand_in(base.as_deref())?,
             base,
             look,
+            play,
+            fps: ctx.program_fps().max(1),
             shown,
         }))
     }
@@ -249,11 +287,92 @@ impl Look {
                 }
             }),
         };
+        // A rigged model stands at rest until a clip poses it.
+        let pose = model.rig().map(|r| r.rest().into());
         ShownModel {
             model: Arc::new(model),
             lighting: self.lighting,
             casts_shadows: self.casts_shadows,
             receives_shadows: self.receives_shadows,
+            pose,
+        }
+    }
+}
+
+/// The live settings that play a file's animation (ADR-0151 decision 7).
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Play {
+    /// The clip, `None` for none (standing at rest).
+    clip: Option<usize>,
+    speed: f64,
+    looped: bool,
+}
+
+impl Play {
+    fn of(settings: &Settings, base: Option<&Base>) -> Result<Self, SourceError> {
+        let bad = |param: &str, reason: String| SourceError::Setting {
+            param: param.into(),
+            reason,
+        };
+        // Settings saved before animation had none of these: play none.
+        let name = match settings.get("animation") {
+            None | Some(Value::Null) => "",
+            Some(value) => value
+                .as_str()
+                .ok_or_else(|| bad("animation", "must be a string".into()))?,
+        };
+        let speed = match settings.get("animation_speed") {
+            None => 1.0,
+            Some(value) => value
+                .as_f64()
+                .filter(|v| (0.0..=8.0).contains(v))
+                .ok_or_else(|| bad("animation_speed", "must be a number from 0 to 8".into()))?,
+        };
+        let looped = match settings.get("animation_loop") {
+            None => true,
+            Some(value) => value
+                .as_bool()
+                .ok_or_else(|| bad("animation_loop", "must be true or false".into()))?,
+        };
+        let clip = match (name, base) {
+            ("", _) | (_, None | Some(Base::Shape(_))) => None,
+            (name, Some(Base::File(model))) => {
+                let clips = model.rig().map(|r| r.clips()).unwrap_or_default();
+                let found = clips.iter().position(|c| c.name == name);
+                if found.is_none() {
+                    let names: Vec<&str> = clips.iter().map(|c| c.name.as_str()).collect();
+                    return Err(bad(
+                        "animation",
+                        if names.is_empty() {
+                            format!("the file has no animation `{name}`: it has none")
+                        } else {
+                            format!(
+                                "the file has no animation `{name}`; it has {}",
+                                names.join(", ")
+                            )
+                        },
+                    ));
+                }
+                found
+            }
+        };
+        Ok(Self {
+            clip,
+            speed,
+            looped,
+        })
+    }
+
+    /// The time into the clip at `at` since the source started: `at` times the speed,
+    /// looped over the clip's length or held at its end.
+    fn seconds(&self, at: MediaTime, duration: f64) -> f64 {
+        let t = at.as_secs_f64().max(0.0) * self.speed;
+        if duration <= 0.0 {
+            0.0
+        } else if self.looped {
+            t.rem_euclid(duration)
+        } else {
+            t.min(duration)
         }
     }
 }
@@ -397,16 +516,62 @@ struct ModelSource {
     frame: Arc<VideoFrame>,
     base: Option<Base>,
     look: Look,
+    play: Play,
+    /// The program's frame rate, which a playing clip moves on at.
+    fps: u32,
     shown: Option<ShownModel>,
 }
 
+impl ModelSource {
+    /// Poses the shown model for `at`, when it plays a clip.
+    fn pose(&mut self, at: MediaTime) {
+        let (Some(clip), Some(base), Some(shown)) = (self.play.clip, &self.base, &mut self.shown)
+        else {
+            return;
+        };
+        let Some(rig) = base.rig() else {
+            return;
+        };
+        let duration = rig.clips().get(clip).map_or(0.0, |c| c.duration);
+        let seconds = self.play.seconds(at, duration);
+        shown.pose = Some(rig.pose(clip, seconds).into());
+    }
+
+    /// Whether the picture moves on from `at`: a clip playing, not yet held at its end.
+    fn moving(&self, at: MediaTime) -> bool {
+        let (Some(clip), Some(rig)) = (self.play.clip, self.base.as_ref().and_then(|b| b.rig()))
+        else {
+            return false;
+        };
+        let duration = rig.clips().get(clip).map_or(0.0, |c| c.duration);
+        self.play.speed > 0.0
+            && duration > 0.0
+            && (self.play.looped || at.as_secs_f64() * self.play.speed < duration)
+    }
+}
+
 impl Source for ModelSource {
-    fn frame(&mut self, _: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
+    fn frame(&mut self, at: MediaTime) -> Result<Arc<VideoFrame>, SourceError> {
+        self.pose(at);
         Ok(Arc::clone(&self.frame))
     }
 
-    fn next_change(&self, _: MediaTime) -> Option<MediaTime> {
-        None
+    /// A playing clip moves on every program frame; the stand-in frame itself never
+    /// changes.
+    fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
+        if !self.moving(at) {
+            return None;
+        }
+        let step = Timebase::per_second(self.fps)
+            .ok()
+            .and_then(|tb| {
+                MediaTime::new(1, tb)
+                    .rescale(at.timebase(), Rounding::Up)
+                    .ok()
+            })
+            .filter(|step| step.ticks() > 0)
+            .unwrap_or_else(|| MediaTime::new(1, at.timebase()));
+        at.checked_add(step).ok()
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
@@ -416,9 +581,16 @@ impl Source for ModelSource {
             });
         }
         let look = Look::of(settings)?;
+        let play = Play::of(settings, self.base.as_ref())?;
         if look != self.look {
             self.shown = self.base.as_ref().map(|base| look.apply(base));
             self.look = look;
+        }
+        if play != self.play {
+            if let Some(shown) = &mut self.shown {
+                shown.pose = shown.model.rig().map(|r| r.rest().into());
+            }
+            self.play = play;
         }
         self.settings = settings.clone();
         Ok(())

@@ -1057,7 +1057,7 @@ impl LiveSources {
                         frame
                     }
                 };
-                return Some(Look::Frame(frame, next));
+                return Some(Look::frame(frame, next));
             }
             if jstream_sources::opens_browser(&entry.kind) {
                 // Not painted yet: the stand-in, until a re-plan finds the first paint.
@@ -1066,11 +1066,11 @@ impl LiveSources {
                 let (frame, own) =
                     Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
                 let next = if running.slot.is_some() { own } else { next };
-                return Some(Look::Frame(frame, next));
+                return Some(Look::frame(frame, next));
             }
         }
         let (frame, next) = Self::cpu_frame(source_id, running, (at, now), versions, &self.stills)?;
-        Some(Look::Frame(frame, next))
+        Some(Look::frame(frame, next))
     }
 
     /// [`Self::look`]'s frame from the source's CPU frame at `at`, its own time.

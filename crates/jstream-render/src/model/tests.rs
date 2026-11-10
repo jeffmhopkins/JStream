@@ -1237,3 +1237,95 @@ fn golden_model_a_floor_cuts_what_is_below_it() {
     assert!(rgb(&seen, 80, 40)[0] > 0, "the upper half has depth");
     assert_eq!(rgb(&seen, 80, 60)[0], 0, "the lower half has none");
 }
+
+/// ADR-0151 decision 7: a rigged model is drawn where its pose places it. At rest its
+/// one slot is the identity and the cube shows its front; posed half a turn about the
+/// vertical, its back faces the viewer, lit the right way out, in the same box (a pose
+/// never rescales it, since the box fits the rest pose).
+#[test]
+fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
+    use jstream_media::model::rig::{Rest, Rig, RigNode, Slot};
+    use std::sync::Arc;
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let cube = coloured_cube();
+    let mut primitive = cube.primitives()[0].clone();
+    for v in &mut primitive.vertices {
+        v.weights = [1.0, 0.0, 0.0, 0.0];
+    }
+    let identity = [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    let rig = Rig::new(
+        vec![RigNode {
+            parent: None,
+            rest: Rest::Matrix(identity),
+        }],
+        vec![Slot {
+            node: 0,
+            inverse_bind: identity,
+        }],
+        vec![],
+    )
+    .expect("a rig");
+    let rigged = Model::rigged(
+        vec![primitive],
+        cube.materials().to_vec(),
+        vec![],
+        Some(Arc::new(rig)),
+    )
+    .expect("the cube builds");
+    let compositor = &mut opened.compositor;
+    let uploaded = compositor.upload_model(&rigged).expect("the model uploads");
+    let geometry = boxed(80.0, 50.0, 40.0);
+    let shoot = |compositor: &mut Compositor| {
+        let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+        compositor
+            .draw_model(
+                &ModelDraw {
+                    model: &uploaded,
+                    geometry,
+                    camera: None,
+                    lighting: Lighting::Studio,
+                    lights: None,
+                    shadows: &[],
+                    environment: None,
+                    floor: None,
+                },
+                &layer,
+            )
+            .expect("the model draws");
+        let items = [crate::tests::item(
+            &layer,
+            Placement::Layer(geometry),
+            Crop::NONE,
+            1.0,
+        )];
+        render(compositor, &items)
+    };
+    let rest = shoot(compositor);
+    assert_near(rgb(&rest, 80, 50), FRONT, (80, 50));
+    let half_turn: [f32; 16] = [
+        -1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, -1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ];
+    compositor.pose_model(&uploaded, &[half_turn]);
+    let turned = shoot(compositor);
+    for at in [(62, 32), (80, 50), (97, 67)] {
+        assert_near(rgb(&turned, at.0, at.1), BACK, at);
+    }
+    let back = count(&turned, BACK);
+    assert!(
+        (1520..=1680).contains(&back),
+        "{back} back pixels, want about 1600"
+    );
+    // A palette of another length is ignored.
+    compositor.pose_model(&uploaded, &[identity_f32(), identity_f32()]);
+    assert_near(rgb(&shoot(compositor), 80, 50), BACK, (80, 50));
+}
+
+fn identity_f32() -> [f32; 16] {
+    [
+        1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+    ]
+}

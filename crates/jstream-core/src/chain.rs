@@ -1519,7 +1519,7 @@ mod tests {
             graph,
             Some(&SceneId::new("main")),
             None,
-            &mut |_| Some(Look::Frame(frame.clone(), None)),
+            &mut |_| Some(Look::frame(frame.clone(), None)),
             assets,
         )
         .shot
@@ -1713,7 +1713,7 @@ mod tests {
                 graph,
                 Some(&SceneId::new("main")),
                 None,
-                &mut |_| Some(Look::Frame(frame.clone(), None)),
+                &mut |_| Some(Look::frame(frame.clone(), None)),
                 &assets,
             )
             .shot
@@ -1924,7 +1924,7 @@ mod tests {
             graph,
             Some(&SceneId::new(program)),
             None,
-            &mut |_| Some(Look::Frame(frame.clone(), None)),
+            &mut |_| Some(Look::frame(frame.clone(), None)),
             &FilterAssets::default(),
         )
         .shot
@@ -2749,6 +2749,15 @@ mod tests {
     /// [`shot`], with `cam` showing an unlit white model of `shape` (ADR-0107) in place
     /// of its frame, a transparent stand-in.
     fn model_shot(graph: &Graph, shape: &str) -> Shot {
+        model_shot_with(graph, shape, |shown| shown)
+    }
+
+    /// [`model_shot`], with the shown model changed by `change` first.
+    fn model_shot_with(
+        graph: &Graph,
+        shape: &str,
+        change: impl Fn(jstream_sources::ShownModel) -> jstream_sources::ShownModel,
+    ) -> Shot {
         use jstream_sources::SourceKind as _;
         let kind = jstream_sources::ModelKind::new();
         let mut settings: jstream_protocol::Settings = kind
@@ -2763,7 +2772,7 @@ mod tests {
         let source = kind
             .create(&settings, &jstream_sources::Context::default())
             .expect("a model");
-        let shown = source.model().expect("a shape is a model");
+        let shown = change(source.model().expect("a shape is a model"));
         let white: Vec<u8> = std::iter::repeat_n(WHITE, 16 * 9).flatten().collect();
         let frame = Frame::new(16, 9, &white, 1).expect("invariant: 16x9 RGBA8");
         let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
@@ -2774,7 +2783,7 @@ mod tests {
             Some(&SceneId::new("main")),
             None,
             &mut |id| {
-                Some(Look::Frame(
+                Some(Look::frame(
                     if id.as_str() == "cam" {
                         stand_in.clone()
                     } else {
@@ -2786,6 +2795,86 @@ mod tests {
             &FilterAssets::default(),
         )
         .shot
+    }
+
+    /// A rigged model is drawn as its pose places it (ADR-0151 decision 7), in a box
+    /// fitted to its rest pose: a pose half its width to the right moves it there, in
+    /// its layer, without rescaling it.
+    #[test]
+    fn golden_a_posed_model_draws_where_its_pose_places_it() {
+        use jstream_media::model::rig::{Mat4, Rest, Rig, RigNode, Slot};
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(&mut graph, vec![hide("logo")]);
+        let identity = [
+            1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
+        ];
+        let rigged = |palette: Mat4| {
+            move |shown: jstream_sources::ShownModel| {
+                let model = &shown.model;
+                let mut primitives = model.primitives().to_vec();
+                for v in primitives.iter_mut().flat_map(|p| &mut p.vertices) {
+                    v.weights = [1.0, 0.0, 0.0, 0.0];
+                }
+                let rig = Rig::new(
+                    vec![RigNode {
+                        parent: None,
+                        rest: Rest::Matrix(identity),
+                    }],
+                    vec![Slot {
+                        node: 0,
+                        inverse_bind: identity,
+                    }],
+                    vec![],
+                )
+                .expect("a rig");
+                let model = jstream_media::model::Model::rigged(
+                    primitives,
+                    model.materials().to_vec(),
+                    model.textures().to_vec(),
+                    Some(std::sync::Arc::new(rig)),
+                )
+                .expect("a model");
+                jstream_sources::ShownModel {
+                    model: std::sync::Arc::new(model),
+                    pose: Some(vec![palette].into()),
+                    ..shown
+                }
+            }
+        };
+        let rest = identity.map(|v| v as f32);
+        assert_golden(
+            &model_shot_with(&graph, "plane", rigged(rest)),
+            "
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            ",
+            "at rest the plane fills its box",
+        );
+        // Half a unit to the right: half the box.
+        let mut moved = rest;
+        moved[12] = 0.5;
+        assert_golden(
+            &model_shot_with(&graph, "plane", rigged(moved)),
+            "
+            ....WWWWWWWW....
+            ....WWWWWWWW....
+            ....WWWWWWWW....
+            ....WWWWWWWW....
+            ....WWWWWWWW....
+            ....WWWWWWWW....
+            ....WWWWWWWW....
+            ....WWWWWWWW....
+            ....WWWWWWWW....
+            ",
+            "the pose moves it",
+        );
     }
 
     /// A model item draws its model where its box is, posed by its geometry and moved by
@@ -2903,7 +2992,7 @@ mod tests {
             Some(&SceneId::new("main")),
             running.map(|running| (running, running.start)),
             &mut |id| {
-                Some(Look::Frame(
+                Some(Look::frame(
                     if id.as_str() == "cam" {
                         stand_in.clone()
                     } else {
@@ -2997,7 +3086,7 @@ mod tests {
             Some(&SceneId::new("main")),
             None,
             &mut |id| {
-                Some(Look::Frame(
+                Some(Look::frame(
                     match id.as_str() {
                         "cam" => stand_in.clone(),
                         "panorama" => red.clone(),
@@ -3137,7 +3226,7 @@ mod tests {
             Some(&SceneId::new("main")),
             None,
             &mut |id| {
-                Some(Look::Frame(
+                Some(Look::frame(
                     if model && id.as_str() == "cam" {
                         modelled.clone()
                     } else {
@@ -3345,7 +3434,7 @@ mod tests {
                 Some(&SceneId::new("main")),
                 None,
                 &mut |id| {
-                    Some(Look::Frame(
+                    Some(Look::frame(
                         if id.as_str() == "cam" {
                             black.clone()
                         } else {
@@ -3419,7 +3508,7 @@ mod tests {
                 graph,
                 Some(&SceneId::new("main")),
                 None,
-                &mut |_| Some(Look::Frame(white.clone(), None)),
+                &mut |_| Some(Look::frame(white.clone(), None)),
                 &FilterAssets::default(),
             )
             .shot;
@@ -3528,7 +3617,7 @@ mod tests {
                 Some(&SceneId::new("main")),
                 None,
                 &mut |id| {
-                    Some(Look::Frame(
+                    Some(Look::frame(
                         if id.as_str() == "cam" {
                             white.clone()
                         } else {
@@ -3635,7 +3724,7 @@ mod tests {
                 Some(&SceneId::new("main")),
                 None,
                 &mut |id| {
-                    Some(Look::Frame(
+                    Some(Look::frame(
                         if id.as_str() == "cam" {
                             grey.clone()
                         } else {
@@ -3739,7 +3828,7 @@ mod tests {
                 Some(&SceneId::new("main")),
                 None,
                 &mut |id| {
-                    Some(Look::Frame(
+                    Some(Look::frame(
                         if id.as_str() == "cam" {
                             black.clone()
                         } else {
@@ -3890,7 +3979,7 @@ mod tests {
                 Some(&main),
                 None,
                 &mut |id| {
-                    Some(Look::Frame(
+                    Some(Look::frame(
                         match id.as_str() {
                             "cam" => stand_in.clone(),
                             "logo" => lamp.clone(),

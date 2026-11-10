@@ -228,13 +228,13 @@ fn a_required_extension_it_lacks_is_refused_and_ignored_features_are_listed() {
     let err = load_glb(&doc, &bin).expect_err("refused");
     assert!(err.0.contains("KHR_draco_mesh_compression"), "{err:?}");
     let (doc, bin) = triangle(
-        json!({ "animations": [{}], "skins": [{}], "extensionsUsed": ["EXT_lights_ies"] }),
+        json!({ "cameras": [{}], "extensionsUsed": ["EXT_lights_ies"] }),
         true,
     );
     let (_, ignored) = load_glb(&doc, &bin).expect("loads");
     assert_eq!(
         ignored.0.into_iter().collect::<Vec<_>>(),
-        vec!["animations", "extensions", "skins"]
+        vec!["cameras", "extensions"]
     );
 }
 
@@ -551,4 +551,117 @@ fn a_file_uri_stays_below_the_models_folder() {
             "{uri}: {err:?}"
         );
     }
+}
+
+/// Appends `bytes` to the buffer as a new view and an accessor over it, and returns the
+/// accessor's index.
+fn add_accessor(doc: &mut Value, bin: &mut Vec<u8>, bytes: &[u8], accessor: Value) -> usize {
+    while !bin.len().is_multiple_of(4) {
+        bin.push(0);
+    }
+    let views = doc["bufferViews"].as_array_mut().expect("views");
+    views.push(json!({ "buffer": 0, "byteOffset": bin.len(), "byteLength": bytes.len() }));
+    let view = views.len() - 1;
+    bin.extend_from_slice(bytes);
+    doc["buffers"][0]["byteLength"] = json!(bin.len());
+    let mut accessor = accessor;
+    accessor["bufferView"] = json!(view);
+    let accessors = doc["accessors"].as_array_mut().expect("accessors");
+    accessors.push(accessor);
+    accessors.len() - 1
+}
+
+#[test]
+fn an_animated_node_keeps_its_mesh_in_its_own_space_and_poses_it() {
+    let (mut doc, mut bin) = triangle(json!({}), true);
+    doc["nodes"] = json!([{ "mesh": 0, "translation": [0.0, 1.0, 0.0] }]);
+    let times = add_accessor(
+        &mut doc,
+        &mut bin,
+        &f32s(&[0.0, 2.0]),
+        json!({ "componentType": 5126, "count": 2, "type": "SCALAR" }),
+    );
+    let moves = add_accessor(
+        &mut doc,
+        &mut bin,
+        &f32s(&[0.0, 1.0, 0.0, 4.0, 1.0, 0.0]),
+        json!({ "componentType": 5126, "count": 2, "type": "VEC3" }),
+    );
+    doc["animations"] = json!([{
+        "name": "slide",
+        "samplers": [{ "input": times, "output": moves }],
+        "channels": [{ "sampler": 0, "target": { "node": 0, "path": "translation" } }]
+    }]);
+    let (model, ignored) = load_glb(&doc, &bin).expect("loads");
+    assert!(ignored.0.is_empty(), "{ignored:?}");
+    let rig = model.rig().expect("a rig");
+    assert_eq!(rig.clip("slide"), Some(0));
+    assert_eq!(rig.clips()[0].duration, 2.0);
+    // The vertices stay in the node's space, placed by its slot.
+    let v = &model.primitives()[0].vertices;
+    assert_eq!(v[1].position, [1.0, 0.0, 0.0]);
+    assert_eq!((v[1].joints, v[1].weights), ([0; 4], [1.0, 0.0, 0.0, 0.0]));
+    // The bounds are the rest pose's: one up in glTF, so up the canvas.
+    assert_eq!(model.bounds().min, [0.0, -2.0, 0.0]);
+    assert_eq!(model.bounds().max, [1.0, -1.0, 0.0]);
+    // Halfway through, the node has slid 2 along x.
+    let posed = rig.pose(0, 1.0);
+    let at = jstream_media::model::rig::skin(&posed, v[0].joints, v[0].weights, v[0].position);
+    assert_eq!(at, [2.0, -1.0, 0.0]);
+}
+
+#[test]
+fn a_skinned_mesh_is_placed_by_its_joints() {
+    let (mut doc, mut bin) = triangle(json!({}), true);
+    // Node 0 holds the mesh and the skin; nodes 1 and 2 are its joints, the second one
+    // up from the first.
+    doc["nodes"] = json!([
+        { "mesh": 0, "skin": 0 },
+        { "children": [2] },
+        { "translation": [0.0, 1.0, 0.0] }
+    ]);
+    doc["scenes"] = json!([{ "nodes": [0, 1] }]);
+    let joints = add_accessor(
+        &mut doc,
+        &mut bin,
+        &u16s(&[0, 1, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0]),
+        json!({ "componentType": 5123, "count": 3, "type": "VEC4" }),
+    );
+    // The first two vertices half on each joint; the third all on the second.
+    let weights = add_accessor(
+        &mut doc,
+        &mut bin,
+        &f32s(&[1.0, 1.0, 0.0, 0.0, 1.0, 1.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0]),
+        json!({ "componentType": 5126, "count": 3, "type": "VEC4" }),
+    );
+    let mut undo_second = [0.0f32; 16];
+    for i in [0, 5, 10, 15] {
+        undo_second[i] = 1.0;
+    }
+    let mut inverse = undo_second.to_vec();
+    undo_second[13] = -1.0;
+    inverse.extend(undo_second);
+    let inverse = add_accessor(
+        &mut doc,
+        &mut bin,
+        &f32s(&inverse),
+        json!({ "componentType": 5126, "count": 2, "type": "MAT4" }),
+    );
+    doc["skins"] = json!([{ "joints": [1, 2], "inverseBindMatrices": inverse }]);
+    doc["meshes"][0]["primitives"][0]["attributes"]["JOINTS_0"] = json!(joints);
+    doc["meshes"][0]["primitives"][0]["attributes"]["WEIGHTS_0"] = json!(weights);
+    let (model, ignored) = load_glb(&doc, &bin).expect("loads");
+    assert!(ignored.0.is_empty(), "{ignored:?}");
+    let rig = model.rig().expect("a rig");
+    assert_eq!(rig.slots(), 2);
+    let v = &model.primitives()[0].vertices;
+    assert_eq!(v[0].weights, [0.5, 0.5, 0.0, 0.0]);
+    assert_eq!(v[2].joints[0], 1);
+    // At rest every joint's slot is the identity: the mesh stands as it was bound.
+    assert_eq!(model.bounds().min, [0.0, -1.0, 0.0]);
+    assert_eq!(model.bounds().max, [1.0, 0.0, 0.0]);
+    // A joint that isn't in the scene is refused.
+    doc["scenes"] = json!([{ "nodes": [0] }]);
+    let err = load_glb(&doc, &bin).expect_err("refused");
+    assert!(err.0.contains("isn't in the scene"), "{err:?}");
 }
