@@ -796,7 +796,13 @@ impl ModelRuntime {
             .image
             .texture()
             .create_view(&wgpu::TextureViewDescriptor::default());
-        let views = [&picture, &self.white, &self.flat_normal, &self.white, &picture];
+        let views = [
+            &picture,
+            &self.white,
+            &self.flat_normal,
+            &self.white,
+            &picture,
+        ];
         let mut entries = vec![
             wgpu::BindGroupEntry {
                 binding: 0,

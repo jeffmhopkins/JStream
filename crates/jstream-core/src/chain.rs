@@ -3556,7 +3556,10 @@ mod tests {
         let Some(unlit) = centre(&graph) else {
             return;
         };
-        assert!(unlit[..3].iter().all(|&c| c > 245), "unlit, it is white: {unlit:?}");
+        assert!(
+            unlit[..3].iter().all(|&c| c > 245),
+            "unlit, it is white: {unlit:?}"
+        );
         apply(&mut graph, vec![lit(true)]);
         let red = centre(&graph).expect("an adapter");
         assert!(

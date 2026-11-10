@@ -5774,7 +5774,9 @@ fn light_card(
         (live, captures),
         chains,
     );
-    let surface = geometry.and_then(|geometry| geometry.surface).unwrap_or_default();
+    let surface = geometry
+        .and_then(|geometry| geometry.surface)
+        .unwrap_or_default();
     let view = camera.and_then(|camera| camera.view(shot.canvas).ok());
     let (lights, shadowed) = light_scene(
         compositor,
@@ -5815,13 +5817,12 @@ fn light_card(
             let (width, height) = (layer.width(), layer.height());
             let items = [Item {
                 image,
-                placement: Placement::Layer(
-                    ItemGeometry::covering_canvas(width, height)
-                        .map_err(|_| RenderError::Invalid {
-                            what: "item box",
-                            detail: format!("a lit card's layer of {width}x{height}"),
-                        })?,
-                ),
+                placement: Placement::Layer(ItemGeometry::covering_canvas(width, height).map_err(
+                    |_| RenderError::Invalid {
+                        what: "item box",
+                        detail: format!("a lit card's layer of {width}x{height}"),
+                    },
+                )?),
                 crop: Crop::NONE,
                 opacity: OPAQUE,
                 blend: BlendMode::Normal,
@@ -5970,7 +5971,13 @@ fn light_scene(
     let Some(view) = view else {
         return (lights, shadowed);
     };
-    scene_lights(shot, scene_id, (at, view), live, (&mut lights, &mut shadowed));
+    scene_lights(
+        shot,
+        scene_id,
+        (at, view),
+        live,
+        (&mut lights, &mut shadowed),
+    );
     let shading = lights
         .iter()
         .filter(|light| light.kind != jstream_render::LightKind::Ambient)
