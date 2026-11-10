@@ -1022,6 +1022,26 @@ impl State {
         });
     }
 
+    /// Checks that `scene_id` draws through a camera, as the engine's live aim does
+    /// (ADR-0152): `not_found` for a scene that doesn't exist, `action_failed` for one
+    /// with no camera of its own, its parent's or a follow camera's.
+    fn camera_family(&self, scene_id: &SceneId) -> Result<(), ProtocolError> {
+        let si = self.collection.existing_scene(scene_id)?;
+        let scenes = &self.collection.scenes;
+        let family = scenes[si].variant_of.as_ref().map_or(si, |parent| {
+            scenes.iter().position(|s| &s.id == parent).unwrap_or(si)
+        });
+        if scenes[si].camera.is_none()
+            && scenes[family].camera.is_none()
+            && scenes[family].camera_follow.is_none()
+        {
+            return Err(ProtocolError::ActionFailed {
+                reason: format!("scene `{scene_id}` draws through no camera"),
+            });
+        }
+        Ok(())
+    }
+
     /// `item.show`, `item.hide` and `item.toggle` (ADR-0101), as the engine runs them:
     /// the placement's `item.set_visible`, one `rev` and a `state.changed`, logged for
     /// undo conflicts but no step of the sender's history. The mock draws nothing, so it
@@ -1112,6 +1132,17 @@ impl State {
                             "scene `{scene_id}` has no camera that follows the pointer"
                         ),
                     });
+                }
+                return Ok(CallResult::action());
+            }
+            // The mock draws no camera, so it checks a live aim's call as the engine
+            // does and keeps nothing (ADR-0152).
+            Action::SceneDriveCamera { .. } | Action::SceneAimCamera { .. } => {
+                if let Some((field, reason)) = jstream_protocol::camera_aim_check(&action) {
+                    return Err(invalid(0, field, reason));
+                }
+                if let Some(scene_id) = jstream_protocol::camera_aim_scene(&action) {
+                    self.camera_family(scene_id)?;
                 }
                 return Ok(CallResult::action());
             }
@@ -1469,6 +1500,18 @@ impl State {
             Query::PtzList => QueryResult::PtzList {
                 cameras: Vec::new(),
             },
+            // No aim is kept, so every camera is at its home (ADR-0152).
+            Query::SceneCameraAim { scene_id } => {
+                self.camera_family(&scene_id)?;
+                QueryResult::SceneCameraAim {
+                    aim: jstream_protocol::CameraAimInfo {
+                        pan_deg: jstream_protocol::Finite32::ZERO,
+                        tilt_deg: jstream_protocol::Finite32::ZERO,
+                        zoom: jstream_protocol::Finite32::ONE,
+                        moving: false,
+                    },
+                }
+            }
             Query::CaptureTargets => QueryResult::CaptureTargets {
                 targets: vec![
                     CaptureTargetInfo {

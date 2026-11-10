@@ -164,4 +164,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0149](0149-where-warm-scenes-are-pinned.md) | Where a warm scene is pinned, and which scenes count as bound | accepted | agent |  |
 | [ADR-0150](0150-the-warm-scenes-gpu-byte-budget.md) | The warm scenes' GPU-byte budget, and how it is estimated | accepted | agent |  |
 | [ADR-0151](0151-the-rest-of-richer-3d-scenes.md) | Shadows, reflections, occlusion, volumetric fog, depth-aware bloom, a scene environment, lit cards, billboards and model animation | accepted | agent |  |
+| [ADR-0152](0152-a-ptz-controller-drives-scene-cameras.md) | A PTZ controller drives scene cameras: a live aim, its actions, and VISCA endpoints | accepted | agent |  |
 <!-- @generated end adr-index -->
