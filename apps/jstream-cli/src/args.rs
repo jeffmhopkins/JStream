@@ -789,6 +789,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 // No flip argument yet: the command sets an unflipped box.
                 flip_h: false,
                 flip_v: false,
+                billboard: false,
             },
         },
         ("canvas.set_size", [width, height]) => Edit::CanvasSetSize {
