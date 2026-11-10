@@ -1147,6 +1147,25 @@ it out; `filter::testing` reads both lists.
   `c · (1 − k) + color · c.alpha · k`, `k = share · strength` at most 1, so alpha is
   kept. Where nothing was drawn, at no strength, and without a matching depth, it
   copies its input.
+- `floor_reflection` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 4, `depth/reflection.rs`): `floor_y_px` (default 1080, the plane in the
+  scene's space, y down), `strength` (0 to 1, default 0.5), `fade_px` (default 0, never)
+  and `blur_px` (0 to 64, default 0). The engine reads the floor
+  (`video_filter_reflection_floor`) and draws the scene mirrored in it into
+  `ViewDepth::reflection` (`DepthReflection`: the picture and its view depth, through
+  the mirrored camera made right-handed, so x runs the other way about the principal
+  point, and the floor it used, which the filter mirrors in; its models are drawn with
+  `ModelDraw::floor`, which `model.wgsl` cuts at in `fs` and `fs_depth` through the
+  frame's `cut` plane, `golden_model_a_floor_cuts_what_is_below_it`). One draw
+  (`reflection/floor.wgsl`, through `Ctx::draw_program` for its four textures) rebuilds
+  each pixel's point from the view depth; one within a footprint of the floor (two
+  pixels at its distance, or the half float's precision there) takes the mirrored
+  picture at `(2 c.x − x, y)`, where the mirrored depth puts the reflected thing on the
+  pixel's own ray, so its height above the floor: at or under the footprint (under the
+  floor, or the floor itself) it shows nothing. It is laid source-over the picture at
+  `strength`, faded linearly to nothing at `fade_px` above the floor, and over a disc of
+  12 taps of radius `blur_px` when that is above 0. Without the view or a reflection it
+  copies its input (`the_floor_takes_the_reflection_of_what_is_above_it`).
 - `volumetric_fog` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 6, `depth/volumetric.rs`): `color` (with alpha, default `#c8ccd2ff`),
   `density` (0 to 20 per 1000 px, default 0.5), `base_y_px` (default 1080) and

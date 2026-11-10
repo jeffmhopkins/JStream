@@ -1879,6 +1879,23 @@ A chain that also reads the shadow maps (`Chain::reads_shadows`, the render crat
 `draw_shadows` unless a receiving model drew them this run, and `drew_depth` hands them to
 the fog in `ViewDepth::shadows`, made again only when a map, its light or its camera
 changes (`volumetric_fog_gets_the_shadow_maps_of_its_scene`).
+A chain with a `floor_reflection` (`Chain::reflection_floor`, its first one's floor,
+ADR-0151 decision 4) gives its pass that floor (`Pass::reflection`): after the view
+depth, `draw_reflection` draws the scene through the camera mirrored in the floor
+(`mirrored_camera`: position and target mirrored, rolled so its down is the mirrored
+down, `a_camera_mirrors_in_the_floor`) into a `GpuKey::Reflection` layer, each model it
+shows drawn again through that camera into its `GpuKey::ReflectedModel`, lit as it is
+but unshadowed, in place of its layer, and items without a camera left out; then that
+picture's view depth into `GpuKey::ReflectionDepth` (`draw_view_depth` through the
+mirrored camera, every model included). The pass is cut at the floor, since the mirrored
+camera looks up at it from below and the floor would hide everything on it: each model
+is drawn with `ModelDraw::floor`, so nothing of it at or below the plane is drawn or
+written to the depth, and a card whose four corners (`ItemGeometry::corners_in_scene`)
+are all within half a pixel of the floor or below it is left out. Each kept model costs
+a canvas-sized layer (about 16 MB at 1080p) while a reflection is on. `drew_depth` hands
+both and the floor to the filter in `ViewDepth::reflection`
+(`a_floor_reflection_gets_its_scene_mirrored_in_its_floor`,
+`a_floor_card_reflects_what_stands_on_it`).
 
 In a transition the scene is one picture
 (ADR-0065 §6): one track over the canvas that pairs with nothing, so Fade crossfades

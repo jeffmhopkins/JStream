@@ -360,6 +360,18 @@ impl Chain {
         })
     }
 
+    /// The floor the first of its filters that mirrors its scene mirrors it in (ADR-0151
+    /// decision 4), so the scene's composite draws the scene mirrored there for it.
+    pub(crate) fn reflection_floor(&self) -> Option<f32> {
+        self.filters.iter().find_map(|filter| {
+            (filter.effect.is_none() && filter.program.is_none())
+                .then(|| {
+                    jstream_render::video_filter_reflection_floor(&filter.kind, &filter.settings)
+                })
+                .flatten()
+        })
+    }
+
     /// The room its filters need beyond each edge of the input, in canvas pixels: the
     /// sum of what each draws past its input at its settings (ADR-0136), each filter
     /// taking the largest of its own settings' outset and that of each of `also`'s
@@ -910,7 +922,15 @@ impl Chains {
         key: &GpuKey,
         (view, lights): (jstream_protocol::CameraView, &[jstream_render::SceneLight]),
         shadows: bool,
+        reflection: Option<(&GpuKey, &GpuKey, f32)>,
     ) {
+        let reflection = reflection.and_then(|(image, depth, floor_y)| {
+            Some(jstream_render::DepthReflection {
+                image: cache.get(image)?.clone(),
+                depth: cache.get(depth)?.clone(),
+                floor_y,
+            })
+        });
         let (Some(ran), Some(layer)) = (self.ran, cache.get(key)) else {
             return;
         };
@@ -955,12 +975,14 @@ impl Chains {
             if !same(&depth.shadows) {
                 depth.shadows = owned(cache);
             }
+            depth.reflection = reflection;
             return;
         }
         let fresh = jstream_render::ViewDepth {
             view: Some(view),
             lights: Arc::from(lights),
             shadows: owned(cache),
+            reflection,
             ..jstream_render::ViewDepth::new(Arc::new(layer.clone()), focal_px)
         };
         if let Some((_, old)) = self.depths.insert(scene.clone(), (ran, fresh)) {
@@ -3263,6 +3285,177 @@ mod tests {
         apply(&mut graph, vec![hide("logo")]);
         let dark = centre(&graph).expect("an adapter");
         assert!(luma(dark) < 6, "no light, no glow: {dark:?}");
+    }
+
+    /// ADR-0151 decision 4: a scene whose chain holds a floor reflection hands it the
+    /// scene drawn mirrored in the filter's floor, with that picture's depth; a 2D scene
+    /// hands it none.
+    #[test]
+    fn a_floor_reflection_gets_its_scene_mirrored_in_its_floor() {
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        let mirror = Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("main"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("mirror"),
+            kind: "floor_reflection".into(),
+            settings: [("floor_y_px", serde_json::json!(30.0))]
+                .into_iter()
+                .collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        apply(&mut graph, vec![mirror]);
+        let white = Frame::new(16, 9, &[255; 4].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
+        let mirrored = |graph: &Graph| {
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |_| Some(Look::Frame(white.clone(), None)),
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &LiveParams::default()),
+                &[(32, 18)],
+            );
+            Some(
+                chains
+                    .depths
+                    .get(&SceneId::new("main"))
+                    .and_then(|(_, depth)| depth.reflection.as_ref())
+                    .map(|r| (r.floor_y, r.image.width(), r.depth.height())),
+            )
+        };
+        let Some(flat) = mirrored(&graph) else {
+            return;
+        };
+        assert_eq!(flat, None, "a 2D scene draws no reflection");
+        apply(
+            &mut graph,
+            vec![Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(jstream_protocol::SceneCamera::framing(canvas)),
+            }],
+        );
+        assert_eq!(
+            mirrored(&graph).expect("an adapter"),
+            Some((30.0, CANVAS.0, CANVAS.1)),
+            "the scene mirrored in the floor reaches the filter"
+        );
+    }
+
+    /// ADR-0151 decision 4, end to end: a card lying flat as the floor, and a red card
+    /// standing on it, through the framing camera. The floor under the red card shows it
+    /// reflected: the mirrored pass leaves out the floor itself, which would otherwise
+    /// hide everything above it from the mirrored camera.
+    #[test]
+    fn a_floor_card_reflects_what_stands_on_it() {
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let mut graph = placed(&[
+            ("cam", (32.0, 30.0), (400.0, 400.0), 0.0),
+            ("logo", (32.0, 27.0), (24.0, 6.0), 0.0),
+        ]);
+        let mut floor = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 30.0).expect("finite"),
+            jstream_protocol::Size::try_new(400.0, 400.0).expect("positive"),
+        )
+        .expect("valid");
+        floor.fit_mode = jstream_protocol::FitMode::Stretch;
+        floor.tilt_deg = jstream_protocol::Finite32::new(90.0).expect("finite");
+        let mirror = |strength: f32| Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("main"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new(format!("mirror{strength}")),
+            kind: "floor_reflection".into(),
+            settings: [
+                ("floor_y_px", serde_json::json!(30.0)),
+                ("strength", serde_json::json!(strength)),
+            ]
+            .into_iter()
+            .collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry: floor,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(canvas)),
+                },
+            ],
+        );
+        let grey =
+            Frame::new(16, 9, &[64, 64, 64, 255].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
+        let red =
+            Frame::new(16, 9, &[255, 0, 0, 255].repeat(16 * 9), 3).expect("invariant: 16x9 RGBA8");
+        let under = |graph: &Graph| {
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |id| {
+                    Some(Look::Frame(
+                        if id.as_str() == "cam" {
+                            grey.clone()
+                        } else {
+                            red.clone()
+                        },
+                        None,
+                    ))
+                },
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            Some(
+                draw_points(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (&shot, &LiveParams::default()),
+                    &[(32, 33)],
+                )[0],
+            )
+        };
+        let Some(bare) = under(&graph) else {
+            return;
+        };
+        assert!(
+            bare[0].abs_diff(bare[1]) < 8,
+            "the floor alone is grey under the card: {bare:?}"
+        );
+        apply(&mut graph, vec![mirror(1.0)]);
+        let reflected = under(&graph).expect("an adapter");
+        assert!(
+            reflected[0] > reflected[1] + 40,
+            "the red card is reflected in the floor under it: {reflected:?}"
+        );
     }
 
     /// ADR-0151 decision 6: a scene whose chain holds volumetric fog hands it the shadow

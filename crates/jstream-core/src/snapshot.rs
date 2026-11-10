@@ -3147,6 +3147,12 @@ pub(crate) enum GpuKey {
     /// casters from its first or second light that casts shadows, at
     /// [`jstream_render::SHADOW_MAP_PX`] square.
     ShadowMap(SceneId, u8),
+    /// A 3D scene drawn mirrored in its floor, for its chain's `floor_reflection`
+    /// (ADR-0151 decision 4), and that picture's view depth.
+    Reflection(SceneId),
+    ReflectionDepth(SceneId),
+    /// A model item drawn through its scene's mirrored camera, for that reflection.
+    ReflectedModel(SceneId, ItemId),
 }
 
 /// A shadow map drawn for a scene in this run of the chains (ADR-0151 decision 3).
@@ -3277,6 +3283,9 @@ struct Pass {
     /// Whether its chain also reads the scene's shadow maps (ADR-0151 decision 6), so
     /// the pass draws them when no model that receives them has.
     reads_shadows: bool,
+    /// The floor its chain mirrors the scene in (ADR-0151 decision 4), so the pass draws
+    /// the scene mirrored there; `None` without such a filter, or a view depth.
+    reflection: Option<f32>,
 }
 
 /// The committed cameras a pass resolves its camera from (ADR-0094 §6), so that live
@@ -3560,6 +3569,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
             layers,
             view_depth: None,
             reads_shadows: false,
+            reflection: None,
         }];
     }
     let mut passes = Vec::new();
@@ -3827,6 +3837,10 @@ fn visit_into(
         && chain.is_some_and(Chain::reads_depth))
     .then(|| GpuKey::ViewDepth(id.clone()));
     let reads_shadows = view_depth.is_some() && chain.is_some_and(Chain::reads_shadows);
+    let reflection = view_depth
+        .as_ref()
+        .and(chain)
+        .and_then(Chain::reflection_floor);
     passes.pass(Pass {
         scene: id.clone(),
         depth,
@@ -3836,6 +3850,7 @@ fn visit_into(
         layers,
         view_depth,
         reads_shadows,
+        reflection,
     });
 }
 
@@ -5587,7 +5602,33 @@ fn run_chains(
                         });
                         chains.drew_shadows(&pass.scene, maps);
                     }
-                    chains.drew_depth(cache, &pass.scene, depth, (view, &lights), reads_shadows);
+                    // The scene mirrored in its floor, for a filter that reflects it.
+                    let reflection = match (pass.reflection, camera) {
+                        (Some(floor), Some(camera)) => draw_reflection(
+                            compositor,
+                            (&mut *cache, &*chains),
+                            (shot, at),
+                            pass,
+                            (floor, camera),
+                            &lights,
+                            (live, captures),
+                        )
+                        .unwrap_or_else(|error| {
+                            tracing::debug!(scene = %pass.scene, %error, "reflection not drawn this frame");
+                            None
+                        }),
+                        _ => None,
+                    };
+                    chains.drew_depth(
+                        cache,
+                        &pass.scene,
+                        depth,
+                        (view, &lights),
+                        reads_shadows,
+                        reflection
+                            .as_ref()
+                            .map(|(image, depth, floor)| (image, depth, *floor)),
+                    );
                     chains.lights = lights;
                     chains.shadowed = shadowed;
                 }
@@ -5810,6 +5851,7 @@ fn draw_model(
                 lighting: shown.lighting,
                 lights: lit.then_some(lights.as_slice()),
                 shadows: &maps,
+                floor: None,
             },
             layer,
         )),
@@ -5939,7 +5981,7 @@ fn draw_shadows(
             (shot, pass, &seen),
             key,
             (at, canvas, camera),
-            (live, Some(from)),
+            (live, Some((from, true, None))),
         )?;
         drawn.push(DrawnShadow {
             light,
@@ -5949,6 +5991,188 @@ fn draw_shadows(
         });
     }
     Ok(drawn)
+}
+
+/// Draws `pass`'s scene through `camera` mirrored in the floor `y = floor` (ADR-0151
+/// decision 4) into its [`GpuKey::Reflection`], with that picture's view depth in its
+/// [`GpuKey::ReflectionDepth`]: its cards with their cameras mirrored, and each model it
+/// shows drawn again through the mirrored camera into its [`GpuKey::ReflectedModel`],
+/// lit as it is but unshadowed, in place of its layer. An item without a camera isn't in
+/// the scene's space and isn't mirrored. Returns the two keys and the floor, or `None`
+/// for a camera that can't be mirrored or seen.
+///
+/// # Errors
+/// What the compositor reports for making or drawing into the layers.
+fn draw_reflection(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &Chains),
+    (shot, at): (&Shot, MediaTime),
+    pass: &Pass,
+    (floor, camera): (f32, SceneCamera),
+    lights: &[jstream_render::SceneLight],
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> Result<Option<(GpuKey, GpuKey, f32)>, RenderError> {
+    let Some(mirrored) = mirrored_camera(camera, floor, shot.canvas) else {
+        return Ok(None);
+    };
+    let canvas = shot.canvas()?;
+    let (width, height) = (canvas.width(), canvas.height());
+    let image_key = GpuKey::Reflection(pass.scene.clone());
+    let depth_key = GpuKey::ReflectionDepth(pass.scene.clone());
+    cache.layer(compositor, &image_key, width, height)?;
+    cache.layer(compositor, &depth_key, width, height)?;
+    // Each model the pass shows, drawn through the mirrored camera, by the layer the
+    // pass places for it.
+    let size = [width as f32, height as f32];
+    let mut models: Vec<(&GpuKey, GpuKey)> = Vec::new();
+    for layer in &pass.layers {
+        if !layer.boxed.is_some_and(|boxed| boxed.model) {
+            continue;
+        }
+        let (GpuKey::ItemBox(scene_id, item_id)
+        | GpuKey::Filtered(ChainOwner::Item(scene_id, item_id))) = &layer.image
+        else {
+            continue;
+        };
+        let Some(geometry) = layer_item(
+            layer,
+            (&*cache, chains),
+            shot,
+            (at, size),
+            live,
+            Some(camera),
+        )
+        .and_then(|item| match item.placement {
+            Placement::Layer(geometry) => Some(geometry),
+            _ => None,
+        }) else {
+            continue;
+        };
+        let Some((model, shown)) = shot.boxes.iter().find_map(|(owner, boxed)| match owner {
+            ChainOwner::Item(scene, item) if scene == scene_id && item == item_id => {
+                match &boxed.source {
+                    SourceRef::Frame(source) => Some((
+                        chains.model(source)?,
+                        shot.frames.get(source)?.model.as_ref()?,
+                    )),
+                    _ => None,
+                }
+            }
+            _ => None,
+        }) else {
+            continue;
+        };
+        let reflected = GpuKey::ReflectedModel(scene_id.clone(), item_id.clone());
+        cache.layer(compositor, &reflected, width, height)?;
+        let Some(target) = cache.get(&reflected) else {
+            continue;
+        };
+        compositor.draw_model(
+            &jstream_render::ModelDraw {
+                model,
+                geometry,
+                camera: Some(mirrored),
+                lighting: shown.lighting,
+                lights: (shown.lighting == Lighting::Scene).then_some(lights),
+                shadows: &[],
+                // Only what stands above the floor is reflected in it.
+                floor: Some(floor),
+            },
+            target,
+        )?;
+        models.push((&layer.image, reflected));
+    }
+    let mut items = Vec::new();
+    if fill_items(
+        &mut items,
+        (&*cache, chains),
+        (shot, pass),
+        (at, canvas),
+        (live, captures),
+    )
+    .is_none()
+    {
+        return Ok(None);
+    }
+    let mut mirror = Vec::with_capacity(items.len());
+    for item in &items {
+        let Some(_) = item.camera else {
+            continue;
+        };
+        // A card lying in the floor, or below it, would hide what stands on it from the
+        // mirrored camera, which looks up at the floor from under it.
+        if let Placement::Geometry(geometry) = item.placement
+            && geometry
+                .corners_in_scene()
+                .iter()
+                .all(|corner| corner[1] >= f64::from(floor) - 0.5)
+        {
+            continue;
+        }
+        let image = models
+            .iter()
+            .find(|(shown, _)| {
+                cache
+                    .get(shown)
+                    .is_some_and(|image| image.texture() == item.image.texture())
+            })
+            .and_then(|(_, reflected)| cache.get(reflected))
+            .unwrap_or(item.image);
+        mirror.push(Item {
+            image,
+            camera: Some(mirrored),
+            ..*item
+        });
+    }
+    let (Some(target), Some(_)) = (cache.get(&image_key), cache.get(&depth_key)) else {
+        return Ok(None);
+    };
+    let seen = scene(canvas, Color::TRANSPARENT, &mirror);
+    compositor.render_into(&seen, target)?;
+    draw_view_depth(
+        compositor,
+        (&*cache, chains),
+        (shot, pass, &seen),
+        &depth_key,
+        (at, canvas, camera),
+        (live, Some((mirrored, false, Some(floor)))),
+    )?;
+    Ok(Some((image_key, depth_key, floor)))
+}
+
+/// `camera` mirrored in the floor `y = floor` (ADR-0151 decision 4), as a right-handed
+/// camera: its position and target mirrored, rolled so its down axis is the mirrored
+/// down. Its right axis is then the mirrored right reversed, so what it sees is the
+/// reflection with x running the other way about the principal point. `None` for a
+/// camera that can't be seen on `canvas` or a mirror out of range.
+fn mirrored_camera(
+    camera: SceneCamera,
+    floor: f32,
+    canvas: jstream_protocol::Canvas,
+) -> Option<SceneCamera> {
+    let flip = |v: jstream_protocol::Vec3| {
+        Some(jstream_protocol::Vec3 {
+            y: jstream_protocol::Finite32::new(2.0 * floor - v.y.get())?,
+            ..v
+        })
+    };
+    let level = SceneCamera {
+        position: flip(camera.position)?,
+        target: flip(camera.target)?,
+        roll_deg: jstream_protocol::Finite32::ZERO,
+        ..camera
+    };
+    let [_, down, _] = camera.view(canvas).ok()?.axes();
+    let mirrored_down = [down[0], -down[1], down[2]];
+    let [right0, down0, _] = level.view(canvas).ok()?.axes();
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let roll = dot(mirrored_down, right0)
+        .atan2(dot(mirrored_down, down0))
+        .to_degrees();
+    Some(SceneCamera {
+        roll_deg: jstream_protocol::Finite32::new(roll as f32)?,
+        ..level
+    })
 }
 
 /// The pass that composites scene `id` this frame: a chain's, the program's or a
@@ -6271,6 +6495,11 @@ fn layer_item<'a>(
     }
 }
 
+/// Another camera a scene's view depth is drawn through, as a shadow map or the mirrored
+/// floor pass draws it: the camera, whether only shadow casters are drawn (ADR-0151
+/// decision 3), and the floor its models are cut at (decision 4).
+type DepthFrom = (SceneCamera, bool, Option<f32>);
+
 /// Draws the view depth of `pass`, a 3D scene's composite that its chain reads depth
 /// from, into `key` (ADR-0143 decision 4): its cards as `drawn` places them, then each
 /// model it shows at least half opaque, posed as its layer is. Returns the camera's view
@@ -6285,7 +6514,7 @@ fn draw_view_depth(
     (shot, pass, drawn): (&Shot, &Pass, &Scene<'_>),
     key: &GpuKey,
     (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
-    (live, from): (&LiveParams, Option<SceneCamera>),
+    (live, from): (&LiveParams, Option<DepthFrom>),
 ) -> Result<Option<CameraView>, RenderError> {
     let Ok(view) = camera.view(shot.canvas) else {
         return Ok(None);
@@ -6337,17 +6566,18 @@ fn draw_view_depth(
             continue;
         };
         // A shadow map leaves out a model that casts none (ADR-0151 decision 3).
-        if from.is_some() && !shown.casts_shadows {
+        if from.is_some_and(|(_, casters, _)| casters) && !shown.casts_shadows {
             continue;
         }
         compositor.draw_model_depth(
             &jstream_render::ModelDraw {
                 model,
                 geometry,
-                camera: Some(from.unwrap_or(camera)),
+                camera: Some(from.map_or(camera, |(from, _, _)| from)),
                 lighting: shown.lighting,
                 lights: None,
                 shadows: &[],
+                floor: from.and_then(|(_, _, floor)| floor),
             },
             target,
         )?;
@@ -6738,6 +6968,45 @@ pub(crate) mod tests {
     /// the box grown
     /// in proportion, turned as the box is. A box too large for one texture is scaled
     /// down uniformly, and a legacy transform has the box its quad covers.
+    /// ADR-0151 decision 4: the mirrored camera sits mirrored in the floor, looks along
+    /// the mirrored view, and is rolled so its down axis is the mirrored down; its right
+    /// axis is the mirrored right reversed, so its picture runs the other way in x.
+    #[test]
+    fn a_camera_mirrors_in_the_floor() {
+        let canvas = Canvas {
+            width: 64,
+            height: 36,
+        };
+        let finite = |v: f32| jstream_protocol::Finite32::new(v).expect("finite");
+        let camera = jstream_protocol::SceneCamera {
+            position: jstream_protocol::Vec3 {
+                x: finite(10.0),
+                y: finite(-20.0),
+                z: finite(80.0),
+            },
+            target: jstream_protocol::Vec3 {
+                x: finite(32.0),
+                y: finite(30.0),
+                z: finite(0.0),
+            },
+            roll_deg: finite(12.0),
+            ..jstream_protocol::SceneCamera::framing(canvas)
+        };
+        let mirrored = super::mirrored_camera(camera, 40.0, canvas).expect("a mirror");
+        assert_eq!(mirrored.position.y.get(), 100.0);
+        assert_eq!(mirrored.target.y.get(), 50.0);
+        let [right, down, forward] = camera.view(canvas).expect("a view").axes();
+        let [r, d, f] = mirrored.view(canvas).expect("a view").axes();
+        let mirror = |v: [f64; 3]| [v[0], -v[1], v[2]];
+        let close = |a: [f64; 3], b: [f64; 3]| (0..3).all(|i| (a[i] - b[i]).abs() < 1e-5);
+        assert!(close(d, mirror(down)), "{d:?} against {down:?}");
+        assert!(close(f, mirror(forward)), "{f:?} against {forward:?}");
+        assert!(
+            close(r, mirror(right).map(|c| -c)),
+            "{r:?} against {right:?}"
+        );
+    }
+
     #[test]
     fn an_effects_layer_is_the_box_plus_its_outset() {
         use jstream_protocol::{Finite32, FitMode, ItemGeometry, Size, Vec2};
