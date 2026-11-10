@@ -174,5 +174,7 @@ nothing. The same holds for a PR into a wave.
   its own diff doesn't change, `review-gate` carries the pass to the new head and there is
   no review round ([ADR-0109](../adr/0109-review-pass-carries-across-base-merges.md)). A
   conflict resolution that changes the PR's own lines, any other commit in the push, or a
-  PR that hadn't passed gets a normal round.
+  PR that hadn't passed gets a normal round. A stacked PR's pass carries the same way once
+  the PR below it squash-merges and it merges the wave in, when the review named the base
+  it was made against ([ADR-0154](../adr/0154-a-carried-pass-compares-against-the-reviewed-base.md)).
 - **Draft until it is ready.** CI skips drafts, so a PR still being built stays a draft.

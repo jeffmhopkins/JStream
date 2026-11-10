@@ -159,8 +159,14 @@ The summary ends with **exactly one** verdict marker line, followed by a human-r
 
 ```markdown
 <!-- jstream-review v1 verdict=pass sha=<40-char head SHA> round=<n> reviewer-session=<your session id> -->
+<!-- jstream-review-base v1 sha=<the same head SHA> base=<40-char base SHA> -->
 ✅ No issues found at `<sha7>` (round <n>). Non-blocking: N1, N2.
 ```
+
+The second line names the head of the PR's base branch that you reviewed the diff against
+(`gh pr view <n> --json baseRefOid`). It lets a pass carry once a stacked PR's base
+squash-merges under it ([ADR-0154](docs/adr/0154-a-carried-pass-compares-against-the-reviewed-base.md)).
+Leave it out if you can't tell the base: the pass then carries only as ADR-0109 says.
 
 | verdict | When | Human line |
 |---|---|---|
@@ -175,7 +181,8 @@ those, the **highest round** decides, and within it any `fail` or `escalate` bea
 ([ADR-0019](docs/adr/0019-review-gate-v2.md)). When no marker names the head, a `pass`
 from the latest round carries to it if the head only merges the base branch into the head
 you reviewed, leaving the PR's own diff unchanged
-([ADR-0109](docs/adr/0109-review-pass-carries-across-base-merges.md)). So:
+([ADR-0109](docs/adr/0109-review-pass-carries-across-base-merges.md)); the reviewed diff is
+taken against the base your base line names, else the current base (ADR-0154). So:
 - post **exactly one** verdict per round, and never run two reviews of the same head at once;
 - a re-review of the same head (for example after a maintainer decision) uses the next round number.
 

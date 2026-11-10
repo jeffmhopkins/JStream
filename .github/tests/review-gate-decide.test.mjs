@@ -3,11 +3,11 @@
 import fs from 'fs';
 const yml = fs.readFileSync(new URL("../workflows/review-gate.yml", import.meta.url), 'utf8');
 const block = yml.slice(yml.indexOf('// BEGIN decide'), yml.indexOf('// END decide'));
-const { decide, carryCandidate, sameChange, onlyBaseMerges } = new Function(block + '\nreturn { decide, carryCandidate, sameChange, onlyBaseMerges };')();
+const { decide, carryCandidate, reviewedBase, sameChange, onlyBaseMerges } = new Function(block + '\nreturn { decide, carryCandidate, reviewedBase, sameChange, onlyBaseMerges };')();
 const H = 'a'.repeat(40), OLD = 'b'.repeat(40);
 const mk = (verdict, round, opts = {}) => ({
   author_association: opts.assoc ?? 'OWNER',
-  body: `Review\n<!-- jstream-review v1 verdict=${verdict} sha=${opts.sha ?? H} round=${round} reviewer-session=${opts.session ?? 'grokbot-jstream-review'} -->\n`,
+  body: `Review\n<!-- jstream-review v1 verdict=${verdict} sha=${opts.sha ?? H} round=${round} reviewer-session=${opts.session ?? 'grokbot-jstream-review'} -->\n${opts.base ? `<!-- jstream-review-base v1 sha=${opts.baseSha ?? opts.sha ?? H} base=${opts.base} -->\n` : ''}`,
 });
 const authors = new Set(['session_BUILDER1']);
 let fails = 0;
@@ -45,6 +45,16 @@ const eq = (name, got, want) => { const ok = got === want; if (!ok) fails++; con
 eq('candidate: latest marker sha', carryCandidate([mk('fail', 1, { sha: 'c'.repeat(40) }), mk('pass', 2, { sha: OLD })], H), OLD);
 eq('candidate: none when the head is reviewed', carryCandidate([mk('pass', 1, { sha: OLD }), mk('pass', 2)], H), null);
 eq('candidate: none without markers', carryCandidate([], H), null);
+// ADR-0154: the base a review was made against, from its marker.
+const B1 = 'd'.repeat(40), B2 = 'e'.repeat(40);
+eq('base: named by the marker', reviewedBase([mk('pass', 1, { sha: OLD, base: B1 })], OLD), B1);
+eq('base: none in an older marker', reviewedBase([mk('pass', 1, { sha: OLD })], OLD), null);
+eq('base: the latest marker for that sha', reviewedBase([mk('fail', 1, { sha: OLD, base: B1 }), mk('pass', 2, { sha: OLD, base: B2 })], OLD), B2);
+eq('base: another sha\'s marker is not used', reviewedBase([mk('pass', 1, { sha: H, base: B1 })], OLD), null);
+t('a marker with base= still decides', [mk('pass', 1, { base: B1 })], 'success');
+t('carry: a pass whose marker names its base', [mk('pass', 1, { sha: OLD, base: B1 })], 'success', C);
+eq('base: a base line for another sha is ignored', reviewedBase([mk('pass', 1, { sha: OLD, base: B1, baseSha: H })], OLD), null);
+eq('base: a malformed base line is ignored', reviewedBase([{ author_association: 'OWNER', body: `<!-- jstream-review v1 verdict=pass sha=${OLD} round=1 reviewer-session=s -->\n<!-- jstream-review-base v1 sha=${OLD} base=xyz -->` }], OLD), null);
 const f = (filename, patch, status = 'modified') => ({ filename, status, patch });
 const P1 = '@@ -10,3 +10,4 @@ fn a() {\n ctx\n-old\n+new\n+more';
 const P1moved = '@@ -40,3 +41,4 @@ fn a() {\n other ctx\n-old\n+new\n+more';

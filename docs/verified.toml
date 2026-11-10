@@ -948,7 +948,7 @@ stamp = { hash = "b3:087bce1f5e4fcd85", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:03d8063e7a07d5dd", by = "agent:release-thread", note = "Step 3 now says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; the rest of the PR loop, and REVIEW#output's added carry sentence, are consistent with review-gate.yml" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#output"]
-stamp = { hash = "b3:484aaeab32c61c4c", by = "agent:issues-burndown", note = "Re-read the PR loop against REVIEW › output's new lines (gate re-reads only on PR events and marker comments; a push cancels earlier heads' after-review runs): builders never post markers and auto-merge still lands on green, so it holds" }
+stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Re-read: step 3's carry sentence still holds (a push that only merges main into a passed head carries, ADR-0109); the base line is the reviewer's to write, so the builder's loop is unchanged" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#rounds"]
 stamp = { hash = "b3:1d8bae6753e4ae8d", by = "agent:release-thread", note = "Step 3 says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; REVIEW#rounds and #gather are back to main's text (no merge-only reviewer round), consistent with that" }
@@ -6723,10 +6723,10 @@ stamp = { hash = "b3:ef6690600d49a5a1", by = "agent:claude@session_01QBbMRwRuZe7
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["REVIEW#output"."body"]
-stamp = { hash = "b3:484aaeab32c61c4c", by = "agent:issues-burndown", note = "Added that review-gate re-reads the PR only on PR events and marker comments (its new job if and per-run skip group), and that a push cancels after-review runs for earlier heads; markers, rounds and carry unchanged" }
+stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Added the jstream-review-base line under the verdict marker (the base SHA reviewed against, from gh pr view --json baseRefOid) and said the carry diffs the reviewed head against it (ADR-0154); checked against review-gate.yml's baseRe, markersOf and reviewedBase" }
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
-stamp = { hash = "b3:c9b757436ac5df6a", by = "agent:issues-burndown", note = "The push-time cancel now runs only for a same-repo head; fork PRs never get after-review runs (dispatch skips them), so 'a push cancels those runs for the PR's earlier heads' still holds as written." }
+stamp = { hash = "b3:54cfad47c5f2d5eb", by = "agent:claude", note = "Added the jstream-review-base line under the verdict marker (the base SHA reviewed against, from gh pr view --json baseRefOid) and said the carry diffs the reviewed head against it (ADR-0154); checked against review-gate.yml's baseRe, markersOf and reviewedBase" }
 
 ["ROADMAP#beta"."body"]
 stamp = { hash = "b3:c57bb7caabb42736", by = "agent:beta-bar", note = "Re-read after review round 1: the scope says only that past projects need not load (Jeff's words), with no claim on settings or the protocol; the ship list is an unranked bullet list, and the beta.1 targets in docs/progress.toml carry no priority" }
@@ -6918,7 +6918,7 @@ stamp = { hash = "b3:ef078d22b4977c46", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:e3a952e1cfaf7cd4", by = "agent:claude", note = "Cargo.toml only gains a dev profile opt-level for jstream-platform (its NV12 converter); the workspace version and the apps that take it are unchanged" }
 
 ["RUNBOOK-WAVES#churn"."body"]
-stamp = { hash = "b3:59bac5719c90918f", by = "agent:wave-owner", note = "Two bullets now speak of a bump whose number another bump took, instead of the protocol holder, matching the rewritten protocol section; the rest holds." }
+stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
 
 ["RUNBOOK-WAVES#churn"."dep:docs/runbooks/waves.md#protocol"]
 stamp = { hash = "b3:9bdafb3a0e32d90c", by = "agent:wave-owner", note = "Two bullets now speak of a bump whose number another bump took, instead of the protocol holder, matching the rewritten protocol section; the rest holds." }
