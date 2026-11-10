@@ -1667,7 +1667,10 @@ fn serve(
     // can a video filter (a scroll, a video delay) and a capture. The slots' stamp is
     // read before the draw: a frame a slot takes during it is drawn again next time.
     let slots = snapshot.shot().slot_stamp();
+    // So does a scene camera's live aim while a drive or a glide moves it (ADR-0152),
+    // which the parameter channel doesn't republish as it moves.
     let changed = snapshot.shot().changes_with_time()
+        || live.aims_move()
         || frames.is_some_and(|frames| work.frames != frames)
         || slots != work.slots
         || !work
