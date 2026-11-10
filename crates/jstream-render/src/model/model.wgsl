@@ -13,7 +13,12 @@
 //
 // With scene lights (ADR-0143 decision 3) the rig is replaced by the scene's point, spot
 // and directional lights, placed in the same viewing frame on the CPU, and the
-// environment is scaled by the scene's ambient light.
+// environment is scaled by the scene's ambient light. A scene's environment light
+// (ADR-0151 decision 9) replaces the studio gradient with its sky, in the scene's space:
+// a gradient from its ground through its horizon to its sky straight up, or its
+// picture as an equirectangular panorama, spun about the vertical by its turn. A rough
+// reflection, and the diffuse light, read the panorama over a ring of taps around the
+// direction, wider the rougher. With no ambient light the sky lights a model on its own.
 
 const MAX_LIGHTS: u32 = 8u;
 const MAX_SHADOWS: u32 = 2u;
@@ -40,6 +45,7 @@ struct Frame {
     ambient: vec4<f32>,
     lights: array<Light, MAX_LIGHTS>,
     shadows: array<Shadow, MAX_SHADOWS>,
+    environment: Environment,
     // A floor the model is cut at (ADR-0151 decision 4): a fragment whose dot(xyz, seen)
     // + w is at or above 0 is at or below it, and isn't drawn. (0, 0, 0, -1) cuts nothing.
     cut: vec4<f32>,
@@ -47,6 +53,22 @@ struct Frame {
 
 fn below_floor(seen: vec3<f32>) -> bool {
     return dot(frame.cut.xyz, seen) + frame.cut.w >= 0.0;
+}
+
+// The scene's sky (ADR-0151 decision 9).
+struct Environment {
+    // rgb: straight up, linear light times intensity; w: 1 when there is one.
+    sky: vec4<f32>,
+    // rgb: at the horizon; w: its turn about the vertical, in radians.
+    horizon: vec4<f32>,
+    // rgb: below the horizon; w: how its picture stores alpha, -1 for no picture.
+    ground: vec4<f32>,
+    // xyz: the camera's right axis in the scene; w: 1 when an ambient light scales it.
+    right: vec4<f32>,
+    // xyz: its down axis; w: the intensity the picture is scaled by.
+    down: vec4<f32>,
+    // xyz: its forward axis.
+    forward: vec4<f32>,
 }
 
 // One light's shadow map (ADR-0151 decision 3), in the viewing frame.
@@ -74,6 +96,8 @@ struct Material {
 @group(0) @binding(0) var<uniform> frame: Frame;
 @group(0) @binding(1) var shadow0: texture_2d<f32>;
 @group(0) @binding(2) var shadow1: texture_2d<f32>;
+@group(0) @binding(3) var sky_tex: texture_2d<f32>;
+@group(0) @binding(4) var sky_sampler: sampler;
 @group(1) @binding(0) var<uniform> material: Material;
 @group(1) @binding(1) var tex_sampler: sampler;
 @group(1) @binding(2) var base_tex: texture_2d<f32>;
@@ -119,6 +143,56 @@ fn environment(dir: vec3<f32>) -> vec3<f32> {
     let sky = mix(vec3<f32>(0.62, 0.64, 0.68), vec3<f32>(0.42, 0.47, 0.56), max(up, 0.0));
     let floor = mix(vec3<f32>(0.30, 0.28, 0.26), vec3<f32>(0.16, 0.15, 0.14), max(-up, 0.0));
     return select(floor, sky, up >= 0.0);
+}
+
+// `dir`, in the viewing frame, as a direction in the scene's space spun by the sky's
+// turn: x right, y down, z toward where the camera looks from.
+fn sky_dir(dir: vec3<f32>) -> vec3<f32> {
+    let e = frame.environment;
+    let d = normalize(e.right.xyz * dir.x + e.down.xyz * dir.y - e.forward.xyz * dir.z);
+    let c = cos(e.horizon.w);
+    let s = sin(e.horizon.w);
+    return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
+}
+
+// The panorama's light along `d`, a scene direction: its centre ahead along -z.
+fn panorama(d: vec3<f32>) -> vec3<f32> {
+    let u = 0.5 + atan2(d.x, -d.z) / (2.0 * PI);
+    let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, 0.001, 0.999);
+    let c = to_premul_linear(
+        textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(u, v), 0.0),
+        frame.environment.ground.w,
+    );
+    return c.rgb * frame.environment.down.w;
+}
+
+// The scene's sky along `dir` (in the viewing frame), blurred over `spread`: 0 a single
+// sample, 1 a ring about 45 degrees out.
+fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
+    let e = frame.environment;
+    let d = sky_dir(dir);
+    if e.ground.w < 0.0 {
+        let up = clamp(-d.y, -1.0, 1.0);
+        if up >= 0.0 {
+            return mix(e.horizon.rgb, e.sky.rgb, sqrt(up));
+        }
+        return mix(e.horizon.rgb, e.ground.rgb, min(-up * 4.0, 1.0));
+    }
+    if spread <= 0.01 {
+        return panorama(d);
+    }
+    var side = vec3<f32>(0.0, 1.0, 0.0);
+    if abs(d.y) > 0.99 {
+        side = vec3<f32>(1.0, 0.0, 0.0);
+    }
+    let t = normalize(cross(d, side));
+    let b = cross(d, t);
+    var sum = panorama(d);
+    for (var k = 0u; k < 8u; k++) {
+        let a = f32(k) * PI * 0.25;
+        sum += panorama(normalize(d + spread * (t * cos(a) + b * sin(a))));
+    }
+    return sum / 9.0;
 }
 
 fn ggx(n_dot_h: f32, alpha: f32) -> f32 {
@@ -337,7 +411,16 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         let r = reflect(-v, n);
         // The gradient is smooth, so a rough reflection samples it nearer the normal.
         let blurred = normalize(mix(r, n, roughness * roughness));
-        lit += ambient * (diffuse * environment(n) + environment(blurred) * env_brdf(f0, roughness, n_dot_v));
+        if frame.params.w > 0.5 && frame.environment.sky.w > 0.5 {
+            // The scene's sky, scaled by its ambient light when it has one.
+            if frame.environment.right.w < 0.5 {
+                ambient = vec3<f32>(1.0);
+            }
+            let reflected = sky(blurred, roughness * roughness);
+            lit += ambient * (diffuse * sky(n, 1.0) + reflected * env_brdf(f0, roughness, n_dot_v));
+        } else {
+            lit += ambient * (diffuse * environment(n) + environment(blurred) * env_brdf(f0, roughness, n_dot_v));
+        }
         let occlusion = mix(1.0, textureSample(occlusion_tex, tex_sampler, in.uv).r, material.surface.w);
         color = lit * occlusion + emitted;
     }

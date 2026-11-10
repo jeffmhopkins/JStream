@@ -1966,6 +1966,15 @@ model with the first 8 point, spot and directional ones and every ambient one; a
 with more is logged once (`Chains::lights_warned`). A light placed without a box has no
 position and is left out. In a 2D scene a `scene`-lit model is studio-lit
 (`a_scene_lit_model_is_lit_by_the_lights_its_scene_places`).
+An environment light ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+decision 9) isn't one of those lights: `scene_environment` takes the scene's first one,
+in stacking order, as the model's sky (`ModelDraw::environment`), at its intensity
+times its item's opacity and spun by its item's turn, and a second one is logged once
+(`Chains::environments_warned`). Planning puts the frame of the source its `image`
+names in the shot when it places the light (`look_sky`), so it is uploaded though no
+item shows it, and the sky reads that upload; a source the pipeline captures isn't
+drawn for a sky alone. A reflection's models take the same sky
+(`an_environment_light_lights_a_scene_lit_model_with_its_sky`).
 Shadows ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3):
 `scene_lights` also lists the spot and directional lights whose source has `shadows`,
 by index with their softness (`Chains::shadowed`). The first `scene`-lit model of a run

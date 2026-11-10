@@ -33,9 +33,11 @@ pub const MAX_SHADOW_MAPS: usize = 2;
 pub const SHADOW_MAP_PX: u32 = 2048;
 /// Bytes of one shadow map's view in the frame uniform: four `vec4`.
 const SHADOW_BYTES: u64 = 64;
+/// Bytes of the environment in the frame uniform: six `vec4`.
+const ENVIRONMENT_BYTES: u64 = 96;
 /// Bytes of the frame uniform: two `mat4x4`, a `mat3x3` (three padded columns), a
-/// `vec4` of parameters, a `vec4` of ambient light, the lights, the shadow maps' views
-/// and the floor's cutting plane.
+/// `vec4` of parameters, a `vec4` of ambient light, the lights, the shadow maps' views,
+/// the environment and the floor's cutting plane.
 const FRAME_BYTES: u64 = 64
     + 64
     + 48
@@ -43,7 +45,10 @@ const FRAME_BYTES: u64 = 64
     + 16
     + MAX_SCENE_LIGHTS as u64 * LIGHT_BYTES
     + MAX_SHADOW_MAPS as u64 * SHADOW_BYTES
+    + ENVIRONMENT_BYTES
     + 16;
+/// The frame's textures: the shadow maps, then the environment's picture.
+const FRAME_TEXTURES: usize = MAX_SHADOW_MAPS + 1;
 /// Bytes of a material's uniform: four `vec4`.
 const MATERIAL_BYTES: u64 = 64;
 
@@ -123,11 +128,33 @@ pub struct ModelDraw<'a> {
     /// [`MAX_SHADOW_MAPS`]: each light's visibility at a fragment scales its light. Only
     /// a model lit by its scene uses them; empty for one that receives no shadows.
     pub shadows: &'a [ShadowMap<'a>],
+    /// The scene's environment light (ADR-0151 decision 9): the sky a model lit by its
+    /// scene takes its ambient light and reflections from, in place of the studio
+    /// gradient. Ignored without `lights`.
+    pub environment: Option<Environment<'a>>,
     /// A floor the model is cut at (ADR-0151 decision 4): nothing of it at or below the
     /// plane `y = floor` of the scene's space (y down) is drawn, or written to its view
     /// depth, so a scene drawn mirrored in its floor shows only what stands above it.
     /// `None` draws all of it; ignored without a `camera`.
     pub floor: Option<f32>,
+}
+
+/// The sky around a 3D scene (ADR-0151 decision 9), from its first environment light.
+#[derive(Clone, Copy, Debug)]
+pub struct Environment<'a> {
+    /// The sky straight up, straight sRGB. Alpha is ignored.
+    pub sky: Color,
+    /// The sky at the horizon.
+    pub horizon: Color,
+    /// Below the horizon.
+    pub ground: Color,
+    /// Scales it: the light's intensity times its item's opacity.
+    pub intensity: f32,
+    /// How far it is spun about the vertical axis, in degrees: its item's turn.
+    pub turn_deg: f32,
+    /// A picture that is the sky instead, as an equirectangular panorama: its centre
+    /// straight ahead along -z, up at its top.
+    pub image: Option<&'a Image>,
 }
 
 /// One light's shadow map (ADR-0151 decision 3): the scene's casters' view depth drawn
@@ -192,9 +219,10 @@ pub struct SceneLight {
 pub(crate) struct ModelRuntime {
     material_layout: wgpu::BindGroupLayout,
     frame_layout: wgpu::BindGroupLayout,
-    /// The frame bind group with the shadow maps of the last draw that had any, and
-    /// their textures, so a steady frame makes no bind group (ADR-0151 decision 3).
-    shadow_bind: Option<([Option<wgpu::Texture>; MAX_SHADOW_MAPS], wgpu::BindGroup)>,
+    /// The frame bind group with the shadow maps and environment picture of the last
+    /// draw that had any, and their textures, so a steady frame makes no bind group
+    /// (ADR-0151 decisions 3 and 9).
+    shadow_bind: Option<([Option<wgpu::Texture>; FRAME_TEXTURES], wgpu::BindGroup)>,
     opaque: wgpu::RenderPipeline,
     blended: wgpu::RenderPipeline,
     /// The model's view depth (ADR-0143 decision 4), keeping the larger value.
@@ -224,7 +252,8 @@ impl ModelRuntime {
             },
             count: None,
         };
-        // The frame's uniform, then the shadow maps (ADR-0151 decision 3).
+        // The frame's uniform, the shadow maps (ADR-0151 decision 3), then the
+        // environment's picture and its repeating sampler (decision 9).
         let frame_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("jstream-render-model-frame"),
             entries: &[
@@ -240,6 +269,13 @@ impl ModelRuntime {
                 },
                 texture_entry(1),
                 texture_entry(2),
+                texture_entry(3),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 4,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
         });
         let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -270,7 +306,14 @@ impl ModelRuntime {
         });
         let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-model"),
-            source: wgpu::ShaderSource::Wgsl(include_str!("model.wgsl").into()),
+            // The filters' colour helpers, so a picture decodes as every pass decodes it.
+            source: wgpu::ShaderSource::Wgsl(
+                concat!(
+                    include_str!("../filter/colour.wgsl"),
+                    include_str!("model.wgsl")
+                )
+                .into(),
+            ),
         });
         let layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("jstream-render-model"),
@@ -424,7 +467,12 @@ impl ModelRuntime {
         };
         let white = pixel("jstream-render-model-white", [255; 4]);
         let flat_normal = pixel("jstream-render-model-normal", [128, 128, 255, 255]);
-        let frame_bind = frame_bind_group(device, &frame_layout, &frame, [&white, &white]);
+        let frame_bind = frame_bind_group(
+            device,
+            &frame_layout,
+            (&frame, &sampler),
+            [&white, &white, &white],
+        );
         Self {
             material_layout,
             frame_layout,
@@ -609,7 +657,7 @@ impl ModelRuntime {
     fn frame_bind_for(
         &mut self,
         gpu: &Gpu,
-        maps: [Option<&Image>; MAX_SHADOW_MAPS],
+        maps: [Option<&Image>; FRAME_TEXTURES],
     ) -> wgpu::BindGroup {
         if maps.iter().all(Option::is_none) {
             return self.frame_bind.clone();
@@ -631,8 +679,8 @@ impl ModelRuntime {
         let bind = frame_bind_group(
             &gpu.device,
             &self.frame_layout,
-            &self.frame,
-            [view(0), view(1)],
+            (&self.frame, &self.sampler),
+            [view(0), view(1), view(2)],
         );
         self.shadow_bind = Some((textures, bind.clone()));
         bind
@@ -692,7 +740,7 @@ impl ModelRuntime {
         };
         // The shadow maps of the lights that shade it, that this compositor drew.
         let mut views = [[0.0f32; 16]; MAX_SHADOW_MAPS];
-        let mut maps: [Option<&Image>; MAX_SHADOW_MAPS] = [None; MAX_SHADOW_MAPS];
+        let mut maps: [Option<&Image>; FRAME_TEXTURES] = [None; FRAME_TEXTURES];
         let mut count = 0;
         if let (Some(lighting), Some(view)) = (lights.as_ref(), camera.as_ref()) {
             for shadow in draw.shadows {
@@ -706,12 +754,25 @@ impl ModelRuntime {
                 }
             }
         }
+        // The scene's sky, for a model lit by its scene (ADR-0151 decision 9).
+        let sky = match (draw.environment, lights.as_ref(), camera.as_ref()) {
+            (Some(environment), Some(lighting), Some(view)) => {
+                let image = environment.image.filter(|image| image.owner().is(owner));
+                maps[MAX_SHADOW_MAPS] = image;
+                Some(environment_values(&environment, image, lighting, view))
+            }
+            _ => None,
+        };
         let frame = frame_bytes(
             &solid,
             &clip,
             draw.lighting,
             lights.as_ref(),
-            (&views[..count], floor_cut(draw.floor, camera.as_ref())),
+            (
+                &views[..count],
+                sky.as_ref(),
+                floor_cut(draw.floor, camera.as_ref()),
+            ),
         );
         let frame_bind = self.frame_bind_for(gpu, maps);
         let depth = self.depth_view(gpu, width, height);
@@ -826,7 +887,7 @@ impl ModelRuntime {
             &clip,
             Lighting::Unlit,
             None,
-            (&[], floor_cut(draw.floor, Some(&camera))),
+            (&[], None, floor_cut(draw.floor, Some(&camera))),
         );
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
@@ -914,17 +975,23 @@ pub(crate) struct SceneLighting {
     pub(crate) lights: Vec<[f32; 16]>,
     /// For each of `lights`, its index in the lights it was made from.
     pub(crate) sources: Vec<usize>,
+    /// Whether an ambient light is among them, at any intensity: it then scales the
+    /// environment, which otherwise lights a model on its own (ADR-0151 decision 9).
+    pub(crate) has_ambient: bool,
 }
 
 impl SceneLighting {
     pub(crate) fn new(lights: &[SceneLight], view: &jstream_protocol::CameraView) -> Self {
         let mut ambient = [0.0f32; 3];
+        let mut has_ambient = false;
         let mut packed = Vec::with_capacity(MAX_SCENE_LIGHTS);
         let mut sources = Vec::with_capacity(MAX_SCENE_LIGHTS);
         // Slots taken by the shading lights so far, lit or not.
         let mut slots = 0;
         for (source, light) in lights.iter().enumerate() {
             let positive = |v: f32| v.is_finite() && v > 0.0;
+            // An ambient light scales the environment even faded out to nothing.
+            has_ambient |= light.kind == LightKind::Ambient;
             if light.kind != LightKind::Ambient {
                 // Every shading light takes one of the 8 in order, lit or not, so fading
                 // one of them out never switches a ninth on (ADR-0143 decision 3).
@@ -1001,16 +1068,18 @@ impl SceneLighting {
             ambient,
             lights: packed,
             sources,
+            has_ambient,
         }
     }
 }
 
-/// The frame bind group over `frame` and the two shadow maps' views.
+/// The frame bind group over `frame`, the two shadow maps' views, the environment
+/// picture's and `sampler`.
 fn frame_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
-    frame: &wgpu::Buffer,
-    shadows: [&wgpu::TextureView; MAX_SHADOW_MAPS],
+    (frame, sampler): (&wgpu::Buffer, &wgpu::Sampler),
+    textures: [&wgpu::TextureView; FRAME_TEXTURES],
 ) -> wgpu::BindGroup {
     device.create_bind_group(&wgpu::BindGroupDescriptor {
         label: Some("jstream-render-model-frame"),
@@ -1022,11 +1091,19 @@ fn frame_bind_group(
             },
             wgpu::BindGroupEntry {
                 binding: 1,
-                resource: wgpu::BindingResource::TextureView(shadows[0]),
+                resource: wgpu::BindingResource::TextureView(textures[0]),
             },
             wgpu::BindGroupEntry {
                 binding: 2,
-                resource: wgpu::BindingResource::TextureView(shadows[1]),
+                resource: wgpu::BindingResource::TextureView(textures[1]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 3,
+                resource: wgpu::BindingResource::TextureView(textures[2]),
+            },
+            wgpu::BindGroupEntry {
+                binding: 4,
+                resource: wgpu::BindingResource::Sampler(sampler),
             },
         ],
     })
@@ -1078,12 +1155,67 @@ pub(crate) fn shadow_view(
     ])
 }
 
+/// An environment in the shader's terms (`model.wgsl`'s `Environment`): its colours as
+/// linear light times its intensity, its turn, how its picture stores alpha (-1 for
+/// none), whether the scene has an ambient light, and the camera's axes, which take the
+/// viewing frame back to the scene's space.
+fn environment_values(
+    environment: &Environment<'_>,
+    image: Option<&Image>,
+    lighting: &SceneLighting,
+    view: &jstream_protocol::CameraView,
+) -> [f32; 24] {
+    let intensity = if environment.intensity.is_finite() {
+        environment.intensity.max(0.0)
+    } else {
+        0.0
+    };
+    let linear = |color: Color| {
+        let [r, g, b, _] = crate::color::premultiplied_linear(Color { a: 1.0, ..color });
+        [r, g, b].map(|c| c * intensity)
+    };
+    let [sky, horizon, ground] =
+        [environment.sky, environment.horizon, environment.ground].map(linear);
+    let turn = if environment.turn_deg.is_finite() {
+        environment.turn_deg.to_radians()
+    } else {
+        0.0
+    };
+    let [right, down, forward] = view.axes().map(|axis| axis.map(|c| c as f32));
+    [
+        sky[0],
+        sky[1],
+        sky[2],
+        1.0,
+        horizon[0],
+        horizon[1],
+        horizon[2],
+        turn,
+        ground[0],
+        ground[1],
+        ground[2],
+        image.map_or(-1.0, |image| image.alpha().shader_mode()),
+        right[0],
+        right[1],
+        right[2],
+        if lighting.has_ambient { 1.0 } else { 0.0 },
+        down[0],
+        down[1],
+        down[2],
+        intensity,
+        forward[0],
+        forward[1],
+        forward[2],
+        0.0,
+    ]
+}
+
 fn frame_bytes(
     solid: &Solid,
     clip: &[[f32; 4]; 4],
     lighting: Lighting,
     lights: Option<&SceneLighting>,
-    (shadows, cut): (&[[f32; 16]], [f32; 4]),
+    (shadows, environment, cut): (&[[f32; 16]], Option<&[f32; 24]>, [f32; 4]),
 ) -> Vec<u8> {
     let mut values = Vec::with_capacity((FRAME_BYTES / 4) as usize);
     values.extend(clip.iter().flatten());
@@ -1124,7 +1256,9 @@ fn frame_bytes(
             }
         }
     }
-    // The floor's cutting plane follows the shadow maps.
+    // The environment follows the shadow maps; none leaves the studio gradient.
+    values.extend(environment.copied().unwrap_or([0.0; 24]));
+    // The floor's cutting plane follows the environment.
     values.extend(cut);
     values.resize((FRAME_BYTES / 4) as usize, 0.0);
     f32_bytes(&values)

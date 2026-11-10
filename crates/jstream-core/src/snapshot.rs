@@ -2926,6 +2926,7 @@ impl<'a> Planner<'a, '_> {
             };
             let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
             note_light(out, id, item, through.as_ref(), &image);
+            self.look_sky(&image, out);
             let Some(geometry) = endpoint_geometry(item, size, canvas) else {
                 continue;
             };
@@ -3009,6 +3010,7 @@ impl<'a> Planner<'a, '_> {
                 let effects = self.boxed(id, item, &source, out);
                 let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
                 note_light(out, id, item, through.as_ref(), &source);
+                self.look_sky(&source, out);
                 placed.push(Placed {
                     item: item.id().clone(),
                     through,
@@ -3037,6 +3039,28 @@ impl<'a> Planner<'a, '_> {
             self.add_chain(ChainOwner::Scene(id.clone()), chain, out);
         }
         path.remove(id);
+    }
+
+    /// The picture of `source`'s sky when it is an environment light with one (ADR-0151
+    /// decision 9): that source's frame goes in `out` too, so it is uploaded with the
+    /// shot's, though no item shows it. A source captured by the pipeline isn't drawn
+    /// for a sky alone.
+    fn look_sky(&mut self, source: &SourceRef, out: &mut Shot) {
+        let SourceRef::Frame(id) = source else {
+            return;
+        };
+        let Some(image) = out
+            .frames
+            .get(id)
+            .and_then(|frame| frame.light.as_ref())
+            .and_then(|light| light.environment.as_ref())
+            .and_then(|sky| sky.image.clone())
+        else {
+            return;
+        };
+        if &image != id {
+            self.look(&image, out);
+        }
     }
 
     /// What `source_id` shows. Its frame goes in `out`, asked for once per shot.
@@ -5842,6 +5866,22 @@ fn draw_model(
     } else {
         Vec::new()
     };
+    // Its scene's sky (ADR-0151 decision 9); one environment counts.
+    let (environment, skies) = if lit {
+        scene_environment((shot, &*cache), scene_id, at, live)
+    } else {
+        (None, 0)
+    };
+    if skies > 1
+        && !chains.environments_warned.contains(scene_id)
+        && chains.environments_warned.insert(scene_id.clone())
+    {
+        tracing::warn!(
+            scene = %scene_id,
+            environments = skies,
+            "scene has more than one environment light; the first in stacking order lights it"
+        );
+    }
     let drawn = match (chains.model(source), cache.get(key)) {
         (Some(model), Some(layer)) => Some(compositor.draw_model(
             &jstream_render::ModelDraw {
@@ -5851,6 +5891,7 @@ fn draw_model(
                 lighting: shown.lighting,
                 lights: lit.then_some(lights.as_slice()),
                 shadows: &maps,
+                environment,
                 floor: None,
             },
             layer,
@@ -5884,7 +5925,7 @@ fn note_light(
     if out
         .frames
         .get(source)
-        .and_then(|frame| frame.light)
+        .and_then(|frame| frame.light.as_ref())
         .is_none()
     {
         return;
@@ -6075,6 +6116,7 @@ fn draw_reflection(
                 lighting: shown.lighting,
                 lights: (shown.lighting == Lighting::Scene).then_some(lights),
                 shadows: &[],
+                environment: scene_environment((shot, &*cache), &pass.scene, at, live).0,
                 // Only what stands above the floor is reflected in it.
                 floor: Some(floor),
             },
@@ -6284,10 +6326,13 @@ fn scene_lights(
         return;
     };
     for placed in placed {
+        // An environment light lights through its sky, not as a light (ADR-0151
+        // decision 9).
         let Some(light) = shot
             .frames
             .get(&placed.source)
-            .and_then(|frame| frame.light)
+            .and_then(|frame| frame.light.as_ref())
+            .filter(|light| light.kind != LightType::Environment)
         else {
             continue;
         };
@@ -6310,7 +6355,7 @@ fn scene_lights(
                 LightType::Point => jstream_render::LightKind::Point,
                 LightType::Spot => jstream_render::LightKind::Spot,
                 LightType::Directional => jstream_render::LightKind::Directional,
-                LightType::Ambient => jstream_render::LightKind::Ambient,
+                LightType::Ambient | LightType::Environment => jstream_render::LightKind::Ambient,
             },
             position,
             aim,
@@ -6325,6 +6370,64 @@ fn scene_lights(
             shadowed.push((lights.len() - 1, light.shadow_softness));
         }
     }
+}
+
+/// The sky of scene `id` at `at` (ADR-0151 decision 9): its first environment light, in
+/// stacking order, at its intensity times its item's opacity, spun by its item's turn,
+/// with its picture when that source's frame was uploaded this frame. Also how many
+/// environment lights the scene places, so a caller can log the ones that don't count.
+fn scene_environment<'c>(
+    (shot, cache): (&Shot, &'c ResourceCache<GpuKey>),
+    id: &SceneId,
+    at: MediaTime,
+    live: &LiveParams,
+) -> (Option<jstream_render::Environment<'c>>, usize) {
+    let Some(placed) = shot.lights.get(id) else {
+        return (None, 0);
+    };
+    let mut found = None;
+    let mut count = 0;
+    for placed in placed {
+        let Some(sky) = shot
+            .frames
+            .get(&placed.source)
+            .and_then(|frame| frame.light.as_ref())
+            .and_then(|light| light.environment.as_ref().map(|sky| (light, sky)))
+        else {
+            continue;
+        };
+        count += 1;
+        if found.is_some() {
+            continue;
+        }
+        let (light, sky) = sky;
+        let (placement, crop) = live.apply_to(
+            &placed.item,
+            placed.through.as_ref(),
+            placed.placement,
+            placed.crop,
+        );
+        let (item, modifiers) = &placed.motion.to;
+        let by = shot.motion_at(item, modifiers, at);
+        let (placement, _, opacity) = motion::apply(&by, placement, crop, placed.opacity);
+        let turn_deg = match placement {
+            Placement::Geometry(geometry) => geometry.turn_deg.get(),
+            _ => 0.0,
+        };
+        let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
+        found = Some(jstream_render::Environment {
+            sky: colour(sky.sky),
+            horizon: colour(sky.horizon),
+            ground: colour(sky.ground),
+            intensity: light.intensity * opacity,
+            turn_deg,
+            image: sky
+                .image
+                .as_ref()
+                .and_then(|image| cache.get(&GpuKey::Frame(image.clone()))),
+        });
+    }
+    (found, count)
 }
 
 /// Marks the layers [`compose`] draws `view` at `output` through as used in the cache's
@@ -6577,6 +6680,7 @@ fn draw_view_depth(
                 lighting: shown.lighting,
                 lights: None,
                 shadows: &[],
+                environment: None,
                 floor: from.and_then(|(_, _, floor)| floor),
             },
             target,

@@ -661,6 +661,9 @@ pub(crate) struct Chains {
     pub(crate) lights: Vec<jstream_render::SceneLight>,
     /// The scenes whose lights past the limit have been logged, so each logs once.
     pub(crate) lights_warned: BTreeSet<jstream_protocol::SceneId>,
+    /// The scenes whose extra environment lights were logged, once each (ADR-0151
+    /// decision 9).
+    pub(crate) environments_warned: BTreeSet<jstream_protocol::SceneId>,
     /// Each 3D scene's view depth (ADR-0143 decision 4), as its composite last drew it,
     /// with the frame of the chains' run that drew it: a scene's depth-reading filters
     /// read it only in that run. Kept, like a scene layer a filter reads, to tell when
@@ -2925,6 +2928,103 @@ mod tests {
         Some(pixels[0])
     }
 
+    /// ADR-0151 decision 9: an environment light lights a `scene`-lit model with its sky
+    /// on its own: a blue horizon tints a plane facing the camera blue, and a source
+    /// named as its picture, which no item shows, lights it from that picture instead.
+    #[test]
+    fn an_environment_light_lights_a_scene_lit_model_with_its_sky() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(jstream_protocol::SceneCamera::framing(
+                    jstream_protocol::Canvas {
+                        width: CANVAS.0,
+                        height: CANVAS.1,
+                    },
+                )),
+            }],
+        );
+        let blue = [0.0, 0.0, 1.0];
+        let sky = |image: Option<&str>| jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Environment,
+            color: [1.0; 3],
+            intensity: 2.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.3,
+            environment: Some(jstream_sources::ShownEnvironment {
+                sky: blue,
+                horizon: blue,
+                ground: blue,
+                image: image.map(SourceId::new),
+            }),
+        };
+        let Some(tinted) = lit_centre(&graph, sky(None)) else {
+            return;
+        };
+        assert!(
+            tinted[2] > 60 && tinted[2] > tinted[0] + 40,
+            "the sky lights the plane blue: {tinted:?}"
+        );
+        // The picture: a red source that only the light names.
+        use jstream_sources::SourceKind as _;
+        let kind = jstream_sources::ModelKind::new();
+        let mut settings: jstream_protocol::Settings = kind
+            .descriptor()
+            .params
+            .iter()
+            .map(|p| (p.id.clone(), p.default.clone()))
+            .collect();
+        settings.insert(String::from("shape"), serde_json::json!("plane"));
+        settings.insert(String::from("lighting"), serde_json::json!("scene"));
+        settings.insert(String::from("color"), serde_json::json!("#ffffff"));
+        let model = kind
+            .create(&settings, &jstream_sources::Context::default())
+            .expect("a model");
+        let stand_in = Frame::new(16, 9, &[0; 16 * 9 * 4], 2)
+            .expect("invariant: 16x9 RGBA8")
+            .with_model(model.model());
+        let lamp = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_light(Some(sky(Some("panorama"))));
+        let red = Frame::new(4, 2, &[255, 0, 0, 255].repeat(8), 4).expect("invariant: 4x2 RGBA8");
+        let shot = snapshot::plan_with(
+            &graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::Frame(
+                    match id.as_str() {
+                        "cam" => stand_in.clone(),
+                        "panorama" => red.clone(),
+                        _ => lamp.clone(),
+                    },
+                    None,
+                ))
+            },
+            &FilterAssets::default(),
+        )
+        .shot;
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let mut compositor = gpu().expect("an adapter");
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let pixel = draw_points(
+            &mut compositor,
+            (&mut cache, &mut chains),
+            (&shot, &LiveParams::default()),
+            &[(32, 18)],
+        )[0];
+        assert!(
+            pixel[0] > 60 && pixel[0] > pixel[2] + 40,
+            "the picture lights the plane red: {pixel:?}"
+        );
+    }
+
     /// ADR-0143 decisions 2 and 3: a `scene`-lit model in a 3D scene is lit by the light
     /// items placed there, where their items put them and as bright as their opacity
     /// lets them be; with none it is dark, and in a 2D scene it is studio-lit.
@@ -2953,12 +3053,13 @@ mod tests {
             softness: 0.2,
             shadows: false,
             shadow_softness: 0.3,
+            environment: None,
         };
         let point = light(jstream_sources::LightType::Point);
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
         // In a 2D scene the plane is studio-lit, whatever lights are placed.
         apply(&mut graph, vec![lamp(-200.0)]);
-        let Some(flat) = lit_centre(&graph, point) else {
+        let Some(flat) = lit_centre(&graph, point.clone()) else {
             return;
         };
         assert!(luma(flat) > 60, "studio-lit in a 2D scene: {flat:?}");
@@ -2975,11 +3076,11 @@ mod tests {
             }],
         );
         // Behind the plane, a point light lights only its back, which isn't drawn.
-        let behind = lit_centre(&graph, point).expect("an adapter");
+        let behind = lit_centre(&graph, point.clone()).expect("an adapter");
         assert!(luma(behind) < 6, "lit from behind: {behind:?}");
         // In front of it, the same light lights its face.
         apply(&mut graph, vec![lamp(200.0)]);
-        let front = lit_centre(&graph, point).expect("an adapter");
+        let front = lit_centre(&graph, point.clone()).expect("an adapter");
         assert!(luma(front) > 150, "lit from the front: {front:?}");
         // The item's opacity scales the light: at 0 it is off.
         apply(
@@ -2990,7 +3091,7 @@ mod tests {
                 opacity: jstream_protocol::Finite32::new(0.0).expect("finite"),
             }],
         );
-        let off = lit_centre(&graph, point).expect("an adapter");
+        let off = lit_centre(&graph, point.clone()).expect("an adapter");
         assert!(luma(off) < 6, "a light at opacity 0 is off: {off:?}");
         // An ambient light lights it from everywhere, wherever its item is.
         apply(
@@ -3231,6 +3332,7 @@ mod tests {
             softness: 0.2,
             shadows: false,
             shadow_softness: 0.3,
+            environment: None,
         };
         let black =
             Frame::new(16, 9, &[0, 0, 0, 255].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
@@ -3509,6 +3611,7 @@ mod tests {
             softness: 0.2,
             shadows,
             shadow_softness: 0.3,
+            environment: None,
         };
         let black =
             Frame::new(16, 9, &[0, 0, 0, 255].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
@@ -3635,6 +3738,7 @@ mod tests {
             softness: 0.2,
             shadows,
             shadow_softness: 0.0,
+            environment: None,
         };
         // The card's shadow falls 17 px to one side of it on the wall, which is behind
         // the canvas plane, so the camera sees it nearer the centre: about 10 px out
@@ -3759,6 +3863,7 @@ mod tests {
             softness: 0.2,
             shadows: false,
             shadow_softness: 0.3,
+            environment: None,
         };
         let running = crate::transition::Running {
             from: crate::transition::From::Scene(main.clone()),
@@ -3777,7 +3882,7 @@ mod tests {
             from_camera: crate::transition::camera_of(&graph, &main),
         };
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
-        let Some(landed) = lit_centre(&graph, light) else {
+        let Some(landed) = lit_centre(&graph, light.clone()) else {
             return;
         };
         let switching = lit_centre_in(&graph, light, Some(&running)).expect("an adapter");

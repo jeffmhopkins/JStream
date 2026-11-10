@@ -335,7 +335,14 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   last two shown for a spot only), `shadows` (default off: a spot or directional light
   casts shadows) and `shadow_softness` (0 to 1, default 0.3,
   [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3; settings
-  saved without them read as no shadows) are all live. Its frame is one transparent pixel: it
+  saved without them read as no shadows) are all live. `type` `environment`
+  ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 9) is the
+  sky around the whole scene, shown with `sky_color`, `horizon_color` and `ground_color`
+  (defaults `#9cc2e8`, white and `#3a3a3a`) and `image` (a video source whose picture is
+  the sky instead, as an equirectangular panorama; null for none; a capture lights it
+  only while an item also shows it), which
+  `ShownLight::environment` carries as a `ShownEnvironment` (settings saved without
+  them read as their defaults). Its frame is one transparent pixel: it
   draws nothing, and `Source::light` hands the engine its settings, which the item that
   places it gives a position, an aim and a strength (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),

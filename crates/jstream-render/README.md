@@ -718,6 +718,27 @@ rotated per pixel, whose stored `1 / w` isn't nearer the light than the fragment
 more than 0.2%; outside the map is lit. A shadowed light's light is scaled by that share
 (`golden_model_a_shadow_map_shadows_a_scene_lit_model`, a cube's and a card's map).
 
+**Environment** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+decision 9). `ModelDraw::environment` is the scene's sky (`Environment`: sky, horizon
+and ground colours, an intensity, a turn about the vertical, and maybe a picture), used
+only with `lights`. It is packed after the shadow maps (`environment_values`: the
+colours as linear light times the intensity, the turn in radians, how the picture
+stores alpha or -1 for none, whether the lights hold an ambient one at any intensity
+(`SceneLighting::has_ambient`), and the camera's axes, which take a viewing-frame
+direction back to the scene's space), and the picture is bound beside the maps (binding
+3, with the model's repeating sampler at 4; white without). In `model.wgsl` it replaces
+the studio gradient for the ambient and reflected terms: `sky` turns the direction into
+the scene's space and spins it by the turn, then reads the gradient (horizon to sky by
+the square root of the height up, horizon to ground over a quarter of the way down) or
+the panorama (`panorama`: its centre ahead along -z, up at its top, read bilinear at
+level 0 and decoded by the filters' `to_premul_linear` from `filter/colour.wgsl`, which
+the model shader is built with, so a page painted as premultiplied sRGB code values reads
+as an upload of the same colour does,
+`golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`), over a ring of 8
+taps around the direction for a spread: the reflection at the square of the roughness,
+the diffuse light at 1. An ambient light scales it; with none it lights the model on its
+own (`golden_model_an_environment_lights_a_model_from_its_sky`).
+
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
 function:
