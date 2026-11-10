@@ -929,6 +929,115 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "properties": {
+                  "pan": {
+                    "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to drive: a keyframe scene drives its family's."
+                  },
+                  "tilt": {
+                    "description": "Tilt speed: negative down, positive up, 0 stops. Omitted keeps the tilt.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "scene.drive_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops. Omitted keeps the zoom.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "properties": {
+                  "pan_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Pan from the stored camera's view, in degrees, -170 to 170, positive to the right."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to aim: a keyframe scene aims its family's."
+                  },
+                  "speed": {
+                    "description": "How fast to glide there, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Tilt from the stored camera's view, in degrees, -89 to 89, positive up."
+                  },
+                  "type": {
+                    "const": "scene.aim_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Zoom, 1 (the stored camera's field of view) to 8 (an eighth as wide)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
                 "properties": {
                   "item_id": {
@@ -7577,6 +7686,115 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.zoom_camera",
                     "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "properties": {
+                  "pan": {
+                    "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to drive: a keyframe scene drives its family's."
+                  },
+                  "tilt": {
+                    "description": "Tilt speed: negative down, positive up, 0 stops. Omitted keeps the tilt.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "scene.drive_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops. Omitted keeps the zoom.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "properties": {
+                  "pan_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Pan from the stored camera's view, in degrees, -170 to 170, positive to the right."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to aim: a keyframe scene aims its family's."
+                  },
+                  "speed": {
+                    "description": "How fast to glide there, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Tilt from the stored camera's view, in degrees, -89 to 89, positive up."
+                  },
+                  "type": {
+                    "const": "scene.aim_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Zoom, 1 (the stored camera's field of view) to 8 (an eighth as wide)."
                   }
                 },
                 "required": [
@@ -16016,6 +16234,115 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.zoom_camera",
                     "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "properties": {
+                  "pan": {
+                    "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to drive: a keyframe scene drives its family's."
+                  },
+                  "tilt": {
+                    "description": "Tilt speed: negative down, positive up, 0 stops. Omitted keeps the tilt.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "scene.drive_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops. Omitted keeps the zoom.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "properties": {
+                  "pan_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Pan from the stored camera's view, in degrees, -170 to 170, positive to the right."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to aim: a keyframe scene aims its family's."
+                  },
+                  "speed": {
+                    "description": "How fast to glide there, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Tilt from the stored camera's view, in degrees, -89 to 89, positive up."
+                  },
+                  "type": {
+                    "const": "scene.aim_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Zoom, 1 (the stored camera's field of view) to 8 (an eighth as wide)."
                   }
                 },
                 "required": [
@@ -24817,6 +25144,115 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "properties": {
+                  "pan": {
+                    "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to drive: a keyframe scene drives its family's."
+                  },
+                  "tilt": {
+                    "description": "Tilt speed: negative down, positive up, 0 stops. Omitted keeps the tilt.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "scene.drive_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops. Omitted keeps the zoom.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "properties": {
+                  "pan_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Pan from the stored camera's view, in degrees, -170 to 170, positive to the right."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to aim: a keyframe scene aims its family's."
+                  },
+                  "speed": {
+                    "description": "How fast to glide there, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Tilt from the stored camera's view, in degrees, -89 to 89, positive up."
+                  },
+                  "type": {
+                    "const": "scene.aim_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Zoom, 1 (the stored camera's field of view) to 8 (an eighth as wide)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
                 "properties": {
                   "item_id": {
@@ -31985,7 +32421,7 @@ source: crates/jstream-mcp/src/tests.rs
         "openWorldHint": false,
         "readOnlyHint": false
       },
-      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_ptz_shots` (edit), `scene.set_camera_motion` (edit), `scene.set_camera_follow` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.zoom_camera` (action), `scene.set_keyframe` (action), `scene.list` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
+      "description": "Runs one `scene` operation: set `op.type` to one of `scene.create` (edit), `scene.create_variant` (edit), `scene.rename` (edit), `scene.set_role` (edit), `scene.delete` (edit), `scene.reorder` (edit), `scene.set_folder` (edit), `scene.set_meta` (edit), `scene.set_options` (edit), `scene.set_camera` (edit), `scene.set_ptz_shots` (edit), `scene.set_camera_motion` (edit), `scene.set_camera_follow` (edit), `scene.set_transitions` (edit), `scene.switch` (action), `scene.switch_and_watch` (action), `scene.zoom_camera` (action), `scene.drive_camera` (action), `scene.aim_camera` (action), `scene.set_keyframe` (action), `scene.list` (query), `scene.camera_aim` (query). An edit is applied as a batch of one: it is undoable, it raises the state `rev` by one, and it accepts `expected_rev` and `idempotency_key`. Use `batch` to apply several edits atomically. An action has side effects and is never undone; the answer only says it was accepted. A query only reads. `scene.switch_and_watch` is `scene.switch` followed by a `video.frames` sheet of the program mix from the switch on, in one call, so you can see a transition play: say a stinger's cover at its `cut_ms`, or a 600 ms move. Its result leads with the sheet as an image content block. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
         "$defs": {
           "BusId": {
@@ -33180,6 +33616,115 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "properties": {
+                  "pan": {
+                    "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to drive: a keyframe scene drives its family's."
+                  },
+                  "tilt": {
+                    "description": "Tilt speed: negative down, positive up, 0 stops. Omitted keeps the tilt.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "scene.drive_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops. Omitted keeps the zoom.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "properties": {
+                  "pan_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Pan from the stored camera's view, in degrees, -170 to 170, positive to the right."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to aim: a keyframe scene aims its family's."
+                  },
+                  "speed": {
+                    "description": "How fast to glide there, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Tilt from the stored camera's view, in degrees, -89 to 89, positive up."
+                  },
+                  "type": {
+                    "const": "scene.aim_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Zoom, 1 (the stored camera's field of view) to 8 (an eighth as wide)."
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Sets the keyframe a scene is drawn through wherever another scene places it\n(ADR-0116, since 0.88): keyframe tracks. A scene with keyframe scenes then switches\nbetween them on its own, independently of the scene placing it and of every other\nplaced scene, so independent states (a background, a panel layout, an effect)\ndon't multiply into one keyframe each combination. Where the placing scene is\ndrawn through a keyframe of its own that overrides an item in this scene's tree,\nthat keyframe draws it instead. What each placed scene draws through is studio\nstate like the program scene: it changes no `rev`, is never undone or saved, and\n`studio.get` reports it. When program draws the scene and the preset is a `move`\nor `fade`, the change plays as its Move from what is on screen, pairing each item\nwith itself, as `item.show` does; any other kind switches at once. Emits `scene.keyframe_changed`. Fails with `not_found` for a\nscene, keyframe or preset the collection doesn't have, and with\n`invalid_argument` when `scene_id` is itself a keyframe scene or `keyframe_id`\nisn't one of its keyframe scenes.",
                 "properties": {
                   "keyframe_id": {
@@ -33229,6 +33774,24 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom\n`scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether\none is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its\nhome, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.",
+                "properties": {
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to read: a keyframe scene reads its family's."
+                  },
+                  "type": {
+                    "const": "scene.camera_aim",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
                 ],
                 "type": "object"
               }
@@ -34714,6 +35277,115 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.zoom_camera",
                     "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+                "properties": {
+                  "pan": {
+                    "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to drive: a keyframe scene drives its family's."
+                  },
+                  "tilt": {
+                    "description": "Tilt speed: negative down, positive up, 0 stops. Omitted keeps the tilt.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "type": {
+                    "const": "scene.drive_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "description": "Zoom speed: negative wide, positive tele, 0 stops. Omitted keeps the zoom.",
+                    "format": "int8",
+                    "maximum": 127,
+                    "minimum": -128,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  }
+                },
+                "required": [
+                  "type",
+                  "scene_id"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+                "properties": {
+                  "pan_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Pan from the stored camera's view, in degrees, -170 to 170, positive to the right."
+                  },
+                  "scene_id": {
+                    "$ref": "#/$defs/SceneId",
+                    "description": "The scene whose camera to aim: a keyframe scene aims its family's."
+                  },
+                  "speed": {
+                    "description": "How fast to glide there, 1 to 24. Omitted for the fastest.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "tilt_deg": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Tilt from the stored camera's view, in degrees, -89 to 89, positive up."
+                  },
+                  "type": {
+                    "const": "scene.aim_camera",
+                    "type": "string"
+                  },
+                  "zoom": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/Finite32"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "Zoom, 1 (the stored camera's field of view) to 8 (an eighth as wide)."
                   }
                 },
                 "required": [

@@ -753,6 +753,10 @@ struct Transitioning {
     /// What moves the cameras of the scene it leaves and the one it shows (ADR-0113 §3):
     /// a Move into or out of a follow camera moves with it.
     moves: (Option<Arc<CameraMoves>>, Option<Arc<CameraMoves>>),
+    /// The scene families of the scene it leaves and the one it shows, whose live aims
+    /// turn their cameras as it runs (ADR-0152); `None` for what was on screen when a
+    /// transition was cut short.
+    families: (Option<SceneId>, Option<SceneId>),
     /// The item chains whose settings a Move blends between two looks (ADR-0127).
     blends: Vec<EffectBlend>,
     end_ms: f32,
@@ -1799,12 +1803,20 @@ fn plan_inner(
                 },
                 planner.camera_moves(&running.to, &mut shot),
             );
+            let families = (
+                match &running.from {
+                    transition::From::Scene(from) => planner.family(from),
+                    transition::From::OnScreen(_) => None,
+                },
+                planner.family(&running.to),
+            );
             shot.transition = Some(Transitioning {
                 start: running.start,
                 tracks,
                 backgrounds: (from.unwrap_or(Color::TRANSPARENT), to),
                 cameras: planner.track_cameras(running, pairs),
                 moves,
+                families,
                 blends,
                 end_ms: planned.end_ms,
             });
@@ -2191,10 +2203,10 @@ impl<'a> Planner<'a, '_> {
         // A follow camera on a scene with no camera of its own supplies the framing
         // camera, so the scene draws as it does in 2D until the pointer moves it
         // (ADR-0120).
-        let family = scene.variant_of().unwrap_or(scene.id());
+        let family = scene.variant_of().unwrap_or(scene.id()).clone();
         let supplied = self
             .state
-            .scene(family)
+            .scene(&family)
             .and_then(|family| family.camera_follow())
             .map(|_| SceneCamera::framing(self.state.canvas()));
         (own.is_some() || parent.is_some() || supplied.is_some()).then_some(PassCamera {
@@ -2202,7 +2214,15 @@ impl<'a> Planner<'a, '_> {
             parent,
             supplied,
             moves: None,
+            family,
         })
+    }
+
+    /// The scene family of the planned scene `id`: its parent for a keyframe scene,
+    /// else itself.
+    fn family(&self, id: &SceneId) -> Option<SceneId> {
+        let (scene, _) = self.drawn(id)?;
+        Some(scene.variant_of().unwrap_or(scene.id()).clone())
     }
 
     /// The camera motion and follow camera of the planned scene `id`'s family
@@ -2332,13 +2352,17 @@ impl<'a> Planner<'a, '_> {
 
     /// Whether every one of `visuals`, the 2D side of a Move into or out of 3D, draws the
     /// same through the framing camera as in 2D (ADR-0128): flat, with no tilt, turn or
-    /// depth. A tilted item's own perspective projects about its own centre, the camera
-    /// about the canvas's, so even at the framing camera's focal length an item off the
-    /// centre would jump.
+    /// depth, and not a billboard. A tilted item's own perspective projects about its own
+    /// centre, the camera about the canvas's, so even at the framing camera's focal
+    /// length an item off the centre would jump; and a billboard, flat in 2D, turns to
+    /// face any camera (ADR-0151 decision 2).
     fn framed_alike(visuals: &[Visual]) -> bool {
         visuals.iter().all(|visual| {
             let g = &visual.at.geometry;
-            g.tilt_deg.get() == 0.0 && g.turn_deg.get() == 0.0 && g.depth_px.get() == 0.0
+            g.tilt_deg.get() == 0.0
+                && g.turn_deg.get() == 0.0
+                && g.depth_px.get() == 0.0
+                && !g.billboard
         })
     }
 
@@ -3344,6 +3368,8 @@ struct PassCamera {
     supplied: Option<SceneCamera>,
     /// Its family's camera motion and follow camera (ADR-0113), when it has either.
     moves: Option<Arc<CameraMoves>>,
+    /// Its scene family: whose live aim turns it (ADR-0152).
+    family: SceneId,
 }
 
 impl PassCamera {
@@ -3988,6 +4014,10 @@ pub(crate) struct LiveParams {
     /// since the engine started (ADR-0113 §4), in (negative: out). A follow camera takes
     /// the steps asked for since it started.
     zooms: BTreeMap<SceneId, i64>,
+    /// Each scene family's live aim (ADR-0152): the pan, tilt and zoom
+    /// `scene.drive_camera` and `scene.aim_camera` gave its camera, drawn on top of the
+    /// camera and its moves. A family without one draws its camera as it is.
+    aims: BTreeMap<SceneId, crate::aim::Aim>,
 }
 
 /// One item's live values: its own, and those addressed to each keyframe scene.
@@ -4115,6 +4145,7 @@ impl LiveParams {
             items,
             cameras,
             zooms: BTreeMap::new(),
+            aims: BTreeMap::new(),
         }
     }
 
@@ -4127,6 +4158,26 @@ impl LiveParams {
     /// The zoom steps asked for `family`'s follow camera.
     pub(crate) fn zooms(&self, family: &SceneId) -> i64 {
         self.zooms.get(family).copied().unwrap_or(0)
+    }
+
+    /// With `aims` as each scene family's live aim.
+    pub(crate) fn with_aims(mut self, aims: BTreeMap<SceneId, crate::aim::Aim>) -> Self {
+        self.aims = aims;
+        self
+    }
+
+    /// Whether a drive or a glide moves any scene family's live aim (ADR-0152), or did
+    /// last: a picture drawn through it changes with time.
+    pub(crate) fn aims_move(&self) -> bool {
+        self.aims.values().any(crate::aim::Aim::moves)
+    }
+
+    /// `camera`, `family`'s camera as it moves at `at`, turned by the family's live aim.
+    fn aimed(&self, family: &SceneId, camera: SceneCamera, at: MediaTime) -> SceneCamera {
+        match self.aims.get(family) {
+            Some(aim) => aim.apply(camera, at),
+            None => camera,
+        }
     }
 
     /// The camera `pass` draws through, with live cameras applied as
@@ -6867,7 +6918,8 @@ fn draw_view_depth(
 }
 
 /// `base`, a pass's camera with its live camera applied, moved by its family's camera
-/// motion and follow camera (ADR-0113) at `at`, for a pass first shown at `shown`.
+/// motion and follow camera (ADR-0113) at `at`, for a pass first shown at `shown`, and
+/// turned by its family's live aim (ADR-0152).
 fn moved_camera(
     base: Option<SceneCamera>,
     planned: Option<&PassCamera>,
@@ -6876,7 +6928,7 @@ fn moved_camera(
     chains: &Chains,
 ) -> Option<SceneCamera> {
     let base = base?;
-    Some(match planned.and_then(|camera| camera.moves.as_deref()) {
+    let moved = match planned.and_then(|camera| camera.moves.as_deref()) {
         Some(moves) => moves.apply(
             base,
             (at, shown),
@@ -6886,6 +6938,10 @@ fn moved_camera(
             live.zooms(&moves.family),
         ),
         None => base,
+    };
+    Some(match planned {
+        Some(planned) => live.aimed(&planned.family, moved, at),
+        None => moved,
     })
 }
 
@@ -6927,22 +6983,40 @@ fn fill_tracks<'a>(
     let size = [canvas.width() as f32, canvas.height() as f32];
     // Each end's camera as it moves this frame, a follow camera's included.
     let mut cameras = transition.cameras;
-    let moved = |moves: &Option<Arc<CameraMoves>>, camera: Option<SceneCamera>, shown| {
-        let (Some(moves), Some(camera)) = (moves, camera) else {
-            return camera;
+    let moved = |moves: &Option<Arc<CameraMoves>>,
+                 family: &Option<SceneId>,
+                 camera: Option<SceneCamera>,
+                 shown| {
+        let camera = camera?;
+        let camera = match moves {
+            Some(moves) => moves.apply(
+                camera,
+                (at, shown),
+                shot.canvas,
+                captures,
+                &mut chains.cameras(),
+                live.zooms(&moves.family),
+            ),
+            None => camera,
         };
-        Some(moves.apply(
-            camera,
-            (at, shown),
-            shot.canvas,
-            captures,
-            &mut chains.cameras(),
-            live.zooms(&moves.family),
-        ))
+        Some(match family {
+            Some(family) => live.aimed(family, camera, at),
+            None => camera,
+        })
     };
     cameras.ends = (
-        moved(&transition.moves.0, cameras.ends.0, None),
-        moved(&transition.moves.1, cameras.ends.1, Some(transition.start)),
+        moved(
+            &transition.moves.0,
+            &transition.families.0,
+            cameras.ends.0,
+            None,
+        ),
+        moved(
+            &transition.moves.1,
+            &transition.families.1,
+            cameras.ends.1,
+            Some(transition.start),
+        ),
     );
     items.clear();
     items.extend(
@@ -7903,6 +7977,7 @@ pub(crate) mod tests {
                 overlay_run: 1,
             },
             moves: (None, None),
+            families: (None, None),
             blends: Vec::new(),
             end_ms: 1000.0,
         };

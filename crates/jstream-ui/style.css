@@ -1226,6 +1226,11 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .jtunnel-setting { display: grid; gap: 0.6rem; margin: 14px 0; }
 .jtunnel-add { display: flex; flex-wrap: wrap; gap: 0.4rem; }
 .jtunnel-add input { flex: 1 1 10rem; width: auto; }
+.ptz-controller-setting { display: grid; gap: 0.6rem; margin: 14px 0; }
+.ptz-controller-add { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.ptz-controller-add input { flex: 1 1 10rem; width: auto; }
+.ptz-controller-add select { flex: 0 1 auto; width: auto; }
+.ptz-controller-title { margin: 6px 0 0; font-size: 12px; font-weight: 600; color: var(--muted); }
 .device-name { font-weight: 600; }
 .device-dates { flex: 1; color: var(--muted); font-size: 0.8rem; }
 

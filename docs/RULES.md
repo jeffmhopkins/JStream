@@ -666,7 +666,7 @@ The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md
 | `gate-test` | Node test of `review-gate`'s decision function, run against the workflow file | yes | now |
 | `review-gate` | Commit status set from the reviewer agent's verdict for the head SHA ([R-GOV-003](#R-GOV-003)) | yes | now |
 | `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
-| `dist-linux` | `cargo xtask dist-linux` on Linux: the desktop app's `.deb` ([ADR-0141](adr/0141-desktop-app-on-linux.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
+| `dist-linux` | `cargo xtask dist-linux` on Linux: the desktop app's `.deb` and AppImage ([ADR-0141](adr/0141-desktop-app-on-linux.md)), uploaded as artifacts, with the web UI the `dist-ui` job builds for release | no | now |
 | `release` | On a `v*` tag, or run by hand on `main`: builds the portable zip from a clean build and publishes it as a GitHub release ([release runbook](runbooks/release.md)) | n/a | now |
 | `e2e-stream` | `cargo xtask e2e-stream` on Linux: streams to a local `ffmpeg` RTMP server and checks the received file with `ffprobe` ([jstream-daemon › Real-receiver end to end](../apps/jstream-daemon/README.md#receiver-e2e)) | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |

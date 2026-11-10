@@ -95,7 +95,7 @@ impl HeadState {
 
 /// An emulated VISCA head on loopback, until dropped.
 pub(crate) struct FakeHead {
-    addr: SocketAddr,
+    pub(crate) addr: SocketAddr,
     transport: PtzTransport,
     state: Arc<Mutex<HeadState>>,
     stop: Arc<AtomicBool>,
@@ -144,9 +144,10 @@ impl FakeHead {
         lock(&self.state).clone()
     }
 
-    /// Waits up to two seconds for `done` to hold.
+    /// Waits up to ten seconds for `done` to hold: long, because it waits on the head and
+    /// only a failure waits it out, and a loaded CI runner can be slow (#1494).
     pub(crate) fn wait(&self, done: impl Fn(&HeadState) -> bool) -> bool {
-        let until = Instant::now() + Duration::from_secs(2);
+        let until = Instant::now() + Duration::from_secs(10);
         while Instant::now() < until {
             if done(&lock(&self.state)) {
                 return true;
@@ -453,9 +454,12 @@ fn the_queue_merges_drives_and_aims_and_a_stop_goes_first() {
 /// whose drive set it moving ends (ADR-0146 §3).
 #[test]
 fn a_drive_stops_when_its_client_leaves_or_the_head_is_dropped() {
+    // A command sent again because its reply was late reaches the head twice in a row:
+    // counted once.
     let stops = |h: &HeadState| {
-        h.commands
-            .iter()
+        let mut sent = h.commands.clone();
+        sent.dedup();
+        sent.iter()
             .filter(|c| {
                 matches!(
                     c,
@@ -482,17 +486,26 @@ fn a_drive_stops_when_its_client_leaves_or_the_head_is_dropped() {
     assert!(head.wait(|h| stops(h) == 1), "{:?}", head.state());
     std::thread::sleep(Duration::from_millis(100));
     assert_eq!(stops(&head.state()), 1);
-    // A drive at 0 forgets its driver, so the session ending sends nothing more.
+    // A drive at 0 forgets its driver, so the session ending sends nothing more. The
+    // zoom drive lands before the stop is sent: two drives queued together are merged
+    // into the later one, and the head then sees one stop fewer (#1494).
     assert!(matches!(
         ptz.act(&client(), &drive("cam", 0, 0, 3)),
         Some(Ok(()))
     ));
+    assert!(
+        head.wait(|h| h.commands.contains(&Command::Zoom(Drive::Plus(Some(2))))),
+        "{:?}",
+        head.state()
+    );
     assert!(matches!(
         ptz.act(&client(), &drive("cam", 0, 0, 0)),
         Some(Ok(()))
     ));
-    assert!(head.wait(|h| stops(h) == 2), "{:?}", head.state());
+    assert!(head.wait(|h| stops(h) == 3), "{:?}", head.state());
     ptz.forget_client(&client());
+    std::thread::sleep(Duration::from_millis(100));
+    assert_eq!(stops(&head.state()), 3, "the session ending sent nothing");
     // Dropping the setup mid-drive stops the head, and its focus.
     assert!(matches!(
         ptz.act(&other, &drive("cam", -3, 2, 0)),
@@ -504,7 +517,7 @@ fn a_drive_stops_when_its_client_leaves_or_the_head_is_dropped() {
             .any(|c| matches!(c, Command::PanTiltDrive { pan: Pan::Left, .. }))
     }));
     drop(ptz);
-    assert!(head.wait(|h| stops(h) == 3), "{:?}", head.state());
+    assert!(head.wait(|h| stops(h) == 4), "{:?}", head.state());
     assert!(
         head.wait(|h| h.commands.last() == Some(&Command::Focus(Drive::Stop))),
         "{:?}",
@@ -608,6 +621,14 @@ fn foreign_replies_are_dropped_and_silence_is_reported() {
     assert!(!info.reachable);
     assert_eq!(info.pose, None);
     assert_eq!(info.error.as_deref(), Some("no reply"));
+    // `profile.get` says why (ADR-0155): the home went twice, and nothing answered.
+    let profile = ptz.profile().remove(0);
+    assert_eq!(profile.camera, "mute");
+    assert_eq!(profile.transport, "udp");
+    assert!(!profile.reachable);
+    assert_eq!((profile.resent, profile.unanswered), (1, 1), "{profile:?}");
+    assert_eq!((profile.refused, profile.busy), (0, 0));
+    assert_eq!(profile.dropped, info.dropped);
 }
 
 /// The daemon's syntax, and the checks on a camera and a list.

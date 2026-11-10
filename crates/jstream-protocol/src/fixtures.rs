@@ -1526,6 +1526,22 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
         },
+        // A scene camera's live aim (ADR-0152).
+        Action::SceneDriveCamera {
+            scene_id: SceneId::new("scn_1"),
+            pan: Some(8),
+            tilt: Some(-3),
+            zoom: None,
+        },
+        Action::SceneAimCamera {
+            scene_id: SceneId::new("scn_1"),
+            aim: crate::CameraAim {
+                pan_deg: crate::Finite32::new(-20.0),
+                tilt_deg: crate::Finite32::new(5.0),
+                zoom: crate::Finite32::new(2.0),
+            },
+            speed: Some(12),
+        },
         // PTZ heads (ADR-0146).
         Action::PtzDrive {
             camera: "close".into(),
@@ -1895,6 +1911,9 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::VideoMixList,
         Query::CaptureTargets,
         Query::PtzList,
+        Query::SceneCameraAim {
+            scene_id: SceneId::new("scn_1"),
+        },
         Query::JtunnelSenders,
         Query::FontList,
         Query::ValuesList { prefix: None },
@@ -2237,6 +2256,29 @@ fn profile_info() -> ProfileInfo {
                 cold: true,
             },
         ],
+        ptz_controllers: vec![crate::PtzControllerProfile {
+            address: "192.168.1.20:52381".into(),
+            transport: "visca_ip".into(),
+            target: "program".into(),
+            answered: 1_240,
+            unallowed: 3,
+            malformed: 0,
+            refused: 0,
+            idle_stops: 1,
+        }],
+        ptz_cameras: vec![crate::PtzCameraProfile {
+            camera: "Stage left".into(),
+            address: "192.168.1.30:52381".into(),
+            transport: "visca_ip".into(),
+            reachable: true,
+            sent: 2_410,
+            replies: 4_790,
+            dropped: 0,
+            resent: 2,
+            unanswered: 0,
+            refused: 1,
+            busy: 3,
+        }],
     }
 }
 
@@ -2896,6 +2938,14 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
             ],
         },
+        QueryResult::SceneCameraAim {
+            aim: crate::CameraAimInfo {
+                pan_deg: crate::Finite32::new(-20.0).expect("finite"),
+                tilt_deg: crate::Finite32::new(5.0).expect("finite"),
+                zoom: crate::Finite32::new(2.0).expect("finite"),
+                moving: false,
+            },
+        },
         QueryResult::JtunnelSenders {
             on: true,
             senders: vec![
@@ -3041,7 +3091,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             ],
         },
         QueryResult::ProfileGet {
-            profile: profile_info(),
+            profile: Box::new(profile_info()),
         },
         QueryResult::QualityProbe {
             probe: quality_probe(),

@@ -65,8 +65,9 @@ const V11: &str = include_str!("fixtures/v11.json");
 /// loading as version 1 must.
 const V12: &str = include_str!("fixtures/v12.json");
 
-/// A collection file at schema version 13, version 12 with a motion
-/// modifier on `i4` that drives its `edge` effect's `width` (ADR-0138). It must keep loading as version 1 must.
+/// A collection file at schema version 13: version 12 with a motion modifier on `i4`
+/// that drives its `edge` effect's `width` (ADR-0138). It must keep loading as version 1
+/// must.
 const V13: &str = include_str!("fixtures/v13.json");
 
 /// A collection file at schema version 14: version 13 with PTZ shots on scene `a` and
@@ -768,7 +769,7 @@ fn a_keyframe_scene_overrides_its_parents_shots_per_camera() {
 /// Versions before 14 have no PTZ shots, so a scene's shots there are refused.
 #[test]
 fn an_older_file_refuses_ptz_shots() {
-    let mut value: Value = serde_json::from_str(V12).unwrap_or_default();
+    let mut value: Value = serde_json::from_str(V13).unwrap_or_default();
     value["scenes"][0]["ptz_shots"] = json!([{"camera": "wide", "preset": 1}]);
     assert!(matches!(
         load(&value.to_string()),

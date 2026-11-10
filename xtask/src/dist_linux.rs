@@ -18,10 +18,11 @@ use std::process::Command;
 
 use anyhow::{Context, Result, bail};
 
+use crate::appimage;
 use crate::browser_linux::{self, CHROME_SANDBOX};
 use crate::dist::{build_ui, copy, copy_dir, describe};
 
-const USAGE: &str = "usage: cargo xtask dist-linux [--ui-dir <built UI folder>] [--out <folder>] [--revision <name>]";
+const USAGE: &str = "usage: cargo xtask dist-linux [--ui-dir <built UI folder>] [--out <folder>] [--revision <name>] [--linuxdeploy <linuxdeploy AppImage> --appimage-runtime <type 2 runtime>]";
 
 /// The packages `cargo build` builds, and the features: the desktop app's window, and
 /// both hosts' browser sources, which start the helper in the `browser` folder.
@@ -63,6 +64,8 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     let mut ui_dir = None;
     let mut out = None;
     let mut revision = None;
+    let mut linuxdeploy = None;
+    let mut runtime = None;
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || {
@@ -74,9 +77,19 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
             "--ui-dir" => ui_dir = Some(value()?),
             "--out" => out = Some(value()?),
             "--revision" => revision = Some(value()?.to_string_lossy().into_owned()),
+            "--linuxdeploy" => linuxdeploy = Some(value()?),
+            "--appimage-runtime" => runtime = Some(value()?),
             _ => bail!("unknown argument `{arg}`\n{USAGE}"),
         }
     }
+    let tools = match (linuxdeploy, runtime) {
+        (Some(linuxdeploy), Some(runtime)) => Some(appimage::Tools {
+            linuxdeploy: absolute(&linuxdeploy)?,
+            runtime: absolute(&runtime)?,
+        }),
+        (None, None) => None,
+        _ => bail!("--linuxdeploy and --appimage-runtime go together\n{USAGE}"),
+    };
     if !cfg!(target_os = "linux") {
         bail!("the Linux package is built on Linux");
     }
@@ -99,7 +112,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     let browser = target.join("dist-linux-browser");
     browser_linux::build_release(root, &target, &browser)?;
     let version = deb_version(
-        env!("CARGO_PKG_VERSION"),
+        &workspace_version(root)?,
         revision.unwrap_or_else(|| describe(root)).as_str(),
     );
     let stage = out.join(format!("{PACKAGE}_{version}_{arch}"));
@@ -109,7 +122,48 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     lay_out(root, &target.join("release"), &ui, &browser, &stage)?;
     let deb = pack(&stage, &version, arch, &out)?;
     eprintln!("wrote {}", deb.display());
+    if let Some(tools) = tools {
+        let entry = desktop_entry();
+        let inputs = appimage::Inputs {
+            root,
+            release: &target.join("release"),
+            ui: &ui,
+            browser: &browser,
+            app_id: APP_ID,
+            desktop_entry: &entry,
+        };
+        let out = absolute(&out)?;
+        let image = appimage::build(
+            &inputs,
+            &tools,
+            &version,
+            &absolute(&target.join("dist-linux-appimage"))?,
+            &out,
+        )?;
+        eprintln!("wrote {}", image.display());
+    }
     Ok(true)
+}
+
+/// The release version the apps take, `[workspace.package]`'s (xtask's own is 0.0.0).
+fn workspace_version(root: &Path) -> Result<String> {
+    let manifest = root.join("Cargo.toml");
+    let text =
+        fs::read_to_string(&manifest).with_context(|| format!("reading {}", manifest.display()))?;
+    version_of(&text)
+        .with_context(|| format!("{} has no [workspace.package] version", manifest.display()))
+}
+
+/// `[workspace.package]`'s version in a workspace manifest.
+fn version_of(manifest: &str) -> Option<String> {
+    let table = manifest.parse::<toml::Table>().ok()?;
+    let version = table.get("workspace")?.get("package")?.get("version")?;
+    version.as_str().map(str::to_owned)
+}
+
+/// `path`, from the working directory if it's relative: linuxdeploy runs with its own.
+fn absolute(path: &Path) -> Result<PathBuf> {
+    std::path::absolute(path).with_context(|| format!("resolving {}", path.display()))
 }
 
 /// Writes `DEBIAN/control` into the laid-out `stage` and packs it with `dpkg-deb` into
@@ -211,7 +265,7 @@ fn symlink(target: &str, link: &Path) -> Result<()> {
 
 /// Gives `file` the Unix `mode`.
 #[cfg(unix)]
-fn set_mode(file: &Path, mode: u32) -> Result<()> {
+pub(crate) fn set_mode(file: &Path, mode: u32) -> Result<()> {
     use std::os::unix::fs::PermissionsExt as _;
     fs::set_permissions(file, fs::Permissions::from_mode(mode))
         .with_context(|| format!("setting {}'s mode to {mode:o}", file.display()))
@@ -219,7 +273,7 @@ fn set_mode(file: &Path, mode: u32) -> Result<()> {
 
 /// As [`symlink`], only on Unix.
 #[cfg(not(unix))]
-fn set_mode(file: &Path, mode: u32) -> Result<()> {
+pub(crate) fn set_mode(file: &Path, mode: u32) -> Result<()> {
     bail!(
         "can't set {}'s mode to {mode:o}: not on Unix",
         file.display()
@@ -317,12 +371,16 @@ fn size_kib(dir: &Path) -> Result<u64> {
 
 #[cfg(test)]
 mod tests {
-    use super::{BINARIES, LIB_DIR, control, deb_arch, deb_version, desktop_entry, lay_out, pack};
-    use std::fs;
-    #[cfg(target_os = "linux")]
-    use std::os::unix::fs::PermissionsExt as _;
+    use super::{control, deb_arch, deb_version, desktop_entry, version_of, workspace_version};
     use std::path::Path;
-    use std::process::Command;
+    // The package test runs on Linux only, so its imports are Linux's too.
+    #[cfg(target_os = "linux")]
+    use {
+        super::{BINARIES, LIB_DIR, lay_out, pack},
+        std::fs,
+        std::os::unix::fs::PermissionsExt as _,
+        std::process::Command,
+    };
 
     /// Lays out a package from stand-in binaries and a one-page UI, and, where
     /// `dpkg-deb` is installed, packs it and reads the package back.
@@ -417,6 +475,18 @@ mod tests {
             );
         }
         let _ = fs::remove_dir_all(&scratch);
+    }
+
+    #[test]
+    fn the_version_is_the_workspace_s() {
+        let manifest =
+            "[workspace]\nmembers = []\n\n[workspace.package]\nversion = \"0.1.0-alpha.5\"\n";
+        assert_eq!(version_of(manifest).as_deref(), Some("0.1.0-alpha.5"));
+        assert_eq!(version_of("[package]\nversion = \"0.0.0\"\n"), None);
+        let root = Path::new(env!("CARGO_MANIFEST_DIR"))
+            .parent()
+            .expect("the workspace root");
+        assert_ne!(workspace_version(root).expect("the workspace's"), "0.0.0");
     }
 
     #[test]
