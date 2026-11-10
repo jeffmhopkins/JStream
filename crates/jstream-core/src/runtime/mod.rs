@@ -10,7 +10,7 @@
 mod captures;
 mod devices;
 mod gpu;
-mod pass_guard;
+pub(crate) mod pass_guard;
 mod pipeline;
 mod publish;
 mod render;
