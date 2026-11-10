@@ -89,5 +89,4 @@ decisions 5, 6 and 10, and ADR-0146's command exchange.
 - **Harder:** a controller that sends nothing for 5 seconds while its joystick is held
   steady sees the drive stop. The value is a constant; it becomes a setting only if a
   real controller needs it.
-- **Later:** the PTZ cameras' own counters (#1423) are in `profile.get` since
-  [ADR-0154](0154-ptz-cameras-counters-in-profile-get.md).
+- **Still open:** the PTZ cameras' own counters (#1423) aren't in `profile.get` yet.
