@@ -65,6 +65,8 @@ fn main() -> ExitCode {
         startup.host,
         startup.network_file,
         startup.jtunnel_file,
+        startup.ptz_file,
+        startup.ptz_controllers,
     ) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
