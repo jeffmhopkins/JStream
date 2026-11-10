@@ -446,8 +446,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   a `jstream-ptz` thread and its own socket: Sony-style VISCA over IP on UDP (with a
   sequence reset at start), raw VISCA over UDP, or raw VISCA over TCP, reconnecting
   after a second. The thread sends what the control side queues, waits up to 300 ms
-  for each command's ACK, completion or error (on "buffer full" it waits up to two
-  seconds for a completion and sends once more), and while idle asks the head's
+  for each command's ACK, completion or error (with no reply it sends it once more,
+  since every command it sends lands the head in the same place however often it
+  arrives, ADR-0153 §4; on "buffer full" it waits up to two seconds for a completion
+  and sends once more), and while idle asks the head's
   pan-tilt, zoom and focus positions every 500 ms. Its queue holds at most 16 unsent
   commands: a drive replaces an unsent drive and an aim an unsent aim, and a stop drops
   the unsent drives and goes first. On raw VISCA, which has no sequence numbers, it
@@ -474,8 +476,15 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   `scene.drive_camera` or `scene.aim_camera` for its target (a scene, or what
   `studio.get` says is on program or preview), answering inquiries from
   `scene.camera_aim` in its own units (16 counts a degree; zoom 0 to 16384). Its
-  presets are aims it holds in memory. The host keeps the returned `PtzControllers`;
-  dropping it stops the threads and ends their sessions, so their drives stop.
+  presets are aims it holds in memory. It notes which axes its own drives left moving,
+  and stops them once no allowed controller has been heard for `IDLE_STOP` (5 s), or
+  when a TCP endpoint's last connection closes
+  ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
+  §1). It counts what it answered, what it dropped (an address not allowed, not VISCA,
+  a connection past the four) and those stops; the engine holds each endpoint weakly
+  and reports them in `profile.get`'s `ptz_controllers` while they run (§2). The host
+  keeps the returned `PtzControllers`; dropping it stops the threads and ends their
+  sessions, so their drives stop.
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
@@ -863,7 +872,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   scene's family camera, presets, home, the replies to what a scene camera can't do and
   to what isn't VISCA, a message to another address ignored; the allowlist dropping an
   address not on it; program and preview targets following the studio; an endpoint's
-  drive stopping when it closes; the daemon's endpoint syntax and setup checks. The aim
+  drive stopping when it closes, when its controller goes quiet (only the axes its own
+  drive left moving) and when a TCP controller hangs up, with `profile.get` counting it;
+  the daemon's endpoint syntax and setup checks. The aim
   itself: the turn, tilt limit and zoom on a camera, the speed curves, a drive to its
   limit, a glide arriving on every axis together, a drive stopping with its session; and
   through the engine, the actions, the query, the refusals and binding, and the program
@@ -3602,7 +3613,9 @@ sent under the collection lock, and a head's status is a leaf mutex its thread t
 alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
 while it sends or waits for a reply. A PTZ controller endpoint's thread is a client:
 each message it translates is a call on its session, which takes the collection lock
-as any call does, and it holds no lock while it waits on its socket.
+as any call does, and it holds no lock while it waits on its socket. The engine's list
+of running endpoints (`Shared::ptz_controllers`) is a leaf mutex, taken alone to add
+them and by `profile.get` to read their counters, which are atomics.
 The collection file's lock comes before the collection lock: a save holds it, takes the
 collection lock only to serialize, and writes with it released. An effect-pack update
 that moved filters through their renames (#1353) saves once the collection lock is

@@ -1648,7 +1648,7 @@ impl State {
             },
             // The mock draws nothing and reads no threads (ADR-0103): an empty profile.
             Query::ProfileGet { .. } => QueryResult::ProfileGet {
-                profile: jstream_protocol::ProfileInfo::default(),
+                profile: Box::default(),
             },
             other => return Err(unimplemented_by_mock(other.name())),
         };

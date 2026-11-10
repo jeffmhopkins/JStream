@@ -8,6 +8,7 @@ use crate::host::{self, Host};
 use crate::jtunnel;
 use crate::logs::LogFile;
 use crate::network;
+use crate::ptz;
 use crate::ui::{self, Ui};
 use anyhow::Context;
 use jstream_crash::Secrets;
@@ -88,6 +89,11 @@ pub struct Startup {
     /// The "Receive from JTunnel senders" setting's file, which `set_jtunnel` writes,
     /// when the data folder is known.
     pub jtunnel_file: Option<PathBuf>,
+    /// The "Accept a PTZ controller" setting's file, which `set_ptz_controllers`
+    /// writes, when the data folder is known.
+    pub ptz_file: Option<PathBuf>,
+    /// The PTZ controller endpoints the setting opened, kept until the app exits.
+    pub ptz_controllers: Option<jstream_core::PtzControllers>,
 }
 
 impl Startup {
@@ -99,6 +105,8 @@ impl Startup {
             host: None,
             network_file: None,
             jtunnel_file: None,
+            ptz_file: None,
+            ptz_controllers: None,
         }
     }
 }
@@ -140,6 +148,7 @@ pub fn start(
         // After the backends, which `host::engine` sets: arrivals are stamped on the
         // media clock (ADR-0123 §1).
         jtunnel::start(&engine, &jtunnel::setting_file(data));
+        let ptz_controllers = ptz::start(&engine, &ptz::setting_file(data));
         let agents = options.mcp.then(|| host::Agents {
             port: options.port.unwrap_or(host::MCP_PORT),
             token_file: data.join(host::TOKEN_FILE),
@@ -173,11 +182,12 @@ pub fn start(
             }
             started => started,
         }
+        .map(|host| (host, ptz_controllers))
     })();
     let vcam = host::vcam_status(exe_dir, !options.no_vcam);
     tracing::info!(vcam = vcam.as_str(), "virtual camera");
-    let host = match host {
-        Ok(host) => host,
+    let (host, ptz_controllers) = match host {
+        Ok(started) => started,
         Err(error) => return problem(error),
     };
     let ui_dir = match (&options.ui_dir, exe_dir) {
@@ -205,6 +215,7 @@ pub fn start(
             network_open: host.network().is_some(),
             wheel_focus_only: wheel_focus_only() || !host.global_wheel(),
             jtunnel: &jtunnel::read(&jtunnel::setting_file(data)),
+            ptz: &ptz::read(&ptz::setting_file(data)),
         },
     );
     Startup {
@@ -213,6 +224,8 @@ pub fn start(
         host: Some(host),
         network_file: Some(network::setting_file(data)),
         jtunnel_file: Some(jtunnel::setting_file(data)),
+        ptz_file: Some(ptz::setting_file(data)),
+        ptz_controllers,
     }
 }
 

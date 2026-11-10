@@ -785,7 +785,10 @@ The wire format, versioning, error codes and compatibility policy are designed i
   zoom factor) move a scene family's camera at runtime, with no `rev` change, and the
   query `scene.camera_aim` reads it. A PTZ controller drives them: the host's controller
   endpoints, each on one LAN address and answering only allowlisted controllers, are
-  sessions that turn VISCA into these actions (ADR-0123 §5).
+  sessions that turn VISCA into these actions (ADR-0123 §5). An endpoint stops the
+  drives it started when its controller goes quiet, and `profile.get`'s
+  `ptz_controllers` (protocol 0.120) counts what each answered and dropped
+  ([ADR-0153](adr/0153-ptz-controller-idle-stop-counters-and-setting.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));

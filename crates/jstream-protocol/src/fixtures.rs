@@ -2231,6 +2231,16 @@ fn profile_info() -> ProfileInfo {
                 cold: true,
             },
         ],
+        ptz_controllers: vec![crate::PtzControllerProfile {
+            address: "192.168.1.20:52381".into(),
+            transport: "visca_ip".into(),
+            target: "program".into(),
+            answered: 1_240,
+            unallowed: 3,
+            malformed: 0,
+            refused: 0,
+            idle_stops: 1,
+        }],
     }
 }
 
@@ -3043,7 +3053,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             ],
         },
         QueryResult::ProfileGet {
-            profile: profile_info(),
+            profile: Box::new(profile_info()),
         },
         QueryResult::QualityProbe {
             probe: quality_probe(),

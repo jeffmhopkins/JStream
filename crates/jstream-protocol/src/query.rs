@@ -916,9 +916,9 @@ pub enum QueryResult {
     /// The result of `profile.get` (0.73). Runtime state, so it carries no `rev`.
     #[serde(rename = "profile.get")]
     ProfileGet {
-        /// Where the time went.
+        /// Where the time went. Boxed: it is far larger than the other results.
         #[serde(flatten)]
-        profile: ProfileInfo,
+        profile: Box<ProfileInfo>,
     },
     /// The result of `quality.probe` (0.110). Runtime state, so it carries no `rev`.
     #[serde(rename = "quality.probe")]

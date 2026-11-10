@@ -598,6 +598,12 @@ impl Worker {
         let mut error = None;
         for command in commands {
             let mut got = self.command(command);
+            // Nothing answered: a datagram lost, or a head (or this machine) too busy to
+            // answer in time. Every command JStream sends lands the head in the same
+            // place however often it arrives, so it goes once more (#1494).
+            if got.is_none() {
+                got = self.command(command);
+            }
             // The head's command buffers are full (an aim's pan-tilt and zoom still
             // moving): wait for one to complete, then send it once more.
             if matches!(got, Some(Got::Full)) {

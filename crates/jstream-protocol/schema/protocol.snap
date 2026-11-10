@@ -11403,6 +11403,62 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PtzControllerProfile": {
+      "description": "One PTZ controller endpoint ([`ProfileInfo::ptz_controllers`], ADR-0152, ADR-0153):\nwhat it answered and what it dropped, counted from when it opened.",
+      "properties": {
+        "address": {
+          "default": "",
+          "description": "The address and port it listens on, as `192.168.1.20:52381`.",
+          "type": "string"
+        },
+        "answered": {
+          "default": 0,
+          "description": "VISCA messages it answered.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "idle_stops": {
+          "default": 0,
+          "description": "Drives it stopped because its controller went quiet (ADR-0153 §1).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "malformed": {
+          "default": 0,
+          "description": "Datagrams that aren't VISCA over IP, which it dropped.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "refused": {
+          "default": 0,
+          "description": "Connections it refused because it already held as many as it takes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target": {
+          "default": "",
+          "description": "What it drives: `program`, `preview` or `scene:<scene id>`.",
+          "type": "string"
+        },
+        "transport": {
+          "default": "",
+          "description": "Its transport's name: `visca_ip`, `udp` or `tcp`.",
+          "type": "string"
+        },
+        "unallowed": {
+          "default": 0,
+          "description": "Datagrams and connections from an address it doesn't allow, which it dropped.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "PtzFocus": {
       "description": "What `ptz.focus` does.",
       "oneOf": [
@@ -13528,6 +13584,13 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The CPU the engine's process used in the window, as a percentage of one core\n(200 is two cores busy), when the host can read it."
+            },
+            "ptz_controllers": {
+              "description": "The PTZ controller endpoints the host opened (since 0.120, ADR-0153), in its\norder. Like `network`, each one's counts run from when it opened, not over the\nwindow. Omitted when none is open.",
+              "items": {
+                "$ref": "#/$defs/PtzControllerProfile"
+              },
+              "type": "array"
             },
             "seconds": {
               "$ref": "#/$defs/Finite32",
@@ -15923,5 +15986,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.118"
+  "title": "JStream protocol 0.120"
 }

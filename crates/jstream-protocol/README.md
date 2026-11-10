@@ -166,7 +166,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
-  0.113, `NetworkProfile` and `NetworkInputProfile` among them),
+  0.113, `NetworkProfile` and `NetworkInputProfile`, and since 0.120
+  `PtzControllerProfile`, among them),
   `quality.probe` (since 0.110, `quality.rs`: `ProbeStream`, `QualityProbeInfo` with its
   `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
   `MAX_PSNR_DB`), with `QueryResult`
@@ -341,8 +342,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.118 because a scene camera has a live aim that a PTZ controller
-drives: the actions `scene.drive_camera` and `scene.aim_camera` and the query
+`PROTOCOL_VERSION` is 0.120 because `profile.get` counts each PTZ controller endpoint:
+`ptz_controllers` (`PtzControllerProfile`,
+[ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md), #1181);
+0.118 because a scene camera has a live aim that a PTZ controller drives: the actions `scene.drive_camera` and `scene.aim_camera` and the query
 `scene.camera_aim` (`CameraAim`, `CameraAimInfo`,
 [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md), #1181); 0.117 because the warm scenes have a GPU-byte budget:
 `studio.set_warm`'s `gpu_mib`, `studio.get`'s `warm_gpu_mib` and `profile.get`'s `warm`
@@ -1745,7 +1748,13 @@ Queries read and never change `rev`. Those that read the collection state carry 
   warm count picked, in the warm order, each a `WarmSceneProfile`: its `scene_id`, the
   `gpu_bytes` it is estimated to hold beyond what a mix draws anyway and the warm scenes
   kept before it, and `cold: true` when the GPU-memory limit left it cold. Like
-  `network`, it is the state now, not the window's.
+  `network`, it is the state now, not the window's. Since 0.120, `ptz_controllers`
+  (omitted while no PTZ controller endpoint runs,
+  [ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md) §2)
+  lists each endpoint as a `PtzControllerProfile`, in the host's order: the `address`
+  it listens on, its `transport` and `target`, and from when it opened the messages it
+  `answered`, the datagrams and connections it dropped as `unallowed`, `malformed` or
+  `refused` (past its four connections), and its `idle_stops`.
   Runtime state, so no `rev`. Added in 0.73.
 - `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
   frames its encoder was given
