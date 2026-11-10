@@ -25,7 +25,8 @@
 //!   lit by the studio rig, then placed in the scene (ADR-0107), the per-frame cost of a
 //!   model; and the same with a cube, the cheapest closed shape.
 //! - `depth_fog_1080p_camera`: what a depth-aware scene filter adds to N of those
-//!   cards (ADR-0143): the scene's view depth, then `depth_fog` over its composite.
+//!   cards (ADR-0143): the scene's view depth, then `depth_fog` over its composite;
+//!   `ambient_occlusion_1080p_camera` the same with `ambient_occlusion` (ADR-0151).
 //! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (the bytes copied into a
 //!   buffer, then premultiplied in linear light on the GPU), as an image or media source
 //!   does on a new frame: `rewrite` with the GPU's work waited for, `rewrite_call` the
@@ -325,17 +326,34 @@ fn three_d(c: &mut Criterion) {
     // A scene's view depth and depth fog over its composite (ADR-0143): the cost a
     // depth-aware scene filter adds on top of drawing the scene, which is drawn once
     // outside the loop.
+    for (id, group_name) in [
+        ("depth_fog", "depth_fog_1080p_camera"),
+        ("ambient_occlusion", "ambient_occlusion_1080p_camera"),
+    ] {
+        depth_filter(&mut compositor, (&images, camera), id, group_name, c);
+    }
+}
+
+/// The view depth of N cards and the depth-aware kind `id` at its defaults over their
+/// composite, as benchmark group `group_name`.
+fn depth_filter(
+    compositor: &mut Compositor,
+    (images, camera): (&[Image], SceneCamera),
+    id: &str,
+    group_name: &str,
+    c: &mut Criterion,
+) {
     let kind = jstream_render::depth_filter_descriptors()
         .into_iter()
-        .find(|kind| kind.kind_id == "depth_fog")
-        .expect("invariant: depth fog is a depth-aware kind");
+        .find(|kind| kind.kind_id == id)
+        .expect("invariant: a depth-aware kind");
     let defaults = jstream_protocol::Settings(
         kind.params
             .iter()
             .map(|param| (param.id.clone(), param.default.clone()))
             .collect(),
     );
-    let mut fog = VideoFilter::new("depth_fog", &defaults).expect("invariant: it builds");
+    let mut fog = VideoFilter::new(id, &defaults).expect("invariant: it builds");
     let depth = std::sync::Arc::new(
         compositor
             .layer(WIDTH, HEIGHT)
@@ -358,7 +376,7 @@ fn three_d(c: &mut Criterion) {
         image: std::sync::Arc::clone(&depth),
         focal_px,
     }));
-    let mut group = c.benchmark_group("depth_fog_1080p_camera");
+    let mut group = c.benchmark_group(group_name);
     group.sample_size(20);
     for count in [4, 16] {
         let items = cards(&images[..count]);
@@ -371,8 +389,8 @@ fn three_d(c: &mut Criterion) {
                     .expect("view depth");
                 compositor
                     .apply_filter_into(&mut fog, &composite, &fogged, FilterClock::default())
-                    .expect("fog");
-                wait(&compositor);
+                    .expect("the filter");
+                wait(compositor);
             });
         });
     }

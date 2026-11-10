@@ -3,6 +3,64 @@ source: crates/jstream-core/src/kinds.rs
 ---
 [
   {
+    "kind_id": "ambient_occlusion",
+    "category": "video_filter",
+    "name": "Ambient occlusion",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "radius_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 48.0,
+        "label": "Radius",
+        "description": "Darkens creases, corners and where things meet, from the scene's depth. It works in a scene's filters when the scene has a camera, best first in the chain; anywhere else it changes nothing. How far from a point something nearer still shades it, in scene pixels.",
+        "live": true
+      },
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "label": "Strength",
+        "description": "How dark full occlusion is.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#000000",
+        "label": "Color",
+        "description": "The colour occlusion shades toward.",
+        "live": true
+      },
+      {
+        "id": "quality",
+        "type": "enum",
+        "options": [
+          {
+            "value": "low",
+            "label": "Low"
+          },
+          {
+            "value": "high",
+            "label": "High"
+          }
+        ],
+        "default": "low",
+        "label": "Quality",
+        "description": "Low takes 8 samples a pixel, High 16: smoother, at twice the cost.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "app_audio",
     "category": "source",
     "name": "Application audio",

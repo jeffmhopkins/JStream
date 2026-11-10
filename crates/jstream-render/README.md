@@ -1110,6 +1110,21 @@ it out; `filter::testing` reads both lists.
   the premultiplied fog over the pixel source-over at that amount,
   `fog · a + pixel · (1 − fog.alpha · a)`, so a translucent fog colour never thins the
   picture.
+- `ambient_occlusion` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 5, `depth/occlusion.rs`): `radius_px` (1 to 2000, default 48), `strength`
+  (0 to 2, default 1), `color` (default black) and `quality` (`low`, 8 samples a pixel,
+  the default, or `high`, 16). Two draws. The first (`occlusion/sample.wgsl`) reads only
+  the depth: it rebuilds each pixel's point `((px − c) D / f, D)` about the canvas
+  centre, its normal from neighbours two pixels away (each side the one nearer in
+  depth, so an edge doesn't bend it), and counts the hemisphere samples about the
+  normal, rotated per pixel by a 4 × 4 ordered pattern, that land behind a nearer
+  depth by more than a small bias, faded where that occluder is far past the radius.
+  It writes the share and the pixel's `1 / w` into a scratch layer. The second
+  (`occlusion/apply.wgsl`) averages the share over the 4 × 4 tile, keeping to pixels
+  within 1% of the distance (or a quarter of the radius), and lays
+  `c · (1 − k) + color · c.alpha · k`, `k = share · strength` at most 1, so alpha is
+  kept. Where nothing was drawn, at no strength, and without a matching depth, it
+  copies its input.
 
 **Bounds.** Drop shadow, outline (outside), glow and bloom draw within their input's
 frame, as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for
@@ -1458,11 +1473,13 @@ through an off-axis camera, their mips rebuilt each frame as a live source's are
 (`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed
 (`model_1080p`), a scene's view depth and `depth_fog` over the 3D scene's composite for
 4 and 16 cards, the scene itself drawn outside the loop (`depth_fog_1080p_camera`,
-ADR-0143), and
+ADR-0143), the same with `ambient_occlusion` at its defaults
+(`ambient_occlusion_1080p_camera`, ADR-0151), and
 refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
 20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
 items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms, and depth with
-fog 31 and 48 ms for 4 and 16 cards. Run them with
+fog 31 and 48 ms for 4 and 16 cards, and depth with ambient occlusion 47 and 67 ms
+(criterion's `--quick`). Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the
