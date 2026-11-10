@@ -157,15 +157,90 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
 - macOS: the platform crate per [ADR-0063](docs/adr/0063-macos-platform-support.md)
   (ScreenCaptureKit capture, Core Audio with process taps, VideoToolbox and AudioToolbox,
   the Keychain), on macOS 14 and later, Apple Silicon supported and Intel best effort.
-  Signing and notarisation, and the virtual camera as a CMIO camera extension, come later,
-  the camera in its own ADR. A Syphon receiver, the macOS follow-up to Spout2, is its own
-  item when wanted.
+  macOS stays unsigned, and its browser sources are to come from CEF as on Windows; the
+  plan, and what can't work unsigned, is in [macOS without signing](#macos-unsigned).
+  A Syphon receiver, the macOS follow-up to Spout2, is its own item when wanted.
 - Linux: the platform crate per [ADR-0060](docs/adr/0060-linux-platform-support.md)
   (portal and PipeWire capture, VA-API encode). Per
   [ADR-0140](docs/adr/0140-source-types-and-decoding-scope-v3.md), software H.264 is Cisco's
   OpenH264 binary, downloaded on the user's request, and AAC is an AAC-LC encoder in Rust,
   built once its own patent-check ADR is accepted. The virtual camera via v4l2loopback
   needs root, so it gets its own ADR.
+
+<a id="macos-unsigned"></a>
+## macOS without signing: the plan
+<!-- @section
+depends_on = ["docs/adr/0063-macos-platform-support.md", "docs/adr/0144-the-desktop-app-on-macos.md"]
+-->
+
+The maintainer's decision: **JStream on macOS stays unsigned for good.** There will be no
+Apple Developer Program membership, so no Developer ID signing and no notarisation. This
+answers ADR-0063's question 1 "never" where it said "later". Nothing below is built yet;
+it is the plan, and each part gets its own ADR when its work starts (ADR-0144 keeps the
+browser source out of the macOS app until then).
+
+- **Browser sources come from CEF**, the Chromium the Windows and Linux builds already
+  ship, reusing their integration: the sandboxed `jstream-browser-helper` (ADR-0048) with
+  CEF's runtime next to it, and the hosts' `cef` feature. On macOS CEF needs its
+  framework in `JStream.app/Contents/Frameworks` and its helper app bundles (the plain,
+  GPU, renderer and plugin helpers) beside it. `scripts/mac/bundle-app.sh` would sign each
+  helper and the framework ad hoc from the inside out, then the app. To check on a Mac
+  before it ships: that the helpers launch from a downloaded, quarantined image once the
+  user has allowed the app, and that CEF's macOS sandbox works with no entitlements, as an
+  ad-hoc build has none.
+- **Releases gain an unsigned `.dmg` later**: a macOS job in `release.yml` runs
+  `scripts/mac/bundle-app.sh` and uploads `JStream-<version>-macos-<arch>.dmg`, as the
+  after-review `macos-app` job does for PRs. Its release text says how to open an
+  unsigned app.
+
+**What works unsigned:** everything ADR-0063 builds on. Screen and window capture,
+webcams, microphones and process audio taps (each with the user's permission), the
+hardware encoders, streaming and recording, stream keys in the login Keychain, the
+desktop app and its global hotkeys, and, with CEF, browser sources.
+
+**What an unsigned build can't do, or does worse:**
+- **No virtual camera in the download.** macOS's only supported virtual camera is a Core
+  Media I/O camera extension, a system extension. Installing one needs the restricted
+  System Extension entitlement, which only comes in a provisioning profile from a paid
+  team ([Apple's capability table](https://developer.apple.com/help/account/reference/supported-capabilities-macos)
+  lists it for paid memberships and Developer ID only, so a free Apple ID's personal team
+  can't have it).
+- **A Gatekeeper detour on first open.** A downloaded copy is blocked until the user
+  allows it in System Settings › Privacy & Security; since macOS 15 Control-click no
+  longer skips that.
+- **Permissions forgotten after each update.** macOS ties Screen Recording, Camera,
+  Microphone and Accessibility grants to the code signature, and an ad-hoc signature
+  changes with every build, so each new version asks again, and the Keychain asks again
+  for stored keys.
+- **No data-protection or iCloud Keychain**, which need a signed app's keychain
+  entitlements; keys stay in the login keychain on that Mac (ADR-0063).
+- **No Mac App Store listing**, which needs a paid membership too.
+
+<a id="macos-vcam-source"></a>
+### The virtual camera for people who build from source
+Building on your own Mac removes the quarantine, but not the entitlement, so a
+from-source build gets the virtual camera only in one of these ways. None is built yet:
+the camera extension is its own ADR, and the plan is to ship its code behind an opt-in
+build that needs one of them.
+
+1. **Your own paid Apple Developer account (the one that works normally).** You would
+   sign the app and its extension with your own team: `scripts/mac/bundle-app.sh` already
+   takes a Developer ID identity, and would also take your provisioning profile for the
+   extension. Install `JStream.app` in `/Applications`, turn the camera on in JStream,
+   and approve it once in System Settings (on recent macOS, Privacy & Security ›
+   Extensions, under Camera or Media Extensions).
+2. **Apple's developer test mode, with System Integrity Protection off.** This is how
+   Apple's own engineers test system extensions, and it lowers the Mac's security, so it
+   is for developers only: start in Recovery, run `csrutil disable` in Terminal, restart,
+   run `systemextensionsctl developer on`, then install and approve as in 1. Whether an
+   ad-hoc signed extension loads this way on current macOS is unverified, and forum
+   reports show it failing on some 26.x releases; it needs a Mac to try before the docs
+   promise it.
+3. **Not a legacy DAL plug-in.** The older plug-in kind stopped loading in macOS 14.1.
+   Apple's switch to bring it back
+   ([`system-override legacy-camera-plugins-without-sw-camera-indication=on`](https://support.apple.com/HT213969),
+   run in Recovery) hides the camera-in-use light, works only in apps that load
+   third-party code, and is deprecated, so JStream won't build one.
 
 <a id="beta"></a>
 ## Beta: what the first beta needs
