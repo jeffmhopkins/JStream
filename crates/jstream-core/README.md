@@ -338,7 +338,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -358,6 +358,17 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot.
+- **Live aim** (`aim.rs`,
+  [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)): each
+  scene family's runtime pan, tilt and zoom, which `scene.drive_camera` and
+  `scene.aim_camera` set and `scene.camera_aim` reads. Each axis is a value at a time
+  and how it moves from there (still, a drive up to its limit, or an eased glide), so
+  the engine, the render thread and the snapshot thread compute the same aim for any
+  time. The engine keeps them beside the follow cameras' zoom steps
+  (`State::camera_aims`) and publishes them on the parameter channel; a pass's camera,
+  and each end of a transition, is turned by its family's aim after its motion and
+  follow camera. A drive belongs to the session that last set an axis moving, and
+  `forget_client` stops it.
 - **Studio** (`studio.rs`): which scene is on program and which on preview, and the
   transition running onto program, runtime state under the collection lock that
   `scene.switch` and `studio.set_preview` set and `studio.get` reads
@@ -382,7 +393,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/lan.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/ptz/mod.rs", "crates/jstream-core/src/quality.rs", "crates/jstream-core/src/runtime/**"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.rs", "crates/jstream-core/src/camera_controls.rs", "crates/jstream-core/src/codec_downloads.rs", "crates/jstream-core/src/drops.rs", "crates/jstream-core/src/lan.rs", "crates/jstream-core/src/load.rs", "crates/jstream-core/src/output_stats.rs", "crates/jstream-core/src/outputs.rs", "crates/jstream-core/src/preview/**", "crates/jstream-core/src/profile/**", "crates/jstream-core/src/ptz/controller.rs", "crates/jstream-core/src/ptz/mod.rs", "crates/jstream-core/src/quality.rs", "crates/jstream-core/src/runtime/**"]
 -->
 
 - **Preview** (`preview/`): `preview.subscribe` and `preview.unsubscribe`, the program
@@ -436,8 +447,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   a `jstream-ptz` thread and its own socket: Sony-style VISCA over IP on UDP (with a
   sequence reset at start), raw VISCA over UDP, or raw VISCA over TCP, reconnecting
   after a second. The thread sends what the control side queues, waits up to 300 ms
-  for each command's ACK, completion or error (on "buffer full" it waits up to two
-  seconds for a completion and sends once more), and while idle asks the head's
+  for each command's ACK, completion or error (with no reply it sends it once more,
+  since every command it sends lands the head in the same place however often it
+  arrives, ADR-0153 §4; on "buffer full" it waits up to two seconds for a completion
+  and sends once more), and while idle asks the head's
   pan-tilt, zoom and focus positions every 500 ms. Its queue holds at most 16 unsent
   commands: a drive replaces an unsent drive and an aim an unsent aim, and a stop drops
   the unsent drives and goes first. On raw VISCA, which has no sequence numbers, it
@@ -453,6 +466,27 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   shots of the scenes the studio shows, fired from `emit_studio` when the program or
   preview scene changes (the program's paced to the switch's duration by
   `matched_speed`; the preview's only for cameras the program's shots don't name).
+- **PTZ controllers** (`ptz/controller.rs`,
+  [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)): the other
+  direction, a controller driving scene cameras, off until the host calls
+  `Engine::start_ptz_controllers` with its endpoints and allowlist (ADR-0123 §5). Each
+  endpoint binds one LAN address (never every interface) over VISCA over IP, raw UDP or
+  raw TCP (up to four connections), and gets a `jstream-ptz-in` thread and its own
+  session on the engine, named `PTZ controller <address>`. It drops and counts what
+  comes from an address not allowed, or isn't VISCA, and turns each message into
+  `scene.drive_camera` or `scene.aim_camera` for its target (a scene, or what
+  `studio.get` says is on program or preview), answering inquiries from
+  `scene.camera_aim` in its own units (16 counts a degree; zoom 0 to 16384). Its
+  presets are aims it holds in memory. It notes which axes its own drives left moving,
+  on every scene's camera it drove (a cut on a program or preview target leaves the
+  earlier scene's on the list), and stops them once no allowed controller has been heard for `IDLE_STOP` (5 s), or
+  when a TCP endpoint's last connection closes
+  ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
+  §1). It counts what it answered, what it dropped (an address not allowed, not VISCA,
+  a connection past the four) and those stops; the engine holds each endpoint weakly
+  and reports them in `profile.get`'s `ptz_controllers` while they run (§2). The host
+  keeps the returned `PtzControllers`; dropping it stops the threads and ends their
+  sessions, so their drives stop.
 - **Audio** (`audio.rs`, [ADR-0028](../../docs/adr/0028-audio-model-v2.md)): the
   program mixer follows the collection's audio. While the program stage runs, every bus
   of the collection has a mixer bus with its fader and mute, and every source with a
@@ -556,7 +590,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
 <a id="contents-tests"></a>
 ## Contents: tests
 <!-- @section
-covers = ["crates/jstream-core/src/ptz/tests.rs", "crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**", "crates/jstream-core/tests/**"]
+covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/controller/tests.rs", "crates/jstream-core/src/ptz/tests.rs", "crates/jstream-core/src/tests.rs", "crates/jstream-core/src/tests/**", "crates/jstream-core/tests/**"]
 -->
 
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
@@ -834,6 +868,19 @@ covers = ["crates/jstream-core/src/ptz/tests.rs", "crates/jstream-core/src/tests
   switches firing shots (a keyframe scene's over its parent's, a camera not listed
   skipped, a longer transition pacing a pose), and a preview moving only the cameras
   the program doesn't frame.
+- **PTZ controllers and the live aim** (`src/ptz/controller/tests.rs`, `src/aim/tests.rs`,
+  `src/tests/cameras.rs`, `src/tests/transitions.rs`): a VISCA controller emulator on
+  loopback over all three transports, driving, aiming, zooming and reading a keyframe
+  scene's family camera, presets, home, the replies to what a scene camera can't do and
+  to what isn't VISCA, a message to another address ignored; the allowlist dropping an
+  address not on it; program and preview targets following the studio; an endpoint's
+  drive stopping when it closes, when its controller goes quiet (only the axes its own
+  drive left moving, on the scene cut away from too) and when a TCP controller hangs up, with `profile.get` counting it;
+  the daemon's endpoint syntax and setup checks. The aim
+  itself: the turn, tilt limit and zoom on a camera, the speed curves, a drive to its
+  limit, a glide arriving on every axis together, a drive stopping with its session; and
+  through the engine, the actions, the query, the refusals and binding, and the program
+  mix drawing a panned camera (GPU).
 
 <a id="design"></a>
 ## Design
@@ -1007,6 +1054,10 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md) §4: no `rev` and
   no undo step; it adds its steps to the family's zoom count and publishes the live
   values, and is `not_found`, `invalid_argument` or `action_failed` as the mock answers),
+  `scene.drive_camera` and `scene.aim_camera`
+  ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md): no `rev`
+  and no undo step; they move the family's live aim from now, checked as the mock checks
+  them),
   `timeline.play`, `timeline.seek`, `timeline.stop` and `source.restart` (see
   [Timelines](#timelines)), `scene.set_keyframe` (see
   [Keyframe tracks](#keyframe-tracks)),
@@ -1346,7 +1397,7 @@ other is with no blur, [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md))
 a 2D one moves too ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)):
 `Planner::track_cameras` takes the canvas's framing camera for the 2D end, which draws
 it as 2D does, unless `Planner::transition` finds an item on the 2D side that the
-framing camera would draw differently (tilted, turned or pushed in depth,
+framing camera would draw differently (tilted, turned, pushed in depth or a billboard,
 `framed_alike`), in which case it plans a Fade of the same duration, its sides planned
 again unflattened as a Fade's are; the engine no longer fades such a switch up front. A Fade
 keeps each side's own camera on its items. A keyframe of a 2D scene may have a camera
@@ -1884,7 +1935,10 @@ stacking order, whether it copies the scene whole or plans it as a transition's 
 model stays lit through a switch (`a_scene_lit_model_stays_lit_through_a_transition`).
 `scene_lights` takes each of them with its live values and
 motion applied, at the centre of its box and shining out of its back
-(`ItemGeometry::light_pose`), at its intensity times its opacity. The renderer lights the
+(`ItemGeometry::light_pose_seen` through the scene camera's view, so a billboard light
+turns with its box to face the camera and shines away from it,
+[ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 2), at its
+intensity times its opacity. The renderer lights the
 model with the first 8 point, spot and directional ones and every ambient one; a scene
 with more is logged once (`Chains::lights_warned`). A light placed without a box has no
 position and is left out. In a 2D scene a `scene`-lit model is studio-lit
@@ -3587,7 +3641,11 @@ render thread only tries it. The PTZ heads work
 the same way as the camera controls (ADR-0146): actions and shots go to each `jstream-ptz` thread over a channel,
 sent under the collection lock, and a head's status is a leaf mutex its thread takes
 alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
-while it sends or waits for a reply.
+while it sends or waits for a reply. A PTZ controller endpoint's thread is a client:
+each message it translates is a call on its session, which takes the collection lock
+as any call does, and it holds no lock while it waits on its socket. The engine's list
+of running endpoints (`Shared::ptz_controllers`) is a leaf mutex, taken alone to add
+them and by `profile.get` to read their counters, which are atomics.
 The collection file's lock comes before the collection lock: a save holds it, takes the
 collection lock only to serialize, and writes with it released. An effect-pack update
 that moved filters through their renames (#1353) saves once the collection lock is

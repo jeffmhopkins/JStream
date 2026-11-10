@@ -87,6 +87,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("capture.targets", Class(R)),
     // LAN addresses of the machine's PTZ heads (ADR-0146) are the person's.
     ("ptz.list", N),
+    // A scene camera's live aim (ADR-0152) holds no address: it's the scene's.
+    ("scene.camera_aim", Class(R)),
     // LAN addresses of the senders on the person's network (ADR-0123).
     ("jtunnel.senders", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
@@ -214,6 +216,8 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     // like `video.snapshot`.
     ("scene.switch_and_watch", N),
     ("scene.zoom_camera", Class(L)),
+    ("scene.drive_camera", Class(L)),
+    ("scene.aim_camera", Class(L)),
     // They move a physical head on the LAN (ADR-0146), which no plugin scope covers.
     ("ptz.drive", N),
     ("ptz.aim", N),

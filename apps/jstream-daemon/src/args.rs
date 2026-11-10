@@ -35,6 +35,17 @@ Options:
                        udp (raw VISCA) or tcp (raw VISCA, also for a serial
                        bridge); #n is its VISCA address, 1 to 7 (default 1).
                        Off without it: no socket is open
+  --ptz-controller <address:port[/transport][#n]=target>
+                       let a PTZ controller drive a scene camera over VISCA
+                       (ADR-0152): listen on this one LAN address and port
+                       (never every interface) and drive the target, which is
+                       program, preview or scene:<scene id> (repeatable). The
+                       transport and #n are as for --ptz-camera; #n is the
+                       VISCA address it answers as. Needs --ptz-controller-allow.
+                       Off without it: no socket is open
+  --ptz-controller-allow <ip>
+                       a controller address the endpoints answer, on the LAN
+                       (repeatable); every other address is dropped
   --plugin-dir <dir>   where installed WASM plugins and their grants are saved
                        (plugins.json) and loaded from at startup (default:
                        `plugins` in the platform data directory); created if
@@ -133,6 +144,11 @@ pub struct Options {
     /// `--ptz-camera`: the PTZ cameras to drive, in the order given (ADR-0146). None
     /// leaves PTZ control off.
     pub ptz: Vec<jstream_core::PtzCamera>,
+    /// `--ptz-controller`: the PTZ controller endpoints to open, in the order given
+    /// (ADR-0152). None leaves controller input off.
+    pub ptz_controllers: Vec<jstream_core::PtzController>,
+    /// `--ptz-controller-allow`: the controller addresses the endpoints answer.
+    pub ptz_controller_allow: Vec<std::net::IpAddr>,
     /// `--jtunnel-accept`: the JTunnel senders to receive from, in the order given.
     /// None turns the receiver off.
     pub jtunnel: Vec<jstream_core::AcceptedSender>,
@@ -238,6 +254,19 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 jstream_core::PtzSetup::new(options.ptz.clone())
                     .map_err(|err| format!("`--ptz-camera`: {err}"))?;
             }
+            "--ptz-controller" => {
+                let controller = value()?
+                    .parse::<jstream_core::PtzController>()
+                    .map_err(|err| format!("`--ptz-controller`: {err}"))?;
+                options.ptz_controllers.push(controller);
+            }
+            "--ptz-controller-allow" => {
+                let text = value()?;
+                let ip = text.parse::<std::net::IpAddr>().map_err(|_| {
+                    format!("`--ptz-controller-allow`: `{text}` is not an IP address")
+                })?;
+                options.ptz_controller_allow.push(ip);
+            }
             "--jtunnel-accept" => {
                 let text = value()?;
                 let sender = text
@@ -322,6 +351,11 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
     } else if lan_port.is_some() || lan_bind.is_some() || lan_renew {
         return Err("`--lan-port`, `--lan-bind` and `--lan-renew` need `--lan`".to_owned());
     }
+    jstream_core::PtzControllerSetup::new(
+        options.ptz_controllers.clone(),
+        options.ptz_controller_allow.clone(),
+    )
+    .map_err(|err| format!("`--ptz-controller`: {err}"))?;
     Ok(Invocation::Serve(Box::new(options)))
 }
 
@@ -433,9 +467,48 @@ mod tests {
                 effects_dir: Some("/tmp/effects".to_owned()),
                 lan: None,
                 ptz: Vec::new(),
+                ptz_controllers: Vec::new(),
+                ptz_controller_allow: Vec::new(),
                 jtunnel: Vec::new(),
             }
         );
+    }
+
+    /// ADR-0152, ADR-0123 §5: controller input is off unless `--ptz-controller` lists an
+    /// endpoint, which needs an allowlist, and each is checked as the engine checks it.
+    #[test]
+    fn ptz_controllers_are_opt_in_and_allowlisted() {
+        let off = serve("");
+        assert!(off.ptz_controllers.is_empty() && off.ptz_controller_allow.is_empty());
+        let on = serve(
+            "--ptz-controller 192.168.1.10:52381=program \
+             --ptz-controller 192.168.1.10:5678/tcp#2=scene:scn_1 \
+             --ptz-controller-allow 192.168.1.50",
+        );
+        let endpoints: Vec<_> = on.ptz_controllers.iter().map(|c| c.to_string()).collect();
+        assert_eq!(
+            endpoints,
+            [
+                "192.168.1.10:52381/visca_ip#1=program",
+                "192.168.1.10:5678/tcp#2=scene:scn_1"
+            ]
+        );
+        assert_eq!(
+            on.ptz_controller_allow,
+            ["192.168.1.50".parse::<std::net::IpAddr>().unwrap()]
+        );
+        assert!(
+            error("--ptz-controller 192.168.1.10:52381=program").contains("allow at least one")
+        );
+        assert!(
+            error("--ptz-controller 0.0.0.0:52381=program --ptz-controller-allow 10.0.0.2")
+                .contains("one interface")
+        );
+        assert!(
+            error("--ptz-controller 192.168.1.10:52381=program --ptz-controller-allow 8.8.8.8")
+                .contains("not a LAN address")
+        );
+        assert!(error("--ptz-controller-allow nope").contains("not an IP address"));
     }
 
     /// ADR-0146 §1: PTZ control is off unless `--ptz-camera` lists a camera, and each

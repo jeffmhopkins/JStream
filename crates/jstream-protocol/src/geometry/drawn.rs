@@ -123,6 +123,7 @@ impl Plane {
     /// The item's plane through a scene camera (ADR-0094 decision 3): its axes and
     /// centre in the camera's frame, with the viewer at `z = f`, so `w = D / f`.
     pub(super) fn seen(geometry: ItemGeometry, view: &CameraView) -> Self {
+        let geometry = geometry.facing(view);
         let (ax, ay) = axes(geometry);
         let to_view = |axis: [f32; 3]| {
             let axis = axis.map(f64::from);

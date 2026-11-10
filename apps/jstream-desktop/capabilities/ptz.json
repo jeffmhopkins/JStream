@@ -1,0 +1,6 @@
+{
+  "identifier": "ptz",
+  "description": "The app's own main window may save the \"Accept a PTZ controller\" setting, its endpoints and its allowed controllers, which apply at the next start. No other command is granted.",
+  "windows": ["main"],
+  "permissions": ["allow-set-ptz-controllers"]
+}

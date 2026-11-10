@@ -169,3 +169,158 @@ fn a_follow_filter_moves_a_2d_scenes_camera_until_it_is_off() {
     let failed = block_on(control.call(zoom("a", 1))).expect_err("no follow camera");
     assert_eq!(code(&failed), Some("action_failed"));
 }
+
+fn drive(scene: &str, pan: Option<i8>, tilt: Option<i8>, zoom: Option<i8>) -> Call {
+    Call::Action {
+        action: Action::SceneDriveCamera {
+            scene_id: SceneId::new(scene),
+            pan,
+            tilt,
+            zoom,
+        },
+    }
+}
+
+fn aim_at(scene: &str, pan: f32, tilt: f32, zoom: f32) -> Call {
+    Call::Action {
+        action: Action::SceneAimCamera {
+            scene_id: SceneId::new(scene),
+            aim: jstream_protocol::CameraAim {
+                pan_deg: Finite32::new(pan),
+                tilt_deg: Finite32::new(tilt),
+                zoom: Finite32::new(zoom),
+            },
+            speed: None,
+        },
+    }
+}
+
+fn camera_aim(control: &dyn Control, scene: &str) -> jstream_protocol::CameraAimInfo {
+    match super::query(
+        control,
+        jstream_protocol::Query::SceneCameraAim {
+            scene_id: SceneId::new(scene),
+        },
+    )
+    .expect("scene.camera_aim")
+    {
+        jstream_protocol::QueryResult::SceneCameraAim { aim } => aim,
+        other => panic!("{other:?}"),
+    }
+}
+
+/// ADR-0152: `scene.drive_camera` and `scene.aim_camera` move a scene family's live aim,
+/// which reaches the render thread on the parameter channel and `scene.camera_aim`
+/// reads; a refused call moves nothing, and a drive stops when its session ends.
+#[test]
+fn a_scene_cameras_live_aim_is_driven_aimed_and_read() {
+    let engine = Engine::new().with_cpu_compositor();
+    let hub = engine.render_hub();
+    let control = connected(&engine);
+    batch(&control, edits(scenes())).expect("scenes");
+    batch(
+        &control,
+        Batch::single(Edit::SceneCreateVariant {
+            scene_id: SceneId::new("a2"),
+            variant_of: SceneId::new("a"),
+            name: "A2".into(),
+        }),
+    )
+    .expect("keyframe");
+
+    let home = camera_aim(&control, "a");
+    assert_eq!(
+        (
+            home.pan_deg.get(),
+            home.tilt_deg.get(),
+            home.zoom.get(),
+            home.moving
+        ),
+        (0.0, 0.0, 1.0, false),
+        "a camera nobody aimed is at its home"
+    );
+    assert!(!hub.load_live().aims_move());
+
+    // An aim through a keyframe scene aims its family's camera, at once at the fastest
+    // speed for a small turn.
+    block_on(control.call(aim_at("a2", 1.0, -1.0, 1.0))).expect("aim");
+    assert!(
+        hub.load_live().aims_move(),
+        "the aim reached the render thread"
+    );
+    std::thread::sleep(std::time::Duration::from_millis(100));
+    let aimed = camera_aim(&control, "a");
+    assert_eq!(
+        (aimed.pan_deg.get(), aimed.tilt_deg.get(), aimed.zoom.get()),
+        (1.0, -1.0, 1.0)
+    );
+    assert_eq!(camera_aim(&control, "a2"), aimed, "one aim for the family");
+    // A zoom to 2 at the fastest speed glides for most of a second.
+    block_on(control.call(aim_at("a", 1.0, -1.0, 2.0))).expect("zoom");
+    let zooming = camera_aim(&control, "a");
+    assert!(zooming.moving && zooming.zoom.get() < 2.0, "{zooming:?}");
+    std::thread::sleep(std::time::Duration::from_millis(800));
+    assert_eq!(camera_aim(&control, "a").zoom.get(), 2.0, "there");
+
+    // A drive moves it until a stop.
+    block_on(control.call(drive("a", Some(24), None, None))).expect("drive");
+    assert!(camera_aim(&control, "a").moving);
+    std::thread::sleep(std::time::Duration::from_millis(20));
+    block_on(control.call(drive("a", Some(0), None, None))).expect("stop");
+    let stopped = camera_aim(&control, "a");
+    assert!(
+        !stopped.moving && stopped.pan_deg.get() > 1.0,
+        "{stopped:?}"
+    );
+
+    for (call, expected) in [
+        (drive("a", Some(25), None, None), "invalid_argument"),
+        (drive("a", None, None, None), "invalid_argument"),
+        (aim_at("a", 171.0, 0.0, 1.0), "invalid_argument"),
+        (aim_at("a", 0.0, 0.0, 9.0), "invalid_argument"),
+        (drive("b", Some(1), None, None), "action_failed"),
+        (aim_at("b", 0.0, 0.0, 1.0), "action_failed"),
+        (drive("nope", Some(1), None, None), "not_found"),
+    ] {
+        let failed = block_on(control.call(call.clone())).expect_err("refused");
+        assert_eq!(code(&failed), Some(expected), "{call:?}");
+    }
+    assert_eq!(
+        camera_aim(&control, "a"),
+        stopped,
+        "a refused call moves nothing"
+    );
+
+    // `scene.drive_camera` can't be bound; `scene.aim_camera` can.
+    let bind = |action: Action| {
+        batch(
+            &control,
+            Batch::single(Edit::HotkeySet {
+                chord: jstream_protocol::Chord::new("F1"),
+                action,
+            }),
+        )
+    };
+    let refused = bind(Action::SceneDriveCamera {
+        scene_id: SceneId::new("a"),
+        pan: Some(4),
+        tilt: None,
+        zoom: None,
+    })
+    .expect_err("a drive can't be bound");
+    assert_eq!(code(&refused), Some("invalid_argument"));
+
+    // A drive belongs to its session: when that session ends, the camera stops.
+    let other = connected(&engine);
+    block_on(other.call(drive("a", None, Some(-23), None))).expect("drive");
+    assert!(camera_aim(&control, "a").moving);
+    drop(other);
+    let left = camera_aim(&control, "a");
+    assert!(!left.moving, "{left:?}");
+    std::thread::sleep(std::time::Duration::from_millis(50));
+    assert_eq!(
+        camera_aim(&control, "a"),
+        left,
+        "it stays where the drive left it"
+    );
+}
