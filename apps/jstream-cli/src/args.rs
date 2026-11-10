@@ -790,6 +790,7 @@ fn parse_edit<'a, 'b>(args: &'a [&'b str]) -> Result<(Edit, &'a [&'b str]), CliE
                 flip_h: false,
                 flip_v: false,
                 billboard: false,
+                surface: None,
             },
         },
         ("canvas.set_size", [width, height]) => Edit::CanvasSetSize {

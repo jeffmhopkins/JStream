@@ -1182,6 +1182,65 @@ fn Placement(
             "Face the camera"
         </label>
     };
+    // The card's surface (ADR-0151 decision 10): lit by a 3D scene's lights, and its
+    // back hidden. Its numbers are for agents and the API.
+    let surface = Memo::new(move |_| geometry.get().map(|g| g.surface.unwrap_or_default()));
+    let set_surface = move |change: fn(&mut jstream_protocol::Surface, bool), on: bool| {
+        let Some(g) = geometry.get_untracked() else {
+            return;
+        };
+        let mut next = g.surface.unwrap_or_default();
+        change(&mut next, on);
+        if g.surface.unwrap_or_default() == next {
+            return;
+        }
+        let (item_id, scene) = ids.get_value();
+        send(Edit::ItemSetGeometry {
+            item_id,
+            scene_id: Some(scene),
+            geometry: ItemGeometry {
+                surface: (next != jstream_protocol::Surface::DEFAULT).then_some(next),
+                ..g
+            },
+        });
+    };
+    let surface_fields = view! {
+        <label class="check" title="In a 3D scene, the scene's lights, their shadows and its environment light the card, as a flat 3D surface">
+            <input
+                type="checkbox"
+                class="inline-check"
+                disabled=move || surface.with(Option::is_none)
+                prop:checked=move || surface.get().is_some_and(|s| s.lit)
+                on:change=move |event| {
+                    set_surface(|s, on| s.lit = on, event_target_checked(&event));
+                }
+            />
+            "Lit by the scene"
+        </label>
+        <label class="check" title="Seen from behind, the card draws nothing instead of its mirrored picture">
+            <input
+                type="checkbox"
+                class="inline-check"
+                disabled=move || surface.with(Option::is_none)
+                prop:checked=move || {
+                    surface.get().is_some_and(|s| s.back == jstream_protocol::CardBack::Hide)
+                }
+                on:change=move |event| {
+                    set_surface(
+                        |s, on| {
+                            s.back = if on {
+                                jstream_protocol::CardBack::Hide
+                            } else {
+                                jstream_protocol::CardBack::Show
+                            };
+                        },
+                        event_target_checked(&event),
+                    );
+                }
+            />
+            "Hide the back"
+        </label>
+    };
     let depth_hint = Signal::derive(move || {
         if geometry.get().is_some_and(|g| in_3d(&g) || g.billboard) {
             "in use".to_owned()
@@ -1402,6 +1461,7 @@ fn Placement(
                 {depth_field(Depth3::Perspective)}
             </div>
             {billboard_field}
+            {surface_fields}
         </Fold>
         <Fold title="Crop" open=true hint=crop_hint>
             <div class="axes four">

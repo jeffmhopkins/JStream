@@ -1133,9 +1133,13 @@ fn check_geometry(geometry: &ItemGeometry, at: usize) -> Result<(), ProtocolErro
     }
     // Finite fields can still put a corner past f32's range (a centre near f32::MAX), or
     // a 3D item's near-plane clip far enough out to overflow while it is drawn.
-    geometry
-        .check_drawable()
-        .map_err(|err| invalid(at, "geometry", err.to_string()))
+    geometry.check_drawable().map_err(|err| {
+        let name = match err {
+            GeometryError::Surface => "geometry.surface",
+            _ => "geometry",
+        };
+        invalid(at, name, err.to_string())
+    })
 }
 
 /// Rejects an opacity outside [0, `MAX_OPACITY`] (ADR-0023 §1, #1101).

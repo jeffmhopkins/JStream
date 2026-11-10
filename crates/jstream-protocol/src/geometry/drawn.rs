@@ -249,6 +249,15 @@ impl ItemGeometry {
         if plane.facing().abs() < EDGE_ON {
             return Ok(None);
         }
+        // A card whose back is hidden draws nothing seen from behind (ADR-0151 decision
+        // 10).
+        if plane.facing() < 0.0
+            && self
+                .surface
+                .is_some_and(|surface| surface.back == super::CardBack::Hide)
+        {
+            return Ok(None);
+        }
         let half_w = self.size.width.get() * 0.5;
         let half_h = self.size.height.get() * 0.5;
         let left = content.left.max(-half_w);
@@ -317,11 +326,14 @@ impl ItemGeometry {
     /// (behind the viewer, edge-on) is drawable.
     ///
     /// # Errors
-    /// The same as [`Self::validate`], [`GeometryError::NotFinite`] when a corner or a
-    /// vertex is not finite, or [`GeometryError::TooFar`] when an input or a vertex is
-    /// past [`MAX_DRAWN_PX`].
+    /// The same as [`Self::validate`], [`GeometryError::Surface`] for a `surface` out of
+    /// range, [`GeometryError::NotFinite`] when a corner or a vertex is not finite, or
+    /// [`GeometryError::TooFar`] when an input or a vertex is past [`MAX_DRAWN_PX`].
     pub fn check_drawable(self) -> Result<(), GeometryError> {
         self.validate()?;
+        if self.surface.is_some_and(|surface| !surface.in_range()) {
+            return Err(GeometryError::Surface);
+        }
         self.project()?;
         if self.is_neutral_3d() {
             return Ok(());

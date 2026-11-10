@@ -91,6 +91,9 @@ struct Material {
     surface: vec4<f32>,
     // alpha mode (0 opaque, 1 mask, 2 blend), cutoff, double-sided, unlit.
     flags: vec4<f32>,
+    // x: 1 for a lit card (ADR-0151 decision 10), whose base and emissive textures are
+    // its picture in premultiplied linear light, so it emits its own colour.
+    card: vec4<f32>,
 }
 
 @group(0) @binding(0) var<uniform> frame: Frame;
@@ -343,6 +346,11 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
         discard;
     }
     var base = material.base * textureSample(base_tex, tex_sampler, in.uv) * in.color;
+    let card = material.card.x > 0.5;
+    if card {
+        // A card's picture is premultiplied: its colour is what it holds over its alpha.
+        base = vec4<f32>(select(vec3<f32>(0.0), base.rgb / base.a, base.a > 1e-6), base.a);
+    }
     let mode = material.flags.x;
     if mode > 0.5 && mode < 1.5 {
         if base.a < material.flags.y {
@@ -352,7 +360,10 @@ fn fs(in: VsOut, @builtin(front_facing) front_facing: bool) -> @location(0) vec4
     } else if mode < 0.5 {
         base.a = 1.0;
     }
-    let emitted = material.emissive.rgb * textureSample(emissive_tex, tex_sampler, in.uv).rgb;
+    var emitted = material.emissive.rgb * textureSample(emissive_tex, tex_sampler, in.uv).rgb;
+    if card {
+        emitted = material.emissive.rgb * base.rgb;
+    }
     var color: vec3<f32>;
     if frame.params.z > 0.5 || material.flags.w > 0.5 {
         color = base.rgb + emitted;

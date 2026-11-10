@@ -3459,6 +3459,121 @@ mod tests {
         );
     }
 
+    /// ADR-0151 decision 10: a `lit` card in a 3D scene is shaded by the scene's lights,
+    /// so a red light turns a white card red; unlit, or with no light, it draws as it
+    /// is.
+    #[test]
+    fn a_lit_card_is_shaded_by_its_scenes_lights() {
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        let mut lamp = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(8.0, 8.0).expect("positive"),
+        )
+        .expect("valid");
+        lamp.depth_px = jstream_protocol::Finite32::new(40.0).expect("finite");
+        let mut card = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(64.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        card.fit_mode = jstream_protocol::FitMode::Stretch;
+        let lit = |on: bool| Edit::ItemSetGeometry {
+            scene_id: None,
+            item_id: ItemId::new("cam"),
+            geometry: jstream_protocol::ItemGeometry {
+                surface: Some(jstream_protocol::Surface {
+                    lit: on,
+                    ..jstream_protocol::Surface::DEFAULT
+                }),
+                ..card
+            },
+        };
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry: lamp,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(canvas)),
+                },
+                lit(false),
+            ],
+        );
+        let light = jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Point,
+            color: [1.0, 0.0, 0.0],
+            intensity: 2.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.3,
+            environment: None,
+        };
+        let white = Frame::new(16, 9, &[255; 4].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
+        let lamp = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_light(Some(light));
+        let centre = |graph: &Graph| {
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |id| {
+                    Some(Look::Frame(
+                        if id.as_str() == "cam" {
+                            white.clone()
+                        } else {
+                            lamp.clone()
+                        },
+                        None,
+                    ))
+                },
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            Some(
+                draw_points(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (&shot, &LiveParams::default()),
+                    &[(32, 18)],
+                )[0],
+            )
+        };
+        let Some(unlit) = centre(&graph) else {
+            return;
+        };
+        assert!(
+            unlit[..3].iter().all(|&c| c > 245),
+            "unlit, it is white: {unlit:?}"
+        );
+        apply(&mut graph, vec![lit(true)]);
+        let red = centre(&graph).expect("an adapter");
+        assert!(
+            red[0] > 60 && red[1] < 20 && red[2] < 20,
+            "the red light shades it: {red:?}"
+        );
+        apply(&mut graph, vec![hide("logo")]);
+        let dark = centre(&graph).expect("an adapter");
+        assert!(
+            dark[..3].iter().all(|&c| c > 245),
+            "with no light it draws unlit: {dark:?}"
+        );
+    }
+
     /// ADR-0151 decision 4, end to end: a card lying flat as the floor, and a red card
     /// standing on it, through the framing camera. The floor under the red card shows it
     /// reflected: the mirrored pass leaves out the floor itself, which would otherwise

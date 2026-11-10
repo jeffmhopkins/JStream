@@ -1740,6 +1740,7 @@ pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeom
                 flip_h: true,
                 flip_v: false,
                 billboard: false,
+                surface: None,
             });
         }
     }
@@ -1778,6 +1779,7 @@ pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeom
             flip_h,
             flip_v,
             billboard: false,
+            surface: None,
         });
     }
     out

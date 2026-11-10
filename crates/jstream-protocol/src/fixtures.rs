@@ -152,6 +152,31 @@ pub(crate) fn edits() -> Vec<Edit> {
                 ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
             },
         },
+        // A lit card with its back hidden, and one whose back shows (ADR-0151
+        // decision 10).
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("itm_3"),
+            scene_id: None,
+            geometry: ItemGeometry {
+                surface: Some(crate::geometry::Surface {
+                    lit: true,
+                    roughness: Finite32::new(0.4).expect("finite"),
+                    metalness: Finite32::ZERO,
+                    emissive: Finite32::new(0.5).expect("finite"),
+                    back: crate::geometry::CardBack::Hide,
+                    shadows: false,
+                }),
+                ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+            },
+        },
+        Edit::ItemSetGeometry {
+            item_id: ItemId::new("itm_4"),
+            scene_id: None,
+            geometry: ItemGeometry {
+                surface: Some(crate::geometry::Surface::DEFAULT),
+                ..ItemGeometry::covering_canvas(1920, 1080).expect("positive")
+            },
+        },
         Edit::CanvasSetSize {
             width: 3840,
             height: 2160,

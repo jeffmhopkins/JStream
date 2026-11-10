@@ -1975,6 +1975,16 @@ names in the shot when it places the light (`look_sky`), so it is uploaded thoug
 item shows it, and the sky reads that upload; a source the pipeline captures isn't
 drawn for a sky alone. A reflection's models take the same sky
 (`an_environment_light_lights_a_scene_lit_model_with_its_sky`).
+A lit card ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
+10): a box in a 3D scene whose `ItemGeometry::surface` is `lit` and which shows its
+source's own frame, with its effects in its box, is boxed (`Boxed::lit`) even without a
+chain. `draw_box` draws it flat into a `GpuKey::UnlitBox` layer, then `light_card`
+shades that layer by the same lights, shadow maps and sky a `scene`-lit model takes
+(`light_scene`, `shadow_maps`, `scene_sky`) through `Compositor::light_card`, and the
+box is placed from the lit layer; with no lights and no environment it is the flat
+picture (`a_lit_card_is_shaded_by_its_scenes_lights`). A canvas-space effect chain, a
+group or a `scene` source isn't lit yet, and a hidden back also leaves the card out of
+the shadow maps.
 Shadows ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3):
 `scene_lights` also lists the spot and directional lights whose source has `shadows`,
 by index with their softness (`Chains::shadowed`). The first `scene`-lit model of a run

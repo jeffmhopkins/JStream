@@ -446,6 +446,10 @@ pub(crate) struct Boxed {
     /// canvas, which the model is drawn into through the scene's camera, and it is
     /// placed flat as [`Placement::Layer`], sorting by the model's pose.
     model: bool,
+    /// Whether the item is a card lit by its 3D scene (ADR-0151 decision 10): what it
+    /// shows is drawn flat into a layer of its own, then lit there, texel by texel,
+    /// where the box sits in the scene, before any effects run.
+    lit: bool,
 }
 
 impl Boxed {
@@ -470,6 +474,7 @@ impl Boxed {
             input,
             canvas: false,
             model: false,
+            lit: false,
         })
     }
 
@@ -508,6 +513,7 @@ impl Boxed {
             input,
             canvas: true,
             model: false,
+            lit: false,
         })
     }
 
@@ -640,8 +646,9 @@ struct ItemBox {
     /// moves the box where it is placed, except over the canvas (ADR-0106), where they
     /// move the item inside its layer ([`Boxed::moved_inside`]).
     motion: motion::Motion,
-    /// For a model's layer (ADR-0107), the camera of the scene it is in, which the
-    /// model is drawn through, as a pass resolves its own; `None` in a 2D scene.
+    /// For a model's layer (ADR-0107) or a lit card's (ADR-0151 decision 10), the camera
+    /// of the scene it is in, which the model is drawn through or the card is lit from,
+    /// as a pass resolves its own; `None` in a 2D scene.
     camera: Option<PassCamera>,
 }
 
@@ -2751,7 +2758,19 @@ impl<'a> Planner<'a, '_> {
         // A model is drawn into a layer of its own, effects or not (ADR-0107).
         let model = matches!(source, SourceRef::Frame(id)
             if out.frames.get(id).is_some_and(|frame| frame.model.is_some()));
-        if chain.is_none() && !model {
+        // A card lit by its 3D scene is lit in a layer of its own (ADR-0151 decision 10),
+        // when what it shows is a source's own frame, drawn before the passes are.
+        let lit = !model
+            && matches!(source, SourceRef::Frame(_))
+            && item.effects_space() != jstream_protocol::EffectsSpace::Canvas
+            && self.camera(scene).is_some()
+            && match item.placement() {
+                GraphPlacement::Geometry(geometry) => {
+                    geometry.surface.is_some_and(|surface| surface.lit)
+                }
+                _ => false,
+            };
+        if chain.is_none() && !model && !lit {
             return None;
         }
         let canvas = self.state.canvas();
@@ -2794,10 +2813,17 @@ impl<'a> Planner<'a, '_> {
                 ..Boxed::over_canvas(canvas, input)?
             },
             (_, jstream_protocol::EffectsSpace::Canvas) => Boxed::over_canvas(canvas, input)?,
-            (Some(chain), _) => Boxed::new(&geometry, chain.outset_also(&also), input)?,
+            (Some(chain), _) => Boxed {
+                lit,
+                ..Boxed::new(&geometry, chain.outset_also(&also), input)?
+            },
+            (None, _) if lit => Boxed {
+                lit,
+                ..Boxed::new(&geometry, 0, input)?
+            },
             (None, _) => return None,
         };
-        let camera = match model {
+        let camera = match model || lit {
             true => self.camera(scene).map(|mut camera| {
                 camera.moves = self.camera_moves(scene, out);
                 camera
@@ -3177,6 +3203,9 @@ pub(crate) enum GpuKey {
     ReflectionDepth(SceneId),
     /// A model item drawn through its scene's mirrored camera, for that reflection.
     ReflectedModel(SceneId, ItemId),
+    /// A lit card's picture flat in its box, before it is lit into its
+    /// [`GpuKey::ItemBox`] (ADR-0151 decision 10).
+    UnlitBox(SceneId, ItemId),
 }
 
 /// A shadow map drawn for a scene in this run of the chains (ADR-0151 decision 3).
@@ -5715,15 +5744,28 @@ fn draw_box(
         boxed.crop,
     );
     let by = shot.motion_at(&boxed.item, &boxed.motion, at);
+    // Where a lit card's box is in the scene: placed, then moved by its motion.
+    let lit_at = boxed
+        .boxed
+        .lit
+        .then(|| motion::apply(&by, placement, crop, OPAQUE))
+        .and_then(|(placement, crop, _)| boxed.boxed.geometry_of(placement, crop));
     let (placement, crop) = boxed.boxed.moved_inside(&by, placement, crop);
     let inside = boxed
         .boxed
         .geometry_of(placement, crop)
         .and_then(|geometry| boxed.boxed.inside(&geometry));
+    // A lit card is drawn flat into a layer of its own, then lit into its box
+    // (ADR-0151 decision 10).
+    let unlit = GpuKey::UnlitBox(scene_id.clone(), item_id.clone());
+    if boxed.boxed.lit {
+        cache.layer(compositor, &unlit, width, height)?;
+    }
+    let flat = if boxed.boxed.lit { &unlit } else { &key };
     let (Some(image), Some(inside), Some(layer)) = (
         input.as_ref().and_then(|input| cache.get(input)),
         inside,
-        cache.get(&key),
+        cache.get(flat),
     ) else {
         chains.fail(owner);
         return Ok(());
@@ -5743,7 +5785,120 @@ fn draw_box(
         what: "item box",
         detail: format!("an effects layer of {width}x{height}"),
     })?;
-    compositor.render_into(&scene(size, Color::TRANSPARENT, &items), layer)
+    compositor.render_into(&scene(size, Color::TRANSPARENT, &items), layer)?;
+    if !boxed.boxed.lit {
+        return Ok(());
+    }
+    light_card(
+        compositor,
+        (cache, chains),
+        (shot, at),
+        (owner, &unlit, &key),
+        (boxed, lit_at),
+        (live, captures),
+    )
+}
+
+/// Lights `unlit`, the picture of the card `boxed` flat in its box, into its box layer
+/// `key` (ADR-0151 decision 10): shaded where the box sits in its 3D scene this frame,
+/// by the scene's lights, the shadow maps it receives and its environment, seen from the
+/// scene's camera as it moves. With no light of any type it is copied as it is, unlit;
+/// one that can't be lit fails its item.
+///
+/// # Errors
+/// What the compositor reports for drawing into the layer.
+fn light_card(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (shot, at): (&Shot, MediaTime),
+    (owner, unlit, key): (&ChainOwner, &GpuKey, &GpuKey),
+    (boxed, geometry): (&ItemBox, Option<ItemGeometry>),
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> Result<(), RenderError> {
+    let ChainOwner::Item(scene_id, _) = owner else {
+        return Ok(());
+    };
+    let camera = moved_camera(
+        live.camera_of(scene_id, boxed.camera.as_ref()),
+        boxed.camera.as_ref(),
+        (shot, at, shot.shown_at(&boxed.item)),
+        (live, captures),
+        chains,
+    );
+    let surface = geometry
+        .and_then(|geometry| geometry.surface)
+        .unwrap_or_default();
+    let view = camera.and_then(|camera| camera.view(shot.canvas).ok());
+    let (lights, shadowed) = light_scene(
+        compositor,
+        (&mut *cache, &mut *chains),
+        (shot, at),
+        scene_id,
+        (view.as_ref().filter(|_| surface.lit), surface.shadows),
+        (live, captures),
+    );
+    let maps = if surface.shadows {
+        shadow_maps(&*cache, chains, scene_id)
+    } else {
+        Vec::new()
+    };
+    let environment = scene_sky((shot, &*cache), chains, scene_id, at, live);
+    let result = match (geometry, camera, cache.get(unlit), cache.get(key)) {
+        // Lit while the scene has a light of any type (decision 10).
+        (Some(geometry), Some(camera), Some(image), Some(layer))
+            if surface.lit && (!lights.is_empty() || environment.is_some()) =>
+        {
+            Some(compositor.light_card(
+                &jstream_render::CardDraw {
+                    image,
+                    geometry,
+                    camera,
+                    roughness: surface.roughness.get(),
+                    metalness: surface.metalness.get(),
+                    emissive: surface.emissive.get(),
+                    lights: &lights,
+                    shadows: &maps,
+                    environment,
+                },
+                layer,
+            ))
+        }
+        // Unlit: the picture as it is.
+        (_, _, Some(image), Some(layer)) => {
+            let (width, height) = (layer.width(), layer.height());
+            let items = [Item {
+                image,
+                placement: Placement::Layer(ItemGeometry::covering_canvas(width, height).map_err(
+                    |_| RenderError::Invalid {
+                        what: "item box",
+                        detail: format!("a lit card's layer of {width}x{height}"),
+                    },
+                )?),
+                crop: Crop::NONE,
+                opacity: OPAQUE,
+                blend: BlendMode::Normal,
+                visible: true,
+                camera: None,
+                depth_run: 0,
+            }];
+            let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
+                what: "item box",
+                detail: format!("a lit card's layer of {width}x{height}"),
+            })?;
+            Some(compositor.render_into(&scene(size, Color::TRANSPARENT, &items), layer))
+        }
+        _ => None,
+    };
+    drop(maps);
+    chains.lights = lights;
+    chains.shadowed = shadowed;
+    match result {
+        Some(result) => result,
+        None => {
+            chains.fail(owner);
+            Ok(())
+        }
+    }
 }
 
 /// Draws the 3D model item `boxed` shows into its canvas-sized layer `key` (ADR-0107
@@ -5798,90 +5953,26 @@ fn draw_model(
     }
     // A `scene`-lit model in a 3D scene is lit by the scene's lights (ADR-0143
     // decision 3); in a 2D scene it is studio-lit.
-    let mut lights = std::mem::take(&mut chains.lights);
-    let mut shadowed = std::mem::take(&mut chains.shadowed);
-    lights.clear();
-    shadowed.clear();
     let view = camera.and_then(|camera| camera.view(shot.canvas).ok());
     let lit = shown.lighting == Lighting::Scene && view.is_some();
-    if let (true, Some(view)) = (lit, view.as_ref()) {
-        scene_lights(
-            shot,
-            scene_id,
-            (at, view),
-            live,
-            (&mut lights, &mut shadowed),
-        );
-        let shading = lights
-            .iter()
-            .filter(|light| light.kind != jstream_render::LightKind::Ambient)
-            .count();
-        if shading > jstream_render::MAX_SCENE_LIGHTS
-            && !chains.lights_warned.contains(scene_id)
-            && chains.lights_warned.insert(scene_id.clone())
-        {
-            tracing::warn!(
-                scene = %scene_id,
-                lights = shading,
-                max = jstream_render::MAX_SCENE_LIGHTS,
-                "scene has more lights than a model is lit by; the first ones in stacking order light it"
-            );
-        }
-    }
-    // Its scene's shadow maps, drawn by the first model this run that receives them
-    // (ADR-0151 decision 3). A map that can't be drawn leaves the light unshadowed.
-    if lit
-        && shown.receives_shadows
-        && !shadowed.is_empty()
-        && chains.shadows_of(scene_id).is_none()
-    {
-        let maps = draw_shadows(
-            compositor,
-            (&mut *cache, &mut *chains),
-            (shot, at),
-            scene_id,
-            (&lights, &shadowed),
-            (live, captures),
-        )
-        .unwrap_or_else(|error| {
-            tracing::debug!(scene = %scene_id, %error, "shadow maps not drawn this frame");
-            Vec::new()
-        });
-        chains.drew_shadows(scene_id, maps);
-    }
-    let maps: Vec<jstream_render::ShadowMap<'_>> = if lit && shown.receives_shadows {
-        chains
-            .shadows_of(scene_id)
-            .unwrap_or_default()
-            .iter()
-            .filter_map(|drawn| {
-                Some(jstream_render::ShadowMap {
-                    light: drawn.light,
-                    image: cache.get(&drawn.key)?,
-                    camera: drawn.camera,
-                    softness: drawn.softness,
-                })
-            })
-            .collect()
+    let (lights, shadowed) = light_scene(
+        compositor,
+        (&mut *cache, &mut *chains),
+        (shot, at),
+        scene_id,
+        (view.as_ref().filter(|_| lit), shown.receives_shadows),
+        (live, captures),
+    );
+    let maps = if lit && shown.receives_shadows {
+        shadow_maps(&*cache, chains, scene_id)
     } else {
         Vec::new()
     };
-    // Its scene's sky (ADR-0151 decision 9); one environment counts.
-    let (environment, skies) = if lit {
-        scene_environment((shot, &*cache), scene_id, at, live)
+    let environment = if lit {
+        scene_sky((shot, &*cache), chains, scene_id, at, live)
     } else {
-        (None, 0)
+        None
     };
-    if skies > 1
-        && !chains.environments_warned.contains(scene_id)
-        && chains.environments_warned.insert(scene_id.clone())
-    {
-        tracing::warn!(
-            scene = %scene_id,
-            environments = skies,
-            "scene has more than one environment light; the first in stacking order lights it"
-        );
-    }
     let drawn = match (chains.model(source), cache.get(key)) {
         (Some(model), Some(layer)) => Some(compositor.draw_model(
             &jstream_render::ModelDraw {
@@ -5908,6 +5999,111 @@ fn draw_model(
             Ok(())
         }
     }
+}
+
+/// The lights of scene `scene_id` as `view` sees them, for a `scene`-lit model or a lit
+/// card (ADR-0143 decision 3, ADR-0151 decision 10), with the slots of those that cast
+/// shadows: taken from `chains`' kept buffers, to be handed back. With `receives`, the
+/// scene's shadow maps are drawn by the first this run that needs them (ADR-0151
+/// decision 3); a map that can't be drawn leaves its light unshadowed. No `view` (a 2D
+/// scene, or not lit by it) gives none.
+fn light_scene(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
+    (shot, at): (&Shot, MediaTime),
+    scene_id: &SceneId,
+    (view, receives): (Option<&CameraView>, bool),
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> (Vec<jstream_render::SceneLight>, Vec<(usize, f32)>) {
+    let mut lights = std::mem::take(&mut chains.lights);
+    let mut shadowed = std::mem::take(&mut chains.shadowed);
+    lights.clear();
+    shadowed.clear();
+    let Some(view) = view else {
+        return (lights, shadowed);
+    };
+    scene_lights(
+        shot,
+        scene_id,
+        (at, view),
+        live,
+        (&mut lights, &mut shadowed),
+    );
+    let shading = lights
+        .iter()
+        .filter(|light| light.kind != jstream_render::LightKind::Ambient)
+        .count();
+    if shading > jstream_render::MAX_SCENE_LIGHTS
+        && !chains.lights_warned.contains(scene_id)
+        && chains.lights_warned.insert(scene_id.clone())
+    {
+        tracing::warn!(
+            scene = %scene_id,
+            lights = shading,
+            max = jstream_render::MAX_SCENE_LIGHTS,
+            "scene has more lights than a model is lit by; the first ones in stacking order light it"
+        );
+    }
+    if receives && !shadowed.is_empty() && chains.shadows_of(scene_id).is_none() {
+        let maps = draw_shadows(
+            compositor,
+            (&mut *cache, &mut *chains),
+            (shot, at),
+            scene_id,
+            (&lights, &shadowed),
+            (live, captures),
+        )
+        .unwrap_or_else(|error| {
+            tracing::debug!(scene = %scene_id, %error, "shadow maps not drawn this frame");
+            Vec::new()
+        });
+        chains.drew_shadows(scene_id, maps);
+    }
+    (lights, shadowed)
+}
+
+/// The shadow maps drawn for scene `scene_id` this run, as a receiver reads them.
+fn shadow_maps<'c>(
+    cache: &'c ResourceCache<GpuKey>,
+    chains: &Chains,
+    scene_id: &SceneId,
+) -> Vec<jstream_render::ShadowMap<'c>> {
+    chains
+        .shadows_of(scene_id)
+        .unwrap_or_default()
+        .iter()
+        .filter_map(|drawn| {
+            Some(jstream_render::ShadowMap {
+                light: drawn.light,
+                image: cache.get(&drawn.key)?,
+                camera: drawn.camera,
+                softness: drawn.softness,
+            })
+        })
+        .collect()
+}
+
+/// Scene `scene_id`'s sky (ADR-0151 decision 9): its first environment light, any after
+/// it logged once.
+fn scene_sky<'c>(
+    (shot, cache): (&Shot, &'c ResourceCache<GpuKey>),
+    chains: &mut Chains,
+    scene_id: &SceneId,
+    at: MediaTime,
+    live: &LiveParams,
+) -> Option<jstream_render::Environment<'c>> {
+    let (environment, skies) = scene_environment((shot, cache), scene_id, at, live);
+    if skies > 1
+        && !chains.environments_warned.contains(scene_id)
+        && chains.environments_warned.insert(scene_id.clone())
+    {
+        tracing::warn!(
+            scene = %scene_id,
+            environments = skies,
+            "scene has more than one environment light; the first in stacking order lights it"
+        );
+    }
+    environment
 }
 
 /// Records `item` of scene `id` in `out`'s lights when what it shows, `source`, is a

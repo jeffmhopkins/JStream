@@ -345,7 +345,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.121 because `profile.get` counts each PTZ camera's link:
+`PROTOCOL_VERSION` is 0.122 because a card has a surface: `ItemGeometry`'s `surface`
+(`Surface` and `CardBack`, lit by its 3D scene and its back hidden,
+[ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 10, #1231);
+0.121 because `profile.get` counts each PTZ camera's link:
 `ptz_cameras` (`PtzCameraProfile`,
 [ADR-0155](../../docs/adr/0155-ptz-cameras-counters-in-profile-get.md), #1423);
 0.120 because `profile.get` counts each PTZ controller endpoint:
@@ -2929,6 +2932,16 @@ function in this crate so the compositor and the UI share one implementation.
   `rotation_deg`'s roll. Every camera placement goes through it (`project_seen`,
   `drawn_polygon_seen`, `solid` with a view), and `light_pose_seen` turns a billboard
   light with its box. In a 2D scene it changes nothing.
+- `surface` (0.122, [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 10) is an optional `Surface`, omitted when absent, which every card drew as
+  before: `lit` (default false), `roughness` (0 to 1, default 1), `metalness` (0 to 1,
+  default 0), `emissive` (0 to 4, default 0), `back` (`CardBack`: `show`, the default, or
+  `hide`) and `shadows` (default true), each omittable for its default.
+  `check_drawable` refuses a number out of range (`GeometryError::Surface`, named
+  `geometry.surface` by the graph). `drawn_polygon_seen` draws nothing for a hidden back
+  seen from behind, with or without a camera (`a_hidden_back_draws_nothing_from_behind`),
+  so the compositor, the view depth and the shadow maps all leave it out; the engine
+  does the lighting (`jstream-core`'s README). A model ignores it.
 - `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 `ItemTransform`: crop,
   then scale, top-left at `position`, clockwise about that corner. `from_legacy`
   returns that outline as a box with `fit_mode = stretch` and neutral 3D, so a
