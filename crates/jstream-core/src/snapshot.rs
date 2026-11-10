@@ -5519,7 +5519,7 @@ fn run_chains(
                 };
                 let drawn = scene(canvas, pass.background, &items);
                 compositor.render_into(&drawn, layer)?;
-                let focal_px = match (&pass.view_depth, camera) {
+                let view = match (&pass.view_depth, camera) {
                     (Some(depth), Some(camera)) => draw_view_depth(
                         compositor,
                         (&*cache, &*chains),
@@ -5531,8 +5531,14 @@ fn run_chains(
                     _ => None,
                 };
                 drop(items);
-                if let (Some(depth), Some(focal_px)) = (&pass.view_depth, focal_px) {
-                    chains.drew_depth(cache, &pass.scene, depth, focal_px);
+                if let (Some(depth), Some(view)) = (&pass.view_depth, view) {
+                    // The scene's lights, for the filters that light what they add
+                    // (ADR-0151 decision 1).
+                    let mut lights = std::mem::take(&mut chains.lights);
+                    lights.clear();
+                    scene_lights(shot, &pass.scene, (at, &view), live, &mut lights);
+                    chains.drew_depth(cache, &pass.scene, depth, (view, &lights));
+                    chains.lights = lights;
                 }
                 chains.drew_layer(&pass.key);
                 meter.pass(&pass.scene, started.elapsed());
@@ -5982,8 +5988,9 @@ fn layer_item<'a>(
 
 /// Draws the view depth of `pass`, a 3D scene's composite that its chain reads depth
 /// from, into `key` (ADR-0143 decision 4): its cards as `drawn` places them, then each
-/// model it shows at least half opaque, posed as its layer is. Returns the focal length
-/// the depth is measured with, or `None` for a camera that can't be seen on the canvas.
+/// model it shows at least half opaque, posed as its layer is. Returns the camera's view
+/// the depth is measured through, or `None` for a camera that can't be seen on the
+/// canvas.
 ///
 /// # Errors
 /// What the compositor reports for drawing into the layer.
@@ -5994,7 +6001,7 @@ fn draw_view_depth(
     key: &GpuKey,
     (at, canvas, camera): (MediaTime, FrameSize, SceneCamera),
     live: &LiveParams,
-) -> Result<Option<f32>, RenderError> {
+) -> Result<Option<CameraView>, RenderError> {
     let Ok(view) = camera.view(shot.canvas) else {
         return Ok(None);
     };
@@ -6055,7 +6062,7 @@ fn draw_view_depth(
             target,
         )?;
     }
-    Ok(Some(view.focal_px()))
+    Ok(Some(view))
 }
 
 /// `base`, a pass's camera with its live camera applied, moved by its family's camera

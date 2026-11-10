@@ -878,8 +878,9 @@ impl Chains {
     }
 
     /// Records that scene `scene`'s view depth was drawn into `key` in this run, seen
-    /// with a focal length of `focal_px`, for its chain's depth-aware filters to read
-    /// (ADR-0143 decision 5). A layer remade since the last frame (the first, or one at
+    /// through `view` and lit by `lights`, for its chain's depth-aware filters to read
+    /// (ADR-0143 decision 5, ADR-0151 decision 1). The lights are copied only when they
+    /// change. A layer remade since the last frame (the first, or one at
     /// another size) retires the one it replaces into `cache` (R-RT-003); a steady frame
     /// makes no layer and no new handle to it.
     pub(crate) fn drew_depth(
@@ -887,21 +888,27 @@ impl Chains {
         cache: &mut ResourceCache<GpuKey>,
         scene: &jstream_protocol::SceneId,
         key: &GpuKey,
-        focal_px: f32,
+        (view, lights): (jstream_protocol::CameraView, &[jstream_render::SceneLight]),
     ) {
         let (Some(ran), Some(layer)) = (self.ran, cache.get(key)) else {
             return;
         };
+        let focal_px = view.focal_px();
         if let Some((drawn, depth)) = self.depths.get_mut(scene)
             && depth.image.texture() == layer.texture()
         {
             *drawn = ran;
             depth.focal_px = focal_px;
+            depth.view = Some(view);
+            if *depth.lights != *lights {
+                depth.lights = Arc::from(lights);
+            }
             return;
         }
         let fresh = jstream_render::ViewDepth {
-            image: Arc::new(layer.clone()),
-            focal_px,
+            view: Some(view),
+            lights: Arc::from(lights),
+            ..jstream_render::ViewDepth::new(Arc::new(layer.clone()), focal_px)
         };
         if let Some((_, old)) = self.depths.insert(scene.clone(), (ran, fresh)) {
             cache.retire_image(Image::clone(&old.image));
@@ -3066,6 +3073,116 @@ mod tests {
                 fogged[1]
             );
         }
+    }
+
+    /// ADR-0151 decisions 1 and 6: a 3D scene's depth-aware filters get its camera and
+    /// lights with its view depth, so black volumetric fog on its chain glows where a
+    /// light item of the scene reaches it, and stays black without one; a 2D scene
+    /// passes the picture through.
+    #[test]
+    fn volumetric_fog_on_a_scene_is_lit_by_its_lights() {
+        let canvas = jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        };
+        let mut graph = placed(&[("cam", (32.0, 18.0), (64.0, 36.0), 0.0)]);
+        let mut lamp = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(8.0, 8.0).expect("positive"),
+        )
+        .expect("valid");
+        lamp.depth_px = jstream_protocol::Finite32::new(20.0).expect("finite");
+        let fog = Edit::FilterAdd {
+            owner: FilterOwner::Scene {
+                scene_id: SceneId::new("main"),
+            },
+            chain: FilterChain::Video,
+            filter_id: FilterId::new("fog"),
+            kind: "volumetric_fog".into(),
+            settings: [
+                ("color", serde_json::json!("#000000ff")),
+                ("density", serde_json::json!(5.0)),
+                ("falloff_px", serde_json::json!(0.0)),
+                ("noise", serde_json::json!(0.0)),
+                ("scattering", serde_json::json!(1.0)),
+            ]
+            .into_iter()
+            .collect(),
+            enabled: Some(true),
+            index: None,
+        };
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry: lamp,
+                },
+                fog,
+            ],
+        );
+        let light = jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Point,
+            color: [1.0; 3],
+            intensity: 4.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+        };
+        let black =
+            Frame::new(16, 9, &[0, 0, 0, 255].repeat(16 * 9), 2).expect("invariant: 16x9 RGBA8");
+        let lamp = Frame::new(1, 1, &[0; 4], 3)
+            .expect("invariant: 1x1 RGBA8")
+            .with_light(Some(light));
+        let centre = |graph: &Graph| {
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&SceneId::new("main")),
+                None,
+                &mut |id| {
+                    Some(Look::Frame(
+                        if id.as_str() == "cam" {
+                            black.clone()
+                        } else {
+                            lamp.clone()
+                        },
+                        None,
+                    ))
+                },
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            Some(
+                draw_points(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (&shot, &LiveParams::default()),
+                    &[(32, 18)],
+                )[0],
+            )
+        };
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let Some(flat) = centre(&graph) else {
+            return;
+        };
+        assert!(luma(flat) < 6, "a 2D scene isn't fogged: {flat:?}");
+        apply(
+            &mut graph,
+            vec![Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(jstream_protocol::SceneCamera::framing(canvas)),
+            }],
+        );
+        let lit = centre(&graph).expect("an adapter");
+        assert!(luma(lit) > 60, "the light glows in the fog: {lit:?}");
+        apply(&mut graph, vec![hide("logo")]);
+        let dark = centre(&graph).expect("an adapter");
+        assert!(luma(dark) < 6, "no light, no glow: {dark:?}");
     }
 
     /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition

@@ -26,7 +26,8 @@
 //!   model; and the same with a cube, the cheapest closed shape.
 //! - `depth_fog_1080p_camera`: what a depth-aware scene filter adds to N of those
 //!   cards (ADR-0143): the scene's view depth, then `depth_fog` over its composite;
-//!   `ambient_occlusion_1080p_camera` the same with `ambient_occlusion` (ADR-0151).
+//!   `ambient_occlusion_1080p_camera` and `volumetric_fog_1080p_camera` the same with
+//!   `ambient_occlusion` and `volumetric_fog` (ADR-0151).
 //! - `rewrite_rgba8_1080p`: refilling a 1080p upload in place (the bytes copied into a
 //!   buffer, then premultiplied in linear light on the GPU), as an image or media source
 //!   does on a new frame: `rewrite` with the GPU's work waited for, `rewrite_call` the
@@ -329,6 +330,7 @@ fn three_d(c: &mut Criterion) {
     for (id, group_name) in [
         ("depth_fog", "depth_fog_1080p_camera"),
         ("ambient_occlusion", "ambient_occlusion_1080p_camera"),
+        ("volumetric_fog", "volumetric_fog_1080p_camera"),
     ] {
         depth_filter(&mut compositor, (&images, camera), id, group_name, c);
     }
@@ -365,16 +367,15 @@ fn depth_filter(
     let fogged = compositor
         .layer(WIDTH, HEIGHT)
         .expect("invariant: the canvas fits");
-    let focal_px = camera
+    let view = camera
         .view(jstream_protocol::Canvas {
             width: WIDTH,
             height: HEIGHT,
         })
-        .expect("invariant: the camera is valid")
-        .focal_px();
+        .expect("invariant: the camera is valid");
     fog.set_depth(Some(ViewDepth {
-        image: std::sync::Arc::clone(&depth),
-        focal_px,
+        view: Some(view),
+        ..ViewDepth::new(std::sync::Arc::clone(&depth), view.focal_px())
     }));
     let mut group = c.benchmark_group(group_name);
     group.sample_size(20);

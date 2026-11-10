@@ -801,14 +801,14 @@ fn placement(err: jstream_protocol::GeometryError) -> RenderError {
 }
 
 /// A scene's lights in the shader's terms: the model's viewing frame, linear light.
-struct SceneLighting {
-    ambient: [f32; 3],
+pub(crate) struct SceneLighting {
+    pub(crate) ambient: [f32; 3],
     /// Four `vec4` per light, as `model.wgsl`'s `Light`.
-    lights: Vec<[f32; 16]>,
+    pub(crate) lights: Vec<[f32; 16]>,
 }
 
 impl SceneLighting {
-    fn new(lights: &[SceneLight], view: &jstream_protocol::CameraView) -> Self {
+    pub(crate) fn new(lights: &[SceneLight], view: &jstream_protocol::CameraView) -> Self {
         let mut ambient = [0.0f32; 3];
         let mut packed = Vec::with_capacity(MAX_SCENE_LIGHTS);
         // Slots taken by the shading lights so far, lit or not.

@@ -12,10 +12,13 @@
 
 mod fog;
 mod occlusion;
+mod volumetric;
 
 use std::sync::Arc;
 
-use jstream_protocol::{KindDescriptor, Settings};
+use jstream_protocol::{CameraView, KindDescriptor, Settings};
+
+use crate::SceneLight;
 
 use crate::filter::Pass;
 use crate::image::Image;
@@ -30,11 +33,34 @@ pub struct ViewDepth {
     /// ([`jstream_protocol::CameraView::focal_px`]), which turns `1 / w` back into a
     /// distance.
     pub focal_px: f32,
+    /// The camera as seen on the scene's canvas (ADR-0151 decision 1): its position,
+    /// axes and principal point, which turn a pixel and its `1 / w` back into a point
+    /// of the scene's space. `None` leaves the kinds that need it to pass through.
+    pub view: Option<CameraView>,
+    /// The scene's lights, as a `scene`-lit model receives them (ADR-0143 decision 3).
+    pub lights: Arc<[SceneLight]>,
+}
+
+impl ViewDepth {
+    /// A view depth with no camera or lights: what the kinds that read only the depth
+    /// need.
+    pub fn new(image: Arc<Image>, focal_px: f32) -> Self {
+        Self {
+            image,
+            focal_px,
+            view: None,
+            lights: Arc::from([]),
+        }
+    }
 }
 
 /// The depth-aware filter kinds, ordered by ID.
 pub fn descriptors() -> Vec<KindDescriptor> {
-    vec![occlusion::descriptor(), fog::descriptor()]
+    vec![
+        occlusion::descriptor(),
+        fog::descriptor(),
+        volumetric::descriptor(),
+    ]
 }
 
 /// The pass for one of this group's kinds, or `None` for any other kind.
@@ -42,6 +68,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
     match kind_id {
         fog::KIND => Some(Box::new(fog::DepthFog::new(settings))),
         occlusion::KIND => Some(Box::new(occlusion::AmbientOcclusion::new(settings))),
+        volumetric::KIND => Some(Box::new(volumetric::VolumetricFog::new(settings))),
         _ => None,
     }
 }
@@ -49,7 +76,7 @@ pub(crate) fn build(kind_id: &str, settings: &Settings) -> Option<Box<dyn Pass>>
 /// Whether a filter of `kind_id` reads a scene's view depth, so the engine draws it for
 /// a scene chain that holds one (ADR-0143 decision 4).
 pub fn reads_depth(kind_id: &str) -> bool {
-    [fog::KIND, occlusion::KIND].contains(&kind_id)
+    [fog::KIND, occlusion::KIND, volumetric::KIND].contains(&kind_id)
 }
 
 #[cfg(test)]
@@ -61,7 +88,7 @@ mod tests {
     fn every_depth_kind_reads_depth_and_builds() {
         let kinds = super::descriptors();
         let ids: Vec<_> = kinds.iter().map(|kind| kind.kind_id.as_str()).collect();
-        assert_eq!(ids, ["ambient_occlusion", "depth_fog"]);
+        assert_eq!(ids, ["ambient_occlusion", "depth_fog", "volumetric_fog"]);
         for id in ids {
             assert!(super::reads_depth(id), "{id}");
             assert!(super::build(id, &Settings::default()).is_some(), "{id}");
