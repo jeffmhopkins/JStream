@@ -1053,7 +1053,7 @@ stamp = { hash = "b3:087bce1f5e4fcd85", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:03d8063e7a07d5dd", by = "agent:release-thread", note = "Step 3 now says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; the rest of the PR loop, and REVIEW#output's added carry sentence, are consistent with review-gate.yml" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#output"]
-stamp = { hash = "b3:484aaeab32c61c4c", by = "agent:issues-burndown", note = "Re-read the PR loop against REVIEW › output's new lines (gate re-reads only on PR events and marker comments; a push cancels earlier heads' after-review runs): builders never post markers and auto-merge still lands on green, so it holds" }
+stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Re-read: step 3's carry sentence still holds (a push that only merges main into a passed head carries, ADR-0109); the base line is the reviewer's to write, so the builder's loop is unchanged" }
 
 ["CLAUDE#pr-loop"."dep:REVIEW.md#rounds"]
 stamp = { hash = "b3:1d8bae6753e4ae8d", by = "agent:release-thread", note = "Step 3 says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; REVIEW#rounds and #gather are back to main's text (no merge-only reviewer round), consistent with that" }
@@ -2115,7 +2115,7 @@ stamp = { hash = "b3:97488d4d53074c8d", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:f56b2c7983cf2c88", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to events.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#events, matching what it relies on | merge: The ledger conflict took main's entry; events.rs is unchanged by the merge, text unchanged" }
 
 ["CRATE-jstream-core#frame-sheets"."body"]
-stamp = { hash = "b3:5226cfa0323700e5", by = "agent:claude", note = "Port of #1429 to wave/alpha5: at_ms counts from State::switched_at, the transition's start, else the sheet's own start; matches engine.rs and SheetFrame::at_ms's doc" }
+stamp = { hash = "b3:5226cfa0323700e5", by = "agent:claude", note = "Rewrote the switch_and_watch paragraph: at_ms counts from State::switched_at, the transition's start, not the sheet's start, and from the sheet's start when the scene was already on program; matches engine.rs and SheetFrame::at_ms's doc" }
 
 ["CRATE-jstream-core#frame-sheets"."dep:crates/jstream-protocol/README.md#queries"]
 stamp = { hash = "b3:7fac403cc3b68512", by = "agent:ptz-builder", note = "protocol queries gained the profile.get ptz_cameras paragraph only (0.121, ADR-0155); frame sheets are untouched" }
@@ -7296,10 +7296,10 @@ stamp = { hash = "b3:ef6690600d49a5a1", by = "agent:claude@session_01QBbMRwRuZe7
 stamp = { hash = "b3:a0dd0fef4c0b0f34" }
 
 ["REVIEW#output"."body"]
-stamp = { hash = "b3:484aaeab32c61c4c", by = "agent:issues-burndown", note = "Added that review-gate re-reads the PR only on PR events and marker comments (its new job if and per-run skip group), and that a push cancels after-review runs for earlier heads; markers, rounds and carry unchanged" }
+stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Added the jstream-review-base line under the verdict marker (the base SHA reviewed against, from gh pr view --json baseRefOid) and said the carry diffs the reviewed head against it (ADR-0154); checked against review-gate.yml's baseRe, markersOf and reviewedBase" }
 
 ["REVIEW#output"."file:.github/workflows/review-gate.yml"]
-stamp = { hash = "b3:c9b757436ac5df6a", by = "agent:issues-burndown", note = "The push-time cancel now runs only for a same-repo head; fork PRs never get after-review runs (dispatch skips them), so 'a push cancels those runs for the PR's earlier heads' still holds as written." }
+stamp = { hash = "b3:54cfad47c5f2d5eb", by = "agent:claude", note = "Added the jstream-review-base line under the verdict marker (the base SHA reviewed against, from gh pr view --json baseRefOid) and said the carry diffs the reviewed head against it (ADR-0154); checked against review-gate.yml's baseRe, markersOf and reviewedBase" }
 
 ["ROADMAP#beta"."body"]
 stamp = { hash = "b3:c57bb7caabb42736", by = "agent:beta-bar", note = "Re-read after review round 1: the scope says only that past projects need not load (Jeff's words), with no claim on settings or the protocol; the ship list is an unranked bullet list, and the beta.1 targets in docs/progress.toml carry no priority" }
@@ -7494,7 +7494,7 @@ stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-rea
 stamp = { hash = "b3:6653e003f36605e9", by = "agent:lane-d", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features. | merge: The merge's root Cargo.toml changes are dependencies for #1410 and #1424; the version and the macOS bundle-version note are unchanged. | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds | kept from the merged side: Cargo.toml only gains a dev profile opt-level for jstream-platform (its NV12 converter); the workspace version and the apps that take it are unchanged" }
 
 ["RUNBOOK-WAVES#churn"."body"]
-stamp = { hash = "b3:59bac5719c90918f", by = "agent:wave-owner", note = "Two bullets now speak of a bump whose number another bump took, instead of the protocol holder, matching the rewritten protocol section; the rest holds." }
+stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
 
 ["RUNBOOK-WAVES#churn"."dep:docs/runbooks/waves.md#protocol"]
 stamp = { hash = "b3:9bdafb3a0e32d90c", by = "agent:wave-owner", note = "Two bullets now speak of a bump whose number another bump took, instead of the protocol holder, matching the rewritten protocol section; the rest holds." }
