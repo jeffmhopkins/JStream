@@ -955,7 +955,7 @@ covers = ["crates/jstream-protocol/src/kind.rs", "crates/jstream-protocol/src/se
 never a type per kind.
 
 - `kind.list` returns a `KindSummary` per kind (ID, category, name, version), ordered by
-  ID. `kind.describe { kind_id }` returns the `KindDescriptor` and a JSON Schema of its
+  ID. `kind.describe { kind_id, source_id? }` returns the `KindDescriptor` and a JSON Schema of its
   settings generated from it (`settings_schema`), or `invalid_argument` on `kind_id` for
   a kind the engine doesn't have. With a `source_id` (0.123,
   [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 7) the
@@ -1626,7 +1626,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   address (`OutputKind::sends_key_in_cleartext`; 0.37, missing it parses as `false`).
   The engine still publishes; a client shows it as a warning. None of it is
   collection state, so it carries no `rev`.
-- `kind.list` and `kind.describe {kind_id}`: the kinds the engine describes, above.
+- `kind.list` and `kind.describe {kind_id, source_id?}`: the kinds the engine describes, above.
   Not collection state, so no `rev`.
 - `studio.get`: the scene on program (`program_scene`) and on preview
   (`preview_scene`, 0.30), each omitted only while the collection has no scene. Runtime

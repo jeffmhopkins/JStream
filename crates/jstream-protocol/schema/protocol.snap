@@ -11648,6 +11648,17 @@ source: crates/jstream-protocol/src/fixtures.rs
               "description": "The kind to describe, as `kind.list` reports it.",
               "type": "string"
             },
+            "source_id": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/SourceId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "A source of the kind whose own additions the descriptor takes (since 0.123,\nADR-0151 decision 7): a `model`'s `animation` setting names the animations\nits file holds. Fails with `not_found` on `source_id` if there is no such\nsource, and `invalid_argument` if it is of another kind. Omitted describes\nthe kind alone."
+            },
             "type": {
               "const": "kind.describe",
               "type": "string"
@@ -15828,5 +15839,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.119"
+  "title": "JStream protocol 0.123"
 }

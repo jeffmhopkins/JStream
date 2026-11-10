@@ -23742,6 +23742,12 @@ source: crates/jstream-mcp/src/tests.rs
       },
       "description": "Runs one `kind` operation: set `op.type` to one of `kind.list` (query), `kind.describe` (query). A query only reads. Failures come back as a tool error whose `error.code` is stable.",
       "inputSchema": {
+        "$defs": {
+          "SourceId": {
+            "description": "A source (capture, media, color, ...). One instance however many scenes use it.",
+            "type": "string"
+          }
+        },
         "additionalProperties": false,
         "properties": {
           "op": {
@@ -23766,6 +23772,17 @@ source: crates/jstream-mcp/src/tests.rs
                   "kind_id": {
                     "description": "The kind to describe, as `kind.list` reports it.",
                     "type": "string"
+                  },
+                  "source_id": {
+                    "anyOf": [
+                      {
+                        "$ref": "#/$defs/SourceId"
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ],
+                    "description": "A source of the kind whose own additions the descriptor takes (since 0.123,\nADR-0151 decision 7): a `model`'s `animation` setting names the animations\nits file holds. Fails with `not_found` on `source_id` if there is no such\nsource, and `invalid_argument` if it is of another kind. Omitted describes\nthe kind alone."
                   },
                   "type": {
                     "const": "kind.describe",

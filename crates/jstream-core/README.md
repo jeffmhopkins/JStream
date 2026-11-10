@@ -202,7 +202,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   tells a source when it shows it again. `media` sources play through the injected
   backends' media files. A frame stored
   with `set_source_frame` wins over the live one, and a kind that is only described
-  draws nothing. A `display` or `window` source shows what the output pipeline
+  draws nothing. `kind.describe` with a `source_id` adds what that source's running
+  instance knows of its own settings to its kind's descriptor (`LiveSources::describe`,
+  a `model`'s animation names, ADR-0151 decision 7); one that isn't running adds
+  nothing. A `display` or `window` source shows what the output pipeline
   captures for its `target` on the render thread, and a `webcam` source what it
   captures from its `device` (see *Live sources* and *Snapshots* in
   [Design](#design)).
