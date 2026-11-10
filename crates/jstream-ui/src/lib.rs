@@ -36,6 +36,7 @@ pub mod panels;
 pub mod plugins;
 pub mod project;
 pub mod projector;
+pub mod ptz_controllers;
 pub mod screenshot;
 pub mod session;
 pub mod settings;

@@ -46,6 +46,11 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), the setting and
   its accepted senders in the data folder's `jtunnel.json`, starting the engine's
   JTunnel receiver from it, and `set_jtunnel`, the command that saves it.
+- **PTZ controllers** (`ptz.rs`): "Accept a PTZ controller"
+  ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
+  §3), the setting with its endpoints and allowed controllers in the data folder's
+  `ptz_controllers.json`, opening the engine's controller endpoints from it, and
+  `set_ptz_controllers`, the command that saves it.
 - **Global hotkeys** (`hotkeys.rs`, wired in `host.rs` on Windows, macOS, X11 and Wayland): hears the bound
   chords while another application has the focus and runs their actions
   ([Design](#design)). Tested with a fake listener on every platform.
@@ -247,6 +252,14 @@ folder, and its log `logs\cef.log`.
   before adding it (so turning it on with no sender, then restarting, is how to find
   the first one). The page shows why a sender was refused, and the log names the
   senders at start.
+- **PTZ controllers.** Settings › Devices › "Accept a PTZ controller" (off until turned
+  on), its endpoints (an address and port of this machine on the LAN, a transport, a
+  VISCA address and what it drives: Program, Preview or one scene) and its allowed
+  controller addresses save `ptz_controllers.json` in the data folder; they apply at
+  the next start. On, a VISCA joystick or control app at an allowed address drives
+  scene cameras as the daemon's `--ptz-controller` lets it
+  ([ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)). The page
+  shows why an endpoint was refused, and the log names the endpoints at start.
 - **Going live** works as in the daemon: create an RTMP(S) output, set its stream key
   (kept in Windows Credential Manager; on Linux in the Secret Service, else a `0600`
   file, [ADR-0071](../../docs/adr/0071-linux-secret-store.md); on macOS in the login
@@ -356,6 +369,19 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   only finds senders, `jtunnel.senders`, protocol 0.114), and a refused setting or a
   socket that can't be bound is logged and the app runs without the receiver. Off, no
   JTunnel socket is open.
+- **PTZ controllers** (`ptz.rs`,
+  [ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md) §3,
+  ADR-0123 §5). The setting is `{"on": true, "endpoints": [{"address":
+  "192.168.1.20:52381", "transport": "visca_ip", "visca": 1, "target": "program"}],
+  "allow": ["192.168.1.50"]}` in the data folder's `ptz_controllers.json`, kept as the
+  JTunnel setting is: per machine, user-only, replaced whole, and saved only once the
+  engine would take it (`PtzController::new`, `PtzControllerSetup::new`), even while
+  off; a missing, unreadable or malformed file is off. Only the page's `setPtz` saves
+  it, through the Tauri command `set_ptz_controllers`, which the `ptz` capability grants
+  to the main window and nothing else. At start, on with at least one endpoint, the app
+  calls `Engine::start_ptz_controllers` and keeps the handle until it exits, closing the
+  endpoints first so their drives stop; a refused setting or a port that can't be bound
+  is logged and the app runs without them. Off, no endpoint socket is open.
 - **Hotkeys while another app has the focus.** On Windows, macOS and Linux the host hears the
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).

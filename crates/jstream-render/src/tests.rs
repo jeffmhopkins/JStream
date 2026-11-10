@@ -1739,6 +1739,7 @@ pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeom
                 perspective_px: Some(finite(perspective)),
                 flip_h: true,
                 flip_v: false,
+                billboard: false,
             });
         }
     }
@@ -1776,6 +1777,7 @@ pub(crate) fn extreme_geometries(count: usize) -> Vec<jstream_protocol::ItemGeom
             perspective_px: perspective.map(finite),
             flip_h,
             flip_v,
+            billboard: false,
         });
     }
     out

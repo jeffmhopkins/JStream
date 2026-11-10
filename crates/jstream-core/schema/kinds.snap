@@ -3,6 +3,64 @@ source: crates/jstream-core/src/kinds.rs
 ---
 [
   {
+    "kind_id": "ambient_occlusion",
+    "category": "video_filter",
+    "name": "Ambient occlusion",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "radius_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 2000.0,
+        "unit": "px",
+        "default": 48.0,
+        "label": "Radius",
+        "description": "Darkens creases, corners and where things meet, from the scene's depth. It works in a scene's filters when the scene has a camera, best first in the chain; anywhere else it changes nothing. How far from a point something nearer still shades it, in scene pixels.",
+        "live": true
+      },
+      {
+        "id": "strength",
+        "type": "float",
+        "min": 0.0,
+        "max": 2.0,
+        "default": 1.0,
+        "label": "Strength",
+        "description": "How dark full occlusion is.",
+        "live": true
+      },
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": false,
+        "default": "#000000",
+        "label": "Color",
+        "description": "The colour occlusion shades toward.",
+        "live": true
+      },
+      {
+        "id": "quality",
+        "type": "enum",
+        "options": [
+          {
+            "value": "low",
+            "label": "Low"
+          },
+          {
+            "value": "high",
+            "label": "High"
+          }
+        ],
+        "default": "low",
+        "label": "Quality",
+        "description": "Low takes 8 samples a pixel, High 16: smoother, at twice the cost.",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "app_audio",
     "category": "source",
     "name": "Application audio",
@@ -4313,6 +4371,165 @@ source: crates/jstream-core/src/kinds.rs
         "default": 0.5,
         "label": "Centre Y",
         "description": "The centre, from the top edge (0) to the bottom (1).",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "volumetric_fog",
+    "category": "video_filter",
+    "name": "Volumetric fog",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "color",
+        "type": "color",
+        "alpha": true,
+        "default": "#c8ccd2ff",
+        "label": "Color",
+        "description": "Fog with height that drifts and is lit by the scene's lights: a spot light through it shows its beam. It works in a scene's filters when the scene has a camera, best first in the chain; anywhere else it changes nothing. The fog's own colour, the light it scatters from everywhere; its alpha thins it.",
+        "live": true
+      },
+      {
+        "id": "density",
+        "type": "float",
+        "min": 0.0,
+        "max": 20.0,
+        "default": 0.5,
+        "label": "Density",
+        "description": "Fog per 1000 px at the base height.",
+        "live": true
+      },
+      {
+        "id": "base_y_px",
+        "type": "float",
+        "min": -100000.0,
+        "max": 100000.0,
+        "unit": "px",
+        "default": 1080.0,
+        "label": "Base height",
+        "description": "The height where fog is densest, in canvas pixels (y down): 1080 is the bottom of a 1080p canvas. Below it the fog stays as dense.",
+        "live": true
+      },
+      {
+        "id": "falloff_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 100000.0,
+        "unit": "px",
+        "default": 400.0,
+        "label": "Falloff",
+        "description": "Height above the base over which the density halves; 0 makes it even.",
+        "live": true
+      },
+      {
+        "id": "start_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 999999986991104.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Start",
+        "description": "Distance along the camera's view where fog begins, in scene pixels.",
+        "live": true
+      },
+      {
+        "id": "max_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 999999986991104.0,
+        "unit": "px",
+        "default": 8000.0,
+        "label": "Farthest",
+        "description": "How far a ray marches where nothing was drawn, in scene pixels.",
+        "live": true
+      },
+      {
+        "id": "noise",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "default": 0.3,
+        "label": "Noise",
+        "description": "How much moving noise varies the density.",
+        "live": true
+      },
+      {
+        "id": "noise_scale_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 100000.0,
+        "unit": "px",
+        "default": 300.0,
+        "label": "Noise size",
+        "description": "The size of the noise's features.",
+        "live": true
+      },
+      {
+        "id": "wind_x_px",
+        "type": "float",
+        "min": -100000.0,
+        "max": 100000.0,
+        "unit": "px",
+        "default": 20.0,
+        "label": "Wind X",
+        "description": "How far the noise drifts right per second.",
+        "live": true
+      },
+      {
+        "id": "wind_y_px",
+        "type": "float",
+        "min": -100000.0,
+        "max": 100000.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Wind Y",
+        "description": "How far the noise drifts down per second.",
+        "live": true
+      },
+      {
+        "id": "wind_z_px",
+        "type": "float",
+        "min": -100000.0,
+        "max": 100000.0,
+        "unit": "px",
+        "default": 0.0,
+        "label": "Wind Z",
+        "description": "How far the noise drifts toward the viewer per second.",
+        "live": true
+      },
+      {
+        "id": "scattering",
+        "type": "float",
+        "min": 0.0,
+        "max": 8.0,
+        "default": 1.0,
+        "label": "Scattering",
+        "description": "How strongly the scene's lights light the fog.",
+        "live": true
+      },
+      {
+        "id": "quality",
+        "type": "enum",
+        "options": [
+          {
+            "value": "low",
+            "label": "Low"
+          },
+          {
+            "value": "medium",
+            "label": "Medium"
+          },
+          {
+            "value": "high",
+            "label": "High"
+          }
+        ],
+        "default": "medium",
+        "label": "Quality",
+        "description": "Steps along each ray: Low 24, Medium 48, High 96. More is smoother and costs more.",
         "live": true
       }
     ]

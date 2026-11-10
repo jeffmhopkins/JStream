@@ -1156,8 +1156,34 @@ fn Placement(
                 max=f64::from(max) send=commit />
         }
     };
+    // Whether the box turns to face a 3D scene's camera (ADR-0151 decision 2).
+    let billboard = Memo::new(move |_| geometry.get().map(|g| g.billboard));
+    let toggle_billboard = move |event: leptos::ev::Event| {
+        let on = event_target_checked(&event);
+        let Some(g) = geometry.get_untracked().filter(|g| g.billboard != on) else {
+            return;
+        };
+        let (item_id, scene) = ids.get_value();
+        send(Edit::ItemSetGeometry {
+            item_id,
+            scene_id: Some(scene),
+            geometry: ItemGeometry { billboard: on, ..g },
+        });
+    };
+    let billboard_field = view! {
+        <label class="check" title="In a 3D scene, the box turns to face the camera, wherever it moves; its rotation still rolls it">
+            <input
+                type="checkbox"
+                class="inline-check"
+                disabled=move || billboard.with(Option::is_none)
+                prop:checked=move || billboard.get().unwrap_or(false)
+                on:change=toggle_billboard
+            />
+            "Face the camera"
+        </label>
+    };
     let depth_hint = Signal::derive(move || {
-        if geometry.get().is_some_and(|g| in_3d(&g)) {
+        if geometry.get().is_some_and(|g| in_3d(&g) || g.billboard) {
             "in use".to_owned()
         } else {
             String::new()
@@ -1375,6 +1401,7 @@ fn Placement(
                 {depth_field(Depth3::Depth)}
                 {depth_field(Depth3::Perspective)}
             </div>
+            {billboard_field}
         </Fold>
         <Fold title="Crop" open=true hint=crop_hint>
             <div class="axes four">

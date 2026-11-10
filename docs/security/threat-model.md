@@ -222,6 +222,25 @@ startup, and a reply from anywhere but the camera's own address and port, or one
 isn't VISCA, is dropped and counted; a reply can change only the pose and status
 `ptz.list` shows.
 
+The daemon's `--ptz-controller` and `--ptz-controller-allow` (ADR-0123 §5,
+[ADR-0152](../adr/0152-a-ptz-controller-drives-scene-cameras.md)), and the desktop app's
+"Accept a PTZ controller", saved only by the app's own command
+([ADR-0153](../adr/0153-ptz-controller-idle-stop-counters-and-setting.md) §3), are the
+ways to make it listen for a PTZ controller: the protocol can't open an endpoint or
+change the allowlist. Each endpoint binds one LAN address the person gives, never every
+interface, and needs at least one allowed controller address on the LAN; a datagram or
+connection from any other address, or one that isn't VISCA, is dropped and counted.
+An endpoint is a session of its own on the engine, not a control listener
+([R-SEC-002](../RULES.md#R-SEC-002)): what a controller sends becomes only
+`scene.drive_camera` and `scene.aim_camera` for the endpoint's target, and the queries
+it needs to answer (`studio.get`, `scene.camera_aim`). It moves a scene camera's live
+aim, which is never stored or undone; its presets stay in its memory. A drive it
+started stops once its controller has been quiet for 5 seconds, or when a TCP
+controller's last connection closes (ADR-0153 §1), and `profile.get` counts what each
+endpoint answered and dropped (§2). **Accepted:** a
+host on the LAN that spoofs an allowed controller's address can move the endpoint's
+scene camera within those bounds (ADR-0123 §6).
+
 **Gaps:** #546's Windows hardware pass reported the token file and the daemon's logs
 user-only with no inheritance. Still to run on hardware: the devices file after a real
 pairing, and the crash reports' DACL (#656), which hasn't run on Windows CI either. So
@@ -713,9 +732,12 @@ somewhere it shouldn't.
   as malformed. Plugins can't read the list.
 - The socket is not a control listener ([R-SEC-002](../RULES.md#R-SEC-002)): nothing it
   receives reaches the protocol.
-- PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) pass the same
-  LAN check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server)
-  for what they may send and receive.
+- PTZ heads ([ADR-0146](../adr/0146-ptz-cameras-shots-and-actions.md)) and PTZ
+  controller endpoints and their allowlist
+  ([ADR-0152](../adr/0152-a-ptz-controller-drives-scene-cameras.md)) pass the same LAN
+  check, one predicate in `jstream-core`'s `lan.rs`; see [Control server](#server) for
+  what they may send and receive. Unlike the JTunnel socket, a controller endpoint binds
+  only the one address the person gives.
 
 **Accepted:** a host on the LAN that spoofs an accepted sender's address and port can
 inject audio into the source that records it, or notes into what its MIDI sources draw

@@ -1091,8 +1091,11 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
 **Depth-aware kinds** (`src/filter/depth/`,
 [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md) decisions
 5 and 6). A kind there reads a scene's view depth beside its input:
-`VideoFilter::set_depth(Some(ViewDepth { image, focal_px }))` hands it the image
-`Compositor::render_view_depth` drew and the camera's focal length, and
+`VideoFilter::set_depth(Some(ViewDepth { image, focal_px, view, lights }))` hands it the
+image `Compositor::render_view_depth` drew, the camera's focal length, and the rest of
+the scene view ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+decision 1): the camera's `CameraView` and the scene's lights (`ViewDepth::new` gives
+neither, for a kind that reads only the depth), and
 `VideoFilter::reads_depth` (`video_filter_reads_depth(kind)`) says which kinds want one.
 With none, or one of another size than the input, the kind passes its input through.
 They are built by `VideoFilter::new` but listed by `depth_filter_descriptors()`, not
@@ -1110,6 +1113,43 @@ it out; `filter::testing` reads both lists.
   the premultiplied fog over the pixel source-over at that amount,
   `fog · a + pixel · (1 − fog.alpha · a)`, so a translucent fog colour never thins the
   picture.
+- `ambient_occlusion` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 5, `depth/occlusion.rs`): `radius_px` (1 to 2000, default 48), `strength`
+  (0 to 2, default 1), `color` (default black) and `quality` (`low`, 8 samples a pixel,
+  the default, or `high`, 16). Two draws. The first (`occlusion/sample.wgsl`) reads only
+  the depth: it rebuilds each pixel's point `((px − c) D / f, D)` about the canvas
+  centre, its normal from neighbours two pixels away (each side the one nearer in
+  depth, so an edge doesn't bend it), and counts the hemisphere samples about the
+  normal, rotated per pixel by a 4 × 4 ordered pattern, that land behind a nearer
+  depth by more than a small bias, faded where that occluder is far past the radius.
+  It writes the share and the pixel's `1 / w` into a scratch layer. The second
+  (`occlusion/apply.wgsl`) averages the share over the 4 × 4 tile, keeping to pixels
+  within 1% of the distance (or a quarter of the radius), and lays
+  `c · (1 − k) + color · c.alpha · k`, `k = share · strength` at most 1, so alpha is
+  kept. Where nothing was drawn, at no strength, and without a matching depth, it
+  copies its input.
+- `volumetric_fog` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 6, `depth/volumetric.rs`): `color` (with alpha, default `#c8ccd2ff`),
+  `density` (0 to 20 per 1000 px, default 0.5), `base_y_px` (default 1080) and
+  `falloff_px` (default 400, 0 even), `start_px` (default 0) and `max_px` (default
+  8000), `noise` (0 to 1, default 0.3) and `noise_scale_px` (default 300), `wind_x_px`,
+  `wind_y_px` and `wind_z_px` (default 20, 0, 0 px a second), `scattering` (0 to 8,
+  default 1) and `quality` (`low` 24, `medium` 48, the default, or `high` 96 steps). It
+  needs the whole scene view: `ViewDepth::view`, the camera as seen on the canvas
+  (`CameraView::position`, `axes` and `principal`), and `ViewDepth::lights`, packed
+  into the shader as a `scene`-lit model's are (`SceneLighting`, the first 8 shading
+  lights, in the model's viewing frame); without the view it copies its input. One
+  draw (`volumetric/fog.wgsl`) marches each pixel's ray from `start_px` to its depth, or
+  `max_px` where nothing was drawn, in equal steps of distance, each sampled at a point
+  jittered per pixel and per frame (a seed from the clock's 60ths of a second). At each
+  step the extinction is `density / 1000` per pixel of ray, halving every `falloff_px`
+  above `base_y_px` and as dense below it, times `1 + noise (2n − 1)` for two octaves of
+  value noise that repeat every 256 features, drifted by `wind · seconds` wrapped to
+  that period in `f64` (`drift`). Its light is `color` plus `scattering` times each
+  light reaching the point (range falloff and cone as a model's, no surface), with a
+  Henyey-Greenstein phase of `g = 0.4` against an even one. It lays the light scattered
+  toward the camera over the picture times what the fog lets through, scaled by the
+  colour's alpha, source-over as `depth_fog` is.
 
 **Bounds.** Drop shadow, outline (outside), glow and bloom draw within their input's
 frame, as [ADR-0065](../../docs/adr/0065-scene-chains-and-item-effects.md) §5 has it for
@@ -1458,11 +1498,15 @@ through an off-axis camera, their mips rebuilt each frame as a live source's are
 (`composite_1080p_camera`), one sphere and one cube drawn into a 1080p layer and placed
 (`model_1080p`), a scene's view depth and `depth_fog` over the 3D scene's composite for
 4 and 16 cards, the scene itself drawn outside the loop (`depth_fog_1080p_camera`,
-ADR-0143), and
+ADR-0143), the same with `ambient_occlusion` at its defaults
+(`ambient_occlusion_1080p_camera`, ADR-0151), the same with `volumetric_fog` at its
+defaults and the camera's view (`volumetric_fog_1080p_camera`), and
 refilling a 1080p upload in place (`rewrite_rgba8_1080p`). On lavapipe on Linux (llvmpipe, LLVM
 20.1.2, 4 cores of a 2.3 GHz Xeon) the 3D scene took 16, 44 and 143 ms for 1, 4 and 16
 items against 9.6, 17 and 58 ms for the 2D submit, either model 22 ms, and depth with
-fog 31 and 48 ms for 4 and 16 cards. Run them with
+fog 31 and 48 ms for 4 and 16 cards, depth with ambient occlusion 47 and 67 ms, and
+with volumetric fog 541 and 545 ms, its 48 steps a pixel dominating on a CPU
+rasterizer (criterion's `--quick`). Run them with
 `cargo bench -p jstream-render --bench composite`, which takes the GPU when there is
 one; the `bench` workflow records them on lavapipe on every push to `main` ([R-GIT-003](../../docs/RULES.md#R-GIT-003)). A
 software adapter's numbers are CPU rasterisation: they track regressions in what the

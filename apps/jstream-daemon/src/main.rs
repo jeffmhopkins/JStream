@@ -291,6 +291,8 @@ fn run(mut options: Options) -> Result<(), Failure> {
     runtime.block_on(async {
         let stop = serve::shutdown_signal().context("could not install the Ctrl-C handler")?;
         let engine = serve::engine(&options, Arc::new(audit), youtube, &secrets)?;
+        // Kept to the end: dropping it closes the controller endpoints.
+        let _ptz_controllers = serve::ptz_controllers(&engine, &options)?;
         let ui_dir = options.ui_dir.as_deref().map(Path::new);
         let device_file = token::device_file(&path);
         // In the data folder, where the desktop app keeps them too, so both show the
