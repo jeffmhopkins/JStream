@@ -788,7 +788,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   sessions that turn VISCA into these actions (ADR-0123 §5). An endpoint stops the
   drives it started when its controller goes quiet, and `profile.get`'s
   `ptz_controllers` (protocol 0.120) counts what each answered and dropped
-  ([ADR-0153](adr/0153-ptz-controller-idle-stop-counters-and-setting.md)).
+  ([ADR-0153](adr/0153-ptz-controller-idle-stop-counters-and-setting.md)), and
+  `ptz_cameras` (0.122) how each head's link is doing
+  ([ADR-0154](adr/0154-ptz-cameras-counters-in-profile-get.md)).
 - **Stream keys** (protocol 0.7): the actions `output.set_key` and `output.clear_key`.
   A key is not collection state: it goes to the OS credential store and is write-only,
   never in a response, event, error, query or log ([R-SEC-001](RULES.md#R-SEC-001));

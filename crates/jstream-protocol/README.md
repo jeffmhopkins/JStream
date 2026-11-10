@@ -166,8 +166,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
-  0.113, `NetworkProfile` and `NetworkInputProfile`, and since 0.120
-  `PtzControllerProfile`, among them),
+  0.113, `NetworkProfile` and `NetworkInputProfile`, since 0.120
+  `PtzControllerProfile`, and since 0.122 `PtzCameraProfile`, among them),
   `quality.probe` (since 0.110, `quality.rs`: `ProbeStream`, `QualityProbeInfo` with its
   `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
   `MAX_PSNR_DB`), with `QueryResult`
@@ -342,7 +342,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.120 because `profile.get` counts each PTZ controller endpoint:
+`PROTOCOL_VERSION` is 0.122 because `profile.get` counts each PTZ camera's link:
+`ptz_cameras` (`PtzCameraProfile`,
+[ADR-0154](../../docs/adr/0154-ptz-cameras-counters-in-profile-get.md), #1423);
+0.120 because `profile.get` counts each PTZ controller endpoint:
 `ptz_controllers` (`PtzControllerProfile`,
 [ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md), #1181);
 0.119 because a box can face the camera: `ItemGeometry`'s
@@ -1757,7 +1760,14 @@ Queries read and never change `rev`. Those that read the collection state carry 
   lists each endpoint as a `PtzControllerProfile`, in the host's order: the `address`
   it listens on, its `transport` and `target`, and from when it opened the messages it
   `answered`, the datagrams and connections it dropped as `unallowed`, `malformed` or
-  `refused` (past its four connections), and its `idle_stops`.
+  `refused` (past its four connections), and its `idle_stops`. Since 0.122, `ptz_cameras`
+  (omitted while the machine has no PTZ camera,
+  [ADR-0154](../../docs/adr/0154-ptz-cameras-counters-in-profile-get.md)) lists each
+  camera as a `PtzCameraProfile`, in the list's order: its `camera` name, `address`,
+  `transport`, whether it is `reachable` (answered in the last three seconds), and from
+  when its thread started the messages `sent`, the `replies` read and the datagrams
+  `dropped`, the commands `resent` for want of a reply, those still `unanswered` after
+  that, those the head `refused`, and the times its command buffers were full (`busy`).
   Runtime state, so no `rev`. Added in 0.73.
 - `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
   frames its encoder was given

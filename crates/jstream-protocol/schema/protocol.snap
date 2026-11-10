@@ -11407,6 +11407,81 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PtzCameraProfile": {
+      "description": "One PTZ camera ([`ProfileInfo::ptz_cameras`], ADR-0146, ADR-0154): how its link to\nthe head is doing, counted from when its thread started.",
+      "properties": {
+        "address": {
+          "default": "",
+          "description": "The LAN address and port it is reached at, as `192.168.1.30:52381`.",
+          "type": "string"
+        },
+        "busy": {
+          "default": 0,
+          "description": "Times the head's command buffers were full, so a command waited for one to free.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "camera": {
+          "default": "",
+          "description": "Its name, as `ptz.*` actions and shots take it.",
+          "type": "string"
+        },
+        "dropped": {
+          "default": 0,
+          "description": "Datagrams dropped: from another address or port, or not a VISCA reply.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reachable": {
+          "default": false,
+          "description": "Whether it answered in the last three seconds.",
+          "type": "boolean"
+        },
+        "refused": {
+          "default": 0,
+          "description": "Commands the head refused with an error.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replies": {
+          "default": 0,
+          "description": "Replies read from it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resent": {
+          "default": 0,
+          "description": "Commands sent again because nothing answered in time (ADR-0153 §4).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sent": {
+          "default": 0,
+          "description": "Messages sent to it, commands and inquiries.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "transport": {
+          "default": "",
+          "description": "Its transport's name: `visca_ip`, `udp` or `tcp`.",
+          "type": "string"
+        },
+        "unanswered": {
+          "default": 0,
+          "description": "Commands nothing answered even when sent again.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "PtzControllerProfile": {
       "description": "One PTZ controller endpoint ([`ProfileInfo::ptz_controllers`], ADR-0152, ADR-0153):\nwhat it answered and what it dropped, counted from when it opened.",
       "properties": {
@@ -13588,6 +13663,13 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The CPU the engine's process used in the window, as a percentage of one core\n(200 is two cores busy), when the host can read it."
+            },
+            "ptz_cameras": {
+              "description": "The PTZ cameras on this machine's list (since 0.122, ADR-0154), in its order.\nLike `network`, each one's counts run from when its thread started, not over the\nwindow. Omitted when the list is empty.",
+              "items": {
+                "$ref": "#/$defs/PtzCameraProfile"
+              },
+              "type": "array"
             },
             "ptz_controllers": {
               "description": "The PTZ controller endpoints the host opened (since 0.120, ADR-0153), in its\norder. Like `network`, each one's counts run from when it opened, not over the\nwindow. Omitted when none is open.",
@@ -15990,5 +16072,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.120"
+  "title": "JStream protocol 0.122"
 }

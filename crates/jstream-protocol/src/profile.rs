@@ -83,6 +83,40 @@ pub struct ProfileInfo {
     /// window. Omitted when none is open.
     #[serde(skip_serializing_if = "Vec::is_empty")]
     pub ptz_controllers: Vec<PtzControllerProfile>,
+    /// The PTZ cameras on this machine's list (since 0.122, ADR-0154), in its order.
+    /// Like `network`, each one's counts run from when its thread started, not over the
+    /// window. Omitted when the list is empty.
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub ptz_cameras: Vec<PtzCameraProfile>,
+}
+
+/// One PTZ camera ([`ProfileInfo::ptz_cameras`], ADR-0146, ADR-0154): how its link to
+/// the head is doing, counted from when its thread started.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(default)]
+pub struct PtzCameraProfile {
+    /// Its name, as `ptz.*` actions and shots take it.
+    pub camera: String,
+    /// The LAN address and port it is reached at, as `192.168.1.30:52381`.
+    pub address: String,
+    /// Its transport's name: `visca_ip`, `udp` or `tcp`.
+    pub transport: String,
+    /// Whether it answered in the last three seconds.
+    pub reachable: bool,
+    /// Messages sent to it, commands and inquiries.
+    pub sent: u64,
+    /// Replies read from it.
+    pub replies: u64,
+    /// Datagrams dropped: from another address or port, or not a VISCA reply.
+    pub dropped: u64,
+    /// Commands sent again because nothing answered in time (ADR-0153 §4).
+    pub resent: u64,
+    /// Commands nothing answered even when sent again.
+    pub unanswered: u64,
+    /// Commands the head refused with an error.
+    pub refused: u64,
+    /// Times the head's command buffers were full, so a command waited for one to free.
+    pub busy: u64,
 }
 
 /// One PTZ controller endpoint ([`ProfileInfo::ptz_controllers`], ADR-0152, ADR-0153):

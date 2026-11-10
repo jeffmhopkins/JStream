@@ -166,4 +166,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0151](0151-the-rest-of-richer-3d-scenes.md) | Shadows, reflections, occlusion, volumetric fog, depth-aware bloom, a scene environment, lit cards, billboards and model animation | accepted | agent |  |
 | [ADR-0152](0152-a-ptz-controller-drives-scene-cameras.md) | A PTZ controller drives scene cameras: a live aim, its actions, and VISCA endpoints | accepted | agent |  |
 | [ADR-0153](0153-ptz-controller-idle-stop-counters-and-setting.md) | A PTZ controller's idle stop, its counters, the desktop app's setting, and a resent command | accepted | agent |  |
+| [ADR-0154](0154-ptz-cameras-counters-in-profile-get.md) | The PTZ cameras' counters in profile.get | accepted | agent |  |
 <!-- @generated end adr-index -->

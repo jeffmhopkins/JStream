@@ -2198,7 +2198,11 @@ impl Engine {
             let inputs = drops::lock_ledger(&self.drops).input_totals();
             let mut profile = self.shared.profile.profile(*seconds, *top, cpu, inputs);
             profile.network = self.jtunnel_profile();
-            profile.warm = lock(&self.shared.state).warm.report().to_vec();
+            {
+                let state = lock(&self.shared.state);
+                profile.warm = state.warm.report().to_vec();
+                profile.ptz_cameras = state.ptz.profile();
+            }
             profile.ptz_controllers = self.ptz_controller_profile();
             Ok(CallResult::Query {
                 result: QueryResult::ProfileGet {
