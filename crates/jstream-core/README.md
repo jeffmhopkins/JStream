@@ -1395,7 +1395,7 @@ other is with no blur, [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md))
 a 2D one moves too ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)):
 `Planner::track_cameras` takes the canvas's framing camera for the 2D end, which draws
 it as 2D does, unless `Planner::transition` finds an item on the 2D side that the
-framing camera would draw differently (tilted, turned or pushed in depth,
+framing camera would draw differently (tilted, turned, pushed in depth or a billboard,
 `framed_alike`), in which case it plans a Fade of the same duration, its sides planned
 again unflattened as a Fade's are; the engine no longer fades such a switch up front. A Fade
 keeps each side's own camera on its items. A keyframe of a 2D scene may have a camera
@@ -1924,7 +1924,10 @@ stacking order, whether it copies the scene whole or plans it as a transition's 
 model stays lit through a switch (`a_scene_lit_model_stays_lit_through_a_transition`).
 `scene_lights` takes each of them with its live values and
 motion applied, at the centre of its box and shining out of its back
-(`ItemGeometry::light_pose`), at its intensity times its opacity. The renderer lights the
+(`ItemGeometry::light_pose_seen` through the scene camera's view, so a billboard light
+turns with its box to face the camera and shines away from it,
+[ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 2), at its
+intensity times its opacity. The renderer lights the
 model with the first 8 point, spot and directional ones and every ambient one; a scene
 with more is logged once (`Chains::lights_warned`). A light placed without a box has no
 position and is left out. In a 2D scene a `scene`-lit model is studio-lit

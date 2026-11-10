@@ -363,6 +363,36 @@ pub(super) fn item_origin(geometry: ItemGeometry) -> [f64; 3] {
 }
 
 impl ItemGeometry {
+    /// This geometry as `view` sees it (ADR-0151 decision 2): for a [`Self::billboard`],
+    /// its `turn_deg` and `tilt_deg` replaced by the ones that point its front, `+z` in
+    /// its own frame, at the camera's position; any other geometry as it is. A billboard
+    /// whose centre is at the camera keeps its own angles.
+    #[must_use]
+    pub fn facing(self, view: &CameraView) -> Self {
+        if !self.billboard {
+            return self;
+        }
+        let to_camera = sub(view.position, item_origin(self));
+        let len = length(to_camera);
+        if len.is_nan() || len <= 1e-9 {
+            return self;
+        }
+        let [x, y, z] = to_camera.map(|c| c / len);
+        // The front normal after ADR-0022's rotations is
+        // `(sin turn, −cos turn · sin tilt, cos turn · cos tilt)`.
+        let turn = x.atan2(y.hypot(z)).to_degrees();
+        let tilt = (-y).atan2(z).to_degrees();
+        let (Some(turn), Some(tilt)) = (Finite32::new(turn as f32), Finite32::new(tilt as f32))
+        else {
+            return self;
+        };
+        Self {
+            turn_deg: turn,
+            tilt_deg: tilt,
+            ..self
+        }
+    }
+
     /// The box's projected corners through `view`, or as [`Self::project`] gives them
     /// with no view. A corner in front of the camera but behind its near plane is
     /// [`Placed::BehindViewer`].
