@@ -309,6 +309,17 @@ fn an_animation_plays_on_the_media_clock_loops_or_holds_and_a_wrong_name_is_refu
     still.frame(ms(1000)).expect("a frame");
     let rest = still.model().expect("a model").pose.expect("at rest");
     assert_eq!(rest[0][12], 0.0);
+    // The source's own descriptor names the file's animations.
+    let mut described = ModelKind::new().descriptor().clone();
+    still.describe(&mut described);
+    let animation = described.param("animation").expect("the setting");
+    assert!(
+        animation
+            .description
+            .as_deref()
+            .is_some_and(|d| d.ends_with("This file's animations: slide.")),
+        "{animation:?}"
+    );
     // A name the file lacks is refused with the names it has.
     let err = create(
         json!({ "file": file("set/slide.gltf"), "animation": "walk" }),

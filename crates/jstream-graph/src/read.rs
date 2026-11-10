@@ -31,7 +31,7 @@ impl Graph {
             Query::ItemList { scene_id } => self.item_list(scene_id),
             Query::StateGet => Ok(self.state_get()),
             Query::KindList => Ok(self.kind_list()),
-            Query::KindDescribe { kind_id } => self.kind_describe(kind_id),
+            Query::KindDescribe { kind_id, .. } => self.kind_describe(kind_id),
             Query::OutputList => Ok(self.output_list()),
             Query::EncoderList => Ok(self.encoder_list()),
             Query::VideoMixList => Ok(self.video_mix_list()),
@@ -496,7 +496,12 @@ mod tests {
             .collect();
         expected.sort_by(|a, b| a.kind_id.cmp(&b.kind_id));
         assert_eq!(kinds, expected);
-        let describe = |id: &str| graph.query(&Query::KindDescribe { kind_id: id.into() });
+        let describe = |id: &str| {
+            graph.query(&Query::KindDescribe {
+                kind_id: id.into(),
+                source_id: None,
+            })
+        };
         let Some(Ok(QueryResult::KindDescribe {
             kind,
             settings_schema,

@@ -193,17 +193,28 @@ fn PropertiesBody(
         }
     });
 
+    // A model's own descriptor names its file's animations (ADR-0151 decision 7).
+    let own = RwSignal::new(None::<KindDescriptor>);
     if let Some(s) = session.get() {
         let kind_id = kind_id.clone();
+        let source_id = source_id.clone();
         spawn_local(async move {
             if let Err(error) = studio.descriptor(&s, &kind_id).await {
                 problem.try_set(Some(error.to_string()));
+            }
+            if kind_id == "model"
+                && let Ok(kind) = studio.source_descriptor(&s, &kind_id, &source_id).await
+            {
+                own.try_set(Some(kind));
             }
         });
     }
     let descriptor = {
         let kind_id = kind_id.clone();
-        move || studio.descriptors.with(|d| d.get(&kind_id).cloned())
+        move || {
+            own.get()
+                .or_else(|| studio.descriptors.with(|d| d.get(&kind_id).cloned()))
+        }
     };
     // Shows the draft's live settings on output: the first opens the gesture.
     let show_live = StoredValue::new({

@@ -4308,6 +4308,7 @@ mod tests {
         );
         let describe = Query::KindDescribe {
             kind_id: "color".into(),
+            source_id: None,
         };
         let refused = query(&*control, describe).expect_err("kind.describe");
         assert!(

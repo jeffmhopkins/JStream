@@ -5750,6 +5750,39 @@ impl State {
                 }
                 QueryResult::KindList { kinds }
             }
+            // A source's own additions to its kind (ADR-0151 decision 7).
+            Some(Ok(QueryResult::KindDescribe {
+                mut kind,
+                settings_schema,
+            })) => {
+                if let Query::KindDescribe {
+                    kind_id,
+                    source_id: Some(source_id),
+                } = query
+                {
+                    let source = self.graph.state().source(source_id).ok_or_else(|| {
+                        ProtocolError::NotFound {
+                            entity: jstream_protocol::EntityKind::Source,
+                            id: source_id.to_string(),
+                        }
+                    })?;
+                    let same = matches!(
+                        source.kind(),
+                        jstream_protocol::SourceKind::Builtin { kind } if kind == kind_id
+                    );
+                    if !same {
+                        return Err(ProtocolError::invalid_argument(
+                            "source_id",
+                            format!("source `{source_id}` is not a `{kind_id}`"),
+                        ));
+                    }
+                    self.live.describe(source_id, &mut kind);
+                }
+                QueryResult::KindDescribe {
+                    kind,
+                    settings_schema,
+                }
+            }
             Some(result) => result?,
             None => match query {
                 // `key_set` and the encoder session are filled in after the lock is

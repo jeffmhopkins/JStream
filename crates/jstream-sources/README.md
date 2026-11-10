@@ -341,7 +341,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   clock since the source started, looped over the clip or held at its end, so every
   machine shows the same pose at the same time and a restart starts it again;
   `ShownModel::pose` is that palette, the rest pose's while no clip plays, and
-  `next_change` asks for the next program frame while it moves. Its frame is a transparent stand-in at the model's bounds, the
+  `next_change` asks for the next program frame while it moves. `Source::describe` (a
+  no-op by default) lets a running source add to its kind's descriptor; a model's adds
+  its file's animation names to `animation`'s description, which `kind.describe` with
+  its `source_id` returns (#1497). Its frame is a transparent stand-in at the model's bounds, the
   longer side 512 px (`NATURAL_SIDE`), which is the size a new item takes, and
   `Source::model` hands the engine the model, which an item draws in the stand-in's
   place (`jstream-core`'s README).

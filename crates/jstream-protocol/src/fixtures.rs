@@ -1903,6 +1903,11 @@ pub(crate) fn queries() -> Vec<Query> {
         Query::KindList,
         Query::KindDescribe {
             kind_id: "color".into(),
+            source_id: None,
+        },
+        Query::KindDescribe {
+            kind_id: "model".into(),
+            source_id: Some(SourceId::new("src_robot")),
         },
         Query::OutputList,
         Query::StudioGet,
