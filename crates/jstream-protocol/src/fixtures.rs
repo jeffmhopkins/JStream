@@ -2241,6 +2241,19 @@ fn profile_info() -> ProfileInfo {
             refused: 0,
             idle_stops: 1,
         }],
+        ptz_cameras: vec![crate::PtzCameraProfile {
+            camera: "Stage left".into(),
+            address: "192.168.1.30:52381".into(),
+            transport: "visca_ip".into(),
+            reachable: true,
+            sent: 2_410,
+            replies: 4_790,
+            dropped: 0,
+            resent: 2,
+            unanswered: 0,
+            refused: 1,
+            busy: 3,
+        }],
     }
 }
 

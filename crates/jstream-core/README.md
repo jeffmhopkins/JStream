@@ -459,7 +459,10 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   it stops (the host replaced or emptied the list, or the engine shut down) it sends a
   pan-tilt, zoom and focus stop. It reads only replies from the camera's address and
   port and VISCA address, and drops and counts the rest. `ptz.list` reports each head's last pose, last error,
-  counters, and whether it answered in the last three seconds. The control side (`Ptz`)
+  counters, and whether it answered in the last three seconds; `profile.get`'s
+  `ptz_cameras` reports the same link, with the commands resent, left unanswered,
+  refused and met by full buffers
+  ([ADR-0155](../../docs/adr/0155-ptz-cameras-counters-in-profile-get.md)). The control side (`Ptz`)
   sits under the engine lock and only sends on channels: the `ptz.*` actions (it keeps
   the client whose drive set each camera moving, and `forget_client` stops the camera
   when that session ends), and the
@@ -863,8 +866,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   does and answers inquiries with its pose; each transport aiming the head and its
   pose reaching `ptz.list`; actions becoming the VISCA commands ADR-0146 names; a
   queued drive replacing the one before it; the checks and refusals; a reply from
-  another address dropped and counted, and a silent head reported; the daemon's camera
-  syntax; the speed curve; and through the engine, the actions and the list, program
+  another address dropped and counted, and a silent head reported, with its resent and
+  unanswered command in `ptz_cameras` (ADR-0155); the daemon's camera
+  syntax; the speed curve; and through the engine, the actions, the list and
+  `profile.get`'s `ptz_cameras` (listed while the head runs, then gone), program
   switches firing shots (a keyframe scene's over its parent's, a camera not listed
   skipped, a longer transition pacing a pose), and a preview moving only the cameras
   the program doesn't frame.
@@ -3634,7 +3639,7 @@ tap lock (`ProbeTap`) is a leaf: the probe takes it with no engine lock held, an
 render thread only tries it. The PTZ heads work
 the same way as the camera controls (ADR-0146): actions and shots go to each `jstream-ptz` thread over a channel,
 sent under the collection lock, and a head's status is a leaf mutex its thread takes
-alone and `ptz.list` takes under the collection lock; the thread holds no engine lock
+alone and `ptz.list` and `profile.get` take under the collection lock; the thread holds no engine lock
 while it sends or waits for a reply. A PTZ controller endpoint's thread is a client:
 each message it translates is a call on its session, which takes the collection lock
 as any call does, and it holds no lock while it waits on its socket. The engine's list

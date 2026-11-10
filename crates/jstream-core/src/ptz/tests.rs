@@ -95,7 +95,7 @@ impl HeadState {
 
 /// An emulated VISCA head on loopback, until dropped.
 pub(crate) struct FakeHead {
-    addr: SocketAddr,
+    pub(crate) addr: SocketAddr,
     transport: PtzTransport,
     state: Arc<Mutex<HeadState>>,
     stop: Arc<AtomicBool>,
@@ -621,6 +621,14 @@ fn foreign_replies_are_dropped_and_silence_is_reported() {
     assert!(!info.reachable);
     assert_eq!(info.pose, None);
     assert_eq!(info.error.as_deref(), Some("no reply"));
+    // `profile.get` says why (ADR-0155): the home went twice, and nothing answered.
+    let profile = ptz.profile().remove(0);
+    assert_eq!(profile.camera, "mute");
+    assert_eq!(profile.transport, "udp");
+    assert!(!profile.reachable);
+    assert_eq!((profile.resent, profile.unanswered), (1, 1), "{profile:?}");
+    assert_eq!((profile.refused, profile.busy), (0, 0));
+    assert_eq!(profile.dropped, info.dropped);
 }
 
 /// The daemon's syntax, and the checks on a camera and a list.
