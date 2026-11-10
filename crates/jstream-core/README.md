@@ -477,7 +477,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   `studio.get` says is on program or preview), answering inquiries from
   `scene.camera_aim` in its own units (16 counts a degree; zoom 0 to 16384). Its
   presets are aims it holds in memory. It notes which axes its own drives left moving,
-  and stops them once no allowed controller has been heard for `IDLE_STOP` (5 s), or
+  on every scene's camera it drove (a cut on a program or preview target leaves the
+  earlier scene's on the list), and stops them once no allowed controller has been heard for `IDLE_STOP` (5 s), or
   when a TCP endpoint's last connection closes
   ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
   §1). It counts what it answered, what it dropped (an address not allowed, not VISCA,
@@ -873,7 +874,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   to what isn't VISCA, a message to another address ignored; the allowlist dropping an
   address not on it; program and preview targets following the studio; an endpoint's
   drive stopping when it closes, when its controller goes quiet (only the axes its own
-  drive left moving) and when a TCP controller hangs up, with `profile.get` counting it;
+  drive left moving, on the scene cut away from too) and when a TCP controller hangs up, with `profile.get` counting it;
   the daemon's endpoint syntax and setup checks. The aim
   itself: the turn, tilt limit and zoom on a camera, the speed curves, a drive to its
   limit, a glide arriving on every axis together, a drive stopping with its session; and

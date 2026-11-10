@@ -35,14 +35,14 @@ decisions 5, 6 and 10, and ADR-0146's command exchange.
 <a id="decision"></a>
 ## Decision
 1. **A quiet controller's drive stops.** An endpoint notes which axes its own drives
-   left moving, and on which scene's camera.
+   left moving, on each scene's camera it drove.
    - **Quiet:** when it has heard nothing from an allowed controller for 5 seconds, it
      stops those axes, as a head stops when its controller cable is pulled. Any
      message keeps a drive going, an inquiry included.
    - **TCP:** an endpoint stops them at once when its last connection closes.
    - **What clears an axis:** a drive at 0, or an aim that sets it, clears it from the
-     endpoint's list. A drive on another scene's camera leaves the first camera's to its
-     limits.
+     endpoint's list. A drive on another scene's camera clears nothing: a program or
+     preview target that drove one scene, then another after a cut, stops both.
 
    This replaces ADR-0152 decision 5's "without a stop, a drive ends at its axis's
    limit" for drives from an endpoint. 5 seconds is longer than a controller usually

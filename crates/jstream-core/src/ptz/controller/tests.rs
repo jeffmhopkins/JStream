@@ -612,7 +612,10 @@ fn a_quiet_controllers_drive_stops() {
     // An aim on pan and tilt takes those axes over; the zoom drive is still this
     // endpoint's to stop.
     send(&mut t, Command::Home);
-    assert_eq!(t.driving, Some((SceneId::new("a"), [false, false, true])));
+    assert_eq!(
+        t.driving,
+        BTreeMap::from([(SceneId::new("a"), [false, false, true])])
+    );
     assert!(t.stop_if_idle(now + IDLE_STOP), "quiet for IDLE_STOP");
     let aim = settled(&engine, "a", |_| true);
     assert!(aim.zoom.get() > 1.0, "{aim:?}");
@@ -620,7 +623,75 @@ fn a_quiet_controllers_drive_stops() {
     // A drive that is stopped by the controller itself leaves nothing to stop either.
     send(&mut t, Command::Zoom(Drive::Minus(None)));
     send(&mut t, Command::Zoom(Drive::Stop));
-    assert_eq!(t.driving, None);
+    assert!(t.driving.is_empty());
+}
+
+/// #1496 review N2: a program target that drives one scene, then another after a cut,
+/// stops both when its controller goes quiet.
+#[test]
+fn a_drive_left_moving_before_a_cut_still_stops() {
+    let engine = engine();
+    let control = engine.connect();
+    block_on(control.hello(Hello {
+        protocol: PROTOCOL_VERSION,
+        client_name: "PTZ controller test".into(),
+    }))
+    .expect("hello");
+    let mut t = Translator::new(
+        control,
+        &endpoint(PtzTransport::ViscaIp, PtzControllerTarget::Program),
+    );
+    let one = Address::new(1).expect("1");
+    let pan_right = Command::PanTiltDrive {
+        pan_speed: 1,
+        tilt_speed: 1,
+        pan: Pan::Right,
+        tilt: Tilt::Stop,
+    };
+    let now = Instant::now();
+    t.heard(now);
+    assert_eq!(
+        t.handle(pan_right.encode(one).expect("encodes").as_slice())
+            .iter()
+            .map(|b| b.as_slice().to_vec())
+            .collect::<Vec<_>>(),
+        done()
+    );
+    // Cut: scene `c` (3D, its own camera) goes on program; `a` keeps panning.
+    let studio = connected(&engine);
+    batch(
+        &studio,
+        edits(vec![
+            create("c"),
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("c"),
+                camera: Some(SceneCamera::framing(Canvas::DEFAULT)),
+            },
+        ]),
+    )
+    .expect("scene c");
+    block_on(studio.call(Call::Action {
+        action: Action::SceneSwitch {
+            scene_id: SceneId::new("c"),
+            preset_id: None,
+        },
+    }))
+    .expect("cut");
+    assert_eq!(
+        t.handle(pan_right.encode(one).expect("encodes").as_slice())
+            .iter()
+            .map(|b| b.as_slice().to_vec())
+            .collect::<Vec<_>>(),
+        done()
+    );
+    assert!(aim_of(&engine, "a").moving && aim_of(&engine, "c").moving);
+    assert_eq!(t.driving.len(), 2);
+    assert!(t.stop_if_idle(now + IDLE_STOP));
+    assert!(
+        !aim_of(&engine, "a").moving,
+        "the scene cut away from stops too"
+    );
+    assert!(!aim_of(&engine, "c").moving);
 }
 
 /// ADR-0153 §1 and §2: a TCP controller's drive stops when its last connection closes,

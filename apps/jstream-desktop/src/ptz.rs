@@ -9,7 +9,7 @@
 //!   `{"on": true, "endpoints": [{"address": "192.168.1.20:52381", "transport":
 //!   "visca_ip", "visca": 1, "target": "program"}], "allow": ["192.168.1.50"]}`. Only the
 //!   person changes it, from the app's own window: the page calls `set_ptz_controllers`
-//!   through `setPtzControllers` on `__JSTREAM_DESKTOP__` (`bootstrap.rs`), a Tauri
+//!   through `setPtz` on `__JSTREAM_DESKTOP__` (`bootstrap.rs`), a Tauri
 //!   command no engine client (an agent, a plugin or a paired device) can reach. Per
 //!   machine, never in the collection. A missing or unreadable file means off. It takes
 //!   effect when the app next starts.

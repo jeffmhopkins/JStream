@@ -634,9 +634,10 @@ struct Translator {
     /// The position width the controller sent last, which position answers use.
     width: PositionWidth,
     presets: BTreeMap<u8, Preset>,
-    /// The scene whose camera this endpoint last drove, and which of its axes (pan,
-    /// tilt, zoom) that drive left moving.
-    driving: Option<(SceneId, [bool; 3])>,
+    /// Each scene whose camera this endpoint's drives left moving, with which of its
+    /// axes (pan, tilt, zoom) still move. A program or preview target can drive one
+    /// scene, then another after a cut, so every one is kept until stopped.
+    driving: BTreeMap<SceneId, [bool; 3]>,
     /// When an allowed controller was last heard.
     last_heard: Instant,
 }
@@ -652,7 +653,7 @@ impl Translator {
             visca: Address::new(c.visca).unwrap_or(Address::BROADCAST),
             width: PositionWidth::default(),
             presets: BTreeMap::new(),
-            driving: None,
+            driving: BTreeMap::new(),
             last_heard: Instant::now(),
         }
     }
@@ -668,20 +669,21 @@ impl Translator {
         now.saturating_duration_since(self.last_heard) >= IDLE_STOP && self.stop_drives()
     }
 
-    /// Stops the axes this endpoint's drive left moving. Returns whether any were.
+    /// Stops the axes this endpoint's drives left moving, on every scene's camera.
+    /// Returns whether any were.
     fn stop_drives(&mut self) -> bool {
-        let Some((scene_id, [pan, tilt, zoom])) = self.driving.take() else {
-            return false;
-        };
+        let driving = std::mem::take(&mut self.driving);
         let stop = |moving: bool| moving.then_some(0);
-        // A camera that is gone has nothing left to stop.
-        let _ = self.act(Action::SceneDriveCamera {
-            scene_id,
-            pan: stop(pan),
-            tilt: stop(tilt),
-            zoom: stop(zoom),
-        });
-        true
+        for (scene_id, [pan, tilt, zoom]) in &driving {
+            // A camera that is gone has nothing left to stop.
+            let _ = self.act(Action::SceneDriveCamera {
+                scene_id: scene_id.clone(),
+                pan: stop(*pan),
+                tilt: stop(*tilt),
+                zoom: stop(*zoom),
+            });
+        }
+        !driving.is_empty()
     }
 
     fn reply(&self, reply: Reply<'_>) -> Option<jstream_visca::Bytes> {
@@ -810,20 +812,17 @@ impl Translator {
 
     /// Notes which axes of `scene_id`'s camera now move from this endpoint's drive:
     /// `Some(true)` an axis it set moving, `Some(false)` one it stopped or aimed, `None`
-    /// one it left alone. A drive on another scene's camera leaves the first one's to
-    /// its own limits, as a head does.
+    /// one it left alone. Another scene's camera keeps what it had, so a drive left
+    /// moving before a cut still stops (#1496 review N2).
     fn moved(&mut self, scene_id: &SceneId, axes: [Option<bool>; 3]) {
-        let mut moving = match self.driving.take() {
-            Some((driven, moving)) if driven == *scene_id => moving,
-            _ => [false; 3],
-        };
+        let mut moving = self.driving.remove(scene_id).unwrap_or([false; 3]);
         for (now, set) in moving.iter_mut().zip(axes) {
             if let Some(set) = set {
                 *now = set;
             }
         }
         if moving.iter().any(|m| *m) {
-            self.driving = Some((scene_id.clone(), moving));
+            self.driving.insert(scene_id.clone(), moving);
         }
     }
 
