@@ -829,6 +829,115 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Drives a scene's camera (ADR-0152, since 0.118), as `ptz.drive` drives a head:\npans, tilts and zooms its live aim at signed speeds in VISCA steps until the next\ndrive, where 0 stops that axis and an axis left out keeps moving as it was (so a\ncontroller's joystick and zoom rocker drive apart). `pan` is -24 to 24 (negative left), `tilt` -23\nto 23 (negative down), `zoom` -8 to 8 (negative wide). The aim stops at its\nlimits (`MAX_AIM_PAN_DEG`, `MAX_AIM_TILT_DEG`, `MAX_AIM_ZOOM`). Not an edit:\nnothing is stored or undone, and the aim is the stored camera again when the\nengine restarts. A drive belongs to the session that sent it: when that session\nends, the camera stops where it is. `not_found` for a scene that doesn't exist,\n`action_failed` for one that draws through no camera, and `invalid_argument` for\na speed out of range. A keyframe scene drives its family's camera.",
+          "properties": {
+            "pan": {
+              "description": "Pan speed: negative left, positive right, 0 stops. Omitted keeps the pan.",
+              "format": "int8",
+              "maximum": 127,
+              "minimum": -128,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene whose camera to drive: a keyframe scene drives its family's."
+            },
+            "tilt": {
+              "description": "Tilt speed: negative down, positive up, 0 stops. Omitted keeps the tilt.",
+              "format": "int8",
+              "maximum": 127,
+              "minimum": -128,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "type": {
+              "const": "scene.drive_camera",
+              "type": "string"
+            },
+            "zoom": {
+              "description": "Zoom speed: negative wide, positive tele, 0 stops. Omitted keeps the zoom.",
+              "format": "int8",
+              "maximum": 127,
+              "minimum": -128,
+              "type": [
+                "integer",
+                "null"
+              ]
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves a scene camera's live aim to an absolute pan, tilt and zoom (ADR-0152, since\n0.118), each optional, at least one, gliding at `speed` (1 to 24, the fastest by\ndefault). The aim `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera\nitself: its home. It stops a drive on the axes it sets. Fails as\n`scene.drive_camera` does, and with `invalid_argument` for an aim\n`CameraAim::problem` refuses or an empty one.",
+          "properties": {
+            "pan_deg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Pan from the stored camera's view, in degrees, -170 to 170, positive to the right."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene whose camera to aim: a keyframe scene aims its family's."
+            },
+            "speed": {
+              "description": "How fast to glide there, 1 to 24. Omitted for the fastest.",
+              "format": "uint8",
+              "maximum": 255,
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "tilt_deg": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Tilt from the stored camera's view, in degrees, -89 to 89, positive up."
+            },
+            "type": {
+              "const": "scene.aim_camera",
+              "type": "string"
+            },
+            "zoom": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/Finite32"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Zoom, 1 (the stored camera's field of view) to 8 (an eighth as wide)."
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Fires an item's motion modifiers on the `triggered` clock (ADR-0099, #1107),\nsince 0.84: the one `modifier_id` names, or every one on the item when it is\nomitted. Each starts again from its beginning, so firing one while it runs\nrestarts it. The fire is runtime state like the program scene: it changes no\n`rev`, is never undone and emits nothing; the item moves on every mix that draws\nit. A modifier on a group's item moves the whole group. Firing a modifier the\nitem doesn't hold, or one on another clock, does nothing, since a keyframe scene\ncan override the list it fires. Fails with `not_found` for an item not in the\ncollection, and with `invalid_argument` for a malformed `modifier_id`.",
           "properties": {
             "item_id": {
@@ -7984,6 +8093,10 @@ source: crates/jstream-protocol/src/fixtures.rs
     "ItemGeometry": {
       "description": "Where a scene item sits on the canvas: its box, the fit of the source inside that\nbox, and the 3D placement ADR-0022 defines.\n\n`center`, `size` and `rotation_deg` alone define the box, so selection handles need\nno source size. The 3D fields default to neutral (no tilt, turn or depth, and no\nperspective). From protocol 0.34 the engine accepts and draws any 3D it can draw\n([`Self::drawn_polygon`], [`Self::check_drawable`], ADR-0050); earlier minors\nrejected a non-neutral value, and [`Self::is_neutral_3d`] was that check. A negative\n`size` is rejected, not read as a flip: [`Self::flip_h`] and [`Self::flip_v`] mirror\nthe content instead, the additive booleans ADR-0022 reserved.\n\nEvery number is a [`Finite32`]. On the wire, omitted `fit_mode` and angles mean the\ndefaults below, omitted `perspective_px` means orthographic, and omitted flips mean\n`false`. A flip that is `false` is not written.",
       "properties": {
+        "billboard": {
+          "description": "In a 3D scene, the box turns about its centre to face the camera (ADR-0151\ndecision 2): its `turn_deg` and `tilt_deg` are replaced by the ones that point its\nfront at the camera's position, and `rotation_deg` still rolls it. Nothing in a\n2D scene.",
+          "type": "boolean"
+        },
         "center": {
           "$ref": "#/$defs/Vec2",
           "description": "Centre of the box, in canvas pixels."
@@ -11294,6 +11407,137 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "PtzCameraProfile": {
+      "description": "One PTZ camera ([`ProfileInfo::ptz_cameras`], ADR-0146, ADR-0155): how its link to\nthe head is doing, counted from when its thread started.",
+      "properties": {
+        "address": {
+          "default": "",
+          "description": "The LAN address and port it is reached at, as `192.168.1.30:52381`.",
+          "type": "string"
+        },
+        "busy": {
+          "default": 0,
+          "description": "Times the head's command buffers were full, so a command waited for one to free.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "camera": {
+          "default": "",
+          "description": "Its name, as `ptz.*` actions and shots take it.",
+          "type": "string"
+        },
+        "dropped": {
+          "default": 0,
+          "description": "Datagrams dropped: from another address or port, or not a VISCA reply.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reachable": {
+          "default": false,
+          "description": "Whether it answered in the last three seconds.",
+          "type": "boolean"
+        },
+        "refused": {
+          "default": 0,
+          "description": "Commands the head refused with an error.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "replies": {
+          "default": 0,
+          "description": "Replies read from it.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "resent": {
+          "default": 0,
+          "description": "Commands sent again because nothing answered in time (ADR-0153 §4).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "sent": {
+          "default": 0,
+          "description": "Messages sent to it, commands and inquiries.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "transport": {
+          "default": "",
+          "description": "Its transport's name: `visca_ip`, `udp` or `tcp`.",
+          "type": "string"
+        },
+        "unanswered": {
+          "default": 0,
+          "description": "Commands nothing answered even when sent again.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
+    "PtzControllerProfile": {
+      "description": "One PTZ controller endpoint ([`ProfileInfo::ptz_controllers`], ADR-0152, ADR-0153):\nwhat it answered and what it dropped, counted from when it opened.",
+      "properties": {
+        "address": {
+          "default": "",
+          "description": "The address and port it listens on, as `192.168.1.20:52381`.",
+          "type": "string"
+        },
+        "answered": {
+          "default": 0,
+          "description": "VISCA messages it answered.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "idle_stops": {
+          "default": 0,
+          "description": "Drives it stopped because its controller went quiet (ADR-0153 §1).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "malformed": {
+          "default": 0,
+          "description": "Datagrams that aren't VISCA over IP, which it dropped.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "refused": {
+          "default": 0,
+          "description": "Connections it refused because it already held as many as it takes.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "target": {
+          "default": "",
+          "description": "What it drives: `program`, `preview` or `scene:<scene id>`.",
+          "type": "string"
+        },
+        "transport": {
+          "default": "",
+          "description": "Its transport's name: `visca_ip`, `udp` or `tcp`.",
+          "type": "string"
+        },
+        "unallowed": {
+          "default": 0,
+          "description": "Datagrams and connections from an address it doesn't allow, which it dropped.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        }
+      },
+      "type": "object"
+    },
     "PtzFocus": {
       "description": "What `ptz.focus` does.",
       "oneOf": [
@@ -11868,6 +12112,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           },
           "required": [
             "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom\n`scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether\none is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its\nhome, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.",
+          "properties": {
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene whose camera to read: a keyframe scene reads its family's."
+            },
+            "type": {
+              "const": "scene.camera_aim",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
           ],
           "type": "object"
         },
@@ -13008,6 +13270,39 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "The result of `scene.camera_aim`.",
+          "properties": {
+            "moving": {
+              "description": "Whether a drive or an aim is moving it.",
+              "type": "boolean"
+            },
+            "pan_deg": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Pan from the stored camera's view, in degrees, positive to the right."
+            },
+            "tilt_deg": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Tilt from the stored camera's view, in degrees, positive up."
+            },
+            "type": {
+              "const": "scene.camera_aim",
+              "type": "string"
+            },
+            "zoom": {
+              "$ref": "#/$defs/Finite32",
+              "description": "Zoom, 1 to 8."
+            }
+          },
+          "required": [
+            "type",
+            "pan_deg",
+            "tilt_deg",
+            "zoom",
+            "moving"
+          ],
+          "type": "object"
+        },
+        {
           "description": "The result of `jtunnel.senders`.",
           "properties": {
             "on": {
@@ -13368,6 +13663,20 @@ source: crates/jstream-protocol/src/fixtures.rs
                 }
               ],
               "description": "The CPU the engine's process used in the window, as a percentage of one core\n(200 is two cores busy), when the host can read it."
+            },
+            "ptz_cameras": {
+              "description": "The PTZ cameras on this machine's list (since 0.121, ADR-0155), in its order.\nLike `network`, each one's counts run from when its thread started, not over the\nwindow. Omitted when the list is empty.",
+              "items": {
+                "$ref": "#/$defs/PtzCameraProfile"
+              },
+              "type": "array"
+            },
+            "ptz_controllers": {
+              "description": "The PTZ controller endpoints the host opened (since 0.120, ADR-0153), in its\norder. Like `network`, each one's counts run from when it opened, not over the\nwindow. Omitted when none is open.",
+              "items": {
+                "$ref": "#/$defs/PtzControllerProfile"
+              },
+              "type": "array"
             },
             "seconds": {
               "$ref": "#/$defs/Finite32",
@@ -15763,5 +16072,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.117"
+  "title": "JStream protocol 0.121"
 }

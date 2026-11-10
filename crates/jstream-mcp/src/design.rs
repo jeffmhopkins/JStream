@@ -223,6 +223,10 @@ looks; a 2D scene gets a camera for it. `zoom` (1-4) is its resting zoom; \
 `scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
 Turning the filter off returns the camera to where it was. Camera motion and the \
 follow belong to the scene's family: set them on the parent, not a keyframe scene. \
+To reframe a 3D scene live without an edit, `scene.aim_camera` pans and tilts its \
+camera in degrees from the stored view and zooms it (1-8), gliding there; the aim \
+`{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera, and `scene.camera_aim` \
+reads it. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \

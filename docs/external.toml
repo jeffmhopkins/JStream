@@ -803,3 +803,27 @@ relied_on = "OpenFile and SaveFile take (parent_window s, title s, options a{sv}
 review_every = "180d"
 status = "ok"
 checked_note = "Re-read: OpenFile and SaveFile options include handle_token, directory, filters, current_folder and current_name; results carry uris"
+
+[[external]]
+id = "linuxdeploy"
+url = "https://github.com/linuxdeploy/linuxdeploy"
+relied_on = "linuxdeploy copies the libraries an AppDir's usr/bin programs and usr/lib libraries link into usr/lib (keeping files already there, skipping its excludelist), points their rpaths at it, gives the programs in ADDITIONAL_BIN_DIRS an rpath to usr/lib, keeps a --custom-apprun as AppRun.wrapped behind a wrapper that sources apprun-hooks, runs input plugins it finds beside itself or on PATH, and its bundled appimage output plugin passes LDAI_OUTPUT, LDAI_RUNTIME_FILE and LDAI_NO_APPSTREAM to appimagetool (ARCH › Packaging)"
+review_every = "180d"
+status = "unverified"
+checked_note = "Read in the source at tag 1-alpha-20251107-1 (src/core/appdir.cpp, src/core/appdir_root_setup.cpp, src/plugin/plugin.cpp) and linuxdeploy-plugin-appimage's src/main.cpp; the AppImage isn't yet run outside CI"
+
+[[external]]
+id = "linuxdeploy-plugin-gtk"
+url = "https://github.com/linuxdeploy/linuxdeploy-plugin-gtk"
+relied_on = "linuxdeploy-plugin-gtk.sh, with DEPLOY_GTK_VERSION=3, copies GTK 3's modules, GLib schemas, typelibs and pixbuf loaders into the AppDir and writes an apprun-hooks script that points GTK and GLib at them and sets GDK_BACKEND=x11; it doesn't handle WebKitGTK's processes (ARCH › Packaging)"
+review_every = "180d"
+status = "unverified"
+checked_note = "Read the script at commit 7a3fbc31a9e5075073ff8790f26effbac5f84453"
+
+[[external]]
+id = "appimage-type2-runtime"
+url = "https://github.com/AppImage/type2-runtime"
+relied_on = "The static type 2 runtime an AppImage starts with: it mounts the image with FUSE, or extracts it with --appimage-extract or APPIMAGE_EXTRACT_AND_RUN, sets APPDIR and OWD, and runs AppRun (ARCH › Packaging)"
+review_every = "180d"
+status = "unverified"
+checked_note = "Release 20251108's runtime-x86_64 is pinned in after-review.yml by its SHA-256; the page itself was not re-read"
