@@ -175,14 +175,18 @@ fn http_response(reply: ui::Reply) -> Response<Vec<u8>> {
 
 /// Runs the app until its window closes: `ui` serves the pages, `script` (if the
 /// engine started) hands them the engine, `host` is stopped on exit, and
-/// `network_file` is where `set_network` saves "Allow devices on my network", and
-/// `jtunnel_file` where `set_jtunnel` saves "Receive from JTunnel senders".
+/// `network_file` is where `set_network` saves "Allow devices on my network",
+/// `jtunnel_file` where `set_jtunnel` saves "Receive from JTunnel senders", and
+/// `ptz_file` where `set_ptz_controllers` saves "Accept a PTZ controller", whose open
+/// endpoints `ptz_controllers` holds until exit.
 pub fn run(
     ui: Ui,
     script: Option<String>,
     host: Option<Host>,
     network_file: Option<PathBuf>,
     jtunnel_file: Option<PathBuf>,
+    ptz_file: Option<PathBuf>,
+    ptz_controllers: Option<jstream_core::PtzControllers>,
 ) -> anyhow::Result<()> {
     let start = start_url()?;
     let mut builder = tauri::Builder::default();
@@ -192,11 +196,15 @@ pub fn run(
     if let Some(file) = jtunnel_file {
         builder = builder.manage(crate::jtunnel::File(file));
     }
+    if let Some(file) = ptz_file {
+        builder = builder.manage(crate::ptz::File(file));
+    }
     let app = builder
         .invoke_handler(tauri::generate_handler![
             crate::pick::pick_path,
             crate::network::set_network,
-            crate::jtunnel::set_jtunnel
+            crate::jtunnel::set_jtunnel,
+            crate::ptz::set_ptz_controllers
         ])
         // Asynchronous so the update check's request to GitHub doesn't block the
         // window. File requests are answered on this call, as they were before.
@@ -238,11 +246,14 @@ pub fn run(
             "could not create the window (is there a display, and WebKitGTK 4.1?)"
         })?;
     let mut host = host;
+    let mut ptz_controllers = ptz_controllers;
     app.run(move |_app, event| {
-        if let RunEvent::Exit = event
-            && let Some(host) = host.take()
-        {
-            host.stop();
+        if let RunEvent::Exit = event {
+            // The endpoints close first, ending their sessions and so their drives.
+            drop(ptz_controllers.take());
+            if let Some(host) = host.take() {
+                host.stop();
+            }
         }
     });
     Ok(())

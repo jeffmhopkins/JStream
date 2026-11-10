@@ -2531,6 +2531,7 @@ const BOXED: ItemGeometry = ItemGeometry {
     perspective_px: None,
     flip_h: true,
     flip_v: false,
+    billboard: false,
 };
 
 /// `ItemInfo.transform` for [`BOXED`]: its unrotated top-left corner at scale (1, 1).
