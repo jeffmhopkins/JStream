@@ -2247,7 +2247,7 @@ stamp = { hash = "b3:5701f7cb5f0a502c", by = "agent:claude", note = "added that 
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:d8dfc8e6914854c4", by = "agent:claude", note = "scene_lights now uses light_pose_seen through the camera view; the lights paragraph says so (ADR-0151 decision 2)" }
+stamp = { hash = "b3:09c23290361d85db", by = "agent:claude", note = "the depth paragraph names both kinds that read depth; the view-depth path is unchanged | merge: The wave brought #1484's billboard lines (light_pose_seen, the Move fade); the ambient occlusion text is unaffected | kept from the merged side: scene_lights now uses light_pose_seen through the camera view; the lights paragraph says so (ADR-0151 decision 2)" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2373,7 +2373,7 @@ stamp = { hash = "b3:01ad296c6270687e", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:048747410023f472", by = "agent:claude", note = "core outputs now says the program readback can be NV12; the daemon's design text doesn't describe the readback, still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:d8dfc8e6914854c4", by = "agent:claude", note = "the core snapshots change is the billboard light pose; nothing the daemon design says changes" }
+stamp = { hash = "b3:09c23290361d85db", by = "agent:claude", note = "the core snapshots edit names ambient_occlusion beside depth_fog; nothing in the daemon design changes | merge: The core snapshots section gained #1484's billboard lines; nothing in the daemon design changes | kept from the merged side: the core snapshots change is the billboard light pose; nothing the daemon design says changes" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note = "depends_on now names the core sections this design links to (#design for one engine and a session per connection, #snapshots for live sources, #outputs for the placeholder outputs, #wasm-plugins, #logging, #audit-log) instead of the whole old core #design, which is split into topic sections; re-read those passages against them; holds | merge: #1126 changes only core #wasm-plugins' Disabling bullet (save before the event); the daemon's saved-plugin passage still holds; the other core deps are unchanged by the merge" }
