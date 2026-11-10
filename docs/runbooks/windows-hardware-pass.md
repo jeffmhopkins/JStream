@@ -21,6 +21,9 @@ and run them from its wave.
 report ([The script](#script)). The steps below are what it does, and how to do any of
 them by hand.
 
+A release's own run is different: [`scripts\release-pass.ps1`](#release-pass) checks the
+downloaded zip, with no build, and [the alpha.5 checklist](#alpha5) is what it asks.
+
 <a id="script"></a>
 ## The script
 <!-- @section
@@ -96,6 +99,204 @@ scripts\windows-pass.bat -Unattended     # only the checks that need no one
 | `cursor` | [16](#prs) | PR #685 |
 | `clap` | [17](#prs) | PR #573 |
 | `help-links` | [19](#prs) | PR #1083 |
+
+<a id="release-pass"></a>
+## The release pass
+<!-- @section
+covers = ["scripts/release-pass.ps1", "scripts/release-pass.bat"]
+-->
+
+`scripts\release-pass.ps1` checks a downloaded release instead of a build. It runs the
+release's own `jstream-daemon.exe` and `jstream-cli.exe`, so it needs no Rust, git or
+build: only the zip, and the script beside it. From a checkout, or with the two script
+files downloaded from `scripts/` on GitHub into one folder:
+
+```powershell
+scripts\release-pass.bat                                   # finds the zip in Downloads
+scripts\release-pass.bat -Zip C:\path\jstream-v0.1.0-alpha.5-windows-x64.zip
+scripts\release-pass.bat -Root C:\path\to\unzipped\folder  # already unzipped
+scripts\release-pass.bat -AutomatedOnly                    # the automatic checks only
+scripts\release-pass.bat -ManualOnly -PtzController 192.168.1.20
+```
+
+- **Order.** The automatic checks run first and need no one. The script then walks
+  [the release's manual checklist](#alpha5), one item at a time: it says what to do in
+  `jstream.exe` and asks pass, fail or skip. Every line that needs you starts with a
+  magenta `>>> YOU:` and a beep.
+- **The zip.** With `-Zip`, or the zip found in Downloads, it checks the zip against the
+  `.sha256` file beside it, when there is one, and unzips it under
+  `%LOCALAPPDATA%\JStream-release-pass\release`. `-Expect` names the version it should
+  report, `0.1.0-alpha.5` by default.
+- **Nothing of yours is touched by the automatic checks.** Their daemon listens on a free
+  port with its own token and log folder, and `APPDATA` points into the run folder for
+  it alone. Your settings, projects, recent list, effect packs and stream keys are never
+  read or changed, and no output goes live. Two manual items use your own app on purpose:
+  the agent check starts `jstream.exe --mcp` and reads your `%APPDATA%\JStream\token` in
+  memory only, and the PTZ controller check listens on UDP port 52381 on your LAN address,
+  answering only the controller's address. Windows may ask once whether the daemon may
+  use the network: allow private networks.
+- **Report.** The run folder (`%LOCALAPPDATA%\JStream-release-pass\runs\<time>`) gets
+  `report.md`, `results.json`, the daemons' logs, the snapshots and the bench's reports.
+  The zip beside it holds the text files and the snapshots, with every token replaced by
+  `***`; token files and recordings stay out. The script ends by printing the zip's path
+  and one line per item to paste back with it.
+
+| Check | What passes | Issues |
+|---|---|---|
+| zip checksum | the zip's SHA-256 matches its `.sha256` file | |
+| package files | `jstream.exe`, the daemon, the CLI, the virtual camera DLL, the plugin host, the browser helper and the UI are all there | |
+| versions | `jstream-daemon --version` and `jstream-cli version` name `-Expect` | |
+| daemon starts | the daemon prints its `listening on` line | |
+| kind.list | it lists the alpha.5 kinds: the new filters, the depth-aware 3D filters, `model`, `light`, `follow_pointer`, the MIDI sources and `network_audio` | #1226, #1227, #1231, #1225, #1222, #1223, #1224 |
+| profile.get | `thread_cpu` is on, `jstream-render` and `jstream-frames` are among the threads, and the views, warm, streams and PTZ counters are there; a program frame over budget or skipped is a warning | #1221 |
+| snapshot of a browser page | a green HTML page snapshots green | #1184, #1194, #1215 |
+| snapshot of a display capture | the snapshot isn't one flat colour | #1194, #1215 |
+| save, new, open | `collection.new`, `save_as` and `open` round-trip a scene, and `collection.info` lists the project first in the recent list | #1218 |
+| webcam formats | each webcam lists its formats, and its controls when it has any; no webcam is a warning | #1195, #1196 |
+| bench | `jstream-cli bench --scenario all,display` (and `webcam` with one plugged in) passes every default gate; the media scenario runs with `-Media` or a file ffmpeg makes | #1220, #1140 |
+| graceful stop | Ctrl-C makes the daemon print `stopped` and exit 0 | |
+
+<a id="alpha5"></a>
+## The alpha.5 checklist
+<!-- @section
+-->
+
+What the alpha.5 run checks: the fifteen alpha.5 targets that wait on a Windows run
+(the README's progress table, now under beta.1) and a real PTZ controller. Run it on the
+released zip, `v0.1.0-alpha.5`, with [the release pass](#release-pass). Report each
+item's result on its issues; a failure gets its own issue, labelled `windows-hardware`,
+that links back to the item.
+
+**You need:** the zip; a second monitor; a webcam; a microphone or any sound playing;
+a MIDI keyboard; a DAW with the JTunnel plugin; a PTZ controller (a joystick keyboard or
+a control app) on the same network; a VISCA-over-IP camera if you have one; ffmpeg on
+`PATH` for the bench's media scenario (optional).
+
+### Automated
+
+The script runs these first. Each one's pass line is in [the table above](#release-pass).
+
+| Target | Covered by | What is still by hand |
+|---|---|---|
+| The thread model (#1221) | profile.get, bench | M1 |
+| The bench (#1220) | bench | none |
+| A seamless preview (#1217) | bench (its view and stream gates) | M1 |
+| Animated sources (#1138, #1139) | bench (`small_2d`, `layered`) | M2 |
+| Snapshots on Windows (#1184, #1194, #1215) | the two snapshots | M7 |
+| Save and load projects (#1218) | save, new, open | M5 |
+| Webcam Properties (#1195, #1196) | webcam formats, bench (`webcam`) | M12 |
+| Filters, 3D, MIDI and network audio kinds | kind.list | M8, M10, M14 |
+
+A bench fail blocks beta.1; report it on #1220 with the bench's `summary.md`.
+
+### Manual
+
+Each item: what to do in `jstream.exe` from the release folder, then what passes. The
+script asks each one in this order.
+
+**M1. Thread model and a seamless preview (#1221, #1217).** Open a busy scene: a
+browser page, a display capture, the webcam and animated text. Turn on studio mode and
+switch preview and program ten times, half with Fade and half with Cut, while Task
+Manager's Performance tab shows the CPU's logical processors.
+**Pass:** no switch shows a placeholder, a blank frame or a stall; the preview looks as
+sharp as the program; the work spreads over several cores rather than one at 100%.
+
+**M2. Animated sources (#1138, #1139).** Make a scene of about twenty small animated
+items (timers, text with motion) and one small still image, and watch the header's fps
+and CPU for a minute.
+**Pass:** the fps holds at the base rate and every item moves smoothly.
+
+**M3. Pop-out projectors (#1208).** View › Projectors › Program in a window. Drag it to
+the second monitor and double-click it. Then Pop out on a scene row, and Pop out on an
+item (its source alone). Escape closes each.
+**Pass:** each window opens with a live picture, never black; a double click fills that
+monitor; it runs at the full frame rate.
+
+**M4. Settings dialog (#1207, #1210, #1212, #1192, #1230).** File › Settings…: visit
+General, Plugins, Audio plugins (press Rescan) and Devices. Help › Check for updates.
+File › Video settings…: 1280×720 at 60 fps, Apply, then back to 1920×1080 at 30 fps.
+Switch Blending between Browser-style and Linear light on a scene with overlapping
+blended items.
+**Pass:** every page opens; the scan lists your CLAP plugins; the update check says
+you're up to date; the canvas changes size and rate; the blending switch changes how the
+overlaps mix.
+
+**M5. Save and load projects (#1218).** File › New project, add a scene with a text
+source, File › Save As to `Documents\alpha5-test.json`. File › New project again, then
+File › Open recent › alpha5-test. Quit `jstream.exe` and start it again.
+**Pass:** the scene comes back on open, and alpha5-test is still in Open recent after the
+restart.
+
+**M6. UI scrub (#1219, #1198, #1202, #1204, #1206).** Select an item and use the
+Inspector's tabs and its Properties & filters button. Drag that dialog by its header.
+Rotate an item. Use a Browse… button on a file field. Look at the Outputs panel.
+**Pass:** Properties and Filters are one dialog; dialogs drag by their header; the
+item's name turns with its box; Browse… opens a picker that fills the field; the Outputs
+panel is a compact list with each output's settings in a dialog.
+
+**M7. Snapshots on Windows (#1184, #1194, #1215).** In a scene with a browser source and
+a display capture, choose Screenshot (scene) on its row and open the PNG.
+**Pass:** the PNG shows the page and the screen capture, not black boxes.
+
+**M8. Follow pointer, the 3D camera and hotkeys (#1225, #1216, #1214, #1188, #1346).**
+Add the Follow pointer filter to a display capture item and move the mouse to each edge.
+Edit the scene's 3D camera in Scene properties. Bind a hotkey to a scene and Ctrl+WheelUp
+to zoom, then click into Notepad and use both.
+**Pass:** the pointer stays in view with a margin; the 3D camera section edits the
+camera; the hotkey and the wheel chord work while Notepad has the focus, one zoom step a
+notch.
+
+**M9. Small fixes (#1209, #1189).** Switch scenes with the Cut preset. Make a new project
+and look at File › Video settings….
+**Pass:** Cut is an instant cut; a new project is 30 fps, with 60 fps offered.
+
+**M10. Filters (#1226, #1227, #1232, #1295).** On an opaque image: Glow, then Bloom, then
+the Vignette. Then a Border, its 9-slice image frame, and a pulse from audio. Add a Custom
+shader filter, edit it in its editor and Save as pack.
+**Pass:** Glow shows past the item's box; Bloom and the Vignette are easy to tune; the
+borders draw; the shader edits, saves as a pack and loads again from it.
+
+**M11. Page API audio (#1228, #1060).** Add a browser source with a visualiser page that
+reads `jstream.levels`, tick its audio levels checkbox, and play sound or speak. Then
+untick it.
+**Pass:** the page moves with the sound and shows the reading badge; unticked, it gets no
+levels.
+
+**M12. Webcam Properties (#1195, #1196).** A webcam source's Properties: pick the
+device, a resolution, a frame rate and a format, then move a camera control (brightness
+or white balance).
+**Pass:** each choice takes effect in the picture, and the control changes it live.
+
+**M13. Ask before a new agent connects (#1229).** Close
+`jstream.exe` first; the script starts it again with `--mcp`, then sends an agent's
+hello to `127.0.0.1:4455` twice. Choose Deny the first time and Always allow the second.
+Then open File › Settings… › Devices.
+**Pass:** "Agent wants to connect" names `release-pass-agent`; Deny turns it away;
+Always allow lets it in; it is listed under Approved agents, and Remove takes it off.
+
+**M14. MIDI and network audio (#1222, #1223, #1224).** With a MIDI keyboard, add a MIDI
+piano roll and a MIDI keyboard source and play. Bind a note to a scene switch. Send a
+MIDI clock from the DAW and set a motion's speed in beats. With the JTunnel plugin in the
+DAW, turn on File › Settings… › Devices › Receive from JTunnel and add a Network audio
+source.
+**Pass:** the MIDI sources draw what you play; the note switches scenes; the motion
+follows the DAW's tempo; the network audio source's meter moves with the DAW, with no
+dropouts in a minute.
+
+**M15. PTZ cameras over VISCA (#1182).** With a VISCA-over-IP camera: add it, drive it,
+store two presets, and recall a preset in each of two keyframes.
+**Pass:** the camera moves, stores and recalls presets, and a switch between the
+keyframes moves it to each one's preset. Without a camera, skip it and say so on #1182.
+
+**M16. A real PTZ controller drives a scene camera (#1181).** Pass `-PtzController
+<its IP>`, or type it when asked. The script starts a daemon whose endpoint listens on
+this PC's address on the controller's network, port 52381 (VISCA over IP, camera address
+1), answering only that IP, with a scene camera on program. Point the controller at that
+address, pan right, tilt up and zoom in, then press Home, and store and recall a preset.
+**Pass:** the endpoint's `answered` counter in `profile.get` is above 0; the scene
+camera's aim moved; the program picture changed between the before and after snapshots;
+Home goes back to the stored camera and the preset comes back. Packets counted as
+`unallowed` mean the controller sends from another address.
 
 <a id="setup"></a>
 ## Setup
