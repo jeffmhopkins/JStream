@@ -49,7 +49,7 @@ use std::task::{Context, Poll, Wake, Waker};
 
 /// Runs a future to completion, parking this thread until it is woken. The engine's
 /// futures are ready at once, except `video.snapshot`'s, which the snapshot thread wakes.
-fn block_on<F: Future>(future: F) -> F::Output {
+pub(crate) fn block_on<F: Future>(future: F) -> F::Output {
     struct Unpark(std::thread::Thread);
 
     impl Wake for Unpark {
@@ -112,13 +112,13 @@ fn hello() -> Hello {
     }
 }
 
-fn connected(engine: &Engine) -> InProcessControl {
+pub(crate) fn connected(engine: &Engine) -> InProcessControl {
     let control = engine.connect();
     block_on(control.hello(hello())).expect("handshake");
     control
 }
 
-fn create(scene: &str) -> Edit {
+pub(crate) fn create(scene: &str) -> Edit {
     Edit::SceneCreate {
         scene_id: SceneId::new(scene),
         name: scene.to_uppercase(),
@@ -154,7 +154,7 @@ fn add(scene: &str, item: &str, source: &str) -> Edit {
     }
 }
 
-fn batch(control: &dyn Control, batch: Batch) -> Result<Rev, ControlError> {
+pub(crate) fn batch(control: &dyn Control, batch: Batch) -> Result<Rev, ControlError> {
     match block_on(control.call(Call::Batch(batch)))?.result {
         CallResult::Batch { rev, .. } => Ok(rev),
         other => panic!("not a batch result: {other:?}"),
@@ -6872,7 +6872,7 @@ fn rtmp_output(url: &str) -> jstream_protocol::OutputKind {
     }
 }
 
-fn edits(edits: Vec<Edit>) -> Batch {
+pub(crate) fn edits(edits: Vec<Edit>) -> Batch {
     Batch {
         edits,
         expected_rev: None,

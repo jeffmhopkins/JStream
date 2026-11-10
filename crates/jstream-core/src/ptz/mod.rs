@@ -37,6 +37,7 @@ use jstream_visca::{
 use crate::lan::is_lan;
 use crate::lock;
 
+pub(crate) mod controller;
 #[cfg(test)]
 pub(crate) mod tests;
 
@@ -248,6 +249,12 @@ struct Status {
     sent: u64,
     replies: u64,
     dropped: u64,
+    /// Commands sent again for want of a reply, commands still unanswered after that,
+    /// commands the head refused, and times its buffers were full (ADR-0155).
+    resent: u64,
+    unanswered: u64,
+    refused: u64,
+    busy: u64,
 }
 
 struct Shared {
@@ -399,6 +406,33 @@ impl Ptz {
                     sent: status.sent,
                     replies: status.replies,
                     dropped: status.dropped,
+                }
+            })
+            .collect()
+    }
+
+    /// `profile.get`'s `ptz_cameras` (ADR-0155): each camera's link counters, in the
+    /// list's order.
+    pub(crate) fn profile(&self) -> Vec<jstream_protocol::PtzCameraProfile> {
+        let now = Instant::now();
+        self.heads
+            .iter()
+            .map(|head| {
+                let status = lock(&head.shared.status);
+                jstream_protocol::PtzCameraProfile {
+                    camera: head.camera.name.clone(),
+                    address: head.camera.addr.to_string(),
+                    transport: head.camera.transport.name().to_owned(),
+                    reachable: status
+                        .last_reply
+                        .is_some_and(|at| now.duration_since(at) < REACHABLE_FOR),
+                    sent: status.sent,
+                    replies: status.replies,
+                    dropped: status.dropped,
+                    resent: status.resent,
+                    unanswered: status.unanswered,
+                    refused: status.refused,
+                    busy: status.busy,
                 }
             })
             .collect()
@@ -597,16 +631,33 @@ impl Worker {
         let mut error = None;
         for command in commands {
             let mut got = self.command(command);
+            // Nothing answered: a datagram lost, or a head (or this machine) too busy to
+            // answer in time. Every command JStream sends lands the head in the same
+            // place however often it arrives, so it goes once more (#1494).
+            if got.is_none() {
+                self.status().resent += 1;
+                got = self.command(command);
+            }
             // The head's command buffers are full (an aim's pan-tilt and zoom still
             // moving): wait for one to complete, then send it once more.
             if matches!(got, Some(Got::Full)) {
+                self.status().busy += 1;
                 self.await_completion();
                 got = self.command(command);
             }
             match got {
-                Some(Got::Error(why)) => error = Some(why),
-                Some(Got::Full) => error = Some("the head's command buffers are full".into()),
-                None => error = Some("no reply".to_owned()),
+                Some(Got::Error(why)) => {
+                    self.status().refused += 1;
+                    error = Some(why);
+                }
+                Some(Got::Full) => {
+                    self.status().busy += 1;
+                    error = Some("the head's command buffers are full".into());
+                }
+                None => {
+                    self.status().unanswered += 1;
+                    error = Some("no reply".to_owned());
+                }
                 Some(_) => {}
             }
         }

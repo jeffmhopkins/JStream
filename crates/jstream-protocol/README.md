@@ -74,8 +74,9 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`),
-  `scene.zoom_camera`, `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`, `ptz.store`,
-  `ptz.focus`, `item.show`,
+  `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
+  `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
+  `ptz.store`, `ptz.focus`, `item.show`,
   `item.hide`, `item.toggle`, `privacy.set` (deprecated),
   `audio.reset_loudness`, `preview.subscribe`, `preview.unsubscribe`, `preview.report`,
   `pairing.start`, `device.revoke`, `youtube.sign_in`, `youtube.sign_out`,
@@ -161,11 +162,12 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
-  0.113, `NetworkProfile` and `NetworkInputProfile` among them),
+  0.113, `NetworkProfile` and `NetworkInputProfile`, since 0.120
+  `PtzControllerProfile`, and since 0.121 `PtzCameraProfile`, among them),
   `quality.probe` (since 0.110, `quality.rs`: `ProbeStream`, `QualityProbeInfo` with its
   `FrameQuality`, `probe_frames`, `DEFAULT_PROBE_FRAMES`, `MAX_PROBE_FRAMES` and
   `MAX_PSNR_DB`), with `QueryResult`
@@ -346,12 +348,21 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 `PROTOCOL_VERSION` is 0.123 because `kind.describe` takes an optional `source_id`
 whose own additions the descriptor takes, a `model`'s animation names
 ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 7, #1497);
-0.119 because a card has a surface: `ItemGeometry`'s `surface`
+0.122 because a card has a surface: `ItemGeometry`'s `surface`
 (`Surface` and `CardBack`, lit by its 3D scene and its back hidden,
 [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 10, #1231);
-0.118 because a box can face the camera: `ItemGeometry`'s
+0.121 because `profile.get` counts each PTZ camera's link:
+`ptz_cameras` (`PtzCameraProfile`,
+[ADR-0155](../../docs/adr/0155-ptz-cameras-counters-in-profile-get.md), #1423);
+0.120 because `profile.get` counts each PTZ controller endpoint:
+`ptz_controllers` (`PtzControllerProfile`,
+[ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md), #1181);
+0.119 because a box can face the camera: `ItemGeometry`'s
 `billboard` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 2,
-#1231); 0.117 because the warm scenes have a GPU-byte budget:
+#1231); 0.118 because a scene camera has a live aim that a PTZ controller
+drives: the actions `scene.drive_camera` and `scene.aim_camera` and the query
+`scene.camera_aim` (`CameraAim`, `CameraAimInfo`,
+[ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md), #1181); 0.117 because the warm scenes have a GPU-byte budget:
 `studio.set_warm`'s `gpu_mib`, `studio.get`'s `warm_gpu_mib` and `profile.get`'s `warm`
 (`WarmSceneProfile`, [ADR-0150](../../docs/adr/0150-the-warm-scenes-gpu-byte-budget.md),
 #1468); 0.116 because a scene can be kept warm: `SceneOptions`'
@@ -1327,6 +1338,33 @@ are the head's own counts and speeds VISCA's steps.
   The engine sends a scene's shots when it goes on program, and when it goes on
   preview for the cameras the program's shots don't name; an edit moves nothing.
 
+<a id="camera-aim"></a>
+## A scene camera's live aim
+<!-- @section
+covers = ["crates/jstream-protocol/src/camera_aim.rs"]
+depends_on = ["docs/adr/0152-a-ptz-controller-drives-scene-cameras.md"]
+-->
+
+A scene family's camera has a live aim (0.118,
+[ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)): a pan and a
+tilt in degrees from the stored camera's view and a zoom factor, which a PTZ controller
+drives as it drives a head. It is runtime state, never stored or undone; the aim
+`{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera itself, its home. A keyframe
+scene names its family's camera.
+- **`scene.drive_camera {scene_id, pan?, tilt?, zoom?}`**: signed speeds in VISCA steps,
+  as `ptz.drive` takes them (pan -24 to 24, tilt -23 to 23, zoom -8 to 8). 0 stops an
+  axis and an axis left out keeps moving, but a drive names at least one. It can't be
+  bound, and it stops when the session that sent it ends.
+- **`scene.aim_camera {scene_id, pan_deg?, tilt_deg?, zoom?, speed?}`**: glides the
+  axes it sets (`CameraAim`, at least one: pan within ±170, tilt ±89, zoom 1 to 8) to
+  arrive together, at `speed` 1 to 24, the fastest when omitted. It can be bound.
+- **`scene.camera_aim {scene_id}`** answers `CameraAimInfo`: `pan_deg`, `tilt_deg`,
+  `zoom` and whether it is `moving`.
+- `camera_aim_check` gives the field checks every implementation makes first
+  (`invalid_argument`), then the scene: `not_found`, or `action_failed` for one that
+  draws through no camera. Plugins may send the actions under `live` and the query
+  under `read`.
+
 <a id="bindings"></a>
 ## Controller bindings
 <!-- @section
@@ -1663,6 +1701,8 @@ Queries read and never change `rev`. Those that read the collection state carry 
 - `ptz.list`: the PTZ cameras this machine controls, each with its address, transport,
   whether it answered lately, its last pose and error, and its counters
   ([PTZ cameras](#ptz)); empty when the host listed none.
+- `scene.camera_aim` (0.118): a scene family's live aim now, its pan and tilt in
+  degrees, its zoom and whether it moves ([A scene camera's live aim](#camera-aim)).
 - `jtunnel.senders` (0.114, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   §3): whether the JTunnel receiver is `on`, and the senders that answered its mDNS
   query in the last 35 s, ordered by name, then address, each a `JtunnelSenderInfo`:
@@ -1727,7 +1767,20 @@ Queries read and never change `rev`. Those that read the collection state carry 
   warm count picked, in the warm order, each a `WarmSceneProfile`: its `scene_id`, the
   `gpu_bytes` it is estimated to hold beyond what a mix draws anyway and the warm scenes
   kept before it, and `cold: true` when the GPU-memory limit left it cold. Like
-  `network`, it is the state now, not the window's.
+  `network`, it is the state now, not the window's. Since 0.120, `ptz_controllers`
+  (omitted while no PTZ controller endpoint runs,
+  [ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md) §2)
+  lists each endpoint as a `PtzControllerProfile`, in the host's order: the `address`
+  it listens on, its `transport` and `target`, and from when it opened the messages it
+  `answered`, the datagrams and connections it dropped as `unallowed`, `malformed` or
+  `refused` (past its four connections), and its `idle_stops`. Since 0.121, `ptz_cameras`
+  (omitted while the machine has no PTZ camera,
+  [ADR-0155](../../docs/adr/0155-ptz-cameras-counters-in-profile-get.md)) lists each
+  camera as a `PtzCameraProfile`, in the list's order: its `camera` name, `address`,
+  `transport`, whether it is `reachable` (answered in the last three seconds), and from
+  when its thread started the messages `sent`, the `replies` read and the datagrams
+  `dropped`, the commands `resent` for want of a reply, those still `unanswered` after
+  that, those the head `refused`, and the times its command buffers were full (`busy`).
   Runtime state, so no `rev`. Added in 0.73.
 - `quality.probe {stream, frames?}`: how close a stream's decoded pictures are to the
   frames its encoder was given
@@ -2303,7 +2356,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   a camera's motion and follow camera, a scene's PTZ shots (ADR-0146), `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
-  changes what is on air with no undo step, ADR-0113, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
+  changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
+  `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
@@ -2878,14 +2932,14 @@ function in this crate so the compositor and the UI share one implementation.
   flip. The flips travel inside `ItemGeometry`, so `item.add`, `item.set_geometry` and
   its inverse carry them with no edit of their own. The compositor draws them, so the
   engine accepts both.
-- `billboard` (0.118, [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+- `billboard` (0.119, [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 2) is an optional boolean: in a 3D scene the box turns about its centre to
   face the camera. `ItemGeometry::facing(view)` replaces its `turn_deg` and `tilt_deg`
   with the ones that point its front at the camera's position, and keeps
   `rotation_deg`'s roll. Every camera placement goes through it (`project_seen`,
   `drawn_polygon_seen`, `solid` with a view), and `light_pose_seen` turns a billboard
   light with its box. In a 2D scene it changes nothing.
-- `surface` (0.119, [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+- `surface` (0.122, [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
   decision 10) is an optional `Surface`, omitted when absent, which every card drew as
   before: `lit` (default false), `roughness` (0 to 1, default 1), `metalness` (0 to 1,
   default 0), `emissive` (0 to 4, default 0), `back` (`CardBack`: `show`, the default, or

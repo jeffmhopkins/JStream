@@ -141,9 +141,10 @@ jobs:
             // 4. ADR-0109: a pass carries across merges of the base branch. When the head has no
             //    verdict, the latest reviewed head is an ancestor of it, every commit since
             //    merges the base branch in (or only restamps the ledger), and the PR's diff
-            //    against the base branch is the same at both, that review's verdict stands for
-            //    the head. Any doubt (an API error, a truncated list, a file without a patch)
-            //    leaves it pending, as before.
+            //    is the same at both, that review's verdict stands for the head. The reviewed
+            //    head's diff is taken against the base its marker names, else the current one
+            //    (ADR-0154: a stacked PR's base squash-merged under it). Any doubt (an API error,
+            //    a truncated list, a file without a patch) leaves it pending, as before.
             let carry = null;
             const from = carryCandidate(comments, head);
             if (from) {
@@ -175,8 +176,9 @@ jobs:
                   }
                 }
                 if (commits.length > 0 && onlyBaseMerges(commits)) {
-                  const files = async (sha) => (await cmp(`${pr.base.sha}...${sha}`, 300)).files ?? null;
-                  if (sameChange(await files(from), await files(head))) carry = { from };
+                  const files = async (base, sha) => (await cmp(`${base}...${sha}`, 300)).files ?? null;
+                  const reviewed = reviewedBase(comments, from) ?? pr.base.sha;
+                  if (sameChange(await files(reviewed, from), await files(pr.base.sha, head))) carry = { from };
                   else core.info(`${from.slice(0, 7)} and ${head.slice(0, 7)} differ in the PR's own change: no carry`);
                 } else {
                   core.info(`commits after ${from.slice(0, 7)} aren't only merges of the base branch: no carry`);
@@ -194,11 +196,18 @@ jobs:
             function markersOf(comments) {
               const norm = (s) => (s.match(/session_[A-Za-z0-9]+/) || [s.trim()])[0];
               const markerRe = /^<!-- jstream-review v1 verdict=(pass|fail|escalate|recuse) sha=([0-9a-f]{40}) round=(\d+) reviewer-session=(\S+) -->$/m;
+              // ADR-0154: an optional line in the same comment names the base the review was
+              // made against. It is its own marker, so a gate that predates it still reads
+              // the verdict.
+              const baseRe = /^<!-- jstream-review-base v1 sha=([0-9a-f]{40}) base=([0-9a-f]{40}) -->$/m;
               const markers = [];
               for (const c of comments) {
                 if (c.author_association !== 'OWNER') continue;
                 const m = (c.body || '').match(markerRe);
-                if (m) markers.push({ verdict: m[1], sha: m[2], round: Number(m[3]), session: norm(m[4]) });
+                if (!m) continue;
+                const b = (c.body || '').match(baseRe);
+                const base = b && b[1] === m[2] ? b[2] : null;
+                markers.push({ verdict: m[1], sha: m[2], round: Number(m[3]), session: norm(m[4]), base });
               }
               return markers;
             }
@@ -214,6 +223,14 @@ jobs:
             function carryCandidate(comments, head) {
               const last = latestMarker(markersOf(comments));
               return last && last.sha !== head ? last.sha : null;
+            }
+
+            // ADR-0154: the base SHA that `sha`'s latest marker says it was reviewed against, or
+            // null when that marker names none (the caller then uses the current base, as
+            // ADR-0109 did).
+            function reviewedBase(comments, sha) {
+              const last = latestMarker(markersOf(comments).filter((x) => x.sha === sha));
+              return last ? last.base : null;
             }
 
             // ADR-0109: whether two PR diffs (compare-API `files`, each against the base branch)
