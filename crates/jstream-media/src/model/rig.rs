@@ -172,7 +172,11 @@ impl Rig {
     /// # Errors
     /// A [`RigError`] naming the first problem: a parent that isn't before its child, a
     /// node out of range, keys that don't match their times, or a cap.
-    pub fn new(nodes: Vec<RigNode>, slots: Vec<Slot>, mut clips: Vec<Clip>) -> Result<Self, RigError> {
+    pub fn new(
+        nodes: Vec<RigNode>,
+        slots: Vec<Slot>,
+        mut clips: Vec<Clip>,
+    ) -> Result<Self, RigError> {
         let large = |what, got, limit| RigError::TooLarge { what, got, limit };
         if nodes.len() > MAX_NODES {
             return Err(large("nodes", nodes.len(), MAX_NODES));
@@ -425,8 +429,15 @@ fn sample(c: &Channel, t: f64) -> Vec<f64> {
     let cubic = c.interpolation == Interpolation::CubicSpline;
     // The value of key `k`: the middle of its three parts for a cubic spline.
     let value = |k: usize| -> Vec<f64> {
-        let at = if cubic { k * 3 * width + width } else { k * width };
-        c.values[at..at + width].iter().map(|&v| f64::from(v)).collect()
+        let at = if cubic {
+            k * 3 * width + width
+        } else {
+            k * width
+        };
+        c.values[at..at + width]
+            .iter()
+            .map(|&v| f64::from(v))
+            .collect()
     };
     let last = c.times.len() - 1;
     let first_time = f64::from(c.times[0]);
@@ -437,7 +448,11 @@ fn sample(c: &Channel, t: f64) -> Vec<f64> {
         return value(last);
     }
     // The key at or before `t`: the last whose time isn't past it.
-    let k = c.times.partition_point(|&k| f64::from(k) <= t).saturating_sub(1).min(last - 1);
+    let k = c
+        .times
+        .partition_point(|&k| f64::from(k) <= t)
+        .saturating_sub(1)
+        .min(last - 1);
     let (t0, t1) = (f64::from(c.times[k]), f64::from(c.times[k + 1]));
     let span = t1 - t0;
     let s = if span > 0.0 { (t - t0) / span } else { 0.0 };
@@ -454,7 +469,10 @@ fn sample(c: &Channel, t: f64) -> Vec<f64> {
         Interpolation::CubicSpline => {
             let part = |k: usize, p: usize| -> Vec<f64> {
                 let at = k * 3 * width + p * width;
-                c.values[at..at + width].iter().map(|&v| f64::from(v)).collect()
+                c.values[at..at + width]
+                    .iter()
+                    .map(|&v| f64::from(v))
+                    .collect()
             };
             let (v0, out0) = (part(k, 1), part(k, 2));
             let (in1, v1) = (part(k + 1, 0), part(k + 1, 1));

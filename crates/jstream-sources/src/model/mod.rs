@@ -14,7 +14,7 @@ use std::sync::Arc;
 
 use jstream_media::model::shapes::Shape;
 use jstream_media::model::{Lighting, Material, Model};
-use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
+use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_protocol::{
     AssetRoot, EnumOption, KindDescriptor, ParamDescriptor, ParamType, Settings,
 };
@@ -132,7 +132,15 @@ impl ModelKind {
                     "Whether, lit by its scene, it is shadowed by the lights that cast them.",
                 )),
                 live(described(
-                    param("animation", "Animation", ParamType::String { multiline: false, max_len: 256 }, json!("")),
+                    param(
+                        "animation",
+                        "Animation",
+                        ParamType::String {
+                            multiline: false,
+                            max_len: 256,
+                        },
+                        json!(""),
+                    ),
                     "The file's animation to play, by its name; empty plays none and stands it at rest. A name the file lacks is refused with the names it has.",
                 )),
                 live(described(
@@ -150,7 +158,12 @@ impl ModelKind {
                     "How fast it plays: 1 at its own pace, 0 held at its start.",
                 )),
                 live(described(
-                    param("animation_loop", "Loop the animation", ParamType::Bool, json!(true)),
+                    param(
+                        "animation_loop",
+                        "Loop the animation",
+                        ParamType::Bool,
+                        json!(true),
+                    ),
                     "Whether it plays again from its start; if not, it holds its last frame.",
                 )),
             ],
@@ -183,6 +196,7 @@ impl SourceKind for ModelKind {
             base,
             look,
             play,
+            fps: ctx.program_fps().max(1),
             shown,
         }))
     }
@@ -273,12 +287,14 @@ impl Look {
                 }
             }),
         };
+        // A rigged model stands at rest until a clip poses it.
+        let pose = model.rig().map(|r| r.rest().into());
         ShownModel {
             model: Arc::new(model),
             lighting: self.lighting,
             casts_shadows: self.casts_shadows,
             receives_shadows: self.receives_shadows,
-            pose: None,
+            pose,
         }
     }
 }
@@ -501,6 +517,8 @@ struct ModelSource {
     base: Option<Base>,
     look: Look,
     play: Play,
+    /// The program's frame rate, which a playing clip moves on at.
+    fps: u32,
     shown: Option<ShownModel>,
 }
 
@@ -538,12 +556,22 @@ impl Source for ModelSource {
         Ok(Arc::clone(&self.frame))
     }
 
-    /// A playing clip moves on every tick; the stand-in frame itself never changes.
+    /// A playing clip moves on every program frame; the stand-in frame itself never
+    /// changes.
     fn next_change(&self, at: MediaTime) -> Option<MediaTime> {
-        self.moving(at).then(|| {
-            at.checked_add(MediaTime::new(1, at.timebase()))
-                .unwrap_or(at)
-        })
+        if !self.moving(at) {
+            return None;
+        }
+        let step = Timebase::per_second(self.fps)
+            .ok()
+            .and_then(|tb| {
+                MediaTime::new(1, tb)
+                    .rescale(at.timebase(), Rounding::Up)
+                    .ok()
+            })
+            .filter(|step| step.ticks() > 0)
+            .unwrap_or_else(|| MediaTime::new(1, at.timebase()));
+        at.checked_add(step).ok()
     }
 
     fn update(&mut self, settings: &Settings) -> Result<(), SourceError> {
@@ -560,7 +588,7 @@ impl Source for ModelSource {
         }
         if play != self.play {
             if let Some(shown) = &mut self.shown {
-                shown.pose = None;
+                shown.pose = shown.model.rig().map(|r| r.rest().into());
             }
             self.play = play;
         }

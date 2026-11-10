@@ -742,7 +742,11 @@ impl ModelRuntime {
         if let Some((buffer, _, slots)) = &model.inner.pose
             && *slots == palette.len()
         {
-            let bytes: Vec<u8> = palette.iter().flatten().flat_map(|v| v.to_le_bytes()).collect();
+            let bytes: Vec<u8> = palette
+                .iter()
+                .flatten()
+                .flat_map(|v| v.to_le_bytes())
+                .collect();
             gpu.queue.write_buffer(buffer, 0, &bytes);
         }
     }
@@ -1119,7 +1123,11 @@ impl ModelRuntime {
                 multiview_mask: None,
             });
             pass.set_bind_group(0, &frame_bind, &[]);
-            pass.set_bind_group(2, model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1), &[]);
+            pass.set_bind_group(
+                2,
+                model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1),
+                &[],
+            );
             let draw_one = |pass: &mut wgpu::RenderPass<'_>, p: &GpuPrimitive| {
                 let Some(material) = model.materials.get(p.material) else {
                     return;
@@ -1218,7 +1226,11 @@ impl ModelRuntime {
             });
             pass.set_pipeline(&self.depth_only);
             pass.set_bind_group(0, &self.frame_bind, &[]);
-            pass.set_bind_group(2, model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1), &[]);
+            pass.set_bind_group(
+                2,
+                model.pose.as_ref().map_or(&self.rest_pose, |p| &p.1),
+                &[],
+            );
             for p in &model.primitives {
                 let Some(material) = model.materials.get(p.material) else {
                     continue;
@@ -1610,7 +1622,11 @@ fn pose_bind(
     layout: &wgpu::BindGroupLayout,
     palette: &[rig::Mat4],
 ) -> (wgpu::Buffer, wgpu::BindGroup) {
-    let bytes: Vec<u8> = palette.iter().flatten().flat_map(|v| v.to_le_bytes()).collect();
+    let bytes: Vec<u8> = palette
+        .iter()
+        .flatten()
+        .flat_map(|v| v.to_le_bytes())
+        .collect();
     let buffer = gpu
         .device
         .create_buffer_init(&wgpu::util::BufferInitDescriptor {

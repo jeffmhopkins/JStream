@@ -1279,7 +1279,7 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
     let compositor = &mut opened.compositor;
     let uploaded = compositor.upload_model(&rigged).expect("the model uploads");
     let geometry = boxed(80.0, 50.0, 40.0);
-    let mut shoot = |compositor: &mut Compositor| {
+    let shoot = |compositor: &mut Compositor| {
         let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
         compositor
             .draw_model(

@@ -12,12 +12,12 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 use std::sync::Arc;
 
+use jstream_media::model::rig::{
+    self, Channel, Clip, Interpolation, Path, Rest, Rig, RigNode, Slot,
+};
 use jstream_media::model::{
     AlphaMode, MAX_MODEL_BYTES, MAX_TEXTURE_SIDE, MAX_TEXTURES, MAX_TRIANGLES, Material, Model,
     ModelTexture, ModelVertex, Primitive, TextureColor, TextureRef, VERTEX_BYTES, compute_tangents,
-};
-use jstream_media::model::rig::{
-    self, Channel, Clip, Interpolation, Path, Rest, Rig, RigNode, Slot,
 };
 use jstream_protocol::{AssetRoot, check_asset_path};
 use serde::Deserialize;
@@ -380,7 +380,9 @@ pub(crate) fn load(bytes: &[u8], resources: &mut dyn Resources) -> Result<(Model
     } else {
         let tree = tree(&doc, &roots);
         if tree.is_none() {
-            ignored.0.insert("skins and animations of a scene too large or not a tree");
+            ignored
+                .0
+                .insert("skins and animations of a scene too large or not a tree");
         }
         tree
     };
@@ -857,7 +859,8 @@ impl Builder<'_> {
             let inverse = match def.inverse_bind_matrices {
                 Some(accessor) => {
                     let values = self.read(accessor, 16, false)?;
-                    if values.len() < def.joints.len() * 16 || values.iter().any(|v| !v.is_finite()) {
+                    if values.len() < def.joints.len() * 16 || values.iter().any(|v| !v.is_finite())
+                    {
                         return Err(LoadError::new(format!(
                             "skin {skin}'s inverse bind matrices don't match its joints"
                         )));
@@ -869,14 +872,11 @@ impl Builder<'_> {
             let tree = self.rig.as_mut().expect("a rig");
             let base = u16::try_from(tree.slots.len()).map_err(|_| too_many())?;
             for (j, &joint) in def.joints.iter().enumerate() {
-                let node = tree
-                    .rig_of
-                    .get(joint)
-                    .copied()
-                    .flatten()
-                    .ok_or_else(|| {
-                        LoadError::new(format!("skin {skin} names node {joint}, which isn't in the scene"))
-                    })?;
+                let node = tree.rig_of.get(joint).copied().flatten().ok_or_else(|| {
+                    LoadError::new(format!(
+                        "skin {skin} names node {joint}, which isn't in the scene"
+                    ))
+                })?;
                 tree.slots.push(Slot {
                     node,
                     inverse_bind: std::array::from_fn(|i| inverse[j * 16 + i]),
@@ -931,7 +931,10 @@ impl Builder<'_> {
                     continue;
                 };
                 let sampler = animation.samplers.get(c.sampler).ok_or_else(|| {
-                    LoadError::new(format!("animation {a} names sampler {} it doesn't have", c.sampler))
+                    LoadError::new(format!(
+                        "animation {a} names sampler {} it doesn't have",
+                        c.sampler
+                    ))
                 })?;
                 let interpolation = match sampler.interpolation.as_deref() {
                     None | Some("LINEAR") => Interpolation::Linear,

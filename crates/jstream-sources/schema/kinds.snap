@@ -1635,6 +1635,35 @@ source: crates/jstream-sources/tests/kinds.rs
         "label": "Receives shadows",
         "description": "Whether, lit by its scene, it is shadowed by the lights that cast them.",
         "live": true
+      },
+      {
+        "id": "animation",
+        "type": "string",
+        "multiline": false,
+        "max_len": 256,
+        "default": "",
+        "label": "Animation",
+        "description": "The file's animation to play, by its name; empty plays none and stands it at rest. A name the file lacks is refused with the names it has.",
+        "live": true
+      },
+      {
+        "id": "animation_speed",
+        "type": "float",
+        "min": 0.0,
+        "max": 8.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Animation speed",
+        "description": "How fast it plays: 1 at its own pace, 0 held at its start.",
+        "live": true
+      },
+      {
+        "id": "animation_loop",
+        "type": "bool",
+        "default": true,
+        "label": "Loop the animation",
+        "description": "Whether it plays again from its start; if not, it holds its last frame.",
+        "live": true
       }
     ]
   },

@@ -52,7 +52,12 @@ fn close(a: [f32; 3], b: [f32; 3]) {
 
 /// Where the origin goes under a slot's matrix.
 fn origin(m: &Mat4) -> [f32; 3] {
-    skin(std::slice::from_ref(m), [0; 4], [1.0, 0.0, 0.0, 0.0], [0.0; 3])
+    skin(
+        std::slice::from_ref(m),
+        [0; 4],
+        [1.0, 0.0, 0.0, 0.0],
+        [0.0; 3],
+    )
 }
 
 #[test]
@@ -110,7 +115,10 @@ fn a_cubic_spline_with_flat_tangents_eases_through_the_middle() {
         Interpolation::CubicSpline,
         &[0.0, 1.0],
         // in-tangent, value, out-tangent for each key.
-        &[0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+        &[
+            0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 2.0, 0.0, 0.0, 0.0, 0.0,
+            0.0,
+        ],
     );
     let rig = Rig::new(vec![root()], vec![slot(0)], vec![clip(vec![ease])]).unwrap();
     close(origin(&rig.pose(0, 0.5)[0]), [1.0, 0.0, 0.0]);
@@ -154,7 +162,10 @@ fn a_child_moves_with_its_parent_and_a_skin_slot_is_its_bind_offset() {
     let half = skin(&posed, [0, 1, 0, 0], [0.5, 0.5, 0.0, 0.0], [0.0; 3]);
     close(half, [5.0, -0.5, 0.0]);
     // No weight leaves a vertex where it is.
-    close(skin(&posed, [0; 4], [0.0; 4], [1.0, 2.0, 3.0]), [1.0, 2.0, 3.0]);
+    close(
+        skin(&posed, [0; 4], [0.0; 4], [1.0, 2.0, 3.0]),
+        [1.0, 2.0, 3.0],
+    );
 }
 
 #[test]
@@ -170,7 +181,12 @@ fn a_rig_refuses_a_parent_after_its_child_and_keys_that_do_not_match() {
         Rig::new(late, vec![], vec![]),
         Err(RigError::Parent { node: 0, parent: 1 })
     );
-    let short = channel(Path::Translation, Interpolation::Linear, &[0.0, 1.0], &[0.0; 3]);
+    let short = channel(
+        Path::Translation,
+        Interpolation::Linear,
+        &[0.0, 1.0],
+        &[0.0; 3],
+    );
     assert!(matches!(
         Rig::new(vec![root()], vec![slot(0)], vec![clip(vec![short])]),
         Err(RigError::Keys { channel: 0, .. })

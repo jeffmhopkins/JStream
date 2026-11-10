@@ -307,7 +307,8 @@ fn an_animation_plays_on_the_media_clock_loops_or_holds_and_a_wrong_name_is_refu
     // No animation stands it at rest.
     let mut still = create(json!({ "file": file("set/slide.gltf") }), &ctx).expect("loads");
     still.frame(ms(1000)).expect("a frame");
-    assert!(still.model().expect("a model").pose.is_none());
+    let rest = still.model().expect("a model").pose.expect("at rest");
+    assert_eq!(rest[0][12], 0.0);
     // A name the file lacks is refused with the names it has.
     let err = create(
         json!({ "file": file("set/slide.gltf"), "animation": "walk" }),
