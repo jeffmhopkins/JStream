@@ -204,6 +204,10 @@ pub struct ShownModel {
     pub model: Arc<jstream_media::model::Model>,
     /// How it is lit.
     pub lighting: jstream_media::model::Lighting,
+    /// Whether it casts its scene's shadows (ADR-0151 decision 3).
+    pub casts_shadows: bool,
+    /// Whether a `scene`-lit model is shadowed by its scene's lights that cast them.
+    pub receives_shadows: bool,
 }
 
 /// Draws a source's next frame, off any lock the caller of [`Source::frame`] holds.

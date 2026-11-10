@@ -113,6 +113,24 @@ impl ModelKind {
                     ),
                     "Draw a shape's back faces too. A file's materials keep their own.",
                 )),
+                live(described(
+                    param(
+                        "casts_shadows",
+                        "Casts shadows",
+                        ParamType::Bool,
+                        json!(true),
+                    ),
+                    "Whether it blocks the light of its scene's lights that cast shadows.",
+                )),
+                live(described(
+                    param(
+                        "receives_shadows",
+                        "Receives shadows",
+                        ParamType::Bool,
+                        json!(true),
+                    ),
+                    "Whether, lit by its scene, it is shadowed by the lights that cast them.",
+                )),
             ],
             ..kind("model", "3D model", true, false)
         })
@@ -154,6 +172,8 @@ struct Look {
     roughness: f32,
     lighting: Lighting,
     double_sided: bool,
+    casts_shadows: bool,
+    receives_shadows: bool,
 }
 
 impl Look {
@@ -180,6 +200,14 @@ impl Look {
         let double_sided = setting(settings, "double_sided")?
             .as_bool()
             .ok_or_else(|| bad("double_sided", "must be true or false"))?;
+        // Settings saved before shadows had neither: both on.
+        let flag = |id: &str| match settings.get(id) {
+            None => Ok(true),
+            Some(value) => value
+                .as_bool()
+                .ok_or_else(|| bad(id, "must be true or false")),
+        };
+        let (casts_shadows, receives_shadows) = (flag("casts_shadows")?, flag("receives_shadows")?);
         // The colour setting is sRGB; a material's base colour is linear.
         let decode = |c: u8| {
             let c = f32::from(c) / 255.0;
@@ -200,6 +228,8 @@ impl Look {
             roughness: unit("roughness")?,
             lighting,
             double_sided,
+            casts_shadows,
+            receives_shadows,
         })
     }
 
@@ -222,6 +252,8 @@ impl Look {
         ShownModel {
             model: Arc::new(model),
             lighting: self.lighting,
+            casts_shadows: self.casts_shadows,
+            receives_shadows: self.receives_shadows,
         }
     }
 }

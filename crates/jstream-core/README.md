@@ -1937,6 +1937,22 @@ model with the first 8 point, spot and directional ones and every ambient one; a
 with more is logged once (`Chains::lights_warned`). A light placed without a box has no
 position and is left out. In a 2D scene a `scene`-lit model is studio-lit
 (`a_scene_lit_model_is_lit_by_the_lights_its_scene_places`).
+Shadows ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3):
+`scene_lights` also lists the spot and directional lights whose source has `shadows`,
+by index with their softness (`Chains::shadowed`). The first `scene`-lit model of a run
+that receives shadows (`ShownModel::receives_shadows`) in a scene with any draws that
+scene's maps (`draw_shadows`): for each of the first 2 such lights, a
+`GpuKey::ShadowMap` layer of 2048² holding the view depth of the scene's pass (found
+among the chains', the program's and the mixes' passes, `scene_pass`) seen from the
+light, its cards through `render_view_depth` and its models through `draw_view_depth`'s
+model loop, leaving out a model whose source doesn't cast (`casts_shadows`). A spot
+light looks from where it is along its aim, through its cone and a tenth more; a
+directional light from far back along its aim, at the sphere around what the pass places
+(`caster_bounds`), through a 30° view that holds it, which stands in for an orthographic
+view. More than 2 such lights are logged once (`Chains::shadows_warned`). `Chains` keeps
+the maps for that run (`shadows_of`), and every receiving model of the scene draws with
+them. A map that can't be drawn leaves its light unshadowed that frame, logged at debug
+(`a_card_shadows_a_scene_lit_wall`).
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
 Without effects the layer is shown as drawn (`GpuKey::ItemBox`); with them it is their
 input, as for canvas space, so they run over the canvas. The item is placed as

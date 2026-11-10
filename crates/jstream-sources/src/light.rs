@@ -54,6 +54,11 @@ pub struct ShownLight {
     pub cone_deg: f32,
     /// The share of a spot cone, from its edge inward, over which it fades, 0 to 1.
     pub softness: f32,
+    /// Whether it casts shadows (ADR-0151 decision 3): only a spot or directional
+    /// light does.
+    pub shadows: bool,
+    /// How soft its shadows' edges are, 0 (hard) to 1.
+    pub shadow_softness: f32,
 }
 
 /// The `light` kind.
@@ -136,6 +141,21 @@ impl LightKind {
                     "The share of a spot cone, from its edge inward, over which it \
                          fades out.",
                 )),
+                p(
+                    "shadows",
+                    "Shadows",
+                    ParamType::Bool,
+                    json!(false),
+                    "A spot or directional light casts shadows from the scene's models and \
+                     cards onto its scene-lit models. The first two in a scene do.",
+                ),
+                p(
+                    "shadow_softness",
+                    "Shadow softness",
+                    number(0.0, 1.0, 0.05, None),
+                    json!(0.3),
+                    "How soft its shadows' edges are, 0 hard.",
+                ),
             ],
             ..kind("light", "Light", true, false)
         })
@@ -219,6 +239,18 @@ fn shown(settings: &Settings) -> Result<ShownLight, SourceError> {
         range_px: number("range_px", 0.0, MAX_RANGE_PX)?,
         cone_deg: number("cone_deg", 1.0, 170.0)?,
         softness: number("softness", 0.0, 1.0)?,
+        // Settings saved before shadows had none: no shadows.
+        shadows: match settings.get("shadows") {
+            None => false,
+            Some(value) => value
+                .as_bool()
+                .ok_or_else(|| bad("shadows", "must be true or false".into()))?,
+        },
+        shadow_softness: if settings.get("shadow_softness").is_some() {
+            number("shadow_softness", 0.0, 1.0)?
+        } else {
+            0.3
+        },
     })
 }
 

@@ -95,6 +95,7 @@ fn draw_lit(
                 camera,
                 lighting,
                 lights,
+                shadows: &[],
             },
             &layer,
         )
@@ -429,6 +430,7 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     camera: Some(camera),
                     lighting: Lighting::Unlit,
                     lights: None,
+                    shadows: &[],
                 },
                 &layer,
             )
@@ -467,6 +469,7 @@ fn a_model_from_another_compositor_is_refused() {
             camera: None,
             lighting: Lighting::Studio,
             lights: None,
+            shadows: &[],
         },
         &layer,
     );
@@ -563,6 +566,7 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     camera: None,
                     lighting: Lighting::Unlit,
                     lights: None,
+                    shadows: &[],
                 },
                 &layer,
             )
@@ -867,4 +871,157 @@ fn golden_model_lights_are_ignored_without_a_camera_or_unlit() {
         Some(&lights),
     );
     assert_near(rgb(&unlit, 50, 50), [188, 188, 188], (50, 50));
+}
+
+/// ADR-0151 decision 3: a `scene`-lit wall behind a cube, lit by a directional light
+/// from the left, is shadowed where the cube's shadow map puts the cube between it and
+/// the light, and lit elsewhere and without the map; a card's map, drawn as the view
+/// depth draws cards, shadows it the same way.
+#[test]
+fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = SceneCamera::framing(canvas());
+    let white = |shape: Shape| {
+        shape
+            .model(Material {
+                base_color: [1.0; 4],
+                roughness: 1.0,
+                ..Material::default()
+            })
+            .expect("the shape builds")
+    };
+    let wall = compositor
+        .upload_model(&white(Shape::Plane))
+        .expect("uploads");
+    let cube = compositor
+        .upload_model(&white(Shape::Cube))
+        .expect("uploads");
+    let mut wall_at = boxed(80.0, 50.0, 200.0);
+    wall_at.fit_mode = jstream_protocol::FitMode::Stretch;
+    wall_at.depth_px = finite(-60.0);
+    let cube_at = boxed(60.0, 50.0, 20.0);
+    // Shining right and into the scene at 45°: the cube's shadow falls 60 px to its
+    // right on the wall, at x = 120 there, which the camera sees nearer the centre, at
+    // about x = 105, since the wall is behind the canvas plane.
+    let aim = [1.0f64, 0.0, -1.0].map(|c| c / 2f64.sqrt());
+    let light = SceneLight {
+        kind: LightKind::Directional,
+        position: [0.0; 3],
+        aim,
+        color: Color::rgb(1.0, 1.0, 1.0),
+        intensity: 2.0,
+        range_px: 0.0,
+        cone_deg: 45.0,
+        softness: 0.0,
+    };
+    let lights = [light];
+    let centre = [80.0f32, 50.0, -30.0];
+    let from = [0, 1, 2].map(|i| centre[i] - aim[i] as f32 * 600.0);
+    let light_camera = SceneCamera {
+        position: Vec3::new(from[0], from[1], from[2]).expect("finite"),
+        target: Vec3::new(centre[0], centre[1], centre[2]).expect("finite"),
+        fov_deg: finite(30.0),
+        roll_deg: Finite32::ZERO,
+        depth_sort: false,
+        focus_px: None,
+        blur_px: Finite32::ZERO,
+    };
+    let map = compositor.layer(256, 256).expect("a map");
+    let clear = Scene {
+        canvas: FrameSize::new(256, 256).expect("non-zero"),
+        background: Color::rgb(0.0, 0.0, 0.0),
+        items: &[],
+    };
+    compositor
+        .render_view_depth(&clear, &map)
+        .expect("the map clears");
+    compositor
+        .draw_model_depth(
+            &ModelDraw {
+                model: &cube,
+                geometry: cube_at,
+                camera: Some(light_camera),
+                lighting: Lighting::Scene,
+                lights: None,
+                shadows: &[],
+            },
+            &map,
+        )
+        .expect("the cube casts");
+    let card = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let card_map = compositor.layer(256, 256).expect("a map");
+    let mut card_at = boxed(60.0, 50.0, 20.0);
+    card_at.fit_mode = jstream_protocol::FitMode::Stretch;
+    let cards = [Item {
+        camera: Some(light_camera),
+        ..crate::tests::item(&card, Placement::Geometry(card_at), Crop::NONE, 1.0)
+    }];
+    compositor
+        .render_view_depth(
+            &Scene {
+                canvas: FrameSize::new(256, 256).expect("non-zero"),
+                background: Color::rgb(0.0, 0.0, 0.0),
+                items: &cards,
+            },
+            &card_map,
+        )
+        .expect("the card casts");
+    let card_shadows = [super::ShadowMap {
+        light: 0,
+        image: &card_map,
+        camera: light_camera,
+        softness: 0.0,
+    }];
+    let shadows = [super::ShadowMap {
+        light: 0,
+        image: &map,
+        camera: light_camera,
+        softness: 0.0,
+    }];
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let mut shot = |shadows: &[super::ShadowMap<'_>]| {
+        compositor
+            .draw_model(
+                &ModelDraw {
+                    model: &wall,
+                    geometry: wall_at,
+                    camera: Some(camera),
+                    lighting: Lighting::Scene,
+                    lights: Some(&lights),
+                    shadows,
+                },
+                &layer,
+            )
+            .expect("the wall draws");
+        let items = [Item {
+            camera: Some(camera),
+            ..crate::tests::item(&layer, Placement::Layer(wall_at), Crop::NONE, 1.0)
+        }];
+        render(compositor, &items)
+    };
+    let lit = shot(&[]);
+    let shadowed = shot(&shadows);
+    let carded = shot(&card_shadows);
+    let luma = |p: [u8; 3]| p.iter().map(|&c| u32::from(c)).sum::<u32>();
+    let (open_lit, open_shadowed) = (luma(rgb(&lit, 20, 50)), luma(rgb(&shadowed, 20, 50)));
+    let (under_lit, under) = (luma(rgb(&lit, 105, 50)), luma(rgb(&shadowed, 105, 50)));
+    assert!(under_lit > 150, "the wall is lit: {under_lit}");
+    assert!(
+        open_lit.abs_diff(open_shadowed) <= 6,
+        "out of the shadow nothing changes: {open_lit} against {open_shadowed}"
+    );
+    assert!(
+        under + 100 < under_lit,
+        "the cube's shadow darkens the wall: {under} against {under_lit}"
+    );
+    let under_card = luma(rgb(&carded, 105, 50));
+    assert!(
+        under_card + 100 < under_lit,
+        "a card's shadow darkens the wall: {under_card} against {under_lit}"
+    );
 }
