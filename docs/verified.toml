@@ -7347,7 +7347,7 @@ stamp = { hash = "b3:a9e4919b16efa1e8", by = "agent:frame-probe", note = "Re-rea
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["ROADMAP#macos-unsigned"."body"]
-stamp = { hash = "b3:c65694236677f8d5", by = "agent:claude", note = "New section recording the maintainer's decision that macOS stays unsigned (no Apple Developer Program), the CEF browser-source plan reusing the helper, the later unsigned .dmg release job, what can't work unsigned, and the from-source virtual camera routes; re-read against ADR-0063 (§13, questions 1 and 5) and ADR-0144 (decision 3, consequences)" }
+stamp = { hash = "b3:c91a6557994c586c", by = "agent:claude", note = "Added the recommended virtual-camera route without a developer account: writing Program frames into OBS Studio's notarised camera extension's sink stream through public CMIO calls, with its licence position (no OBS code shipped or copied), risks (undocumented interface, one writer, OBS's name and formats) and the routes not chosen (NDI Virtual Input, DAL-based Syphon Virtual Webcam and CamTwist); renumbered the routes and re-read the section" }
 
 ["ROADMAP#macos-unsigned"."dep:docs/adr/0063-macos-platform-support.md"]
 stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:claude", note = "New section recording the maintainer's decision that macOS stays unsigned (no Apple Developer Program), the CEF browser-source plan reusing the helper, the later unsigned .dmg release job, what can't work unsigned, and the from-source virtual camera routes; re-read against ADR-0063 (§13, questions 1 and 5) and ADR-0144 (decision 3, consequences)" }

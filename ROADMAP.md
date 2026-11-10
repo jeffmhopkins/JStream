@@ -199,12 +199,13 @@ hardware encoders, streaming and recording, stream keys in the login Keychain, t
 desktop app and its global hotkeys, and, with CEF, browser sources.
 
 **What an unsigned build can't do, or does worse:**
-- **No virtual camera in the download.** macOS's only supported virtual camera is a Core
+- **No camera extension of JStream's own.** macOS's only supported virtual camera is a Core
   Media I/O camera extension, a system extension. Installing one needs the restricted
   System Extension entitlement, which only comes in a provisioning profile from a paid
   team ([Apple's capability table](https://developer.apple.com/help/account/reference/supported-capabilities-macos)
   lists it for paid memberships and Developer ID only, so a free Apple ID's personal team
-  can't have it).
+  can't have it). The virtual camera goes through another app's signed extension
+  instead ([below](#macos-vcam-source)).
 - **A Gatekeeper detour on first open.** A downloaded copy is blocked until the user
   allows it in System Settings › Privacy & Security; since macOS 15 Control-click no
   longer skips that.
@@ -217,26 +218,50 @@ desktop app and its global hotkeys, and, with CEF, browser sources.
 - **No Mac App Store listing**, which needs a paid membership too.
 
 <a id="macos-vcam-source"></a>
-### The virtual camera for people who build from source
-Building on your own Mac removes the quarantine, but not the entitlement, so a
-from-source build gets the virtual camera only in one of these ways. None is built yet:
-the camera extension is its own ADR, and the plan is to ship its code behind an opt-in
-build that needs one of them.
+### The virtual camera without a developer account
+JStream can't ship a camera extension of its own, and building on your own Mac removes
+the quarantine but not the entitlement. So the virtual camera on macOS comes from a
+camera extension someone else signed, or from one of the routes after it. None is built
+yet; the virtual camera is its own ADR.
 
-1. **Your own paid Apple Developer account (the one that works normally).** You would
+1. **Feed OBS Studio's signed camera extension (the plan for everyone, download or
+   source).** OBS Studio is free, and from OBS 30 on macOS 13 and later it installs a
+   notarised Core Media I/O camera extension, "OBS Virtual Camera". The extension has a
+   sink stream that the OBS app writes frames into with the public Core Media I/O calls
+   (`CMIOStreamCopyBufferQueue`, then enqueueing sample buffers), and any other process
+   can write to it the same way: community tools such as pyvirtualcam and webcam-crop
+   already do, without OBS running. JStream would find the device, open its sink stream
+   and enqueue Program frames, and Zoom, FaceTime or a browser then see the camera. The
+   user installs OBS once, clicks Start Virtual Camera there once so macOS installs and
+   approves the extension, and quits it.
+   - **Licence:** JStream only calls Apple's APIs on a separately installed program and
+     ships none of OBS's GPL code, so its own licence is unaffected. Nothing may be
+     copied from OBS's source; the device's identity and frame format are read from the
+     running system.
+   - **Risks:** OBS doesn't document the sink stream as an interface, so its device ID,
+     stream order or formats can change in an OBS release and break the feed; JStream
+     would check them and say so instead of failing silently. Only one writer at a time,
+     so OBS's own virtual camera and JStream's can't both run. The camera shows as "OBS
+     Virtual Camera", at the formats OBS's extension offers. All of this needs a Mac to
+     confirm before it ships.
+   - **Not chosen:** NDI Tools' Virtual Input (a signed extension fed by an NDI stream)
+     would need an NDI sender in JStream on the proprietary NDI SDK, and NDI's own docs
+     report it unreliable on recent macOS. Syphon Virtual Webcam and CamTwist rely on
+     DAL plug-ins, which no longer load.
+2. **Your own paid Apple Developer account (the one that works normally).** You would
    sign the app and its extension with your own team: `scripts/mac/bundle-app.sh` already
    takes a Developer ID identity, and would also take your provisioning profile for the
    extension. Install `JStream.app` in `/Applications`, turn the camera on in JStream,
    and approve it once in System Settings (on recent macOS, Privacy & Security ›
    Extensions, under Camera or Media Extensions).
-2. **Apple's developer test mode, with System Integrity Protection off.** This is how
+3. **Apple's developer test mode, with System Integrity Protection off.** This is how
    Apple's own engineers test system extensions, and it lowers the Mac's security, so it
    is for developers only: start in Recovery, run `csrutil disable` in Terminal, restart,
-   run `systemextensionsctl developer on`, then install and approve as in 1. Whether an
+   run `systemextensionsctl developer on`, then install and approve as in 2. Whether an
    ad-hoc signed extension loads this way on current macOS is unverified, and forum
    reports show it failing on some 26.x releases; it needs a Mac to try before the docs
    promise it.
-3. **Not a legacy DAL plug-in.** The older plug-in kind stopped loading in macOS 14.1.
+4. **Not a legacy DAL plug-in.** The older plug-in kind stopped loading in macOS 14.1.
    Apple's switch to bring it back
    ([`system-override legacy-camera-plugins-without-sw-camera-indication=on`](https://support.apple.com/HT213969),
    run in Recovery) hides the camera-in-use light, works only in apps that load
