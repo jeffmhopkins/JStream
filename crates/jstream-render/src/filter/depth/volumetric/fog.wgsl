@@ -71,15 +71,9 @@ struct Params {
 @group(0) @binding(6) var shadow0: texture_2d<f32>;
 @group(0) @binding(7) var shadow1: texture_2d<f32>;
 
-// The 1 / w shadow map `s` holds at `px`, 0 (nothing) outside it.
-fn shadow_texel(s: u32, px: vec2<i32>) -> f32 {
-    var size: vec2<u32>;
-    if s == 0u {
-        size = textureDimensions(shadow0);
-    } else {
-        size = textureDimensions(shadow1);
-    }
-    if any(px < vec2<i32>(0)) || any(px >= vec2<i32>(size)) {
+// The 1 / w shadow map `s` holds at `px`, 0 (nothing) outside its `size`.
+fn shadow_texel(s: u32, px: vec2<i32>, size: vec2<i32>) -> f32 {
+    if any(px < vec2<i32>(0)) || any(px >= size) {
         return 0.0;
     }
     if s == 0u {
@@ -88,24 +82,44 @@ fn shadow_texel(s: u32, px: vec2<i32>) -> f32 {
     return textureLoad(shadow1, px, 0).r;
 }
 
-// Whether light slot `light` reaches `q`: 1 unless a map of its own holds something
-// nearer to the light there (by a small bias). One tap: the steps' jitter softens it.
-fn reaches(light: u32, q: vec3<f32>) -> f32 {
-    for (var s = 0u; s < MAX_SHADOWS; s++) {
-        let sh = p.shadows[s];
-        if sh.at.w < 0.0 || u32(sh.at.w) != light {
-            continue;
-        }
-        let focal = sh.right.w;
-        let rel = q - sh.at.xyz;
-        let d = dot(rel, sh.forward.xyz);
-        if d <= 0.0 || focal <= 0.0 {
-            return 1.0;
-        }
-        let at = vec2<f32>(dot(rel, sh.right.xyz), dot(rel, sh.down.xyz)) * focal / d
-            + vec2<f32>(sh.down.w);
-        let stored = shadow_texel(s, vec2<i32>(floor(at)));
-        return select(0.0, 1.0, stored <= focal / d * 1.002);
+// Whether map `s`, of `size`, sees `q`: 1 unless it holds something nearer to its light
+// there (by a small bias), or `q` is behind the light. One tap: the steps' jitter
+// softens it.
+fn seen_by_map(s: u32, q: vec3<f32>, size: vec2<i32>) -> f32 {
+    let sh = p.shadows[s];
+    let focal = sh.right.w;
+    let rel = q - sh.at.xyz;
+    let d = dot(rel, sh.forward.xyz);
+    if d <= 0.0 || focal <= 0.0 {
+        return 1.0;
+    }
+    let at = vec2<f32>(dot(rel, sh.right.xyz), dot(rel, sh.down.xyz)) * focal / d
+        + vec2<f32>(sh.down.w);
+    let stored = shadow_texel(s, vec2<i32>(floor(at)), size);
+    return select(0.0, 1.0, stored <= focal / d * 1.002);
+}
+
+// Whether map `s` shadows light slot `light`.
+fn shadows_light(s: u32, light: u32) -> bool {
+    let w = p.shadows[s].at.w;
+    return w >= 0.0 && u32(w) == light;
+}
+
+// Whether light slot `light` reaches `q`: 1 unless a map of its own, of `sizes` (map 0's
+// in xy, map 1's in zw), doesn't see it.
+//
+// This runs inside the march's loops, whose step count is a uniform, so it must not
+// make FXC (the Direct3D 12 compiler) unroll them, or FXC refuses the whole shader
+// (X3511) and the scene's chain draws nothing on Windows. A `textureDimensions` in
+// a loop does, and so does a loop over the maps that picks a texture by its index:
+// the sizes are read once before the march, and the MAX_SHADOWS (2) maps are tried one
+// by one.
+fn reaches(light: u32, q: vec3<f32>, sizes: vec4<i32>) -> f32 {
+    if shadows_light(0u, light) {
+        return seen_by_map(0u, q, sizes.xy);
+    }
+    if shadows_light(1u, light) {
+        return seen_by_map(1u, q, sizes.zw);
     }
     return 1.0;
 }
@@ -221,6 +235,11 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let dd = (end - start) / steps;
     let ds = dd * ray;
     let offset = jitter(in.pos.xy);
+    // Read here, not in the loops: see `reaches`.
+    let sizes = vec4<i32>(
+        vec2<i32>(textureDimensions(shadow0)),
+        vec2<i32>(textureDimensions(shadow1)),
+    );
     let fog = p.color.rgb;
     var through = 1.0;
     var light = vec3<f32>(0.0);
@@ -235,7 +254,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         }
         var here = fog;
         for (var l = 0u; l < min(p.light_count, MAX_LIGHTS); l = l + 1u) {
-            let lit = reaches(l, q);
+            let lit = reaches(l, q, sizes);
             if lit > 0.0 {
                 here = here + p.density.w * lit * in_light(p.lights[l], q, to_eye);
             }

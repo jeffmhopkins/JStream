@@ -1251,7 +1251,9 @@ it out; `filter::testing` reads both lists.
   light reaching the point (range falloff and cone as a model's, no surface; a shadowed
   light only where one tap of its map has nothing nearer the light, by 0.2%, the
   steps' jitter softening the edge, so what stands in a beam cuts a shaft through it,
-  `a_shadow_map_cuts_the_light_through_the_fog`), with a Henyey-Greenstein phase of `g = 0.4` against an even one. It lays the light scattered
+  `a_shadow_map_cuts_the_light_through_the_fog`; nothing in the march's loops may make FXC, the
+  Direct3D 12 compiler, unroll them, or it refuses the shader: the maps' sizes are read
+  once before the march, and the two maps are tried one by one, not in a loop), with a Henyey-Greenstein phase of `g = 0.4` against an even one. It lays the light scattered
   toward the camera over the picture times what the fog lets through, scaled by the
   colour's alpha, source-over as `depth_fog` is.
 
