@@ -96,7 +96,9 @@ Contents ([Design](#design) explains the choices):
   which calls the global's `browse` to open a native dialog, and `desktop_network()`
   and `allow_network`, which read and save the app's "Allow devices on my network",
   and `desktop_jtunnel()` and `set_jtunnel`, which read and save its "Receive from
-  JTunnel senders" as a `JtunnelSetting` (its JSON tested natively). `same_engine` says
+  JTunnel senders" as a `JtunnelSetting` (its JSON tested natively), and `desktop_ptz()`
+  and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
+  `same_engine` says
   whether the open session is that app's own engine.
 - **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
   file is stored (`place_asset`, tested natively): under the collection folder as a
@@ -266,6 +268,10 @@ Contents ([Design](#design) explains the choices):
   (`heard`, `jtunnel.senders`) on the Devices page, and `with_sender`, the add row's
   check, and `accepts`, whether a heard sender is on the list, tested natively. The
   store's `jtunnel_changed` counts `jtunnel.senders_changed`.
+- **PTZ controllers** (`ptz_controllers.rs`): `PtzControllerSettingView`, the desktop
+  app's "Accept a PTZ controller" switch, endpoints and allowed controllers on the
+  Devices page, and `with_endpoint`, `with_allowed` and `target_label`, the add rows'
+  checks and how a target reads, tested natively with the setting's JSON.
 - **Agents** (`agents.rs`, [ADR-0131](../../docs/adr/0131-ask-before-a-new-agent-connects.md)):
   `AgentPrompt`, the "Agent wants to connect" dialog the shell draws while the server
   holds a new agent's hello (Deny, Allow once, Always allow), on
@@ -312,8 +318,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   [jstream-server › Design](../jstream-server/README.md#design)); that page is the
   server's, not the UI's. In the desktop app the form is skipped: the
   app defines `window.__JSTREAM_DESKTOP__` (`url`, `token`, `vcam`, `collection`,
-  `network`, `networkOpen`, `wheelFocusOnly`, `browse`, `allowNetwork`, `jtunnel` and
-  `setJtunnel`) before the page loads,
+  `network`, `networkOpen`, `wheelFocusOnly`, `browse`, `allowNetwork`, `jtunnel`,
+  `setJtunnel`, `ptz` and `setPtz`) before the page loads,
   and `App` connects to that engine at once (`host.rs`). A projector window lacking the
   global (WebView2 doesn't run the app's script in a window handed to its opener) reads
   its same-origin opener's instead. That connection carries the
@@ -1089,6 +1095,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   address and what accepting lets it do (ADR-0123 §3: the first use is explicit), and
   only Accept in that prompt adds it, through the same save. With the receiver off it
   says senders show while receiving is on.
+  Below it, "Accept a PTZ controller"
+  ([ADR-0153](../../docs/adr/0153-ptz-controller-idle-stop-counters-and-setting.md)
+  §3), shown only when the global has `ptz` and `setPtz`: the switch, the endpoints
+  (address and port, transport, VISCA address and what each drives, each with Remove)
+  with an add row whose target picks Program, Preview or a scene of the open
+  collection, and the allowed controller addresses with their own add row. Each change
+  saves the whole setting through `setPtz`, the app's own command, never a protocol
+  call; a refused change is undone and the app's reason shown, and while it differs
+  from the setting the app started with it says to restart JStream.
   The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
   calls `device.list` when it opens and shows its controls only if that is served: a
   session with no server in front answers `unsupported`, and the Devices page then says

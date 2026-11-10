@@ -7,8 +7,8 @@ use crate::ptz::tests::{FakeHead, HeadState};
 use crate::ptz::{PtzSetup, matched_speed};
 use jstream_control::Control;
 use jstream_protocol::{
-    Action, Call, Easing, Edit, PtzPose, PtzShot, PtzTransport, Query, QueryResult, SceneId,
-    Settings, SourceId, SourceKind, TransitionPresetId,
+    Action, Call, Easing, Edit, PtzCameraProfile, PtzPose, PtzShot, PtzTransport, Query,
+    QueryResult, SceneId, Settings, SourceId, SourceKind, TransitionPresetId,
 };
 use jstream_visca::{Command, PositionWidth, PresetOp};
 
@@ -52,6 +52,20 @@ fn preview(control: &dyn Control, scene: &str) {
     call(control, action).expect("studio.set_preview");
 }
 
+/// `profile.get`'s `ptz_cameras` (ADR-0155).
+fn ptz_profile(control: &dyn Control) -> Vec<PtzCameraProfile> {
+    match query(
+        control,
+        Query::ProfileGet {
+            seconds: None,
+            top: None,
+        },
+    ) {
+        Ok(QueryResult::ProfileGet { profile }) => profile.ptz_cameras,
+        other => panic!("{other:?}"),
+    }
+}
+
 fn recalled(head: &HeadState) -> Vec<u8> {
     head.commands
         .iter()
@@ -73,7 +87,8 @@ fn aims(head: &HeadState) -> Vec<(i32, u8)> {
 }
 
 /// Without `start_ptz` the engine controls no camera: an action fails and the list is
-/// empty. With it, actions reach the head and `ptz.list` shows its pose.
+/// empty. With it, actions reach the head, `ptz.list` shows its pose and `profile.get`
+/// counts its link (ADR-0155).
 #[test]
 fn actions_and_the_list_reach_the_heads_the_host_starts() {
     let engine = Engine::new();
@@ -88,6 +103,7 @@ fn actions_and_the_list_reach_the_heads_the_host_starts() {
             cameras: Vec::new()
         })
     );
+    assert_eq!(ptz_profile(&control), Vec::new());
     let head = FakeHead::start(PtzTransport::ViscaIp);
     engine
         .start_ptz(&PtzSetup::new(vec![head.camera("wide")]).expect("setup"))
@@ -134,9 +150,29 @@ fn actions_and_the_list_reach_the_heads_the_host_starts() {
     let cameras = listed.expect("the pose reaches ptz.list");
     assert_eq!(cameras[0].camera, "wide");
     assert!(cameras[0].reachable);
-    // An empty setup stops them.
+    let profiled = ptz_profile(&control);
+    assert_eq!(profiled.len(), 1, "{profiled:?}");
+    let wide = &profiled[0];
+    assert_eq!(wide.camera, "wide");
+    assert_eq!(wide.address, head.addr.to_string());
+    assert_eq!(wide.transport, "visca_ip");
+    assert!(wide.reachable);
+    assert!(wide.sent > 0 && wide.replies > 0, "{wide:?}");
+    // The head answered every command, the first time.
+    assert_eq!(
+        (
+            wide.dropped,
+            wide.resent,
+            wide.unanswered,
+            wide.refused,
+            wide.busy
+        ),
+        (0, 0, 0, 0, 0)
+    );
+    // An empty setup stops them, and they leave the report.
     engine.start_ptz(&PtzSetup::default()).expect("stop");
     assert_eq!(call(&control, home()), Err("action_failed".into()));
+    assert_eq!(ptz_profile(&control), Vec::new());
 }
 
 /// A scene going on program sends its shots; a keyframe scene sends its own shot for a
