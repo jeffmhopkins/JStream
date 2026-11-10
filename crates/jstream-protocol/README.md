@@ -341,7 +341,9 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.118 because a scene camera has a live aim that a PTZ controller
+`PROTOCOL_VERSION` is 0.119 because a box can face the camera: `ItemGeometry`'s
+`billboard` ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 2,
+#1231); 0.118 because a scene camera has a live aim that a PTZ controller
 drives: the actions `scene.drive_camera` and `scene.aim_camera` and the query
 `scene.camera_aim` (`CameraAim`, `CameraAimInfo`,
 [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md), #1181); 0.117 because the warm scenes have a GPU-byte budget:
@@ -2897,6 +2899,13 @@ function in this crate so the compositor and the UI share one implementation.
   flip. The flips travel inside `ItemGeometry`, so `item.add`, `item.set_geometry` and
   its inverse carry them with no edit of their own. The compositor draws them, so the
   engine accepts both.
+- `billboard` (0.119, [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+  decision 2) is an optional boolean: in a 3D scene the box turns about its centre to
+  face the camera. `ItemGeometry::facing(view)` replaces its `turn_deg` and `tilt_deg`
+  with the ones that point its front at the camera's position, and keeps
+  `rotation_deg`'s roll. Every camera placement goes through it (`project_seen`,
+  `drawn_polygon_seen`, `solid` with a view), and `light_pose_seen` turns a billboard
+  light with its box. In a 2D scene it changes nothing.
 - `legacy_quad` and `ItemGeometry::from_legacy` evaluate a 0.3 `ItemTransform`: crop,
   then scale, top-left at `position`, clockwise about that corner. `from_legacy`
   returns that outline as a box with `fit_mode = stretch` and neutral 3D, so a

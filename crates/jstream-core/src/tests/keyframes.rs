@@ -1890,6 +1890,41 @@ fn a_move_from_2d_with_a_tilted_item_into_3d_fades() {
     );
 }
 
+/// A Move between 2D and 3D fades where the 2D side has a billboard (ADR-0151 decision
+/// 2): flat in 2D, it would turn to face the framing camera and snap flat at the end.
+#[test]
+fn a_move_from_2d_with_a_billboard_into_3d_fades() {
+    let engine = family();
+    let control = connected(&engine);
+    let mut billboard = at(100.0);
+    billboard.billboard = true;
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            Edit::ItemSetGeometry {
+                item_id: ItemId::new("a1"),
+                scene_id: None,
+                geometry: billboard,
+            },
+            Edit::SceneSetCamera {
+                scene_id: SceneId::new("k"),
+                camera: Some(tilted_20()),
+            },
+        ],
+    );
+    switch(&control, "a", None);
+    switch(&control, "k", Some("move"));
+    let hub = engine.render_hub().load();
+    let tracks = hub.shot().tracks().expect("a transition runs");
+    assert!(
+        !tracks
+            .iter()
+            .any(|track| matches!(track, Track::Pair { .. })),
+        "it fades: {tracks:?}"
+    );
+}
+
 /// An item off the canvas's centre with its own perspective at the framing camera's focal
 /// length still fades (ADR-0128 §2): its perspective projects about its own centre, the
 /// camera's about the canvas's, so gliding would make it jump on the first frame.

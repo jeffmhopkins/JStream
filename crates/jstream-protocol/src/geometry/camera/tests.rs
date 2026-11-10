@@ -557,3 +557,90 @@ fn a_light_sits_at_its_items_centre_and_shines_out_of_its_back() {
     let cos = (0..3).map(|i| axis[i] * shines[i]).sum::<f64>() / (length(axis) * length(shines));
     assert!((cos - 1.0).abs() < 1e-9, "{axis:?} against {shines:?}");
 }
+
+fn billboard(geometry: ItemGeometry) -> ItemGeometry {
+    ItemGeometry {
+        billboard: true,
+        ..geometry
+    }
+}
+
+/// The scene-space front normal of `geometry`: its local `x × y`, `+z` in its frame.
+fn front(geometry: ItemGeometry) -> [f64; 3] {
+    let at = |x, y| {
+        let point = world(geometry, x, y);
+        [point.x, point.y, point.z].map(|c| f64::from(c.get()))
+    };
+    let (o, x, y) = (at(0.0, 0.0), at(100.0, 0.0), at(0.0, 100.0));
+    let (a, b) = (
+        [0, 1, 2].map(|i| x[i] - o[i]),
+        [0, 1, 2].map(|i| y[i] - o[i]),
+    );
+    let n = [
+        a[1] * b[2] - a[2] * b[1],
+        a[2] * b[0] - a[0] * b[2],
+        a[0] * b[1] - a[1] * b[0],
+    ];
+    let len = n.iter().map(|c| c * c).sum::<f64>().sqrt();
+    n.map(|c| c / len)
+}
+
+/// ADR-0151 decision 2: a billboard's front points at the camera whatever its own turn
+/// and tilt, its roll is kept, and it draws as an unturned billboard would.
+#[test]
+fn a_billboard_faces_the_camera() {
+    let from = [300.0, -200.0, 1800.0];
+    let seen = view(camera(
+        vec3(from[0] as f32, from[1] as f32, from[2] as f32),
+        vec3(900.0, 600.0, -400.0),
+        50.0,
+        12.0,
+    ));
+    let turned = billboard(item(700.0, 400.0, -250.0, 25.0, 60.0, 15.0));
+    let faced = turned.facing(&seen);
+    assert_eq!(faced.rotation_deg, turned.rotation_deg);
+    let to = [700.0, 400.0, -250.0];
+    let d = [0, 1, 2].map(|i| from[i] - to[i]);
+    let len = d.iter().map(|c| c * c).sum::<f64>().sqrt();
+    let n = front(faced);
+    let cos = (0..3).map(|i| n[i] * d[i] / len).sum::<f64>();
+    assert!((cos - 1.0).abs() < 1e-5, "{n:?} against {d:?}");
+    let unturned = billboard(item(700.0, 400.0, -250.0, 0.0, 0.0, 15.0));
+    for (got, expected) in polygon_points(turned, Some(&seen))
+        .into_iter()
+        .zip(polygon_points(unturned, Some(&seen)))
+    {
+        near(got, expected, 1e-2);
+    }
+}
+
+/// ADR-0151 decision 2: `billboard` changes nothing in a 2D scene, nor for an item
+/// that isn't one.
+#[test]
+fn a_billboard_is_flat_without_a_camera() {
+    let turned = item(700.0, 400.0, -250.0, 25.0, 60.0, 15.0);
+    assert_eq!(
+        polygon_points(billboard(turned), None),
+        polygon_points(turned, None)
+    );
+    let seen = view(SceneCamera::framing(CANVAS));
+    assert_eq!(turned.facing(&seen), turned);
+}
+
+/// ADR-0151 decision 2: a billboard light turns with its box, so it shines away from
+/// the camera.
+#[test]
+fn a_billboard_light_shines_away_from_the_camera() {
+    let seen = view(camera(
+        vec3(300.0, -200.0, 1800.0),
+        vec3(900.0, 600.0, -400.0),
+        50.0,
+        0.0,
+    ));
+    let light = billboard(item(700.0, 400.0, -250.0, 0.0, 90.0, 0.0));
+    let (at, aim) = light.light_pose_seen(&seen);
+    let away = [300.0 - at[0], -200.0 - at[1], 1800.0 - at[2]];
+    let len = away.iter().map(|c| c * c).sum::<f64>().sqrt();
+    let cos = (0..3).map(|i| aim[i] * away[i] / len).sum::<f64>();
+    assert!((cos + 1.0).abs() < 1e-5, "{aim:?} against {away:?}");
+}

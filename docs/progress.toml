@@ -206,6 +206,7 @@ release = "alpha.5"
 title = "Richer 3D scenes: glTF and GLB models with materials, lights, fog and depth-aware effects"
 status = "planned"
 issues = [1231]
+prs = [1400, 1413, 1458, 1460, 1483, 1484]
 note = "finishes roadmap item 3D3"
 
 [[target]]
