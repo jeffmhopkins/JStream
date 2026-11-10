@@ -144,4 +144,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0135](0135-a-shader-source-from-add-source.md) | A shader source is written from Add source | accepted | agent |  |
 | [ADR-0136](0136-an-effects-outset-follows-its-settings.md) | An effect's outset follows its settings | accepted | agent |  |
 | [ADR-0143](0143-scene-lights-and-depth-aware-scene-filters.md) | Scene lights and depth-aware scene filters | accepted | agent |  |
+| [ADR-0154](0154-a-carried-pass-compares-against-the-reviewed-base.md) | A carried review pass compares the reviewed head against the base it was reviewed on | accepted | agent |  |
 <!-- @generated end adr-index -->
