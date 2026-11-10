@@ -739,6 +739,19 @@ taps around the direction for a spread: the reflection at the square of the roug
 the diffuse light at 1. An ambient light scales it; with none it lights the model on its
 own (`golden_model_an_environment_lights_a_model_from_its_sky`).
 
+**Lit cards** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
+decision 10). `Compositor::light_card` shades a flat picture by a scene's lights
+(`CardDraw`: the picture, the card's geometry and camera, its roughness, metalness and
+emissive strength, and the same lights, shadow maps and environment a model takes). It
+shades in texture space: the target is the card's own picture size, and it draws the
+unit quad `CARD_BOUNDS` with a clip matrix that spreads it over the whole target, while
+the world matrix places it as the card stands in the scene, so each texel is lit where it
+stands and the engine then places the lit picture as it would the plain one. The
+material is built per call, with the picture as both base and emissive texture and
+`card` set, so `model.wgsl` unpremultiplies the picture (it holds premultiplied linear
+light) and emits the emissive strength times it; the card is double-sided, and lit from
+whichever side the camera sees (`sees_front`).
+
 **Legacy.** `place` asks [`legacy_quad`](../jstream-protocol/src/geometry.rs) for the
 quad. For a source of size `(sw, sh)`, the image's extent, and crop `(left, top, right, bottom)` that
 function:
