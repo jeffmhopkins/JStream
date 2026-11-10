@@ -943,8 +943,14 @@ fn breaking_engine(
 }
 
 /// Advances the clock a tick at a time until `done` holds or 30 s pass; whether it held.
-fn tick_until(clock: &FakeClock, mut done: impl FnMut() -> bool) -> bool {
-    let deadline = Instant::now() + Duration::from_secs(30);
+fn tick_until(clock: &FakeClock, done: impl FnMut() -> bool) -> bool {
+    tick_within(clock, Duration::from_secs(30), done)
+}
+
+/// [`tick_until`] with its own wall-clock bound, for a test whose ticks each draw a
+/// pass meant to be slow.
+fn tick_within(clock: &FakeClock, bound: Duration, mut done: impl FnMut() -> bool) -> bool {
+    let deadline = Instant::now() + bound;
     while Instant::now() < deadline {
         clock.advance(50_000);
         thread::sleep(Duration::from_millis(10));
@@ -1411,7 +1417,11 @@ fn a_pack_effect_that_runs_too_long_on_the_gpu_is_quarantined() {
 
     block_on(control.call(output_call("yt", true))).expect("output.start");
     let mut event = None;
-    let heard = tick_until(&clock, || {
+    // The guard reports a kind after `SLOW_FRAMES` slow ticks, and each tick here draws
+    // a pass meant to be slow: about 0.4 s on lavapipe and 1.3 s on WARP, where 30
+    // ticks outrun `tick_until`'s 30 s. The bound allows 30 ticks of 4 s.
+    let bound = Duration::from_secs(4 * u64::from(crate::runtime::pass_guard::SLOW_FRAMES));
+    let heard = tick_within(&clock, bound, || {
         event = event.take().or_else(|| {
             super::drain(&mut events)
                 .into_iter()
