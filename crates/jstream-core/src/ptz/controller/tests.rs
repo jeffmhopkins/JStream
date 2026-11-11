@@ -96,8 +96,12 @@ struct Controller {
 impl Controller {
     fn new(to: SocketAddr) -> Self {
         let socket = UdpSocket::bind((LOOPBACK, 0)).expect("bind");
+        // How long a reply may take. An answered exchange ends at its last reply, so
+        // only an exchange meant to go unanswered waits it out. 300 ms was too short on
+        // a loaded Windows runner, where the preview endpoint's reply came later and the
+        // exchange read as unanswered.
         socket
-            .set_read_timeout(Some(Duration::from_millis(300)))
+            .set_read_timeout(Some(Duration::from_secs(5)))
             .expect("timeout");
         Self { socket, to, seq: 0 }
     }

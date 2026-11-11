@@ -827,3 +827,19 @@ relied_on = "The static type 2 runtime an AppImage starts with: it mounts the im
 review_every = "180d"
 status = "unverified"
 checked_note = "Release 20251108's runtime-x86_64 is pinned in after-review.yml by its SHA-256; the page itself was not re-read"
+
+[[external]]
+id = "apple-supported-capabilities-macos"
+url = "https://developer.apple.com/help/account/reference/supported-capabilities-macos"
+relied_on = "Which macOS capabilities a provisioning profile can carry, by membership: the System Extension capability is listed for paid Apple Developer Program and Developer ID only, so a free personal team can't install a camera extension (ROADMAP macos-unsigned)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Seen through search excerpts only: the table's ADP and Developer ID columns and its System Extension row; the rendered checkmarks were not re-read"
+
+[[external]]
+id = "apple-legacy-camera-plugins"
+url = "https://support.apple.com/HT213969"
+relied_on = "From macOS 14.1 legacy DAL camera plug-ins don't load; `system-override legacy-camera-plugins-without-sw-camera-indication=on`, run in Recovery, restores them without the camera-in-use indicator (ROADMAP macos-vcam-source)"
+review_every = "365d"
+status = "unverified"
+checked_note = "Seen through search excerpts only: the 14.1 change and the system-override command; the page itself was not re-read"

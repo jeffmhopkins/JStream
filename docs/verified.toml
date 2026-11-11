@@ -1956,7 +1956,7 @@ stamp = { hash = "b3:8c47ea96a265cbbd", by = "agent:ptz-builder", note = "PTZ te
 stamp = { hash = "b3:ed73b276a16e5ff2", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the controller emulator and live aim tests and their covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/ptz/controller/tests.rs"]
-stamp = { hash = "b3:174fc8c2d4779a23", by = "agent:ptz-builder", note = "#1496 review N2: added a_drive_left_moving_before_a_cut_still_stops (a program target drives a, a cut to c, both stop on quiet); the bullet now names the scene cut away from" }
+stamp = { hash = "b3:4ef52071d881f27b", by = "agent:lane-d-wave-sync", note = "ptz/controller/tests.rs only lengthens the test controller's reply timeout from 300 ms to 5 s (Windows CI answered later than 300 ms); the section's list of the PTZ controller tests and what they check still holds" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/ptz/tests.rs"]
 stamp = { hash = "b3:1345b702ed66bc97", by = "agent:ptz-builder", note = "PTZ tests bullet names the silent head's resent and unanswered command in ptz_cameras (ADR-0155) and the engine test's profile.get listing the head while it runs and dropping it after the empty setup; FakeHead's addr is pub(crate) for that; ADR renumbered 0154 to 0155 because #1503 took 0154 on main, and the links follow" }
@@ -7346,6 +7346,15 @@ stamp = { hash = "b3:a9e4919b16efa1e8", by = "agent:frame-probe", note = "Re-rea
 ["ROADMAP#m2"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
+["ROADMAP#macos-unsigned"."body"]
+stamp = { hash = "b3:c91a6557994c586c", by = "agent:claude", note = "Added the recommended virtual-camera route without a developer account: writing Program frames into OBS Studio's notarised camera extension's sink stream through public CMIO calls, with its licence position (no OBS code shipped or copied), risks (undocumented interface, one writer, OBS's name and formats) and the routes not chosen (NDI Virtual Input, DAL-based Syphon Virtual Webcam and CamTwist); renumbered the routes and re-read the section" }
+
+["ROADMAP#macos-unsigned"."dep:docs/adr/0063-macos-platform-support.md"]
+stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:claude", note = "New section recording the maintainer's decision that macOS stays unsigned (no Apple Developer Program), the CEF browser-source plan reusing the helper, the later unsigned .dmg release job, what can't work unsigned, and the from-source virtual camera routes; re-read against ADR-0063 (§13, questions 1 and 5) and ADR-0144 (decision 3, consequences)" }
+
+["ROADMAP#macos-unsigned"."dep:docs/adr/0144-the-desktop-app-on-macos.md"]
+stamp = { hash = "b3:92af4dc02f396840", by = "agent:claude", note = "New section recording the maintainer's decision that macOS stays unsigned (no Apple Developer Program), the CEF browser-source plan reusing the helper, the later unsigned .dmg release job, what can't work unsigned, and the from-source virtual camera routes; re-read against ADR-0063 (§13, questions 1 and 5) and ADR-0144 (decision 3, consequences)" }
+
 ["RULES#compatibility"."body"]
 stamp = { hash = "b3:cff01f3b41e04a7a", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "R-API-002 now points at PEOPLE_ONLY and DEPRECATED in jstream-mcp tools.rs instead of naming youtube as the one exception; rest of the section unchanged" }
 
@@ -7497,7 +7506,7 @@ stamp = { hash = "b3:eca9b83cffae4953", by = "agent:release-thread", note = "B1 
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:0a0f6b4b7e75e2d2", by = "agent:dependabot-lander", note = "Dependabot bump only changes the cef pin (=156.2.0 -> =156.3.0) in Cargo.toml; [workspace.package] version and the apps that inherit it are untouched, so the section holds" }
+stamp = { hash = "b3:436773871ecd9733", by = "agent:lane-d-wave-sync", note = "Cargo.toml's workspace version goes to 0.1.0-alpha.5 with Cargo.lock from cargo update -w; the section's account of the version, the apps that take it and the pre-release naming still holds" }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
@@ -7537,6 +7546,15 @@ stamp = { hash = "b3:1a6aeaec37c5f24f", by = "agent:claude@session_01TssS8PhoWXH
 
 ["RUNBOOK-WAVES#which-wave"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
+
+["RUNBOOK-WINDOWS-HW-PASS#release-pass"."body"]
+stamp = { hash = "b3:5e6c43e87071ba35", by = "agent:lane-d-wave-sync", note = '''New section for scripts/release-pass.ps1 and .bat: re-read against the script. It runs the zip's own daemon and CLI with no build, checks the zip against its .sha256 and unzips under %LOCALAPPDATA%\JStream-release-pass\release, starts its daemon on a free port with its own token, log folder and APPDATA in the run folder, runs the twelve automatic checks in the table (versions, kind.list, profile.get threads and counters, browser and display snapshots, collection new/save_as/open and collection.info, capture.targets webcam formats, bench all,display[,webcam] with default gates, Ctrl-C graceful stop), then the M1 to M16 items, starting jstream.exe --mcp for M13 and a --ptz-controller daemon for M16, and zips report.md, results.json, logs and snapshots with tokens redacted''' }
+
+["RUNBOOK-WINDOWS-HW-PASS#release-pass"."file:scripts/release-pass.bat"]
+stamp = { hash = "b3:a1a3e1264c2d71ed", by = "agent:lane-d-wave-sync", note = '''New section for scripts/release-pass.ps1 and .bat: re-read against the script. It runs the zip's own daemon and CLI with no build, checks the zip against its .sha256 and unzips under %LOCALAPPDATA%\JStream-release-pass\release, starts its daemon on a free port with its own token, log folder and APPDATA in the run folder, runs the twelve automatic checks in the table (versions, kind.list, profile.get threads and counters, browser and display snapshots, collection new/save_as/open and collection.info, capture.targets webcam formats, bench all,display[,webcam] with default gates, Ctrl-C graceful stop), then the M1 to M16 items, starting jstream.exe --mcp for M13 and a --ptz-controller daemon for M16, and zips report.md, results.json, logs and snapshots with tokens redacted''' }
+
+["RUNBOOK-WINDOWS-HW-PASS#release-pass"."file:scripts/release-pass.ps1"]
+stamp = { hash = "b3:06dc2b4ed94a3853", by = "agent:lane-d-wave-sync", note = '''New section for scripts/release-pass.ps1 and .bat: re-read against the script. It runs the zip's own daemon and CLI with no build, checks the zip against its .sha256 and unzips under %LOCALAPPDATA%\JStream-release-pass\release, starts its daemon on a free port with its own token, log folder and APPDATA in the run folder, runs the twelve automatic checks in the table (versions, kind.list, profile.get threads and counters, browser and display snapshots, collection new/save_as/open and collection.info, capture.targets webcam formats, bench all,display[,webcam] with default gates, Ctrl-C graceful stop), then the M1 to M16 items, starting jstream.exe --mcp for M13 and a --ptz-controller daemon for M16, and zips report.md, results.json, logs and snapshots with tokens redacted''' }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."body"]
 stamp = { hash = "b3:9bfd53a3bcfea856", by = "agent:shader-source", note = "Re-read the script section after merging main. From main's #1083: windows-pass.ps1 gains the pr1083 source and the help-links check, which builds the PR's UI and desktop app and asks whether the Help and About links open the default browser. The table lists help-links for item 19, and the not-checked list names item 19's log search, done by hand. From this PR (#1085): the effect-pack NTFS step is item 20 (closes #1088), and the not-checked list names item 20 as done all by hand, because the script has no pack-write check and adds no table row or source for it | kept from the merged side: Re-read: windows-pass.ps1 gains the pr1083 source and the help-links check (builds the PR's UI and desktop app, asks whether Help and About links open the default browser); the table lists help-links for item 19 and the not-checked list names item 19's log search, done by hand" }
