@@ -2,7 +2,7 @@
 id = "ARCH"
 title = "Architecture"
 kind = "normative"
-status = "draft"
+status = "active"
 review_every = "90d"
 -->
 
@@ -11,9 +11,6 @@ review_every = "90d"
 This document is the map. The reasons behind each choice are in the ADRs under
 [`adr/`](adr/). If this document and the code disagree, fix one of them in the same PR
 ([R-DOC-004](RULES.md#R-DOC-004)).
-
-Status is `draft` until M0 creates the crates. Until then the `covers` globs below are
-provisional, and globs that match nothing are only warnings.
 
 <a id="shape"></a>
 ## Shape of the system
@@ -91,21 +88,26 @@ JStream/
 ├── rust-toolchain.toml  deny.toml  rustfmt.toml  clippy.toml  .editorconfig
 ├── CLAUDE.md               # builder-agent entry point; points to RULES/DOCS
 ├── REVIEW.md               # reviewer-agent prompt; its verdict drives review-gate
+├── CONTRIBUTING.md  SECURITY.md  CODE_OF_CONDUCT.md
 ├── ROADMAP.md
-├── crates/                 # all library crates, flat, every name prefixed `jstream-`
+├── crates/                 # all library crates, flat, every name prefixed `jstream-`;
+│                           # WGSL shaders, fonts and schema snapshots live in their crate
 ├── apps/                   # host binaries (thin)
-├── effects/                # built-in WGSL effect packs (data)
-├── assets/                 # icons, fonts, test media
-├── tests/                  # cross-crate scenario + golden tests
-├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
+├── spikes/                 # open technical spikes (throwaway, not workspace members); a
+│                           # finished one is removed once its results are recorded
 ├── design/                 # UI design references (prototype source); not normative
+├── fuzz/                   # cargo-fuzz targets (own workspace and lockfile)
+├── scripts/                # hardware-pass and release-pass scripts, Linux and macOS install scripts
 ├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), dist-linux (the Linux .deb and AppImage), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
 ├── docs/
-│   ├── ARCHITECTURE.md  RULES.md  DOCS.md
+│   ├── ARCHITECTURE.md  RULES.md  DOCS.md  GETTING-STARTED.md  UI-FEATURES.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
 │   ├── facts.toml          # pinned facts, one source each
+│   ├── progress.toml       # roadmap items and their PRs; feeds the generated progress table
+│   ├── verified.toml       # verification ledger; written only by `cargo xtask docs verify`
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
-│   └── guides/
+│   ├── runbooks/           # release, hardware-pass, waves and per-platform testing steps
+│   └── security/           # threat model
 └── .github/                # workflows (CI, governance, review-gate, sweep), their tests, Dependabot config,
                             # issue and PR templates
 ```
@@ -118,9 +120,9 @@ depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
-Once the `xtask docs` generator lands (planned for M0), this table is generated from
-`[package.metadata.jstream]` ([DOCS › Generated content](DOCS.md#generated)). Until then
-it is maintained by hand. `xtask` is repository tooling and sits outside the layers.
+The table is maintained by hand; `cargo xtask docs generate` does not write it yet
+([DOCS › Generated content](DOCS.md#generated)), and `cargo xtask lint-deps` checks the
+layers themselves from `[package.metadata.jstream]`. `xtask` is repository tooling and sits outside the layers.
 
 The client stack follows from the rule: `jstream-control` builds on `jstream-protocol`, so
 it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` (L3), and
@@ -1223,7 +1225,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 <a id="gpu-pipeline"></a>
 ## GPU pipeline
 <!-- @section
-covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
+covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
 -->
 
@@ -1562,7 +1564,7 @@ the sandboxed helper, whose frames take a second copy.
 <a id="persistence"></a>
 ## Persistence, config and secrets
 <!-- @section
-covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
+covers = ["crates/jstream-graph/src/persist/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
 -->
 

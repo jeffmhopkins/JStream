@@ -125,7 +125,7 @@ fn main() -> ExitCode {
                 ),
                 (
                     "e2e-stream",
-                    "stream to a local ffmpeg RTMP server and probe it (Linux): [--openh264 <library>]",
+                    "stream and record to a local ffmpeg RTMP server and probe it (Linux, macOS): [--openh264 <library>] [-- <test filters>]",
                 ),
                 (
                     "governance",
