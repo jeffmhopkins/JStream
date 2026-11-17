@@ -259,6 +259,7 @@ release = "beta.1"
 title = "Every platform: the release attaches the Windows zip, the macOS disk image, and the Linux .deb and AppImage, each built from the tag"
 status = "planned"
 issues = [1515]
+prs = [1528]
 note = "CI already builds the .deb, AppImage and .dmg after review; release.yml gains the jobs that attach them"
 
 [[target]]
