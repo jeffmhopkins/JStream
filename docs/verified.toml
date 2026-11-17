@@ -1458,7 +1458,7 @@ stamp = { hash = "b3:7ea3249d6cdc1fae", by = "agent:mac-browser", note = "Re-che
 stamp = { hash = "b3:8fde2678f6ca09f6", by = "agent:mac-browser", note = "Re-checked after renumbering: the only change since this section's last verify in this PR is ADR-0156 renamed ADR-0157 (in it or in what it covers or depends on), to avoid #1521's number; it still holds." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/mod.rs"]
-stamp = { hash = "b3:e918c0c6e438dad8", by = "agent:mac-browser", note = "Re-checked after renumbering: the only change since this section's last verify in this PR is ADR-0156 renamed ADR-0157 (in it or in what it covers or depends on), to avoid #1521's number; it still holds." }
+stamp = { hash = "b3:4efbc7344b9fa207", by = "agent:mac-browser", note = "The only change since the last verify: the Windows run_helper passes CEF's args to the shared run(), a compile fix with no behaviour change; the section still holds." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/helper/page_api.rs"]
 stamp = { hash = "b3:29982328a56994e3", by = "agent:claude", note = "Re-read: the helper's message layout gains a comment that it is private to one build (review N3); the purpose holds." }
@@ -7635,7 +7635,7 @@ stamp = { hash = "b3:8562c2415ceafbaf", by = "agent:claude-alpha4-nice", note = 
 stamp = { hash = "b3:7ea3249d6cdc1fae", by = "agent:mac-browser", note = "Re-checked after renumbering: the only change since this section's last verify in this PR is ADR-0156 renamed ADR-0157 (in it or in what it covers or depends on), to avoid #1521's number; it still holds." }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/mod.rs"]
-stamp = { hash = "b3:e918c0c6e438dad8", by = "agent:mac-browser", note = "Re-checked after renumbering: the only change since this section's last verify in this PR is ADR-0156 renamed ADR-0157 (in it or in what it covers or depends on), to avoid #1521's number; it still holds." }
+stamp = { hash = "b3:4efbc7344b9fa207", by = "agent:mac-browser", note = "The only change since the last verify: the Windows run_helper passes CEF's args to run(), a compile fix; the sandbox info still goes to CEF unchanged, so the controls still hold." }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/helper/page_api.rs"]
 stamp = { hash = "b3:29982328a56994e3", by = "agent:claude", note = "Edited: the Page API paragraph lists the engine's tempo as its own grant (ADR-0124 decision 7): tempo.* never reaches a page through the shared values grant, and a MIDI reading has a tempo only with it." }
