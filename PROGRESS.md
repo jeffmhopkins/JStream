@@ -60,11 +60,11 @@ rest lands in.
 <!-- @generated begin progress -->
 ### Next release: `0.1.0-beta.1`
 
-No new features: what the alphas ship, dependable on Windows, unsigned, and with no promise that projects saved by earlier builds load (ROADMAP.md#beta). The latest shipped release is `v0.1.0-alpha.5`. Its progress counts its targets and any roadmap items it carries. Priority is the maintainer's order, 1 first; a ❔ target may move to the release after, so it isn't counted.
+No new features: what the alphas ship, made dependable, with desktop apps for Windows, macOS and Linux, unsigned, and with no promise that projects saved by earlier builds load (ROADMAP.md#beta). The latest shipped release is `v0.1.0-alpha.5`. Its progress counts its targets and any roadmap items it carries. Priority is the maintainer's order, 1 first; a ❔ target may move to the release after, so it isn't counted.
 
 | Progress | Done | In progress | Planned | Undecided |
 |---|---|---|---|---|
-| `███████░░░` 73% | 16 | 0 | 6 | 0 |
+| `██████░░░░` 59% | 16 | 0 | 11 | 0 |
 
 | Priority | Target | Status | Issues | PRs |
 |---|---|---|---|---|
@@ -90,6 +90,21 @@ No new features: what the alphas ship, dependable on Windows, unsigned, and with
 |  | Every merged item's Windows run passes, in one acceptance pass on the candidate build | ⏳ planned: the items marked Windows run in What's left; the issues labelled windows-hardware, apart from the YouTube sign-in run and the waived N-edition run | #778, #777, #690, #673, #620, #576, #563, #557, #546, #445, #436, #380, #357, #347, #341, #1290 |  |
 |  | No known Windows bug breaks going live, recording, the virtual camera, browser pages, media files, snapshots or a graceful stop | ⏳ planned | #1184, #1194, #445, #436 |  |
 |  | Security basics: the threat-model follow-ups, a browser page permission policy, a GPU-hang story for shader packs, and asking before a new agent connects | ⏳ planned | #347, #349, #1229 |  |
+|  | Every platform: the release attaches the Windows zip, the macOS disk image, and the Linux .deb and AppImage, each built from the tag | ⏳ planned: CI already builds the .deb, AppImage and .dmg after review; release.yml gains the jobs that attach them | #1515 |  |
+|  | macOS: one pass on the downloaded .dmg on Apple Silicon, the core flows working, and no known bug breaking one | ⏳ planned: capture, webcam, microphone and desktop audio, going live, recording, media files, snapshots and a graceful stop; the open lines of the macOS hardware checklist | #1356, #1099, #648, #644, #609, #600, #590 |  |
+|  | Linux: one pass on the downloaded .deb and AppImage, on GNOME (Wayland) and KDE Plasma, the core flows working, and no known bug breaking one | ⏳ planned: portal capture, webcam, PipeWire audio, going live on VA-API or OpenH264, recording, browser pages, snapshots and a graceful stop; the open lines of the Linux checklist | #1357, #1142, #1482, #1330, #1266, #942, #832, #666, #616, #514, #1196 |  |
+|  | Wanted, not waited for: browser sources on macOS through CEF, a virtual camera on macOS (OBS Studio's camera extension) and on Linux (v4l2loopback), and media-file sources on Linux (ADR-0072) | ⏳ planned: each ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta) | #1516 |  |
+
+<details open>
+<summary><b>Roadmap items in 0.1.0-beta.1</b>: 0 of 1 merged</summary>
+
+A gate item (🚧) is one the release waits for.
+
+| ID | Item | Gate | Milestone | Status | PRs |
+|---|---|---|---|---|---|
+| LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0140) | 🚧 | M3 | ⏳ planned: patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) landed with wave/m3-3 (#786); intensity stereo (#799) landed with wave/m3-4 (#827); before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518, #723, #727, #799 |
+
+</details>
 
 ### Whole app
 
@@ -137,7 +152,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | LNX3 | AAC-LC encoder in Rust, patent check first (ADR-0140) | M3 | 🔨 build | patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) landed with wave/m3-3 (#786); intensity stereo (#799) landed with wave/m3-4 (#827); before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062) | #508, #518, #723, #727, #799 |
 | F6b | Choose HEVC or AV1 from a client | M3 | 🔨 build | F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877) | #807, #814 |
 | F7 | Direct NVENC and AMF encoders, if measurements justify them | M3 | 🔨 build | ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
-| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | M3 | 🧪 Windows run | ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
+| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | M3 | 🧪 Windows run | ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088) | #1034, #1048, #1050, #1052, #1064, #1085, #1108 |
 | MO2 | Native motion: continuous wiggle, oscillate and drift on items, drawn each frame (item.set_motion) | M3 | 🧪 Windows run | Protocol 0.81; landed with wave/alpha4 (#1176), with camera motion and the follow-cursor camera (#1157, ADR-0113, 0.85); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware, and step 5e the follow camera (#1159) | #1125, #1176 |
 | MO3 | A one-shot shake that a hotkey fires and that decays | M3 | 🧪 Windows run | item.trigger_motion, protocol 0.84; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware | #1156, #1176 |
 | MO5 | Audio-reactive motion modifiers drawn from the render loop | M3 | 🧪 Windows run | Protocol 0.86; landed with wave/alpha4 (#1176); the alpha.4 Windows run's step 4 (the cockpit rebuild over MCP) checks it on hardware, with real audio | #1149, #1176 |
@@ -335,7 +350,7 @@ The order these land in, and what done means, is in [ROADMAP › Endgame](ROADMA
 | F6b | Choose HEVC or AV1 from a client | ⏳ planned: F6 built the encoders; #807 names the encoder a machine lacks at output.start, landed with wave/m3-4 (#827); #814 (protocol 0.41) adds hevc and av1 to VideoCodec and lets an encoder profile take them, landed with wave/m1-5 (#877) | #807, #814 |
 | F7 | Direct NVENC and AMF encoders, if measurements justify them | ⏳ planned: ROADMAP M3: measure Media Foundation's hardware encoders against direct NVENC and AMF first, and build the direct ones only where the numbers say so |  |
 | CL2 | A too_large error for oversized plugin state | ✅ merged: ROADMAP M3 and #102: ADR-0074 (#794, accepted by the maintainer, maintainer tier, landed with wave/m3-5 (#854)) amends ADR-0037's state clause with a stable too_large error; built in #981 (protocol 0.62): a message over the 4 MiB request limit, read below a 16 MiB frame limit, is refused with too_large and the connection stays open, so a batch carrying two 2 MiB CLAP states fails cleanly | #794, #981 |
-| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | 🧪 merged, Windows run pending: ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today | #1034, #1048, #1050, #1052, #1064, #1085 |
+| X2 | Shader sources: multipass WGSL packs with feedback, inputs and audio, written over MCP | 🧪 merged, Windows run pending: ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088) | #1034, #1048, #1050, #1052, #1064, #1085, #1108 |
 | AG1 | MCP prompts only for what undo can't take back (destructiveHint) | ✅ merged | #1055 |
 | AG2 | Agents reach the desktop app: jstream.exe --mcp with a token file, and Connect an agent docs | ✅ merged | #1091 |
 | AG3 | Layering and reflection guidance for agents in MCP | ✅ merged | #1079 |

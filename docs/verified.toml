@@ -7311,7 +7311,7 @@ stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Added the j
 stamp = { hash = "b3:54cfad47c5f2d5eb", by = "agent:claude", note = "Added the jstream-review-base line under the verdict marker (the base SHA reviewed against, from gh pr view --json baseRefOid) and said the carry diffs the reviewed head against it (ADR-0154); checked against review-gate.yml's baseRe, markersOf and reviewedBase" }
 
 ["ROADMAP#beta"."body"]
-stamp = { hash = "b3:c57bb7caabb42736", by = "agent:beta-bar", note = "Re-read after review round 1: the scope says only that past projects need not load (Jeff's words), with no claim on settings or the protocol; the ship list is an unranked bullet list, and the beta.1 targets in docs/progress.toml carry no priority" }
+stamp = { hash = "b3:70c1e786e3e85e5c", by = "agent:claude", note = "After merging main (#1519 moved the progress table to PROGRESS.md): the intro now says progress.toml's beta.1 release is shown in PROGRESS.md, and the Windows-runs gate points at PROGRESS.md's What's left table; the rest re-read and unchanged: per-platform scope and gates (Windows zip, unsigned Apple Silicon .dmg, x86_64 .deb and AppImage; Mac pass #1356; LNX3 AAC notice and Linux pass #1357 without media files) and the wanted list (CEF on macOS, both virtual cameras, Linux media files per ADR-0072), matching progress.toml's beta.1 targets" }
 
 ["ROADMAP#beta"."dep:docs/runbooks/release.md#version"]
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). Beta stays Windows-only; nothing here touches its scope." }
@@ -7320,7 +7320,7 @@ stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-rea
 stamp = { hash = "b3:3e1c71bcef3dc82d", by = "agent:claude-cleanup", note = "Re-read against the runbook Setup change: the MSVC prompt bullet now names windows-pass.ps1's Enter-VsEnv instead of the removed spike script; the beta scope and its link to Setup still hold" }
 
 ["ROADMAP#endgame"."body"]
-stamp = { hash = "b3:d05a70463d1ea44a", by = "agent:claude-readme-polish", note = "Only the What's left link changed: the generated table moved from README.md#progress to PROGRESS.md#status; the done definition and landing order are untouched." }
+stamp = { hash = "b3:d7e4be905cedf2fe", by = "agent:claude", note = "This branch: step 3's platform question is answered (Linux and macOS, desktop apps from beta.1) and step 4 is the rest of the two platform crates beyond what beta.1 ships. The merge (#1519): the intro's What's left link now points at PROGRESS.md#status. Steps 1, 2 and 5 re-read and unchanged | kept from the merged side: Only the What's left link changed: the generated table moved from README.md#progress to PROGRESS.md#status; the done definition and landing order are untouched." }
 
 ["ROADMAP#endgame"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section: done means every M0-M3 item in docs/progress.toml is done (merged, Windows run passed); the five steps match the open waves (ADR-0055 order), the hardware items, ADR-0058's OAuth client, the pending supported-platforms ADR, and ADR-0022's 1.0 removal of deprecated forms; the README What's left table it links is generated from needs" }
@@ -7350,7 +7350,7 @@ stamp = { hash = "b3:a9e4919b16efa1e8", by = "agent:frame-probe", note = "Re-rea
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["ROADMAP#macos-unsigned"."body"]
-stamp = { hash = "b3:c91a6557994c586c", by = "agent:claude", note = "Added the recommended virtual-camera route without a developer account: writing Program frames into OBS Studio's notarised camera extension's sink stream through public CMIO calls, with its licence position (no OBS code shipped or copied), risks (undocumented interface, one writer, OBS's name and formats) and the routes not chosen (NDI Virtual Input, DAL-based Syphon Virtual Webcam and CamTwist); renumbered the routes and re-read the section" }
+stamp = { hash = "b3:90be16913d8e1faa", by = "agent:claude", note = "Only the .dmg line and the 'nothing built yet' sentence changed: releases carry the unsigned .dmg from beta.1 through a release.yml macOS job running scripts/mac/bundle-app.sh as after-review's macos-app does; the rest (CEF plan, what works and doesn't unsigned, vcam routes) re-read and unchanged against ADR-0063 and ADR-0144" }
 
 ["ROADMAP#macos-unsigned"."dep:docs/adr/0063-macos-platform-support.md"]
 stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:claude", note = "New section recording the maintainer's decision that macOS stays unsigned (no Apple Developer Program), the CEF browser-source plan reusing the helper, the later unsigned .dmg release job, what can't work unsigned, and the from-source virtual camera routes; re-read against ADR-0063 (§13, questions 1 and 5) and ADR-0144 (decision 3, consequences)" }
@@ -7527,7 +7527,7 @@ stamp = { hash = "b3:eca9b83cffae4953", by = "agent:release-thread", note = "B1 
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:c4d73729acc8d129", by = "agent:dependabot-lander", note = "Dependabot bump only changes the cef pin (=156.2.0 -> =156.3.0) in Cargo.toml; [workspace.package] version and the apps that inherit it are untouched, so the section holds | merge: main's #1509 bumped [workspace.package] version to 0.1.0-alpha.5; the section names the field and the scheme, not a value, and the alpha.5 pre-release form matches it | kept from the merged side: Cargo.toml's workspace version goes to 0.1.0-alpha.5 with Cargo.lock from cargo update -w; the section's account of the version, the apps that take it and the pre-release naming still holds" }
+stamp = { hash = "b3:c92ab51569abe884", by = "agent:dependabot-lander", note = "Also re-read after rewording the cef pin comment (drops the CEF build numbers, per review N1): comment-only, the workspace version is untouched" }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
