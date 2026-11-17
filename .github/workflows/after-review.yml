@@ -358,6 +358,7 @@ jobs:
             root="$RUNNER_TEMP/squashfs-root"
             for file in AppRun AppRun.wrapped usr/bin/jstream usr/bin/ui/index.html \
               usr/bin/browser/jstream-browser-helper usr/bin/browser/libcef.so \
+              usr/share/doc/jstream/NOTICE.txt \
               usr/lib/libwebkit2gtk-4.1.so.0 \
               usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitWebProcess \
               usr/lib/x86_64-linux-gnu/webkit2gtk-4.1/WebKitNetworkProcess; do
