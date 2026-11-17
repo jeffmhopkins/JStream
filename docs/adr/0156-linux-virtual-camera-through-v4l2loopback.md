@@ -2,14 +2,14 @@
 id = "ADR-0156"
 title = "The Linux virtual camera through v4l2loopback"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0156: The Linux virtual camera through v4l2loopback
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
