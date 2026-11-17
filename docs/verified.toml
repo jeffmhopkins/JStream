@@ -2562,7 +2562,7 @@ stamp = { hash = "b3:fbab93da6f1f4bc6", by = "agent:ptz-builder", note = "#1181 
 stamp = { hash = "b3:e0d04721d92d9a3a", by = "agent:claude", note = "token.rs only moved its file logic to jstream_server::token_file with the same checks and messages; --token-file, reuse and output lines unchanged" }
 
 ["CRATE-jstream-desktop#design"."body"]
-stamp = { hash = "b3:dc2410af54e67b8c", by = "agent:vcam-linux", note = "host.rs on Linux keeps the backends' LoopbackVcam unless --no-vcam; the bootstrap's vcam stays 'unavailable' on Linux, now described as a camera checked only at start" }
+stamp = { hash = "b3:6c1e1f43d6907738", by = "agent:claude", note = "bundle-app.sh now copies LICENSE-MIT and LICENSE-APACHE into Contents/Resources before signing; the macOS app bullet says so; rest unchanged | merge: #1521 brought the Linux virtual camera through v4l2loopback (ADR-0156) into the engine host, --no-vcam and On Linux bullets; the macOS bundle bullet this branch changed (licences in Contents/Resources) is untouched by it and still holds | kept from the merged side: host.rs on Linux keeps the backends' LoopbackVcam unless --no-vcam; the bootstrap's vcam stays 'unavailable' on Linux, now described as a camera checked only at start" }
 
 ["CRATE-jstream-desktop#design"."dep:docs/RULES.md#R-SEC-001"]
 stamp = { hash = "b3:a71c0833188b98b6", by = "agent:acc756d9", note = "Re-read design against the R-SEC-001 exception: the desktop keeps keys in Credential Manager on Windows and has no backends elsewhere; the Linux-only exception does not touch it." }
