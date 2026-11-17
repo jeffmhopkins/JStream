@@ -29,10 +29,14 @@ mod format;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod gpu;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+mod loopback;
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod stream;
 
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 pub use backend::V4l2Devices;
+#[cfg(all(target_os = "linux", target_pointer_width = "64"))]
+pub use loopback::LoopbackVcam;
 
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 mod backend {
@@ -102,7 +106,7 @@ mod backend {
     }
 
     /// The `/dev/videoN` nodes, in number order.
-    fn nodes() -> Vec<PathBuf> {
+    pub(super) fn nodes() -> Vec<PathBuf> {
         let Ok(dir) = std::fs::read_dir("/dev") else {
             return Vec::new();
         };
@@ -154,6 +158,11 @@ mod backend {
             let mut inputs = None;
             for node in nodes() {
                 let Some(path) = node.to_str() else { continue };
+                // This process's own virtual camera: adding it as a source would feed
+                // the camera its own picture.
+                if super::loopback::in_use(path) {
+                    continue;
+                }
                 let Ok(device) = Device::open(path) else {
                     continue;
                 };

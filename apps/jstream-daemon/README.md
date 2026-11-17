@@ -533,7 +533,12 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
     `output.start` fail with `action_failed`, naming it too (#1073);
   - the stand-in `NoMediaDecoders`, so a media-file source fails with its reason until
     [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md)'s decoders exist, no
-    virtual camera (ADR-0060 §9), no CLAP scan and no YouTube sign-in;
+    CLAP scan and no YouTube sign-in;
+  - `LoopbackVcam` as the virtual camera
+    ([ADR-0156](../../docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md)): a
+    `virtual_cam` output writes I420 frames to a v4l2loopback device the user has
+    loaded. The daemon never loads the module or runs anything as root; a start without
+    a device fails, naming the package and the `modprobe` command;
   - `LinuxSecrets` as its stream key store
     ([ADR-0071](../../docs/adr/0071-linux-secret-store.md)): the Secret Service, else
     the `0600` file `secrets` in the config folder. At startup the daemon logs
