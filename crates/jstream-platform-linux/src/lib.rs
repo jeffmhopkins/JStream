@@ -80,7 +80,6 @@ pub use hotkeys::GlobalHotkeys;
 pub use hotkeys::{
     GrabChord, ModifierMasks, key_code as x11_key_code, parse_chord as parse_x11_chord,
 };
-#[cfg(target_os = "linux")]
 pub use media::LinuxMediaDecoders;
 #[cfg(target_os = "linux")]
 pub use openh264::{
