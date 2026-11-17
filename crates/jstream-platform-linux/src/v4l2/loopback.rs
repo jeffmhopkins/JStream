@@ -381,6 +381,10 @@ mod hw_tests {
                 "-i",
                 &path,
             ])
+            // FFmpeg's V4L2 input doesn't read the format's colour fields and would
+            // convert as BT.601, so the BT.709 limited range the camera writes (and
+            // signals) is named here; this checks the pixels, not FFmpeg's default.
+            .args(["-vf", "scale=in_color_matrix=bt709:in_range=tv"])
             .args(["-frames:v", "5", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"])
             .stdout(Stdio::piped())
             .spawn()
