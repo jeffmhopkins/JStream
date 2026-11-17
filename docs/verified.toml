@@ -18,7 +18,7 @@ stamp = { hash = "b3:28fa830d7989af60", by = "agent:browser-linux", note = "Adde
 stamp = { hash = "b3:bc43dee67b83cb62", by = "agent:claude", note = "Added a paragraph on the page API (ADR-0102): one-way data over the pipe then helper process messages to the renderer, which defines window.jstream only in the main frame of the source's own documents, nothing flowing back; added ADR-0102 to depends_on. The rest of the section holds for this change." }
 
 ["ARCH#crate-map"."body"]
-stamp = { hash = "b3:2476c6652cedabb9", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }
+stamp = { hash = "b3:c96ce3b5078c9c97", by = "agent:claude-cleanup", note = "Only the intro note changed: the generator 'planned for M0' line now says the table is hand-maintained and that lint-deps checks layers from [package.metadata.jstream] (checked in xtask/src/lint_deps.rs); table rows unchanged" }
 
 ["ARCH#crate-map"."dep:docs/RULES.md#R-ARCH-002"]
 stamp = { hash = "b3:a84629b45a0a2be7" }
@@ -3282,7 +3282,7 @@ stamp = { hash = "b3:19a6b6cb7ecef9fe", by = "agent:a5c0c5084d9af49ea", note = "
 stamp = { hash = "b3:5d8e0c98027957ce", by = "agent:lane-a", note = "S1 (#1194): added GpuContext Clone semantics and GpuContext::watch (one shared device-loss watch); the engine opens the context once and lends it" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:2476c6652cedabb9", by = "agent:claude", note = "The crate map's change is the jstream-sources row naming note particles; nothing this section takes from it moved" }
+stamp = { hash = "b3:c96ce3b5078c9c97", by = "agent:claude-cleanup", note = "Dependency-only restamp: ARCH#crate-map's intro note was reworded, no crate's layer or job changed; the GPU frames design here still holds" }
 
 ["CRATE-jstream-platform#gpu-frames"."dep:docs/ARCHITECTURE.md#gpu-pipeline"]
 stamp = { hash = "b3:1b139b6a8d488178", by = "agent:claude", note = "gpu-pipeline only gained the environment sky sentence; platform frame interop untouched. | merge: Merged #1490's round 1 fix: ModelDraw gains floor beside environment, the frame uniform's cut plane follows the environment block, and the mirrored models keep their environment while cut at the floor. The section's environment text and the fix's lines both hold. | merge: Merged wave/alpha5: #1491 depth bloom (this PR's base, squashed), #1490 reflections, #1489 shafts, #1488 shadows, #1487 volumetric fog and earlier 3D and PTZ work. Re-read after its render inputs' restamp; unaffected. | kept from the merged side: gpu-pipeline only gained the model shadow-map sentence; platform's frame interop is untouched." }

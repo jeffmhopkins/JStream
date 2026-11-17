@@ -2,7 +2,7 @@
 id = "ARCH"
 title = "Architecture"
 kind = "normative"
-status = "draft"
+status = "active"
 review_every = "90d"
 -->
 
@@ -11,9 +11,6 @@ review_every = "90d"
 This document is the map. The reasons behind each choice are in the ADRs under
 [`adr/`](adr/). If this document and the code disagree, fix one of them in the same PR
 ([R-DOC-004](RULES.md#R-DOC-004)).
-
-Status is `draft` until M0 creates the crates. Until then the `covers` globs below are
-provisional, and globs that match nothing are only warnings.
 
 <a id="shape"></a>
 ## Shape of the system
@@ -123,9 +120,9 @@ depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
-Once the `xtask docs` generator lands (planned for M0), this table is generated from
-`[package.metadata.jstream]` ([DOCS › Generated content](DOCS.md#generated)). Until then
-it is maintained by hand. `xtask` is repository tooling and sits outside the layers.
+The table is maintained by hand; `cargo xtask docs generate` does not write it yet
+([DOCS › Generated content](DOCS.md#generated)), and `cargo xtask lint-deps` checks the
+layers themselves from `[package.metadata.jstream]`. `xtask` is repository tooling and sits outside the layers.
 
 The client stack follows from the rule: `jstream-control` builds on `jstream-protocol`, so
 it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` (L3), and
@@ -1228,7 +1225,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 <a id="gpu-pipeline"></a>
 ## GPU pipeline
 <!-- @section
-covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
+covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
 -->
 
@@ -1567,7 +1564,7 @@ the sandboxed helper, whose frames take a second copy.
 <a id="persistence"></a>
 ## Persistence, config and secrets
 <!-- @section
-covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
+covers = ["crates/jstream-graph/src/persist/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
 -->
 
