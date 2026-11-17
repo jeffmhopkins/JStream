@@ -266,6 +266,7 @@ release = "beta.1"
 title = "macOS: one pass on the downloaded .dmg on Apple Silicon, the core flows working, and no known bug breaking one"
 status = "planned"
 issues = [1356, 1099, 648, 644, 609, 600, 590]
+prs = [1520]
 note = "capture, webcam, microphone and desktop audio, going live, recording, media files, snapshots and a graceful stop; the open lines of the macOS hardware checklist"
 
 [[target]]
