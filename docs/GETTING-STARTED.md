@@ -58,8 +58,8 @@ JStream folder instead (to run it from a USB stick), create an empty file named
 Applications. The app is not signed or notarised, so macOS stops it the first time: open
 it once, then choose **Open Anyway** in System Settings › Privacy & Security. macOS asks
 again for Screen Recording, Camera and Microphone after each update. Settings and scenes
-are in `~/Library/Application Support/JStream`. The macOS build has no browser sources
-and no virtual camera yet.
+are in `~/Library/Application Support/JStream`. The macOS build has no virtual camera
+yet.
 
 **On Linux** (x86_64, GNOME or KDE Plasma): on Ubuntu 24.04 or later, download
 `jstream-v<version>-linux-amd64.deb` and run

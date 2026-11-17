@@ -294,7 +294,15 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - run: rustup toolchain install
-      - run: cargo build --release -p jstream-desktop --locked
+      # With browser sources, as after-review.yml's `macos-app` builds it (ADR-0157).
+      - run: cargo build --release -p jstream-desktop --features cef --locked
+      - name: Ninja for CEF's wrapper build
+        run: command -v ninja || brew install ninja
+      - name: Build the browser helper with CEF
+        run: |
+          set -euo pipefail
+          cef=$(bash scripts/mac/build-browser-helper.sh --locked)
+          echo "CEF_DIR=$cef" >> "$GITHUB_ENV"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: jstream-ui
@@ -304,7 +312,14 @@ jobs:
           TAG: ${{ needs.ui.outputs.tag }}
         run: |
           set -euo pipefail
-          bash scripts/mac/bundle-app.sh --exe target/release/jstream --ui-dir ui-dist --out build
+          bash scripts/mac/bundle-app.sh --exe target/release/jstream --ui-dir ui-dist --out build \
+            --browser-helper target/release/jstream-browser-helper --cef "$CEF_DIR"
+          [ -x build/JStream.app/Contents/MacOS/jstream-browser-helper ] \
+            || { echo "::error::the bundle has no browser helper"; exit 1; }
+          [ -d "build/JStream.app/Contents/Frameworks/Chromium Embedded Framework.framework" ] \
+            || { echo "::error::the bundle has no CEF framework"; exit 1; }
+          [ -f build/JStream.app/Contents/Resources/CEF-VERSION.txt ] \
+            || { echo "::error::the bundle has no CEF-VERSION.txt"; exit 1; }
           arch=$(uname -m)
           if [ "$arch" != arm64 ]; then
             echo "::error::the release's disk image is for Apple Silicon, but this runner is $arch"
@@ -340,6 +355,12 @@ jobs:
             exit 1
           fi
           grep -q 'engine serving the webview' "$log"
+      # As in `macos-app`: a page loads through the bundled helper, its subprocesses
+      # running from the helper apps in CEF's sandbox, and its paints reach the engine.
+      - name: A browser page loads through the bundled helper
+        env:
+          JSTREAM_BROWSER_HELPER: ${{ github.workspace }}/build/JStream.app/Contents/MacOS/jstream-browser-helper
+        run: cargo test -p jstream-browser --features cef --locked --test linux_page a_page_ -- --ignored --nocapture
       # macOS's part of the release text: how to open an unsigned app.
       - name: Write the checksum and the release notes
         env:
@@ -347,6 +368,7 @@ jobs:
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
+          cef=$(head -n 1 build/JStream.app/Contents/Resources/CEF-VERSION.txt)
           cd dist
           dmg="jstream-${TAG}-macos-arm64.dmg"
           shasum -a 256 "$dmg" > "$dmg.sha256"
@@ -355,7 +377,9 @@ jobs:
             echo
             echo "\`${dmg}\`, for Apple Silicon Macs on macOS 14 or later. Open it and drag JStream to Applications. See [Getting started](https://github.com/${REPO}/blob/${TAG}/docs/GETTING-STARTED.md)."
             echo
-            echo "JStream for macOS is **not signed or notarised**, so macOS stops it the first time it opens: open it once, then go to System Settings › Privacy & Security and choose *Open Anyway*. macOS asks again for its permissions (Screen Recording, Camera, Microphone) after each update. This build has no browser sources and no virtual camera yet."
+            echo "JStream for macOS is **not signed or notarised**, so macOS stops it the first time it opens: open it once, then go to System Settings › Privacy & Security and choose *Open Anyway*. macOS asks again for its permissions (Screen Recording, Camera, Microphone) after each update. This build has no virtual camera yet."
+            echo
+            echo "Browser sources run the Chromium Embedded Framework, \`${cef}\`."
             echo
             echo "SHA-256: \`$(cut -d ' ' -f 1 "$dmg.sha256")\`"
             echo

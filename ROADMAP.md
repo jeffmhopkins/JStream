@@ -317,7 +317,7 @@ maintainer orders it when the beta is gathered.
 - **One Mac pass on the downloaded image.** The `.dmg` from the release opens on Apple
   Silicon once the user allows it in Privacy & Security, and its core flows work: screen
   and window capture, a webcam, a microphone and desktop audio, going live, recording,
-  media files and snapshots, and a graceful stop. The open lines of the macOS hardware
+  browser pages, media files and snapshots, and a graceful stop. The open lines of the macOS hardware
   checklist (#1356) are that pass.
 - **No known macOS bug breaks one of those flows.**
 
@@ -333,12 +333,13 @@ maintainer orders it when the beta is gathered.
   graceful stop. The open lines of the Linux checklist (#1357) are that pass.
 - **No known Linux bug breaks one of those flows.**
 
-**Wanted for beta.1, but it doesn't wait for them:** browser sources on macOS through
-CEF, a virtual camera on macOS (through OBS Studio's camera extension,
-[below](#macos-vcam-source)) and on Linux (through v4l2loopback), and media-file sources
-on Linux ([ADR-0072](docs/adr/0072-linux-media-file-decoding.md), not built yet). Each
+**Wanted for beta.1, but it doesn't wait for them:** a virtual camera on macOS (through
+OBS Studio's camera extension, [below](#macos-vcam-source)) and media-file sources on
+Linux ([ADR-0072](docs/adr/0072-linux-media-file-decoding.md), not built yet). Each
 ships in beta.1 if it is done and passes its platform's pass; otherwise it goes to the
-release after. Until then the macOS and Linux notes say what the build lacks.
+release after. Until then the macOS and Linux notes say what the build lacks. Browser
+sources on macOS through CEF and the Linux virtual camera through v4l2loopback were on
+this list and are built, so the release's packages carry them.
 
 Everything else, new features included, goes to the alphas before it or to the releases
 after it.

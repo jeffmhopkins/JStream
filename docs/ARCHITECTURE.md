@@ -1773,8 +1773,8 @@ Foundation, Direct3D 12).
   CEF's framework and the five helper apps (`JStream Helper.app` and its GPU, renderer,
   plugin and alerts variants, each a copy of the helper) in `Contents/Frameworks`, and
   CEF's `CREDITS.html` and `CEF-VERSION.txt` in `Contents/Resources`. Each is signed ad
-  hoc from the inside out before the app. The after-review `macos-app` job bundles them
-  and opens a page through the bundled helper.
+  hoc from the inside out before the app. The after-review `macos-app` job and the
+  release's `macos` job bundle them and open a page through the bundled helper.
 - **Virtual camera:** registering the COM media source is **optional**, an explicit
   step the user chooses; nothing registers it or asks for elevation on its own
   ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The step costs **one UAC

@@ -69,11 +69,14 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
      the packages `jstream-v<version>-linux-amd64.deb` and
      `jstream-v<version>-linux-x86_64.AppImage`, and writes their SHA-256s and Linux's
      part of the notes;
-   - `macos` builds the desktop app on `macos-latest` (Apple Silicon) and bundles it with
-     `scripts/mac/bundle-app.sh`, ad-hoc signed, as `after-review`'s `macos-app` does,
-     starts it once from the bundle until its window's UI finishes the engine's handshake,
-     renames the image `jstream-v<version>-macos-arm64.dmg`, and writes its SHA-256 and
-     macOS's part of the notes, which say how to open an unsigned app;
+   - `macos` builds the desktop app and the browser helper with `cef` on `macos-latest`
+     (Apple Silicon) and bundles them with `scripts/mac/bundle-app.sh`, CEF's framework
+     and helper apps included and ad-hoc signed, as `after-review`'s `macos-app` does
+     ([ADR-0157](../adr/0157-browser-sources-on-macos.md)). It starts the app once from
+     the bundle until its window's UI finishes the engine's handshake, opens a page
+     through the bundled helper, renames the image `jstream-v<version>-macos-arm64.dmg`,
+     and writes its SHA-256 and macOS's part of the notes, which say how to open an
+     unsigned app and name the CEF build;
    - `publish`, the only job allowed to write to the repository, waits for all three and
      creates the GitHub release for the tag with every package and its `.sha256`, the
      notes (a line on the release, then Windows, macOS and Linux) and GitHub's generated
