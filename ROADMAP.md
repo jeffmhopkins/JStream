@@ -280,7 +280,8 @@ The alphas add features. The first beta, `0.1.0-beta.1`
 ([RUNBOOK-RELEASE › The version](docs/runbooks/release.md#version)), adds none: it is what
 the alphas ship, made dependable, and the first release with a desktop app for Windows,
 macOS and Linux. Its targets are the `beta.1` release in
-[`docs/progress.toml`](docs/progress.toml). The maintainer set its scope:
+[`docs/progress.toml`](docs/progress.toml), which [PROGRESS.md](PROGRESS.md) shows. The
+maintainer set its scope:
 
 - **Windows, macOS and Linux.** Each release attaches the portable Windows zip (x64), an
   unsigned macOS disk image (Apple Silicon, macOS 14 and later; Intel stays best effort),
@@ -306,8 +307,8 @@ maintainer orders it when the beta is gathered.
 - **The bench passes.** `jstream bench` passes on the Windows pass machine
   ([Setup](docs/runbooks/windows-hardware-pass.md#setup)), with the thread model and the
   seamless preview alpha.5 aims for.
-- **Every Windows run passes.** Each merged item marked *Windows run* in
-  `docs/progress.toml` passes it, in one acceptance pass on the candidate build rather
+- **Every Windows run passes.** Each merged item marked *Windows run* in PROGRESS.md's
+  [What's left](PROGRESS.md#status) table passes it, in one acceptance pass on the candidate build rather
   than one run at a time.
 - **No known Windows bug breaks a core flow.** Going live, recording, the virtual camera,
   browser pages, media files and snapshots work, and stopping is graceful.
