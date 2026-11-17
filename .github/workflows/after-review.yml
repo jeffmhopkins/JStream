@@ -497,8 +497,8 @@ jobs:
   # same tests as ci.yml's `e2e-stream`, on the backends the daemon builds on macOS. The
   # engine composites on its own Metal device, VideoToolbox encodes H.264 and AudioToolbox
   # AAC, and an `ffmpeg` RTMP server and the MP4 recorder write the files `ffprobe`
-  # checks. The built daemon streams and records with nothing faked, its stream key in the
-  # runner's login keychain. Not required (R-GIT-003).
+  # checks. The built daemon streams and records with nothing faked, its stream key in a
+  # keychain the test makes in its scratch home. Not required (R-GIT-003).
   e2e-stream-macos:
     runs-on: macos-latest
     continue-on-error: true
@@ -519,28 +519,6 @@ jobs:
         run: brew install ffmpeg
       # Type-checks the harness on macOS first, so a compile error reads as one.
       - run: cargo clippy -p jstream-daemon --tests --locked -- -D warnings
-      # The binary test stores its stream key in the default keychain. A runner's login
-      # keychain may be locked, and a search that reaches it would wait on a password
-      # prompt nobody answers, so the run gets a keychain of its own: unlocked, never
-      # relocking, the user's default and the only one searched. A generic password is
-      # then stored and read back with a scratch HOME, as the test's daemon runs, so a
-      # keychain that still prompts fails here, within the timeout, and says so.
-      - name: An unlocked keychain for the stream key
-        run: |
-          set -euo pipefail
-          kc="$RUNNER_TEMP/e2e-stream.keychain-db"
-          security create-keychain -p e2e "$kc"
-          security set-keychain-settings "$kc"
-          security unlock-keychain -p e2e "$kc"
-          security list-keychains -d user -s "$kc"
-          security default-keychain -d user -s "$kc"
-          security list-keychains -d user
-          # macOS has no `timeout`: run a command, and kill it after 20 seconds.
-          t() { "$@" & p=$!; (sleep 20; kill "$p" 2>/dev/null) & w=$!; r=0; wait "$p" || r=$?; kill "$w" 2>/dev/null || true; return "$r"; }
-          mkdir -p "$RUNNER_TEMP/scratch-home"
-          HOME="$RUNNER_TEMP/scratch-home" t security add-generic-password -s jstream-e2e-check -a check -w check -U
-          HOME="$RUNNER_TEMP/scratch-home" t security find-generic-password -s jstream-e2e-check -a check -w
-          t security delete-generic-password -s jstream-e2e-check -a check >/dev/null
       - name: Stream and record to a local receiver
         run: cargo xtask e2e-stream
       - name: The daemon's log

@@ -196,9 +196,12 @@ macOS it refuses the OpenH264 options. They check:
     CI, the test copies the same library the other tests use (downloaded once, or the
     named file) into the daemon's store, where the daemon checks it against the pin, so
     the stream branch runs.
-  - On macOS VideoToolbox is always there, so it must stream. The key goes to the login
-    keychain, under an output ID no real collection uses, and the test clears it at the
-    end, pass or fail.
+  - On macOS VideoToolbox is always there, so it must stream. The key goes to the
+    Keychain, into a login keychain the test makes in its scratch home (macOS keeps the
+    keychain list under `HOME`), so it never reaches the developer's own. The test
+    first checks that `security` reads the list from that home, and stops if it
+    doesn't. The item's output ID is one no real collection uses, and the test clears
+    it at the end, pass or fail.
 
 They don't cover what needs hardware: VA-API, NVENC, QSV, AMF, Media Foundation,
 VideoToolbox's hardware encoders (the in-process tests ask for software, and CI's Mac runners have none), the virtual camera,

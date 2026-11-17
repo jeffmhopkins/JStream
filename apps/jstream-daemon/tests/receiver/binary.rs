@@ -5,9 +5,11 @@
 //! output with a key and a recording, `output.start` on both.
 //!
 //! On Linux it has no session bus, so the stream key goes to ADR-0071's `0600` file, not
-//! the developer's keyring. On macOS the key goes to the login keychain, as the product
-//! keeps it, under an output ID no real collection uses, and the test clears it at the
-//! end. VideoToolbox always has an H.264 encoder, so the daemon must stream there.
+//! the developer's keyring. On macOS the key goes to the Keychain, as the product keeps
+//! it, but into a login keychain the test makes in its scratch home
+//! ([`login_keychain`]), under an output ID no real collection uses, and the test clears
+//! it at the end. VideoToolbox always has an H.264 encoder, so the daemon must stream
+//! there.
 //!
 //! What comes out on Linux depends on the machine's H.264 encoders, which the daemon
 //! chooses as the product does:
@@ -75,6 +77,8 @@ fn data_dir(home: &Path) -> PathBuf {
 fn start_daemon(dir: &Path) -> Daemon {
     let home = dir.join("home");
     std::fs::create_dir_all(&home).expect("the home folder");
+    #[cfg(target_os = "macos")]
+    login_keychain(&home);
     let token_file = dir.join("token");
     let mut child = Command::new(env!("CARGO_BIN_EXE_jstream-daemon"))
         .args(["--port", &free_port().to_string(), "--token-file"])
@@ -114,6 +118,51 @@ fn start_daemon(dir: &Path) -> Daemon {
         .trim()
         .to_owned();
     Daemon { child, url, token }
+}
+
+/// Gives the scratch `home` a login keychain of its own: unlocked, never relocking, and
+/// the only one its user searches. macOS keeps the keychain list under `HOME`, so the
+/// daemon, which runs with this `HOME`, stores its stream key here, never in the
+/// developer's keychain. Without one, the Security framework would ask, in a dialog no
+/// one answers on a runner, where to keep it.
+///
+/// Before changing anything it checks that `security` reads the list from this `HOME`:
+/// a fresh home lists no keychain. If it lists one, the list is the developer's own, so
+/// the test stops rather than change it.
+#[cfg(target_os = "macos")]
+fn login_keychain(home: &Path) {
+    let security = |args: &[&std::ffi::OsStr]| {
+        let out = Command::new("security")
+            .args(args)
+            .env("HOME", home)
+            .stdin(Stdio::null())
+            .output()
+            .expect("`security` runs");
+        assert!(
+            out.status.success(),
+            "security {args:?}: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    let os = std::ffi::OsStr::new;
+    let listed = security(&[os("list-keychains"), os("-d"), os("user")]);
+    assert!(
+        listed.trim().is_empty(),
+        "`security` with HOME={} lists keychains already ({}): it isn't reading this \
+         HOME, so the test won't change that list",
+        home.display(),
+        listed.trim()
+    );
+    let keychains = home.join("Library/Keychains");
+    std::fs::create_dir_all(&keychains).expect("the keychain folder");
+    let path = keychains.join("login.keychain-db");
+    let kc = path.as_os_str();
+    security(&[os("create-keychain"), os("-p"), os("e2e"), kc]);
+    security(&[os("set-keychain-settings"), kc]);
+    security(&[os("unlock-keychain"), os("-p"), os("e2e"), kc]);
+    security(&[os("list-keychains"), os("-d"), os("user"), os("-s"), kc]);
+    security(&[os("default-keychain"), os("-d"), os("user"), os("-s"), kc]);
 }
 
 /// Puts Cisco's library from `JSTREAM_E2E_OPENH264` ([`openh264_library`]) in the
