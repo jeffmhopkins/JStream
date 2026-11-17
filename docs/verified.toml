@@ -7170,7 +7170,7 @@ stamp = { hash = "b3:f541a63287189457", by = "agent:claude", note = "depends_on 
 stamp = { hash = "b3:571a3148557f4619", by = "agent:claude", note = "Added one paragraph of macOS (14+, Apple Silicon) and Linux (x86_64, GNOME or KDE, PipeWire, portal, VA-API or OpenH264) requirements per ADR-0060 and ADR-0063; the Windows list unchanged and still holds against ARCH#packaging" }
 
 ["GETTING-STARTED#requirements"."dep:README.md#platforms"]
-stamp = { hash = "b3:826f54ce6c30e56c", by = "agent:claude-readme-polish", note = "README#platforms now lists all three platforms for beta.1; this section's Windows 11 build 22000, 64-bit and Direct3D 12 requirement matches its Windows row, and the Platforms link still resolves." }
+stamp = { hash = "b3:3f1978bb81618bbc", by = "agent:claude", note = "README#platforms changed only its macOS and Linux delivery cells (beta.1 packages on the releases page); this section's Windows list and its macOS and Linux paragraph match the requirement columns, which are unchanged" }
 
 ["GETTING-STARTED#requirements"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:e7b6a0223c6c5bae", by = "agent:ptz-builder", note = "ADR-0153: the desktop README's usage gained the PTZ controller setting; the requirements are unchanged" }
@@ -7278,7 +7278,7 @@ stamp = { hash = "b3:71234f8ec794e39c", by = "agent:claude", note = "nested_deep
 stamp = { hash = "b3:0c13bb7844ad136a", by = "agent:claude", note = "nested_deep gets its own looser floor (4 fps, 250 ms) for ADR-0126's per-target decode pass on lavapipe; the slow-scenes list names it" }
 
 ["README#platforms"."body"]
-stamp = { hash = "b3:826f54ce6c30e56c", by = "agent:claude-readme-polish", note = "Rewritten for beta.1 targeting Windows, macOS and Linux: requirements match ADR-0008 (Windows 11 22000+, serviced versions), ADR-0063 (macOS 14+, Apple Silicon, Intel best effort) and ADR-0060 (64-bit, GNOME or KDE on Wayland, Ubuntu LTS and Fedora); the how-you-get-it column matches the Windows zip in GETTING-STARTED and the one-command installs in the mac-testing and linux-testing runbooks." }
+stamp = { hash = "b3:3f1978bb81618bbc", by = "agent:claude", note = "The macOS and Linux 'how you get it' cells now say beta.1 brings an unsigned .dmg and a .deb plus AppImage on the releases page (release.yml's macos and linux jobs), with the from-source installers until then; requirement columns unchanged against ADR-0008, ADR-0063 and ADR-0060" }
 
 ["README#platforms"."dep:docs/adr/0008-windows-support-policy.md"]
 stamp = { hash = "b3:c65b46a55b573338" }
