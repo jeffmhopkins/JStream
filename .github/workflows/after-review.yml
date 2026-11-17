@@ -492,3 +492,40 @@ jobs:
           CONTEXT: macos-app
           RESULT: ${{ job.status }}
         run: bash .github/after-review-status.sh
+
+  # The real-receiver harness on macOS (apps/jstream-daemon/README.md#receiver-e2e): the
+  # same tests as ci.yml's `e2e-stream`, on the backends the daemon builds on macOS. The
+  # engine composites on its own Metal device, VideoToolbox encodes H.264 and AudioToolbox
+  # AAC, and an `ffmpeg` RTMP server and the MP4 recorder write the files `ffprobe`
+  # checks. The built daemon streams and records with nothing faked, its stream key in the
+  # runner's login keychain. Not required (R-GIT-003).
+  e2e-stream-macos:
+    runs-on: macos-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: e2e-stream-macos
+          RESULT: pending
+        run: bash .github/after-review-status.sh
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: FFmpeg
+        run: brew install ffmpeg
+      # Type-checks the harness on macOS first, so a compile error reads as one.
+      - run: cargo clippy -p jstream-daemon --tests --locked -- -D warnings
+      - name: Stream and record to a local receiver
+        run: cargo xtask e2e-stream
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: e2e-stream-macos
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh

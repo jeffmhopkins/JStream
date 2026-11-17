@@ -2,23 +2,29 @@
 //!
 //! `tests/e2e.rs` drives the daemon's wiring against a hand-written RTMP sink and fake
 //! codecs, so nothing there is decodable. This harness swaps the fakes on the media
-//! path for real parts: the GPU compositor on a software Vulkan adapter (lavapipe),
-//! JStream's own AAC-LC encoder, a real H.264 encoder, and `ffmpeg` as the RTMP server
-//! (`-listen 1`, writing what it receives to FLV). `ffprobe` and `ffmpeg` then read the
-//! file back: codec, size, frame rate, keyframe spacing, audio, duration, and decoded
-//! pixels and loudness. Only capture and the microphone stay fakes, on a fake clock the
-//! pump keeps level with real time, so the encoders and the server see a live pace.
+//! path for real parts: the GPU compositor, the platform's AAC and H.264 encoders, and
+//! `ffmpeg` as the RTMP server (`-listen 1`, writing what it receives to FLV), or the
+//! MP4 recorder writing a file. `ffprobe` and `ffmpeg` then read the file back: codec,
+//! size, frame rate, keyframe spacing, audio, duration, and decoded pixels and loudness.
+//! Only capture and the microphone stay fakes, on a fake clock the pump keeps level with
+//! real time, so the encoders and the server see a live pace.
 //!
-//! The H.264 encoder is Cisco's OpenH264, the product's Linux software encoder, when
-//! `JSTREAM_E2E_OPENH264` is `download` (the xtask's `--openh264-download`, which CI
-//! runs) or names a copy of the pinned library (`--openh264 <library>`). Otherwise it is
-//! `x264.rs`'s stand-in, `ffmpeg`'s libx264 in a child process.
+//! It runs on Linux and macOS, on each one's own codecs:
+//! - **Linux**: the compositor on a software Vulkan adapter (lavapipe) and JStream's own
+//!   AAC-LC encoder. The H.264 encoder is Cisco's OpenH264, the product's Linux software
+//!   encoder, when `JSTREAM_E2E_OPENH264` is `download` (the xtask's
+//!   `--openh264-download`, which CI runs) or names a copy of the pinned library
+//!   (`--openh264 <library>`). Otherwise it is `x264.rs`'s stand-in, `ffmpeg`'s libx264
+//!   in a child process.
+//! - **macOS**: the backends the daemon builds there: no GPU interop yet, so the engine
+//!   composites on a Metal device of its own and reads the program back, VideoToolbox's
+//!   H.264 encoder and AudioToolbox's AAC-LC encoder.
 //!
-//! The tests are `#[ignore]`d: they need `ffmpeg`, `ffprobe` and a Vulkan adapter, which
+//! The tests are `#[ignore]`d: they need `ffmpeg`, `ffprobe` and a GPU adapter, which
 //! R-TEST-004 keeps out of `cargo test`. Run them with `cargo xtask e2e-stream`, or
 //! `cargo test -p jstream-daemon --test receiver -- --ignored --test-threads=1`.
 
-#![cfg(target_os = "linux")]
+#![cfg(any(target_os = "linux", target_os = "macos"))]
 #![allow(
     clippy::print_stderr,
     reason = "the log shows what each receiver got, which a passing run's assertions don't"
@@ -26,6 +32,7 @@
 
 mod binary;
 mod probe;
+#[cfg(target_os = "linux")]
 mod x264;
 
 use std::path::{Path, PathBuf};
@@ -43,14 +50,18 @@ use jstream_control::protocol::{
 use jstream_core::{Engine, InProcessControl};
 use jstream_daemon::live::{live, rtmp};
 use jstream_media::{ChannelLayout, FrameSize, Timebase};
+use jstream_platform::Backends;
 use jstream_platform::fake::{
     FakeAudioIo, FakeCapture, FakeClock, FakeMediaDecoders, FakeVideoDevices, MemoryKeyStore,
 };
+#[cfg(target_os = "linux")]
 use jstream_platform::{
-    AdapterId, AudioEncoder, AudioEncoderConfig, Backends, CodecInfo, Codecs, GpuContext, GpuFrame,
+    AdapterId, AudioEncoder, AudioEncoderConfig, CodecInfo, Codecs, GpuContext, GpuFrame,
     GpuInterop, PlatformError, VideoDecoder, VideoDecoderConfig, VideoEncoder, VideoEncoderConfig,
 };
+#[cfg(target_os = "linux")]
 use jstream_platform_linux::{HttpsFetch, OPENH264_PIN, OpenH264Store, VaapiCodecs};
+#[cfg(target_os = "linux")]
 use jstream_render::{Compositor, OpenOptions};
 use probe::{Receiver, free_port, mean_volume, pixel, probe};
 use serde_json::{Value, json};
@@ -73,8 +84,10 @@ fn scratch(name: &str) -> PathBuf {
 
 /// GPU interop on a software adapter, standing in for the platform's. It makes no
 /// encode targets, so the program is read back for the CPU encoders.
+#[cfg(target_os = "linux")]
 struct SoftwareGpu;
 
+#[cfg(target_os = "linux")]
 impl GpuInterop for SoftwareGpu {
     fn open_device(&self) -> Result<GpuContext, PlatformError> {
         let compositor = Compositor::open(OpenOptions::headless()).map_err(|err| {
@@ -108,6 +121,7 @@ impl GpuInterop for SoftwareGpu {
 /// Linux's codecs as the product has them, with no VA-API device: JStream's AAC-LC
 /// encoder, and OpenH264 when [`openh264`] found Cisco's library, else the libx264
 /// stand-in.
+#[cfg(target_os = "linux")]
 struct RealCodecs {
     linux: VaapiCodecs,
     openh264: bool,
@@ -117,6 +131,7 @@ struct RealCodecs {
 /// pinned release from Cisco's server, as the app does on the user's request, into a
 /// store the run's tests share (under `CARGO_TARGET_TMPDIR`), so it downloads once; any
 /// other value names a copy of that release. `None` when the variable isn't set.
+#[cfg(target_os = "linux")]
 pub(crate) fn openh264_library() -> Option<PathBuf> {
     let source = std::env::var_os("JSTREAM_E2E_OPENH264")?;
     if source != "download" {
@@ -140,6 +155,7 @@ pub(crate) fn openh264_library() -> Option<PathBuf> {
 /// [`openh264_library`]'s file, stored in `dir`. The store holds it to
 /// [`OPENH264_PIN`]'s SHA-256 and `VaapiCodecs` loads it the way it loads a download, so
 /// a library that isn't the pinned one fails the test.
+#[cfg(target_os = "linux")]
 fn openh264(dir: &Path) -> Option<OpenH264Store> {
     let library = openh264_library()?;
     let store = OpenH264Store::new(dir.join("openh264"));
@@ -148,6 +164,7 @@ fn openh264(dir: &Path) -> Option<OpenH264Store> {
     Some(store)
 }
 
+#[cfg(target_os = "linux")]
 impl RealCodecs {
     fn new(dir: &Path) -> Self {
         match openh264(dir) {
@@ -172,6 +189,7 @@ impl RealCodecs {
     }
 }
 
+#[cfg(target_os = "linux")]
 impl Codecs for RealCodecs {
     fn list(&self) -> Result<Vec<CodecInfo>, PlatformError> {
         let mut list = self.linux.list()?;
@@ -223,21 +241,43 @@ impl Fakes {
         Self { clock, audio }
     }
 
+    /// The fakes, with Linux's codecs and the compositor on a software adapter.
+    #[cfg(target_os = "linux")]
     fn backends(&self, dir: &Path) -> (Backends, &'static str) {
-        let size = FrameSize::new(CANVAS.0, CANVAS.1).expect("size");
         let codecs = RealCodecs::new(dir);
         let name = codecs.video_name();
-        let backends = Backends {
+        (self.with(Arc::new(codecs), Arc::new(SoftwareGpu)), name)
+    }
+
+    /// The fakes, with the codecs and GPU interop the daemon builds on macOS
+    /// (`serve.rs`): VideoToolbox and AudioToolbox, and no interop, so the engine
+    /// composites on a Metal device of its own and reads the program back for the
+    /// encoders.
+    #[cfg(target_os = "macos")]
+    fn backends(&self, _dir: &Path) -> (Backends, &'static str) {
+        use jstream_platform_macos::{NoGpuInterop, VideoToolboxCodecs};
+        (
+            self.with(Arc::new(VideoToolboxCodecs::new()), Arc::new(NoGpuInterop)),
+            "VideoToolbox H.264",
+        )
+    }
+
+    fn with(
+        &self,
+        codecs: Arc<dyn jstream_platform::Codecs>,
+        gpu: Arc<dyn jstream_platform::GpuInterop>,
+    ) -> Backends {
+        let size = FrameSize::new(CANVAS.0, CANVAS.1).expect("size");
+        Backends {
             clock: Arc::new(self.clock.clone()),
             video_devices: Arc::new(FakeVideoDevices::new(self.clock.clone())),
             capture: Arc::new(FakeCapture::new(self.clock.clone(), size)),
             audio: Arc::new(self.audio.clone()),
-            codecs: Arc::new(codecs),
-            gpu: Arc::new(SoftwareGpu),
+            codecs,
+            gpu,
             vcam: None,
             media: Arc::new(FakeMediaDecoders::new()),
-        };
-        (backends, name)
+        }
     }
 
     /// Keeps the media clock level with real time, feeding the microphone 10 ms at a
@@ -541,7 +581,7 @@ fn near(rgb: [u8; 3], want: [u8; 3]) -> bool {
 /// each second with the uptime rising, bytes and frames growing, a bitrate near the
 /// profile's, nothing dropped and health `good`; the uptime starts again at the next
 /// `output.start`.
-#[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
+#[ignore = "needs ffmpeg, ffprobe and a GPU adapter: cargo xtask e2e-stream"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() {
     let dir = scratch("stream");
@@ -722,7 +762,7 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
 /// Opting into 60 fps (ADR-0119) makes the program stream run at 60. FLV stamps are
 /// whole milliseconds, so a 16.7 ms frame is 16 or 17 ms and the measured rate is a
 /// few fps either side of 60. The profile's one-second keyframe is 60 frames.
-#[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
+#[ignore = "needs ffmpeg, ffprobe and a GPU adapter: cargo xtask e2e-stream"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_stream_at_60_fps_is_what_the_collection_opted_into() {
     let dir = scratch("rate60");
@@ -766,7 +806,7 @@ async fn a_stream_at_60_fps_is_what_the_collection_opted_into() {
 /// wide receiver gets red at 320x180 and 30 fps; the vertical one gets 180x320 at
 /// 15 fps, the canvas fitted in the middle with black above and below, turned green by
 /// its filter. Its own chain gives it a dedicated encoder session.
-#[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
+#[ignore = "needs ffmpeg, ffprobe and a GPU adapter: cargo xtask e2e-stream"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_vertical_mix_with_an_output_filter_beside_a_wide_stream() {
     let dir = scratch("vertical");
@@ -847,7 +887,7 @@ async fn a_vertical_mix_with_an_output_filter_beside_a_wide_stream() {
 /// Outputs carry a bus: one stream on the master hears the microphone, one on a bus
 /// with no sends is silent; after a send into that bus, a new run of it hears the
 /// microphone too.
-#[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
+#[ignore = "needs ffmpeg, ffprobe and a GPU adapter: cargo xtask e2e-stream"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn an_output_on_another_bus_carries_that_bus() {
     let dir = scratch("bus");
@@ -891,7 +931,7 @@ async fn an_output_on_another_bus_carries_that_bus() {
 /// listens again it reconnects on its own and goes `active`, staying `poor` while the
 /// outage's lost video is inside the health's window, and the new connection carries a
 /// decodable stream that opens on a keyframe with audio.
-#[ignore = "needs ffmpeg, ffprobe and a Vulkan adapter: cargo xtask e2e-stream"]
+#[ignore = "needs ffmpeg, ffprobe and a GPU adapter: cargo xtask e2e-stream"]
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn a_stream_reconnects_after_the_receiver_restarts() {
     let dir = scratch("reconnect");
@@ -980,4 +1020,97 @@ async fn a_stream_reconnects_after_the_receiver_restarts() {
     assert!(p.duration > 2.0, "{p:?}");
     let rgb = pixel(&after, 1.0, 160, 90);
     assert!(near(rgb, [255, 0, 0]), "{rgb:?}");
+}
+
+/// A recording on an encoder profile: while it runs, the MP4 recorder writes
+/// `<path>.part`, and `output.stop` renames it to the path. The file plays back as
+/// H.264 at the canvas size and 30 fps with a keyframe every 30 frames, and AAC stereo
+/// at 48 kHz with the microphone in it. Its pixels are the scene's, and it holds the
+/// frames the output's stats counted.
+#[ignore = "needs ffmpeg, ffprobe and a GPU adapter: cargo xtask e2e-stream"]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn a_recording_is_an_mp4_with_the_program_in_it() {
+    let dir = scratch("record");
+    let rig = Rig::new(&dir).await;
+    rig.edit(red_scene_with_mic()).await;
+    let path = dir.join("program.mp4");
+    let part = dir.join("program.mp4.part");
+    rig.edit(json!([
+        {"type": "encoder.create", "profile_id": "low", "name": "Low",
+         "profile": {
+            "video": {"codec": "h264", "rate_control": {"type": "cbr", "kbps": 800},
+                      "keyframe_interval_s": 1, "hardware": "avoid"},
+            "audio": {"codec": "aac", "kbps": 128}}},
+        {"type": "output.create", "output_id": "rec",
+         "kind": {"type": "record", "path": path.to_str().expect("a UTF-8 path"),
+                  "container": "mp4"}},
+        {"type": "output.set_encoder", "output_id": "rec", "profile_id": "low"},
+    ]))
+    .await;
+
+    rig.start("rec").await;
+    rig.until("rec active", |rig| {
+        rig.state("rec") == Some(OutputState::Active)
+    })
+    .await;
+    rig.stream_for("rec", 4).await;
+    assert!(
+        part.is_file() && !path.exists(),
+        "a running recording is written as {}",
+        part.display()
+    );
+    rig.stop("rec").await;
+    assert!(
+        path.is_file() && !part.exists(),
+        "the stop renames {} to {}",
+        part.display(),
+        path.display()
+    );
+    // The stop's final tick, before `stopped`, counts every frame the run sent.
+    let last = rig.stats("rec").last().cloned().expect("a tick");
+    assert_eq!(last.dropped_frames, 0, "{last:?}");
+    assert!(
+        rig.states("rec")
+            .iter()
+            .all(|s| !matches!(s, OutputState::Failed | OutputState::Reconnecting)),
+        "{:?}",
+        rig.states("rec")
+    );
+
+    let p = probe(&path);
+    eprintln!("{} recorded: {p:?}", rig.video_encoder);
+    assert_eq!(p.video_codec, "h264", "{p:?}");
+    assert_eq!(
+        (p.width, p.height),
+        (u64::from(CANVAS.0), u64::from(CANVAS.1)),
+        "{p:?}"
+    );
+    assert!(close(p.measured_fps(), 30.0, 1.0), "{p:?}");
+    assert_eq!(p.audio_codec.as_deref(), Some("aac"), "{p:?}");
+    assert_eq!(
+        (p.sample_rate, p.channels),
+        (Some(48_000), Some(2)),
+        "{p:?}"
+    );
+    assert!(p.duration > 3.0, "{p:?}");
+    assert!(
+        close(p.video_packets.len() as f64, last.frames as f64, 30.0),
+        "the file holds the frames the stats counted, within a tick: {} vs {last:?}",
+        p.video_packets.len()
+    );
+    assert_eq!(
+        p.video_packets.first().map(|(_, k)| *k),
+        Some(true),
+        "{p:?}"
+    );
+    let spacing = p.keyframe_spacing();
+    assert!(spacing.len() >= 2, "{spacing:?}");
+    assert!(
+        spacing.iter().all(|n| *n == 30),
+        "a keyframe every 30 frames: {spacing:?}"
+    );
+    let rgb = pixel(&path, 2.0, 160, 90);
+    assert!(near(rgb, [255, 0, 0]), "the recording is red: {rgb:?}");
+    let volume = mean_volume(&path);
+    assert!(volume > -25.0, "the microphone is in it: {volume} dB");
 }

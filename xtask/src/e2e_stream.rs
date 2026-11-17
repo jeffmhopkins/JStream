@@ -1,12 +1,13 @@
 //! `cargo xtask e2e-stream`: streams to a real RTMP server and checks what it received
-//! (`apps/jstream-daemon/tests/receiver`), on Linux.
+//! (`apps/jstream-daemon/tests/receiver`), on Linux and macOS.
 //!
-//! It checks that `ffmpeg` and `ffprobe` are installed, points Vulkan at lavapipe when
-//! `VK_DRIVER_FILES` isn't set and lavapipe is installed, then runs the harness's
-//! ignored tests one at a time. `--openh264-download` runs them on Cisco's OpenH264,
-//! which the harness downloads from Cisco and checks against the pin, as CI does;
-//! `--openh264 <library>` runs them on a copy of the pinned library already on disk.
-//! With neither, they use the libx264 stand-in.
+//! It checks that `ffmpeg` and `ffprobe` are installed, on Linux points Vulkan at
+//! lavapipe when `VK_DRIVER_FILES` isn't set and lavapipe is installed, then runs the
+//! harness's ignored tests one at a time. On Linux, `--openh264-download` runs them on
+//! Cisco's OpenH264, which the harness downloads from Cisco and checks against the pin,
+//! as CI does; `--openh264 <library>` runs them on a copy of the pinned library already
+//! on disk. With neither, they use the libx264 stand-in. On macOS they run on
+//! VideoToolbox and AudioToolbox, and the OpenH264 options are refused.
 //!
 //! Docs: apps/jstream-daemon/README.md#receiver-e2e
 
@@ -37,16 +38,25 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
             ),
         }
     }
-    if !cfg!(target_os = "linux") {
-        bail!("the receiver harness runs on Linux only");
+    let linux = cfg!(target_os = "linux");
+    if !linux && !cfg!(target_os = "macos") {
+        bail!("the receiver harness runs on Linux and macOS only");
     }
+    if !linux && openh264.is_some() {
+        bail!("OpenH264 is Linux's encoder; on macOS the harness runs on VideoToolbox");
+    }
+    let install = if linux {
+        "sudo apt-get install ffmpeg"
+    } else {
+        "brew install ffmpeg"
+    };
     for tool in ["ffmpeg", "ffprobe"] {
         let found = Command::new(tool)
             .arg("-version")
             .output()
             .is_ok_and(|o| o.status.success());
         if !found {
-            bail!("`{tool}` isn't installed; install FFmpeg (e.g. `sudo apt-get install ffmpeg`)");
+            bail!("`{tool}` isn't installed; install FFmpeg (e.g. `{install}`)");
         }
     }
     let mut cargo = Command::new(std::env::var("CARGO").unwrap_or_else(|_| "cargo".into()));
@@ -61,7 +71,8 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
         "--ignored",
         "--test-threads=1",
     ]);
-    if std::env::var_os("VK_DRIVER_FILES").is_none()
+    if linux
+        && std::env::var_os("VK_DRIVER_FILES").is_none()
         && let Some(icd) = lavapipe()
     {
         eprintln!("xtask e2e-stream: Vulkan on lavapipe ({})", icd.display());
@@ -69,8 +80,10 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
     }
     if let Some(library) = &openh264 {
         cargo.env("JSTREAM_E2E_OPENH264", library);
-    } else {
+    } else if linux {
         eprintln!("xtask e2e-stream: H.264 through the libx264 stand-in (no --openh264)");
+    } else {
+        eprintln!("xtask e2e-stream: H.264 and AAC through VideoToolbox and AudioToolbox");
     }
     let status = cargo.status().context("running cargo test")?;
     Ok(status.success())

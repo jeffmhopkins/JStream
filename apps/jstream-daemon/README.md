@@ -89,9 +89,9 @@ Contents (a first cut, the M1a host of [ROADMAP › M1](../../ROADMAP.md#m1)):
   stream, MCP starts the recording, and the test checks `stats.tick`, what the sink
   received and the recorded MP4. It runs in process, on the library's `live` and
   `rtmp`, the wiring `serve.rs` uses, so it runs the same on every OS;
-  `tests/receiver/`, the same wiring streaming to a real RTMP server and decoding what
-  it got, and the built binary on its own Linux backends streaming to one, ignored by
-  `cargo test` ([Real-receiver end to end](#receiver-e2e));
+  `tests/receiver/`, on Linux and macOS, the same wiring streaming to a real RTMP server
+  and recording to MP4 and decoding what it got, and the built binary on its own
+  backends streaming to one and recording, ignored by `cargo test` ([Real-receiver end to end](#receiver-e2e));
   `tests/delay_load.rs`, Windows MSVC only, which reads the built binary's PE headers to check that the
   backends' Media Foundation DLLs are delay-loaded and none is a load-time import;
   `tests/info_plist.rs`, which checks on every OS that `Info.plist` has each usage
@@ -115,18 +115,26 @@ to the desktop app), and only an app may link both `jstream-core` and `jstream-s
 covers = ["apps/jstream-daemon/tests/receiver/**", "xtask/src/e2e_stream.rs"]
 -->
 
-`tests/receiver/` streams to a real RTMP server and checks what arrives, so the output
-path is tested end to end without hardware or a YouTube account. `tests/e2e.rs`
-already drives the daemon's wiring, but on fake codecs and a hand-written sink, so
-nothing it sends can be decoded. Here the engine is the one `live.rs` builds, and only
-capture and the microphone are fakes. Their fake clock is kept level with real time.
-Everything after them is real: the GPU compositor on a software Vulkan adapter
-(lavapipe), JStream's AAC-LC encoder, an H.264 encoder, the RTMP publisher with its
-reconnects, and `ffmpeg -listen 1` as the server, which writes the stream to FLV.
-`ffprobe` and `ffmpeg` then read the file back. One more test runs the built daemon
-binary on its own Linux backends, with nothing faked, against the same receiver.
+`tests/receiver/` streams to a real RTMP server and records to MP4, and checks what
+arrives, so going live and recording are tested end to end without a YouTube account.
+`tests/e2e.rs` already drives the daemon's wiring, but on fake codecs and a
+hand-written sink, so nothing it sends can be decoded. Here the engine is the one
+`live.rs` builds, and only capture and the microphone are fakes. Their fake clock is
+kept level with real time. Everything after them is real: the GPU compositor, the
+platform's AAC and H.264 encoders, the RTMP publisher with its reconnects, `ffmpeg
+-listen 1` as the server, which writes the stream to FLV, and the MP4 recorder.
+`ffprobe` and `ffmpeg` then read the files back. One more test runs the built daemon
+binary on its own backends, with nothing faked, against the same receiver.
 
-The H.264 encoder is Cisco's OpenH264, Linux's software encoder
+It runs on Linux and macOS. On Linux the compositor runs on a software Vulkan adapter
+(lavapipe) and the AAC encoder is JStream's own. On macOS the harness takes the codecs
+and GPU interop the daemon builds there (`serve.rs`): VideoToolbox's H.264 encoder,
+AudioToolbox's AAC-LC encoder, and no GPU interop yet, so the engine composites on a
+Metal device of its own and reads the program back for the encoders. CI runs it on
+Linux in `e2e-stream` and on macOS in `e2e-stream-macos`
+([R-GIT-003](../../docs/RULES.md#R-GIT-003)).
+
+On Linux the H.264 encoder is Cisco's OpenH264, Linux's software encoder
 ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), when
 `JSTREAM_E2E_OPENH264` asks for it. `cargo xtask e2e-stream --openh264-download`, which
 CI runs, sets it to `download`: the harness installs the pinned release from Cisco's
@@ -139,10 +147,11 @@ child process. Product code never encodes through FFmpeg
 ([R-DEP-002](../../docs/RULES.md#R-DEP-002)). The stand-in is for machines with no
 route to Cisco.
 
-The tests need `ffmpeg`, `ffprobe` and a Vulkan adapter, which
+The tests need `ffmpeg`, `ffprobe` and a GPU adapter (lavapipe will do on Linux), which
 [R-TEST-004](../../docs/RULES.md#R-TEST-004) keeps out of `cargo test`, so they are
-`#[ignore]`d. `cargo xtask e2e-stream` checks for the tools, points Vulkan at lavapipe
-when it is installed, and runs them one at a time, in about half a minute. They check:
+`#[ignore]`d. `cargo xtask e2e-stream` checks for the tools, on Linux points Vulkan at
+lavapipe when it is installed, and runs them one at a time, in about a minute. On
+macOS it refuses the OpenH264 options. They check:
 
 - **A stream on an encoder profile.** H.264 at the canvas size and 30 fps, a keyframe
   every 30 frames, which from the second keyframe on is a second apart within 0.1 s,
@@ -170,22 +179,30 @@ when it is installed, and runs them one at a time, in about half a minute. They 
   outage is inside the health's ten-second window (#994). The new connection opens on a
   keyframe, with audio, and the test stops the output only once the receiver's file
   holds 2.5 s of video after the reconnect, not on the output's own frame count (#1141).
+- **A recording.** An MP4 recording on an encoder profile is written as `<path>.part`
+  while it runs, and `output.stop` renames it to its path. The file holds H.264 at the
+  canvas size and 30 fps with a keyframe every 30 frames, AAC stereo at 48 kHz with the
+  microphone in it, the scene's pixels, and the frames the output's stats counted.
 - **The daemon binary on its own backends** (`binary.rs`). The built `jstream-daemon`
-  runs as a user runs it, on the Linux backends `serve.rs` builds, with no fakes and
-  nothing in process. Its data, config and log folders are in the test's scratch
-  folder, and it has no session bus, so the stream key goes to ADR-0071's fallback
-  file, which the test checks. A client drives it over the WebSocket API: a red colour
-  source, an RTMP output with its key, `output.start`. With an H.264 encoder (VA-API, or
-  OpenH264 in the daemon's store) the receiver must get H.264 at the canvas size and
-  AAC, with red pixels. Without one, as on a machine running the stand-in, the start
-  must fail with a reason that names OpenH264 and VA-API. When `JSTREAM_E2E_OPENH264` is
-  set, as on CI, the test copies the same library the other tests use (downloaded once,
-  or the named file) into the daemon's store, where the daemon checks it against the
-  pin, so the stream branch runs.
+  runs as a user runs it, on the backends `serve.rs` builds, with no fakes and nothing
+  in process. Its data, config and log folders are in the test's scratch folder. A
+  client drives it over the WebSocket API: a red colour source, an RTMP output with its
+  key and an MP4 recording, `output.start` on both. With an H.264 encoder the receiver
+  and the recording must each get H.264 at the canvas size and AAC, with red pixels.
+  - On Linux it has no session bus, so the stream key goes to ADR-0071's fallback
+    file, which the test checks. Its encoder is VA-API, or OpenH264 in the daemon's
+    store. Without one, as on a machine running the stand-in, the start must fail with
+    a reason that names OpenH264 and VA-API. When `JSTREAM_E2E_OPENH264` is set, as on
+    CI, the test copies the same library the other tests use (downloaded once, or the
+    named file) into the daemon's store, where the daemon checks it against the pin, so
+    the stream branch runs.
+  - On macOS VideoToolbox is always there, so it must stream. The key goes to the login
+    keychain, under an output ID no real collection uses, and the test clears it at the
+    end, pass or fail.
 
-They don't cover what needs hardware or another OS: VA-API, NVENC, QSV, AMF, Media
-Foundation and VideoToolbox, the virtual camera, real capture devices, or the platform
-GPU paths.
+They don't cover what needs hardware: VA-API, NVENC, QSV, AMF, Media Foundation,
+VideoToolbox's hardware encoders (the in-process tests ask for software, and CI's Mac runners have none), the virtual camera,
+real capture devices, or the platform GPU paths.
 
 <a id="usage"></a>
 ## Usage
