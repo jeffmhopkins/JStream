@@ -367,7 +367,7 @@ impl Vcam {
             Vcam::Outdated => Some(UPDATE_HINT),
             Vcam::Off => Some("Start JStream without `--no-vcam` to use it."),
             Vcam::Unknown => Some(
-                "The engine checks the camera when it starts: an unregistered one is refused with how to register it.",
+                "The engine checks the camera when it starts, and a refusal says what to set up: registering it on Windows, loading v4l2loopback on Linux.",
             ),
         }
     }
@@ -393,7 +393,7 @@ pub fn start_blocker(row: &OutputRow, vcam: Vcam) -> Option<&'static str> {
 
 /// What a start refused with "no virtual camera" means: the engine was built or started
 /// without a camera, which registering can't change.
-pub const NO_CAMERA_HINT: &str = "This engine has no virtual camera: it runs on Windows 11 only, and the desktop app has none when started with `--no-vcam`.";
+pub const NO_CAMERA_HINT: &str = "This engine has no virtual camera: it runs on Windows 11 and on Linux (through v4l2loopback), and the desktop app has none when started with `--no-vcam`.";
 
 /// A failed virtual camera start, for the panel. The engine's two reasons that need
 /// explaining get a hint: an unregistered camera (the platform's "is not registered",

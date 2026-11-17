@@ -28,7 +28,7 @@
 //! on Linux. On other platforms the crate builds empty except for its
 //! platform-independent helpers, which are tested everywhere.
 //!
-//! Docs: crates/jstream-platform-linux/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0060-linux-platform-support.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0062-aac-lc-encoder-patent-check.md, docs/adr/0014-media-clock.md, docs/adr/0071-linux-secret-store.md, docs/adr/0072-linux-media-file-decoding.md, docs/adr/0112-assignable-camera-zoom-bindings.md
+//! Docs: crates/jstream-platform-linux/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0060-linux-platform-support.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0062-aac-lc-encoder-patent-check.md, docs/adr/0014-media-clock.md, docs/adr/0071-linux-secret-store.md, docs/adr/0072-linux-media-file-decoding.md, docs/adr/0112-assignable-camera-zoom-bindings.md, docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md, docs/security/threat-model.md#vcam
 
 #[cfg(feature = "aac-encoder")]
 mod aac;
@@ -59,6 +59,7 @@ mod session;
 mod spa;
 mod v4l2;
 mod vaapi;
+pub mod vcam;
 
 #[cfg(feature = "aac-encoder")]
 pub use aac::{AAC_ENCODER_NAME, RustAacEncoder, aac_config, aac_encoder_info};
@@ -106,7 +107,7 @@ pub use process::{LinuxProcessCpu, LinuxThreadCpu};
 pub use secrets::LinuxSecrets;
 pub use session::{Session, SessionKind, SupportTier};
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
-pub use v4l2::V4l2Devices;
+pub use v4l2::{LoopbackVcam, V4l2Devices};
 #[cfg(target_os = "linux")]
 pub use vaapi::probe_encoders;
 pub use vaapi::{H264Profile, VaEncoder, VaEntrypoint, VaProfile};

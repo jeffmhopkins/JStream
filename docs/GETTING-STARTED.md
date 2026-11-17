@@ -172,7 +172,7 @@ row) and give it a new file name. Browse… is there too.
 <a id="vcam"></a>
 ## The virtual camera (optional)
 <!-- @section
-depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md", "apps/jstream-desktop/README.md#usage"]
+depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md", "apps/jstream-desktop/README.md#usage", "docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
 -->
 
 The virtual camera lets video-call apps (Teams, Zoom, Meet in a browser) use the program
@@ -187,6 +187,22 @@ administrator rights; everything else in JStream works without it.
 
 After you update JStream, the virtual camera output's settings may say "registered, but not for this
 version": run the same command again to update the registered copy.
+
+**On Linux** the camera is a v4l2loopback device, which you install and load once
+(JStream never asks for root itself):
+
+1. Install the module: `sudo apt install v4l2loopback-dkms` on Ubuntu and Debian,
+   `sudo dnf install v4l2loopback` from RPM Fusion on Fedora, or
+   `sudo pacman -S v4l2loopback-dkms` on Arch.
+2. Create the camera:
+   `sudo modprobe v4l2loopback devices=1 card_label="JStream Camera" exclusive_caps=1`.
+   To have it at every boot, put `v4l2loopback` in
+   `/etc/modules-load.d/v4l2loopback.conf` and
+   `options v4l2loopback devices=1 card_label="JStream Camera" exclusive_caps=1` in
+   `/etc/modprobe.d/v4l2loopback.conf`.
+3. Add a **Virtual camera** output in **Outputs** and start it, then pick
+   "JStream Camera" in the other app. Without a device, the start is refused with these
+   steps.
 
 <a id="agents"></a>
 ## Connect an agent (optional)

@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
-depends_on = ["docs/adr/0072-linux-media-file-decoding.md", "docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md", "docs/adr/0141-desktop-app-on-linux.md"]
+depends_on = ["docs/adr/0072-linux-media-file-decoding.md", "docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md", "docs/adr/0141-desktop-app-on-linux.md", "docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
 -->
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -48,6 +48,7 @@ platform-independent helpers, which are tested on every platform.
 | `PipeWireAudio` | `AudioIo` | `pipewire/` | devices, input, output and loopback on PipeWire (ADR-0060 §4) |
 | `AlsaAudio` | `AudioIo` | `alsa.rs` | the fallback without a PipeWire daemon; no loopback |
 | `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path, and their camera controls (`VIDIOC_QUERYCTRL`, `VIDIOC_S_CTRL`) |
+| `LoopbackVcam` | `VcamSink` | `v4l2/loopback.rs`, `vcam.rs` | the virtual camera: I420 frames written to a v4l2loopback device the user has loaded, one labelled `JStream` first, left out of the webcam list while it writes ([ADR-0156](../../docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md)) |
 | `LinuxBackends` | | `backends.rs` | the backend set, with ADR-0060 §4's audio choice made once |
 | `LinuxMediaDecoders` | `MediaDecoders` | `media.rs`, `media/` | local media files as [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) lays out. So far: WAV, FLAC, Ogg Vorbis and MP3 files through symphonia's pure-Rust readers and decoders, mixed down to stereo where wider. Any other container or codec is `Unsupported`, naming it; AAC waits for ADR-0072 (g)'s decoder patent check |
 | `portal_pick_path`, `FileChoice` | | `portal/file_chooser.rs` | the desktop app's Browse dialogs through the FileChooser portal: open, save or folder, answered only by the portal's own bus connection, a local `file://` path or nothing ([ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)) |
@@ -68,7 +69,8 @@ Not here yet:
   there), the protocol field that tells the UI the secret store's fallback is active,
   and the `jstream.toml` setting that turns the fallback off (ADR-0071 §4, §5).
 
-The virtual camera is out of scope (`Backends::vcam` is `None` on Linux).
+JStream never loads v4l2loopback or runs anything as root: a camera start without a
+writable device fails with the commands that install and load it (ADR-0156).
 
 **Tests.** Everything that doesn't call Linux (D-Bus messages, the portal handshake, SPA
 pods, VA-API and V4L2 layouts, parameter sets, the audio graph planning, the secret
@@ -81,3 +83,6 @@ adapter where there is no GPU. Three kinds are opt-in:
   Cisco, which is how the pin is recorded, and round-trips a stream through Cisco's
   encoder and decoder, luma and both chroma planes (CI's `e2e-stream` job runs it);
 - DMA-BUF import and export need a GPU driver, so they are covered only by `hw-tests`.
+
+The virtual camera's `hw-tests` test needs v4l2loopback loaded and FFmpeg; CI's
+`vcam-linux` job loads the module on its runner and runs it (`-- --ignored v4l2::loopback::`).
