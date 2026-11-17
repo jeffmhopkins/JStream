@@ -47,7 +47,8 @@ and its GPU, renderer, plugin and alerts variants), which CEF's subprocesses run
 Each process loads the framework itself and each subprocess enters CEF's sandbox first
 (`jstream_browser::run_helper` does both). `scripts/mac/build-browser-helper.sh` builds it
 and `scripts/mac/bundle-app.sh` lays it out and signs it ad hoc. There is no run path
-to set: the framework is loaded at run time.
+to set: the framework is loaded at run time. `build.rs` links the C++ standard library,
+which the framework loader and sandbox entry compiled into `cef-dll-sys` need.
 
 Like `jstream-browser`, it builds CEF only with its `cef` feature (Windows, Linux and macOS),
 which turns on `jstream-browser`'s `helper` feature; without it, the DLL exports nothing

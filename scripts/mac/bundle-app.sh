@@ -188,25 +188,27 @@ suffix() {
 
 # A helper app's Info.plist: an agent app (no Dock icon) of the app's version, with CEF's
 # recommended environment.
+# Adds one key to the plist at $1: `plist_key <plist> <key> <type> [<value>]`.
+plist_key() { /usr/libexec/PlistBuddy -c "Add :$2 $3 ${4-}" "$1" >/dev/null; }
+
 helper_plist() {
     local to=$1 name=$2 id=$3 version=$4
     rm -f "$to"
-    set_helper_key() { /usr/libexec/PlistBuddy -c "Add :$1 $2 $3" "$to" >/dev/null; }
-    set_helper_key CFBundleDevelopmentRegion string en
-    set_helper_key CFBundleExecutable string "$name"
-    set_helper_key CFBundleIdentifier string "$id"
-    set_helper_key CFBundleInfoDictionaryVersion string 6.0
-    set_helper_key CFBundleName string "$name"
-    set_helper_key CFBundlePackageType string APPL
-    set_helper_key CFBundleShortVersionString string "$version"
-    set_helper_key CFBundleVersion string "$version"
-    set_helper_key LSEnvironment dict
+    plist_key "$to" CFBundleDevelopmentRegion string en
+    plist_key "$to" CFBundleExecutable string "$name"
+    plist_key "$to" CFBundleIdentifier string "$id"
+    plist_key "$to" CFBundleInfoDictionaryVersion string 6.0
+    plist_key "$to" CFBundleName string "$name"
+    plist_key "$to" CFBundlePackageType string APPL
+    plist_key "$to" CFBundleShortVersionString string "$version"
+    plist_key "$to" CFBundleVersion string "$version"
+    plist_key "$to" LSEnvironment dict
     # CEF's helpers turn the nano allocator off (its own helper Info.plist does).
-    set_helper_key LSEnvironment:MallocNanoZone string 0
-    set_helper_key LSFileQuarantineEnabled bool true
-    set_helper_key LSMinimumSystemVersion string 14.0
-    set_helper_key LSUIElement bool true
-    set_helper_key NSSupportsAutomaticGraphicsSwitching bool true
+    plist_key "$to" LSEnvironment:MallocNanoZone string 0
+    plist_key "$to" LSFileQuarantineEnabled bool true
+    plist_key "$to" LSMinimumSystemVersion string 14.0
+    plist_key "$to" LSUIElement bool true
+    plist_key "$to" NSSupportsAutomaticGraphicsSwitching bool true
     plutil -lint "$to" >/dev/null
 }
 
