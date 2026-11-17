@@ -38,7 +38,7 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
 -->
 
 1. **Pick the commit.** A commit on `main` whose `after-review` run passed, so its
-   `dist` artifact is the same zip the release builds. Run the
+   `dist`, `dist-linux` and `macos-app` artifacts are the packages the release builds. Run the
    [Windows hardware pass](windows-hardware-pass.md) on that artifact for the features
    the release ships.
 2. **Check the version.** The workspace version at that commit is the one to release; if
@@ -59,20 +59,38 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "docs/adr/0066-portable-windows-
      `main`, and stops if the version's tag already exists or the check can't tell;
    - `zip` runs `cargo xtask dist --revision v<version>` on `windows-latest` from a clean
      build, so the zip is `jstream-v<version>-windows-x64.zip`, browser helper and CEF
-     runtime included, and writes its SHA-256 and the release notes: the getting-started
-     link, the unsigned warning, the CEF build from `browser\CEF-VERSION.txt` and the
-     checksum;
-   - `publish`, the only job allowed to write to the repository, creates the GitHub
-     release for the tag with the zip and its `.sha256`, those notes and GitHub's
-     generated list of merged PRs. A version with a pre-release part is marked as a
-     pre-release. On a run started by hand it first creates the tag, and fails if the tag
-     appeared since `ui` checked, so a release never lands on another commit's tag.
-5. **Check the release page**: the zip downloads, its checksum matches, and it starts on
-   a clean Windows machine.
+     runtime included, and writes its SHA-256 and Windows's part of the release notes:
+     the getting-started link, the unsigned warning, the CEF build from
+     `browser\CEF-VERSION.txt` and the checksum;
+   - `linux` runs `cargo xtask dist-linux` on `ubuntu-latest` from a clean build, with the
+     same pinned linuxdeploy, GTK plugin and AppImage runtime as `after-review`'s
+     `dist-linux`, checks that `chrome-sandbox` is setuid root and that the AAC notice
+     ([ADR-0062](../adr/0062-aac-lc-encoder-patent-check.md)) is in the `.deb`, renames
+     the packages `jstream-v<version>-linux-amd64.deb` and
+     `jstream-v<version>-linux-x86_64.AppImage`, and writes their SHA-256s and Linux's
+     part of the notes;
+   - `macos` builds the desktop app on `macos-latest` (Apple Silicon) and bundles it with
+     `scripts/mac/bundle-app.sh`, ad-hoc signed, as `after-review`'s `macos-app` does,
+     starts it once from the bundle until its window's UI finishes the engine's handshake,
+     renames the image `jstream-v<version>-macos-arm64.dmg`, and writes its SHA-256 and
+     macOS's part of the notes, which say how to open an unsigned app;
+   - `publish`, the only job allowed to write to the repository, waits for all three and
+     creates the GitHub release for the tag with every package and its `.sha256`, the
+     notes (a line on the release, then Windows, macOS and Linux) and GitHub's generated
+     list of merged PRs. A version with a pre-release part is marked as a pre-release. On
+     a run started by hand it first creates the tag, and fails if the tag appeared since
+     `ui` checked, so a release never lands on another commit's tag. If any platform's
+     job fails, nothing is published.
+5. **Check the release page**: each package downloads and its checksum matches; the zip
+   starts on a clean Windows machine, the `.dmg` on a Mac once allowed in Privacy &
+   Security, and the `.deb` and AppImage on a Linux desktop
+   ([ROADMAP › Beta](../../ROADMAP.md#beta) has each platform's pass).
 
-**Signing.** Releases are unsigned until a code-signing certificate is available
+**Signing.** Windows builds are unsigned until a code-signing certificate is available
 ([ADR-0066](../adr/0066-portable-windows-distribution-v2.md)); the notes and the guide
-say how to get past SmartScreen. When one is, signing joins the `zip` job before the zip
+say how to get past SmartScreen. The macOS image stays unsigned for good
+([ROADMAP › macOS without signing](../../ROADMAP.md#macos-unsigned)), and the Linux
+packages are unsigned ([ADR-0141](../adr/0141-desktop-app-on-linux.md)). When one is, signing joins the `zip` job before the zip
 is written, and the browser helper's exe and DLL get the same certificate
 ([ADR-0048](../adr/0048-sandboxed-browser-helper.md)).
 

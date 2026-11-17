@@ -106,7 +106,8 @@ updates what changed:
 **The desktop app** isn't the installer's: `scripts/mac/bundle-app.sh` makes
 `JStream.app` and `JStream-<version>-macos-<arch>.dmg` from a release build of
 `jstream-desktop` and the built UI, ad-hoc signed, and the after-review `macos-app` job
-uploads that image for each PR it runs on
+uploads that image for each PR it runs on; from beta.1 each release attaches it too
+([RUNBOOK-RELEASE › Cutting a release](release.md#cut))
 ([jstream-desktop › Usage](../../apps/jstream-desktop/README.md#usage)). It is unsigned,
 so a downloaded copy needs Allow in System Settings › Privacy & Security the first time,
 and macOS asks again for each permission after every new build. Its prompts name

@@ -1706,15 +1706,17 @@ Foundation, Direct3D 12).
   package also has the Linux helper's executable, so `dist` builds the DLL alone
   (`--lib`).
 - **The Linux `.deb`:** the desktop app on Linux ships as a Debian package
-  ([ADR-0141](adr/0141-desktop-app-on-linux.md) decision 5), built in CI and not yet
-  published or signed. `cargo xtask dist-linux`, on Linux, builds the web UI for release
+  ([ADR-0141](adr/0141-desktop-app-on-linux.md) decision 5), built in CI, published with
+  each release from beta.1 ([ROADMAP › Beta](../ROADMAP.md#beta)), and unsigned. `cargo xtask dist-linux`, on Linux, builds the web UI for release
   (or takes `--ui-dir`), builds `jstream` (with its `webkitgtk` window and `cef`),
   `jstream-daemon` (with `cef`) and `jstream-cli` for release, and lays them out under
   `/usr/lib/jstream` with the UI in `ui` and the browser helper's folder in `browser`
   beside them (where both look: the exe path resolves the link), `chrome-sandbox` in it
   setuid root, links to
   them in `/usr/bin`, an application-menu entry and the icon as `dev.jstream.desktop`,
-  and the licences. `dpkg-deb --root-owner-group` packs it as
+  and the licences with a `NOTICE.txt` that says JStream holds no AAC patent licence and
+  names Via LA, for its own AAC encoder
+  ([ADR-0062](adr/0062-aac-lc-encoder-patent-check.md)). `dpkg-deb --root-owner-group` packs it as
   `jstream_<version>_<arch>.deb` in `target/dist-linux`: the version is the workspace's (the apps') with
   a pre-release sorting before its release (`0.1.0~alpha.4`) and `+<--revision or git
   describe>`. It depends on the distribution's WebKitGTK 4.1 and GTK 3 and the libraries
@@ -1725,7 +1727,8 @@ Foundation, Direct3D 12).
   its control fields and files, fails unless `chrome-sandbox` in it is setuid root, and
   uploads it as is.
 - **The Linux AppImage:** the same decision's second package, for distributions the
-  `.deb` doesn't install on, also a CI artifact and unsigned. Given `--linuxdeploy` and
+  `.deb` doesn't install on, also built in CI, published with each release from beta.1,
+  and unsigned, with the same licences and `NOTICE.txt`. Given `--linuxdeploy` and
   `--appimage-runtime`, `dist-linux` builds `JStream-<the .deb's version>-<arch>.AppImage`
   from the same build: the desktop app alone (it runs the engine; the `.deb` has the
   daemon and the CLI) in the AppDir's `usr/bin` with `ui` and `browser` beside it, and

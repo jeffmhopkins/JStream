@@ -547,7 +547,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `cargo run` has them as the daemon's binary does. `scripts/mac/bundle-app.sh` builds
   `JStream.app`: the binary in `Contents/MacOS`, the UI in `Contents/Resources/ui`
   (`app::bundled_ui_dir`, so nothing but code sits beside the binary and the bundle can
-  be signed whole), an icon made from `icons/icon.png`, and `Info.plist` with the bundle
+  be signed whole), the licence files in `Contents/Resources`, an icon made from `icons/icon.png`, and `Info.plist` with the bundle
   keys added (macOS 14 as the floor, ADR-0063). It signs the bundle ad hoc, or with
   `--sign` a Developer ID with the hardened runtime and `entitlements.plist` (camera and
   microphone; not sandboxed), and packs it in a UDZO disk image with a link to
