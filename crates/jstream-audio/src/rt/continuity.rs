@@ -1,5 +1,5 @@
-//! Where each packet sits in an input's device-position sequence. Ported from spike S3
-//! (`StreamClock` in `spikes/s3-clock/src/clock.rs`), with clock values in seconds on the
+//! Where each packet sits in an input's device-position sequence. Ported from spike S3's
+//! `StreamClock` (M0's clock spike), with clock values in seconds on the
 //! media clock instead of WASAPI's 100 ns ticks.
 //!
 //! A device position counts frames since the stream started, including frames lost in

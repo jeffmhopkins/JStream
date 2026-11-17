@@ -91,21 +91,26 @@ JStream/
 ├── rust-toolchain.toml  deny.toml  rustfmt.toml  clippy.toml  .editorconfig
 ├── CLAUDE.md               # builder-agent entry point; points to RULES/DOCS
 ├── REVIEW.md               # reviewer-agent prompt; its verdict drives review-gate
+├── CONTRIBUTING.md  SECURITY.md  CODE_OF_CONDUCT.md
 ├── ROADMAP.md
-├── crates/                 # all library crates, flat, every name prefixed `jstream-`
+├── crates/                 # all library crates, flat, every name prefixed `jstream-`;
+│                           # WGSL shaders, fonts and schema snapshots live in their crate
 ├── apps/                   # host binaries (thin)
-├── effects/                # built-in WGSL effect packs (data)
-├── assets/                 # icons, fonts, test media
-├── tests/                  # cross-crate scenario + golden tests
-├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
+├── spikes/                 # open technical spikes (throwaway, not workspace members); a
+│                           # finished one is removed once its results are recorded
 ├── design/                 # UI design references (prototype source); not normative
+├── fuzz/                   # cargo-fuzz targets (own workspace and lockfile)
+├── scripts/                # hardware-pass and release-pass scripts, Linux and macOS install scripts
 ├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), dist-linux (the Linux .deb and AppImage), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
 ├── docs/
-│   ├── ARCHITECTURE.md  RULES.md  DOCS.md
+│   ├── ARCHITECTURE.md  RULES.md  DOCS.md  GETTING-STARTED.md  UI-FEATURES.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
 │   ├── facts.toml          # pinned facts, one source each
+│   ├── progress.toml       # roadmap items and their PRs; feeds the generated progress table
+│   ├── verified.toml       # verification ledger; written only by `cargo xtask docs verify`
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
-│   └── guides/
+│   ├── runbooks/           # release, hardware-pass, waves and per-platform testing steps
+│   └── security/           # threat model
 └── .github/                # workflows (CI, governance, review-gate, sweep), their tests, Dependabot config,
                             # issue and PR templates
 ```
@@ -1706,15 +1711,17 @@ Foundation, Direct3D 12).
   package also has the Linux helper's executable, so `dist` builds the DLL alone
   (`--lib`).
 - **The Linux `.deb`:** the desktop app on Linux ships as a Debian package
-  ([ADR-0141](adr/0141-desktop-app-on-linux.md) decision 5), built in CI and not yet
-  published or signed. `cargo xtask dist-linux`, on Linux, builds the web UI for release
+  ([ADR-0141](adr/0141-desktop-app-on-linux.md) decision 5), built in CI, published with
+  each release from beta.1 ([ROADMAP › Beta](../ROADMAP.md#beta)), and unsigned. `cargo xtask dist-linux`, on Linux, builds the web UI for release
   (or takes `--ui-dir`), builds `jstream` (with its `webkitgtk` window and `cef`),
   `jstream-daemon` (with `cef`) and `jstream-cli` for release, and lays them out under
   `/usr/lib/jstream` with the UI in `ui` and the browser helper's folder in `browser`
   beside them (where both look: the exe path resolves the link), `chrome-sandbox` in it
   setuid root, links to
   them in `/usr/bin`, an application-menu entry and the icon as `dev.jstream.desktop`,
-  and the licences. `dpkg-deb --root-owner-group` packs it as
+  and the licences with a `NOTICE.txt` that says JStream holds no AAC patent licence and
+  names Via LA, for its own AAC encoder
+  ([ADR-0062](adr/0062-aac-lc-encoder-patent-check.md)). `dpkg-deb --root-owner-group` packs it as
   `jstream_<version>_<arch>.deb` in `target/dist-linux`: the version is the workspace's (the apps') with
   a pre-release sorting before its release (`0.1.0~alpha.4`) and `+<--revision or git
   describe>`. It depends on the distribution's WebKitGTK 4.1 and GTK 3 and the libraries
@@ -1725,7 +1732,8 @@ Foundation, Direct3D 12).
   its control fields and files, fails unless `chrome-sandbox` in it is setuid root, and
   uploads it as is.
 - **The Linux AppImage:** the same decision's second package, for distributions the
-  `.deb` doesn't install on, also a CI artifact and unsigned. Given `--linuxdeploy` and
+  `.deb` doesn't install on, also built in CI, published with each release from beta.1,
+  and unsigned, with the same licences and `NOTICE.txt`. Given `--linuxdeploy` and
   `--appimage-runtime`, `dist-linux` builds `JStream-<the .deb's version>-<arch>.AppImage`
   from the same build: the desktop app alone (it runs the engine; the `.deb` has the
   daemon and the CLI) in the AppDir's `usr/bin` with `ui` and `browser` beside it, and

@@ -99,8 +99,8 @@ The first beta, `0.1.0-beta.1`, targets all three desktop platforms.
 | Platform | Requirements | How you get it today |
 |---|---|---|
 | **Windows** | Windows 11 build 22000<!--fact:min-windows-build--> or later, 64-bit, with a Direct3D 12 GPU; supported on the versions Microsoft currently services ([ADR-0008](docs/adr/0008-windows-support-policy.md)) | A portable zip from the [releases page](https://github.com/jeffmhopkins/JStream/releases) |
-| **macOS** | macOS 14 or later, Apple Silicon (Intel best effort) ([ADR-0063](docs/adr/0063-macos-platform-support.md)) | One command that builds and installs it from source ([mac-testing](docs/runbooks/mac-testing.md)) |
-| **Linux** | 64-bit, GNOME or KDE Plasma on Wayland, current Ubuntu LTS and Fedora ([ADR-0060](docs/adr/0060-linux-platform-support.md)) | One command that builds and installs it from source ([linux-testing](docs/runbooks/linux-testing.md)) |
+| **macOS** | macOS 14 or later, Apple Silicon (Intel best effort) ([ADR-0063](docs/adr/0063-macos-platform-support.md)) | From beta.1, an unsigned disk image (`.dmg`) from the [releases page](https://github.com/jeffmhopkins/JStream/releases); before then, one command that builds and installs it from source ([mac-testing](docs/runbooks/mac-testing.md)) |
+| **Linux** | 64-bit, GNOME or KDE Plasma on Wayland, current Ubuntu LTS and Fedora ([ADR-0060](docs/adr/0060-linux-platform-support.md)) | From beta.1, a `.deb` and an AppImage from the [releases page](https://github.com/jeffmhopkins/JStream/releases); before then, one command that builds and installs it from source ([linux-testing](docs/runbooks/linux-testing.md)) |
 
 <a id="install"></a>
 ## Install and first steps
@@ -109,8 +109,10 @@ The first beta, `0.1.0-beta.1`, targets all three desktop platforms.
 
 1. **Get it.** On Windows, download the latest `jstream-v<version>-windows-x64.zip` from
    the [releases page](https://github.com/jeffmhopkins/JStream/releases), unzip it and run
-   `jstream.exe`. There is no installer and it needs no administrator rights. On macOS or
-   Linux, run the one-line install from [Platforms](#platforms).
+   `jstream.exe`. There is no installer and it needs no administrator rights. From beta.1
+   the same page has an unsigned `.dmg` for Apple Silicon Macs and a `.deb` and an
+   AppImage for 64-bit Linux ([Getting started](docs/GETTING-STARTED.md#install)); before
+   then, run the one-line install from [Platforms](#platforms).
 2. **Learn it.** [docs/GETTING-STARTED.md](docs/GETTING-STARTED.md) walks through a first
    scene, going live, recording, the virtual camera and connecting an agent.
 3. **Report what breaks.** Bugs and ideas are welcome as
