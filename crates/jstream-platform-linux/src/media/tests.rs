@@ -28,8 +28,19 @@ fn read_all(decoder: &mut dyn MediaDecoder) -> (usize, f64, f32) {
     let mut frames = 0;
     let mut first = None;
     let mut peak = 0.0_f32;
+    let mut next: Option<f64> = None;
     while let Some(block) = decoder.next_audio().expect("decodes") {
-        first.get_or_insert(block.pts().as_secs_f64());
+        let pts = block.pts().as_secs_f64();
+        first.get_or_insert(pts);
+        // Each block starts where the one before it ended: no gap, no overlap.
+        let rate = f64::from(block.format().sample_rate());
+        if let Some(expected) = next {
+            assert!(
+                (pts - expected).abs() < 0.5 / rate,
+                "block at {pts}, expected {expected}"
+            );
+        }
+        next = Some(pts + block.frames() as f64 / rate);
         frames += block.frames();
         peak = block.samples().iter().fold(peak, |p, s| p.max(s.abs()));
     }
@@ -53,7 +64,7 @@ fn plays(name: &str, layout: ChannelLayout) {
         (22_050..=22_050 + 2_048).contains(&frames),
         "{name}: {frames} frames"
     );
-    assert!(first.abs() < 0.03, "{name}: starts at {first}");
+    assert!(first.abs() < 1e-9, "{name}: starts at {first}");
     assert!(peak > 0.05 && peak <= 1.0, "{name}: peak {peak}");
     assert!(decoder.next_audio().expect("end").is_none(), "{name}");
 

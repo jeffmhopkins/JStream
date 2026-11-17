@@ -26,7 +26,7 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::units::{Time, TimeBase, Timestamp};
+use symphonia::core::units::{Time, TimeBase};
 
 /// The `call` an `Os` error names.
 const CALL: &str = "symphonia";
@@ -188,11 +188,6 @@ fn normalise(weights: &mut [f32]) {
     }
 }
 
-/// Converts a symphonia timestamp in `timebase` to a [`MediaTime`].
-fn media_time(ts: Timestamp, timebase: Timebase) -> MediaTime {
-    MediaTime::new(ts.get(), timebase)
-}
-
 /// The engine's time base for a symphonia one.
 fn timebase(tb: TimeBase) -> Result<Timebase, PlatformError> {
     Ok(Timebase::new(tb.numer.get(), tb.denom.get())?)
@@ -279,7 +274,10 @@ impl AudioStream {
         let mut samples = Vec::new();
         decoded.copy_to_vec_interleaved::<f32>(&mut samples);
         let samples = self.downmix.apply(samples);
-        let pts = media_time(packet.pts, self.timebase);
+        // Gapless decoding drops the packet's first `trim_start` frames (an MP3's encoder
+        // delay), so the block starts that much after the packet.
+        let trim = i64::try_from(packet.trim_start.get()).unwrap_or(0);
+        let pts = MediaTime::new(packet.pts.get().saturating_add(trim), self.timebase);
         Ok(Some(AudioBuffer::new(self.format, pts, samples)?))
     }
 
