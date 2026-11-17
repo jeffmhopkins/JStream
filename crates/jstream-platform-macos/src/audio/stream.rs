@@ -22,11 +22,14 @@
 //! Desktop and application audio record a process tap the same way, through the private
 //! aggregate device the stream owns ([`super::tap`]). Its watcher ends the stream when
 //! that device stops working, the tapped output is removed, or the tapped process exits.
+//! A tap's IOProc starts on its watcher thread, not the opener's, because macOS holds
+//! that start until the user answers the system audio recording prompt ([`open`]).
 
 use std::cell::UnsafeCell;
 use std::ffi::c_void;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr::NonNull;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::thread::{self, JoinHandle};
@@ -709,6 +712,8 @@ struct Running {
     format: AudioFormat,
     tx: Sender<Event>,
     thread: Option<JoinHandle<()>>,
+    /// Whether the IOProc has started ([`open`]): until it has, a drop doesn't join.
+    started: Arc<AtomicBool>,
 }
 
 impl AudioStream for Running {
@@ -721,6 +726,11 @@ impl Drop for Running {
     fn drop(&mut self) {
         let _ = self.tx.send(Event::Stop);
         if let Some(t) = self.thread.take() {
+            if !self.started.load(Ordering::SeqCst) {
+                // Still waiting in `AudioDeviceStart` (a tap's permission prompt): it owns
+                // the stream, sees the stop once the start returns, and cleans up then.
+                return;
+            }
             // The watcher catches panics itself, so joining only waits for it to end.
             let _ = t.join();
         }
@@ -762,8 +772,15 @@ pub(super) fn open_output(
     open(which, Handler::Output(handler))
 }
 
-/// Plans the device, starts its IOProc on this thread, and hands the stream to a watcher
-/// thread.
+/// Plans the device, starts its IOProc, and hands the stream to a watcher thread.
+///
+/// A device's IOProc starts on this thread, so a failure to start is the caller's error.
+/// A tap's starts on the watcher thread instead: the first time a tap runs, macOS asks
+/// for the system audio recording permission, and `AudioDeviceStart` waits until the
+/// user answers. Started here, that wait would hold the caller, an `output.start`, and
+/// with it the engine, for as long as the prompt stays up, and for ever on a Mac with no
+/// one at it. So the stream opens at once, records nothing until the start returns, and
+/// a failed start is reported through the handler's `on_error`, as a lost stream is.
 fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, PlatformError> {
     let direction = which.direction;
     let (tap, device) = which.attach()?;
@@ -800,11 +817,21 @@ fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, Platform
         )
     });
     let device_listeners = device_listeners(device, direction, &notify);
-    let capture = Capture::start(device, &shared)?;
+    let deferred = tap.is_some();
+    let capture = if deferred {
+        None
+    } else {
+        Some(Capture::start(device, &shared)?)
+    };
+    // Set once the IOProc runs. Until then, dropping the stream doesn't wait for the
+    // watcher, which may be held in `AudioDeviceStart` by the permission prompt: it sees
+    // the stop once the start returns, and stops itself.
+    let started = Arc::new(AtomicBool::new(!deferred));
+    let started_watcher = Arc::clone(&started);
     let mut watch = Watch {
         device_listeners,
         _default_listener: default_listener.flatten(),
-        capture: Some(capture),
+        capture,
         tap,
         device,
         which,
@@ -821,7 +848,13 @@ fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, Platform
     let thread = thread::Builder::new()
         .name(name.to_owned())
         .spawn(move || {
-            let result = catch_unwind(AssertUnwindSafe(|| watch.run(&rx)));
+            let result = catch_unwind(AssertUnwindSafe(|| {
+                if watch.capture.is_none() {
+                    watch.capture = Some(Capture::start(watch.device, &watch.shared)?);
+                    started_watcher.store(true, Ordering::SeqCst);
+                }
+                watch.run(&rx)
+            }));
             watch.stop();
             let error = match result {
                 Ok(Ok(())) => None,
@@ -846,5 +879,6 @@ fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, Platform
         format,
         tx,
         thread: Some(thread),
+        started,
     }))
 }
