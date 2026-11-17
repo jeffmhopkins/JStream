@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["apps/jstream-browser-helper/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0156-browser-sources-on-macos.md"]
 -->
 
 The sandboxed browser helper
@@ -40,6 +40,15 @@ path (`build.rs`). Chromium sandboxes the subprocesses itself; there is no boots
 executable does nothing, and the zip builds the DLL alone (`--lib`), as the two would
 share a PDB name.
 
-Like `jstream-browser`, it builds CEF only with its `cef` feature (Windows and Linux),
+On macOS ([ADR-0156](../../docs/adr/0156-browser-sources-on-macos.md)) it is the same
+executable, in `JStream.app/Contents/MacOS` beside the app, with CEF's framework in
+`Contents/Frameworks` and copies of itself as the helper apps there (`JStream Helper.app`
+and its GPU, renderer, plugin and alerts variants), which CEF's subprocesses run from.
+Each process loads the framework itself and each subprocess enters CEF's sandbox first
+(`jstream_browser::run_helper` does both). `scripts/mac/build-browser-helper.sh` builds it
+and `scripts/mac/bundle-app.sh` lays it out and signs it ad hoc. There is no run path
+to set: the framework is loaded at run time.
+
+Like `jstream-browser`, it builds CEF only with its `cef` feature (Windows, Linux and macOS),
 which turns on `jstream-browser`'s `helper` feature; without it, the DLL exports nothing
 and there is no executable. `dox` compile-checks it without building CEF.

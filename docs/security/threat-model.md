@@ -306,14 +306,18 @@ covers = [
   "crates/jstream-browser/src/helper/page_api.rs",
   "crates/jstream-sources/src/page_api.rs",
 ]
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0060-linux-platform-support.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md", "docs/runbooks/linux-testing.md#script"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0060-linux-platform-support.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md", "docs/adr/0156-browser-sources-on-macos.md", "docs/runbooks/linux-testing.md#script"]
 -->
 
 **Built** (C8, on Windows), as [ADR-0021](../adr/0021-browser-source.md) and
 [ADR-0048](../adr/0048-sandboxed-browser-helper.md) decide. Its first run on Windows
 hardware is still to come (#341). On Linux it is built as
 [ADR-0095](../adr/0095-browser-helper-on-linux.md) decides, and CI opens a page through
-the sandboxed helper in its `browser-linux` job.
+the sandboxed helper in its `browser-linux` job. On macOS it is built as
+[ADR-0156](../adr/0156-browser-sources-on-macos.md) decides, in the desktop app's
+bundle only, and CI's after-review `macos-app` job opens a page through the bundled
+helper; the sandbox on real hardware and the helpers launching from a quarantined
+download are checked by hand (#1356).
 
 **Threats:** a page exploiting the renderer to reach the engine, which holds the stream
 keys; a page reading local files; a page driving the control API; a page using the
@@ -321,13 +325,15 @@ camera or microphone; a page probing the LAN.
 
 **Controls:** pages run in a separate helper process with CEF's sandbox on (on Linux
 Chromium's own, through user namespaces or a setuid `chrome-sandbox`, with no switch to
-turn it off; a root user can't run pages); profiles are
-in memory, with no cache or cookies on disk; every request a page makes, navigations
+turn it off; a root user can't run pages; on macOS CEF's Seatbelt sandbox, which each
+subprocess enters before it loads anything else, and exits if it can't); profiles are
+in memory, with no cache or cookies on disk, and their key never in the desktop's
+keyring or the macOS login Keychain; every request a page makes, navigations
 included, passes a request policy that allows only `http`, `https`, `ws`, `wss`,
 `data:`, `blob:`, `about:blank` and `about:srcdoc`, and `file:` only in a local page's
 own folder or below it, compared by name and again after resolving links; popups are not
 shown. The control server refuses a page's WebSocket upgrade, since its `Origin` is
-foreign or `null`. On Linux the engine's line to the helper is a socket pair, which no
+foreign or `null`. On Linux and macOS the engine's line to the helper is a socket pair, which no
 other process can join, and pages' frames cross through a folder made fresh for each
 helper with mode 0700, which the engine reads only up to the size of the page it opened.
 

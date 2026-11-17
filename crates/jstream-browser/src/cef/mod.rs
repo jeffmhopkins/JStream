@@ -1,4 +1,4 @@
-//! The CEF backend (Windows and Linux, feature `cef`): pages run in the sandboxed browser
+//! The CEF backend (Windows, Linux and macOS, feature `cef`): pages run in the sandboxed browser
 //! helper process, which this backend starts and drives over a private byte stream each
 //! way (ADR-0048, ADR-0095, ARCH › Browser source). No CEF code runs in the engine's
 //! process.
@@ -9,11 +9,13 @@
 //! two pipes this backend created. The backend checks that the process on the other end
 //! is the one it started. Pages' frames cross as shared textures ([`gpu`]).
 //!
-//! **The helper on Linux.** `jstream-browser-helper --jstream-frames=<folder>`, a plain
-//! executable that runs CEF's browser process with the sandbox on, its standard input one
-//! end of a socket pair whose other end this backend holds, so nothing else can be on the
-//! line. It paints in software and writes each paint into a slot file in `<folder>`, a
-//! private folder this backend makes for it and removes when it stops ([`cpu`]).
+//! **The helper on Linux and macOS.** `jstream-browser-helper --jstream-frames=<folder>`,
+//! a plain executable that runs CEF's browser process with the sandbox on, its standard
+//! input one end of a socket pair whose other end this backend holds, so nothing else can
+//! be on the line. It paints in software and writes each paint into a slot file in
+//! `<folder>`, a private folder this backend makes for it and removes when it stops
+//! ([`cpu`]). On macOS it is in the app bundle's `Contents/MacOS`, beside the host, with
+//! CEF's framework and helper apps in `Contents/Frameworks` (ADR-0156).
 //!
 //! Either way the backend then sends the cache and log settings, and waits for CEF to
 //! start. Pages are then opened, restyled and closed by message ([`Link`]).
@@ -42,7 +44,7 @@
 //! and the next `open` starts a new one. Dropping the backend asks the helper to close its
 //! pages and exit, and kills it after 15 s.
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod cpu;
 #[cfg(windows)]
 mod gpu;
@@ -68,7 +70,7 @@ use gpu::DeviceSlot;
 #[cfg(windows)]
 const HELPER_EXE: &str = "jstream-browser-helper.exe";
 /// The helper executable, in [`HELPER_DIR`] beside the host's, or beside it.
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const HELPER_EXE: &str = "jstream-browser-helper";
 
 /// The folder beside the host's exe that holds the helper and CEF's runtime in the
@@ -90,7 +92,9 @@ const EXIT_GRACE: Duration = Duration::from_secs(15);
 pub struct CefConfig {
     /// The helper exe: on Windows `jstream-browser-helper.exe`, CEF's bootstrap exe, with
     /// `jstream-browser-helper.dll` and CEF's runtime files beside it; on Linux
-    /// `jstream-browser-helper`, with `libcef.so` and CEF's runtime files beside it.
+    /// `jstream-browser-helper`, with `libcef.so` and CEF's runtime files beside it; on
+    /// macOS `jstream-browser-helper` in `JStream.app/Contents/MacOS`, with CEF's
+    /// framework and helper apps in `Contents/Frameworks` (ADR-0156).
     pub helper: PathBuf,
     /// CEF's root cache folder. Pages keep no cookies or storage on disk: each runs in
     /// CEF's in-memory profile, and this folder holds only CEF's own state.
@@ -136,7 +140,7 @@ fn helper_in(dir: &std::path::Path) -> PathBuf {
 pub struct CefBackend {
     config: CefConfig,
     clock: Arc<dyn MediaClock>,
-    /// The device pages' shared textures are opened on (Windows). On Linux frames are in
+    /// The device pages' shared textures are opened on (Windows). On Linux and macOS frames are in
     /// CPU memory and need none.
     #[cfg(windows)]
     device: Arc<DeviceSlot>,
@@ -156,9 +160,9 @@ struct Helper {
     link: Arc<Link>,
     child: Child,
     reader: Option<JoinHandle<()>>,
-    /// The folder the helper writes its paints into (Linux), removed once it has
+    /// The folder the helper writes its paints into (Linux and macOS), removed once it has
     /// stopped: declared after the fields `stop` uses, so it drops after.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     _frames: cpu::FramesDir,
     /// The job the helper and every process it starts run in (Windows), which kills
     /// them all when its handle closes: when this drops after `stop`, and when the
@@ -268,7 +272,7 @@ impl CefBackend {
             link,
             child,
             reader: Some(reader),
-            #[cfg(target_os = "linux")]
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             _frames: launched.dir,
             #[cfg(windows)]
             _job: launched.job,
@@ -332,9 +336,9 @@ impl CefBackend {
         })
     }
 
-    /// Starts the helper process (Linux) on one end of a socket pair, with a fresh
+    /// Starts the helper process (Linux and macOS) on one end of a socket pair, with a fresh
     /// private folder for its paints.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     #[expect(clippy::unused_self, reason = "the same shape as the Windows launch")]
     fn launch(&self, exe: &std::path::Path) -> Result<Launched, BrowserError> {
         let dir = cpu::FramesDir::create()?;
@@ -381,8 +385,8 @@ impl BrowserBackend for CefBackend {
         }
     }
 
-    /// Pages' frames on Linux are CPU frames, which need no device.
-    #[cfg(target_os = "linux")]
+    /// Pages' frames on Linux and macOS are CPU frames, which need no device.
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     fn use_device(&self, _gpu: Option<&GpuContext>) {}
 }
 
@@ -399,7 +403,7 @@ struct Launched {
     from_helper: Box<dyn std::io::Read + Send>,
     to_helper: Box<dyn std::io::Write + Send>,
     frames: Arc<dyn crate::link::Frames>,
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     dir: cpu::FramesDir,
     #[cfg(windows)]
     job: job::KillOnClose,

@@ -11,6 +11,16 @@
 //!
 //! CI runs it on every Linux build of the helper.
 //!
+//! On macOS (ADR-0156) the same tests open pages through the helper in a bundled
+//! `JStream.app`, which must hold CEF's framework and helper apps as
+//! `scripts/mac/bundle-app.sh` lays them out; CI's `macos-app` job runs the two that load
+//! a page (`a_page_`) against the app it bundles:
+//!
+//! ```text
+//! JSTREAM_BROWSER_HELPER=dist/JStream.app/Contents/MacOS/jstream-browser-helper \
+//!   cargo test -p jstream-browser --features cef --test linux_page a_page_ -- --ignored
+//! ```
+//!
 //! A second test serves the page over `http` from `127.0.0.1` (#1069): CEF on Linux names
 //! `null` as the initiator of a web source's own first load, which the request policy
 //! must still count as the source's own.
@@ -18,7 +28,7 @@
 //! `local_network` (in `linux_page/`) checks what pages reach on this computer through
 //! Chromium's own Local Network Access checks (#347, #1035).
 
-#![cfg(all(target_os = "linux", feature = "cef"))]
+#![cfg(all(any(target_os = "linux", target_os = "macos"), feature = "cef"))]
 
 #[path = "linux_page/local_network.rs"]
 mod local_network;
@@ -136,7 +146,7 @@ fn paints_red(dir: &std::path::Path, location: PageLocation) {
         }
     };
     assert!(page.paints_on_cpu());
-    assert!(page.frame().is_none(), "no GPU frames on Linux");
+    assert!(page.frame().is_none(), "no GPU frames on Linux or macOS");
     let deadline = Instant::now() + PAINT_TIMEOUT;
     let pixel = |frame: &jstream_media::VideoFrame, x: u32, y: u32| -> [u8; 4] {
         let plane = &frame.planes()[0];
