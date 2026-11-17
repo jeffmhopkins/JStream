@@ -978,7 +978,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: tran
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "The server change is a host-side read of UI settings (UiSettingsView); no wire change, no protocol version." }
 
 ["ARCH#repo-layout"."body"]
-stamp = { hash = "b3:4777d1365752584f", by = "agent:claude", note = "The xtask line now says dist-linux builds the .deb and the AppImage; main.rs only gained the appimage module" }
+stamp = { hash = "b3:5b9543f2d51737c2", by = "agent:claude-cleanup", note = "Tree matched against the checkout: dropped effects/, assets/, tests/ and docs/guides/ (none exist), added fuzz/, scripts/, docs runbooks, security, progress and verified files, and spikes/ now holds only open spikes (S5, S6)" }
 
 ["ARCH#repo-layout"."file:xtask/src/main.rs"]
 stamp = { hash = "b3:c0dc3a0e42aa6af2", by = "agent:claude", note = "The xtask line now says dist-linux builds the .deb and the AppImage; main.rs only gained the appimage module" }
@@ -1266,16 +1266,16 @@ stamp = { hash = "b3:e1985cbf78dd0f8b", by = "agent:claude-sidechain", note = "S
 stamp = { hash = "b3:27676895b11e8ddd", by = "agent:bus-outputs", note = "Re-read for Chain::replace, Command::SetMasterKernel, ControlPlane::set_master_host and FilterControl::set_bus_host (a master CLAP filter's copy on another bus swaps from the delayed-dry stand-in to a host of its own and back) and the no_alloc ticks for it; fixed the master-chain bullet that said the plugin runs on the master bus only until outputs take other buses, and the test list" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/continuity.rs"]
-stamp = { hash = "b3:d05ce04f7cd98328" }
+stamp = { hash = "b3:0d368dc6983f17fa", by = "agent:claude-cleanup", note = "Re-read after the spike S3 path references in rt/drift.rs, rt/control.rs and rt/continuity.rs became prose (spikes/s3-clock was removed); comment-only change, the purpose text still holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/control.rs"]
-stamp = { hash = "b3:74007a614fa11f23" }
+stamp = { hash = "b3:79dffadd37cabd8b", by = "agent:claude-cleanup", note = "Re-read after the spike S3 path references in rt/drift.rs, rt/control.rs and rt/continuity.rs became prose (spikes/s3-clock was removed); comment-only change, the purpose text still holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/downmix.rs"]
 stamp = { hash = "b3:87a3c92b5159adb3" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/drift.rs"]
-stamp = { hash = "b3:0b9d1aeb21625025" }
+stamp = { hash = "b3:2ea693434e841a01", by = "agent:claude-cleanup", note = "Re-read after the spike S3 path references in rt/drift.rs, rt/control.rs and rt/continuity.rs became prose (spikes/s3-clock was removed); comment-only change, the purpose text still holds" }
 
 ["CRATE-jstream-audio#purpose"."file:crates/jstream-audio/src/rt/host.rs"]
 stamp = { hash = "b3:17eba6378ba05683", by = "agent:claude-clap-chains", note = "Re-read against MasterControl::insert_host_filter, mixer_rate/mixer_block_frames on the master and tap handles, and the HostStandIn kernel: the routing summary holds; the API list now names MasterControl for insert_host_filter and says the plugin runs on the master bus with a delayed-dry stand-in on other buses, and the tests list adds a_master_clap_filter_runs_on_the_master_bus_only." }
@@ -1341,16 +1341,16 @@ stamp = { hash = "b3:e1985cbf78dd0f8b", by = "agent:claude-sidechain", note = "N
 stamp = { hash = "b3:27676895b11e8ddd", by = "agent:bus-outputs", note = "Master chain and output taps now describes per-bus hosts: set_bus_host builds the kernel on the control thread, refuses a host that isn't ready or has another latency, and the mixer swaps it in place with no allocation, the replaced one to the collector; checked against chain.rs, cmd.rs and mixer.rs" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/continuity.rs"]
-stamp = { hash = "b3:d05ce04f7cd98328" }
+stamp = { hash = "b3:0d368dc6983f17fa", by = "agent:claude-cleanup", note = "Re-read after the rt/ module docs stopped pointing at the removed spikes/s3-clock files; comment-only change, nothing in the realtime rules or their description moved" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/control.rs"]
-stamp = { hash = "b3:74007a614fa11f23" }
+stamp = { hash = "b3:79dffadd37cabd8b", by = "agent:claude-cleanup", note = "Re-read after the rt/ module docs stopped pointing at the removed spikes/s3-clock files; comment-only change, nothing in the realtime rules or their description moved" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/downmix.rs"]
 stamp = { hash = "b3:87a3c92b5159adb3" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/drift.rs"]
-stamp = { hash = "b3:0b9d1aeb21625025" }
+stamp = { hash = "b3:2ea693434e841a01", by = "agent:claude-cleanup", note = "Re-read after the rt/ module docs stopped pointing at the removed spikes/s3-clock files; comment-only change, nothing in the realtime rules or their description moved" }
 
 ["CRATE-jstream-audio#realtime"."file:crates/jstream-audio/src/rt/host.rs"]
 stamp = { hash = "b3:17eba6378ba05683", by = "agent:claude-clap-chains", note = "Re-read against cmd.rs add_host_filter on the master (add_master_kernels: slot 0 HostFilter, others HostStandIn), master_copy building a stand-in for a later bus, and HostStandIn (a Delay plus fixed latency, no allocation on process): added the exception to one copy per bus to Master chain and output taps; CLAP filters text still holds." }
@@ -7314,7 +7314,7 @@ stamp = { hash = "b3:c57bb7caabb42736", by = "agent:beta-bar", note = "Re-read a
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). Beta stays Windows-only; nothing here touches its scope." }
 
 ["ROADMAP#beta"."dep:docs/runbooks/windows-hardware-pass.md#setup"]
-stamp = { hash = "b3:334612f11ae5b106", by = "agent:beta-bar", note = "New section: re-read against Jeff's three scope decisions (Windows only, unsigned, no compatibility promise) and against the beta.1 release and targets added to docs/progress.toml; its links resolve to release.md#version and windows-hardware-pass.md#setup" }
+stamp = { hash = "b3:3e1c71bcef3dc82d", by = "agent:claude-cleanup", note = "Re-read against the runbook Setup change: the MSVC prompt bullet now names windows-pass.ps1's Enter-VsEnv instead of the removed spike script; the beta scope and its link to Setup still hold" }
 
 ["ROADMAP#endgame"."body"]
 stamp = { hash = "b3:51a30f126bdeee93", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section, whole text re-read: done means every M0-M3 item in docs/progress.toml is done, merged on main with its Windows run passed where it needs one, and an item leaves M3 only when the maintainer moves it to Later; it links README#progress's What's left table generated from needs. Five steps, side by side, ordered by what lands first: 1 land the open waves in milestone order (RUNBOOK-WAVES#landing), build items finishing into their wave; 2 Windows runs by the maintainer, re-run after a later build changes an item; 3 the maintainer's ADR-0058 OAuth client, until which daemon sign-in and signed-in YouTube features stay hidden, and which platforms are supported (Linux first, macOS stays or moves to Later); 4 Linux after its codec-path ADR and macOS after its own ADR, as M3 plans; 5 release check running the M1-M3 demos from a clean checkout, 1.0 being the maintainer's call since it removes the deprecated forms (ADR-0022). All hold against the rows and those docs." }
@@ -7563,7 +7563,7 @@ stamp = { hash = "b3:9bfd53a3bcfea856", by = "agent:shader-source", note = "Re-r
 stamp = { hash = "b3:9e3a9ddf79167120", by = "agent:windows-pass", note = "Written with scripts/windows-pass.ps1 and .bat: checked the sources and worktree paths, the ask-first list, -Unattended, the daemon and Ctrl-C stop, the report and zip contents, and the check-to-item table against the script's task list" }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."file:scripts/windows-pass.ps1"]
-stamp = { hash = "b3:95a3edd6b61832aa", by = "agent:help-about", note = "Re-read: windows-pass.ps1 gains the pr1083 source and the help-links check (builds the PR's UI and desktop app, asks whether Help and About links open the default browser); the table lists help-links for item 19 and the not-checked list names item 19's log search, done by hand" }
+stamp = { hash = "b3:991398efeb975dd6", by = "agent:claude-cleanup", note = "Re-read after the Enter-VsEnv comment in windows-pass.ps1 stopped citing the removed spikes/s4-browser/run-s4.ps1; comment-only, no check, option or behaviour changed" }
 
 ["SECURITY#scope"."body"]
 stamp = { hash = "b3:a7d08d8dbb13095d", by = "agent:acc756d9", note = "Re-read the scope list: the secrets promise now names the ADR-0071 Linux file fallback, matching the amended R-SEC-001; the other promises are unchanged." }
