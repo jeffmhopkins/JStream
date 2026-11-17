@@ -121,7 +121,7 @@ const AUDIO_FRAMES: usize = wire::MAX_AUDIO_SAMPLES / 2;
 /// `RunWinMain`, unchanged; CEF reads it.
 #[cfg(windows)]
 pub unsafe fn run_helper(sandbox_info: *mut c_void) -> i32 {
-    run(sandbox_info)
+    run(&::cef::args::Args::new(), sandbox_info)
 }
 
 /// Runs the helper's process, from the `jstream-browser-helper` executable's `main`,
