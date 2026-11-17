@@ -1041,13 +1041,13 @@ stamp = { hash = "b3:56b6301e2e6a132b" }
 stamp = { hash = "b3:c06c302493ca4828", by = "agent:claude", note = "The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
 
 ["CLAUDE#docs-duty"."body"]
-stamp = { hash = "b3:ebb8cc94aaf6b184", by = "agent:claude", note = "#719 (#715): the docs-duty bullet on --renote gains 'on a stacked PR, add --from <base branch>, or it rewrites the base PR's notes too', which matches verify_renote and base_ledgers. Its dependency DOCS › Verification gained, in this PR, the stacked-base paragraph: --renote --from <base branch>, which must be an ancestor of HEAD, keeps the base PR's entries, keeps an entry equal to the one where HEAD left origin/main or any origin/wave/*, and warns that a bare --renote on a stacked PR rewrites the base PR's entries too. #704's same-hash text was already there, and the merge of #704's branch left the section unchanged (its hash is the same before and after). #679's text is in Bootstrap and Notes, not in this section. docs-duty's merge-main and --merge bullets are unchanged and consistent with it." }
+stamp = { hash = "b3:d5a8350624e9527b", by = "agent:claude-readme-polish", note = "The progress generator now writes PROGRESS.md instead of README.md, so the roadmap-item bullet says docs generate feeds the progress table in PROGRESS.md; the merge-main bullet still matches DOCS#verification, whose only change renames where the progress table lives." }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#notes"]
 stamp = { hash = "b3:f5003e619f01c5ad", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read against DOCS#notes' #888 wording (kept segments word for word apart from pieces the note already holds): the duty bullets name merge-main, re-verifying stale sections and verify, and describe no note composition, so they hold" }
 
 ["CLAUDE#docs-duty"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:087bce1f5e4fcd85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification and #notes changed for #874/#888 (merge segments kept, fuller equal-hash note kept, piece-level kept dedupe): verify --note/--renote guidance here is unchanged and still holds" }
+stamp = { hash = "b3:fc747925e68f859c", by = "agent:claude-readme-polish", note = "The progress generator now writes PROGRESS.md instead of README.md, so the roadmap-item bullet says docs generate feeds the progress table in PROGRESS.md; the merge-main bullet still matches DOCS#verification, whose only change renames where the progress table lives." }
 
 ["CLAUDE#pr-loop"."body"]
 stamp = { hash = "b3:03d8063e7a07d5dd", by = "agent:release-thread", note = "Step 3 now says a push that only merges main into a passed head keeps the pass (ADR-0109) instead of resetting the gate; the rest of the PR loop, and REVIEW#output's added carry sentence, are consistent with review-gate.yml" }
@@ -6984,7 +6984,7 @@ stamp = { hash = "b3:f11d51441c215afb", by = "agent:wave-owner", note = "main in
 stamp = { hash = "b3:d3e0276005fba3f9", by = "agent:a2656", note = "Added the stats bullet against stats.rs (videos.list parts, Readonly scope, None for counts YouTube omits, STATS_INTERVAL, ChatRate window and cap) and moved audience stats out of Not yet, leaving the engine's polling, event and query; live.rs makes call, first, non_empty and u64_or_string crate-visible (main already has all but first so); lib.rs doc names stats. Review B1: re-read the ChatRate sentence against per_minute: the oldest poll in the window is its start, the rate is the later polls' messages over oldest..newest, None until two polls; the wave merge (MAC1 #570, #583) touched nothing here" }
 
 ["DOCS#bootstrap"."body"]
-stamp = { hash = "b3:6c0adf92f4fa91ee", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read the bullets against #874/#888/#858. The merge-main bullet now says main's by and note win at equal content unless the branch's note holds main's in full and more, or main's has none. It says verify --merge keeps every earlier merge's text. It says every verify after the merge keeps each merged-side segment once, word for word apart from pieces the note already holds (#888). It also says verify refuses a repeated flag, a text given with its file, and a note or --by that isn't one line. The other bullets are unchanged." }
+stamp = { hash = "b3:72ded72b0d94ed67", by = "agent:claude-readme-polish", note = "xtask/src/docs changed only the progress block's target (TARGET = PROGRESS.md) and comments and tests that name it; the Generated content bullet now says the progress block is in PROGRESS.md, and everything else still matches the checker." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/backrefs.rs"]
 stamp = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
@@ -6993,7 +6993,7 @@ stamp = { hash = "b3:ba285841b70c7e29", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:4c4c67861267d20d", by = "agent:claude", note = "#740 (#742), now on main after #739 landed. check.rs: lint: entries must be set above allow in the root [workspace.lints]; rustc's are named bare, and any other tool's (clippy, rustdoc) as <tool>::<name> under its own table. deny: entries must name a top-level deny.toml table. RuleRefs carries both sets, read_toml reads both files, and test_list uses it. mod.rs: lint_and_deny_entries_must_be_configured covers a rustc lint, a clippy lint set through a table, one set to allow, one not configured, a clippy lint without its prefix, a rustdoc:: lint and the same unprefixed, and a deny section present and missing. Body: the Available-now item says every enforced_by entry is checked against what it names (CI checks, configured lints, deny.toml sections, tests read from the source), linking to #rules, whose lint and deny rows say how. Merging main brings #739's squash (the test: resolution, already merged here through its branch) plus #704 and #719, whose merge-main and --renote text this section holds; the conflict hunks were this PR's lint/deny additions to #739's lines, resolved to this PR's side." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/generate.rs"]
-stamp = { hash = "b3:4f6727ac1605073c", by = "agent:claude", note = "Re-read the whole section against the new xtask/src/docs/summary.rs (ui-summary generator for docs/UI-FEATURES.md, opt-in by its begin marker), with_block moved from progress.rs to generate.rs and shared by both, the summary wired into write_generated/check_repo, and merge-main's list of generator-owned blocks gaining ui-summary. The Generated content bullet now names the UI features summary; the merge-main bullet (conflicts only inside @generated blocks) still holds since ui-summary was added to that list; the other bullets are untouched by this change." }
+stamp = { hash = "b3:10f4e7e5cc1f756b", by = "agent:claude-readme-polish", note = "xtask/src/docs changed only the progress block's target (TARGET = PROGRESS.md) and comments and tests that name it; the Generated content bullet now says the progress block is in PROGRESS.md, and everything else still matches the checker." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/govern.rs"]
 stamp = { hash = "b3:34cbbe36abdc6774", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
@@ -7008,16 +7008,16 @@ stamp = { hash = "b3:e9526047eb0b1865", by = "agent:claude@session_015b9KWJ2bkGu
 stamp = { hash = "b3:8544bb9260a481c4", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read ledger.rs: holds_more/adopt keep the branch's equal-hash entry when its note holds main's in full and more, or main's has none. merge_note keeps every earlier ' | merge: ' segment and appends the new text once. keep_notes drops a kept segment's pieces, split at MERGE_MARK, that the note already holds (#888). restamp_merge keeps the branch's own pre-merge entry at the merged side's hash when it holds more. check_stamp refuses control characters. The merge-main bullet and its kept-segment wording match all of this." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/merge.rs"]
-stamp = { hash = "b3:dda76de92d9869eb", by = "agent:ab9c156e", note = "Re-read against #855's merge.rs change: refuse_merge_in_progress refuses a verify while MERGE_HEAD is set, and check_merged_from checks that the last merge brought in origin/<branch> for --merge --from; the section's merge-main bullet names both." }
+stamp = { hash = "b3:7ae3fde8f5f59be1", by = "agent:claude-readme-polish", note = "xtask/src/docs changed only the progress block's target (TARGET = PROGRESS.md) and comments and tests that name it; the Generated content bullet now says the progress block is in PROGRESS.md, and everything else still matches the checker." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/mod.rs"]
-stamp = { hash = "b3:27a5516642a408c8", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read mod.rs: parse_verify refuses a flag given twice, a mode's text with its --<mode>-file, a missing value, an unknown flag and a second positional. Text::check refuses control characters in each --per-input text. The tests cover keep_notes' piece dedupe, --note --per-input after a merge and the argument refusals. The bullet's sentence on what every verify refuses matches." }
+stamp = { hash = "b3:55faeb2e407d36f9", by = "agent:claude-readme-polish", note = "xtask/src/docs changed only the progress block's target (TARGET = PROGRESS.md) and comments and tests that name it (rustfmt-wrapped); the Generated content bullet now says the progress block is in PROGRESS.md, and everything else still matches the checker." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/parse.rs"]
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/progress.rs"]
-stamp = { hash = "b3:a6322f2c9283cfe5", by = "agent:claude-readme-alpha5", note = "progress.rs now renders only the next release (its [[target]] rows by priority, undecided ones uncounted, and its roadmap items) then the whole app by milestone; the bullet's 'README's progress block' and docs progress wording still hold" }
+stamp = { hash = "b3:cdf549f90e3fa76e", by = "agent:claude-readme-polish", note = "xtask/src/docs changed only the progress block's target (TARGET = PROGRESS.md) and comments and tests that name it; the Generated content bullet now says the progress block is in PROGRESS.md, and everything else still matches the checker." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/summary.rs"]
 stamp = { hash = "b3:3ae490162b60c1b9", by = "agent:claude", note = "summary.rs is new in this PR; re-read the whole file against the section. It generates the ui-summary block in docs/UI-FEATURES.md and is opt-in: with no begin marker outside a fence, or no such doc (as on main), it writes and reports nothing. Areas are every other ## section whose body has a Markdown table with a Status column, in document order, titled by heading and linked by anchor; each row is counted by its Status cell (U+FE0F stripped, fenced tables skipped, escaped pipes kept in a cell) into the five statuses, then a bold Total row. It fails on a missing or empty Status cell, on a status that isn't one of the five, on a block that finds no area, and on an unclosed block, writing nothing then. It reuses with_block from generate.rs. The section's Generated content bullet names the UI features summary and its merge-main bullet still holds, so the section holds." }
@@ -7170,7 +7170,7 @@ stamp = { hash = "b3:f541a63287189457", by = "agent:claude", note = "depends_on 
 stamp = { hash = "b3:33e39447d2457615", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
 
 ["GETTING-STARTED#requirements"."dep:README.md#platforms"]
-stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: Windows 11 x64 build 22000 per README Platforms (fact min-windows-build), D3D12, Media Feature Pack on N editions (the desktop app's can't-start window), WebView2, no installer or admin per ADR-0066" }
+stamp = { hash = "b3:826f54ce6c30e56c", by = "agent:claude-readme-polish", note = "README#platforms now lists all three platforms for beta.1; this section's Windows 11 build 22000, 64-bit and Direct3D 12 requirement matches its Windows row, and the Platforms link still resolves." }
 
 ["GETTING-STARTED#requirements"."dep:apps/jstream-desktop/README.md#usage"]
 stamp = { hash = "b3:172759b788471ab8", by = "agent:claude", note = "CRATE-jstream-desktop#usage changed only its Linux bullet (browser sources with cef, ADR-0158) and Cargo deps; this section's Windows steps don't depend on it and hold" }
@@ -7278,10 +7278,13 @@ stamp = { hash = "b3:71234f8ec794e39c", by = "agent:claude", note = "nested_deep
 stamp = { hash = "b3:0c13bb7844ad136a", by = "agent:claude", note = "nested_deep gets its own looser floor (4 fps, 250 ms) for ADR-0126's per-target decode pass on lavapipe; the slow-scenes list names it" }
 
 ["README#platforms"."body"]
-stamp = { hash = "b3:3a704f0eeb2803f9", by = "agent:claude-mac1", note = "Re-read the platform table on ADR-0063's acceptance: the macOS row now says per ADR-0063, macOS 14 and later, Apple Silicon with Intel best effort, matching its decision 2 and answers 2 and 3; the section now depends on ADR-0063; Windows and Linux rows unchanged" }
+stamp = { hash = "b3:826f54ce6c30e56c", by = "agent:claude-readme-polish", note = "Rewritten for beta.1 targeting Windows, macOS and Linux: requirements match ADR-0008 (Windows 11 22000+, serviced versions), ADR-0063 (macOS 14+, Apple Silicon, Intel best effort) and ADR-0060 (64-bit, GNOME or KDE on Wayland, Ubuntu LTS and Fedora); the how-you-get-it column matches the Windows zip in GETTING-STARTED and the one-command installs in the mac-testing and linux-testing runbooks." }
 
 ["README#platforms"."dep:docs/adr/0008-windows-support-policy.md"]
 stamp = { hash = "b3:c65b46a55b573338" }
+
+["README#platforms"."dep:docs/adr/0060-linux-platform-support.md"]
+stamp = { hash = "b3:3d3663bf20225913", by = "agent:claude-readme-polish", note = "Rewritten for beta.1 targeting Windows, macOS and Linux: requirements match ADR-0008 (Windows 11 22000+, serviced versions), ADR-0063 (macOS 14+, Apple Silicon, Intel best effort) and ADR-0060 (64-bit, GNOME or KDE on Wayland, Ubuntu LTS and Fedora); the how-you-get-it column matches the Windows zip in GETTING-STARTED and the one-command installs in the mac-testing and linux-testing runbooks." }
 
 ["README#platforms"."dep:docs/adr/0063-macos-platform-support.md"]
 stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:claude-mac1", note = "Re-read the platform table on ADR-0063's acceptance: the macOS row now says per ADR-0063, macOS 14 and later, Apple Silicon with Intel best effort, matching its decision 2 and answers 2 and 3; the section now depends on ADR-0063; Windows and Linux rows unchanged" }
@@ -7308,7 +7311,7 @@ stamp = { hash = "b3:6aa695a5fb73ed9d", by = "agent:claude", note = "Added the j
 stamp = { hash = "b3:54cfad47c5f2d5eb", by = "agent:claude", note = "Added the jstream-review-base line under the verdict marker (the base SHA reviewed against, from gh pr view --json baseRefOid) and said the carry diffs the reviewed head against it (ADR-0154); checked against review-gate.yml's baseRe, markersOf and reviewedBase" }
 
 ["ROADMAP#beta"."body"]
-stamp = { hash = "b3:c57bb7caabb42736", by = "agent:beta-bar", note = "Re-read after review round 1: the scope says only that past projects need not load (Jeff's words), with no claim on settings or the protocol; the ship list is an unranked bullet list, and the beta.1 targets in docs/progress.toml carry no priority" }
+stamp = { hash = "b3:70c1e786e3e85e5c", by = "agent:claude", note = "After merging main (#1519 moved the progress table to PROGRESS.md): the intro now says progress.toml's beta.1 release is shown in PROGRESS.md, and the Windows-runs gate points at PROGRESS.md's What's left table; the rest re-read and unchanged: per-platform scope and gates (Windows zip, unsigned Apple Silicon .dmg, x86_64 .deb and AppImage; Mac pass #1356; LNX3 AAC notice and Linux pass #1357 without media files) and the wanted list (CEF on macOS, both virtual cameras, Linux media files per ADR-0072), matching progress.toml's beta.1 targets" }
 
 ["ROADMAP#beta"."dep:docs/runbooks/release.md#version"]
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). Beta stays Windows-only; nothing here touches its scope." }
@@ -7317,7 +7320,7 @@ stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-rea
 stamp = { hash = "b3:334612f11ae5b106", by = "agent:beta-bar", note = "New section: re-read against Jeff's three scope decisions (Windows only, unsigned, no compatibility promise) and against the beta.1 release and targets added to docs/progress.toml; its links resolve to release.md#version and windows-hardware-pass.md#setup" }
 
 ["ROADMAP#endgame"."body"]
-stamp = { hash = "b3:51a30f126bdeee93", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section, whole text re-read: done means every M0-M3 item in docs/progress.toml is done, merged on main with its Windows run passed where it needs one, and an item leaves M3 only when the maintainer moves it to Later; it links README#progress's What's left table generated from needs. Five steps, side by side, ordered by what lands first: 1 land the open waves in milestone order (RUNBOOK-WAVES#landing), build items finishing into their wave; 2 Windows runs by the maintainer, re-run after a later build changes an item; 3 the maintainer's ADR-0058 OAuth client, until which daemon sign-in and signed-in YouTube features stay hidden, and which platforms are supported (Linux first, macOS stays or moves to Later); 4 Linux after its codec-path ADR and macOS after its own ADR, as M3 plans; 5 release check running the M1-M3 demos from a clean checkout, 1.0 being the maintainer's call since it removes the deprecated forms (ADR-0022). All hold against the rows and those docs." }
+stamp = { hash = "b3:d7e4be905cedf2fe", by = "agent:claude", note = "This branch: step 3's platform question is answered (Linux and macOS, desktop apps from beta.1) and step 4 is the rest of the two platform crates beyond what beta.1 ships. The merge (#1519): the intro's What's left link now points at PROGRESS.md#status. Steps 1, 2 and 5 re-read and unchanged | kept from the merged side: Only the What's left link changed: the generated table moved from README.md#progress to PROGRESS.md#status; the done definition and landing order are untouched." }
 
 ["ROADMAP#endgame"."dep:docs/adr/0055-wave-branches.md#decision"]
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "new section: done means every M0-M3 item in docs/progress.toml is done (merged, Windows run passed); the five steps match the open waves (ADR-0055 order), the hardware items, ADR-0058's OAuth client, the pending supported-platforms ADR, and ADR-0022's 1.0 removal of deprecated forms; the README What's left table it links is generated from needs" }
@@ -7347,7 +7350,7 @@ stamp = { hash = "b3:a9e4919b16efa1e8", by = "agent:frame-probe", note = "Re-rea
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
 
 ["ROADMAP#macos-unsigned"."body"]
-stamp = { hash = "b3:c91a6557994c586c", by = "agent:claude", note = "Added the recommended virtual-camera route without a developer account: writing Program frames into OBS Studio's notarised camera extension's sink stream through public CMIO calls, with its licence position (no OBS code shipped or copied), risks (undocumented interface, one writer, OBS's name and formats) and the routes not chosen (NDI Virtual Input, DAL-based Syphon Virtual Webcam and CamTwist); renumbered the routes and re-read the section" }
+stamp = { hash = "b3:90be16913d8e1faa", by = "agent:claude", note = "Only the .dmg line and the 'nothing built yet' sentence changed: releases carry the unsigned .dmg from beta.1 through a release.yml macOS job running scripts/mac/bundle-app.sh as after-review's macos-app does; the rest (CEF plan, what works and doesn't unsigned, vcam routes) re-read and unchanged against ADR-0063 and ADR-0144" }
 
 ["ROADMAP#macos-unsigned"."dep:docs/adr/0063-macos-platform-support.md"]
 stamp = { hash = "b3:97b1d6f51853aa49", by = "agent:claude", note = "New section recording the maintainer's decision that macOS stays unsigned (no Apple Developer Program), the CEF browser-source plan reusing the helper, the later unsigned .dmg release job, what can't work unsigned, and the from-source virtual camera routes; re-read against ADR-0063 (§13, questions 1 and 5) and ADR-0144 (decision 3, consequences)" }
@@ -7512,13 +7515,13 @@ stamp = { hash = "b3:c4d73729acc8d129", by = "agent:dependabot-lander", note = "
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
 
 ["RUNBOOK-WAVES#churn"."dep:docs/runbooks/waves.md#protocol"]
-stamp = { hash = "b3:9bdafb3a0e32d90c", by = "agent:wave-owner", note = "Two bullets now speak of a bump whose number another bump took, instead of the protocol holder, matching the rewritten protocol section; the rest holds." }
+stamp = { hash = "b3:1c1c501593334955", by = "agent:claude-readme-polish", note = "Its dependency #protocol changed only the name of the progress table's file; the advice on when to merge main is unchanged." }
 
 ["RUNBOOK-WAVES#current"."body"]
 stamp = { hash = "b3:f4c8d34998b1aa24", by = "agent:ab9c156e", note = "Re-read against #855: the paragraph now points PRs whose section inputs need different notes to --per-input --merge-file <notes.toml> --from wave/<name>, which DOCS#verification describes; the --merge, --note and --renote guidance still matches it." }
 
 ["RUNBOOK-WAVES#current"."dep:docs/DOCS.md#verification"]
-stamp = { hash = "b3:087bce1f5e4fcd85", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Re-read after DOCS#verification changed for #874: --merge still keeps this PR's note and adds the merge text (now after earlier merges' text), and the wave's notes are still kept, so the steps hold" }
+stamp = { hash = "b3:fc747925e68f859c", by = "agent:claude-readme-polish", note = "DOCS#verification changed only to say the regenerated progress table lives in PROGRESS.md; merge-main still resolves stamp and @generated conflicts as this section says." }
 
 ["RUNBOOK-WAVES#landing"."body"]
 stamp = { hash = "b3:4658abf796c67b1a", by = "agent:claude@session_01KHmFFuaj6RanQyeDm8WbrN", note = "step 5 now also drops or updates each landed row's needs; the rest of the landing steps are unchanged and match the progress.toml rules" }
@@ -7536,7 +7539,7 @@ stamp = { hash = "b3:c9f78031bb1abe35", by = "agent:wave-owner", note = "Step 2'
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Sync PRs now auto-merge with mergeMethod MERGE, matching ADR-0055's sync-PR bullet and the ruleset allowing merge commits." }
 
 ["RUNBOOK-WAVES#protocol"."body"]
-stamp = { hash = "b3:9bdafb3a0e32d90c", by = "agent:wave-owner", note = "Rewritten: no owner hand-out; a bump takes the next number, rewrites the protocol README's opening version line (held by a test), so a second bump on the same number conflicts and renumbers after merging the wave. Checked against ADR-0055's consequences: bumps still go to the earliest wave and must be right in each PR." }
+stamp = { hash = "b3:1c1c501593334955", by = "agent:claude-readme-polish", note = "Step 3 now names the progress table in PROGRESS.md as the example @generated block merge-main resolves; the rest of the protocol-bump order is unchanged." }
 
 ["RUNBOOK-WAVES#protocol"."dep:docs/adr/0055-wave-branches.md#consequences"]
 stamp = { hash = "b3:27ef1830af9f4a1c", by = "agent:claude", note = "New. Keeps the queue order by routing every PROTOCOL_VERSION bump to the earliest wave." }

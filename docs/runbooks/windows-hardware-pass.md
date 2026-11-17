@@ -162,7 +162,7 @@ scripts\release-pass.bat -ManualOnly -PtzController 192.168.1.20
 -->
 
 What the alpha.5 run checks: the fifteen alpha.5 targets that wait on a Windows run
-(the README's progress table, now under beta.1) and a real PTZ controller. Run it on the
+(the progress table in PROGRESS.md, now under beta.1) and a real PTZ controller. Run it on the
 released zip, `v0.1.0-alpha.5`, with [the release pass](#release-pass). Report each
 item's result on its issues; a failure gets its own issue, labelled `windows-hardware`,
 that links back to the item.

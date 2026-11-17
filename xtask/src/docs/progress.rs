@@ -1,4 +1,4 @@
-//! The roadmap progress block in `README.md`, generated from `docs/progress.toml`
+//! The roadmap progress block in `PROGRESS.md`, generated from `docs/progress.toml`
 //! (docs/DOCS.md#generated). `docs generate` writes it, `docs check` reports drift, and
 //! `docs progress` lists the entries that the merged history says are out of date.
 
@@ -16,7 +16,7 @@ use super::parse::{Diag, Doc};
 /// with their status and PRs.
 pub(crate) const DATA: &str = "docs/progress.toml";
 /// The doc that carries the block.
-const TARGET: &str = "README.md";
+const TARGET: &str = "PROGRESS.md";
 /// The name of the generated block.
 pub(crate) const BLOCK: &str = "progress";
 /// Each status, with the label the item table shows for it.
@@ -765,7 +765,7 @@ fn read(root: &Path) -> Result<Option<String>> {
         .with_context(|| format!("reading {DATA}"))
 }
 
-/// What the generator would write to `README.md` (path, line of the block, new text),
+/// What the generator would write to `PROGRESS.md` (path, line of the block, new text),
 /// when it differs from what is committed, and the problems that stop it.
 pub(crate) fn generate(root: &Path, docs: &[Doc]) -> (Option<(String, usize, String)>, Vec<Diag>) {
     let problem = |path: &str, msg: String| Diag {
