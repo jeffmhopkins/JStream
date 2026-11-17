@@ -1,6 +1,6 @@
 # Roadmap progress: the source of the generated `progress` block in PROGRESS.md
 # (docs/DOCS.md#generated). Edit this file, then run `cargo xtask docs generate`;
-# `docs check` fails while the README differs from it.
+# `docs check` fails while PROGRESS.md differs from it.
 #
 # A PR that delivers or advances an item updates its entry here: its number in `prs`,
 # and `status` once it is true on main. The weekly sweep runs `cargo xtask docs progress`
@@ -9,7 +9,7 @@
 # status: done (merged) | hardware (merged; a run on Windows hardware is still pending,
 #         named by `note`) | review (a PR is open) | planned
 # needs:  the steps an unfinished item still needs before it is `done`, in order, for the
-#         README's "What's left" table: build (code to write or finish through review),
+#         "What's left" table in PROGRESS.md: build (code to write or finish through review),
 #         wave (merged into a wave that hasn't landed), hardware (a Windows run),
 #         maintainer (a decision or an action only the maintainer can take). Set it on
 #         every `planned` and `review` item (`docs progress` lists the ones without); a
@@ -21,7 +21,7 @@
 # gate:   true when the release waits for the item; set only with `release`.
 #
 # A `[[target]]` is an outcome a release still to come aims for, beside the roadmap items it
-# carries; most come from a Windows run's findings and are tracked by issues. The README
+# carries; most come from a Windows run's findings and are tracked by issues. PROGRESS.md
 # shows the next release's targets, its items and its progress, and no shipped release.
 # release:   the release it aims for, one without a `tag`.
 # priority:  the maintainer's order, 1 first; leave it out for the rest.
