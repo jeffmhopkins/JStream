@@ -64,10 +64,12 @@ yet.
 **On Linux** (x86_64, GNOME or KDE Plasma): on Ubuntu 24.04 or later, download
 `jstream-v<version>-linux-amd64.deb` and run
 `sudo apt install ./jstream-v<version>-linux-amd64.deb`, then start JStream from the app
-menu. On other distributions, Debian included, download `jstream-v<version>-linux-x86_64.AppImage`, make it
-executable (`chmod +x`) and run it. Settings and scenes are in `~/.local/share/jstream`.
-Without a VA-API GPU encoder, JStream offers to download Cisco's OpenH264 for streaming. The
-Linux build has no media-file sources yet. Its virtual camera needs the v4l2loopback module
+menu. On other distributions, Debian included, download
+`jstream-v<version>-linux-x86_64.AppImage`, make it executable (`chmod +x`) and run it.
+Settings and scenes are in `~/.local/share/jstream`. Without a VA-API GPU encoder, JStream
+offers to download Cisco's OpenH264 for streaming. On Linux a media-file source plays
+audio files (WAV, FLAC, Ogg Vorbis and MP3) but not video files yet. The virtual camera
+needs the v4l2loopback module
 ([The virtual camera](#vcam)).
 
 Your scenes, sources and outputs are one project file. **File › Save project as…** saves

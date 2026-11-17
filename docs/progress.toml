@@ -282,8 +282,8 @@ release = "beta.1"
 title = "Wanted, not waited for: browser sources on macOS through CEF, a virtual camera on macOS (OBS Studio's camera extension) and on Linux (v4l2loopback), and media-file sources on Linux (ADR-0072)"
 status = "planned"
 issues = [1516]
-prs = [1521, 1522]
-note = "each ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta); browser sources on macOS (#1522) and the Linux virtual camera (#1521) are built and in the release's packages"
+prs = [1521, 1522, 1523]
+note = "each ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta); browser sources on macOS (#1522) and the Linux virtual camera (#1521) are built and in the release's packages, and Linux media files play audio (#1523) but not video yet"
 
 [[milestone]]
 id = "M0"
