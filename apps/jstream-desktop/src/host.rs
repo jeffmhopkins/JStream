@@ -738,14 +738,15 @@ fn macos_backends() -> anyhow::Result<Backends> {
 /// The Linux backends (ADR-0060), as the daemon builds them (its `serve.rs`): ScreenCast
 /// portal capture with its restore tokens in `data`'s `capture-tokens` folder, V4L2
 /// webcams, PipeWire audio (else ALSA, logged), VA-API and OpenH264 encoding, and the
-/// Vulkan GPU interop. Media files are `Unsupported` until ADR-0072's decoders exist,
-/// and there is no virtual camera. Creating them opens no device.
+/// Vulkan GPU interop. Media files play as far as ADR-0072's decoders are built
+/// (`LinuxMediaDecoders`), and the virtual camera is `LoopbackVcam` (ADR-0156), which
+/// looks for its v4l2loopback device only when it starts. Creating them opens no device.
 ///
 /// # Errors
 /// When neither PipeWire nor ALSA can be used, or the media clock can't be read.
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 fn linux_backends(data: &Path) -> anyhow::Result<Backends> {
-    use jstream_platform_linux::{LinuxBackends, LinuxGpu, NoMediaDecoders, Session};
+    use jstream_platform_linux::{LinuxBackends, LinuxGpu, LinuxMediaDecoders, Session};
     let session = Session::from_env();
     let set = LinuxBackends::new(session.clone(), Some(data.join(CAPTURE_TOKEN_DIR)))
         .context("could not open the Linux backends")?;
@@ -765,7 +766,7 @@ fn linux_backends(data: &Path) -> anyhow::Result<Backends> {
             "PipeWire is unavailable, so audio uses ALSA: no desktop or application audio"
         );
     }
-    Ok(set.into_backends(Arc::new(LinuxGpu::new()), Arc::new(NoMediaDecoders)))
+    Ok(set.into_backends(Arc::new(LinuxGpu::new()), Arc::new(LinuxMediaDecoders)))
 }
 
 /// The folder in the data folder that keeps the ScreenCast portal's restore tokens, the

@@ -257,6 +257,12 @@ tauri-build = { version = "2.7", default-features = false, features = ["config-j
 # shipped): Symphonia's pure-Rust AAC-LC decoder, MPL-2.0, and the core crate its decoder
 # API is in. Neither has default features; `symphonia-core`'s optional `rustfft` stays off.
 symphonia-codec-aac = { version = "0.6", default-features = false }
+# Linux's media-file audio (ADR-0072 (c), (d)): symphonia's readers for WAV, FLAC, Ogg and
+# MP3 files, and its pure-Rust decoders for the royalty-free codecs, PCM, FLAC, Vorbis and
+# MP3. MPL-2.0. No default features, so no SIMD (`rustfft`), no MKV or MP4 reader (the
+# crate demuxes those itself) and, above all, no `aac`: AAC decoding waits for ADR-0072
+# (g)'s patent check. The crate turns on only the features it uses.
+symphonia = { version = "0.6", default-features = false }
 symphonia-core = { version = "0.6", default-features = false }
 thiserror = { version = "2", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false }

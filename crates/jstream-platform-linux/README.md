@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-platform-linux/src/**", "crates/jstream-platform-linux/Cargo.toml"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md", "docs/adr/0141-desktop-app-on-linux.md", "docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
+depends_on = ["docs/adr/0072-linux-media-file-decoding.md", "docs/ARCHITECTURE.md#crate-map/jstream-platform-linux", "docs/ARCHITECTURE.md#threading", "docs/adr/0060-linux-platform-support.md", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0062-aac-lc-encoder-patent-check.md", "docs/adr/0014-media-clock.md", "docs/RULES.md#unsafe", "crates/jstream-platform/README.md#purpose", "crates/jstream-aac/README.md#purpose", "docs/adr/0071-linux-secret-store.md", "docs/adr/0141-desktop-app-on-linux.md", "docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
 -->
 
 The Linux implementations of the [`jstream-platform`](../jstream-platform/README.md#purpose)
@@ -50,7 +50,7 @@ platform-independent helpers, which are tested on every platform.
 | `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path, and their camera controls (`VIDIOC_QUERYCTRL`, `VIDIOC_S_CTRL`) |
 | `LoopbackVcam` | `VcamSink` | `v4l2/loopback.rs`, `vcam.rs` | the virtual camera: I420 frames written to a v4l2loopback device the user has loaded, one labelled `JStream` first, left out of the webcam list while it writes ([ADR-0156](../../docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md)) |
 | `LinuxBackends` | | `backends.rs` | the backend set, with ADR-0060 §4's audio choice made once |
-| `NoMediaDecoders` | `MediaDecoders` | `unbuilt.rs` | refuses every file, naming [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) |
+| `LinuxMediaDecoders` | `MediaDecoders` | `media.rs`, `media/` | local media files as [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) lays out. So far: WAV, FLAC, Ogg Vorbis and MP3 files through symphonia's pure-Rust readers and decoders, mixed down to stereo where wider. Any other container or codec is `Unsupported`, naming it; AAC waits for ADR-0072 (g)'s decoder patent check |
 | `portal_pick_path`, `FileChoice` | | `portal/file_chooser.rs` | the desktop app's Browse dialogs through the FileChooser portal: open, save or folder, answered only by the portal's own bus connection, a local `file://` path or nothing ([ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)) |
 | `GlobalHotkeys` | | `hotkeys.rs` | X11 only: the collection's bound chords heard while another app has the focus, grabbed on the root window with `xcb_grab_key`, and wheel chords as buttons 4 and 5 with `xcb_grab_button` ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6); Wayland has no grab |
 | `PortalHotkeys` | | `portal/global_shortcuts.rs` | Wayland's global hotkeys: the GlobalShortcuts portal binds one shortcut per chord (its id the chord, its preferred trigger the same keys in the shortcuts format) and reports each activation, answered only by the portal's own bus connection; wheel chords can't be shortcuts ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5) |
@@ -63,7 +63,8 @@ JStream never ships or builds OpenH264. The stored file's SHA-256 is checked aga
 each `dlopen`, and a copy from anywhere else is never loaded.
 
 Not here yet:
-- media-file decoders (ADR-0072), for which `NoMediaDecoders` stands in;
+- the rest of ADR-0072's media-file decoders: MP4, MOV, Matroska and WebM files, VA-API
+  video decoding, and the system's FFmpeg as the fallback behind its two gates;
 - an app keeping its OAuth tokens in `LinuxSecrets` (the daemon keeps its stream keys
   there), the protocol field that tells the UI the secret store's fallback is active,
   and the `jstream.toml` setting that turns the fallback off (ADR-0071 §4, §5).

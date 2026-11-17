@@ -15,7 +15,8 @@
 //! (`RustAacEncoder`, feature `aac-encoder`), which `VaapiCodecs` opens,
 //! the stream-key and OAuth-token store (`LinuxSecrets`, ADR-0071): the Secret
 //! Service, else a `0600` file, the process's CPU time (`LinuxProcessCpu`) and its threads' (`LinuxThreadCpu`), and
-//! `NoMediaDecoders`, the stand-in until ADR-0072's media-file decoders exist, and
+//! `LinuxMediaDecoders`, the media-file backend ADR-0072 lays out (so far symphonia's
+//! readers and decoders for WAV, FLAC, Ogg Vorbis and MP3 files), and
 //! `GlobalHotkeys`, the desktop app's global hotkeys as X11 key grabs (ADR-0112), and its
 //! Browse dialogs through the FileChooser portal (`portal_pick_path`). `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
 //! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and
@@ -27,7 +28,7 @@
 //! on Linux. On other platforms the crate builds empty except for its
 //! platform-independent helpers, which are tested everywhere.
 //!
-//! Docs: crates/jstream-platform-linux/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0060-linux-platform-support.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0062-aac-lc-encoder-patent-check.md, docs/adr/0014-media-clock.md, docs/adr/0071-linux-secret-store.md, docs/adr/0112-assignable-camera-zoom-bindings.md, docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md, docs/security/threat-model.md#vcam
+//! Docs: crates/jstream-platform-linux/README.md#purpose, docs/ARCHITECTURE.md#crate-map, docs/adr/0060-linux-platform-support.md, docs/adr/0140-source-types-and-decoding-scope-v3.md, docs/adr/0062-aac-lc-encoder-patent-check.md, docs/adr/0014-media-clock.md, docs/adr/0071-linux-secret-store.md, docs/adr/0072-linux-media-file-decoding.md, docs/adr/0112-assignable-camera-zoom-bindings.md, docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md, docs/security/threat-model.md#vcam
 
 #[cfg(feature = "aac-encoder")]
 mod aac;
@@ -43,6 +44,7 @@ mod dl;
 #[cfg(target_os = "linux")]
 mod gpu;
 mod hotkeys;
+mod media;
 #[cfg(target_os = "linux")]
 mod openh264;
 #[cfg(any(target_os = "linux", test))]
@@ -55,8 +57,6 @@ mod secrets;
 mod session;
 #[cfg(any(target_os = "linux", test))]
 mod spa;
-#[cfg(target_os = "linux")]
-mod unbuilt;
 mod v4l2;
 mod vaapi;
 pub mod vcam;
@@ -81,6 +81,7 @@ pub use hotkeys::GlobalHotkeys;
 pub use hotkeys::{
     GrabChord, ModifierMasks, key_code as x11_key_code, parse_chord as parse_x11_chord,
 };
+pub use media::LinuxMediaDecoders;
 #[cfg(target_os = "linux")]
 pub use openh264::{
     Fetch, HttpsFetch, MAX_DOWNLOAD_BYTES, OPENH264_COMPONENT, OPENH264_DECODER_NAME,
@@ -105,8 +106,6 @@ pub use process::{LinuxProcessCpu, LinuxThreadCpu};
 #[cfg(target_os = "linux")]
 pub use secrets::LinuxSecrets;
 pub use session::{Session, SessionKind, SupportTier};
-#[cfg(target_os = "linux")]
-pub use unbuilt::NoMediaDecoders;
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 pub use v4l2::{LoopbackVcam, V4l2Devices};
 #[cfg(target_os = "linux")]
