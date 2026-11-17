@@ -134,7 +134,12 @@ jobs:
       - name: v4l2loopback and FFmpeg
         run: |
           sudo apt-get update
-          sudo apt-get install -y "linux-headers-$(uname -r)" "linux-modules-extra-$(uname -r)" v4l2loopback-dkms ffmpeg
+          sudo apt-get install -y "linux-headers-$(uname -r)" v4l2loopback-dkms ffmpeg
+          # V4L2's core (videodev) is in the kernel's extra modules on some flavours; the
+          # Azure kernel of some runner images has no such package, so it's optional here
+          # and modprobe below says if videodev is missing.
+          sudo apt-get install -y "linux-modules-extra-$(uname -r)" || true
+          modinfo videodev | head -3
           sudo modprobe videodev
           sudo modprobe v4l2loopback devices=1 card_label="JStream Camera" exclusive_caps=1
           sudo chmod a+rw /dev/video*
