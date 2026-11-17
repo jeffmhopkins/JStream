@@ -6507,7 +6507,7 @@ stamp = { hash = "b3:e97684fe742d6756" }
 stamp = { hash = "b3:b99f9face13e57e7", by = "agent:claude-settings", note = "Documented the mock daemon's --agent-token mode and the daemonArgs fixture; matches main.rs and fixtures.js" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/package.json"]
-stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #751 bumps @playwright/test 1.64.0 to 1.64.1, a patch release, pinned exactly in package.json and package-lock.json (playwright and playwright-core move with it). The harness section names no version: it still pins @playwright/test exactly, the browser is still Playwright's Chromium or JSTREAM_E2E_CHROMIUM, and nothing it describes about the config or the mock daemon changes; holds" }
+stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "Dependabot bump only moves @playwright/test 1.64.1 -> 1.65.0 in package.json; the section names no Playwright version and its fixtures, mock daemon and scripts are unchanged, so it holds" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/playwright.config.js"]
 stamp = { hash = "b3:063a37f95f399bff" }
@@ -6630,7 +6630,7 @@ stamp = { hash = "b3:e81f81581b462e6d", by = "agent:claude-settings", note = "Th
 stamp = { hash = "b3:cc33975e5ce1cf00", by = "agent:claude@session_016cfwAwenZjqNGDUSCJ89jp", note = "Q3: written with the harness, specs and config; 13 tests (one test.fail for #305) pass locally in headless shell and full Chromium 141" }
 
 ["CRATE-jstream-ui-e2e#running"."file:crates/jstream-ui/tests/e2e/package.json"]
-stamp = { hash = "b3:e7d2b3325e5ac572", by = "agent:a2656", note = "Dependabot #751 bumps @playwright/test 1.64.0 to 1.64.1, a patch release, pinned exactly in package.json and package-lock.json. The running section names no version: npm ci --ignore-scripts, npx playwright test, JSTREAM_E2E_CHROMIUM or PLAYWRIGHT_BROWSERS_PATH holding the build this Playwright version expects, show-trace, and CI's ui-e2e job are unchanged by a patch bump; holds" }
+stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "Dependabot bump only moves @playwright/test 1.64.1 -> 1.65.0 in package.json; the section names no Playwright version and its npm ci / npx playwright test commands and browser setup are unchanged, so it holds" }
 
 ["CRATE-jstream-ui-e2e#running"."file:crates/jstream-ui/tests/e2e/playwright.config.js"]
 stamp = { hash = "b3:063a37f95f399bff" }
