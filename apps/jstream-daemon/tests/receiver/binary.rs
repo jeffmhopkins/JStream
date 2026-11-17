@@ -166,10 +166,11 @@ fn login_keychain(home: &Path) {
     security(&[os("default-keychain"), os("-d"), os("user"), os("-s"), kc]);
 }
 
-/// Puts Cisco's library from `JSTREAM_E2E_OPENH264` ([`openh264_library`]) in the
-/// daemon's store, which checks it against the pin when it loads. Whether it did.
+/// Whether the daemon will have an H.264 encoder. On Linux, that is OpenH264: this puts
+/// Cisco's library from `JSTREAM_E2E_OPENH264` ([`openh264_library`]) in the daemon's
+/// store, which checks it against the pin when it loads, and says whether it did.
 #[cfg(target_os = "linux")]
-fn install_openh264(home: &Path) -> bool {
+fn has_h264_encoder(home: &Path) -> bool {
     let Some(library) = openh264_library() else {
         return false;
     };
@@ -183,7 +184,7 @@ fn install_openh264(home: &Path) -> bool {
 /// On macOS there is nothing to install: VideoToolbox's encoder is part of the OS, so
 /// the daemon has one.
 #[cfg(target_os = "macos")]
-fn install_openh264(_home: &Path) -> bool {
+fn has_h264_encoder(_home: &Path) -> bool {
     true
 }
 
@@ -209,7 +210,7 @@ async fn edit(control: &WsControl, edits: Value) {
 async fn the_daemon_binary_streams_and_records_on_its_own_backends() {
     let dir = scratch("binary");
     // Whether the daemon has an H.264 encoder, so must stream.
-    let encoder = install_openh264(&dir.join("home"));
+    let encoder = has_h264_encoder(&dir.join("home"));
     let recording = dir.join("binary.mp4");
     let daemon = start_daemon(&dir);
     let control = WsControl::connect(WsConfig::new(daemon.url.clone(), daemon.token.clone()))

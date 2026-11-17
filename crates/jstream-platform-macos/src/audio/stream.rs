@@ -31,7 +31,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::ptr::NonNull;
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::thread::{self, JoinHandle};
 use std::time::Duration;
 
@@ -737,6 +737,18 @@ impl Drop for Running {
     }
 }
 
+/// Whether the stream's owner has dropped it: a [`Event::Stop`] is queued, or every
+/// sender is gone. Takes the queued events.
+fn stopped(rx: &Receiver<Event>) -> bool {
+    loop {
+        match rx.try_recv() {
+            Ok(Event::Stop) | Err(TryRecvError::Disconnected) => return true,
+            Ok(Event::Changed) => {}
+            Err(TryRecvError::Empty) => return false,
+        }
+    }
+}
+
 /// How to run `device` now: the tap's plan when it is a tap's device.
 fn plan(
     tap: Option<&Tap>,
@@ -780,7 +792,8 @@ pub(super) fn open_output(
 /// user answers. Started here, that wait would hold the caller, an `output.start`, and
 /// with it the engine, for as long as the prompt stays up, and for ever on a Mac with no
 /// one at it. So the stream opens at once, records nothing until the start returns, and
-/// a failed start is reported through the handler's `on_error`, as a lost stream is.
+/// a failed start is reported through the handler's `on_error`, as a lost stream is,
+/// unless the stream was dropped while it waited.
 fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, PlatformError> {
     let direction = which.direction;
     let (tap, device) = which.attach()?;
@@ -850,7 +863,13 @@ fn open(which: Which, handler: Handler) -> Result<Box<dyn AudioStream>, Platform
         .spawn(move || {
             let result = catch_unwind(AssertUnwindSafe(|| {
                 if watch.capture.is_none() {
-                    watch.capture = Some(Capture::start(watch.device, &watch.shared)?);
+                    match Capture::start(watch.device, &watch.shared) {
+                        Ok(capture) => watch.capture = Some(capture),
+                        // The owner dropped the stream while the start waited: it closed
+                        // the stream already, so a failed start isn't news to report.
+                        Err(_) if stopped(&rx) => return Ok(()),
+                        Err(e) => return Err(e),
+                    }
                     started_watcher.store(true, Ordering::SeqCst);
                 }
                 watch.run(&rx)
