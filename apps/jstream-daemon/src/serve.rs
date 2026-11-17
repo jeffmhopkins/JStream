@@ -348,8 +348,8 @@ fn macos_backends() -> anyhow::Result<Backends> {
 /// [`CAPTURE_TOKEN_DIR`] so a grant survives restarts, V4L2 webcams and capture cards,
 /// PipeWire audio (else ALSA, with the reason logged), VA-API H.264 and HEVC with Cisco's
 /// OpenH264 as the software H.264 encoder once the user has downloaded it, JStream's
-/// AAC-LC encoder, and the Vulkan GPU interop. Media files are `Unsupported` until
-/// ADR-0072's decoders exist, and there is no virtual camera (ADR-0060 §9). Creating
+/// AAC-LC encoder, the Vulkan GPU interop, and media files as far as ADR-0072's
+/// decoders are built (`LinuxMediaDecoders`). There is no virtual camera (ADR-0060 §9). Creating
 /// them lists the audio backend's devices and probes the VA-API render nodes, and opens
 /// nothing else: capture asks the portal only when a pipeline first uses it. A machine
 /// without a GPU composites on the engine's own software device (`open_capture` in core
@@ -362,7 +362,7 @@ fn macos_backends() -> anyhow::Result<Backends> {
 /// to fix them), or the media clock can't be read.
 #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
 fn linux_backends() -> anyhow::Result<Backends> {
-    use jstream_platform_linux::{LinuxBackends, LinuxGpu, NoMediaDecoders, Session};
+    use jstream_platform_linux::{LinuxBackends, LinuxGpu, LinuxMediaDecoders, Session};
     let session = Session::from_env();
     let token_dir = jstream_platform::paths::data_dir().map(|dir| dir.join(CAPTURE_TOKEN_DIR));
     let set = LinuxBackends::new(session.clone(), token_dir)
@@ -384,7 +384,7 @@ fn linux_backends() -> anyhow::Result<Backends> {
             "PipeWire is unavailable, so audio uses ALSA: no desktop or application audio"
         );
     }
-    Ok(set.into_backends(Arc::new(LinuxGpu::new()), Arc::new(NoMediaDecoders)))
+    Ok(set.into_backends(Arc::new(LinuxGpu::new()), Arc::new(LinuxMediaDecoders)))
 }
 
 /// The folder in the data folder that keeps the ScreenCast portal's restore tokens.

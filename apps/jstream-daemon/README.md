@@ -506,8 +506,9 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
     needs it installed. Without any adapter the daemon logs a warning at startup naming
     that package (`jstream_core::no_adapter_warning`), and `video.snapshot` and
     `output.start` fail with `action_failed`, naming it too (#1073);
-  - the stand-in `NoMediaDecoders`, so a media-file source fails with its reason until
-    [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md)'s decoders exist, no
+  - `LinuxMediaDecoders` for media files, as far as
+    [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md)'s decoders are built
+    (the crate's README lists what plays); any other file fails with its reason. No
     virtual camera (ADR-0060 §9), no CLAP scan and no YouTube sign-in;
   - `LinuxSecrets` as its stream key store
     ([ADR-0071](../../docs/adr/0071-linux-secret-store.md)): the Secret Service, else
@@ -816,7 +817,7 @@ folder another process is using, so the daemon couldn't start pages while the ap
   (the backends, the key store, the Media Foundation check and the user-only token
   and log files), `jstream-platform-macos` on macOS only (the backends built so far,
   the GPU-interop stand-in and the Keychain key store), `jstream-platform-linux` on
-  Linux only (the backends, the media-file stand-in, the Secret Service key store and
+  Linux only (the backends, the media-file decoders, the Secret Service key store and
   the process CPU reader; the integration tests use its AAC-LC encoder and OpenH264
   loader too),
   `jstream-protocol` (`OutputId`, `OutputKind`), `jstream-media` (`Codec`, for the AAC
