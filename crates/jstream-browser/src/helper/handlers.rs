@@ -57,7 +57,7 @@ wrap_app! {
                 .append_switch_with_value(Some(&"password-store".into()), Some(&"basic".into()));
             // The same on macOS: Chromium would otherwise keep its key in the login
             // Keychain, which asks the user again after each update of an ad-hoc signed
-            // app (ADR-0156).
+            // app (ADR-0157).
             #[cfg(target_os = "macos")]
             command_line.append_switch(Some(&"use-mock-keychain".into()));
             // Pages are painted off screen, so on Linux they need no display at all: with
@@ -225,7 +225,7 @@ wrap_render_handler! {
             width: c_int,
             height: c_int,
         ) {
-            // Software paints are Linux's and macOS's (ADR-0095, ADR-0156); Windows paints
+            // Software paints are Linux's and macOS's (ADR-0095, ADR-0157); Windows paints
             // shared textures.
             #[cfg(any(target_os = "linux", target_os = "macos"))]
             {

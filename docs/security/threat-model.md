@@ -306,7 +306,7 @@ covers = [
   "crates/jstream-browser/src/helper/page_api.rs",
   "crates/jstream-sources/src/page_api.rs",
 ]
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0060-linux-platform-support.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md", "docs/adr/0156-browser-sources-on-macos.md", "docs/runbooks/linux-testing.md#script"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0060-linux-platform-support.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0102-page-api-for-browser-sources.md", "docs/adr/0157-browser-sources-on-macos.md", "docs/runbooks/linux-testing.md#script"]
 -->
 
 **Built** (C8, on Windows), as [ADR-0021](../adr/0021-browser-source.md) and
@@ -314,7 +314,7 @@ depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0048-sandboxed-browse
 hardware is still to come (#341). On Linux it is built as
 [ADR-0095](../adr/0095-browser-helper-on-linux.md) decides, and CI opens a page through
 the sandboxed helper in its `browser-linux` job. On macOS it is built as
-[ADR-0156](../adr/0156-browser-sources-on-macos.md) decides, in the desktop app's
+[ADR-0157](../adr/0157-browser-sources-on-macos.md) decides, in the desktop app's
 bundle only, and CI's after-review `macos-app` job opens a page through the bundled
 helper; the sandbox on real hardware and the helpers launching from a quarantined
 download are checked by hand (#1356).

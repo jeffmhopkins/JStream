@@ -59,7 +59,7 @@ update.
   `logs/` to a bug report.
 
 What isn't on the Mac yet: the virtual camera, and browser sources outside `JStream.app`
-(the installer's daemon has none; the app has them, ADR-0156). The installer runs
+(the installer's daemon has none; the app has them, ADR-0157). The installer runs
 JStream in your browser; the desktop window comes as `JStream.app`, built apart from it
 (see [The script](#script)).
 
@@ -73,7 +73,7 @@ downloaded through a browser (so it is quarantined): add a browser source and ch
 page shows and plays sound, which means CEF's helper apps launched from the quarantined
 bundle once the app was allowed; that no second Dock icon or menu bar appears for the
 helper; that `logs/cef.log` in the data folder shows no sandbox errors; and that no
-Keychain prompt appears for the browser (ADR-0156).
+Keychain prompt appears for the browser (ADR-0157).
 
 <a id="script"></a>
 ## The script
@@ -116,7 +116,7 @@ uploads that image for each PR it runs on
 ([jstream-desktop › Usage](../../apps/jstream-desktop/README.md#usage)). Given the browser
 helper and CEF's folder (`scripts/mac/build-browser-helper.sh` builds the one and prints
 the other), it also bundles browser sources: CEF's framework and helper apps, each signed
-ad hoc from the inside out ([ADR-0156](../adr/0156-browser-sources-on-macos.md)), and the
+ad hoc from the inside out ([ADR-0157](../adr/0157-browser-sources-on-macos.md)), and the
 job then opens a page through the bundled helper. It is unsigned,
 so a downloaded copy needs Allow in System Settings › Privacy & Security the first time,
 and macOS asks again for each permission after every new build. Its prompts name

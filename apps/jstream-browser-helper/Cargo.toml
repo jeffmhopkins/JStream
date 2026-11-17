@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 6
-summary = "`jstream-browser-helper` (the sandboxed browser helper: on Windows a DLL loaded by CEF's bootstrap exe, ADR-0048; on Linux an executable, ADR-0095; on macOS the same executable in the app bundle, ADR-0156)"
+summary = "`jstream-browser-helper` (the sandboxed browser helper: on Windows a DLL loaded by CEF's bootstrap exe, ADR-0048; on Linux an executable, ADR-0095; on macOS the same executable in the app bundle, ADR-0157)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and the
@@ -32,7 +32,7 @@ undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 crate-type = ["cdylib"]
 
 [[bin]]
-# The helper on Linux (ADR-0095), with `libcef.so` beside it, and on macOS (ADR-0156), in
+# The helper on Linux (ADR-0095), with `libcef.so` beside it, and on macOS (ADR-0157), in
 # the app bundle with CEF's framework; a no-op on Windows.
 name = "jstream-browser-helper"
 path = "src/main.rs"

@@ -1,4 +1,4 @@
-//! The helper on macOS (ADR-0156): what CEF needs of a process before it starts, which on
+//! The helper on macOS (ADR-0157): what CEF needs of a process before it starts, which on
 //! Windows the bootstrap exe and on Linux the executable's own linking provide.
 //!
 //! **The bundle.** The browser process is `JStream.app/Contents/MacOS/jstream-browser-helper`.
@@ -90,7 +90,7 @@ impl Framework {
             return Err(format!(
                 "CEF's framework didn't load: JStream.app must hold {FRAMEWORK} in \
                  Contents/Frameworks, as scripts/mac/bundle-app.sh lays it out \
-                 (docs/adr/0156-browser-sources-on-macos.md)"
+                 (docs/adr/0157-browser-sources-on-macos.md)"
             ));
         }
         Ok(Self(loader))

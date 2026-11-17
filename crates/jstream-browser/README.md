@@ -23,7 +23,7 @@ crate rather than part of a platform crate, so that only the helper's build down
 builds CEF ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.md),
 [ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md),
 [ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md),
-[ADR-0156](../../docs/adr/0156-browser-sources-on-macos.md)).
+[ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)).
 
 This README is the crate's map. How each part behaves (limits, timeouts, threads, the
 request and permission rules) is in its module's rustdoc, next to the code:
@@ -80,13 +80,13 @@ the page API, which paints one colour without `window.jstream`, another with it 
 no data, a third once an update has arrived (and a fourth if a member it wasn't
 granted exists), and checks the update survives a reload. CI's `browser-linux` job
 runs both, sandboxed, headless and without a GPU. On macOS the same file opens pages
-through the helper in a bundled `JStream.app` (ADR-0156): the after-review `macos-app`
+through the helper in a bundled `JStream.app` (ADR-0157): the after-review `macos-app`
 job runs its two page-load tests (`a_page_`) against the app it bundles.
 
 <a id="open-items"></a>
 ## Open items
 <!-- @section
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0156-browser-sources-on-macos.md"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0157-browser-sources-on-macos.md"]
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet.
@@ -112,7 +112,7 @@ What ADR-0021 asks for that this crate doesn't do yet.
   DMA-BUFs onto the engine's Vulkan device would avoid the copies on a machine with a
   GPU, and neither path has been measured. The desktop app has no Linux build, so only
   the daemon wires the Linux backend.
-- **macOS.** Frames are copied on the CPU too (ADR-0156); CEF's IOSurface paints would
+- **macOS.** Frames are copied on the CPU too (ADR-0157); CEF's IOSurface paints would
   avoid it. Only the desktop app wires the backend there: the daemon isn't an app bundle.
   The helper apps launching from a quarantined download, and the sandbox on real
   hardware, are checked by hand ([mac-testing runbook](../../docs/runbooks/mac-testing.md)).

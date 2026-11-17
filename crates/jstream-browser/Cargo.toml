@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 3
-summary = "Browser sources' engine (ADR-0021, ADR-0046, ADR-0048, ADR-0095, ADR-0156): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, Linux and macOS, feature `cef`), which starts the sandboxed browser helper and imports its frames, as shared textures onto the engine's device on Windows and as CPU frames on Linux and macOS; and the helper's CEF code (feature `helper`)"
+summary = "Browser sources' engine (ADR-0021, ADR-0046, ADR-0048, ADR-0095, ADR-0157): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, Linux and macOS, feature `cef`), which starts the sandboxed browser helper and imports its frames, as shared textures onto the engine's device on Windows and as CPU frames on Linux and macOS; and the helper's CEF code (feature `helper`)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
@@ -35,7 +35,7 @@ cef = ["dep:windows", "dep:wgpu"]
 # `jstream-browser-helper` turns it on. `cef-dll-sys`'s build script downloads the CEF
 # binary distribution, and on Windows and macOS builds CEF's C++ wrapper with CMake and
 # Ninja (ADR-0046), with the sandbox on (ADR-0048; on Linux Chromium's own, ADR-0095; on
-# macOS CEF's Seatbelt sandbox library, ADR-0156).
+# macOS CEF's Seatbelt sandbox library, ADR-0157).
 helper = ["dep:cef", "cef?/sandbox", "dep:windows", "dep:libc", "dep:objc2", "dep:objc2-app-kit"]
 # Compile-checks both without downloading or building CEF (`cef`'s docs.rs mode): for
 # CI's clippy. A binary built with it doesn't link.
@@ -58,12 +58,12 @@ cef = { workspace = true, optional = true }
 
 [target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 # The helper's `dup2`, which swaps its standard input (the engine's socket) for
-# `/dev/null` before CEF starts subprocesses (ADR-0095, ADR-0156); only with the `helper`
+# `/dev/null` before CEF starts subprocesses (ADR-0095, ADR-0157); only with the `helper`
 # feature.
 libc = { workspace = true, optional = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
-# The helper's browser process on macOS (ADR-0156): CEF needs `NSApp` to be an
+# The helper's browser process on macOS (ADR-0157): CEF needs `NSApp` to be an
 # application class that speaks Chromium's `CrAppControlProtocol`, which the helper
 # defines (`objc2::define_class!`) and makes the shared application, with no Dock icon.
 # Only with the `helper` feature; both are already in the tree for the platform crate.

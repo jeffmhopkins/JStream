@@ -1,4 +1,4 @@
-//! The helper on Linux and macOS (ADR-0095, ADR-0156): started on one end of a socket pair, which is its
+//! The helper on Linux and macOS (ADR-0095, ADR-0157): started on one end of a socket pair, which is its
 //! standard input, and its paints read as CPU frames from slot files in a private folder
 //! made for it ([`crate::cpu_frames`]).
 //!

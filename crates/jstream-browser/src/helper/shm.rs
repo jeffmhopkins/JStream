@@ -1,4 +1,4 @@
-//! A page's slot files (Linux and macOS, ADR-0095, ADR-0156): CEF's software paints, as straight-alpha
+//! A page's slot files (Linux and macOS, ADR-0095, ADR-0157): CEF's software paints, as straight-alpha
 //! RGBA8, written into the next of [`SLOTS`] files the engine reads them from
 //! ([`crate::cpu_frames`]), in the private folder it made for this helper.
 //!

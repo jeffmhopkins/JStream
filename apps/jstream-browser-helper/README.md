@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["apps/jstream-browser-helper/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0156-browser-sources-on-macos.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/apps/*", "crates/jstream-browser/README.md#purpose", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0157-browser-sources-on-macos.md"]
 -->
 
 The sandboxed browser helper
@@ -40,7 +40,7 @@ path (`build.rs`). Chromium sandboxes the subprocesses itself; there is no boots
 executable does nothing, and the zip builds the DLL alone (`--lib`), as the two would
 share a PDB name.
 
-On macOS ([ADR-0156](../../docs/adr/0156-browser-sources-on-macos.md)) it is the same
+On macOS ([ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)) it is the same
 executable, in `JStream.app/Contents/MacOS` beside the app, with CEF's framework in
 `Contents/Frameworks` and copies of itself as the helper apps there (`JStream Helper.app`
 and its GPU, renderer, plugin and alerts variants), which CEF's subprocesses run from.

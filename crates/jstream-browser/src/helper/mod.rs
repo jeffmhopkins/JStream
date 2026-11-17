@@ -1,5 +1,5 @@
 //! The browser helper's CEF code (Windows, Linux and macOS, feature `helper`; ADR-0048,
-//! ADR-0095, ADR-0156, ARCH › Browser source): what `jstream-browser-helper.dll` runs when CEF's
+//! ADR-0095, ADR-0157, ARCH › Browser source): what `jstream-browser-helper.dll` runs when CEF's
 //! bootstrap exe calls it on Windows, and what the `jstream-browser-helper` executable
 //! runs on Linux and macOS, in CEF's browser process and in every one of its sandboxed
 //! subprocesses.
@@ -135,7 +135,7 @@ pub fn run_helper() -> i32 {
 }
 
 /// Runs the helper's process, from the `jstream-browser-helper` executable's `main`,
-/// and returns its exit code (ADR-0156). The browser process is
+/// and returns its exit code (ADR-0157). The browser process is
 /// `JStream.app/Contents/MacOS/jstream-browser-helper`; CEF's subprocesses start as the
 /// same executable copied into the helper app bundles in `Contents/Frameworks`, so they
 /// come here too. A subprocess first enters CEF's sandbox, then each process loads CEF's
@@ -228,7 +228,7 @@ fn browser_process(
         // The sandbox is on (ADR-0021, ADR-0048, ADR-0095): on Windows CEF's bootstrap exe
         // set it up, on Linux Chromium's own (user namespaces, or the setuid
         // `chrome-sandbox` beside the helper) starts in each subprocess, on macOS each
-        // subprocess enters CEF's Seatbelt sandbox before anything else (ADR-0156), and
+        // subprocess enters CEF's Seatbelt sandbox before anything else (ADR-0157), and
         // every subprocess starts as the same executable.
         no_sandbox: 0,
         windowless_rendering_enabled: 1,
@@ -239,7 +239,7 @@ fn browser_process(
         log_severity: LogSeverity::WARNING,
         ..Default::default()
     };
-    // On macOS, where the bundle keeps CEF's framework and its helper apps (ADR-0156).
+    // On macOS, where the bundle keeps CEF's framework and its helper apps (ADR-0157).
     #[cfg(target_os = "macos")]
     let settings = mac::bundle_settings(settings);
     let started = ::cef::initialize(
@@ -288,7 +288,7 @@ const INITIALIZE_FAILED: &str = "cef::initialize failed: libcef.so and its resou
 const INITIALIZE_FAILED: &str = "cef::initialize failed: JStream.app must hold CEF's framework \
      and its helper apps in Contents/Frameworks, as scripts/mac/bundle-app.sh lays them \
      out, and no other process may be using the same browser cache folder \
-     (docs/adr/0156-browser-sources-on-macos.md)";
+     (docs/adr/0157-browser-sources-on-macos.md)";
 
 /// Connects to the engine's two pipes, named by `--jstream-pipe` (Windows). Returns
 /// (from the engine, to the engine, no folder).
@@ -490,7 +490,7 @@ impl Host {
         let window_info = ::cef::WindowInfo {
             windowless_rendering_enabled: 1,
             // Shared textures on Windows; software paints on Linux and macOS (ADR-0095,
-            // ADR-0156).
+            // ADR-0157).
             shared_texture_enabled: i32::from(cfg!(windows)),
             ..Default::default()
         };

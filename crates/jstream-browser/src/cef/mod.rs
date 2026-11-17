@@ -15,7 +15,7 @@
 //! be on the line. It paints in software and writes each paint into a slot file in
 //! `<folder>`, a private folder this backend makes for it and removes when it stops
 //! ([`cpu`]). On macOS it is in the app bundle's `Contents/MacOS`, beside the host, with
-//! CEF's framework and helper apps in `Contents/Frameworks` (ADR-0156).
+//! CEF's framework and helper apps in `Contents/Frameworks` (ADR-0157).
 //!
 //! Either way the backend then sends the cache and log settings, and waits for CEF to
 //! start. Pages are then opened, restyled and closed by message ([`Link`]).
@@ -94,7 +94,7 @@ pub struct CefConfig {
     /// `jstream-browser-helper.dll` and CEF's runtime files beside it; on Linux
     /// `jstream-browser-helper`, with `libcef.so` and CEF's runtime files beside it; on
     /// macOS `jstream-browser-helper` in `JStream.app/Contents/MacOS`, with CEF's
-    /// framework and helper apps in `Contents/Frameworks` (ADR-0156).
+    /// framework and helper apps in `Contents/Frameworks` (ADR-0157).
     pub helper: PathBuf,
     /// CEF's root cache folder. Pages keep no cookies or storage on disk: each runs in
     /// CEF's in-memory profile, and this folder holds only CEF's own state.

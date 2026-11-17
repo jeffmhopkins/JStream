@@ -11,7 +11,7 @@
 //!
 //! CI runs it on every Linux build of the helper.
 //!
-//! On macOS (ADR-0156) the same tests open pages through the helper in a bundled
+//! On macOS (ADR-0157) the same tests open pages through the helper in a bundled
 //! `JStream.app`, which must hold CEF's framework and helper apps as
 //! `scripts/mac/bundle-app.sh` lays them out; CI's `macos-app` job runs the two that load
 //! a page (`a_page_`) against the app it bundles:

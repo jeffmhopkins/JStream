@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds the browser helper for macOS with CEF (ADR-0156) and prints CEF's distribution
+# Builds the browser helper for macOS with CEF (ADR-0157) and prints CEF's distribution
 # folder, the one `cef-dll-sys`'s build downloaded the pinned CEF into and built its C++
 # wrapper against (with CMake and Ninja, which must be on the path). Pass both to
 # `scripts/mac/bundle-app.sh`:

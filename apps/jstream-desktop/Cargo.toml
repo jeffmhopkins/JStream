@@ -25,7 +25,7 @@ path = "src/main.rs"
 # Off by default, as in `jstream-browser`, until the CEF runtime and the helper are packaged
 # (its README's open items); the portable folder then also needs the helper exe and the
 # CEF runtime beside `jstream.exe`, and on macOS the app bundle the helper, CEF's framework
-# and its helper apps (`scripts/mac/bundle-app.sh`, ADR-0156). Windows and macOS only:
+# and its helper apps (`scripts/mac/bundle-app.sh`, ADR-0157). Windows and macOS only:
 # elsewhere it builds nothing.
 cef = ["dep:jstream-browser", "jstream-browser/cef"]
 # Compile-checks the CEF wiring without building CEF, for CI's clippy.
@@ -86,7 +86,7 @@ tauri.workspace = true
 # stream keys in the Keychain, the Browse panels, and the global hotkeys' Carbon and
 # event-tap listener.
 [target.'cfg(target_os = "macos")'.dependencies]
-# The CEF backend for browser sources, with the `cef` feature only (ADR-0156).
+# The CEF backend for browser sources, with the `cef` feature only (ADR-0157).
 jstream-browser = { workspace = true, optional = true }
 jstream-platform-macos.workspace = true
 # Names the browser backend the engine takes (`BrowserBackend`, from `jstream-browser`).

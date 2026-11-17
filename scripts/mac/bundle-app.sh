@@ -7,7 +7,7 @@
 # staples the ticket. Runs on a Mac: it needs codesign, hdiutil, sips, iconutil, ditto and
 # PlistBuddy, which macOS has.
 #
-# With --browser-helper and --cef it also bundles browser sources (ADR-0156): the helper
+# With --browser-helper and --cef it also bundles browser sources (ADR-0157): the helper
 # in Contents/MacOS beside the app, CEF's framework in Contents/Frameworks, and the
 # helper apps CEF's subprocesses run from beside it, each a copy of the helper. Every
 # piece is signed ad hoc from the inside out (the framework's libraries, the framework,
@@ -140,7 +140,7 @@ main() {
     echo "$dmg"
 }
 
-# Browser sources (ADR-0156): the helper beside the app, CEF's framework, the helper apps
+# Browser sources (ADR-0157): the helper beside the app, CEF's framework, the helper apps
 # its subprocesses run from, and CEF's version and credits; each signed ad hoc from the
 # inside out, before the app is.
 browser() {

@@ -422,7 +422,7 @@ jobs:
         run: bash .github/after-review-status.sh
 
   # The desktop app on macOS (ADR-0144): lints it natively, builds the release binary with
-  # `cef` browser sources and the browser helper with CEF (ADR-0156; its build downloads
+  # `cef` browser sources and the browser helper with CEF (ADR-0157; its build downloads
   # the pinned CEF and builds its wrapper with CMake and Ninja), bundles JStream.app and the
   # disk image (ad-hoc signed from the inside out; scripts/mac/bundle-app.sh), then starts
   # the app from the bundle with a fresh home folder and waits for its window's UI to
