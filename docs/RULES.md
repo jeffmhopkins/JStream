@@ -644,7 +644,7 @@ A skipped job reports a `skipped` check, which a required check accepts, but a s
 job reports under its bare name (`clippy`, `test`), so the required `clippy (…)` and `test (…)`
 contexts never report on a draft head. That is what keeps auto-merge from firing on a draft
 whose checks were all skipped.
-`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist`, `dist-linux` and `macos` are in
+`ci` runs the Linux jobs. The Windows legs of `clippy` and `test`, `ui-e2e`, `dist`, `dist-linux`, `macos` and `e2e-stream-macos` are in
 `after-review`, which runs on `main` and, on a PR, once `review-gate` passes the head SHA
 ([ADR-0054](adr/0054-platform-ci-after-review.md)). A dispatched run's checks aren't linked to
 the PR, so each of its jobs also posts a commit status under its check name, which the PR counts.
@@ -668,7 +668,8 @@ The wave's PR into `main` runs every check ([ADR-0055](adr/0055-wave-branches.md
 | `dist` | `cargo xtask dist` on Windows: the portable zip ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)), uploaded as an artifact, with the web UI the `dist-ui` job builds for release | no | now |
 | `dist-linux` | `cargo xtask dist-linux` on Linux: the desktop app's `.deb` and AppImage ([ADR-0141](adr/0141-desktop-app-on-linux.md)), uploaded as artifacts, with the web UI the `dist-ui` job builds for release | no | now |
 | `release` | On a `v*` tag, or run by hand on `main`: builds the portable zip from a clean build and publishes it as a GitHub release ([release runbook](runbooks/release.md)) | n/a | now |
-| `e2e-stream` | `cargo xtask e2e-stream` on Linux: streams to a local `ffmpeg` RTMP server and checks the received file with `ffprobe` ([jstream-daemon › Real-receiver end to end](../apps/jstream-daemon/README.md#receiver-e2e)) | no | now |
+| `e2e-stream` | `cargo xtask e2e-stream` on Linux: streams to a local `ffmpeg` RTMP server and records to MP4, and checks both files with `ffprobe` ([jstream-daemon › Real-receiver end to end](../apps/jstream-daemon/README.md#receiver-e2e)) | no | now |
+| `e2e-stream-macos` | `cargo xtask e2e-stream` on macOS: the same harness on VideoToolbox and AudioToolbox, streaming to a local `ffmpeg` RTMP server and recording to MP4 ([jstream-daemon › Real-receiver end to end](../apps/jstream-daemon/README.md#receiver-e2e)) | no | now |
 | `ui-e2e` | Playwright end-to-end tests of the web UI against the mock daemon ([jstream-ui end-to-end tests](../crates/jstream-ui/tests/e2e/README.md)) | no | M2 |
 | `macos` | clippy on `jstream-platform-macos`, then build and unit tests on macOS | yes, from M3 ([ADR-0063](adr/0063-macos-platform-support.md)) | M0 |
 | `bench` | criterion benchmarks in `jstream-render`, `jstream-audio` and `jstream-encode`: each run once on a PR that touches them; in full on `main`, recorded as an artifact and a job summary ([R-RT-005](#R-RT-005)) | no | now |

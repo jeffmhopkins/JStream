@@ -309,6 +309,14 @@ status = "ok"
 checked_note = "Re-read restore_token, persist_mode values, cursor_mode metadata and OpenPipeWireRemote"
 
 [[external]]
+id = "v4l2loopback"
+url = "https://github.com/v4l2loopback/v4l2loopback"
+relied_on = "v4l2loopback is a kernel module that creates V4L2 loopback devices: a writer's frames are read by other apps as a webcam; its options include devices, video_nr, card_label and exclusive_caps, and exclusive_caps=1 offers only output until a writer opens it, then only capture (ADR-0156)"
+review_every = "365d"
+status = "ok"
+checked_note = "Re-read the README's description and its options devices, card_label and exclusive_caps"
+
+[[external]]
 id = "pipewire-docs"
 url = "https://docs.pipewire.org/"
 relied_on = "PipeWire is a low-level multimedia framework for low-latency audio and video streams, the API screen-cast nodes and audio devices are read through (ADR-0060)"

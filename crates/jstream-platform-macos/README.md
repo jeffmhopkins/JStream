@@ -57,7 +57,9 @@ tested on every platform.
 
 Each permission is asked for once (macOS prompts the first time); after that a missing
 grant is a `PlatformError::Os` naming the System Settings pane, and nothing retries on its
-own.
+own. The system audio recording permission is the exception: it has no API, and macOS
+holds a tap's start until the user answers its prompt, so a tap starts on its stream's
+watcher thread and opening it never waits on the prompt (`audio/stream.rs`).
 
 Not here yet, in roughly the order they follow:
 - capture frames as IOSurfaces imported into Metal and wgpu (GPU frames), once a spike

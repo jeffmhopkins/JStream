@@ -2,7 +2,7 @@
 id = "ARCH"
 title = "Architecture"
 kind = "normative"
-status = "draft"
+status = "active"
 review_every = "90d"
 -->
 
@@ -11,9 +11,6 @@ review_every = "90d"
 This document is the map. The reasons behind each choice are in the ADRs under
 [`adr/`](adr/). If this document and the code disagree, fix one of them in the same PR
 ([R-DOC-004](RULES.md#R-DOC-004)).
-
-Status is `draft` until M0 creates the crates. Until then the `covers` globs below are
-provisional, and globs that match nothing are only warnings.
 
 <a id="shape"></a>
 ## Shape of the system
@@ -53,8 +50,13 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 
 | Host (`apps/`) | What it is |
 |---|---|
+<<<<<<< HEAD
 | `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. It runs on Windows (WebView2), on Linux with its `webkitgtk` feature (WebKitGTK, [ADR-0141](adr/0141-desktop-app-on-linux.md)) and on macOS (WKWebView, an unsigned `JStream.app`; [ADR-0144](adr/0144-the-desktop-app-on-macos.md)), on Windows, macOS and 64-bit Linux with the engine live as in the daemon, with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents, with "Allow devices on my network" the TLS network listener for paired devices, and with "Receive from JTunnel senders" the engine's JTunnel receiver for the senders accepted in its settings ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF, on Windows and 64-bit Linux ([ADR-0158](adr/0158-browser-sources-in-the-linux-app.md)). |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, with `--lan` also listens for paired devices on the network over TLS ([ADR-0104](adr/0104-network-listener-over-tls.md)), and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
+=======
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. It runs on Windows (WebView2), on Linux with its `webkitgtk` feature (WebKitGTK, [ADR-0141](adr/0141-desktop-app-on-linux.md)) and on macOS (WKWebView, an unsigned `JStream.app`; [ADR-0144](adr/0144-the-desktop-app-on-macos.md)), on Windows, macOS and 64-bit Linux with the engine live as in the daemon, with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents, with "Allow devices on my network" the TLS network listener for paired devices, and with "Receive from JTunnel senders" the engine's JTunnel receiver for the senders accepted in its settings ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
+| `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, with `--lan` also listens for paired devices on the network over TLS ([ADR-0104](adr/0104-network-listener-over-tls.md)), and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, on Linux publishes it to a v4l2loopback device the user loads ([ADR-0156](adr/0156-linux-virtual-camera-through-v4l2loopback.md)), built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
+>>>>>>> pr1528
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, which a host's CEF backend starts and drives over named pipes (Windows) or a socket pair (Linux). On Windows CEF's bootstrap exe renamed plus this crate's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), on Linux this crate's executable ([ADR-0095](adr/0095-browser-helper-on-linux.md)). Hosts that turn on browser sources ship it next to their own exe ([its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
 | `jstream-plugin-host` | Not a host of the engine: the out-of-process CLAP plugin host, one process per CLAP filter instance, started by the engine ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)). It talks to the engine only through a shared-memory block and framed messages on its stdin and stdout, never the protocol ([its README](../apps/jstream-plugin-host/README.md#purpose)). |
@@ -123,9 +125,9 @@ depends_on = ["docs/RULES.md#R-ARCH-002", "docs/RULES.md#R-ARCH-003"]
 -->
 
 A crate may depend only on crates in **strictly lower** layers ([R-ARCH-002](RULES.md#R-ARCH-002)).
-Once the `xtask docs` generator lands (planned for M0), this table is generated from
-`[package.metadata.jstream]` ([DOCS › Generated content](DOCS.md#generated)). Until then
-it is maintained by hand. `xtask` is repository tooling and sits outside the layers.
+The table is maintained by hand; `cargo xtask docs generate` does not write it yet
+([DOCS › Generated content](DOCS.md#generated)), and `cargo xtask lint-deps` checks the
+layers themselves from `[package.metadata.jstream]`. `xtask` is repository tooling and sits outside the layers.
 
 The client stack follows from the rule: `jstream-control` builds on `jstream-protocol`, so
 it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` (L3), and
@@ -153,7 +155,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 2 | `jstream-youtube` | OAuth plus the YouTube Live API client (broadcasts, streams, health, chat reading and sending as the channel, audience stats; [ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md)). No media code. | no |
 | 2 | `jstream-platform-windows` | WGC capture, MF webcam and capture-card capture (with MJPEG decode), WASAPI (incl. process loopback), MF encode/decode, MF hardware encoders, D3D11↔D3D12 interop, Credential Manager store for stream keys, vcam sink side, CLAP plugin-host launcher (job object, scrubbed environment) and shared block | **yes** |
 | 2 | `jstream-platform-macos` | ScreenCaptureKit, Core Audio (incl. process taps), AVFoundation webcams, VideoToolbox/AudioToolbox, AVFoundation media files, IOSurface↔Metal, Keychain store for stream keys and OAuth tokens, and the desktop app's global hotkeys and open and save panels (M3; [ADR-0063](adr/0063-macos-platform-support.md), [ADR-0144](adr/0144-the-desktop-app-on-macos.md); Apple frameworks through the objc2 crates, Carbon's hotkeys declared by hand) | **yes** |
-| 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader (its encoder, and its decoder for the engine's own H.264 streams), AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback, X11 global hotkeys for the desktop app ([ADR-0112](adr/0112-assignable-camera-zoom-bindings.md)) (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0140](adr/0140-source-types-and-decoding-scope-v3.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
+| 2 | `jstream-platform-linux` | PipeWire, with ALSA as the audio fallback, V4L2 webcams and capture cards paired with their microphones, VAAPI, dmabuf↔Vulkan, the OpenH264 loader (its encoder, and its decoder for the engine's own H.264 streams), AAC encoding through `jstream-aac`, secrets in the Secret Service with a `0600` file fallback, X11 global hotkeys for the desktop app ([ADR-0112](adr/0112-assignable-camera-zoom-bindings.md)), the virtual camera on a v4l2loopback device ([ADR-0156](adr/0156-linux-virtual-camera-through-v4l2loopback.md)) (M3; [ADR-0060](adr/0060-linux-platform-support.md), [ADR-0140](adr/0140-source-types-and-decoding-scope-v3.md), [ADR-0071](adr/0071-linux-secret-store.md); a crate loading its system libraries at run time) | **yes** |
 | 2 | `jstream-plugin-clap` | Safe wrapper over the CLAP plugin ABI ([ADR-0035](adr/0035-clap-plugins-out-of-process.md)): loading a plugin file, its stereo audio effects, parameters, latency and saved state, and real-time processing. Only `jstream-plugin-host` links it | **yes** |
 | 2 | `jstream-vcam-windows` | `cdylib` COM media source loaded by Frame Server ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). Depends only on L0 and `windows`, so it logs through its own sink (the debugger and a capped file in the host account's profile), not `tracing`: no subscriber exists inside Frame Server. | **yes** |
 | 3 | `jstream-encode` | Encoder sessions: outputs with no video chain share one per (mix, encoder profile), and an output with a video chain gets its own ([ADR-0080](adr/0080-program-master-and-output-chains-v2.md)); rate control; fan-out of packet streams | no |
@@ -1228,7 +1230,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 <a id="gpu-pipeline"></a>
 ## GPU pipeline
 <!-- @section
-covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**", "effects/**"]
+covers = ["crates/jstream-render/**", "crates/jstream-platform-windows/src/gpu/**"]
 depends_on = ["docs/adr/0004-wgpu-with-native-interop.md"]
 -->
 
@@ -1567,7 +1569,7 @@ the sandboxed helper, whose frames take a second copy.
 <a id="persistence"></a>
 ## Persistence, config and secrets
 <!-- @section
-covers = ["crates/jstream-graph/src/persist/**", "crates/jstream-core/src/settings/**"]
+covers = ["crates/jstream-graph/src/persist/**"]
 depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/0025-typed-settings-kind-descriptors.md"]
 -->
 
