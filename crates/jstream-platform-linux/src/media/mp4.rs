@@ -102,11 +102,13 @@ impl Track {
     pub(crate) fn seek_index(&self, pts: i64) -> usize {
         let mut best = 0;
         for (i, s) in self.samples.iter().enumerate() {
-            if s.sync && s.pts <= pts {
+            if s.sync {
+                // Sync samples are shown in decoding order: the first one after `pts`
+                // ends the search.
+                if s.pts > pts {
+                    break;
+                }
                 best = i;
-            }
-            if s.dts > pts {
-                break;
             }
         }
         best
@@ -132,7 +134,7 @@ impl Mp4 {
         let mut moov = None;
         let mut saw_ftyp = false;
         let mut fragmented = false;
-        while at + 8 <= len {
+        while at.saturating_add(8) <= len {
             file.seek(SeekFrom::Start(at)).map_err(|e| io_error(&e))?;
             let mut head = [0_u8; 16];
             file.read_exact(&mut head[..8]).map_err(|e| io_error(&e))?;
@@ -505,10 +507,10 @@ fn edit_shift(elst: &[u8], movie_timescale: u32, timescale: u32) -> Result<i64, 
             // An empty edit: the track starts later.
             let ticks =
                 i128::from(duration) * i128::from(timescale) / i128::from(movie_timescale.max(1));
-            delay += i64::try_from(ticks).unwrap_or(0);
+            delay = delay.saturating_add(i64::try_from(ticks).unwrap_or(0));
             continue;
         }
-        return Ok(delay - media_time);
+        return Ok(delay.saturating_sub(media_time));
     }
     Ok(delay)
 }
@@ -597,12 +599,17 @@ fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformE
         runs.push((first.max(1), per));
     }
     let mut offsets = Vec::with_capacity(count);
+    // Chunks ascend, and so do the runs' first chunks: a cursor finds each chunk's run
+    // in one pass, not a search per chunk.
+    let mut run = 0;
     'chunks: for (index, &start) in chunks.iter().enumerate() {
         let chunk = u32::try_from(index + 1).unwrap_or(u32::MAX);
+        while runs.get(run + 1).is_some_and(|(first, _)| *first <= chunk) {
+            run += 1;
+        }
         let per = runs
-            .iter()
-            .rev()
-            .find(|(first, _)| *first <= chunk)
+            .get(run)
+            .filter(|(first, _)| *first <= chunk)
             .map_or(0, |(_, per)| *per);
         let mut at = start;
         for _ in 0..per {
@@ -610,7 +617,7 @@ fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformE
                 break 'chunks;
             };
             offsets.push(at);
-            at += u64::from(size);
+            at = at.saturating_add(u64::from(size));
         }
     }
     if offsets.len() < count {
@@ -632,7 +639,7 @@ fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformE
                 break;
             }
             dts.push(t);
-            t += delta;
+            t = t.saturating_add(delta);
         }
     }
     while dts.len() < count {
@@ -685,7 +692,7 @@ fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformE
             offset: offsets[i],
             size: sizes[i],
             dts: dts[i],
-            pts: dts[i] + cts[i] + shift,
+            pts: dts[i].saturating_add(cts[i]).saturating_add(shift),
             sync: sync[i],
         })
         .collect())

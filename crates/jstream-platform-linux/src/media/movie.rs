@@ -116,13 +116,16 @@ fn open_video(track: Track, config: &MediaDecoderConfig) -> Result<Video, Platfo
     if (size.width(), size.height()) != track.size {
         tracing::debug!(?size, sample_entry = ?track.size, "the SPS and the sample entry disagree on the size; the SPS wins");
     }
+    // An edit list that trims the start leaves the cut frames before 0: decoded, as
+    // later frames reference them, but not shown, as after `seek(0)`.
+    let skip_before = Some(1 - frame_step(&track));
     Ok(Video {
         track,
         decoder,
         next: 0,
         flushed: false,
         timebase,
-        skip_before: None,
+        skip_before,
     })
 }
 
@@ -154,7 +157,8 @@ fn open_audio(track: Track) -> Option<Audio> {
             stream,
             next: 0,
             timebase,
-            skip_until: None,
+            // As for the video: what an edit list trims off the start isn't heard.
+            skip_until: Some(MediaTime::zero(Timebase::MICROS)),
         }),
         Err(err) => {
             tracing::info!(%err, "a movie file's audio doesn't decode");

@@ -342,6 +342,18 @@ impl VaapiH264Decoder {
         let Some(plan) = plan else {
             return Ok(());
         };
+        // The surfaces were made for the SPS the decoder opened with: a stream whose
+        // in-band SPS changes the picture size, or needs more buffers, is refused.
+        if plan.sps.coded_size() != self.coded
+            || Planner::slots_for(&plan.sps) > self.res.surfaces.len()
+        {
+            self.planner.reset();
+            return Err(PlatformError::Unsupported {
+                what: "an H.264 stream that changes its picture size partway, in a media \
+                       file on Linux"
+                    .into(),
+            });
+        }
         let slots = self.res.surfaces.clone();
         let target = slots[plan.slot];
         let mut buffers = Vec::with_capacity(2 + 2 * plan.slices.len());

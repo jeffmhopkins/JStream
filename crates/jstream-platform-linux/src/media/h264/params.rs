@@ -182,8 +182,8 @@ impl Sps {
         let (w, h) = self.coded_size();
         let [left, right, top, bottom] = self.crop;
         (
-            w.saturating_sub(left + right),
-            h.saturating_sub(top + bottom),
+            w.saturating_sub(left.saturating_add(right)),
+            h.saturating_sub(top.saturating_add(bottom)),
         )
     }
 

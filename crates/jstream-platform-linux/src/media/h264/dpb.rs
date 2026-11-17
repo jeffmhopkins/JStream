@@ -105,9 +105,15 @@ pub(crate) struct Planner {
     slots: usize,
     /// The slot of the picture being decoded, between `submit` and `finish`.
     pending: Option<(Frame, SliceHeader, Sps)>,
-    /// Whether the stream has had an IDR picture yet; pictures before the first are
-    /// skipped, since what they reference was never decoded.
+    /// Whether decoding has a starting point yet: an IDR picture, or after a seek an
+    /// all-intra one (an open GOP's recovery point). Pictures before it are skipped,
+    /// since what they reference was never decoded.
     started: bool,
+    /// After starting on an all-intra picture that isn't IDR: its picture order count.
+    /// Pictures decoded after it but shown before it (the open GOP's leading pictures)
+    /// reference frames before the starting point, so they are decoded but never
+    /// output. Cleared by the next IDR picture or MMCO 5.
+    start_poc: Option<i32>,
 }
 
 impl Planner {
@@ -122,6 +128,7 @@ impl Planner {
             slots,
             pending: None,
             started: false,
+            start_poc: None,
         }
     }
 
@@ -155,9 +162,15 @@ impl Planner {
         Ok(())
     }
 
-    /// The first sequence parameter set, for sizing the decoder.
+    /// The sequence parameter set to size the decoder for: the one the lowest-numbered
+    /// picture parameter set names, else the lowest-numbered one.
     pub(crate) fn first_sps(&self) -> Option<&Sps> {
-        self.sps.values().next()
+        let named = self
+            .pps
+            .iter()
+            .min_by_key(|(id, _)| **id)
+            .and_then(|(_, pps)| self.sps.get(&pps.sps_id));
+        named.or_else(|| self.sps.iter().min_by_key(|(id, _)| **id).map(|(_, s)| s))
     }
 
     /// Forgets the decoded frames (a seek), keeping the parameter sets. Every frame
@@ -168,6 +181,7 @@ impl Planner {
         self.max_long_term_idx = None;
         self.pending = None;
         self.started = false;
+        self.start_poc = None;
     }
 
     /// Takes one access unit's NAL units (escaped, header byte included) shown at `pts`.
@@ -218,11 +232,29 @@ impl Planner {
             return Ok((Vec::new(), None));
         };
         let first = first.clone();
+        let mut recovery = false;
         if first.idr {
             self.started = true;
-        }
-        if !self.started {
-            return Ok((Vec::new(), None));
+            self.start_poc = None;
+        } else if !self.started {
+            let intra = slices
+                .iter()
+                .all(|(h, _)| matches!(h.slice_type, SliceType::I | SliceType::Si));
+            if !intra {
+                return Ok((Vec::new(), None));
+            }
+            // A recovery point: decoding starts here with an empty buffer, its own
+            // frame_num taken as the previous one so no gap is filled, and its picture
+            // order count relative to itself.
+            self.started = true;
+            recovery = true;
+            self.poc = PocState {
+                prev_poc_msb: 0,
+                prev_poc_lsb: i32::try_from(first.pic_order_cnt_lsb).unwrap_or(0),
+                prev_frame_num_offset: 0,
+                prev_frame_num: first.frame_num,
+                prev_ref_frame_num: first.frame_num,
+            };
         }
         if sps.chroma_format_idc != 1
             || sps.bit_depth_luma_minus8 != 0
@@ -241,6 +273,12 @@ impl Planner {
             self.fill_gap(&first, &sps);
         }
         let (top_poc, bottom_poc) = self.picture_order_count(&first, &sps);
+        if recovery {
+            self.start_poc = Some(top_poc.min(bottom_poc));
+        }
+        let leading = self
+            .start_poc
+            .is_some_and(|start| top_poc.min(bottom_poc) < start);
 
         let slot = self.free_slot().ok_or(ParseError::Invalid(
             "more frames held than the decoded picture buffer allows",
@@ -252,7 +290,7 @@ impl Planner {
             bottom_poc,
             long_term: None,
             reference: first.is_reference(),
-            waiting: true,
+            waiting: !leading,
             pts,
         };
 
@@ -398,10 +436,12 @@ impl Planner {
                 self.poc.prev_poc_msb = 0;
                 self.poc.prev_poc_lsb = current.top_poc;
             } else {
+                // The MSB from the state before this picture, then the state moves on.
+                let msb = self.poc_msb(&header, &sps);
                 let max_lsb = i64::from(sps.max_poc_lsb());
                 self.poc.prev_poc_lsb =
                     i32::try_from(i64::from(header.pic_order_cnt_lsb) % max_lsb).unwrap_or(0);
-                self.poc.prev_poc_msb = self.poc_msb(&header, &sps);
+                self.poc.prev_poc_msb = msb;
             }
             self.poc.prev_ref_frame_num = current.frame_num;
         }
@@ -415,6 +455,7 @@ impl Planner {
         let mut outputs = Vec::new();
         if mmco5 {
             outputs.extend(self.drain());
+            self.start_poc = None;
         }
         self.dpb.retain(|f| f.reference || f.waiting);
         self.dpb.push(current);
@@ -556,9 +597,9 @@ impl Planner {
         let max = i32::try_from(sps.max_poc_lsb()).unwrap_or(i32::MAX);
         let lsb = i32::try_from(header.pic_order_cnt_lsb).unwrap_or(0);
         if lsb < prev_lsb && prev_lsb - lsb >= max / 2 {
-            prev_msb + max
+            prev_msb.saturating_add(max)
         } else if lsb > prev_lsb && lsb - prev_lsb > max / 2 {
-            prev_msb - max
+            prev_msb.saturating_sub(max)
         } else {
             prev_msb
         }
@@ -568,9 +609,10 @@ impl Planner {
     fn picture_order_count(&self, header: &SliceHeader, sps: &Sps) -> (i32, i32) {
         match sps.pic_order_cnt_type {
             0 => {
-                let top = self.poc_msb(header, sps)
-                    + i32::try_from(header.pic_order_cnt_lsb).unwrap_or(0);
-                (top, top + header.delta_pic_order_cnt_bottom)
+                let top = self
+                    .poc_msb(header, sps)
+                    .saturating_add(i32::try_from(header.pic_order_cnt_lsb).unwrap_or(0));
+                (top, top.saturating_add(header.delta_pic_order_cnt_bottom))
             }
             1 => {
                 let offset = self.frame_num_offset(header, sps);

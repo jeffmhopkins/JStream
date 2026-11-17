@@ -6,6 +6,12 @@
 //! `hevc`, the structs libva reads are declared in `ffi`, and CPU frames are written
 //! into VA images by `upload`; those four are platform-independent and tested
 //! everywhere.
+//!
+//! Decoding goes the other way: `VaapiH264Decoder` (`decoder`) decodes a media file's
+//! H.264 on a render node whose driver offers the stream's profile, from the pictures
+//! `media::h264`'s planner lays out, and reads each frame back. The picture, scaling
+//! list and slice parameters it submits are built in `h264_dec`, platform-independent
+//! and tested everywhere too.
 
 #[cfg(target_os = "linux")]
 mod decoder;

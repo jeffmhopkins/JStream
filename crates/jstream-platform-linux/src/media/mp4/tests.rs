@@ -78,3 +78,16 @@ fn other_files_are_not_mp4() {
     let file = File::open(testdata("tone.flac")).expect("opens");
     assert!(Mp4::open(file).expect("reads").is_none());
 }
+
+#[test]
+fn a_box_claiming_the_largest_size_doesnt_overflow() {
+    // `ftyp` with a 64-bit size of u64::MAX: refused or ignored, never a panic.
+    let mut bytes = vec![0, 0, 0, 1];
+    bytes.extend_from_slice(b"ftyp");
+    bytes.extend_from_slice(&u64::MAX.to_be_bytes());
+    let path = std::env::temp_dir().join(format!("jstream-mp4-test-{}.mp4", std::process::id()));
+    std::fs::write(&path, &bytes).expect("writes");
+    let file = File::open(&path).expect("opens");
+    let _ = std::fs::remove_file(&path);
+    assert!(super::Mp4::open(file).is_err());
+}
