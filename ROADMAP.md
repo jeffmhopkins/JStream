@@ -159,13 +159,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md"]
   the Keychain), on macOS 14 and later, Apple Silicon supported and Intel best effort.
   macOS stays unsigned, and its browser sources are to come from CEF as on Windows; the
   plan, and what can't work unsigned, is in [macOS without signing](#macos-unsigned).
+  The desktop app ships on macOS from [beta.1](#beta).
   A Syphon receiver, the macOS follow-up to Spout2, is its own item when wanted.
 - Linux: the platform crate per [ADR-0060](docs/adr/0060-linux-platform-support.md)
   (portal and PipeWire capture, VA-API encode). Per
   [ADR-0140](docs/adr/0140-source-types-and-decoding-scope-v3.md), software H.264 is Cisco's
   OpenH264 binary, downloaded on the user's request, and AAC is an AAC-LC encoder in Rust,
   built once its own patent-check ADR is accepted. The virtual camera via v4l2loopback
-  needs root, so it gets its own ADR.
+  needs root, so it gets its own ADR. The desktop app ships on Linux, as a `.deb` and an
+  AppImage, from [beta.1](#beta).
 
 <a id="macos-unsigned"></a>
 ## macOS without signing: the plan
@@ -175,8 +177,9 @@ depends_on = ["docs/adr/0063-macos-platform-support.md", "docs/adr/0144-the-desk
 
 The maintainer's decision: **JStream on macOS stays unsigned for good.** There will be no
 Apple Developer Program membership, so no Developer ID signing and no notarisation. This
-answers ADR-0063's question 1 "never" where it said "later". Nothing below is built yet;
-it is the plan, and each part gets its own ADR when its work starts (ADR-0144 keeps the
+answers ADR-0063's question 1 "never" where it said "later". Apart from the release's
+disk image, nothing below is built yet; it is the plan, and each part gets its own ADR
+when its work starts (ADR-0144 keeps the
 browser source out of the macOS app until then).
 
 - **Browser sources come from CEF**, the Chromium the Windows and Linux builds already
@@ -188,10 +191,10 @@ browser source out of the macOS app until then).
   before it ships: that the helpers launch from a downloaded, quarantined image once the
   user has allowed the app, and that CEF's macOS sandbox works with no entitlements, as an
   ad-hoc build has none.
-- **Releases gain an unsigned `.dmg` later**: a macOS job in `release.yml` runs
-  `scripts/mac/bundle-app.sh` and uploads `JStream-<version>-macos-<arch>.dmg`, as the
-  after-review `macos-app` job does for PRs. Its release text says how to open an
-  unsigned app.
+- **Releases carry an unsigned `.dmg` from [beta.1](#beta)**: a macOS job in
+  `release.yml` runs `scripts/mac/bundle-app.sh` as the after-review `macos-app` job does
+  for PRs, and attaches the disk image. Its release text says how to open an unsigned
+  app.
 
 **What works unsigned:** everything ADR-0063 builds on. Screen and window capture,
 webcams, microphones and process audio taps (each with the user's permission), the
@@ -275,33 +278,70 @@ depends_on = ["docs/runbooks/release.md#version", "docs/runbooks/windows-hardwar
 
 The alphas add features. The first beta, `0.1.0-beta.1`
 ([RUNBOOK-RELEASE › The version](docs/runbooks/release.md#version)), adds none: it is what
-the alphas ship, made dependable on Windows. Its targets are the `beta.1` release in
-[`docs/progress.toml`](docs/progress.toml), which the README shows once alpha.5 ships. The
+the alphas ship, made dependable, and the first release with a desktop app for Windows,
+macOS and Linux. Its targets are the `beta.1` release in
+[`docs/progress.toml`](docs/progress.toml), which [PROGRESS.md](PROGRESS.md) shows. The
 maintainer set its scope:
 
-- **Windows only.** Linux and macOS stay in [M3](#m3) and their hardware runs don't gate
-  it.
-- **Unsigned**, like the alphas. A code-signing certificate isn't part of it.
+- **Windows, macOS and Linux.** Each release attaches the portable Windows zip (x64), an
+  unsigned macOS disk image (Apple Silicon, macOS 14 and later; Intel stays best effort),
+  and for Linux a `.deb` and an AppImage (x86_64, on the floors of
+  [ADR-0060](docs/adr/0060-linux-platform-support.md)'s supported tier).
+- **Unsigned**, like the alphas, on every platform. A code-signing certificate isn't part
+  of it, and macOS stays unsigned for good ([below](#macos-unsigned)).
 - **No promise that past projects load.** A beta build need not load a project saved by
   an earlier build.
 
 It ships when all of these hold on the candidate build. The list is unranked; the
-maintainer orders it when the beta is gathered:
+maintainer orders it when the beta is gathered.
 
-- **The bench passes.** `jstream bench` passes on the Windows pass machine
-  ([Setup](docs/runbooks/windows-hardware-pass.md#setup)), with the thread model and the
-  seamless preview alpha.5 aims for.
-- **Every Windows run passes.** Each merged item marked *Windows run* in the README's
-  What's left table passes it, in one acceptance pass on the candidate build rather
-  than one run at a time.
-- **No known Windows bug breaks a core flow.** Going live, recording, the virtual camera,
-  browser pages, media files and snapshots work, and stopping is graceful.
+**Every platform:**
+- **The packages are published.** The release workflow builds each one from the tagged
+  commit and attaches it, and CI has opened each app and loaded its UI
+  ([RUNBOOK-RELEASE › Cutting a release](docs/runbooks/release.md#cut)).
 - **The security basics hold**: the threat-model follow-ups, a permission policy for
   browser pages, a GPU-hang story for shader packs, and asking before a new agent
   connects.
 
-Everything else, new features, Linux and macOS included, goes to the alphas before it or
-to the releases after it.
+**Windows:**
+- **The bench passes.** `jstream bench` passes on the Windows pass machine
+  ([Setup](docs/runbooks/windows-hardware-pass.md#setup)), with the thread model and the
+  seamless preview alpha.5 aims for.
+- **Every Windows run passes.** Each merged item marked *Windows run* in PROGRESS.md's
+  [What's left](PROGRESS.md#status) table passes it, in one acceptance pass on the candidate build rather
+  than one run at a time.
+- **No known Windows bug breaks a core flow.** Going live, recording, the virtual camera,
+  browser pages, media files and snapshots work, and stopping is graceful.
+
+**macOS:**
+- **One Mac pass on the downloaded image.** The `.dmg` from the release opens on Apple
+  Silicon once the user allows it in Privacy & Security, and its core flows work: screen
+  and window capture, a webcam, a microphone and desktop audio, going live, recording,
+  media files and snapshots, and a graceful stop. The open lines of the macOS hardware
+  checklist (#1356) are that pass.
+- **No known macOS bug breaks one of those flows.**
+
+**Linux:**
+- **The packages carry the AAC notice.** The `.deb` and the AppImage say that JStream
+  holds no AAC patent licence and name Via LA, as
+  [ADR-0062](docs/adr/0062-aac-lc-encoder-patent-check.md) requires before the encoder
+  ships (LNX3).
+- **One Linux pass on the downloaded packages.** The `.deb` installs and the AppImage runs
+  on Ubuntu LTS with GNOME on Wayland, and on KDE Plasma, and their core flows work:
+  screen capture through the portal, a webcam, PipeWire audio, going live on VA-API or on
+  OpenH264 downloaded from the app, recording, browser pages and snapshots, and a
+  graceful stop. The open lines of the Linux checklist (#1357) are that pass.
+- **No known Linux bug breaks one of those flows.**
+
+**Wanted for beta.1, but it doesn't wait for them:** browser sources on macOS through
+CEF, a virtual camera on macOS (through OBS Studio's camera extension,
+[below](#macos-vcam-source)) and on Linux (through v4l2loopback), and media-file sources
+on Linux ([ADR-0072](docs/adr/0072-linux-media-file-decoding.md), not built yet). Each
+ships in beta.1 if it is done and passes its platform's pass; otherwise it goes to the
+release after. Until then the macOS and Linux notes say what the build lacks.
+
+Everything else, new features included, goes to the alphas before it or to the releases
+after it.
 
 <a id="endgame"></a>
 ## Endgame: what done means
@@ -329,10 +369,10 @@ finish: builds, runs and decisions go on side by side, and the order is what lan
    - the Google Cloud project and OAuth client for YouTube sign-in
      ([ADR-0058](docs/adr/0058-youtube-sign-in-with-a-jstream-client.md)). Until then
      the daemon's sign-in and the signed-in YouTube features stay hidden;
-   - which platforms besides Windows are supported (maintainer tier): Linux first, and
-     whether macOS stays in M3 or moves to Later.
-4. **Platform crates**: Linux, after its codec-path ADR, and macOS, if it stays, after
-   its own ADR ([M3](#m3)).
+   - which platforms besides Windows are supported: answered, Linux and macOS both, with
+     desktop apps released from [beta.1](#beta).
+4. **Platform crates**: the rest of Linux's and macOS's ([M3](#m3)), on top of what
+   beta.1 ships for them.
 5. **Release check.** With every item `done`, run the M1, M2 and M3 demos from a clean
    checkout. Whether that becomes a first release, 1.0, is the maintainer's call: 1.0
    removes the deprecated protocol forms
