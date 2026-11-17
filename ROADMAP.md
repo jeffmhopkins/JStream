@@ -351,8 +351,8 @@ depends_on = ["docs/adr/0055-wave-branches.md#decision"]
 The Rust implementation is **done** when every item of M0 to M3 in
 [`docs/progress.toml`](docs/progress.toml) is `done`: merged on `main`, with its Windows
 run passed where it needs one. Then each milestone's demo above runs from a clean checkout.
-An item leaves M3 only when the maintainer moves it to [Later](#later). The README's
-[What's left](README.md#progress) table lists every unfinished item with the steps it still
+An item leaves M3 only when the maintainer moves it to [Later](#later). The
+[What's left](PROGRESS.md#status) table in PROGRESS.md lists every unfinished item with the steps it still
 needs, from that file.
 
 The remaining work lands in this order. A step doesn't wait for the one before it to

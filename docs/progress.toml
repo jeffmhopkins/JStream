@@ -1,4 +1,4 @@
-# Roadmap progress: the source of the generated `progress` block in README.md
+# Roadmap progress: the source of the generated `progress` block in PROGRESS.md
 # (docs/DOCS.md#generated). Edit this file, then run `cargo xtask docs generate`;
 # `docs check` fails while the README differs from it.
 #
