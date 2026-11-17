@@ -519,7 +519,11 @@ jobs:
         run: brew install ffmpeg
       # Type-checks the harness on macOS first, so a compile error reads as one.
       - run: cargo clippy -p jstream-daemon --tests --locked -- -D warnings
+      # Optimised, as the product ships: the harness runs at a live pace, and a debug
+      # build on the runner's three cores falls behind it.
       - name: Stream and record to a local receiver
+        env:
+          CARGO_PROFILE_DEV_OPT_LEVEL: 2
         run: cargo xtask e2e-stream
       - name: The daemon's log
         if: failure()

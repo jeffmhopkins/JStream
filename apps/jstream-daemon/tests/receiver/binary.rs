@@ -156,11 +156,12 @@ fn login_keychain(home: &Path) {
     );
     let keychains = home.join("Library/Keychains");
     std::fs::create_dir_all(&keychains).expect("the keychain folder");
-    let path = keychains.join("login.keychain-db");
+    // `create-keychain` leaves the new keychain unlocked, and `set-keychain-settings`
+    // with no options keeps it so: no timeout, no lock on sleep.
+    let path = keychains.join("login.keychain");
     let kc = path.as_os_str();
     security(&[os("create-keychain"), os("-p"), os("e2e"), kc]);
     security(&[os("set-keychain-settings"), kc]);
-    security(&[os("unlock-keychain"), os("-p"), os("e2e"), kc]);
     security(&[os("list-keychains"), os("-d"), os("user"), os("-s"), kc]);
     security(&[os("default-keychain"), os("-d"), os("user"), os("-s"), kc]);
 }

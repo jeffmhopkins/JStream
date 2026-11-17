@@ -2511,7 +2511,7 @@ stamp = { hash = "b3:227d6b118e5f59c3", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:5c2b51f837551c47", by = "agent:mac1-audio", note = "This PR's whole change to Purpose: the build-script bullet describes build.rs embedding Info.plist in the binary's __TEXT,__info_plist section on macOS targets (ADR-0063 §11), so the microphone, camera and system audio recording prompts have their usage strings without an app bundle; it names the bundle identifier io.github.jeffmhopkins.jstream.daemon under the app ID io.github.jeffmhopkins.jstream (fact markers), and says a daemon started from a terminal is attributed to the terminal app. The tests list adds the new tests/info_plist.rs: on every OS each usage key has a non-empty string and CFBundleIdentifier equals the pinned fact under the app ID, and on macOS the built binary contains the plist. covers now includes Info.plist and build.rs. Re-read against build.rs's -sectcreate block (with its new comment pointing here), Info.plist and tests/info_plist.rs (whose doc now names the bundle identifier); the bullet was only rewrapped" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/receiver/binary.rs"]
-stamp = { hash = "b3:bdfcf3eea44d77b3", by = "agent:mac-e2e", note = "binary.rs now makes a login keychain in the scratch home on macOS; Purpose's test list is unchanged" }
+stamp = { hash = "b3:0e8df0b5fb26ad64", by = "agent:mac-e2e", note = "login_keychain drops the unlock step (create-keychain leaves it unlocked); Purpose unchanged" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/receiver/main.rs"]
 stamp = { hash = "b3:d81d9054a7cdb9ca", by = "agent:mac-e2e", note = "The second run's uptime check now counts from its own output.start; Purpose's test list is unchanged" }
@@ -2526,7 +2526,7 @@ stamp = { hash = "b3:32c9928094e5d21e", by = "agent:frame-probe", note = "Re-rea
 stamp = { hash = "b3:a226d5035d18dd98", by = "agent:mac-e2e", note = "macOS binary-test bullet now says the key goes to a login keychain the test makes in its scratch home, after checking security reads the list from that HOME; matches login_keychain in binary.rs" }
 
 ["CRATE-jstream-daemon#receiver-e2e"."file:apps/jstream-daemon/tests/receiver/binary.rs"]
-stamp = { hash = "b3:bdfcf3eea44d77b3", by = "agent:mac-e2e", note = "macOS binary-test bullet now says the key goes to a login keychain the test makes in its scratch home, after checking security reads the list from that HOME; matches login_keychain in binary.rs" }
+stamp = { hash = "b3:0e8df0b5fb26ad64", by = "agent:mac-e2e", note = "Keychain setup detail only; the section's description of the scratch-home keychain still holds" }
 
 ["CRATE-jstream-daemon#receiver-e2e"."file:apps/jstream-daemon/tests/receiver/main.rs"]
 stamp = { hash = "b3:d81d9054a7cdb9ca", by = "agent:mac-e2e", note = "The uptime-restart check is now 'no more than the time since this output.start and below the first run's last tick', which still matches 'starts again at the next one'" }
