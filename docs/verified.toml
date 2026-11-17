@@ -3420,7 +3420,7 @@ stamp = { hash = "b3:469e300ae477e5ef", by = "agent:claude", note = "Re-read: th
 stamp = { hash = "b3:bc6ab78fa36d7423", by = "agent:linux-desktop", note = "Re-read: added the FileChooser portal module (portal/file_chooser.rs, portal_pick_path and FileChoice) to the map, with ADR-0141 (now maintainer tier, proposed) as a dependency; the D-Bus client and portal rows still hold. The wave/alpha5 merge touched nothing this section describes" }
 
 ["CRATE-jstream-platform-linux#purpose"."dep:docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
-stamp = { hash = "b3:51f0dc463828274f", by = "agent:vcam-linux", note = "added LoopbackVcam (v4l2/loopback.rs, vcam.rs) to the table, replaced 'virtual camera out of scope' with ADR-0156's no-root rule, and described the vcam-linux CI test; checked against backends.rs, v4l2.rs, abi.rs and device.rs" }
+stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "round 2: a start where no loopback node opens but some /dev/video node refused this user now says so (denied_message: the video group, then the install steps); the hw test reads FFmpeg on its own thread with a deadline and restarts the camera. The README's LoopbackVcam row and hw-tests paragraph still hold" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/Cargo.toml"]
 stamp = { hash = "b3:1751e857d6cb0f5f", by = "agent:vcam-linux", note = "added LoopbackVcam (v4l2/loopback.rs, vcam.rs) to the table, replaced 'virtual camera out of scope' with ADR-0156's no-root rule, and described the vcam-linux CI test; checked against backends.rs, v4l2.rs, abi.rs and device.rs" }
@@ -3579,7 +3579,7 @@ stamp = { hash = "b3:e0039869f660d565", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:b18bd0cde9b2493d", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "v4l2/gpu.rs imports NV12 as R8 luma and RG8 chroma (offset after the luma rows in one buffer plane, or the second plane for NV12M), refuses short strides and offsets past u32, picks Pass::Nv12, and tests NV12 one- and two-plane at odd sizes against the CPU conversion; matches the section's paragraph and tests list | kept from the merged side: v4l2/gpu.rs imports YUYV buffers as half-width Rgba8Unorm, picks the ring's Pass by layout, converts with the frame's ColorInfo, and its tests cover YUYV in BT.601/709/2020 at both ranges, short buffers and the DeviceLost case; matches the section's paragraph and tests list | kept from the merged side: V4l2Devices bullet: RGB32 FourCCs (AR24/XR24 as Bgra8, AB24/XB24 as Rgba8), on_context with LINEAR import (Shared.linear), EXPBUF export read-only, ring copy waited on before QBUF, failures end the GPU path; checked against v4l2.rs, v4l2/abi.rs, v4l2/gpu.rs, device.rs, format.rs, gpu.rs, dmabuf.rs" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/v4l2/loopback.rs"]
-stamp = { hash = "b3:b7c115c11b92f8ff", by = "agent:vcam-linux", note = "added LoopbackVcam (v4l2/loopback.rs, vcam.rs) to the table, replaced 'virtual camera out of scope' with ADR-0156's no-root rule, and described the vcam-linux CI test; checked against backends.rs, v4l2.rs, abi.rs and device.rs" }
+stamp = { hash = "b3:8572a475ae23a8db", by = "agent:vcam-linux", note = "round 2: a start where no loopback node opens but some /dev/video node refused this user now says so (denied_message: the video group, then the install steps); the hw test reads FFmpeg on its own thread with a deadline and restarts the camera. The README's LoopbackVcam row and hw-tests paragraph still hold" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/v4l2/stream.rs"]
 stamp = { hash = "b3:86240c6d978da38b", by = "agent:claude@session_01K4N6DrL8C1KSQcuHTvpBcs", note = "Deliver::Gpu arm: frame() waits for the GPU copy before streaming.queue, an Err fails the stream without QBUF, and any Ok(None) (short buffer or full ring) counts as skipped, which the README's V4L2 paragraph and frame's rustdoc now say" }
@@ -3606,7 +3606,7 @@ stamp = { hash = "b3:c0088c004ee5b4ac", by = "agent:ab9c156e", note = "Re-read t
 stamp = { hash = "b3:5c91d1782279c741", by = "agent:claude", note = "Re-read Purpose against #516: the PipeWire stream now uses jstream_platform::mailbox and the VA-API upload jstream_platform::nv12 (Nv12Image moved there); edited both bullets. write_nv12's NV12 copy and format dispatch stay here and behave as before." }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/vcam.rs"]
-stamp = { hash = "b3:12ebb1eb9817497a", by = "agent:vcam-linux", note = "added LoopbackVcam (v4l2/loopback.rs, vcam.rs) to the table, replaced 'virtual camera out of scope' with ADR-0156's no-root rule, and described the vcam-linux CI test; checked against backends.rs, v4l2.rs, abi.rs and device.rs" }
+stamp = { hash = "b3:07548de1ca70f677", by = "agent:vcam-linux", note = "round 2: a start where no loopback node opens but some /dev/video node refused this user now says so (denied_message: the video group, then the install steps); the hw test reads FFmpeg on its own thread with a deadline and restarts the camera. The README's LoopbackVcam row and hw-tests paragraph still hold" }
 
 ["CRATE-jstream-platform-macos#purpose"."body"]
 stamp = { hash = "b3:cc369568b860a3f7", by = "agent:claude", note = "Edited the GlobalHotkeys row: wheel_needs_accessibility (CGPreflightPostEventAccess, no prompt), re-exported from lib.rs." }
@@ -7242,7 +7242,7 @@ stamp = { hash = "b3:89a97b65e96a1324", by = "agent:vcam-linux", note = "added t
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:wave-owner", note = "merge: this input is main's at a798a5e8, from #859, which adds this guide; main's record of it is kept below | kept from the merged side: New: optional step per ADR-0066, jstream-daemon --register-vcam (desktop Usage and the outputs panel's own hint), the Program Files copy, Virtual camera output, the 'registered, but not for this version' state in outputs.rs" }
 
 ["GETTING-STARTED#vcam"."dep:docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
-stamp = { hash = "b3:51f0dc463828274f", by = "agent:vcam-linux", note = "added the Linux steps: install v4l2loopback, the modprobe line with card_label JStream Camera and exclusive_caps=1, and how to persist it, matching vcam.rs's remedy and ADR-0156" }
+stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "ADR-0156 is now maintainer tier and proposed; the Linux steps are unchanged and still match vcam.rs's MODPROBE and PERSIST_HINT" }
 
 ["PERF-SUITE#runner"."body"]
 stamp = { hash = "b3:6ef2740094e0f29b", by = "agent:claude-perf-suite", note = "run() now writes report.json before running the bench, and reports both the bench and the threshold failures before returning false; the text says the bench runs after the report is written" }
@@ -7779,16 +7779,16 @@ stamp = { hash = "b3:556c11754d691766", by = "agent:claude-settings", note = "#1
 stamp = { hash = "b3:67b338188a2fdf2c", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, people-only MCP nouns, server parts or gate credentials)" }
 
 ["THREAT-MODEL#vcam"."body"]
-stamp = { hash = "b3:3a7ba072f5d72213", by = "agent:vcam-linux", note = "added the Linux paragraph per ADR-0156: no root, writes only to a free v4l2loopback node, accepted that whoever can open the node reads it; covers now includes v4l2/loopback.rs" }
+stamp = { hash = "b3:8b27b5721133b926", by = "agent:vcam-linux", note = "per review N3: 'never' became 'normally refused', and Accepted names the two driver cases where a second writer isn't refused (exclusive_caps=0 with the same format, exclusive_caps=1 before the first write); ADR-0156 now proposed, maintainer tier" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0066-portable-windows-distribution-v2.md"]
 stamp = { hash = "b3:21bfee63ca110182", by = "agent:vcam-242", note = "Maintainer accepted ADR-0066: the paragraph is now 'Accepted, not yet on main (#242)' quoting his decision, ADR-0066 marked accepted, depends_on moved from superseded ADR-0020 to ADR-0066. #242 stays in Gaps until #561 lands, since the page counts only merged controls; today's behaviour (HKLM InprocServer32 naming the DLL beside the exe, swappable without a prompt) still matches register.rs and vcam_register.rs" }
 
 ["THREAT-MODEL#vcam"."dep:docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
-stamp = { hash = "b3:51f0dc463828274f", by = "agent:vcam-linux", note = "added the Linux paragraph per ADR-0156: no root, writes only to a free v4l2loopback node, accepted that whoever can open the node reads it; covers now includes v4l2/loopback.rs" }
+stamp = { hash = "b3:d06fbe6ea0f30765", by = "agent:vcam-linux", note = "per review N3: 'never' became 'normally refused', and Accepted names the two driver cases where a second writer isn't refused (exclusive_caps=0 with the same format, exclusive_caps=1 before the first write); ADR-0156 now proposed, maintainer tier" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-platform-linux/src/v4l2/loopback.rs"]
-stamp = { hash = "b3:b7c115c11b92f8ff", by = "agent:vcam-linux", note = "added the Linux paragraph per ADR-0156: no root, writes only to a free v4l2loopback node, accepted that whoever can open the node reads it; covers now includes v4l2/loopback.rs" }
+stamp = { hash = "b3:8572a475ae23a8db", by = "agent:vcam-linux", note = "per review N3: 'never' became 'normally refused', and Accepted names the two driver cases where a second writer isn't refused (exclusive_caps=0 with the same format, exclusive_caps=1 before the first write); ADR-0156 now proposed, maintainer tier" }
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-platform-windows/src/vcam/shared.rs"]
 stamp = { hash = "b3:3ca0e169f953f32d", by = "agent:claude", note = "#540's Controls (in flight) paragraph matches vcam/shared.rs and sink.rs (an existing control mapping is refused unless its owner and DACL are ones the producer sets) and win/frames.rs (the DLL checks the owner of a session block's textures and fence). The wave/m1-3 merge added the #242 Accepted paragraph (ADR-0066's %ProgramFiles% copy, #561); the merged Gaps line keeps both: the user-writable DLL until #561 lands, and the pre-existing mapping DACL (#356) with its fix in flight here" }

@@ -140,7 +140,8 @@ jobs:
           sudo chmod a+rw /dev/video*
           v4l2-ctl --list-devices 2>/dev/null || ls -l /dev/video*
       - name: Publish and read back
-        run: cargo test -p jstream-platform-linux --features hw-tests --locked --lib -- --ignored --nocapture v4l2::loopback::
+        run: |
+          cargo test -p jstream-platform-linux --features hw-tests --locked --lib -- --ignored --nocapture v4l2::loopback::
 
   # The browser helper on Linux (ADR-0095): builds it with the pinned CEF, which its build
   # downloads, lays it out as it ships (`cargo xtask browser-linux`), and opens a page

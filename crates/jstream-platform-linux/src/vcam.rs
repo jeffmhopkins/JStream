@@ -52,6 +52,19 @@ pub fn missing_remedy() -> String {
     )
 }
 
+/// Why a start found no device when some video nodes refused this user: the
+/// v4l2loopback device may be among them.
+#[must_use]
+pub fn denied_message(paths: &[String]) -> String {
+    format!(
+        "no v4l2loopback device could be opened, and this user may not open {}. If \
+         v4l2loopback is loaded, add yourself to the `video` group (`sudo usermod -aG \
+         video $USER`, then log in again); otherwise {}",
+        paths.join(", "),
+        missing_remedy()
+    )
+}
+
 /// `V4L2_CAP_VIDEO_OUTPUT`: the node takes frames written to it.
 pub(crate) const CAP_VIDEO_OUTPUT: u32 = 0x2;
 /// `V4L2_CAP_DEVICE_CAPS`: `device_caps` is filled in and describes this node.
@@ -248,6 +261,12 @@ mod tests {
     fn a_short_source_is_refused() {
         let (mut scratch, mut out) = (Vec::new(), Vec::new());
         assert!(bgra_to_i420(&[0; 8], 8, 2, 2, &mut scratch, &mut out).is_err());
+    }
+
+    #[test]
+    fn a_refused_node_names_the_video_group_and_the_module() {
+        let m = denied_message(&["/dev/video10".to_owned()]);
+        assert!(m.contains("/dev/video10") && m.contains("video` group") && m.contains(MODPROBE));
     }
 
     #[test]

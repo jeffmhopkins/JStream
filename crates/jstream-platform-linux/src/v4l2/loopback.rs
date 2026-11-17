@@ -19,7 +19,9 @@ use super::abi::{
 };
 use super::device::Device;
 use super::format::c_name;
-use crate::vcam::{COMPONENT, Node, bgra_to_i420, camera_size, i420_bytes, missing_remedy, pick};
+use crate::vcam::{
+    COMPONENT, Node, bgra_to_i420, camera_size, denied_message, i420_bytes, missing_remedy, pick,
+};
 
 /// The nodes this process's virtual cameras write to.
 static IN_USE: Mutex<Vec<String>> = Mutex::new(Vec::new());
@@ -85,14 +87,22 @@ impl LoopbackVcam {
 }
 
 /// Every `/dev/videoN` node this user can open, as `VIDIOC_QUERYCAP` describes it, with
-/// the device opened.
-fn loopback_nodes() -> Vec<(Node, Device)> {
-    super::backend::nodes()
+/// the device opened, and the paths of those it isn't allowed to open.
+fn loopback_nodes() -> (Vec<(Node, Device)>, Vec<String>) {
+    let mut denied = Vec::new();
+    let nodes = super::backend::nodes()
         .into_iter()
         .filter_map(|path| {
             let path = path.to_str()?.to_owned();
             let number = super::format::node_number(path.strip_prefix("/dev/")?)?;
-            let mut device = Device::open(&path).ok()?;
+            let mut device = match Device::open(&path) {
+                Ok(device) => device,
+                Err(PlatformError::Os { code, .. }) if code == u32::try_from(libc::EACCES).ok() => {
+                    denied.push(path);
+                    return None;
+                }
+                Err(_) => return None,
+            };
             let cap = device.capability().ok()?;
             device.what = format!("virtual camera {path:?}");
             let node = Node {
@@ -105,7 +115,8 @@ fn loopback_nodes() -> Vec<(Node, Device)> {
             };
             Some((node, device))
         })
-        .collect()
+        .collect();
+    (nodes, denied)
 }
 
 /// The I420 output format at `width` x `height`, BT.709 limited range.
@@ -173,7 +184,7 @@ impl VcamSink for LoopbackVcam {
                 ),
             }
         })?;
-        let mut nodes = loopback_nodes();
+        let (mut nodes, denied) = loopback_nodes();
         let order: Vec<String> = pick(&nodes.iter().map(|(n, _)| n.clone()).collect::<Vec<_>>())
             .into_iter()
             .map(|n| n.path.clone())
@@ -210,6 +221,12 @@ impl VcamSink for LoopbackVcam {
                 what: "every v4l2loopback device (another app is writing to each)",
             },
             Some(e) => e,
+            // The module may be loaded, but its device isn't this user's to open.
+            None if !denied.is_empty() => PlatformError::Os {
+                call: "open",
+                code: u32::try_from(libc::EACCES).ok(),
+                message: denied_message(&denied),
+            },
             None => PlatformError::MissingComponent {
                 component: COMPONENT,
                 remedy: missing_remedy(),
@@ -316,18 +333,26 @@ mod hw_tests {
         VideoFrame::new(info, vec![Plane::new(data, (W * 4) as usize)]).expect("frame")
     }
 
+    fn format() -> VcamFormat {
+        VcamFormat {
+            size: FrameSize::new(W, H).expect("size"),
+            pixel_format: PixelFormat::Bgra8,
+            frame_period: Timebase::new(1, 30).expect("period"),
+        }
+    }
+
     /// The camera publishes, and FFmpeg reading the device as a webcam gets its frames
     /// back: red on the left and blue on the right, within the round trip's rounding.
+    /// Then it stops and starts again, as a user restarting the output does.
     #[test]
     #[ignore = "needs v4l2loopback loaded and FFmpeg"]
     fn loopback_frames_read_back_through_ffmpeg() {
         let mut cam = LoopbackVcam::new();
-        cam.start(VcamFormat {
-            size: FrameSize::new(W, H).expect("size"),
-            pixel_format: PixelFormat::Bgra8,
-            frame_period: Timebase::new(1, 30).expect("period"),
-        })
-        .expect("start: is v4l2loopback loaded?");
+        cam.start(format()).expect("start: is v4l2loopback loaded?");
+        // A frame before FFmpeg opens the node: with `exclusive_caps=1` it offers
+        // capture only once a writer has written.
+        cam.publish(VideoSurface::Cpu(frame([0, 0, 255], [255, 0, 0], 0)))
+            .expect("first publish");
         let path = cam.device_path().expect("a device").to_owned();
         assert!(in_use(&path), "the webcam list leaves our camera out");
 
@@ -335,7 +360,7 @@ mod hw_tests {
         let writer = {
             let stop = Arc::clone(&stop);
             std::thread::spawn(move || {
-                let mut n = 0;
+                let mut n = 1;
                 while !stop.load(Ordering::Acquire) {
                     cam.publish(VideoSurface::Cpu(frame([0, 0, 255], [255, 0, 0], n)))
                         .expect("publish");
@@ -360,24 +385,30 @@ mod hw_tests {
             .stdout(Stdio::piped())
             .spawn()
             .expect("ffmpeg");
-        let mut out = Vec::new();
-        ffmpeg
-            .stdout
-            .take()
-            .expect("stdout")
-            .read_to_end(&mut out)
-            .expect("read");
+        // Read on a thread of its own, so a hung FFmpeg fails the test at the deadline
+        // instead of blocking the read.
+        let mut stdout = ffmpeg.stdout.take().expect("stdout");
+        let reader = std::thread::spawn(move || {
+            let mut out = Vec::new();
+            stdout.read_to_end(&mut out).map(|_| out)
+        });
         let deadline = Instant::now() + Duration::from_secs(20);
         let status = loop {
             if let Some(s) = ffmpeg.try_wait().expect("wait") {
-                break s;
+                break Some(s);
             }
-            assert!(Instant::now() < deadline, "ffmpeg didn't finish");
+            if Instant::now() >= deadline {
+                let _ = ffmpeg.kill();
+                let _ = ffmpeg.wait();
+                break None;
+            }
             std::thread::sleep(Duration::from_millis(50));
         };
         stop.store(true, Ordering::Release);
         let mut cam = writer.join().expect("writer");
+        let status = status.expect("ffmpeg didn't finish in 20 s");
         assert!(status.success(), "ffmpeg failed: {status}");
+        let out = reader.join().expect("reader").expect("read");
 
         let frame_bytes = (W * H * 3) as usize;
         assert_eq!(out.len(), frame_bytes * 5, "five {W}x{H} frames");
@@ -402,5 +433,10 @@ mod hw_tests {
         cam.stop().expect("stop");
         assert!(!in_use(&path));
         assert_eq!(cam.format(), None);
+
+        cam.start(format()).expect("start again");
+        cam.publish(VideoSurface::Cpu(frame([0, 0, 255], [255, 0, 0], 0)))
+            .expect("publish after a restart");
+        cam.stop().expect("stop again");
     }
 }

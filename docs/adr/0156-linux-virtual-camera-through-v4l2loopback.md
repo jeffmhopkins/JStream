@@ -2,14 +2,14 @@
 id = "ADR-0156"
 title = "The Linux virtual camera through v4l2loopback"
 kind = "adr"
-status = "accepted"
-tier = "agent"
+status = "proposed"
+tier = "maintainer"
 -->
 
 # ADR-0156: The Linux virtual camera through v4l2loopback
 
 <!-- @generated begin adr-status -->
-> **Status:** accepted
+> **Status:** proposed
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -36,10 +36,14 @@ The forces:
   takes whole frames through `write()`, copying each into its next buffer without
   waiting for a reader.
 
-This is agent tier ([ADR-0043](0043-narrow-maintainer-tier.md)): Linux is already a
-supported platform (ADR-0060), the virtual camera is already part of the product on
-Windows, and this decision adds no privilege, licence, dependency or compatibility
-promise. JStream asks for no root and loads no module.
+This is maintainer tier ([ADR-0043](0043-narrow-maintainer-tier.md)): it brings the
+virtual camera into Linux's supported scope, which ADR-0060 §9 held back as its own
+later decision, and that is product scope, as for the Linux browser source
+([ADR-0095](0095-browser-helper-on-linux.md)) and desktop app
+([ADR-0141](0141-desktop-app-on-linux.md)) from the same list. It also accepts new
+risks in the threat model ([Virtual camera](../security/threat-model.md#vcam)): any
+process that can open the node reads the program. It adds no privilege, licence or
+dependency: JStream asks for no root and loads no module.
 
 <a id="decision"></a>
 ## Decision
