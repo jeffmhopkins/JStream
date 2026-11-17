@@ -2514,7 +2514,7 @@ stamp = { hash = "b3:5c2b51f837551c47", by = "agent:mac1-audio", note = "This PR
 stamp = { hash = "b3:9cd9a03440542efe", by = "agent:mac-e2e", note = "Diagnostics only (the 60 fps assertion names skipped ticks and stats; the binary test's timeout names the call); Purpose's test list still holds" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/receiver/main.rs"]
-stamp = { hash = "b3:4ddf821547fef831", by = "agent:mac-e2e", note = "Diagnostics only (the 60 fps assertion names skipped ticks and stats; the binary test's timeout names the call); Purpose's test list still holds" }
+stamp = { hash = "b3:d81d9054a7cdb9ca", by = "agent:mac-e2e", note = "The second run's uptime check now counts from its own output.start; Purpose's test list is unchanged" }
 
 ["CRATE-jstream-daemon#purpose"."file:apps/jstream-daemon/tests/receiver/probe.rs"]
 stamp = { hash = "b3:b3fdeb6d5713702a", by = "agent:mac-e2e", note = "Tests list now says tests/receiver runs on Linux and macOS, records to MP4 as well as streaming, and the binary test streams and records on its own backends; the rest of Purpose is unchanged by this test-only diff" }
@@ -2529,7 +2529,7 @@ stamp = { hash = "b3:0eed8e42f83aed49", by = "agent:mac-e2e", note = "Rewritten 
 stamp = { hash = "b3:9cd9a03440542efe", by = "agent:mac-e2e", note = "Diagnostics only in the 60 fps test and the binary test's call timeout; what the section says each test checks is unchanged" }
 
 ["CRATE-jstream-daemon#receiver-e2e"."file:apps/jstream-daemon/tests/receiver/main.rs"]
-stamp = { hash = "b3:4ddf821547fef831", by = "agent:mac-e2e", note = "Diagnostics only in the 60 fps test and the binary test's call timeout; what the section says each test checks is unchanged" }
+stamp = { hash = "b3:d81d9054a7cdb9ca", by = "agent:mac-e2e", note = "The uptime-restart check is now 'no more than the time since this output.start and below the first run's last tick', which still matches 'starts again at the next one'" }
 
 ["CRATE-jstream-daemon#receiver-e2e"."file:apps/jstream-daemon/tests/receiver/probe.rs"]
 stamp = { hash = "b3:b3fdeb6d5713702a", by = "agent:mac-e2e", note = "Rewritten for the macOS port: VideoToolbox/AudioToolbox and NoGpuInterop as serve.rs builds them, the new recording test, the binary test streaming and recording with its Keychain key cleared, the xtask refusing OpenH264 options on macOS, and the e2e-stream-macos CI job" }

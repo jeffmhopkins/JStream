@@ -742,18 +742,23 @@ async fn a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats() 
     let volume = mean_volume(&file);
     assert!(volume > -25.0, "the microphone is in it: {volume} dB");
 
-    // A second run's uptime starts again from 0.
+    // A second run's uptime starts again from 0: its first tick counts no more than the
+    // time since this `output.start`, however late a slow machine sends that tick, and
+    // less than the first run's last tick.
     let receiver = Receiver::start(port, KEY, &dir.join("again.flv"));
     let before = rig.stats("live").len();
+    let restarted = Instant::now();
     rig.start("live").await;
     rig.until("a tick of the second run", |rig| {
         rig.stats("live").len() > before
     })
     .await;
+    let since = restarted.elapsed().as_secs_f64();
     let first = rig.stats("live")[before].clone();
     assert!(
-        first.uptime_ms < 2_000,
-        "the uptime starts again: {first:?}"
+        first.uptime_ms as f64 / 1000.0 <= since + 0.5 && first.uptime_ms < last.uptime_ms,
+        "the uptime starts again: {first:?} {since:.3} s after output.start, the first \
+         run ended at {last:?}"
     );
     rig.stop("live").await;
     drop(receiver.finish());
