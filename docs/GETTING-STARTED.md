@@ -61,10 +61,10 @@ again for Screen Recording, Camera and Microphone after each update. Settings an
 are in `~/Library/Application Support/JStream`. The macOS build has no browser sources
 and no virtual camera yet.
 
-**On Linux** (x86_64, GNOME or KDE Plasma): on Ubuntu 24.04 or later or Debian 12 or
-later, download `jstream-v<version>-linux-amd64.deb` and run
+**On Linux** (x86_64, GNOME or KDE Plasma): on Ubuntu 24.04 or later, download
+`jstream-v<version>-linux-amd64.deb` and run
 `sudo apt install ./jstream-v<version>-linux-amd64.deb`, then start JStream from the app
-menu. On other distributions, download `jstream-v<version>-linux-x86_64.AppImage`, make it
+menu. On other distributions, Debian included, download `jstream-v<version>-linux-x86_64.AppImage`, make it
 executable (`chmod +x`) and run it. Settings and scenes are in `~/.local/share/jstream`.
 Without a VA-API GPU encoder, JStream offers to download Cisco's OpenH264 for streaming. The
 Linux build has no virtual camera and no media-file sources yet.
