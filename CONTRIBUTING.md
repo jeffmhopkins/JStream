@@ -56,6 +56,47 @@ happens to a report.
 - **Docs are checked like code.** [docs/DOCS.md](docs/DOCS.md) explains the
   hash-verified sections and `cargo xtask docs check`.
 
+<a id="working-on-the-code"></a>
+## Working on the code
+<!-- @section
+depends_on = ["docs/ARCHITECTURE.md#repo-layout", "docs/ARCHITECTURE.md#crate-map"]
+-->
+
+**Find your way around.** [ARCH › Repository layout](docs/ARCHITECTURE.md#repo-layout)
+says what each top-level folder holds, and [ARCH › Crate map](docs/ARCHITECTURE.md#crate-map)
+gives every crate's layer and job. Each crate and app has a README; its first section says
+what the crate is for and which rules apply to it. To see everything that governs one
+file (rules, doc sections and ADRs), run `cargo xtask docs for <path>`.
+
+**Build and run.** [README › Build and run](README.md#build) has the commands. Everything
+builds on every OS, and the tests run on fakes, so a Linux machine can work on Windows or
+macOS code. On Linux the GPU tests need Vulkan; Mesa's software driver (lavapipe, in
+`mesa-vulkan-drivers`) is what CI uses.
+
+**Before you push**, run what CI runs ([`ci.yml`](.github/workflows/ci.yml)):
+
+```sh
+cargo fmt --all --check
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo xtask docs check          # stale or broken doc sections
+cargo xtask lint-deps           # crate layers, unsafe and dependency rules
+cargo deny check
+```
+
+CI also lints the macOS crate for `aarch64-apple-darwin` and the web UI for `wasm32`, and
+builds the UI with `trunk`. Those jobs are listed in `ci.yml` with their exact commands.
+
+**When a check says a doc is stale**, re-read the section it names against your change,
+edit it if it's wrong, and record the re-read with `cargo xtask docs verify`
+([CLAUDE › Your documentation duty](CLAUDE.md#docs-duty),
+[DOCS › Hash-bound verification](docs/DOCS.md#verification)).
+
+**Testing on real hardware.** The fakes don't cover devices, encoders or the GPU interop.
+Each OS has a runbook for the checks only a real machine can run:
+[Windows](docs/runbooks/windows-hardware-pass.md), [macOS](docs/runbooks/mac-testing.md)
+and [Linux](docs/runbooks/linux-testing.md).
+
 <a id="licensing"></a>
 ## Licensing
 <!-- @section
