@@ -8,6 +8,8 @@
 //! everywhere.
 
 #[cfg(target_os = "linux")]
+mod decoder;
+#[cfg(target_os = "linux")]
 mod display;
 #[cfg_attr(
     not(target_os = "linux"),
@@ -25,6 +27,14 @@ mod ffi;
     )
 )]
 mod h264;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux decoder; built elsewhere for its tests"
+    )
+)]
+mod h264_dec;
 // Used by the Linux session; built elsewhere for its tests, which use all of it.
 #[cfg(any(target_os = "linux", test))]
 mod hevc;
@@ -41,6 +51,8 @@ mod upload;
 
 use jstream_platform::media::Codec;
 
+#[cfg(target_os = "linux")]
+pub(crate) use decoder::VaapiH264Decoder;
 #[cfg(target_os = "linux")]
 pub(crate) use session::VaapiEncoder;
 

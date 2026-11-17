@@ -15,6 +15,32 @@
 //! Everything here is pure Rust and platform-independent, and tested everywhere.
 
 pub(crate) mod audio;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod h264;
+#[cfg(target_os = "linux")]
+mod movie;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod mp4;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod yuv;
 
 use std::fs::File;
 use std::path::Path;
@@ -40,18 +66,42 @@ impl MediaDecoders for LinuxMediaDecoders {
         config: &MediaDecoderConfig,
     ) -> Result<Box<dyn MediaDecoder>, PlatformError> {
         let file = File::open(path).map_err(|err| open_error(path, &err))?;
+        let movie_file = file.try_clone().map_err(|err| open_error(path, &err))?;
+        if let Some(mp4) = mp4::Mp4::open(movie_file)? {
+            return open_movie(mp4, config);
+        }
         if let Some(audio) = AudioFile::open(path, file, config.audio)? {
             return Ok(Box::new(AudioOnly::new(audio)));
         }
         Err(PlatformError::Unsupported {
             what: format!(
-                "this media file's container on Linux ({}): WAV, FLAC, Ogg and MP3 play so far",
+                "this media file's container on Linux ({}): MP4, MOV, WAV, FLAC, Ogg and MP3 \
+                 play so far",
                 path.extension()
                     .and_then(|e| e.to_str())
                     .unwrap_or("no extension")
             ),
         })
     }
+}
+
+/// A movie file's decoder: VA-API video, so Linux only.
+#[cfg(target_os = "linux")]
+fn open_movie(
+    mp4: mp4::Mp4,
+    config: &MediaDecoderConfig,
+) -> Result<Box<dyn MediaDecoder>, PlatformError> {
+    Ok(Box::new(movie::Movie::open(mp4, config)?))
+}
+
+#[cfg(not(target_os = "linux"))]
+fn open_movie(
+    _mp4: mp4::Mp4,
+    _config: &MediaDecoderConfig,
+) -> Result<Box<dyn MediaDecoder>, PlatformError> {
+    Err(PlatformError::Unsupported {
+        what: "movie files away from Linux".into(),
+    })
 }
 
 /// The error for a file that didn't open.

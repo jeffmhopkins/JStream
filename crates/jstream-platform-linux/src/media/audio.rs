@@ -459,7 +459,10 @@ impl AudioFile {
 }
 
 /// `block` without the frames before `until`: `None` when it ends before it.
-fn cut_before(block: AudioBuffer, until: MediaTime) -> Result<Option<AudioBuffer>, PlatformError> {
+pub(crate) fn cut_before(
+    block: AudioBuffer,
+    until: MediaTime,
+) -> Result<Option<AudioBuffer>, PlatformError> {
     let format = block.format();
     let rate = i64::from(format.sample_rate());
     let start = block
