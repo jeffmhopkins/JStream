@@ -37,7 +37,7 @@ depends_on = ["docs/DOCS.md#verification", "docs/DOCS.md#notes"]
 - Never type dates, revisions or history into docs; git provides them. Never edit
   `@generated` blocks; run `cargo xtask docs generate` (e.g. after changing an ADR's status).
 - Delivering or advancing a roadmap item → update its entry in `docs/progress.toml` (PR
-  number, then `status`) and run `cargo xtask docs generate`; it feeds the README's progress table.
+  number, then `status`) and run `cargo xtask docs generate`; it feeds the progress table in PROGRESS.md.
 - New external URL → register it in `docs/external.toml`. Repeated value → `docs/facts.toml`.
 - New crate root → add its `//! Docs:` line.
 - Never edit `docs/verified.toml` by hand. Only `docs verify` writes it (apart from

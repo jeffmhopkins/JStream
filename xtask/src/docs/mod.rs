@@ -94,14 +94,14 @@ fn load(root: &Path) -> Result<Loaded> {
 }
 
 /// Rewrites every `@generated` block from its source, as `docs generate` does: the ADR
-/// status banners and index, the README's progress table and the UI features summary. Returns what was written
+/// status banners and index, the progress table in PROGRESS.md and the UI features summary. Returns what was written
 /// and the problems that stopped a block.
 pub(crate) fn write_generated(root: &Path) -> Result<generate::Generated> {
     let l = load(root)?;
     let mut g = generate::generate(&l.docs);
-    let (readme, problems) = progress::generate(root, &l.docs);
+    let (progress_doc, problems) = progress::generate(root, &l.docs);
     g.files
-        .extend(readme.map(|(path, line, text)| (path, Some(line), text)));
+        .extend(progress_doc.map(|(path, line, text)| (path, Some(line), text)));
     g.problems.extend(problems);
     let (ui, problems) = summary::generate(&l.docs);
     g.files
@@ -1617,12 +1617,12 @@ mod tests {
         assert!(work.0.join("src/w.rs").exists());
     }
 
-    /// Two branches that each mark a different roadmap item done and regenerate the README
+    /// Two branches that each mark a different roadmap item done and regenerate PROGRESS.md
     /// conflict only inside its progress block: `docs merge-main` takes the wave's side,
     /// regenerates the block from the merged `docs/progress.toml` and commits.
     #[test]
     fn merge_main_regenerates_conflicting_generated_blocks() {
-        let readme = "<!-- @doc\nid = \"README\"\ntitle = \"R\"\nkind = \"normative\"\nstatus = \"active\"\nreview_every = \"90d\"\n-->\n\n# R\n\n<!-- @generated begin progress -->\n<!-- @generated end progress -->\n";
+        let progress_doc = "<!-- @doc\nid = \"PROGRESS\"\ntitle = \"P\"\nkind = \"normative\"\nstatus = \"active\"\nreview_every = \"90d\"\n-->\n\n# P\n\n<!-- @generated begin progress -->\n<!-- @generated end progress -->\n";
         let item = |id: &str, status: &str| {
             let prs = if status == "done" { "[1]" } else { "[]" };
             format!(
@@ -1639,7 +1639,10 @@ mod tests {
         };
         let base = progress("planned", "planned");
         let mut files = REGISTRIES.to_vec();
-        files.extend([("README.md", readme), ("docs/progress.toml", base.as_str())]);
+        files.extend([
+            ("PROGRESS.md", progress_doc),
+            ("docs/progress.toml", base.as_str()),
+        ]);
         let (origin, work) = origin_and_clone("merge-generated", &files);
         let generated = |f: &Fixture| {
             let g = write_generated(&f.0).expect("generates");
@@ -1659,8 +1662,8 @@ mod tests {
 
         let m = merge::merge_main(&work.0, "wave/m1").expect("merges");
         assert!(m.committed && m.refused.is_empty(), "{m:?}");
-        assert_eq!(m.generated, vec!["README.md".to_owned()]);
-        let text = std::fs::read_to_string(work.0.join("README.md")).expect("readme");
+        assert_eq!(m.generated, vec!["PROGRESS.md".to_owned()]);
+        let text = std::fs::read_to_string(work.0.join("PROGRESS.md")).expect("progress doc");
         assert!(text.contains("2 of 3 items are merged"), "{text}");
         assert!(!text.contains("<<<<<<<"), "{text}");
         assert!(write_generated(&work.0).expect("again").files.is_empty());
