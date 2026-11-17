@@ -76,7 +76,7 @@ tag = "v0.1.0-alpha.5"
 [[release]]
 id = "beta.1"
 version = "0.1.0-beta.1"
-goal = "No new features: what the alphas ship, dependable on Windows, unsigned, and with no promise that projects saved by earlier builds load (ROADMAP.md#beta)"
+goal = "No new features: what the alphas ship, made dependable, with desktop apps for Windows, macOS and Linux, unsigned, and with no promise that projects saved by earlier builds load (ROADMAP.md#beta)"
 
 [[target]]
 release = "beta.1"
@@ -253,6 +253,34 @@ release = "beta.1"
 title = "Security basics: the threat-model follow-ups, a browser page permission policy, a GPU-hang story for shader packs, and asking before a new agent connects"
 status = "planned"
 issues = [347, 349, 1229]
+
+[[target]]
+release = "beta.1"
+title = "Every platform: the release attaches the Windows zip, the macOS disk image, and the Linux .deb and AppImage, each built from the tag"
+status = "planned"
+issues = [1515]
+note = "CI already builds the .deb, AppImage and .dmg after review; release.yml gains the jobs that attach them"
+
+[[target]]
+release = "beta.1"
+title = "macOS: one pass on the downloaded .dmg on Apple Silicon, the core flows working, and no known bug breaking one"
+status = "planned"
+issues = [1356, 1099, 648, 644, 609, 600, 590]
+note = "capture, webcam, microphone and desktop audio, going live, recording, media files, snapshots and a graceful stop; the open lines of the macOS hardware checklist"
+
+[[target]]
+release = "beta.1"
+title = "Linux: one pass on the downloaded .deb and AppImage, on GNOME (Wayland) and KDE Plasma, the core flows working, and no known bug breaking one"
+status = "planned"
+issues = [1357, 1142, 1482, 1330, 1266, 942, 832, 666, 616, 514, 1196]
+note = "portal capture, webcam, PipeWire audio, going live on VA-API or OpenH264, recording, browser pages, media files, snapshots and a graceful stop; the open lines of the Linux checklist"
+
+[[target]]
+release = "beta.1"
+title = "Wanted, not waited for: browser sources on macOS through CEF, and a virtual camera on macOS (OBS Studio's camera extension) and on Linux (v4l2loopback)"
+status = "planned"
+issues = [1516]
+note = "each needs its own ADR and ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta)"
 
 [[milestone]]
 id = "M0"
@@ -1365,13 +1393,14 @@ title = "Linux OpenH264 download (ADR-0140)"
 status = "done"
 prs = [536, 1015, 1041]
 note = "store, check, loader and encoder (#536, landed with wave/m3-2, #663); the pin's two SHA-256 values recorded from Cisco's server, and CI's e2e-stream job downloads OpenH264 and streams on it (#1015); the UI offers the download in Encoders, with Cisco's notice, licence link and full licence text, through protocol 0.69's codec.downloads, codec.download and codec.delete (#1041)"
-needs = ["build"]
 
 [[item]]
 id = "LNX3"
 milestone = "M3"
 title = "AAC-LC encoder in Rust, patent check first (ADR-0140)"
 status = "planned"
+release = "beta.1"
+gate = true
 prs = [508, 518, 723, 727, 799]
 note = "patent check ADR-0062 accepted (#508); encoder and Linux wiring (#518), landed with wave/m3-2 (#663); TNS (#723, more tests #727) landed with wave/m3-3 (#786); intensity stereo (#799) landed with wave/m3-4 (#827); before the Linux app ships the encoder its licence information must say JStream holds no AAC patent licence and name Via LA (ADR-0062)"
 needs = ["build"]
@@ -1410,8 +1439,8 @@ title = "Shader sources: multipass WGSL packs with feedback, inputs and audio, w
 status = "hardware"
 release = "alpha.4"
 gate = true
-prs = [1034, 1048, 1050, 1052, 1064, 1085]
-note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088); for the cockpit scenes (warp, reflections, audio glow) that browser sources draw on the CPU today"
+prs = [1034, 1048, 1050, 1052, 1064, 1085, 1108]
+note = "ADR-0093 (agent tier) and the program in jstream-effects and jstream-render (#1034), and the engine wiring: kinds, stand-ins, scene slots, restart on show and audio (#1048); writing packs over the protocol and MCP is decided by ADR-0097 (maintainer tier, accepted): the quarantine follows the shader digest (#1064), and pack.write, pack.delete, pack.list and pack.read (protocol 0.72, #1085), whose Windows and macOS run is item 20 of the Windows hardware pass (#1088)"
 
 [[item]]
 id = "AG1"
