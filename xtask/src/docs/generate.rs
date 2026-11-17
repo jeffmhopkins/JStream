@@ -146,7 +146,7 @@ pub(crate) fn join(lines: &[&str], like: &str) -> String {
 
 /// `doc`'s text with the inside of its `name` block replaced by `body`, and the 1-based
 /// line of the begin marker. Used by the generators that own one block in a hand-written
-/// doc (the README's progress table, the UI features summary).
+/// doc (the progress table in PROGRESS.md, the UI features summary).
 pub(crate) fn with_block(doc: &Doc, name: &str, body: &str) -> Result<(String, usize), String> {
     let lines: Vec<&str> = doc.text.lines().collect();
     let open = outside_fences(&lines);

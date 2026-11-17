@@ -148,10 +148,10 @@ scripts\release-pass.bat -ManualOnly -PtzController 192.168.1.20
 | versions | `jstream-daemon --version` and `jstream-cli version` name `-Expect` | |
 | daemon starts | the daemon prints its `listening on` line | |
 | kind.list | it lists the alpha.5 kinds: the new filters, the depth-aware 3D filters, `model`, `light`, `follow_pointer`, the MIDI sources and `network_audio` | #1226, #1227, #1231, #1225, #1222, #1223, #1224 |
-| profile.get | `thread_cpu` is on, `jstream-render` and `jstream-frames` are among the threads, and the views, warm, streams and PTZ counters are there; a program frame over budget or skipped is a warning | #1221 |
+| profile.get | `thread_cpu` is on (`jstream-render` and `jstream-frames` missing is a warning: they run only while an output or a contact sheet does), and the views, warm, streams and PTZ counters are there; a program frame over budget or skipped is a warning | #1221 |
 | snapshot of a browser page | a green HTML page snapshots green | #1184, #1194, #1215 |
 | snapshot of a display capture | the snapshot isn't one flat colour | #1194, #1215 |
-| save, new, open | `collection.new`, `save_as` and `open` round-trip a scene, and `collection.info` lists the project first in the recent list | #1218 |
+| save, new, open | `collection.new`, `save_as` and `open` round-trip a scene, and `collection.info` names the opened project; the recent list is the app's, so the daemon's empty one is skipped and M5 checks it | #1218 |
 | webcam formats | each webcam lists its formats, and its controls when it has any; no webcam is a warning | #1195, #1196 |
 | bench | `jstream-cli bench --scenario all,display` (and `webcam` with one plugged in) passes every default gate; the media scenario runs with `-Media` or a file ffmpeg makes | #1220, #1140 |
 | graceful stop | Ctrl-C makes the daemon print `stopped` and exit 0 | |
@@ -162,7 +162,7 @@ scripts\release-pass.bat -ManualOnly -PtzController 192.168.1.20
 -->
 
 What the alpha.5 run checks: the fifteen alpha.5 targets that wait on a Windows run
-(the README's progress table, now under beta.1) and a real PTZ controller. Run it on the
+(the progress table in PROGRESS.md, now under beta.1) and a real PTZ controller. Run it on the
 released zip, `v0.1.0-alpha.5`, with [the release pass](#release-pass). Report each
 item's result on its issues; a failure gets its own issue, labelled `windows-hardware`,
 that links back to the item.
@@ -309,7 +309,7 @@ Home goes back to the stored camera and the preset comes back. Packets counted a
   `ffmpeg -list_devices true -f dshow`).
 - **Toolchain:** the MSVC Rust toolchain. Items that build CEF also need an
   **x64 Native Tools Command Prompt for VS** with CMake and Ninja on `PATH`, as
-  `spikes/s4-browser/run-s4.ps1` sets up.
+  `scripts/windows-pass.ps1` sets up for itself (`Enter-VsEnv`).
 - **Administrator rights** for the virtual camera registration items (one UAC prompt
   each).
 - **Builds, in this order:** `main` (the [On main](#main) items and the

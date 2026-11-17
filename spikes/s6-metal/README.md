@@ -19,7 +19,8 @@ macOS crate gets GPU frames. It checks, on a real Mac, the path that decision an
 Above all, it decides how that hand-off is synchronised. It measures two choices, plus a
 variant of one, against a control that has no synchronisation.
 
-It is modelled on [spike S1](../s1-gpu/README.md#pipeline), which proved the Windows path.
+It is modelled on spike S1, which proved the Windows path
+([ARCH › GPU pipeline](../../docs/ARCHITECTURE.md#gpu-pipeline)).
 
 The crate is not a workspace member. It has its own `[workspace]` table and its own
 `Cargo.lock`.

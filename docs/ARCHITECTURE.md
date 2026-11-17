@@ -91,21 +91,26 @@ JStream/
 ├── rust-toolchain.toml  deny.toml  rustfmt.toml  clippy.toml  .editorconfig
 ├── CLAUDE.md               # builder-agent entry point; points to RULES/DOCS
 ├── REVIEW.md               # reviewer-agent prompt; its verdict drives review-gate
+├── CONTRIBUTING.md  SECURITY.md  CODE_OF_CONDUCT.md
 ├── ROADMAP.md
-├── crates/                 # all library crates, flat, every name prefixed `jstream-`
+├── crates/                 # all library crates, flat, every name prefixed `jstream-`;
+│                           # WGSL shaders, fonts and schema snapshots live in their crate
 ├── apps/                   # host binaries (thin)
-├── effects/                # built-in WGSL effect packs (data)
-├── assets/                 # icons, fonts, test media
-├── tests/                  # cross-crate scenario + golden tests
-├── spikes/                 # M0 technical spikes (throwaway, not workspace members)
+├── spikes/                 # open technical spikes (throwaway, not workspace members); a
+│                           # finished one is removed once its results are recorded
 ├── design/                 # UI design references (prototype source); not normative
+├── fuzz/                   # cargo-fuzz targets (own workspace and lockfile)
+├── scripts/                # hardware-pass and release-pass scripts, Linux and macOS install scripts
 ├── xtask/                  # docs, lint-deps, governance, dist (the portable zip), dist-linux (the Linux .deb and AppImage), browser-linux (the Linux browser helper's folder), e2e-stream, perf (the perf suite and its scenes), gen-schema, golden
 ├── docs/
-│   ├── ARCHITECTURE.md  RULES.md  DOCS.md
+│   ├── ARCHITECTURE.md  RULES.md  DOCS.md  GETTING-STARTED.md  UI-FEATURES.md
 │   ├── external.toml       # external resources we rely on (URL + what we rely on)
 │   ├── facts.toml          # pinned facts, one source each
+│   ├── progress.toml       # roadmap items and their PRs; feeds the generated progress table
+│   ├── verified.toml       # verification ledger; written only by `cargo xtask docs verify`
 │   ├── adr/                # NNNN-title.md (+ TEMPLATE.md, generated README.md index)
-│   └── guides/
+│   ├── runbooks/           # release, hardware-pass, waves and per-platform testing steps
+│   └── security/           # threat model
 └── .github/                # workflows (CI, governance, review-gate, sweep), their tests, Dependabot config,
                             # issue and PR templates
 ```

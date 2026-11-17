@@ -35,13 +35,13 @@ blake3 = { version = "1", default-features = false, features = ["std", "pure"] }
 # MIT or Apache-2.0, no dependencies.
 clap-sys = { version = "0.5", default-features = false }
 # CEF's C API for browser sources (ADR-0021, picked by spike S4; ADR-0046), pinned
-# exactly: the version carries the CEF build it was generated from (156.0.14), and its
-# sys crate (`cef-dll-sys`, 156.0.15 in Cargo.lock) has a build script that downloads
-# that exact CEF distribution. No default features:
+# exactly: the version's build metadata names the CEF build it was generated from, and its
+# sys crate (`cef-dll-sys`, its exact version in Cargo.lock) has a build script that
+# downloads that exact CEF distribution. No default features:
 # `jstream-browser`'s `helper` feature turns `sandbox` on for CEF's bootstrap layout
 # (ADR-0048), and `build-util`/`resources` are app-bundling helpers. Only that feature
 # pulls it in.
-cef = { version = "=156.3.0", default-features = false }
+cef = { version = "=156.4.0", default-features = false }
 # Benchmarks (`benches/` in jstream-render, jstream-audio and jstream-encode), dev-only.
 # No default features: no `rayon` or `plotters`, so no HTML plots; the JSON estimates under
 # `target/criterion` are what the `bench` workflow records. `cargo_bench_support` keeps
@@ -244,7 +244,7 @@ serde_json = { version = "1", default-features = false, features = ["std", "floa
 # `once_cell`, plus derive macros at build time. Chosen over `ab_glyph` and `fontdue`
 # because their `ttf-parser` is unmaintained (RUSTSEC-2026-0192). No default features:
 # `autohint_shaping` only serves the autohinter, which is not used.
-skrifa = { version = "0.49", default-features = false, features = ["std"] }
+skrifa = { version = "0.50", default-features = false, features = ["std"] }
 # The desktop app's window and webview (ADR-0045): WebView2 on Windows through `wry`.
 # No default features: no compression of embedded assets (the app embeds none), no
 # dynamic ACL, and no Linux `x11`/`dbus`; `wry` is the webview runtime, and
