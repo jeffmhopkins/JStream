@@ -7011,7 +7011,7 @@ stamp = { hash = "b3:8544bb9260a481c4", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:7ae3fde8f5f59be1", by = "agent:claude-readme-polish", note = "xtask/src/docs changed only the progress block's target (TARGET = PROGRESS.md) and comments and tests that name it; the Generated content bullet now says the progress block is in PROGRESS.md, and everything else still matches the checker." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/mod.rs"]
-stamp = { hash = "b3:878d3c7fb09668e1", by = "agent:claude-readme-polish", note = "xtask/src/docs changed only the progress block's target (TARGET = PROGRESS.md) and comments and tests that name it; the Generated content bullet now says the progress block is in PROGRESS.md, and everything else still matches the checker." }
+stamp = { hash = "b3:55faeb2e407d36f9", by = "agent:claude-readme-polish", note = "xtask/src/docs changed only the progress block's target (TARGET = PROGRESS.md) and comments and tests that name it (rustfmt-wrapped); the Generated content bullet now says the progress block is in PROGRESS.md, and everything else still matches the checker." }
 
 ["DOCS#bootstrap"."file:xtask/src/docs/parse.rs"]
 stamp = { hash = "b3:53a744195774fba0", by = "agent:claude@session_015b9KWJ2bkGuwJvExqqrKPz", note = "ADR-0053: re-read against xtask/src/docs (new ledger.rs, inputs() in hash.rs, verify/migrate in mod.rs, merge.rs ledger resolution, history.rs ledger events); hash-bound and merge-main bullets now describe the ledger and docs migrate, rehash removed; other bullets unchanged" }
