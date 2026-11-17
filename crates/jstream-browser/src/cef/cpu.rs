@@ -1,9 +1,10 @@
-//! The helper on Linux (ADR-0095): started on one end of a socket pair, which is its
+//! The helper on Linux and macOS (ADR-0095, ADR-0157): started on one end of a socket pair, which is its
 //! standard input, and its paints read as CPU frames from slot files in a private folder
 //! made for it ([`crate::cpu_frames`]).
 //!
 //! **The folder** is `jstream-browser-<pid>-<random>` under `$XDG_RUNTIME_DIR` (the
-//! user's own, in memory), else `/dev/shm`, else the temp folder. It is created fresh
+//! user's own, in memory), else `/dev/shm`, else the temp folder (on macOS always the
+//! temp folder, the user's own under `/var/folders`). It is created fresh
 //! with mode 0700, so it can't already exist and only this user can reach it, and is
 //! removed with everything in it once the helper has stopped.
 //!

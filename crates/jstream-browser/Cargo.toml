@@ -1,7 +1,7 @@
 [package]
 name = "jstream-browser"
 version = "0.0.0"
-description = "Browser sources' engine: the BrowserBackend seam, pages' audio hand-off and custom CSS, the CEF backend that drives the sandboxed browser helper (Windows and Linux, feature `cef`), and the helper's CEF code (feature `helper`)."
+description = "Browser sources' engine: the BrowserBackend seam, pages' audio hand-off and custom CSS, the CEF backend that drives the sandboxed browser helper (Windows, Linux and macOS, feature `cef`), and the helper's CEF code (feature `helper`)."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 3
-summary = "Browser sources' engine (ADR-0021, ADR-0046, ADR-0048, ADR-0095): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows and Linux, feature `cef`), which starts the sandboxed browser helper and imports its frames, as shared textures onto the engine's device on Windows and as CPU frames on Linux; and the helper's CEF code (feature `helper`)"
+summary = "Browser sources' engine (ADR-0021, ADR-0046, ADR-0048, ADR-0095, ADR-0157): the `BrowserBackend` seam, pages' audio hand-off, custom CSS and request policy; the CEF backend (Windows, Linux and macOS, feature `cef`), which starts the sandboxed browser helper and imports its frames, as shared textures onto the engine's device on Windows and as CPU frames on Linux and macOS; and the helper's CEF code (feature `helper`)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
@@ -26,16 +26,17 @@ allow_attributes_without_reason = "deny"  # R-RS-009
 undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 
 [features]
-# The CEF backend the engine holds (Windows and Linux; elsewhere it builds nothing): it
+# The CEF backend the engine holds (Windows, Linux and macOS; elsewhere it builds nothing): it
 # starts the browser helper process and talks to it over a pipe or socket (ADR-0048,
 # ADR-0095). It doesn't build CEF; off by default, as only a build that ships browser
 # sources needs it.
 cef = ["dep:windows", "dep:wgpu"]
-# CEF itself, run in the browser helper process (Windows and Linux): only
+# CEF itself, run in the browser helper process (Windows, Linux and macOS): only
 # `jstream-browser-helper` turns it on. `cef-dll-sys`'s build script downloads the CEF
-# binary distribution, and on Windows builds CEF's C++ wrapper with CMake and Ninja
-# (ADR-0046), with the sandbox on (ADR-0048; on Linux Chromium's own, ADR-0095).
-helper = ["dep:cef", "cef?/sandbox", "dep:windows", "dep:libc"]
+# binary distribution, and on Windows and macOS builds CEF's C++ wrapper with CMake and
+# Ninja (ADR-0046), with the sandbox on (ADR-0048; on Linux Chromium's own, ADR-0095; on
+# macOS CEF's Seatbelt sandbox library, ADR-0157).
+helper = ["dep:cef", "cef?/sandbox", "dep:windows", "dep:libc", "dep:objc2", "dep:objc2-app-kit"]
 # Compile-checks both without downloading or building CEF (`cef`'s docs.rs mode): for
 # CI's clippy. A binary built with it doesn't link.
 dox = ["cef", "helper", "cef?/dox"]
@@ -51,14 +52,23 @@ jstream-platform.workspace = true
 thiserror.workspace = true
 tracing.workspace = true
 
-[target.'cfg(any(windows, target_os = "linux"))'.dependencies]
+[target.'cfg(any(windows, target_os = "linux", target_os = "macos"))'.dependencies]
 # CEF's C API (ADR-0021, ADR-0046), only with the `helper` feature.
 cef = { workspace = true, optional = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dependencies]
 # The helper's `dup2`, which swaps its standard input (the engine's socket) for
-# `/dev/null` before CEF starts subprocesses (ADR-0095); only with the `helper` feature.
+# `/dev/null` before CEF starts subprocesses (ADR-0095, ADR-0157); only with the `helper`
+# feature.
 libc = { workspace = true, optional = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# The helper's browser process on macOS (ADR-0157): CEF needs `NSApp` to be an
+# application class that speaks Chromium's `CrAppControlProtocol`, which the helper
+# defines (`objc2::define_class!`) and makes the shared application, with no Dock icon.
+# Only with the `helper` feature; both are already in the tree for the platform crate.
+objc2 = { workspace = true, optional = true }
+objc2-app-kit = { workspace = true, optional = true, features = ["NSEvent", "NSRunningApplication"] }
 
 [target.'cfg(windows)'.dependencies]
 # The engine's side: the helper's pipes and process, and its shared textures opened on
@@ -87,8 +97,9 @@ wgpu = { workspace = true, optional = true, features = ["dx12"] }
 # the daemon does.
 jstream-platform-windows.workspace = true
 
-[target.'cfg(target_os = "linux")'.dev-dependencies]
-# The Linux helper's end-to-end test (`tests/linux_page.rs`) stamps pages on a fake clock.
+[target.'cfg(any(target_os = "linux", target_os = "macos"))'.dev-dependencies]
+# The helper's end-to-end test on Linux and macOS (`tests/linux_page.rs`) stamps pages on
+# a fake clock.
 jstream-platform = { workspace = true, features = ["fake"] }
 # Its local-network checks (`tests/linux_page/local_network.rs`) serve an `https` page
 # from loopback, with a certificate made at test time, as the RTMPS tests do (R-DEP-006).

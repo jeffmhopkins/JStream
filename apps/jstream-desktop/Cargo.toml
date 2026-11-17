@@ -24,7 +24,9 @@ path = "src/main.rs"
 # Browser sources (ADR-0021, ADR-0046): the engine opens `browser` sources' pages in CEF.
 # Off by default, as in `jstream-browser`, until the CEF runtime and the helper are packaged
 # (its README's open items); the portable folder then also needs the helper exe and the
-# CEF runtime beside `jstream.exe`. Windows only: elsewhere it builds nothing.
+# CEF runtime beside `jstream.exe`, and on macOS the app bundle the helper, CEF's framework
+# and its helper apps (`scripts/mac/bundle-app.sh`, ADR-0157). Windows and macOS only:
+# elsewhere it builds nothing.
 cef = ["dep:jstream-browser", "jstream-browser/cef"]
 # Compile-checks the CEF wiring without building CEF, for CI's clippy.
 dox = ["cef", "jstream-browser/dox"]
@@ -84,7 +86,11 @@ tauri.workspace = true
 # stream keys in the Keychain, the Browse panels, and the global hotkeys' Carbon and
 # event-tap listener.
 [target.'cfg(target_os = "macos")'.dependencies]
+# The CEF backend for browser sources, with the `cef` feature only (ADR-0157).
+jstream-browser = { workspace = true, optional = true }
 jstream-platform-macos.workspace = true
+# Names the browser backend the engine takes (`BrowserBackend`, from `jstream-browser`).
+jstream-sources.workspace = true
 tauri.workspace = true
 
 # On Linux, the live engine's backends and stream key store (as the daemon's), the file

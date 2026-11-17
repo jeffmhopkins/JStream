@@ -1,7 +1,7 @@
 [package]
 name = "jstream-browser-helper"
 version.workspace = true
-description = "The browser helper: the DLL CEF's bootstrap exe loads on Windows, and an executable on Linux, running CEF's browser process for browser sources with the sandbox on."
+description = "The browser helper: the DLL CEF's bootstrap exe loads on Windows, and an executable on Linux and macOS, running CEF's browser process for browser sources with the sandbox on."
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 6
-summary = "`jstream-browser-helper` (the sandboxed browser helper: on Windows a DLL loaded by CEF's bootstrap exe, ADR-0048; on Linux an executable, ADR-0095)"
+summary = "`jstream-browser-helper` (the sandboxed browser helper: on Windows a DLL loaded by CEF's bootstrap exe, ADR-0048; on Linux an executable, ADR-0095; on macOS the same executable in the app bundle, ADR-0157)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and the
@@ -32,13 +32,14 @@ undocumented_unsafe_blocks = "deny"       # R-UNSAFE-002
 crate-type = ["cdylib"]
 
 [[bin]]
-# The helper on Linux (ADR-0095), with `libcef.so` beside it; a no-op on Windows.
+# The helper on Linux (ADR-0095), with `libcef.so` beside it, and on macOS (ADR-0157), in
+# the app bundle with CEF's framework; a no-op on Windows.
 name = "jstream-browser-helper"
 path = "src/main.rs"
 required-features = ["cef"]
 
 [features]
-# Built with CEF: on Windows the DLL exports `RunWinMain`, on Linux the executable runs
+# Built with CEF: on Windows the DLL exports `RunWinMain`, on Linux and macOS the executable runs
 # the helper. Without it, the DLL exports nothing and there is no executable. Off by
 # default, as building CEF downloads it, and on Windows compiles its wrapper (ADR-0046).
 cef = ["jstream-browser/helper"]
