@@ -7394,6 +7394,24 @@ stamp = { hash = "b3:c60cba487fc0a5e5", by = "agent:claude@session_01Fdcnfj3q78X
 ["RULES#real-time"."dep:docs/ARCHITECTURE.md#threading"]
 stamp = { hash = "b3:c0f12942330f5f38", by = "agent:claude", note = "threading only changed the jstream-readback row (NV12 readback); nothing here refers to the readback" }
 
+["RUNBOOK-AGENT-PRE-PASS#linux"."body"]
+stamp = { hash = "b3:f4e69848c6224703", by = "agent:claude", note = "round 1 fixes: the script now removes release/, appimage/ and the daemons' data folders after the zip unless --keep, and prints a Left on this machine line, as the section now says; a daemon whose token file stays empty counts as a start failure; the profile.get row says the Linux check needs only thread_cpu and the live row says it checks jstream-render" }
+
+["RUNBOOK-AGENT-PRE-PASS#linux"."dep:docs/runbooks/linux-testing.md#script"]
+stamp = { hash = "b3:8562c2415ceafbaf", by = "agent:claude", note = "new section: each table row checked against scripts/release-pass.py's checks (names, pass conditions, the --display, --launch, --checkout, --installed, --root and --zip-screenshots options, the daemons' own XDG folders, the outputs daemon without the session bus, the hw-tests' portal and hotkeys skips) and its report and zip contents; run here against a debug daemon and the hw-tests path" }
+
+["RUNBOOK-AGENT-PRE-PASS#linux"."file:scripts/release-pass.py"]
+stamp = { hash = "b3:00b685dbbd52f3e0", by = "agent:claude", note = "round 1 fixes: the script now removes release/, appimage/ and the daemons' data folders after the zip unless --keep, and prints a Left on this machine line, as the section now says; a daemon whose token file stays empty counts as a start failure; the profile.get row says the Linux check needs only thread_cpu and the live row says it checks jstream-render" }
+
+["RUNBOOK-AGENT-PRE-PASS#windows"."body"]
+stamp = { hash = "b3:9fa6832a864cf026", by = "agent:claude", note = "new section: the steps match release-pass.ps1's -AutomatedOnly, -Zip and -Expect, windows-pass.ps1's -Unattended, and that the release pass's zip holds snapshot-display.png" }
+
+["RUNBOOK-AGENT-PRE-PASS#windows"."dep:docs/runbooks/windows-hardware-pass.md#release-pass"]
+stamp = { hash = "b3:d934cf7d3d17abf8", by = "agent:claude", note = "new section: the steps match release-pass.ps1's -AutomatedOnly, -Zip and -Expect, windows-pass.ps1's -Unattended, and that the release pass's zip holds snapshot-display.png" }
+
+["RUNBOOK-AGENT-PRE-PASS#windows"."dep:docs/runbooks/windows-hardware-pass.md#script"]
+stamp = { hash = "b3:9bfd53a3bcfea856", by = "agent:claude", note = "new section: the steps match release-pass.ps1's -AutomatedOnly, -Zip and -Expect, windows-pass.ps1's -Unattended, and that the release pass's zip holds snapshot-display.png" }
+
 ["RUNBOOK-GO-LIVE#before"."body"]
 stamp = { hash = "b3:609417aafbfc64f1", by = "agent:claude@session_01Lx8gSdsaC68VMTh3GSuRAA", note = "#235 round 1: daemon Usage exit-0 row and camera bullet changed; prerequisites unaffected; holds" }
 
@@ -7551,13 +7569,13 @@ stamp = { hash = "b3:1a6aeaec37c5f24f", by = "agent:claude@session_01TssS8PhoWXH
 stamp = { hash = "b3:edc32ebec97fa507", by = "agent:claude", note = "Moving a PR now says to push, since a base change doesn't re-run ci.yml (types lacks edited); targets still match ADR-0055." }
 
 ["RUNBOOK-WINDOWS-HW-PASS#release-pass"."body"]
-stamp = { hash = "b3:5e6c43e87071ba35", by = "agent:lane-d-wave-sync", note = '''New section for scripts/release-pass.ps1 and .bat: re-read against the script. It runs the zip's own daemon and CLI with no build, checks the zip against its .sha256 and unzips under %LOCALAPPDATA%\JStream-release-pass\release, starts its daemon on a free port with its own token, log folder and APPDATA in the run folder, runs the twelve automatic checks in the table (versions, kind.list, profile.get threads and counters, browser and display snapshots, collection new/save_as/open and collection.info, capture.targets webcam formats, bench all,display[,webcam] with default gates, Ctrl-C graceful stop), then the M1 to M16 items, starting jstream.exe --mcp for M13 and a --ptz-controller daemon for M16, and zips report.md, results.json, logs and snapshots with tokens redacted''' }
+stamp = { hash = "b3:d934cf7d3d17abf8", by = "agent:claude", note = "release-pass.ps1 now warns, not fails, when jstream-render or jstream-frames isn't running (they run only with an output or a contact sheet), and checks collection.info's path with the recent list skipped (the daemon keeps none; M5 checks the app's): the profile.get and save, new, open rows say so; the rest of the table and steps unchanged" }
 
 ["RUNBOOK-WINDOWS-HW-PASS#release-pass"."file:scripts/release-pass.bat"]
 stamp = { hash = "b3:a1a3e1264c2d71ed", by = "agent:lane-d-wave-sync", note = '''New section for scripts/release-pass.ps1 and .bat: re-read against the script. It runs the zip's own daemon and CLI with no build, checks the zip against its .sha256 and unzips under %LOCALAPPDATA%\JStream-release-pass\release, starts its daemon on a free port with its own token, log folder and APPDATA in the run folder, runs the twelve automatic checks in the table (versions, kind.list, profile.get threads and counters, browser and display snapshots, collection new/save_as/open and collection.info, capture.targets webcam formats, bench all,display[,webcam] with default gates, Ctrl-C graceful stop), then the M1 to M16 items, starting jstream.exe --mcp for M13 and a --ptz-controller daemon for M16, and zips report.md, results.json, logs and snapshots with tokens redacted''' }
 
 ["RUNBOOK-WINDOWS-HW-PASS#release-pass"."file:scripts/release-pass.ps1"]
-stamp = { hash = "b3:06dc2b4ed94a3853", by = "agent:lane-d-wave-sync", note = '''New section for scripts/release-pass.ps1 and .bat: re-read against the script. It runs the zip's own daemon and CLI with no build, checks the zip against its .sha256 and unzips under %LOCALAPPDATA%\JStream-release-pass\release, starts its daemon on a free port with its own token, log folder and APPDATA in the run folder, runs the twelve automatic checks in the table (versions, kind.list, profile.get threads and counters, browser and display snapshots, collection new/save_as/open and collection.info, capture.targets webcam formats, bench all,display[,webcam] with default gates, Ctrl-C graceful stop), then the M1 to M16 items, starting jstream.exe --mcp for M13 and a --ptz-controller daemon for M16, and zips report.md, results.json, logs and snapshots with tokens redacted''' }
+stamp = { hash = "b3:39eb1bc27f40fc54", by = "agent:claude", note = "release-pass.ps1 now warns, not fails, when jstream-render or jstream-frames isn't running (they run only with an output or a contact sheet), and checks collection.info's path with the recent list skipped (the daemon keeps none; M5 checks the app's): the profile.get and save, new, open rows say so; the rest of the table and steps unchanged" }
 
 ["RUNBOOK-WINDOWS-HW-PASS#script"."body"]
 stamp = { hash = "b3:9bfd53a3bcfea856", by = "agent:shader-source", note = "Re-read the script section after merging main. From main's #1083: windows-pass.ps1 gains the pr1083 source and the help-links check, which builds the PR's UI and desktop app and asks whether the Help and About links open the default browser. The table lists help-links for item 19, and the not-checked list names item 19's log search, done by hand. From this PR (#1085): the effect-pack NTFS step is item 20 (closes #1088), and the not-checked list names item 20 as done all by hand, because the script has no pack-write check and adds no table row or source for it | kept from the merged side: Re-read: windows-pass.ps1 gains the pr1083 source and the help-links check (builds the PR's UI and desktop app, asks whether Help and About links open the default browser); the table lists help-links for item 19 and the not-checked list names item 19's log search, done by hand" }

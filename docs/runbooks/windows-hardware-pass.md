@@ -148,10 +148,10 @@ scripts\release-pass.bat -ManualOnly -PtzController 192.168.1.20
 | versions | `jstream-daemon --version` and `jstream-cli version` name `-Expect` | |
 | daemon starts | the daemon prints its `listening on` line | |
 | kind.list | it lists the alpha.5 kinds: the new filters, the depth-aware 3D filters, `model`, `light`, `follow_pointer`, the MIDI sources and `network_audio` | #1226, #1227, #1231, #1225, #1222, #1223, #1224 |
-| profile.get | `thread_cpu` is on, `jstream-render` and `jstream-frames` are among the threads, and the views, warm, streams and PTZ counters are there; a program frame over budget or skipped is a warning | #1221 |
+| profile.get | `thread_cpu` is on (`jstream-render` and `jstream-frames` missing is a warning: they run only while an output or a contact sheet does), and the views, warm, streams and PTZ counters are there; a program frame over budget or skipped is a warning | #1221 |
 | snapshot of a browser page | a green HTML page snapshots green | #1184, #1194, #1215 |
 | snapshot of a display capture | the snapshot isn't one flat colour | #1194, #1215 |
-| save, new, open | `collection.new`, `save_as` and `open` round-trip a scene, and `collection.info` lists the project first in the recent list | #1218 |
+| save, new, open | `collection.new`, `save_as` and `open` round-trip a scene, and `collection.info` names the opened project; the recent list is the app's, so the daemon's empty one is skipped and M5 checks it | #1218 |
 | webcam formats | each webcam lists its formats, and its controls when it has any; no webcam is a warning | #1195, #1196 |
 | bench | `jstream-cli bench --scenario all,display` (and `webcam` with one plugged in) passes every default gate; the media scenario runs with `-Media` or a file ffmpeg makes | #1220, #1140 |
 | graceful stop | Ctrl-C makes the daemon print `stopped` and exit 0 | |
