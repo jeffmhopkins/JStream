@@ -3,6 +3,7 @@ id = "SPIKE-S4"
 title = "Spike S4: CEF browser source"
 kind = "guide"
 status = "retired"
+review_every = "180d"
 replaced_by = "docs/ARCHITECTURE.md"
 retired_sections = { "pipeline" = [], "choices" = [], "run" = [], "paste-back" = [], "risks" = [] }
 -->

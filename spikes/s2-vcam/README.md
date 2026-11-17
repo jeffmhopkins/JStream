@@ -3,6 +3,7 @@ id = "SPIKE-S2"
 title = "Spike S2: Windows virtual camera"
 kind = "guide"
 status = "retired"
+review_every = "180d"
 replaced_by = "docs/ARCHITECTURE.md"
 retired_sections = { "what" = [], "run" = [], "paste-back" = [], "risks" = [] }
 -->

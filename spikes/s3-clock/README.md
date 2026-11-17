@@ -3,6 +3,7 @@ id = "SPIKE-S3"
 title = "Spike S3: media clock and audio drift"
 kind = "guide"
 status = "retired"
+review_every = "180d"
 replaced_by = "docs/ARCHITECTURE.md"
 retired_sections = { "what" = [], "run" = [], "paste-back" = [], "risks" = [] }
 -->
