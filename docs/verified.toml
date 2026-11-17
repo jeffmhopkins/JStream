@@ -1077,10 +1077,10 @@ stamp = { hash = "b3:7b29924362b09367" }
 stamp = { hash = "b3:2e6b22f1e1ad5561", by = "agent:claude-cleanup", note = "New section: checked each command against ci.yml's fmt, clippy, test, docs, lint-deps and deny jobs, every link and anchor (README#build, ARCH#repo-layout, ARCH#crate-map, CLAUDE#docs-duty, DOCS#verification, the three runbooks), and the lavapipe note against ci.yml's test job" }
 
 ["CONTRIBUTING#working-on-the-code"."dep:docs/ARCHITECTURE.md#crate-map"]
-stamp = { hash = "b3:2476c6652cedabb9", by = "agent:claude-cleanup", note = "New section: checked each command against ci.yml's fmt, clippy, test, docs, lint-deps and deny jobs, every link and anchor (README#build, ARCH#repo-layout, ARCH#crate-map, CLAUDE#docs-duty, DOCS#verification, the three runbooks), and the lavapipe note against ci.yml's test job" }
+stamp = { hash = "b3:c96ce3b5078c9c97", by = "agent:claude-cleanup", note = "New section: checked each command against ci.yml's fmt, clippy, test, docs, lint-deps and deny jobs, every link and anchor, and that ARCH#repo-layout (now listing fuzz/, scripts/, runbooks) and ARCH#crate-map (intro now says the table is hand-maintained) still back the 'find your way around' pointers" }
 
 ["CONTRIBUTING#working-on-the-code"."dep:docs/ARCHITECTURE.md#repo-layout"]
-stamp = { hash = "b3:4777d1365752584f", by = "agent:claude-cleanup", note = "New section: checked each command against ci.yml's fmt, clippy, test, docs, lint-deps and deny jobs, every link and anchor (README#build, ARCH#repo-layout, ARCH#crate-map, CLAUDE#docs-duty, DOCS#verification, the three runbooks), and the lavapipe note against ci.yml's test job" }
+stamp = { hash = "b3:5b9543f2d51737c2", by = "agent:claude-cleanup", note = "New section: checked each command against ci.yml's fmt, clippy, test, docs, lint-deps and deny jobs, every link and anchor, and that ARCH#repo-layout (now listing fuzz/, scripts/, runbooks) and ARCH#crate-map (intro now says the table is hand-maintained) still back the 'find your way around' pointers" }
 
 ["CRATE-jstream-aac#purpose"."body"]
 stamp = { hash = "b3:fe2151507bd5bf11", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
