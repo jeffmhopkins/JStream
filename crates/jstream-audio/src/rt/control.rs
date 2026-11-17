@@ -1,5 +1,5 @@
 //! The PI controller that steers each input's adaptive resampler, and the one-pole
-//! smoother in front of it. Ported from spike S3 (`spikes/s3-clock/src/control.rs`),
+//! smoother in front of it. Ported from M0's clock spike S3,
 //! whose tuning held real devices within 0.06 ms of the engine time line
 //! (docs/ARCHITECTURE.md#threading).
 //!
