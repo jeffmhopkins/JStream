@@ -1,8 +1,9 @@
-# release: builds the portable Windows zip from a version tag and publishes it as a GitHub
-# release (docs/runbooks/release.md). The tag is `v` and the workspace version the shipped
+# release: builds the desktop app for every platform from a version tag, the portable
+# Windows zip, the Linux .deb and AppImage and the macOS disk image, and publishes them as
+# one GitHub release (docs/runbooks/release.md, ROADMAP.md#beta). The tag is `v` and the workspace version the shipped
 # apps take (Cargo.toml's [workspace.package]); a version with a pre-release part
-# (`0.1.0-alpha.1`) makes a pre-release. Builds are unsigned until a certificate exists
-# (ADR-0066). A pushed tag starts it, or the maintainer runs it on main from the Actions
+# (`0.1.0-alpha.1`) makes a pre-release. Builds are unsigned: Windows until a certificate
+# exists (ADR-0066), Linux as ADR-0141 leaves it, and macOS for good (ROADMAP.md#macos-unsigned). A pushed tag starts it, or the maintainer runs it on main from the Actions
 # tab (workflow_dispatch): then the tag is `v` and main's version, and `publish` creates it
 # on that commit before the release. Nothing else starts it.
 # Editing this file is a governance change (R-GOV-001).
@@ -147,13 +148,12 @@ jobs:
         env:
           TAG: ${{ needs.ui.outputs.tag }}
         run: cargo xtask dist --ui-dir ui-dist --out dist --revision "$TAG"
-      # The release's text: what the build is, the unsigned warning, the CEF build it
-      # ships (ADR-0021 asks each release to name it) and the zip's SHA-256.
+      # Windows's part of the release text: what the build is, the unsigned warning, the
+      # CEF build it ships (ADR-0021 asks each release to name it) and the zip's SHA-256.
       - name: Write the checksum and the release notes
         shell: bash
         env:
           TAG: ${{ needs.ui.outputs.tag }}
-          VERSION: ${{ needs.ui.outputs.version }}
           REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
@@ -162,35 +162,238 @@ jobs:
           sha256sum "$zip" > "$zip.sha256"
           cef=$(head -n 1 "jstream-${TAG}-windows-x64/browser/CEF-VERSION.txt" | tr -d '\r')
           {
-            echo "JStream ${VERSION}, the portable Windows build (x64). Unzip it anywhere and run \`jstream.exe\`: see [Getting started](https://github.com/${REPO}/blob/${TAG}/docs/GETTING-STARTED.md)."
+            echo "### Windows"
+            echo
+            echo "\`${zip}\`, the portable build (x64). Unzip it anywhere and run \`jstream.exe\`: see [Getting started](https://github.com/${REPO}/blob/${TAG}/docs/GETTING-STARTED.md)."
             echo
             echo "This build is **not code-signed**, so Windows SmartScreen may warn that it protected your PC: choose *More info*, then *Run anyway*."
             echo
             echo "Browser sources run the Chromium Embedded Framework, \`${cef}\` (licences in \`browser\\CREDITS.html\`)."
             echo
             echo "SHA-256: \`$(cut -d ' ' -f 1 "$zip.sha256")\`"
-          } > notes.md
+            echo
+          } > notes-1-windows.md
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: release
+          name: release-windows
           path: |
             dist/*.zip
             dist/*.sha256
-            dist/notes.md
+            dist/notes-*.md
+          if-no-files-found: error
+          retention-days: 7
+
+  # The Linux .deb and AppImage, from a clean build (no cache), as after-review.yml's
+  # `dist-linux` builds them, with the same pinned tools (keep the versions and hashes in
+  # step with it). The empty revision gives the release's own Debian version
+  # (`0.1.0~beta.1`). Both are renamed after the tag, as the zip is.
+  linux:
+    needs: ui
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      LINUXDEPLOY_VERSION: 1-alpha-20251107-1
+      LINUXDEPLOY_SHA256: c20cd71e3a4e3b80c3483cef793cda3f4e990aca14014d23c544ca3ce1270b4d
+      LINUXDEPLOY_GTK_COMMIT: 7a3fbc31a9e5075073ff8790f26effbac5f84453
+      LINUXDEPLOY_GTK_SHA256: b0f4cbc684a0103a9651f0955b635eaea0096b3a66c0f5a2c2aa337960375171
+      APPIMAGE_RUNTIME_VERSION: "20251108"
+      APPIMAGE_RUNTIME_SHA256: 2fca8b443c92510f1483a883f60061ad09b46b978b2631c807cd873a47ec260d
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - name: WebKitGTK
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev
+      - name: linuxdeploy, its GTK plugin and the AppImage runtime
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/appimage-tools"
+          mkdir -p "$tools"
+          cd "$tools"
+          curl -sSLf -o linuxdeploy-x86_64.AppImage "https://github.com/linuxdeploy/linuxdeploy/releases/download/${LINUXDEPLOY_VERSION}/linuxdeploy-x86_64.AppImage"
+          echo "${LINUXDEPLOY_SHA256}  linuxdeploy-x86_64.AppImage" | sha256sum -c -
+          curl -sSLf -o linuxdeploy-plugin-gtk.sh "https://raw.githubusercontent.com/linuxdeploy/linuxdeploy-plugin-gtk/${LINUXDEPLOY_GTK_COMMIT}/linuxdeploy-plugin-gtk.sh"
+          echo "${LINUXDEPLOY_GTK_SHA256}  linuxdeploy-plugin-gtk.sh" | sha256sum -c -
+          curl -sSLf -o runtime-x86_64 "https://github.com/AppImage/type2-runtime/releases/download/${APPIMAGE_RUNTIME_VERSION}/runtime-x86_64"
+          echo "${APPIMAGE_RUNTIME_SHA256}  runtime-x86_64" | sha256sum -c -
+          chmod +x linuxdeploy-x86_64.AppImage linuxdeploy-plugin-gtk.sh
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jstream-ui
+          path: ui-dist
+      - name: Build the .deb and the AppImage
+        env:
+          TAG: ${{ needs.ui.outputs.tag }}
+        run: |
+          set -euo pipefail
+          tools="$RUNNER_TEMP/appimage-tools"
+          cargo xtask dist-linux --ui-dir ui-dist --out build --revision "" \
+            --linuxdeploy "$tools/linuxdeploy-x86_64.AppImage" \
+            --appimage-runtime "$tools/runtime-x86_64"
+          debs=(build/*.deb); images=(build/*.AppImage)
+          if [ "${#debs[@]}" -ne 1 ] || [ "${#images[@]}" -ne 1 ]; then
+            echo "::error::expected one .deb and one AppImage, got: ${debs[*]} ${images[*]}"
+            exit 1
+          fi
+          # As after-review checks: the sandbox setuid root, and ADR-0062's AAC notice.
+          dpkg-deb --contents "${debs[0]}" \
+            | grep -E '^-rwsr-xr-x root/root .* \./usr/lib/jstream/browser/chrome-sandbox$'
+          dpkg-deb --contents "${debs[0]}" | grep -E ' \./usr/share/doc/jstream/NOTICE\.txt$'
+          mkdir -p dist
+          mv "${debs[0]}" "dist/jstream-${TAG}-linux-amd64.deb"
+          mv "${images[0]}" "dist/jstream-${TAG}-linux-x86_64.AppImage"
+      # Linux's part of the release text.
+      - name: Write the checksums and the release notes
+        env:
+          TAG: ${{ needs.ui.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cef=$(head -n 1 target/dist-linux-browser/CEF-VERSION.txt)
+          cd dist
+          deb="jstream-${TAG}-linux-amd64.deb"
+          image="jstream-${TAG}-linux-x86_64.AppImage"
+          sha256sum "$deb" > "$deb.sha256"
+          sha256sum "$image" > "$image.sha256"
+          {
+            echo "### Linux"
+            echo
+            echo "For 64-bit PCs (x86_64), on GNOME or KDE Plasma. See [Getting started](https://github.com/${REPO}/blob/${TAG}/docs/GETTING-STARTED.md)."
+            echo
+            echo "- \`${deb}\`, for Ubuntu 24.04 or later: \`sudo apt install ./${deb}\`, then start JStream from the app menu."
+            echo "- \`${image}\`, for other distributions, Debian included: make it executable (\`chmod +x ${image}\`) and run it."
+            echo
+            echo "These packages are **not signed**. JStream encodes H.264 on your GPU through VA-API or, when you ask it to, with Cisco's OpenH264, which it downloads from Cisco. It encodes AAC with its own encoder; JStream holds no AAC patent licence (\`NOTICE.txt\`). The virtual camera needs the v4l2loopback module (see Getting started). There is no media-file source on Linux yet."
+            echo
+            echo "Browser sources run the Chromium Embedded Framework, \`${cef}\`."
+            echo
+            echo "SHA-256:"
+            echo "- \`${deb}\`: \`$(cut -d ' ' -f 1 "$deb.sha256")\`"
+            echo "- \`${image}\`: \`$(cut -d ' ' -f 1 "$image.sha256")\`"
+            echo
+          } > notes-3-linux.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-linux
+          path: |
+            dist/*.deb
+            dist/*.AppImage
+            dist/*.sha256
+            dist/notes-*.md
+          if-no-files-found: error
+          retention-days: 7
+
+  # The macOS disk image for Apple Silicon, from a clean build (no cache), bundled and
+  # ad-hoc signed by scripts/mac/bundle-app.sh, as after-review.yml's `macos-app` builds
+  # it, and started once from the bundle the same way before it is uploaded.
+  macos:
+    needs: ui
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - run: rustup toolchain install
+      - run: cargo build --release -p jstream-desktop --locked
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: jstream-ui
+          path: ui-dist
+      - name: Bundle JStream.app and the disk image
+        env:
+          TAG: ${{ needs.ui.outputs.tag }}
+        run: |
+          set -euo pipefail
+          bash scripts/mac/bundle-app.sh --exe target/release/jstream --ui-dir ui-dist --out build
+          arch=$(uname -m)
+          if [ "$arch" != arm64 ]; then
+            echo "::error::the release's disk image is for Apple Silicon, but this runner is $arch"
+            exit 1
+          fi
+          dmgs=(build/*.dmg)
+          if [ "${#dmgs[@]}" -ne 1 ]; then
+            echo "::error::expected one disk image, got: ${dmgs[*]}"
+            exit 1
+          fi
+          mkdir -p dist
+          mv "${dmgs[0]}" "dist/jstream-${TAG}-macos-arm64.dmg"
+      # As in after-review.yml's `macos-app`: the window's page says hello to the engine.
+      - name: The app starts and its window loads the UI
+        run: |
+          set -euo pipefail
+          home="$RUNNER_TEMP/home"
+          mkdir -p "$home"
+          log="$home/Library/Application Support/JStream/logs/jstream-desktop.log"
+          HOME="$home" build/JStream.app/Contents/MacOS/jstream --no-vcam &
+          app=$!
+          ok=0
+          for _ in $(seq 1 600); do
+            if [ -f "$log" ] && grep -q 'handshake done' "$log"; then ok=1; break; fi
+            kill -0 "$app" 2>/dev/null || break
+            sleep 0.1
+          done
+          kill -TERM "$app" 2>/dev/null || true
+          wait "$app" 2>/dev/null || true
+          if [ "$ok" != 1 ]; then
+            echo "::error::the app's window didn't load the UI within 60 seconds"
+            [ -f "$log" ] && cat "$log"
+            exit 1
+          fi
+          grep -q 'engine serving the webview' "$log"
+      # macOS's part of the release text: how to open an unsigned app.
+      - name: Write the checksum and the release notes
+        env:
+          TAG: ${{ needs.ui.outputs.tag }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          cd dist
+          dmg="jstream-${TAG}-macos-arm64.dmg"
+          shasum -a 256 "$dmg" > "$dmg.sha256"
+          {
+            echo "### macOS"
+            echo
+            echo "\`${dmg}\`, for Apple Silicon Macs on macOS 14 or later. Open it and drag JStream to Applications. See [Getting started](https://github.com/${REPO}/blob/${TAG}/docs/GETTING-STARTED.md)."
+            echo
+            echo "JStream for macOS is **not signed or notarised**, so macOS stops it the first time it opens: open it once, then go to System Settings › Privacy & Security and choose *Open Anyway*. macOS asks again for its permissions (Screen Recording, Camera, Microphone) after each update. This build has no browser sources and no virtual camera yet."
+            echo
+            echo "SHA-256: \`$(cut -d ' ' -f 1 "$dmg.sha256")\`"
+            echo
+          } > notes-2-macos.md
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-macos
+          path: |
+            dist/*.dmg
+            dist/*.sha256
+            dist/notes-*.md
           if-no-files-found: error
           retention-days: 7
 
   # Publishing is its own job, so only it can write to the repository.
   publish:
-    needs: [ui, zip]
+    needs: [ui, zip, linux, macos]
     runs-on: ubuntu-latest
     permissions:
       contents: write   # creates the release and uploads its files; nothing else
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          name: release
+          pattern: release-*
+          merge-multiple: true
           path: release
+      # One release text: a line on the release, then each platform's part, Windows,
+      # macOS, then Linux.
+      - name: Gather the release notes
+        env:
+          VERSION: ${{ needs.ui.outputs.version }}
+        run: |
+          set -euo pipefail
+          {
+            echo "JStream ${VERSION}, the desktop app for Windows, macOS and Linux."
+            echo
+            cat release/notes-*.md
+          } > notes.md
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -206,6 +409,7 @@ jobs:
           if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
             gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA" > /dev/null
           fi
-          gh release create "$TAG" release/*.zip release/*.sha256 \
+          gh release create "$TAG" release/*.zip release/*.dmg release/*.deb release/*.AppImage \
+            release/*.sha256 \
             --repo "$GITHUB_REPOSITORY" --verify-tag "${prerelease[@]}" \
-            --title "JStream $VERSION" --notes-file release/notes.md --generate-notes
+            --title "JStream $VERSION" --notes-file notes.md --generate-notes

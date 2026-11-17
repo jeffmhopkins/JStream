@@ -6,8 +6,8 @@
 //! `chrome-sandbox` setuid root, ADR-0095), links in `/usr/bin`, an application-menu entry
 //! and its icon, then `dpkg-deb` packs it. The package depends on the distribution's
 //! WebKitGTK 4.1 and the libraries CEF's runtime needs, so it installs on the Ubuntu and
-//! Debian releases that ship them. It is a CI artifact; publishing it with a release, and
-//! signing it, are later decisions.
+//! Debian releases that ship them. CI builds it after review, and `release.yml` publishes
+//! it with each release (ROADMAP.md#beta), unsigned.
 //!
 //! Docs: docs/ARCHITECTURE.md#packaging, docs/adr/0095-browser-helper-on-linux.md
 
@@ -57,7 +57,27 @@ const DEPENDS: &str = "libwebkit2gtk-4.1-0, libgtk-3-0, libnss3, libatk1.0-0t64 
 const SANDBOX_MODE: u32 = 0o4755;
 
 /// Repository files copied into the package's doc folder.
-const LICENSES: &[&str] = &["LICENSE-MIT", "LICENSE-APACHE"];
+pub(crate) const LICENSES: &[&str] = &["LICENSE-MIT", "LICENSE-APACHE"];
+
+/// The licence notice beside them, `NOTICE.txt`, in the `.deb` and the AppImage alike.
+/// The packages ship JStream's own AAC-LC encoder, so it says that JStream holds no AAC
+/// patent licence and names Via LA, as ADR-0062 requires before the encoder ships (the
+/// install script writes the same notice). OpenH264 isn't shipped: the app downloads
+/// Cisco's binary when the user asks, and shows Cisco's notice and licence then.
+pub(crate) const NOTICE: &str = "\
+JStream is licensed under the MIT or Apache-2.0 licence, at your option (LICENSE-MIT,
+LICENSE-APACHE).
+
+AAC: JStream encodes AAC audio with its own AAC-LC encoder. JStream holds no AAC patent
+licence. Via Licensing Alliance (Via LA) administers the AAC patent pool.
+
+H.264: JStream encodes H.264 with your GPU's driver through VA-API or, when you ask it
+to, with Cisco's OpenH264 binary, which it downloads from Cisco. OpenH264 Video Codec
+provided by Cisco Systems, Inc.
+
+Browser sources use the Chromium Embedded Framework (CEF) and Chromium, under their own
+licences, in the browser folder beside the jstream program.
+";
 
 /// Runs `cargo xtask dist-linux`.
 pub fn run(args: &[String], root: &Path) -> Result<bool> {
@@ -237,6 +257,7 @@ fn lay_out(root: &Path, release: &Path, ui: &Path, browser: &Path, stage: &Path)
     for license in LICENSES {
         copy(&root.join(license), &doc.join(license))?;
     }
+    fs::write(doc.join("NOTICE.txt"), NOTICE).context("writing NOTICE.txt")?;
     let apps = stage.join("usr/share/applications");
     fs::create_dir_all(&apps).with_context(|| format!("creating {}", apps.display()))?;
     fs::write(apps.join(format!("{APP_ID}.desktop")), desktop_entry())
@@ -441,6 +462,10 @@ mod tests {
                 .is_file()
         );
         assert!(stage.join("usr/share/doc/jstream/LICENSE-MIT").is_file());
+        let notice =
+            fs::read_to_string(stage.join("usr/share/doc/jstream/NOTICE.txt")).expect("notice");
+        assert!(notice.contains("JStream holds no AAC patent\nlicence"));
+        assert!(notice.contains("Via LA"));
 
         if Command::new("dpkg-deb").arg("--version").output().is_ok() {
             let deb = pack(&stage, "1.0.0~test", "amd64", &scratch).expect("packed");

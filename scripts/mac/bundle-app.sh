@@ -104,6 +104,8 @@ main() {
     cp "$exe" "$app/Contents/MacOS/jstream"
     # The app finds its UI in Contents/Resources (`app::bundled_ui_dir`).
     cp -R "$ui" "$app/Contents/Resources/ui"
+    # The licences, inside the bundle so the signature covers them.
+    cp "$root/LICENSE-MIT" "$root/LICENSE-APACHE" "$app/Contents/Resources/"
     icon "$root/apps/jstream-desktop/icons/icon.png" "$app/Contents/Resources/JStream.icns"
     plist "$root/apps/jstream-desktop/Info.plist" "$app/Contents/Info.plist" "$short"
     if [ -n "$helper" ]; then
