@@ -140,7 +140,7 @@ Every PR that bumps `PROTOCOL_VERSION` goes into the earliest open wave, so bump
 3. **A conflicting bump comes first.** Its thread merges the wave in before anything else
    it is doing. The owner watches the wave's open bumps and tells a thread as soon as its
    bump conflicts. `docs merge-main` resolves stamp conflicts and conflicts inside
-   `@generated` blocks such as the README's progress table, so the rest of these merges
+   `@generated` blocks such as the progress table in PROGRESS.md, so the rest of these merges
    is usually automatic.
 
 If the wave is cut first, an open bump moves to the next wave and takes the number after

@@ -10,7 +10,7 @@
 //! and inline stamps the branch added are then moved by `docs migrate`.
 //!
 //! A conflict wholly inside `@generated` blocks, such as two PRs each regenerating the
-//! README's progress table, is resolved by taking that branch's side and rewriting every
+//! progress table in PROGRESS.md, is resolved by taking that branch's side and rewriting every
 //! block from the merged sources, as `docs generate` would (ADR-0038). Every other conflict
 //! is left untouched for a person.
 
