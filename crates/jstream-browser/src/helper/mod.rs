@@ -1,13 +1,13 @@
-//! The browser helper's CEF code (Windows and Linux, feature `helper`; ADR-0048,
-//! ADR-0095, ARCH › Browser source): what `jstream-browser-helper.dll` runs when CEF's
+//! The browser helper's CEF code (Windows, Linux and macOS, feature `helper`; ADR-0048,
+//! ADR-0095, ADR-0157, ARCH › Browser source): what `jstream-browser-helper.dll` runs when CEF's
 //! bootstrap exe calls it on Windows, and what the `jstream-browser-helper` executable
-//! runs on Linux, in CEF's browser process and in every one of its sandboxed
+//! runs on Linux and macOS, in CEF's browser process and in every one of its sandboxed
 //! subprocesses.
 //!
 //! **In a subprocess** (renderer, GPU, utility) it hands the process to CEF.
 //!
 //! **In the browser process** it connects to the engine: on Windows to its two pipes
-//! (named by `--jstream-pipe`), on Linux through the socket that is its standard input,
+//! (named by `--jstream-pipe`), on Linux and macOS through the socket that is its standard input,
 //! which it then swaps for `/dev/null` so CEF's subprocesses never hold it. It starts CEF with the sandbox on, off-screen rendering, profiles in
 //! memory and the engine's cache and log settings, and runs CEF's message loop on the
 //! process's main thread, which is CEF's UI thread. A reader thread takes the engine's
@@ -15,7 +15,7 @@
 //! the browser process's threads, while a new adapter and shutting down are posted to the
 //! UI thread. Each page is a windowless browser with shared textures, painting at its
 //! frame rate with a transparent background; its paints are copied into textures it
-//! shares with the engine on Windows (`d3d11`), and on Linux painted in software and
+//! shares with the engine on Windows (`d3d11`), and on Linux and macOS painted in software and
 //! written into slot files in the folder the engine named (`--jstream-frames`,
 //! `shm`), its audio is sent as interleaved stereo, and its
 //! requests go through its [`RequestPolicy`].
@@ -27,11 +27,12 @@
 //! # Pages, permissions and requests
 //!
 //! Every page is a windowless browser, with shared textures on Windows and software
-//! paints on Linux, painting at its spec's frame rate with a transparent background.
+//! paints on Linux and macOS, painting at its spec's frame rate with a transparent background.
 //! Command-line switches let pages play sound without a click and turn off first-run and
 //! error dialogs, and on Linux with neither `DISPLAY` nor `WAYLAND_DISPLAY` set, start
 //! Chromium on its headless platform. On Linux Chromium also keeps its in-memory
-//! profiles' key itself (`--password-store=basic`), never opening the desktop's keyring.
+//! profiles' key itself (`--password-store=basic`), never opening the desktop's keyring,
+//! and on macOS it uses a key of its own (`--use-mock-keychain`), never the login Keychain.
 //! Pop-ups are blocked. Every
 //! permission a page asks for (camera, microphone, screen capture, geolocation,
 //! notifications, clipboard, MIDI and the rest) is refused by the page's permission
@@ -66,8 +67,10 @@
 #[cfg(windows)]
 mod d3d11;
 mod handlers;
+#[cfg(target_os = "macos")]
+mod mac;
 mod page_api;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 mod shm;
 
 use std::collections::HashMap;
@@ -86,13 +89,13 @@ use crate::wire::{self, ToEngine, ToHelper};
 use crate::{PageData, PageSpec, RequestPolicy, css_script};
 #[cfg(windows)]
 use d3d11::{Gpu, PageTextures};
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use shm::PageTextures;
 
 /// The helper's end of its connection to the engine, each way.
 #[cfg(windows)]
 type Stream = std::fs::File;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 type Stream = std::os::unix::net::UnixStream;
 
 /// How long shutting down waits for open pages to close before CEF's loop is quit
@@ -103,8 +106,8 @@ const CLOSE_GRACE: Duration = Duration::from_secs(10);
 #[cfg(windows)]
 const PIPE_SWITCH: &str = "--jstream-pipe=";
 
-/// The switch that names the folder paints go into (Linux).
-#[cfg(target_os = "linux")]
+/// The switch that names the folder paints go into (Linux and macOS).
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 const FRAMES_SWITCH: &str = "--jstream-frames=";
 
 /// The most stereo frames one audio message carries.
@@ -118,7 +121,7 @@ const AUDIO_FRAMES: usize = wire::MAX_AUDIO_SAMPLES / 2;
 /// `RunWinMain`, unchanged; CEF reads it.
 #[cfg(windows)]
 pub unsafe fn run_helper(sandbox_info: *mut c_void) -> i32 {
-    run(sandbox_info)
+    run(&::cef::args::Args::new(), sandbox_info)
 }
 
 /// Runs the helper's process, from the `jstream-browser-helper` executable's `main`,
@@ -128,13 +131,52 @@ pub unsafe fn run_helper(sandbox_info: *mut c_void) -> i32 {
 #[cfg(target_os = "linux")]
 #[must_use]
 pub fn run_helper() -> i32 {
-    run(std::ptr::null_mut())
+    run(&::cef::args::Args::new(), std::ptr::null_mut())
 }
 
-fn run(sandbox_info: *mut c_void) -> i32 {
+/// Runs the helper's process, from the `jstream-browser-helper` executable's `main`,
+/// and returns its exit code (ADR-0157). The browser process is
+/// `JStream.app/Contents/MacOS/jstream-browser-helper`; CEF's subprocesses start as the
+/// same executable copied into the helper app bundles in `Contents/Frameworks`, so they
+/// come here too. A subprocess first enters CEF's sandbox, then each process loads CEF's
+/// framework from where the bundle keeps it, and the browser process makes `NSApp` an
+/// application class CEF accepts ([`mac`]).
+#[cfg(target_os = "macos")]
+#[must_use]
+pub fn run_helper() -> i32 {
+    let args = ::cef::args::Args::new();
+    let subprocess = mac::is_subprocess();
+    let Some(_sandbox) = mac::Sandbox::enter(&args, subprocess) else {
+        return 1;
+    };
+    let _framework = match mac::Framework::load(subprocess) {
+        Ok(framework) => framework,
+        Err(reason) => {
+            if !subprocess {
+                fail_to_start(reason);
+            }
+            return 1;
+        }
+    };
+    if !subprocess && !mac::become_shared_application() {
+        fail_to_start(mac::NO_APPLICATION.into());
+        return 1;
+    }
+    run(&args, std::ptr::null_mut())
+}
+
+/// Tells the engine CEF can't start, before anything else is set up (macOS): the
+/// framework didn't load. Nothing to do when the engine isn't there either.
+#[cfg(target_os = "macos")]
+fn fail_to_start(reason: String) {
+    if let Some((_, mut to_engine, _)) = connect() {
+        let _ = wire::send(&mut to_engine, &ToEngine::StartFailed { reason });
+    }
+}
+
+fn run(args: &::cef::args::Args, sandbox_info: *mut c_void) -> i32 {
     // Must come before any other CEF call: it fixes the API version the bindings use.
     let _ = ::cef::api_hash(::cef::sys::CEF_API_VERSION_LAST, 0);
-    let args = ::cef::args::Args::new();
     let mut app = handlers::app();
     let code = ::cef::execute_process(
         Some(args.as_main_args()),
@@ -145,7 +187,7 @@ fn run(sandbox_info: *mut c_void) -> i32 {
         // A subprocess, which CEF has run to its end.
         return code;
     }
-    match browser_process(&args, &mut app, sandbox_info) {
+    match browser_process(args, &mut app, sandbox_info) {
         Ok(()) => 0,
         Err(()) => 1,
     }
@@ -185,8 +227,9 @@ fn browser_process(
     let settings = ::cef::Settings {
         // The sandbox is on (ADR-0021, ADR-0048, ADR-0095): on Windows CEF's bootstrap exe
         // set it up, on Linux Chromium's own (user namespaces, or the setuid
-        // `chrome-sandbox` beside the helper) starts in each subprocess, and every
-        // subprocess starts as the same executable.
+        // `chrome-sandbox` beside the helper) starts in each subprocess, on macOS each
+        // subprocess enters CEF's Seatbelt sandbox before anything else (ADR-0157), and
+        // every subprocess starts as the same executable.
         no_sandbox: 0,
         windowless_rendering_enabled: 1,
         root_cache_path: path(&cache_root),
@@ -196,6 +239,9 @@ fn browser_process(
         log_severity: LogSeverity::WARNING,
         ..Default::default()
     };
+    // On macOS, where the bundle keeps CEF's framework and its helper apps (ADR-0157).
+    #[cfg(target_os = "macos")]
+    let settings = mac::bundle_settings(settings);
     let started = ::cef::initialize(
         Some(args.as_main_args()),
         Some(&settings),
@@ -238,6 +284,11 @@ const INITIALIZE_FAILED: &str = "cef::initialize failed: libcef.so and its resou
      next to the helper, and the sandbox must be able to start: run as a user other than \
      root, with unprivileged user namespaces allowed or chrome-sandbox set up \
      (docs/adr/0095-browser-helper-on-linux.md)";
+#[cfg(target_os = "macos")]
+const INITIALIZE_FAILED: &str = "cef::initialize failed: JStream.app must hold CEF's framework \
+     and its helper apps in Contents/Frameworks, as scripts/mac/bundle-app.sh lays them \
+     out, and no other process may be using the same browser cache folder \
+     (docs/adr/0157-browser-sources-on-macos.md)";
 
 /// Connects to the engine's two pipes, named by `--jstream-pipe` (Windows). Returns
 /// (from the engine, to the engine, no folder).
@@ -255,9 +306,9 @@ fn connect() -> Option<(Stream, Stream, ())> {
 
 /// Takes the engine's socket, the process's standard input, and puts `/dev/null` in its
 /// place, so the subprocesses CEF starts never inherit it and the engine sees the
-/// helper's end close when the helper exits (Linux). Returns (from the engine, to the
+/// helper's end close when the helper exits (Linux and macOS). Returns (from the engine, to the
 /// engine, the folder named by `--jstream-frames`).
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 fn connect() -> Option<(Stream, Stream, std::path::PathBuf)> {
     use std::os::fd::{AsFd, AsRawFd};
     let frames = std::env::args().find_map(|arg| {
@@ -287,7 +338,7 @@ pub(crate) struct Host {
     /// Bumped with each device, so pages remake their textures (Windows).
     #[cfg(windows)]
     generation: AtomicU64,
-    /// The folder paints are written into (Linux); nothing on Windows.
+    /// The folder paints are written into (Linux and macOS); nothing on Windows.
     #[cfg_attr(windows, expect(dead_code, reason = "Windows needs no folder"))]
     frames: Frames,
     /// Browsers asked for and not yet closed.
@@ -375,8 +426,8 @@ impl Host {
                 let host = Arc::clone(self);
                 post(move || host.use_adapter(luid));
             }
-            // Pages paint in software on Linux, on no adapter.
-            #[cfg(target_os = "linux")]
+            // Pages paint in software on Linux and macOS, on no adapter.
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             ToHelper::Adapter { .. } => {}
             ToHelper::Shutdown => self.stop(),
             ToHelper::Start { .. } => self.warn("the engine sent a second start"),
@@ -438,7 +489,8 @@ impl Host {
         });
         let window_info = ::cef::WindowInfo {
             windowless_rendering_enabled: 1,
-            // Shared textures on Windows; software paints on Linux (ADR-0095).
+            // Shared textures on Windows; software paints on Linux and macOS (ADR-0095,
+            // ADR-0157).
             shared_texture_enabled: i32::from(cfg!(windows)),
             ..Default::default()
         };
@@ -645,7 +697,7 @@ impl PageShared {
     /// The browser is about to be destroyed (`OnBeforeClose`, UI thread).
     pub(crate) fn closed(&self) {
         lock(&self.browser).take();
-        #[cfg(target_os = "linux")]
+        #[cfg(any(target_os = "linux", target_os = "macos"))]
         self.textures.remove(&self.host.frames, self.id);
         self.host.send(&ToEngine::Closed { page: self.id });
         self.host.browser_closed();
@@ -748,10 +800,10 @@ impl PageShared {
     }
 
     /// One software paint, `bgra` of `width` × `height` premultiplied BGRA8 (UI thread,
-    /// Linux): written into a slot file as straight RGBA8 and announced to the engine.
+    /// Linux and macOS): written into a slot file as straight RGBA8 and announced to the engine.
     /// Skipped while the engine holds every slot; a failure is reported once until a
     /// paint succeeds.
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     pub(crate) fn paint(self: &Arc<Self>, bgra: &[u8], width: u32, height: u32) {
         let reloading = lock(&self.reloading);
         let Some(reloading) = self.paint_through(reloading) else {
@@ -950,15 +1002,16 @@ fn run_script(frame: &::cef::Frame, script: &str) {
     );
 }
 
-/// Where a page's paints go: the slot files' folder on Linux, nothing on Windows.
+/// Where a page's paints go: the slot files' folder on Linux and macOS, nothing on
+/// Windows.
 #[cfg(windows)]
 type Frames = ();
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 type Frames = std::path::PathBuf;
 
 #[cfg(windows)]
 use d3d11::Painted;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use shm::Painted;
 
 fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {

@@ -11,7 +11,7 @@
 
 pub mod app;
 pub mod bootstrap;
-#[cfg(all(windows, feature = "cef"))]
+#[cfg(all(any(windows, target_os = "macos"), feature = "cef"))]
 pub mod browser;
 pub mod host;
 pub mod hotkeys;
