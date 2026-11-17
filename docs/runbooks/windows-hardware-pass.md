@@ -309,7 +309,7 @@ Home goes back to the stored camera and the preset comes back. Packets counted a
   `ffmpeg -list_devices true -f dshow`).
 - **Toolchain:** the MSVC Rust toolchain. Items that build CEF also need an
   **x64 Native Tools Command Prompt for VS** with CMake and Ninja on `PATH`, as
-  `spikes/s4-browser/run-s4.ps1` sets up.
+  `scripts/windows-pass.ps1` sets up for itself (`Enter-VsEnv`).
 - **Administrator rights** for the virtual camera registration items (one UAC prompt
   each).
 - **Builds, in this order:** `main` (the [On main](#main) items and the
