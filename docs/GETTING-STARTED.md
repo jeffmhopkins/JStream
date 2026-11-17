@@ -67,7 +67,8 @@ and no virtual camera yet.
 menu. On other distributions, Debian included, download `jstream-v<version>-linux-x86_64.AppImage`, make it
 executable (`chmod +x`) and run it. Settings and scenes are in `~/.local/share/jstream`.
 Without a VA-API GPU encoder, JStream offers to download Cisco's OpenH264 for streaming. The
-Linux build has no virtual camera and no media-file sources yet.
+Linux build has no media-file sources yet. Its virtual camera needs the v4l2loopback module
+([The virtual camera](#vcam)).
 
 Your scenes, sources and outputs are one project file. **File › Save project as…** saves
 them to a new file, **File › Open project…** and **Open recent** switch to another, and

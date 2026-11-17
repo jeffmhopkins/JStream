@@ -455,13 +455,9 @@ fn new_token() -> anyhow::Result<String> {
 /// it also opens browser sources' pages, keeping CEF's cache and log under `data`
 /// (`browser::backend`). On 64-bit Linux it is live the same way on the Linux backends
 /// (`linux_backends`), with stream keys in the Secret Service, else its `0600` file
-<<<<<<< HEAD
-/// (ADR-0071), browser sources with the `cef` feature as on Windows, and no virtual
-/// camera. On macOS it is live the same way on the backends the
-=======
-/// (ADR-0071), and the virtual camera on a v4l2loopback device (`LoopbackVcam`,
-/// ADR-0156) unless `vcam` is false. On macOS it is live the same way on the backends the
->>>>>>> pr1528
+/// (ADR-0071), the virtual camera on a v4l2loopback device (`LoopbackVcam`, ADR-0156)
+/// unless `vcam` is false, and browser sources with the `cef` feature as on Windows
+/// (ADR-0158). On macOS it is live the same way on the backends the
 /// daemon uses there (`macos_backends`), with stream keys in the Keychain and no virtual
 /// camera. Elsewhere there are no backends yet. Either way it
 /// watches the effect packs in `data`'s `effects` folder (`Engine::watch_effect_packs`)
@@ -497,10 +493,11 @@ pub fn engine(
     };
     #[cfg(all(target_os = "linux", target_pointer_width = "64"))]
     let engine = {
-<<<<<<< HEAD
-        // No virtual camera on Linux yet (ADR-0060 §9).
-        let _ = vcam;
-        let backends = linux_backends(data)?;
+        // The v4l2loopback camera (ADR-0156), unless `--no-vcam` turned it off.
+        let mut backends = linux_backends(data)?;
+        if !vcam {
+            backends.vcam = None;
+        }
         // Browser sources through the helper beside the app (ADR-0095, ADR-0158).
         #[cfg(feature = "cef")]
         let browser = crate::browser::backend(data, Arc::clone(&backends.clock));
@@ -511,14 +508,6 @@ pub fn engine(
             None => engine,
         };
         handled(engine)
-=======
-        // The v4l2loopback camera (ADR-0156), unless `--no-vcam` turned it off.
-        let mut backends = linux_backends(data)?;
-        if !vcam {
-            backends.vcam = None;
-        }
-        handled(live(engine, backends, linux_keys()?, secrets))
->>>>>>> pr1528
     };
     #[cfg(target_os = "macos")]
     let engine = {

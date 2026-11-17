@@ -271,18 +271,13 @@ folder, and its log `logs\cef.log`.
   folder (one administrator prompt); the panel says whether it is, as the app read it
   at start, so restart the app after registering. `--no-vcam` turns the camera off.
 - **On Linux** the data folder is `$XDG_DATA_HOME/jstream` (else
-<<<<<<< HEAD
-  `~/.local/share/jstream`), the daemon's too. There is no virtual camera (the panel
-  says it is unavailable). Browser sources need the `cef` feature, which the `.deb` and
-  the AppImage are built with, and the helper's `browser` folder beside the app
-  ([ADR-0158](../../docs/adr/0158-browser-sources-in-the-linux-app.md)). Browse opens the desktop's own
-=======
   `~/.local/share/jstream`), the daemon's too. The virtual camera writes to a
   v4l2loopback device, which the user installs and loads once
   ([ADR-0156](../../docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md)); the app
   never runs anything as root, and a start without a device is refused with the
-  commands to run. There are no browser sources yet. Browse opens the desktop's own
->>>>>>> pr1528
+  commands to run. Browser sources need the `cef` feature, which the `.deb`
+  and the AppImage are built with, and the helper's `browser` folder beside the app
+  ([ADR-0158](../../docs/adr/0158-browser-sources-in-the-linux-app.md)). Browse opens the desktop's own
   dialog through the FileChooser portal, so `xdg-desktop-portal` and a backend for the
   desktop must run, as screen capture needs anyway.
 - **On macOS** the data folder is `~/Library/Application Support/JStream`, the daemon's
