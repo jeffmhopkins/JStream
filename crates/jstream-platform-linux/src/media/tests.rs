@@ -191,6 +191,9 @@ fn an_unknown_container_is_unsupported() {
     );
 }
 
+// Movies decode through VA-API, so only on Linux; elsewhere the crate is built for its
+// portable parts' tests.
+#[cfg(target_os = "linux")]
 #[test]
 fn a_movie_opens_or_names_the_missing_decoder() {
     // On a machine with a VA-API H.264 decoder it opens; elsewhere (CI) it names what
