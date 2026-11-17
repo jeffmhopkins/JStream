@@ -513,3 +513,57 @@ jobs:
           CONTEXT: macos-app
           RESULT: ${{ job.status }}
         run: bash .github/after-review-status.sh
+
+  # The real-receiver harness on macOS (apps/jstream-daemon/README.md#receiver-e2e): the
+  # same tests as ci.yml's `e2e-stream`, on the backends the daemon builds on macOS. The
+  # engine composites on its own Metal device, VideoToolbox encodes H.264 and AudioToolbox
+  # AAC, and an `ffmpeg` RTMP server and the MP4 recorder write the files `ffprobe`
+  # checks. The built daemon streams and records with nothing faked, its stream key in a
+  # keychain the test makes in its scratch home. Not required (R-GIT-003).
+  e2e-stream-macos:
+    runs-on: macos-latest
+    continue-on-error: true
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Report pending to the PR
+        if: github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: e2e-stream-macos
+          RESULT: pending
+        run: bash .github/after-review-status.sh
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+      - name: FFmpeg
+        run: brew install ffmpeg
+      # Type-checks the harness on macOS first, so a compile error reads as one.
+      - run: cargo clippy -p jstream-daemon --tests --locked -- -D warnings
+      # The two tests that hold the stream to a live pace (frame rate, keyframe timing,
+      # one stats tick a second) run on their own and report without failing the job:
+      # the runner's paravirtual GPU reads frames back slower than real time on some
+      # hosts, which makes the engine skip render ticks (each failure says how many).
+      # Every other test, the daemon binary's included, must pass.
+      - name: Stream and record to a local receiver
+        run: >-
+          cargo xtask e2e-stream --
+          --skip a_stream_at_60_fps_is_what_the_collection_opted_into
+          --skip a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats
+      - name: The live-pace tests (reported, not required)
+        continue-on-error: true
+        run: >-
+          cargo xtask e2e-stream --
+          a_stream_at_60_fps_is_what_the_collection_opted_into
+          a_stream_reaches_a_real_receiver_with_its_encoder_settings_and_stats
+      - name: The daemon's log
+        if: failure()
+        run: cat target/tmp/receiver-binary/logs/*.log || true
+      - name: Report the result to the PR
+        if: always() && github.event_name == 'workflow_dispatch'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CONTEXT: e2e-stream-macos
+          RESULT: ${{ job.status }}
+        run: bash .github/after-review-status.sh
