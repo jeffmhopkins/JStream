@@ -843,7 +843,7 @@ function Test-Media {
     }
 }
 
-# Loads the MSVC environment into this process, as spikes/s4-browser/run-s4.ps1 does.
+# Loads the MSVC environment (vcvars64) into this process, so CEF's CMake and Ninja build runs.
 function Enter-VsEnv {
     $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
     if (-not (Test-Path -LiteralPath $vswhere)) { return $false }

@@ -1,5 +1,5 @@
 //! Running linear regression of a device's clock against the media clock. Ported from
-//! spike S3 (`spikes/s3-clock/src/drift.rs`).
+//! M0's clock spike S3, whose results are in docs/ARCHITECTURE.md#threading.
 //!
 //! Each timestamped packet gives a point `(x, y)`: `x` is the packet's media-clock time
 //! and `y` is its device position divided by the nominal sample rate, both in seconds.
