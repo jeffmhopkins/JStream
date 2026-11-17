@@ -328,14 +328,15 @@ maintainer orders it when the beta is gathered.
 - **One Linux pass on the downloaded packages.** The `.deb` installs and the AppImage runs
   on Ubuntu LTS with GNOME on Wayland, and on KDE Plasma, and their core flows work:
   screen capture through the portal, a webcam, PipeWire audio, going live on VA-API or on
-  OpenH264 downloaded from the app, recording, browser pages, media files and snapshots,
-  and a graceful stop. The open lines of the Linux checklist (#1357) are that pass.
+  OpenH264 downloaded from the app, recording, browser pages and snapshots, and a
+  graceful stop. The open lines of the Linux checklist (#1357) are that pass.
 - **No known Linux bug breaks one of those flows.**
 
 **Wanted for beta.1, but it doesn't wait for them:** browser sources on macOS through
-CEF, and a virtual camera on macOS (through OBS Studio's camera extension,
-[below](#macos-vcam-source)) and on Linux (through v4l2loopback). Each needs its own ADR
-and ships in beta.1 if it is done and passes its platform's pass; otherwise it goes to the
+CEF, a virtual camera on macOS (through OBS Studio's camera extension,
+[below](#macos-vcam-source)) and on Linux (through v4l2loopback), and media-file sources
+on Linux ([ADR-0072](docs/adr/0072-linux-media-file-decoding.md), not built yet). Each
+ships in beta.1 if it is done and passes its platform's pass; otherwise it goes to the
 release after. Until then the macOS and Linux notes say what the build lacks.
 
 Everything else, new features included, goes to the alphas before it or to the releases

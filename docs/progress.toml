@@ -273,14 +273,14 @@ release = "beta.1"
 title = "Linux: one pass on the downloaded .deb and AppImage, on GNOME (Wayland) and KDE Plasma, the core flows working, and no known bug breaking one"
 status = "planned"
 issues = [1357, 1142, 1482, 1330, 1266, 942, 832, 666, 616, 514, 1196]
-note = "portal capture, webcam, PipeWire audio, going live on VA-API or OpenH264, recording, browser pages, media files, snapshots and a graceful stop; the open lines of the Linux checklist"
+note = "portal capture, webcam, PipeWire audio, going live on VA-API or OpenH264, recording, browser pages, snapshots and a graceful stop; the open lines of the Linux checklist"
 
 [[target]]
 release = "beta.1"
-title = "Wanted, not waited for: browser sources on macOS through CEF, and a virtual camera on macOS (OBS Studio's camera extension) and on Linux (v4l2loopback)"
+title = "Wanted, not waited for: browser sources on macOS through CEF, a virtual camera on macOS (OBS Studio's camera extension) and on Linux (v4l2loopback), and media-file sources on Linux (ADR-0072)"
 status = "planned"
 issues = [1516]
-note = "each needs its own ADR and ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta)"
+note = "each ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta)"
 
 [[milestone]]
 id = "M0"
