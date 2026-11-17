@@ -138,9 +138,10 @@ fn install_openh264(_home: &Path) -> bool {
 }
 
 async fn call(control: &WsControl, call: Call) -> Result<CallResult, ControlError> {
+    let what = format!("{call:?}");
     tokio::time::timeout(Duration::from_secs(20), control.call(call))
         .await
-        .expect("the daemon answers within 20 s")
+        .unwrap_or_else(|_| panic!("the daemon answers within 20 s: {what}"))
         .map(|response| response.result)
 }
 

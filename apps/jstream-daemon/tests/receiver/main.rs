@@ -783,16 +783,20 @@ async fn a_stream_at_60_fps_is_what_the_collection_opted_into() {
     rig.edit(json!([{"type": "output.set_encoder", "output_id": "live", "profile_id": "low"}]))
         .await;
     let receiver = Receiver::start(port, KEY, &dir.join("live.flv"));
+    let skipped_before = rig.render_ticks();
     rig.start("live").await;
     rig.until("two seconds at 60 fps", |rig| {
         rig.stats("live").last().is_some_and(|s| s.frames >= 120)
     })
     .await;
     rig.stop("live").await;
+    let skipped = rig.render_ticks() - skipped_before;
+    let last = rig.stats("live").last().cloned();
     let p = probe(&receiver.finish());
     assert!(
         close(p.measured_fps(), 60.0, 4.0),
-        "60 fps, within a millisecond of stamp: {p:?}"
+        "60 fps, within a millisecond of stamp; the engine skipped {skipped} render ticks, \
+         and the output's last stats were {last:?}: {p:?}"
     );
     let spacing = p.keyframe_spacing();
     assert!(

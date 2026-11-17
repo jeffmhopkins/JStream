@@ -519,8 +519,24 @@ jobs:
         run: brew install ffmpeg
       # Type-checks the harness on macOS first, so a compile error reads as one.
       - run: cargo clippy -p jstream-daemon --tests --locked -- -D warnings
+      # The binary test stores its stream key in the default keychain. A runner's login
+      # keychain may be locked, and unlocking it would need a password prompt nobody
+      # answers, so the run gets a keychain of its own: unlocked, never relocking, and
+      # the user's default for the job.
+      - name: An unlocked keychain for the stream key
+        run: |
+          set -euo pipefail
+          kc="$RUNNER_TEMP/e2e-stream.keychain-db"
+          security create-keychain -p e2e "$kc"
+          security set-keychain-settings "$kc"
+          security unlock-keychain -p e2e "$kc"
+          security list-keychains -d user -s "$kc" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -d user -s "$kc"
       - name: Stream and record to a local receiver
         run: cargo xtask e2e-stream
+      - name: The daemon's log
+        if: failure()
+        run: cat target/tmp/receiver-binary/logs/*.log || true
       - name: Report the result to the PR
         if: always() && github.event_name == 'workflow_dispatch'
         shell: bash
