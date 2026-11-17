@@ -455,7 +455,8 @@ fn new_token() -> anyhow::Result<String> {
 /// it also opens browser sources' pages, keeping CEF's cache and log under `data`
 /// (`browser::backend`). On 64-bit Linux it is live the same way on the Linux backends
 /// (`linux_backends`), with stream keys in the Secret Service, else its `0600` file
-/// (ADR-0071), and no virtual camera. On macOS it is live the same way on the backends the
+/// (ADR-0071), browser sources with the `cef` feature as on Windows, and no virtual
+/// camera. On macOS it is live the same way on the backends the
 /// daemon uses there (`macos_backends`), with stream keys in the Keychain and no virtual
 /// camera. Elsewhere there are no backends yet. Either way it
 /// watches the effect packs in `data`'s `effects` folder (`Engine::watch_effect_packs`)
@@ -493,7 +494,17 @@ pub fn engine(
     let engine = {
         // No virtual camera on Linux yet (ADR-0060 §9).
         let _ = vcam;
-        handled(live(engine, linux_backends(data)?, linux_keys()?, secrets))
+        let backends = linux_backends(data)?;
+        // Browser sources through the helper beside the app (ADR-0095, ADR-0158).
+        #[cfg(feature = "cef")]
+        let browser = crate::browser::backend(data, Arc::clone(&backends.clock));
+        let engine = live(engine, backends, linux_keys()?, secrets);
+        #[cfg(feature = "cef")]
+        let engine = match browser {
+            Some(browser) => engine.with_browser(browser),
+            None => engine,
+        };
+        handled(engine)
     };
     #[cfg(target_os = "macos")]
     let engine = {
@@ -665,10 +676,13 @@ struct Live {
     handle: Arc<OnceLock<Weak<Engine>>>,
 }
 
-#[cfg(all(windows, feature = "cef"))]
+#[cfg(all(
+    any(windows, all(target_os = "linux", target_pointer_width = "64")),
+    feature = "cef"
+))]
 impl Live {
     /// The engine with `browser` for browser sources.
-    fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
+    fn with_browser(self, browser: Arc<dyn jstream_browser::BrowserBackend>) -> Self {
         Self {
             engine: self.engine.with_browser(browser),
             handle: self.handle,

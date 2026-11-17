@@ -168,4 +168,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0153](0153-ptz-controller-idle-stop-counters-and-setting.md) | A PTZ controller's idle stop, its counters, the desktop app's setting, and a resent command | accepted | agent |  |
 | [ADR-0154](0154-a-carried-pass-compares-against-the-reviewed-base.md) | A carried review pass compares the reviewed head against the base it was reviewed on | accepted | agent |  |
 | [ADR-0155](0155-ptz-cameras-counters-in-profile-get.md) | The PTZ cameras' counters in profile.get | accepted | agent |  |
+| [ADR-0158](0158-browser-sources-in-the-linux-app.md) | Browser sources in the Linux desktop app | accepted | agent |  |
 <!-- @generated end adr-index -->

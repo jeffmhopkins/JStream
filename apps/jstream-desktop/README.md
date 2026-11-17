@@ -64,7 +64,8 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   stored relative to the collection), whether "Allow devices on my network" is on,
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
   and the JTunnel setting as it was at start with `setJtunnel`, which saves it.
-- **Browser sources** (`browser.rs`, Windows with the `cef` feature only): the CEF
+- **Browser sources** (`browser.rs`, Windows and 64-bit Linux with the `cef` feature;
+  [ADR-0158](../../docs/adr/0158-browser-sources-in-the-linux-app.md) on Linux): the CEF
   backend the engine opens `browser` sources' pages in.
 - **Window** (`shell.rs`, Windows, macOS, and Linux with `webkitgtk`): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
@@ -271,7 +272,9 @@ folder, and its log `logs\cef.log`.
   at start, so restart the app after registering. `--no-vcam` turns the camera off.
 - **On Linux** the data folder is `$XDG_DATA_HOME/jstream` (else
   `~/.local/share/jstream`), the daemon's too. There is no virtual camera (the panel
-  says it is unavailable) and no browser sources yet. Browse opens the desktop's own
+  says it is unavailable). Browser sources need the `cef` feature, which the `.deb` and
+  the AppImage are built with, and the helper's `browser` folder beside the app
+  ([ADR-0158](../../docs/adr/0158-browser-sources-in-the-linux-app.md)). Browse opens the desktop's own
   dialog through the FileChooser portal, so `xdg-desktop-portal` and a backend for the
   desktop must run, as screen capture needs anyway.
 - **On macOS** the data folder is `~/Library/Application Support/JStream`, the daemon's

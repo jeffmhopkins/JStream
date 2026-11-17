@@ -57,9 +57,10 @@ jobs:
       - run: rustup target add aarch64-apple-darwin
       - run: cargo clippy -p jstream-platform-macos --all-targets --locked --target aarch64-apple-darwin -- -D warnings
       # The browser source's CEF backend and helper on Linux (ADR-0095), and the daemon's
-      # wiring of them, type-checked against cef-dll-sys's bundled bindings without
-      # downloading CEF (`dox`); the browser-linux job below builds them for real.
-      - run: cargo clippy -p jstream-browser -p jstream-browser-helper -p jstream-daemon --all-targets --features jstream-browser/dox,jstream-browser/fake,jstream-browser-helper/dox,jstream-daemon/dox --locked -- -D warnings
+      # and the desktop app's wiring of them (ADR-0158), type-checked against
+      # cef-dll-sys's bundled bindings without downloading CEF (`dox`); the browser-linux
+      # job below builds them for real.
+      - run: cargo clippy -p jstream-browser -p jstream-browser-helper -p jstream-daemon -p jstream-desktop --all-targets --features jstream-browser/dox,jstream-browser/fake,jstream-browser-helper/dox,jstream-daemon/dox,jstream-desktop/dox --locked -- -D warnings
 
   test:
     if: github.event_name != 'pull_request' || !github.event.pull_request.draft

@@ -2919,7 +2919,6 @@ dependencies = [
  "jstream-platform-windows",
  "jstream-protocol",
  "jstream-server",
- "jstream-sources",
  "rustls",
  "rustls-native-certs",
  "serde",

@@ -24,7 +24,7 @@ path = "src/main.rs"
 # Browser sources (ADR-0021, ADR-0046): the engine opens `browser` sources' pages in CEF.
 # Off by default, as in `jstream-browser`, until the CEF runtime and the helper are packaged
 # (its README's open items); the portable folder then also needs the helper exe and the
-# CEF runtime beside `jstream.exe`. Windows only: elsewhere it builds nothing.
+# CEF runtime beside `jstream.exe`. Windows and Linux (ADR-0158): on macOS it builds nothing.
 cef = ["dep:jstream-browser", "jstream-browser/cef"]
 # Compile-checks the CEF wiring without building CEF, for CI's clippy.
 dox = ["cef", "jstream-browser/dox"]
@@ -76,8 +76,6 @@ jstream-control = { workspace = true, features = ["ws"] }
 # The CEF backend for browser sources, with the `cef` feature only.
 jstream-browser = { workspace = true, optional = true }
 jstream-platform-windows.workspace = true
-# Names the browser backend the engine takes (`BrowserBackend`, from `jstream-browser`).
-jstream-sources.workspace = true
 tauri.workspace = true
 
 # The window (WKWebView) and the live engine on macOS (ADR-0144): the platform backends,
@@ -89,8 +87,11 @@ tauri.workspace = true
 
 # On Linux, the live engine's backends and stream key store (as the daemon's), the file
 # dialog's portal, and the global hotkeys' listeners and the session kind that picks one
-# (ADR-0112); with `webkitgtk`, the window (Tauri on WebKitGTK).
+# (ADR-0112); with `webkitgtk`, the window (Tauri on WebKitGTK); with `cef`, browser
+# sources.
 [target.'cfg(target_os = "linux")'.dependencies]
+# The CEF backend for browser sources, with the `cef` feature only (ADR-0158).
+jstream-browser = { workspace = true, optional = true }
 jstream-platform-linux.workspace = true
 tauri = { workspace = true, optional = true }
 

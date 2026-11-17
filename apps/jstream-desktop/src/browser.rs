@@ -1,9 +1,9 @@
 //! Browser sources in the app (ADR-0021, ADR-0046, ADR-0048): the CEF backend the engine
 //! opens `browser` sources' pages in, through the sandboxed browser helper, on the engine's
-//! media clock, with pages' frames on a GPU device of the media adapter. Windows with the
-//! `cef` feature only.
+//! media clock, with pages' frames on a GPU device of the media adapter on Windows, and
+//! as CPU frames on 64-bit Linux (ADR-0095, ADR-0158). With the `cef` feature only.
 //!
-//! Docs: apps/jstream-desktop/README.md#design, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md
+//! Docs: apps/jstream-desktop/README.md#design, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md, docs/adr/0095-browser-helper-on-linux.md, docs/adr/0158-browser-sources-in-the-linux-app.md
 
 use jstream_browser::{BrowserBackend, CefBackend, CefConfig};
 use jstream_platform::MediaClock;
