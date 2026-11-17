@@ -67,7 +67,7 @@ later, download `jstream-v<version>-linux-amd64.deb` and run
 menu. On other distributions, download `jstream-v<version>-linux-x86_64.AppImage`, make it
 executable (`chmod +x`) and run it. Settings and scenes are in `~/.local/share/jstream`.
 Without a VA-API GPU encoder, JStream offers to download Cisco's OpenH264 for streaming. The
-Linux build has no virtual camera yet.
+Linux build has no virtual camera and no media-file sources yet.
 
 Your scenes, sources and outputs are one project file. **File › Save project as…** saves
 them to a new file, **File › Open project…** and **Open recent** switch to another, and

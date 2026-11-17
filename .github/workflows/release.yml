@@ -264,7 +264,7 @@ jobs:
             echo "- \`${deb}\`, for Ubuntu 24.04 or later and Debian 12 or later: \`sudo apt install ./${deb}\`, then start JStream from the app menu."
             echo "- \`${image}\`, for other distributions: make it executable (\`chmod +x ${image}\`) and run it."
             echo
-            echo "These packages are **not signed**. JStream encodes H.264 on your GPU through VA-API or, when you ask it to, with Cisco's OpenH264, which it downloads from Cisco. It encodes AAC with its own encoder; JStream holds no AAC patent licence (\`NOTICE.txt\`). There is no virtual camera on Linux yet."
+            echo "These packages are **not signed**. JStream encodes H.264 on your GPU through VA-API or, when you ask it to, with Cisco's OpenH264, which it downloads from Cisco. It encodes AAC with its own encoder; JStream holds no AAC patent licence (\`NOTICE.txt\`). There is no virtual camera and no media-file source on Linux yet."
             echo
             echo "Browser sources run the Chromium Embedded Framework, \`${cef}\`."
             echo
