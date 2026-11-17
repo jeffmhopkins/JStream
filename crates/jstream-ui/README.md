@@ -1070,8 +1070,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   also optional. In a
   browser the page can't tell, so it lets the engine decide and explains its refusal:
   an unregistered camera ("is not registered") gets the full registration command, and
-  an engine with no camera at all ("no virtual camera": not running on Windows, or the
-  desktop app's `--no-vcam`) gets that, with no registration advice; on Windows 10 the
+  an engine with no camera at all ("no virtual camera": not running on Windows or Linux,
+  or the desktop app's `--no-vcam`) gets that, with no registration advice; on Windows 10 the
   sink's own reason ("it needs Windows 11") is shown as it is.
 - **Pairing.** In the desktop app the Devices page starts with "Allow devices on my
   network" ([ADR-0104](../../docs/adr/0104-network-listener-over-tls.md) decision 1),

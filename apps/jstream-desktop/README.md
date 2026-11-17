@@ -33,7 +33,7 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
 - **Startup** (`app.rs`, `main.rs`): the command line, the log file, then the engine,
   its server and the UI bundle. Anything that fails becomes the page the window shows.
 - **Engine host** (`host.rs`): the engine (on Windows, macOS and 64-bit Linux a live one,
-  wired as the daemon's is, plus the virtual camera on Windows) and its server on a free port, with a token made fresh
+  wired as the daemon's is, plus the virtual camera on Windows and Linux) and its server on a free port, with a token made fresh
   at each start (with `--mcp`, on a fixed port with the data folder's token file and MCP
   on, the window on a token of its own, and a new agent held until the person answers;
   and with `Network` the TLS network listener and pairing); `vcam_status`, whether the
@@ -161,7 +161,7 @@ Closing the window stops the engine.
 | Option | Meaning |
 |---|---|
 | `--ui-dir <folder>` | The UI bundle (`trunk build`'s `dist`). Default: the `ui` folder beside the exe, or in a macOS app the one in `Contents/Resources`. |
-| `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. Linux and macOS have no virtual camera, so it changes nothing there. |
+| `--no-vcam` | Run without the virtual camera: a `virtual_cam` output can't start. On Linux the camera writes to a v4l2loopback device the user loads (ADR-0156); macOS has no virtual camera, so it changes nothing there. |
 | `--mcp` | Let agents in: listen on `127.0.0.1:4455` with the data folder's `token` file, and serve MCP at `/mcp` (see **Agents** below). Off by default. |
 | `--port <port>` | With `--mcp`, the port instead of 4455. Without `--mcp` it is refused. |
 
@@ -270,8 +270,11 @@ folder, and its log `logs\cef.log`.
   folder (one administrator prompt); the panel says whether it is, as the app read it
   at start, so restart the app after registering. `--no-vcam` turns the camera off.
 - **On Linux** the data folder is `$XDG_DATA_HOME/jstream` (else
-  `~/.local/share/jstream`), the daemon's too. There is no virtual camera (the panel
-  says it is unavailable) and no browser sources yet. Browse opens the desktop's own
+  `~/.local/share/jstream`), the daemon's too. The virtual camera writes to a
+  v4l2loopback device, which the user installs and loads once
+  ([ADR-0156](../../docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md)); the app
+  never runs anything as root, and a start without a device is refused with the
+  commands to run. There are no browser sources yet. Browse opens the desktop's own
   dialog through the FileChooser portal, so `xdg-desktop-portal` and a backend for the
   desktop must run, as screen capture needs anyway.
 - **On macOS** the data folder is `~/Library/Application Support/JStream`, the daemon's
@@ -452,7 +455,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   The strings are written as escaped JavaScript literals. The global carries
   `url`, `token` and `vcam`, the virtual camera's status as the app read it at start:
   `registered`, `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable`
-  (not Windows). The UI uses `vcam` only to say whether the camera can start (its
+  (not Windows: on Linux the camera finds its device only when it starts). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the data
   folder, `network`, whether "Allow devices on my network" was on at start,
   `networkOpen`, whether its listener then opened, `wheelFocusOnly`, whether wheel

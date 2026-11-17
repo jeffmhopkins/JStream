@@ -51,8 +51,8 @@ mod set {
 
     use super::{AudioBackend, choose};
     use crate::{
-        AlsaAudio, MonotonicClock, PairedAudio, PipeWireAudio, PortalCapture, Session, V4l2Devices,
-        VaapiCodecs,
+        AlsaAudio, LoopbackVcam, MonotonicClock, PairedAudio, PipeWireAudio, PortalCapture,
+        Session, V4l2Devices, VaapiCodecs,
     };
 
     /// The backends this crate has, built together for one process: the media clock,
@@ -127,7 +127,8 @@ mod set {
         }
 
         /// The engine's backend set, with the GPU interop and media-file decoders the
-        /// host supplies. Linux has no virtual camera (ADR-0060 §9), so `vcam` is `None`.
+        /// host supplies. The virtual camera is a [`LoopbackVcam`] (ADR-0156), which
+        /// opens nothing until it starts.
         pub fn into_backends(
             self,
             gpu: Arc<dyn GpuInterop>,
@@ -142,7 +143,7 @@ mod set {
                 codecs: self.codecs,
                 gpu,
                 media,
-                vcam: None,
+                vcam: Some(Box::new(LoopbackVcam::new())),
             }
         }
     }
