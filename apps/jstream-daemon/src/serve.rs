@@ -349,7 +349,8 @@ fn macos_backends() -> anyhow::Result<Backends> {
 /// PipeWire audio (else ALSA, with the reason logged), VA-API H.264 and HEVC with Cisco's
 /// OpenH264 as the software H.264 encoder once the user has downloaded it, JStream's
 /// AAC-LC encoder, and the Vulkan GPU interop. Media files are `Unsupported` until
-/// ADR-0072's decoders exist, and there is no virtual camera (ADR-0060 §9). Creating
+/// ADR-0072's decoders exist, and the virtual camera writes to a v4l2loopback device the
+/// user has loaded (`LoopbackVcam`, ADR-0156), looked for only on `output.start`. Creating
 /// them lists the audio backend's devices and probes the VA-API render nodes, and opens
 /// nothing else: capture asks the portal only when a pipeline first uses it. A machine
 /// without a GPU composites on the engine's own software device (`open_capture` in core
