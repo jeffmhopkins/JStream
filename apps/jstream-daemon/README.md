@@ -132,7 +132,12 @@ and GPU interop the daemon builds there (`serve.rs`): VideoToolbox's H.264 encod
 AudioToolbox's AAC-LC encoder, and no GPU interop yet, so the engine composites on a
 Metal device of its own and reads the program back for the encoders. CI runs it on
 Linux in `e2e-stream` and on macOS in `e2e-stream-macos`
-([R-GIT-003](../../docs/RULES.md#R-GIT-003)).
+([R-GIT-003](../../docs/RULES.md#R-GIT-003)). On macOS the two tests that hold the
+stream to a live pace (the stream on an encoder profile, and 60 fps) run in a step of
+their own that reports without failing the job: the runner's paravirtual GPU reads
+frames back slower than real time on some hosts, so the engine skips render ticks, and
+each failure says how many. Anything after `--` on `cargo xtask e2e-stream` goes to the
+test binary, which is how the job picks the tests.
 
 On Linux the H.264 encoder is Cisco's OpenH264, Linux's software encoder
 ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)), when

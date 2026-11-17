@@ -2523,7 +2523,7 @@ stamp = { hash = "b3:b3fdeb6d5713702a", by = "agent:mac-e2e", note = "Tests list
 stamp = { hash = "b3:32c9928094e5d21e", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["CRATE-jstream-daemon#receiver-e2e"."body"]
-stamp = { hash = "b3:a226d5035d18dd98", by = "agent:mac-e2e", note = "macOS binary-test bullet now says the key goes to a login keychain the test makes in its scratch home, after checking security reads the list from that HOME; matches login_keychain in binary.rs" }
+stamp = { hash = "b3:d6e1cd2eda50b92d", by = "agent:mac-e2e", note = "Added the xtask's '--' passthrough and the macOS job's split: the two live-pace tests report in their own continue-on-error step; matches e2e_stream.rs and after-review.yml" }
 
 ["CRATE-jstream-daemon#receiver-e2e"."file:apps/jstream-daemon/tests/receiver/binary.rs"]
 stamp = { hash = "b3:0e8df0b5fb26ad64", by = "agent:mac-e2e", note = "Keychain setup detail only; the section's description of the scratch-home keychain still holds" }
@@ -2538,7 +2538,7 @@ stamp = { hash = "b3:b3fdeb6d5713702a", by = "agent:mac-e2e", note = "Rewritten 
 stamp = { hash = "b3:32c9928094e5d21e", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["CRATE-jstream-daemon#receiver-e2e"."file:xtask/src/e2e_stream.rs"]
-stamp = { hash = "b3:ee00bd1731f9ccf3", by = "agent:mac-e2e", note = "Rewritten for the macOS port: VideoToolbox/AudioToolbox and NoGpuInterop as serve.rs builds them, the new recording test, the binary test streaming and recording with its Keychain key cleared, the xtask refusing OpenH264 options on macOS, and the e2e-stream-macos CI job" }
+stamp = { hash = "b3:a2e7c68a0fb6e889", by = "agent:mac-e2e", note = "Added the xtask's '--' passthrough and the macOS job's split: the two live-pace tests report in their own continue-on-error step; matches e2e_stream.rs and after-review.yml" }
 
 ["CRATE-jstream-daemon#usage"."body"]
 stamp = { hash = "b3:c3778e6be8f54062", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added --ptz-controller and --ptz-controller-allow (table rows, the PTZ controllers bullet, the hand-rolled option list); then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }

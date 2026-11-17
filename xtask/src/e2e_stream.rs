@@ -7,7 +7,8 @@
 //! Cisco's OpenH264, which the harness downloads from Cisco and checks against the pin,
 //! as CI does; `--openh264 <library>` runs them on a copy of the pinned library already
 //! on disk. With neither, they use the libx264 stand-in. On macOS they run on
-//! VideoToolbox and AudioToolbox, and the OpenH264 options are refused.
+//! VideoToolbox and AudioToolbox, and the OpenH264 options are refused. Anything after
+//! `--` goes to the test binary: test name filters, or `--skip <name>`.
 //!
 //! Docs: apps/jstream-daemon/README.md#receiver-e2e
 
@@ -22,11 +23,16 @@ const ICD_DIR: &str = "/usr/share/vulkan/icd.d";
 /// Runs the harness; `Ok(false)` when a test failed.
 pub fn run(args: &[String], root: &Path) -> Result<bool> {
     let mut openh264 = None;
-    let mut rest = args.iter();
-    while let Some(arg) = rest.next() {
+    let mut filters: &[String] = &[];
+    let mut rest = args.iter().enumerate();
+    while let Some((i, arg)) = rest.next() {
         match arg.as_str() {
+            "--" => {
+                filters = &args[i + 1..];
+                break;
+            }
             "--openh264" => {
-                let path = rest.next().context("--openh264 needs the library's path")?;
+                let (_, path) = rest.next().context("--openh264 needs the library's path")?;
                 let path = Path::new(path)
                     .canonicalize()
                     .with_context(|| format!("{path} doesn't exist"))?;
@@ -34,7 +40,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
             }
             "--openh264-download" => openh264 = Some("download".into()),
             other => bail!(
-                "unknown argument {other}; usage: e2e-stream [--openh264-download | --openh264 <library>]"
+                "unknown argument {other}; usage: e2e-stream [--openh264-download | --openh264 <library>] [-- <test filters and flags>]"
             ),
         }
     }
@@ -71,6 +77,7 @@ pub fn run(args: &[String], root: &Path) -> Result<bool> {
         "--ignored",
         "--test-threads=1",
     ]);
+    cargo.args(filters);
     if linux
         && std::env::var_os("VK_DRIVER_FILES").is_none()
         && let Some(icd) = lavapipe()
