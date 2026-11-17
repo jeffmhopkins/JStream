@@ -7506,7 +7506,7 @@ stamp = { hash = "b3:eca9b83cffae4953", by = "agent:release-thread", note = "B1 
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:aae47052dda414de", by = "agent:dependabot-lander", note = "Dependabot cargo group bump only changes the cef (=156.3.0 -> =156.4.0) and skrifa (0.49 -> 0.50) requirements in Cargo.toml; [workspace.package] version and the apps that inherit it are untouched, so the section holds" }
+stamp = { hash = "b3:c92ab51569abe884", by = "agent:dependabot-lander", note = "Also re-read after rewording the cef pin comment (drops the CEF build numbers, per review N1): comment-only, the workspace version is untouched" }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
