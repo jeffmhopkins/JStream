@@ -408,6 +408,8 @@ pub(crate) const CAP_TIMEPERFRAME: u32 = 0x1000;
 
 /// `V4L2_BUF_TYPE_VIDEO_CAPTURE`.
 pub(crate) const BUF_TYPE_VIDEO_CAPTURE: u32 = 1;
+/// `V4L2_BUF_TYPE_VIDEO_OUTPUT`: the virtual camera's frames, written to v4l2loopback.
+pub(crate) const BUF_TYPE_VIDEO_OUTPUT: u32 = 2;
 /// `V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE`.
 pub(crate) const BUF_TYPE_VIDEO_CAPTURE_MPLANE: u32 = 9;
 /// `V4L2_MEMORY_MMAP`.
@@ -466,6 +468,8 @@ pub(crate) const YCBCR_ENC_BT2020: u32 = 6;
 /// `V4L2_QUANTIZATION_FULL_RANGE` and `_LIM_RANGE`.
 pub(crate) const QUANTIZATION_FULL_RANGE: u32 = 1;
 pub(crate) const QUANTIZATION_LIM_RANGE: u32 = 2;
+/// `V4L2_XFER_FUNC_709`.
+pub(crate) const XFER_FUNC_709: u32 = 1;
 
 #[cfg(test)]
 mod tests {
@@ -561,6 +565,11 @@ mod tests {
             ),
             (0x1000, 9, 8)
         );
+    }
+
+    #[test]
+    fn the_virtual_cameras_constants_match_the_header() {
+        assert_eq!((BUF_TYPE_VIDEO_OUTPUT, XFER_FUNC_709), (2, 1));
     }
 
     #[test]

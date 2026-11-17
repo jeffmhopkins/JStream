@@ -387,6 +387,53 @@ impl Device {
         Ok(Settled::single(f.pix))
     }
 
+    /// `VIDIOC_S_FMT` with every field of `pix` as given, on the single-planar buffer
+    /// type this device uses: the virtual camera's output format, colour fields
+    /// included. Returns the format the driver settled on.
+    pub(crate) fn set_pix(&self, pix: PixFormat) -> Result<PixFormat, PlatformError> {
+        // SAFETY: all-zero is a valid `v4l2_format`.
+        let mut f: Format = unsafe { std::mem::zeroed() };
+        f.type_ = self.ty;
+        f.pix = pix;
+        // SAFETY: `VIDIOC_S_FMT` takes a `v4l2_format`.
+        unsafe { self.ioctl(VIDIOC_S_FMT, &mut f) }
+            .map_err(|e| os_error("VIDIOC_S_FMT", &self.what, &e))?;
+        Ok(f.pix)
+    }
+
+    /// Writes one whole frame with `write()`, as an output device using read/write I/O
+    /// takes it. `false` when the driver would block (the descriptor is non-blocking), so
+    /// the frame was not taken.
+    pub(crate) fn write_frame(&self, data: &[u8]) -> Result<bool, PlatformError> {
+        loop {
+            // SAFETY: `data` is valid for `data.len()` bytes for the call, which only
+            // reads it.
+            let n = unsafe {
+                libc::write(
+                    self.fd.as_raw_fd(),
+                    data.as_ptr().cast::<c_void>(),
+                    data.len(),
+                )
+            };
+            if let Ok(n) = usize::try_from(n) {
+                if n == data.len() {
+                    return Ok(true);
+                }
+                return Err(PlatformError::Os {
+                    call: "write",
+                    code: None,
+                    message: format!("{}: took {n} of a frame's {} bytes", self.what, data.len()),
+                });
+            }
+            let e = io::Error::last_os_error();
+            match e.kind() {
+                io::ErrorKind::Interrupted => continue,
+                io::ErrorKind::WouldBlock => return Ok(false),
+                _ => return Err(os_error("write", &self.what, &e)),
+            }
+        }
+    }
+
     /// `request` (`QUERYBUF`, `QBUF` or `DQBUF`) on memory-mapped buffer `index`. A
     /// multi-planar buffer is given an array of every plane the driver may fill, which
     /// comes back with the buffer.

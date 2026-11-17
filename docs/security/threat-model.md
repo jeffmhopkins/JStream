@@ -649,8 +649,9 @@ covers = [
   "crates/jstream-vcam-windows/src/trust.rs",
   "crates/jstream-vcam-windows/src/win/session.rs",
   "crates/jstream-vcam-windows/src/win/frames.rs",
+  "crates/jstream-platform-linux/src/v4l2/loopback.rs",
 ]
-depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md"]
+depends_on = ["docs/adr/0066-portable-windows-distribution-v2.md", "docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md"]
 -->
 
 **Threats:** another session's user reading the camera feed or injecting frames; a
@@ -689,6 +690,14 @@ A DLL registered by hand with `regsvr32` is registered where it is.
 
 **Gaps:** the copy's DACL and Frame Server loading it are not yet checked on Windows
 hardware (#563).
+
+**Linux** ([ADR-0156](../adr/0156-linux-virtual-camera-through-v4l2loopback.md)): the
+camera is a v4l2loopback node the user loads; JStream never runs anything as root or
+loads the module. It writes only to a node whose driver is v4l2loopback and that takes
+frames, and never to one another writer holds (the format is refused, and it moves on).
+**Accepted:** every process that can open the node, as udev and the session grant it
+(the `video` group or the seat's own access), reads its frames; another writer can
+take a free node before JStream does, and readers then see that writer's frames.
 
 <a id="lan-inputs"></a>
 ## LAN inputs
