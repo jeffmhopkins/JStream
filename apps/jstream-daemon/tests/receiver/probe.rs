@@ -22,6 +22,7 @@ pub fn free_port() -> u16 {
 /// already holding a connection there. Connecting to find out would use up its one
 /// accept, and a publisher that is reconnecting can take that accept, which closes the
 /// listening socket, between two looks.
+#[cfg(target_os = "linux")]
 fn listening(port: u16) -> bool {
     let local = format!("0100007F:{port:04X}");
     std::fs::read_to_string("/proc/net/tcp").is_ok_and(|table| {
@@ -31,6 +32,25 @@ fn listening(port: u16) -> bool {
             fields.get(1) == Some(&local.as_str()) && matches!(fields.get(3), Some(&"0A" | &"01"))
         })
     })
+}
+
+/// [The Linux one](listening)'s look on macOS, which has no `/proc`: `netstat`'s TCP
+/// table, where a socket's local address is `127.0.0.1.<port>` and its state `LISTEN`
+/// or `ESTABLISHED`.
+#[cfg(target_os = "macos")]
+fn listening(port: u16) -> bool {
+    let local = format!("127.0.0.1.{port}");
+    Command::new("netstat")
+        .args(["-an", "-p", "tcp"])
+        .output()
+        .is_ok_and(|out| {
+            String::from_utf8_lossy(&out.stdout).lines().any(|line| {
+                let fields: Vec<&str> = line.split_whitespace().collect();
+                // `proto recv-q send-q local foreign state`.
+                fields.get(3) == Some(&local.as_str())
+                    && matches!(fields.get(5), Some(&"LISTEN" | &"ESTABLISHED"))
+            })
+        })
 }
 
 /// One `ffmpeg` RTMP server for one publish, copying the stream into `file`.
