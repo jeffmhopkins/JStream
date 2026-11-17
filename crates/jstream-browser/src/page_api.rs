@@ -4,11 +4,29 @@
 //! JavaScript that defines it ([`shim`]). Data only flows one way: nothing here, nor in
 //! the shim, carries anything from a page back to the engine.
 
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 use crate::PageLocation;
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 use crate::page::file_url;
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 use crate::request::same_web_origin;
 
 /// The most bytes one [`PageData`] carries in its fields: under the pipe's message limit,
@@ -110,7 +128,13 @@ impl PageData {
 /// Which documents of a page get `window.jstream` (ADR-0102 decision 2): only its main
 /// frame, and only while that shows the source's own document.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 pub(crate) enum ApiHome {
     /// A document of the same origin as this URL (the source's own).
     Web(String),
@@ -118,7 +142,13 @@ pub(crate) enum ApiHome {
     File(String),
 }
 
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 impl ApiHome {
     /// Where a page at `location` gets the API: never for a blank page, nor for a file
     /// whose folder can't be resolved. A page given as HTML gets it on `html_url`'s
@@ -184,7 +214,13 @@ impl ApiHome {
 
 /// The JavaScript that defines `window.jstream` for a page with `api`. Evaluated, it
 /// returns the function that takes each update as JSON text ([`update_json`]).
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 pub(crate) fn shim(api: PageApi) -> String {
     let grant = format!(
         "{{scenes:{},values:{},levels:{},midi:{}}}",
@@ -196,7 +232,13 @@ pub(crate) fn shim(api: PageApi) -> String {
 /// A page's latest update of each kind, merged from those it was sent: so a document
 /// that gets the API later (one the browser hadn't made yet, a reload, a navigation
 /// back) starts from where the page is.
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 #[derive(Debug, Default)]
 pub(crate) struct PageCache {
     /// The clock anchor, and when it arrived.
@@ -208,7 +250,13 @@ pub(crate) struct PageCache {
     values: std::collections::BTreeMap<String, String>,
 }
 
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 impl PageCache {
     /// Takes in `data`.
     pub(crate) fn merge(&mut self, data: &PageData) {
@@ -257,7 +305,13 @@ impl PageCache {
 
 /// `data` as the JSON text the shim's update function takes. A non-finite clock is left
 /// out.
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 pub(crate) fn update_json(data: &PageData) -> String {
     let mut fields = Vec::new();
     if let Some((t, lead)) = data.clock
@@ -292,7 +346,13 @@ pub(crate) fn update_json(data: &PageData) -> String {
 
 /// Whether `name` is safe to write into JSON unescaped: a shared value's name is dotted
 /// segments of `a`–`z`, `0`–`9` and `_`, which the engine checked.
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 fn is_value_name(name: &str) -> bool {
     !name.is_empty()
         && name

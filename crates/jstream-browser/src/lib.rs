@@ -9,40 +9,68 @@
 //! [`BrowserPage`]. The platform-neutral parts are built everywhere: the page's location
 //! and custom CSS ([`PageLocation`], [`css_script`]), the audio hand-off ([`PageAudio`])
 //! and, with the `fake` feature, an in-memory backend for tests. The CEF backend
-//! (`CefBackend`), which starts the helper and drives it over pipes, is built on Windows
-//! and Linux with the `cef` feature only. The CEF code the helper runs (`run_helper`) is
-//! built on Windows and Linux with the `helper` feature only, which
+//! (`CefBackend`), which starts the helper and drives it over pipes, is built on Windows,
+//! Linux and macOS with the `cef` feature only. The CEF code the helper runs
+//! (`run_helper`) is built on the same three with the `helper` feature only, which
 //! `jstream-browser-helper` turns on, so no other build downloads or compiles CEF. On
-//! Windows pages' frames cross as shared textures; on Linux the helper paints in
-//! software and frames cross in CPU memory (ADR-0095, docs/adr/0095-browser-helper-on-linux.md).
+//! Windows pages' frames cross as shared textures; on Linux and macOS the helper paints in
+//! software and frames cross in CPU memory (ADR-0095, docs/adr/0095-browser-helper-on-linux.md;
+//! ADR-0157, docs/adr/0157-browser-sources-on-macos.md).
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-browser/README.md#purpose, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md, docs/adr/0095-browser-helper-on-linux.md, docs/security/threat-model.md#browser
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-browser/README.md#purpose, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md, docs/adr/0095-browser-helper-on-linux.md, docs/adr/0157-browser-sources-on-macos.md, docs/security/threat-model.md#browser
 
 mod audio;
-#[cfg(all(any(windows, target_os = "linux"), feature = "cef"))]
+#[cfg(all(
+    any(windows, target_os = "linux", target_os = "macos"),
+    feature = "cef"
+))]
 mod cef;
 #[cfg(any(
     test,
-    all(target_os = "linux", any(feature = "cef", feature = "helper"))
+    all(
+        any(target_os = "linux", target_os = "macos"),
+        any(feature = "cef", feature = "helper")
+    )
 ))]
 mod cpu_frames;
 #[cfg(any(test, feature = "fake"))]
 pub mod fake;
-#[cfg(all(any(windows, target_os = "linux"), feature = "helper"))]
+#[cfg(all(
+    any(windows, target_os = "linux", target_os = "macos"),
+    feature = "helper"
+))]
 mod helper;
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "cef")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "cef"
+    )
+))]
 mod link;
 mod page;
 mod page_api;
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 mod permission;
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 mod reload_hold;
 mod request;
 #[cfg(any(
     test,
     all(
-        any(windows, target_os = "linux"),
+        any(windows, target_os = "linux", target_os = "macos"),
         any(feature = "cef", feature = "helper")
     )
 ))]
@@ -51,9 +79,15 @@ mod wire;
 use std::sync::Arc;
 
 pub use audio::{MAX_CHUNK_FRAMES, PageAudio, PageAudioStream};
-#[cfg(all(any(windows, target_os = "linux"), feature = "cef"))]
+#[cfg(all(
+    any(windows, target_os = "linux", target_os = "macos"),
+    feature = "cef"
+))]
 pub use cef::{CefBackend, CefConfig};
-#[cfg(all(any(windows, target_os = "linux"), feature = "helper"))]
+#[cfg(all(
+    any(windows, target_os = "linux", target_os = "macos"),
+    feature = "helper"
+))]
 pub use helper::run_helper;
 pub use page::{
     DEFAULT_CSS, HTML_PAGE_DOMAIN, MAX_CSS_BYTES, MAX_FPS, MAX_HTML_BYTES, PageLocation, PageSpec,
@@ -102,7 +136,7 @@ pub trait BrowserPage: Send {
     fn frame(&self) -> Option<GpuFrame>;
 
     /// Whether the page's frames arrive in CPU memory ([`cpu_frame`](Self::cpu_frame))
-    /// instead of on the GPU ([`frame`](Self::frame)): the CEF backend on Linux, whose
+    /// instead of on the GPU ([`frame`](Self::frame)): the CEF backend on Linux and macOS, whose
     /// helper paints in software (ADR-0095). The same for as long as the page is open.
     /// `false`, the default, for a backend that paints on the GPU.
     fn paints_on_cpu(&self) -> bool {

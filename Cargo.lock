@@ -2784,6 +2784,8 @@ dependencies = [
  "jstream-platform",
  "jstream-platform-windows",
  "libc",
+ "objc2",
+ "objc2-app-kit",
  "rcgen",
  "rustls",
  "thiserror 2.0.21",
