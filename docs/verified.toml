@@ -7392,13 +7392,13 @@ stamp = { hash = "b3:c60cba487fc0a5e5", by = "agent:claude@session_01Fdcnfj3q78X
 stamp = { hash = "b3:c0f12942330f5f38", by = "agent:claude", note = "threading only changed the jstream-readback row (NV12 readback); nothing here refers to the readback" }
 
 ["RUNBOOK-AGENT-PRE-PASS#linux"."body"]
-stamp = { hash = "b3:cf6a69bce5195c4f", by = "agent:claude", note = "new section: each table row checked against scripts/release-pass.py's checks (names, pass conditions, the --display, --launch, --checkout, --installed, --root and --zip-screenshots options, the daemons' own XDG folders, the outputs daemon without the session bus, the hw-tests' portal and hotkeys skips) and its report and zip contents; run here against a debug daemon and the hw-tests path" }
+stamp = { hash = "b3:f4e69848c6224703", by = "agent:claude", note = "round 1 fixes: the script now removes release/, appimage/ and the daemons' data folders after the zip unless --keep, and prints a Left on this machine line, as the section now says; a daemon whose token file stays empty counts as a start failure; the profile.get row says the Linux check needs only thread_cpu and the live row says it checks jstream-render" }
 
 ["RUNBOOK-AGENT-PRE-PASS#linux"."dep:docs/runbooks/linux-testing.md#script"]
 stamp = { hash = "b3:8562c2415ceafbaf", by = "agent:claude", note = "new section: each table row checked against scripts/release-pass.py's checks (names, pass conditions, the --display, --launch, --checkout, --installed, --root and --zip-screenshots options, the daemons' own XDG folders, the outputs daemon without the session bus, the hw-tests' portal and hotkeys skips) and its report and zip contents; run here against a debug daemon and the hw-tests path" }
 
 ["RUNBOOK-AGENT-PRE-PASS#linux"."file:scripts/release-pass.py"]
-stamp = { hash = "b3:45126541536f80fd", by = "agent:claude", note = "new section: each table row checked against scripts/release-pass.py's checks (names, pass conditions, the --display, --launch, --checkout, --installed, --root and --zip-screenshots options, the daemons' own XDG folders, the outputs daemon without the session bus, the hw-tests' portal and hotkeys skips) and its report and zip contents; run here against a debug daemon and the hw-tests path" }
+stamp = { hash = "b3:00b685dbbd52f3e0", by = "agent:claude", note = "round 1 fixes: the script now removes release/, appimage/ and the daemons' data folders after the zip unless --keep, and prints a Left on this machine line, as the section now says; a daemon whose token file stays empty counts as a start failure; the profile.get row says the Linux check needs only thread_cpu and the live row says it checks jstream-render" }
 
 ["RUNBOOK-AGENT-PRE-PASS#windows"."body"]
 stamp = { hash = "b3:9fa6832a864cf026", by = "agent:claude", note = "new section: the steps match release-pass.ps1's -AutomatedOnly, -Zip and -Expect, windows-pass.ps1's -Unattended, and that the release pass's zip holds snapshot-display.png" }

@@ -48,8 +48,11 @@ Rules for the agent:
   desktop, and the Linux pass keeps its desktop captures out of its zip unless
   `--zip-screenshots` is given. Say which files show the screen, and share the zip only
   once the maintainer agrees, or without those files.
-- **Leave nothing running.** Each script stops its daemons, removes its temporary files
-  and says what it left behind; the agent checks that line.
+- **Leave nothing running.** Each script stops its daemons and the receiver. The Linux
+  pass also removes what it unpacked and ends with a `Left on this machine:` line, the run
+  folder and its zip. The Windows release pass leaves the unzipped release under
+  `%LOCALAPPDATA%\JStream-release-pass\release` and its run folder beside it: the agent
+  names those to the maintainer, and removes the unzipped release once the run is done.
 
 The agent ends with one reply: the checklist table from the report, the failures with
 their details, the NEEDS PERSON items as the maintainer's to-do list, and where the report
@@ -117,11 +120,11 @@ What it checks, in order:
 | AppImage contents | it unpacks (`--appimage-extract`) and holds `jstream`, the UI, the browser helper and WebKitGTK's processes, and no `chrome-sandbox` |
 | AppImage starts | with `--launch`: it runs for 25 seconds, with its own data and config folders, and starts WebKitGTK's processes; it opens its window on the desktop |
 | versions | `jstream-daemon --version` and `jstream-cli version` name the package's version (or `--expect`) |
-| daemon starts, kind.list, profile.get | as [the Windows release pass](windows-hardware-pass.md#release-pass), on the package's programs (`--installed` runs the installed ones, `--root` a folder of them) |
+| daemon starts, kind.list, profile.get | as [the Windows release pass](windows-hardware-pass.md#release-pass), on the package's programs (`--installed` runs the installed ones, `--root` a folder of them), except that profile.get only needs `thread_cpu` and lists the threads, with no warning for a missing one: going live checks `jstream-render` |
 | snapshot of a browser page, of a media file | a green page snapshots green, and a red clip ffmpeg makes snapshots red |
 | snapshot of a display capture | only with `--display`: on Wayland it shows the screen picker, so someone must be there |
 | save, new, open; webcam formats; bench | as the Windows release pass; the bench runs `all` (and `display` with `--display`, `webcam` with a webcam) |
-| going live on VA-API | a second daemon, without the session bus so its test key goes to a file in the run folder, streams 1080p for ten seconds on an encoder profile that requires hardware to ffmpeg listening on `127.0.0.1`; the output used a hardware encoder and the receiver got H.264 at 1920×1080 and AAC |
+| going live on VA-API | a second daemon, without the session bus so its test key goes to a file in the run folder, streams 1080p for ten seconds on an encoder profile that requires hardware to ffmpeg listening on `127.0.0.1`; the output used a hardware encoder, `profile.get` lists `jstream-render` while it runs, and the receiver got H.264 at 1920×1080 and AAC |
 | recording to a file, quitting stops outputs | it records for eight seconds, then SIGINT stops the daemon with the recording running: the daemon prints `stopped` and exits 0, and the MP4 is H.264 and AAC and decodes without an error |
 | hw: … | with `--checkout`: `cargo test -p jstream-platform-linux --features hw-tests -- --ignored` (VA-API, V4L2, PipeWire, ALSA, D-Bus, the Secret Service), one row per test; the portal tests (they show the picker) and the X11 hotkey test are left out |
 | hw+validation: … | the VA-API tests again with Vulkan's validation layer, when it is installed |
@@ -130,7 +133,10 @@ What it checks, in order:
 The report and `results.json` go in the run folder, and the zip beside it holds the text
 files and the snapshots, with every token and the test key replaced by `***`. Token files
 and the daemons' data folders stay out, and so do the desktop captures unless
-`--zip-screenshots` is given. It exits 1 when a check failed.
+`--zip-screenshots` is given. At the end it removes the unpacked `.deb` and AppImage
+(`release/` and `appimage/` in the work folder) and the daemons' data folders, unless
+`--keep` is given, and prints a `Left on this machine:` line. It exits 1 when a check
+failed.
 
 <a id="mac"></a>
 ## Mac

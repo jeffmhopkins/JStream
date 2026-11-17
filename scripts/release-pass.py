@@ -227,7 +227,16 @@ class Daemon:
                 if self.token_file.exists() and self.token_file.read_text().strip():
                     break
                 time.sleep(0.1)
-            self.token = self.token_file.read_text().strip()
+            try:
+                self.token = self.token_file.read_text().strip()
+            except OSError:
+                self.token = ""
+            if not self.token:
+                # Treated as a start failure, so the pass goes on with the other checks.
+                self.ws_url = None
+                self.stderr_file.write(f"release-pass: no token in {self.token_file} after `listening on`\n")
+                self.stderr_file.flush()
+                return
             SECRETS.append(self.token)
             if not self.mcp_url:
                 time.sleep(1)
@@ -409,6 +418,17 @@ class Pass:
         self.n_webcams = 0
         self.kinds = []
         self.screenshots = []
+
+    def clean_up(self):
+        """Removes the unpacked packages, unless --keep, and says what the run leaves."""
+        unpacked = [self.work / "release", self.work / "appimage"]
+        if not self.args.keep:
+            for folder in unpacked:
+                shutil.rmtree(folder, ignore_errors=True)
+            for home in list(self.out.glob("daemon-*/home")) + [self.out / "appimage-home"]:
+                shutil.rmtree(home, ignore_errors=True)
+        left = [str(self.out), f"{self.out}.zip"] + [str(f) for f in unpacked if f.exists()]
+        return "Left on this machine: " + ", ".join(left)
 
     # --- The machine ---
 
@@ -1135,6 +1155,8 @@ def main():
     ap.add_argument("--launch", action="store_true", help="start the AppImage for 25 seconds (opens its window)")
     ap.add_argument("--screenshot", action="store_true", help="with --launch, screenshot the desktop while it runs")
     ap.add_argument("--zip-screenshots", action="store_true", help="put the desktop screenshots in the zip")
+    ap.add_argument("--keep", action="store_true",
+                    help="keep the unpacked .deb and AppImage and the daemons' data folders after the run")
     ap.add_argument("--media", help="a video file for the bench's media scenario (default: one ffmpeg makes)")
     ap.add_argument("--no-bench", action="store_true", help="skip the bench (several minutes)")
     ap.add_argument("--work-dir", help="where runs go (default ~/.local/share/jstream-release-pass)")
@@ -1223,6 +1245,7 @@ def main():
             print(f"  {r['state']:<10} {r['item']}")
         print(f"Report: {p.out / 'report.md'}")
         print(f"Zip: {zpath}")
+        print(p.clean_up())
         if p.screenshots:
             state = "IN the zip" if args.zip_screenshots else "kept out of the zip"
             print(f"Screenshots of this desktop ({state}): " + ", ".join(str(s) for s in p.screenshots))
