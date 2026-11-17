@@ -459,7 +459,8 @@ fn new_token() -> anyhow::Result<String> {
 /// unless `vcam` is false, and browser sources with the `cef` feature as on Windows
 /// (ADR-0158). On macOS it is live the same way on the backends the
 /// daemon uses there (`macos_backends`), with stream keys in the Keychain and no virtual
-/// camera. Elsewhere there are no backends yet. Either way it
+/// camera, and with the `cef` feature browser sources from the helper in the app bundle
+/// (ADR-0157). Elsewhere there are no backends yet. Either way it
 /// watches the effect packs in `data`'s `effects` folder (`Engine::watch_effect_packs`)
 /// and starts the engine's stats heartbeat, and where it is live each `stats.tick`
 /// carries the process's CPU time.
@@ -514,7 +515,18 @@ pub fn engine(
         // No virtual camera on macOS yet (ADR-0063 §13), so `--no-vcam` changes nothing.
         let _ = vcam;
         let keys: Arc<dyn StreamKeyStore> = Arc::new(jstream_platform_macos::MacosKeychain);
-        handled(live(engine, macos_backends()?, keys, secrets))
+        let backends = macos_backends()?;
+        // Browser sources from the helper in the app bundle (ADR-0157); pages paint in
+        // software and hand the engine CPU frames, so they need no device.
+        #[cfg(feature = "cef")]
+        let browser = crate::browser::backend(data, Arc::clone(&backends.clock));
+        let engine = live(engine, backends, keys, secrets);
+        #[cfg(feature = "cef")]
+        let engine = match browser {
+            Some(browser) => engine.with_browser(browser),
+            None => engine,
+        };
+        handled(engine)
     };
     #[cfg(not(any(
         windows,
@@ -682,7 +694,11 @@ struct Live {
 }
 
 #[cfg(all(
-    any(windows, all(target_os = "linux", target_pointer_width = "64")),
+    any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", target_pointer_width = "64")
+    ),
     feature = "cef"
 ))]
 impl Live {

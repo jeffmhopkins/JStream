@@ -528,7 +528,13 @@ impl Origin {
 
 /// Whether `a` and `b` are `http` or `https` URLs of the same origin: scheme, host and
 /// port, a default port named or not (the page API's rule for a web page, ADR-0102).
-#[cfg(any(test, all(any(windows, target_os = "linux"), feature = "helper")))]
+#[cfg(any(
+    test,
+    all(
+        any(windows, target_os = "linux", target_os = "macos"),
+        feature = "helper"
+    )
+))]
 pub(crate) fn same_web_origin(a: &str, b: &str) -> bool {
     match (Origin::parse(a), Origin::parse(b)) {
         (Some(a), Some(b)) => matches!(a.scheme.as_str(), "http" | "https") && a == b,

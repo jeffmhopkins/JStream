@@ -17,12 +17,13 @@ depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-browser", "docs/ARCHITECTU
 
 The engine side of browser sources ([ADR-0021](../../docs/adr/0021-browser-source.md)):
 web pages rendered off screen by CEF in a sandboxed helper process, each page's frames
-as textures on a GPU device the host hands it (Windows) or as CPU frames (Linux), and its
-audio as a stream the engine records like a device's. Layer 3, its own crate rather than
-part of a platform crate, so that only the helper's build downloads and builds CEF
-([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.md),
+as textures on a GPU device the host hands it (Windows) or as CPU frames (Linux and
+macOS), and its audio as a stream the engine records like a device's. Layer 3, its own
+crate rather than part of a platform crate, so that only the helper's build downloads and
+builds CEF ([ADR-0046](../../docs/adr/0046-browser-crate-and-helper.md),
 [ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md),
-[ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md)).
+[ADR-0095](../../docs/adr/0095-browser-helper-on-linux.md),
+[ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)).
 
 This README is the crate's map. How each part behaves (limits, timeouts, threads, the
 request and permission rules) is in its module's rustdoc, next to the code:
@@ -36,7 +37,7 @@ backend a GPU device to copy the pages' paints onto: the host's at first, and wh
 program stage runs, the stage's own context, which the engine lends it and takes back
 ([jstream-core › Design](../jstream-core/README.md#design), *Live sources*). A page never
 hands out a frame copied onto an earlier device. Without a device a page renders and
-plays but delivers no frames, unless it `paints_on_cpu` (CEF on Linux), whose latest paint
+plays but delivers no frames, unless it `paints_on_cpu` (CEF on Linux and macOS), whose latest paint
 is its `cpu_frame`. Dropping the page closes it.
 
 **What a page may do.** Every request a page makes, navigations and redirects included,
@@ -54,10 +55,10 @@ policy decides. Pop-ups are blocked, and nothing a page sends reaches the engine
 | `answer_prompt`, `answer_media` | `permission.rs` | everywhere | what a page gets when it asks for a permission |
 | `PageApi`, `PageData`, `ApiHome`, `shim` | `page_api.rs`, `page_api.js` | everywhere | the page API's shared parts ([ADR-0102](../../docs/adr/0102-page-api-for-browser-sources.md)) |
 | (the pipe) | `wire.rs`, `link.rs` | everywhere | the messages between the engine and the helper, and the engine's end of the link |
-| (CPU frames) | `cpu_frames.rs` | Linux, tests | slot files and the premultiplied-to-straight conversion |
+| (CPU frames) | `cpu_frames.rs` | Linux, macOS, tests | slot files and the premultiplied-to-straight conversion |
 | `FakeBrowser` | `fake.rs` | feature `fake` | an in-memory backend for tests |
-| `CefBackend`, `CefConfig` | `cef/` | feature `cef`, Windows and Linux | starts and drives the helper: named pipes and shared textures on Windows, a socket pair and slot files on Linux, a job object so no helper outlives the engine |
-| `run_helper` | `helper/` | feature `helper`, Windows and Linux | the helper's CEF code: windowless pages, the request and permission handlers, the page API in the renderer, frames and audio |
+| `CefBackend`, `CefConfig` | `cef/` | feature `cef`, Windows, Linux and macOS | starts and drives the helper: named pipes and shared textures on Windows, a socket pair and slot files on Linux and macOS, a job object so no helper outlives the engine |
+| `run_helper` | `helper/` | feature `helper`, Windows, Linux and macOS | the helper's CEF code: windowless pages, the request and permission handlers, the page API in the renderer, frames and audio; on macOS also CEF's framework loader, its sandbox and the helper's `NSApp` class (`helper/mac.rs`) |
 | (reload hold) | `reload_hold.rs` | feature `helper` | no paints from a reload until the new document paints for real (#1151, #1155) |
 
 Only `jstream-browser-helper` turns on `helper`, so no other build downloads or compiles
@@ -78,12 +79,14 @@ right half transparent, then shuts the helper down. A second test opens a page g
 the page API, which paints one colour without `window.jstream`, another with it and
 no data, a third once an update has arrived (and a fourth if a member it wasn't
 granted exists), and checks the update survives a reload. CI's `browser-linux` job
-runs both, sandboxed, headless and without a GPU.
+runs both, sandboxed, headless and without a GPU. On macOS the same file opens pages
+through the helper in a bundled `JStream.app` (ADR-0157): the after-review `macos-app`
+job runs its two page-load tests (`a_page_`) against the app it bundles.
 
 <a id="open-items"></a>
 ## Open items
 <!-- @section
-depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md"]
+depends_on = ["docs/adr/0021-browser-source.md", "docs/adr/0046-browser-crate-and-helper.md", "docs/adr/0048-sandboxed-browser-helper.md", "docs/adr/0095-browser-helper-on-linux.md", "docs/adr/0157-browser-sources-on-macos.md"]
 -->
 
 What ADR-0021 asks for that this crate doesn't do yet.
@@ -109,5 +112,9 @@ What ADR-0021 asks for that this crate doesn't do yet.
   DMA-BUFs onto the engine's Vulkan device would avoid the copies on a machine with a
   GPU, and neither path has been measured. The desktop app has no Linux build, so only
   the daemon wires the Linux backend.
+- **macOS.** Frames are copied on the CPU too (ADR-0157); CEF's IOSurface paints would
+  avoid it. Only the desktop app wires the backend there: the daemon isn't an app bundle.
+  The helper apps launching from a quarantined download, and the sandbox on real
+  hardware, are checked by hand ([mac-testing runbook](../../docs/runbooks/mac-testing.md)).
 - **Audio timestamps.** Packets are stamped when they reach the engine; if CEF's `pts` is
   QPC time, as S4 suggests, the helper could send it and the engine use it instead.

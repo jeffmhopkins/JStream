@@ -12,7 +12,11 @@
 pub mod app;
 pub mod bootstrap;
 #[cfg(all(
-    any(windows, all(target_os = "linux", target_pointer_width = "64")),
+    any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", target_pointer_width = "64")
+    ),
     feature = "cef"
 ))]
 pub mod browser;

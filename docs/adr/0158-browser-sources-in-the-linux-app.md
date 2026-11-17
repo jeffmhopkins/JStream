@@ -21,9 +21,9 @@ decision 3 then gave the Linux desktop app a live engine with "no virtual camera
 browser sources yet". Its packages already ship everything a browser source needs:
 `cargo xtask dist-linux` builds the app with `cef` and lays the helper's `browser` folder
 beside it, in the `.deb` (with `chrome-sandbox` setuid root) and in the AppImage. Only
-the app's wiring is missing: `jstream-browser` is a Windows-only dependency of the app and
-its `browser` module is compiled for Windows alone, so on Linux the `cef` feature turns
-nothing on and the app's browser sources show nothing. beta.1 ships the Linux app and names browser
+the app's wiring is missing: `jstream-browser` is a dependency of the app on Windows and
+macOS ([ADR-0157](0157-browser-sources-on-macos.md)) but not on Linux, and its `browser`
+module isn't compiled for Linux, so there the `cef` feature turns nothing on and the app's browser sources show nothing. beta.1 ships the Linux app and names browser
 pages among its core flows ([ROADMAP › Beta](../../ROADMAP.md#beta)).
 
 Whether Linux has browser sources, and the sandbox posture that comes with them, was

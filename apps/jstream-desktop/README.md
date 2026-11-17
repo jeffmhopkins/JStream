@@ -64,9 +64,10 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   stored relative to the collection), whether "Allow devices on my network" is on,
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
   and the JTunnel setting as it was at start with `setJtunnel`, which saves it.
-- **Browser sources** (`browser.rs`, Windows and 64-bit Linux with the `cef` feature;
-  [ADR-0158](../../docs/adr/0158-browser-sources-in-the-linux-app.md) on Linux): the CEF
-  backend the engine opens `browser` sources' pages in.
+- **Browser sources** (`browser.rs`, Windows, macOS and 64-bit Linux with the `cef`
+  feature): the CEF backend the engine opens `browser` sources' pages in; on macOS its
+  helper is in the app bundle ([ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)),
+  on Linux beside the app ([ADR-0158](../../docs/adr/0158-browser-sources-in-the-linux-app.md)).
 - **Window** (`shell.rs`, Windows, macOS, and Linux with `webkitgtk`): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
   project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
@@ -100,8 +101,7 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   are tested in `jstream-platform-linux`.
 
 Not here yet: signing and notarising the macOS app (ADR-0063's question 1;
-`scripts/mac/bundle-app.sh` takes an identity when there is one), browser sources on
-macOS, Linux packages, the
+`scripts/mac/bundle-app.sh` takes an identity when there is one), Linux packages, the
 virtual camera's optional registration and unregistration modes (`jstream.exe --register-vcam`, which
 `jstream-daemon` provides for now), a native dialog when WebView2 is missing, native crash
 dumps (only a panic writes a report, as in the daemon), renewing the network
@@ -140,6 +140,21 @@ scripts/mac/bundle-app.sh --exe target/release/jstream --ui-dir crates/jstream-u
 open dist/JStream.app
 ```
 
+With browser sources ([ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)), build
+the app with `cef`, and the browser helper with CEF (its build downloads the pinned CEF
+and builds its wrapper, so CMake and Ninja must be on the path), then hand both to the
+script: it puts the helper beside the app, CEF's framework and the helper apps CEF's
+subprocesses run from in `Contents/Frameworks`, and signs them ad hoc from the inside
+out. The after-review `macos-app` job builds it this way and opens a page through the
+bundled helper.
+
+```sh
+cargo build --release -p jstream-desktop --features cef
+cef=$(scripts/mac/build-browser-helper.sh)
+scripts/mac/bundle-app.sh --exe target/release/jstream --ui-dir crates/jstream-ui/dist \
+  --browser-helper target/release/jstream-browser-helper --cef "$cef"
+```
+
 A downloaded image is blocked by Gatekeeper the first time: allow it in System Settings ›
 Privacy & Security. Each new build asks again for the camera, microphone, screen
 recording and Accessibility, and for the Keychain, because it isn't signed with a stable
@@ -173,8 +188,11 @@ next to it, in a build folder): CEF's bootstrap exe renamed `jstream-browser-hel
 ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md),
 [the helper's README](../jstream-browser-helper/README.md#purpose)). The app itself
 doesn't build or link CEF, so it starts without them; a `browser` source fails to open
-until they are there. The feature is off by default, because only Windows has the
-backend; the portable zip turns it on and ships the helper
+until they are there. On macOS the helper is in the app bundle instead, beside the app,
+with CEF's framework and helper apps in `Contents/Frameworks`, as
+`scripts/mac/bundle-app.sh` lays them out (above). The feature is off by default, because
+only Windows and macOS have the backend in the app; the portable zip and the macOS
+bundle turn it on and ship the helper
 ([ARCH › Packaging](../../docs/ARCHITECTURE.md#packaging)). Without it, a `browser`
 source draws nothing. CEF's cache is the data folder's `cef`
 folder, and its log `logs\cef.log`.
@@ -281,7 +299,9 @@ folder, and its log `logs\cef.log`.
   dialog through the FileChooser portal, so `xdg-desktop-portal` and a backend for the
   desktop must run, as screen capture needs anyway.
 - **On macOS** the data folder is `~/Library/Application Support/JStream`, the daemon's
-  too. There is no virtual camera and no browser sources yet. Browse opens AppKit's open
+  too. There is no virtual camera. Browser sources work in a bundle built with them
+  (ADR-0157): their pages run in the helper inside `JStream.app`, CEF's cache is the data
+  folder's `cef` folder and its log `logs/cef.log`. Browse opens AppKit's open
   and save panels. Global hotkeys' keys need no permission; a wheel chord, bound while a
   follow camera is live, asks for the Accessibility permission the first time, and until
   it is granted in System Settings › Privacy & Security › Accessibility wheel chords are
@@ -560,7 +580,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `/Applications`; `--notarize` submits that image and staples it. The after-review
   `macos-app` job lints the app natively, bundles it, and starts it from the bundle with
   a fresh home folder until the log shows a WebSocket handshake, which only the window's
-  page makes.
+  page makes. With `--browser-helper` and `--cef` the script also bundles browser sources
+  ([ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)): the helper in
+  `Contents/MacOS`, CEF's framework and five helper apps (each a copy of the helper, an
+  agent app with no Dock icon) in `Contents/Frameworks`, and CEF's credits and version in
+  `Contents/Resources`, each signed ad hoc from the inside out before the app; it refuses
+  `--sign` with them, as the helpers would need hardened-runtime entitlements. The
+  `macos-app` job bundles them and opens a page through the bundled helper.
 - **Browser sources, behind a feature.** With `cef`, the engine gets a CEF backend
   (`jstream-browser`) on the backends' media clock, so pages' audio is stamped on the
   clock the mixer runs on. Its pages paint on the engine's one GPU context, on the media
@@ -571,7 +597,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   sources open on the media clock and the engine has its context. CEF runs only in the sandboxed browser helper, which the backend starts on the
   first page ([ADR-0048](../../docs/adr/0048-sandboxed-browser-helper.md)); the app
   doesn't link CEF, so a missing helper or missing CEF files fail that source, not the
-  app. With no device, pages play audio but show no frames.
+  app. With no device, pages play audio but show no frames. On macOS pages paint in
+  software and hand the engine CPU frames, which need no device (ADR-0157).
 - **Logs and the token.** The token reaches only the bootstrap script. It is never
   logged, written to disk, or put in a URL (R-SEC-001).
 - **Crash reports** ([`jstream-crash`](../../crates/jstream-crash/README.md#purpose),

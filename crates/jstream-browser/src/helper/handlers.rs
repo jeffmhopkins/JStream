@@ -55,6 +55,11 @@ wrap_app! {
             #[cfg(target_os = "linux")]
             command_line
                 .append_switch_with_value(Some(&"password-store".into()), Some(&"basic".into()));
+            // The same on macOS: Chromium would otherwise keep its key in the login
+            // Keychain, which asks the user again after each update of an ad-hoc signed
+            // app (ADR-0157).
+            #[cfg(target_os = "macos")]
+            command_line.append_switch(Some(&"use-mock-keychain".into()));
             // Pages are painted off screen, so on Linux they need no display at all: with
             // neither X11 nor Wayland (a server, a container, CI) Chromium's headless
             // platform stands in (ADR-0095).
@@ -194,7 +199,8 @@ wrap_render_handler! {
             _dirty_rects: Option<&[Rect]>,
             info: Option<&AcceleratedPaintInfo>,
         ) {
-            // Shared textures are Windows' paints (ADR-0048); Linux paints in software.
+            // Shared textures are Windows' paints (ADR-0048); Linux and macOS paint in
+            // software.
             #[cfg(windows)]
             {
                 // Popups (`<select>` lists) paint separately; an overlay has no use for them.
@@ -219,8 +225,9 @@ wrap_render_handler! {
             width: c_int,
             height: c_int,
         ) {
-            // Software paints are Linux's (ADR-0095); Windows paints shared textures.
-            #[cfg(target_os = "linux")]
+            // Software paints are Linux's and macOS's (ADR-0095, ADR-0157); Windows paints
+            // shared textures.
+            #[cfg(any(target_os = "linux", target_os = "macos"))]
             {
                 if type_ != PaintElementType::VIEW || buffer.is_null() {
                     return;
@@ -238,7 +245,7 @@ wrap_render_handler! {
                 let bgra = unsafe { std::slice::from_raw_parts(buffer, bytes) };
                 self.page.0.paint(bgra, width, height);
             }
-            #[cfg(not(target_os = "linux"))]
+            #[cfg(not(any(target_os = "linux", target_os = "macos")))]
             let _ = (type_, buffer, width, height);
         }
     }
