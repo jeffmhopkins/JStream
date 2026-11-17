@@ -51,7 +51,7 @@ The checker (`cargo xtask docs`) is built in stages during M0 ([ROADMAP](../ROAD
 - **`cargo xtask docs for <path>`** ([Code back-references](#back-references)): prints
   what governs a file.
 - **Generated content** ([Generated content](#generated)): `cargo xtask docs generate`
-  writes the ADR status banners, the ADR index, the README's progress block and the UI
+  writes the ADR status banners, the ADR index, the progress block in PROGRESS.md and the UI
   features summary, and `docs check` fails on their drift. `cargo xtask docs progress`
   lists progress entries the merged history contradicts.
   The crate map and the other generated references are not generated yet.
@@ -110,9 +110,9 @@ retired_sections = { "old-id" = ["new-id-a", "new-id-b"] }   # tombstones, see L
 ```
 
 **Tracked:** every `.md` file in the repository, wherever it is, except the ones below.
-Today that is `docs/`, `README.md`, `CLAUDE.md`, `REVIEW.md`, `ROADMAP.md` and the READMEs
-under `crates/`, `apps/`, `spikes/` and `design/`, but a new Markdown file anywhere is
-tracked too.
+Today that is `docs/`, `README.md`, `CLAUDE.md`, `REVIEW.md`, `ROADMAP.md`, `PROGRESS.md`
+and the READMEs under `crates/`, `apps/`, `spikes/` and `design/`, but a new Markdown
+file anywhere is tracked too.
 **Not tracked:** `docs/adr/TEMPLATE.md`, everything under `.github/`, and files whose
 path starts with `LICENSE`.
 
@@ -352,8 +352,8 @@ nothing; neither does a merge whose ledger doesn't parse, which the steps after 
 report. In a doc, a conflict whose two sides are only inline `verified` lines
 inside `@section` blocks (either side may have none, as when `main` moved them to the
 ledger) takes main's side too. A conflict whose two sides lie wholly inside `@generated`
-blocks that `docs generate` writes, such as two PRs each regenerating the README's progress
-table, takes main's side, and once every conflict is resolved every block is rewritten from
+blocks that `docs generate` writes, such as two PRs each regenerating the progress
+table in PROGRESS.md, takes main's side, and once every conflict is resolved every block is rewritten from
 the merged sources, as `docs generate` would. If another conflict keeps the merge open, the
 blocks still hold main's side until you run `docs generate` after resolving it. Any
 other conflict, including one in a file that also has stamp conflicts, is left exactly as
@@ -680,7 +680,7 @@ covered by the TTLs of their external resources.
 
 Anything derivable is generated, never hand-written: the crate map (from
 `[package.metadata.jstream]`), the protocol reference, the MCP tool list, the index, and
-the ADR status banners and ADR index, the README's progress table, and the UI features
+the ADR status banners and ADR index, the progress table in PROGRESS.md, and the UI features
 summary. Generated blocks
 in committed docs are fenced as `<!-- @generated begin <name> -->` …
 `<!-- @generated end <name> -->` and are drift-checked.
@@ -703,7 +703,7 @@ differs. Two of them come from ADR `@doc` metadata
 
 It also generates one block from data rather than from docs:
 
-- **The `progress` block** in `README.md`: first a table of the releases with how many
+- **The `progress` block** in `PROGRESS.md`: first a table of the releases with how many
   of their items are merged, in review or planned, and each release's items, unfinished items
   first (the next release's list open); then the same table for the milestones,
   the project's goals, and each milestone's items, all from `docs/progress.toml`. That
@@ -719,7 +719,7 @@ It also generates one block from data rather than from docs:
   the order they land in ([ROADMAP › Endgame](../ROADMAP.md#endgame)). `docs check`
   fails when the file doesn't parse or breaks those rules, including an item that names
   a release it doesn't list, or an unmerged item in a release that has shipped. A PR that delivers or advances
-  an item updates its entry, so the README changes with the work.
+  an item updates its entry, so PROGRESS.md changes with the work.
   `cargo xtask docs progress` compares the file with the merged history (the `(#N)` of
   each squash commit, the `(#N)` of each `* …` line in a wave's landing squash, which
   lists the wave's PRs among every commit on the wave branch, and item IDs that PR titles name in parentheses) and
