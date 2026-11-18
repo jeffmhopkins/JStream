@@ -1,7 +1,8 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use super::{Codec, Mp4};
+use super::super::demux::Demuxed;
+use super::Codec;
 
 fn testdata(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -9,8 +10,8 @@ fn testdata(name: &str) -> PathBuf {
         .join(name)
 }
 
-pub(crate) fn open(name: &str) -> Mp4 {
-    Mp4::open(File::open(testdata(name)).expect("opens"))
+pub(crate) fn open(name: &str) -> Demuxed {
+    super::open(File::open(testdata(name)).expect("opens"))
         .expect("parses")
         .expect("is an MP4 file")
 }
@@ -76,7 +77,7 @@ fn reads_a_quicktime_movie() {
 #[test]
 fn other_files_are_not_mp4() {
     let file = File::open(testdata("tone.flac")).expect("opens");
-    assert!(Mp4::open(file).expect("reads").is_none());
+    assert!(super::open(file).expect("reads").is_none());
 }
 
 #[test]
@@ -89,5 +90,5 @@ fn a_box_claiming_the_largest_size_doesnt_overflow() {
     std::fs::write(&path, &bytes).expect("writes");
     let file = File::open(&path).expect("opens");
     let _ = std::fs::remove_file(&path);
-    assert!(super::Mp4::open(file).is_err());
+    assert!(super::open(file).is_err());
 }

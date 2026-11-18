@@ -12,6 +12,9 @@ use std::io::{Read, Seek, SeekFrom};
 
 use jstream_platform::PlatformError;
 
+use super::demux::Demuxed;
+pub(crate) use super::demux::{Codec, Sample, Track};
+
 /// The largest movie box read: a few hours of 60 fps video stays far below it.
 const MAX_MOOV: u64 = 256 << 20;
 /// The most samples a track may list.
@@ -34,182 +37,82 @@ fn io_error(err: &std::io::Error) -> PlatformError {
     }
 }
 
-/// One sample: where it is and when.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub(crate) struct Sample {
-    pub(crate) offset: u64,
-    pub(crate) size: u32,
-    /// The decode time, in the track's time scale.
-    pub(crate) dts: i64,
-    /// The presentation time on the file's timeline (edit list applied), in the
-    /// track's time scale.
-    pub(crate) pts: i64,
-    pub(crate) sync: bool,
-}
-
-/// A track's codec, as far as this crate decodes it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub(crate) enum Codec {
-    /// H.264, with its `avcC` record.
-    Avc(Vec<u8>),
-    /// MPEG-1/2 Layer III audio.
-    Mp3,
-    /// FLAC, with its `STREAMINFO` block.
-    Flac(Vec<u8>),
-    /// Anything else, by its sample entry's four-character code or, for `mp4a`, its
-    /// object type.
-    Other(String),
-}
-
-/// One track.
-#[derive(Clone, Debug)]
-pub(crate) struct Track {
-    pub(crate) id: u32,
-    pub(crate) video: bool,
-    pub(crate) codec: Codec,
-    /// Ticks per second of the sample times.
-    pub(crate) timescale: u32,
-    /// Video: the sample entry's width and height.
-    pub(crate) size: (u32, u32),
-    /// Audio: channels and sample rate.
-    pub(crate) channels: u16,
-    pub(crate) sample_rate: u32,
-    /// In decoding order.
-    pub(crate) samples: Vec<Sample>,
-}
-
-impl Track {
-    /// How long the track plays, in its time scale.
-    pub(crate) fn duration(&self) -> i64 {
-        self.samples
-            .iter()
-            .map(|s| s.pts)
-            .max()
-            .map_or(0, |last| last + self.frame_step())
-    }
-
-    /// A typical gap between samples, for the last one's duration.
-    fn frame_step(&self) -> i64 {
-        match self.samples.as_slice() {
-            [.., a, b] => (b.dts - a.dts).max(0),
-            _ => 0,
+/// Opens `file` if it is an MP4 or QuickTime file. `Ok(None)` when it isn't.
+///
+/// # Errors
+/// [`PlatformError::Unsupported`] for a fragmented file, and [`PlatformError::Os`]
+/// for one that doesn't read.
+pub(crate) fn open(mut file: File) -> Result<Option<Demuxed>, PlatformError> {
+    let len = file.metadata().map_err(|e| io_error(&e))?.len();
+    let mut at = 0_u64;
+    let mut moov = None;
+    let mut saw_ftyp = false;
+    let mut fragmented = false;
+    while at.saturating_add(8) <= len {
+        file.seek(SeekFrom::Start(at)).map_err(|e| io_error(&e))?;
+        let mut head = [0_u8; 16];
+        file.read_exact(&mut head[..8]).map_err(|e| io_error(&e))?;
+        let mut size = u64::from(u32::from_be_bytes([head[0], head[1], head[2], head[3]]));
+        let kind = [head[4], head[5], head[6], head[7]];
+        let mut header = 8;
+        if size == 1 {
+            file.read_exact(&mut head[8..16])
+                .map_err(|e| io_error(&e))?;
+            size = u64::from_be_bytes([
+                head[8], head[9], head[10], head[11], head[12], head[13], head[14], head[15],
+            ]);
+            header = 16;
+        } else if size == 0 {
+            size = len - at;
         }
-    }
-
-    /// The index to start decoding from to show `pts`: the last sync sample at or
-    /// before it in decoding order, or the first sample. For a track without sync
-    /// samples every sample is one.
-    pub(crate) fn seek_index(&self, pts: i64) -> usize {
-        let mut best = 0;
-        for (i, s) in self.samples.iter().enumerate() {
-            if s.sync {
-                // Sync samples are shown in decoding order: the first one after `pts`
-                // ends the search.
-                if s.pts > pts {
-                    break;
-                }
-                best = i;
-            }
-        }
-        best
-    }
-}
-
-/// An opened MP4 file: its tracks, and the file to read samples from.
-pub(crate) struct Mp4 {
-    file: File,
-    pub(crate) video: Option<Track>,
-    pub(crate) audio: Option<Track>,
-}
-
-impl Mp4 {
-    /// Opens `file` if it is an MP4 or QuickTime file. `Ok(None)` when it isn't.
-    ///
-    /// # Errors
-    /// [`PlatformError::Unsupported`] for a fragmented file, and [`PlatformError::Os`]
-    /// for one that doesn't read.
-    pub(crate) fn open(mut file: File) -> Result<Option<Self>, PlatformError> {
-        let len = file.metadata().map_err(|e| io_error(&e))?.len();
-        let mut at = 0_u64;
-        let mut moov = None;
-        let mut saw_ftyp = false;
-        let mut fragmented = false;
-        while at.saturating_add(8) <= len {
-            file.seek(SeekFrom::Start(at)).map_err(|e| io_error(&e))?;
-            let mut head = [0_u8; 16];
-            file.read_exact(&mut head[..8]).map_err(|e| io_error(&e))?;
-            let mut size = u64::from(u32::from_be_bytes([head[0], head[1], head[2], head[3]]));
-            let kind = [head[4], head[5], head[6], head[7]];
-            let mut header = 8;
-            if size == 1 {
-                file.read_exact(&mut head[8..16])
-                    .map_err(|e| io_error(&e))?;
-                size = u64::from_be_bytes([
-                    head[8], head[9], head[10], head[11], head[12], head[13], head[14], head[15],
-                ]);
-                header = 16;
-            } else if size == 0 {
-                size = len - at;
-            }
-            if at == 0
-                && !matches!(
-                    &kind,
-                    b"ftyp" | b"moov" | b"wide" | b"free" | b"mdat" | b"skip"
-                )
-            {
-                return Ok(None);
-            }
-            if size < header {
-                return Err(invalid("a box shorter than its header"));
-            }
-            match &kind {
-                b"ftyp" => saw_ftyp = true,
-                b"moof" => fragmented = true,
-                b"moov" => {
-                    let body = size - header;
-                    if body > MAX_MOOV {
-                        return Err(invalid("a movie box too large to read"));
-                    }
-                    let mut data = vec![0; usize::try_from(body).unwrap_or(0)];
-                    file.read_exact(&mut data).map_err(|e| io_error(&e))?;
-                    moov = Some(data);
-                }
-                _ => {}
-            }
-            at = at.saturating_add(size);
-        }
-        let Some(moov) = moov else {
-            if saw_ftyp {
-                return Err(invalid("no movie box"));
-            }
+        if at == 0
+            && !matches!(
+                &kind,
+                b"ftyp" | b"moov" | b"wide" | b"free" | b"mdat" | b"skip"
+            )
+        {
             return Ok(None);
-        };
-        let movie = parse_moov(&moov)?;
-        if fragmented && movie.iter().all(|t| t.samples.is_empty()) {
-            return Err(PlatformError::Unsupported {
-                what: "fragmented MP4 files on Linux".into(),
-            });
         }
-        let video = movie
-            .iter()
-            .find(|t| t.video && !t.samples.is_empty())
-            .cloned();
-        let audio = movie
-            .iter()
-            .find(|t| !t.video && !t.samples.is_empty())
-            .cloned();
-        Ok(Some(Self { file, video, audio }))
+        if size < header {
+            return Err(invalid("a box shorter than its header"));
+        }
+        match &kind {
+            b"ftyp" => saw_ftyp = true,
+            b"moof" => fragmented = true,
+            b"moov" => {
+                let body = size - header;
+                if body > MAX_MOOV {
+                    return Err(invalid("a movie box too large to read"));
+                }
+                let mut data = vec![0; usize::try_from(body).unwrap_or(0)];
+                file.read_exact(&mut data).map_err(|e| io_error(&e))?;
+                moov = Some(data);
+            }
+            _ => {}
+        }
+        at = at.saturating_add(size);
     }
-
-    /// Reads one sample's bytes.
-    pub(crate) fn read(&mut self, sample: &Sample) -> Result<Vec<u8>, PlatformError> {
-        self.file
-            .seek(SeekFrom::Start(sample.offset))
-            .map_err(|e| io_error(&e))?;
-        let mut data = vec![0; usize::try_from(sample.size).unwrap_or(0)];
-        self.file.read_exact(&mut data).map_err(|e| io_error(&e))?;
-        Ok(data)
+    let Some(moov) = moov else {
+        if saw_ftyp {
+            return Err(invalid("no movie box"));
+        }
+        return Ok(None);
+    };
+    let movie = parse_moov(&moov)?;
+    if fragmented && movie.iter().all(|t| t.samples.is_empty()) {
+        return Err(PlatformError::Unsupported {
+            what: "fragmented MP4 files on Linux".into(),
+        });
     }
+    let video = movie
+        .iter()
+        .find(|t| t.video && !t.samples.is_empty())
+        .cloned();
+    let audio = movie
+        .iter()
+        .find(|t| !t.video && !t.samples.is_empty())
+        .cloned();
+    Ok(Some(Demuxed::new(file, video, audio)))
 }
 
 /// A box's type and body.
@@ -362,6 +265,7 @@ fn parse_trak(trak: &[u8], movie_timescale: u32) -> Result<Option<Track>, Platfo
         channels: entry.channels,
         sample_rate: entry.sample_rate,
         samples,
+        prefix: Vec::new(),
     }))
 }
 
