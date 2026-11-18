@@ -96,13 +96,10 @@ struct Controller {
 impl Controller {
     fn new(to: SocketAddr) -> Self {
         let socket = UdpSocket::bind((LOOPBACK, 0)).expect("bind");
-        // How long a reply may take. An answered exchange ends at its last reply, so
-        // only an exchange meant to go unanswered waits it out. 300 ms was too short on
-        // a loaded Windows runner, where the preview endpoint's reply came later and the
-        // exchange read as unanswered.
-        socket
-            .set_read_timeout(Some(Duration::from_secs(5)))
-            .expect("timeout");
+        // Polled rather than read with a timeout: on Windows a receive that times out
+        // leaves the socket indeterminate, and the next exchange's reply can be lost
+        // (issue #1526).
+        socket.set_nonblocking(true).expect("non-blocking");
         Self { socket, to, seq: 0 }
     }
 
@@ -115,23 +112,24 @@ impl Controller {
         self.socket.send_to(&out[..len], self.to).expect("send");
         let mut replies = Vec::new();
         let mut buf = [0u8; 64];
+        // How long a reply may take. An answered exchange ends at its last reply, so
+        // only an exchange meant to go unanswered waits it out. 300 ms was too short on
+        // a loaded Windows runner, where the preview endpoint's reply came later and the
+        // exchange read as unanswered.
+        let until = Instant::now() + Duration::from_secs(5);
         loop {
             let n = match self.socket.recv_from(&mut buf) {
                 Ok((n, _)) => n,
-                // Windows reports an earlier ICMP port-unreachable on the next read of
-                // a UDP socket as WSAECONNRESET. It says nothing about this exchange,
-                // whose reply may still be on its way, so read on.
-                Err(e) if e.kind() == io::ErrorKind::ConnectionReset => continue,
-                // No more replies: the read timed out (WouldBlock on Unix, TimedOut on
-                // Windows).
-                Err(e)
-                    if matches!(
-                        e.kind(),
-                        io::ErrorKind::WouldBlock | io::ErrorKind::TimedOut
-                    ) =>
-                {
-                    break;
+                Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                    if Instant::now() >= until {
+                        break;
+                    }
+                    thread::sleep(Duration::from_millis(1));
+                    continue;
                 }
+                // Windows reports an earlier ICMP port-unreachable on the next read of
+                // a UDP socket as WSAECONNRESET. It says nothing about this exchange.
+                Err(e) if e.kind() == io::ErrorKind::ConnectionReset => continue,
                 Err(e) => panic!("reading a reply: {e}"),
             };
             let d = ip::parse(&buf[..n]).expect("a VISCA-over-IP reply");
