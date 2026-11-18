@@ -1,20 +1,18 @@
-//! A movie file (MP4 or QuickTime) as a [`MediaDecoder`]: the crate's own demuxer
-//! ([`Mp4`]), H.264 video on the GPU through VA-API, and the audio through symphonia's
-//! decoders (MP3 and FLAC; AAC waits for ADR-0072 (g), so a file whose audio is AAC
-//! plays its video without sound).
+//! A movie file (MP4, QuickTime, Matroska or WebM) as a [`MediaDecoder`]: the crate's
+//! own demuxers ([`super::mp4`], [`super::mkv`]), H.264 video on the GPU through VA-API,
+//! and the audio through symphonia's decoders (MP3, FLAC and Vorbis; AAC waits for
+//! ADR-0072 (g), and Opus for its FFmpeg path, so a file with that audio plays its video
+//! without sound).
 
 use jstream_platform::media::{AudioBuffer, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{
     HardwarePreference, MediaDecoder, MediaDecoderConfig, MediaInfo, MediaVideoInfo, PlatformError,
 };
-use symphonia::core::audio::Channels;
-use symphonia::core::codecs::audio::AudioCodecParameters;
-use symphonia::core::codecs::audio::well_known::{CODEC_ID_FLAC, CODEC_ID_MP3};
 use symphonia::core::packet::Packet;
 use symphonia::core::units::{Duration, Timestamp};
 
 use super::audio::{AudioStream, cut_before};
-use super::mp4::{Codec, Mp4, Track};
+use super::demux::{Codec, Demuxed, Track};
 use crate::vaapi::VaapiH264Decoder;
 
 /// The audio half: the track and its decoder.
@@ -39,7 +37,7 @@ struct Video {
 
 /// An open movie file.
 pub(crate) struct Movie {
-    mp4: Mp4,
+    file: Demuxed,
     video: Option<Video>,
     audio: Option<Audio>,
     info: MediaInfo,
@@ -51,7 +49,10 @@ impl Movie {
     /// # Errors
     /// [`PlatformError::Unsupported`] for a video codec other than H.264, or a file with
     /// neither video nor audio this decodes; [`VaapiH264Decoder::open`]'s errors.
-    pub(crate) fn open(mut mp4: Mp4, config: &MediaDecoderConfig) -> Result<Self, PlatformError> {
+    pub(crate) fn open(
+        mut mp4: Demuxed,
+        config: &MediaDecoderConfig,
+    ) -> Result<Self, PlatformError> {
         let video = match mp4.video.take() {
             Some(track) => Some(open_video(track, config)?),
             None => None,
@@ -78,13 +79,13 @@ impl Movie {
         };
         if info.video.is_none() && info.audio.is_none() {
             return Err(PlatformError::Unsupported {
-                what: "a movie file with no video, and no audio Linux decodes (MP3 and FLAC \
-                       play; AAC waits for ADR-0072's decoder patent check)"
+                what: "a movie file with no video, and no audio Linux decodes (MP3, FLAC \
+                       and Vorbis play; AAC waits for ADR-0072's decoder patent check)"
                     .into(),
             });
         }
         Ok(Self {
-            mp4,
+            file: mp4,
             video,
             audio,
             info,
@@ -132,24 +133,10 @@ fn open_video(track: Track, config: &MediaDecoderConfig) -> Result<Video, Platfo
 /// The audio decoder for `track`, or `None` (logged) for a codec this doesn't decode:
 /// the video still plays.
 fn open_audio(track: Track) -> Option<Audio> {
-    let mut params = AudioCodecParameters::new();
-    match &track.codec {
-        Codec::Mp3 => {
-            params.for_codec(CODEC_ID_MP3);
-        }
-        Codec::Flac(info) => {
-            params
-                .for_codec(CODEC_ID_FLAC)
-                .with_extra_data(info.clone().into_boxed_slice());
-        }
-        other => {
-            tracing::info!(codec = ?other, "a movie file's audio isn't decoded on Linux");
-            return None;
-        }
-    }
-    params
-        .with_sample_rate(track.sample_rate)
-        .with_channels(Channels::Discrete(track.channels));
+    let Some(params) = track.audio_params() else {
+        tracing::info!(codec = ?track.codec, "a movie file's audio isn't decoded on Linux");
+        return None;
+    };
     let timebase = Timebase::per_second(track.timescale).ok()?;
     match AudioStream::new(&params, timebase) {
         Ok(stream) => Some(Audio {
@@ -170,7 +157,7 @@ fn open_audio(track: Track) -> Option<Audio> {
 /// The first gap between decode times, in the track's ticks.
 fn frame_step(track: &Track) -> i64 {
     match track.samples.as_slice() {
-        [a, b, ..] => (b.dts - a.dts).max(0),
+        [a, b, ..] => b.dts.saturating_sub(a.dts).max(0),
         _ => 0,
     }
 }
@@ -202,7 +189,7 @@ impl MediaDecoder for Movie {
             }
             if let Some(sample) = video.track.samples.get(video.next).copied() {
                 video.next += 1;
-                let data = self.mp4.read(&sample)?;
+                let data = self.file.read(&video.track, &sample)?;
                 video.decoder.decode(&data, sample.pts)?;
             } else if !video.flushed {
                 video.flushed = true;
@@ -219,7 +206,7 @@ impl MediaDecoder for Movie {
         };
         while let Some(sample) = audio.track.samples.get(audio.next).copied() {
             audio.next += 1;
-            let data = self.mp4.read(&sample)?;
+            let data = self.file.read(&audio.track, &sample)?;
             let duration = audio
                 .track
                 .samples

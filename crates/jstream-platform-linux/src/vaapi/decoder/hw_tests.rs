@@ -244,3 +244,10 @@ fn decodes_an_open_gop_stream_and_seeks_to_its_recovery_point() {
     }
     assert_eq!(hashes, OPEN_GOP[30..]);
 }
+
+#[test]
+#[ignore = "needs a GPU with a VA-API H.264 decoder"]
+fn decodes_the_same_stream_from_matroska_bit_exact() {
+    // The MP4's video remuxed into Matroska with `-c:v copy`: the same frames.
+    decodes("h264-vorbis.mkv", &HIGH);
+}

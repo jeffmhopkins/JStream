@@ -197,18 +197,30 @@ fn an_unknown_container_is_unsupported() {
 #[test]
 fn a_movie_opens_or_names_the_missing_decoder() {
     // On a machine with a VA-API H.264 decoder it opens; elsewhere (CI) it names what
-    // to install.
-    match LinuxMediaDecoders.open(&testdata("h264-high.mp4"), &config(true)) {
-        Ok(decoder) => {
-            let info = decoder.info();
-            let video = info.video.expect("video");
-            assert_eq!((video.size.width(), video.size.height()), (120, 90));
-            assert!(info.audio.is_some(), "MP3 audio");
+    // to install. MP3 audio in the MP4, Vorbis in the Matroska file.
+    for name in ["h264-high.mp4", "h264-vorbis.mkv"] {
+        match LinuxMediaDecoders.open(&testdata(name), &config(true)) {
+            Ok(decoder) => {
+                let info = decoder.info();
+                let video = info.video.expect("video");
+                assert_eq!((video.size.width(), video.size.height()), (120, 90));
+                assert!(info.audio.is_some(), "{name}: audio");
+            }
+            Err(PlatformError::MissingComponent { component, remedy }) => {
+                assert!(component.contains("VA-API"), "{component}");
+                assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
+            }
+            Err(err) => panic!("{name}: {err}"),
         }
-        Err(PlatformError::MissingComponent { component, remedy }) => {
-            assert!(component.contains("VA-API"), "{component}");
-            assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
-        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_webm_names_its_video_codec() {
+    match LinuxMediaDecoders.open(&testdata("vp9-opus.webm"), &config(true)) {
+        Err(PlatformError::Unsupported { what }) => assert!(what.contains("V_VP9"), "{what}"),
         Err(err) => panic!("{err}"),
+        Ok(_) => panic!("VP9 doesn't decode yet"),
     }
 }
