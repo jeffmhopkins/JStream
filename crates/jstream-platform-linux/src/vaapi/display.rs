@@ -98,6 +98,9 @@ type CreateImage =
     unsafe extern "C" fn(VaDisplay, *mut ImageFormat, c_int, c_int, *mut Image) -> Status;
 /// `VAStatus vaDestroyImage(VADisplay dpy, VAImageID image)`.
 type DestroyImage = unsafe extern "C" fn(VaDisplay, Id) -> Status;
+/// `VAStatus vaGetImage(VADisplay dpy, VASurfaceID surface, int x, int y,
+/// unsigned int width, unsigned int height, VAImageID image)`.
+type GetImage = unsafe extern "C" fn(VaDisplay, Id, c_int, c_int, c_uint, c_uint, Id) -> Status;
 /// `VAStatus vaPutImage(VADisplay dpy, VASurfaceID surface, VAImageID image, int src_x,
 /// int src_y, unsigned int src_width, unsigned int src_height, int dest_x, int dest_y,
 /// unsigned int dest_width, unsigned int dest_height)`.
@@ -144,6 +147,7 @@ pub(crate) struct Va {
     pub(crate) create_image: CreateImage,
     pub(crate) destroy_image: DestroyImage,
     pub(crate) put_image: PutImage,
+    pub(crate) get_image: GetImage,
     _va: SystemLibrary,
     _drm: SystemLibrary,
 }
@@ -190,6 +194,7 @@ impl Va {
                 create_image: va.function("vaCreateImage")?,
                 destroy_image: va.function("vaDestroyImage")?,
                 put_image: va.function("vaPutImage")?,
+                get_image: va.function("vaGetImage")?,
                 _va: va,
                 _drm: drm,
             }))

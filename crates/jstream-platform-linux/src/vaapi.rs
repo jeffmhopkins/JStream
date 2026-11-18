@@ -6,7 +6,15 @@
 //! `hevc`, the structs libva reads are declared in `ffi`, and CPU frames are written
 //! into VA images by `upload`; those four are platform-independent and tested
 //! everywhere.
+//!
+//! Decoding goes the other way: `VaapiH264Decoder` (`decoder`) decodes a media file's
+//! H.264 on a render node whose driver offers the stream's profile, from the pictures
+//! `media::h264`'s planner lays out, and reads each frame back. The picture, scaling
+//! list and slice parameters it submits are built in `h264_dec`, platform-independent
+//! and tested everywhere too.
 
+#[cfg(target_os = "linux")]
+mod decoder;
 #[cfg(target_os = "linux")]
 mod display;
 #[cfg_attr(
@@ -25,6 +33,14 @@ mod ffi;
     )
 )]
 mod h264;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux decoder; built elsewhere for its tests"
+    )
+)]
+mod h264_dec;
 // Used by the Linux session; built elsewhere for its tests, which use all of it.
 #[cfg(any(target_os = "linux", test))]
 mod hevc;
@@ -41,6 +57,8 @@ mod upload;
 
 use jstream_platform::media::Codec;
 
+#[cfg(target_os = "linux")]
+pub(crate) use decoder::VaapiH264Decoder;
 #[cfg(target_os = "linux")]
 pub(crate) use session::VaapiEncoder;
 

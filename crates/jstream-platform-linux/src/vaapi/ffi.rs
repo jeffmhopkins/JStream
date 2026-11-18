@@ -1,4 +1,5 @@
-//! libva's H.264 and HEVC encode structs and constants, hand-written (ADR-0060 §8).
+//! libva's H.264 and HEVC encode structs, its H.264 decode structs (ADR-0072), and their
+//! constants, hand-written (ADR-0060 §8).
 //!
 //! Each struct mirrors its C declaration field for field, `#[repr(C)]`, with C bitfield
 //! unions as one `u32` (or `u16`) that `h264` and `hevc` pack. They were checked against
@@ -12,6 +13,10 @@
 //! Bitfields are packed lowest bit first, as GCC and Clang lay them out on every Linux
 //! ABI JStream supports (x86_64, aarch64).
 //!
+//! The H.264 decode structs (`va/va.h`'s `VAPictureParameterBufferH264`,
+//! `VAIQMatrixBufferH264` and `VASliceParameterBufferH264`) were checked the same way,
+//! against the same release, and their sizes and offsets are asserted below.
+//!
 //! The surface attributes and the DRM PRIME descriptor that import an encode target
 //! (`va/va.h`, `va/va_drmcommon.h`) were checked the same way, against the same
 //! release.
@@ -19,6 +24,104 @@
 //! Plain data with no pointers (apart from [`CodedBufferSegment`], which only libva
 //! writes, and [`GenericValue`], which carries the descriptor's address), so it builds
 //! on every platform and the parameter builders are tested everywhere.
+
+/// `VAEntrypointVLD`: decoding.
+pub(crate) const ENTRYPOINT_VLD: i32 = 1;
+/// `VA_PICTURE_H264_LONG_TERM_REFERENCE`.
+pub(crate) const PICTURE_H264_LONG_TERM_REFERENCE: u32 = 0x10;
+
+/// The decode buffer types (`VABufferType`).
+pub(crate) mod dec_buffer {
+    /// `VAPictureParameterBufferType`.
+    pub(crate) const PICTURE_PARAMETER: i32 = 0;
+    /// `VAIQMatrixBufferType`.
+    pub(crate) const IQ_MATRIX: i32 = 1;
+    /// `VASliceParameterBufferType`.
+    pub(crate) const SLICE_PARAMETER: i32 = 4;
+    /// `VASliceDataBufferType`.
+    pub(crate) const SLICE_DATA: i32 = 5;
+}
+
+/// `VAPictureParameterBufferH264`: one picture to decode.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecPicParamH264 {
+    pub(crate) curr_pic: PictureH264,
+    pub(crate) reference_frames: [PictureH264; 16],
+    pub(crate) picture_width_in_mbs_minus1: u16,
+    pub(crate) picture_height_in_mbs_minus1: u16,
+    pub(crate) bit_depth_luma_minus8: u8,
+    pub(crate) bit_depth_chroma_minus8: u8,
+    pub(crate) num_ref_frames: u8,
+    /// `seq_fields`: `chroma_format_idc` (bits 0-1), `residual_colour_transform_flag`
+    /// (2), `gaps_in_frame_num_value_allowed_flag` (3), `frame_mbs_only_flag` (4),
+    /// `mb_adaptive_frame_field_flag` (5), `direct_8x8_inference_flag` (6),
+    /// `MinLumaBiPredSize8x8` (7), `log2_max_frame_num_minus4` (8-11),
+    /// `pic_order_cnt_type` (12-13), `log2_max_pic_order_cnt_lsb_minus4` (14-17),
+    /// `delta_pic_order_always_zero_flag` (18).
+    pub(crate) seq_fields: u32,
+    pub(crate) num_slice_groups_minus1: u8,
+    pub(crate) slice_group_map_type: u8,
+    pub(crate) slice_group_change_rate_minus1: u16,
+    pub(crate) pic_init_qp_minus26: i8,
+    pub(crate) pic_init_qs_minus26: i8,
+    pub(crate) chroma_qp_index_offset: i8,
+    pub(crate) second_chroma_qp_index_offset: i8,
+    /// `pic_fields`: `entropy_coding_mode_flag` (bit 0), `weighted_pred_flag` (1),
+    /// `weighted_bipred_idc` (2-3), `transform_8x8_mode_flag` (4), `field_pic_flag`
+    /// (5), `constrained_intra_pred_flag` (6), `pic_order_present_flag` (7),
+    /// `deblocking_filter_control_present_flag` (8), `redundant_pic_cnt_present_flag`
+    /// (9), `reference_pic_flag` (10).
+    pub(crate) pic_fields: u32,
+    pub(crate) frame_num: u16,
+    pub(crate) va_reserved: [u32; 8],
+}
+
+/// `VAIQMatrixBufferH264`: the scaling lists, in zig-zag order.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct IqMatrixH264 {
+    pub(crate) scaling_list_4x4: [[u8; 16]; 6],
+    pub(crate) scaling_list_8x8: [[u8; 64]; 2],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VASliceParameterBufferH264`: one slice to decode.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecSliceParamH264 {
+    pub(crate) slice_data_size: u32,
+    pub(crate) slice_data_offset: u32,
+    pub(crate) slice_data_flag: u32,
+    pub(crate) slice_data_bit_offset: u16,
+    pub(crate) first_mb_in_slice: u16,
+    pub(crate) slice_type: u8,
+    pub(crate) direct_spatial_mv_pred_flag: u8,
+    pub(crate) num_ref_idx_l0_active_minus1: u8,
+    pub(crate) num_ref_idx_l1_active_minus1: u8,
+    pub(crate) cabac_init_idc: u8,
+    pub(crate) slice_qp_delta: i8,
+    pub(crate) disable_deblocking_filter_idc: u8,
+    pub(crate) slice_alpha_c0_offset_div2: i8,
+    pub(crate) slice_beta_offset_div2: i8,
+    pub(crate) ref_pic_list0: [PictureH264; 32],
+    pub(crate) ref_pic_list1: [PictureH264; 32],
+    pub(crate) luma_log2_weight_denom: u8,
+    pub(crate) chroma_log2_weight_denom: u8,
+    pub(crate) luma_weight_l0_flag: u8,
+    pub(crate) luma_weight_l0: [i16; 32],
+    pub(crate) luma_offset_l0: [i16; 32],
+    pub(crate) chroma_weight_l0_flag: u8,
+    pub(crate) chroma_weight_l0: [[i16; 2]; 32],
+    pub(crate) chroma_offset_l0: [[i16; 2]; 32],
+    pub(crate) luma_weight_l1_flag: u8,
+    pub(crate) luma_weight_l1: [i16; 32],
+    pub(crate) luma_offset_l1: [i16; 32],
+    pub(crate) chroma_weight_l1_flag: u8,
+    pub(crate) chroma_weight_l1: [[i16; 2]; 32],
+    pub(crate) chroma_offset_l1: [[i16; 2]; 32],
+    pub(crate) va_reserved: [u32; 4],
+}
 
 /// `VAStatus`: `int`.
 pub(crate) type Status = i32;
@@ -676,6 +779,36 @@ const _: () = {
 
     assert!(size_of::<ConfigAttrib>() == 8);
     assert!(size_of::<PictureH264>() == 36);
+    assert!(size_of::<DecPicParamH264>() == 672);
+    assert!(offset_of!(DecPicParamH264, reference_frames) == 36);
+    assert!(offset_of!(DecPicParamH264, picture_width_in_mbs_minus1) == 612);
+    assert!(offset_of!(DecPicParamH264, num_ref_frames) == 618);
+    assert!(offset_of!(DecPicParamH264, seq_fields) == 620);
+    assert!(offset_of!(DecPicParamH264, num_slice_groups_minus1) == 624);
+    assert!(offset_of!(DecPicParamH264, slice_group_change_rate_minus1) == 626);
+    assert!(offset_of!(DecPicParamH264, pic_init_qp_minus26) == 628);
+    assert!(offset_of!(DecPicParamH264, pic_fields) == 632);
+    assert!(offset_of!(DecPicParamH264, frame_num) == 636);
+    assert!(offset_of!(DecPicParamH264, va_reserved) == 640);
+    assert!(size_of::<IqMatrixH264>() == 240);
+    assert!(offset_of!(IqMatrixH264, scaling_list_8x8) == 96);
+    assert!(size_of::<DecSliceParamH264>() == 3128);
+    assert!(offset_of!(DecSliceParamH264, slice_data_bit_offset) == 12);
+    assert!(offset_of!(DecSliceParamH264, slice_type) == 16);
+    assert!(offset_of!(DecSliceParamH264, slice_beta_offset_div2) == 24);
+    assert!(offset_of!(DecSliceParamH264, ref_pic_list0) == 28);
+    assert!(offset_of!(DecSliceParamH264, ref_pic_list1) == 1180);
+    assert!(offset_of!(DecSliceParamH264, luma_log2_weight_denom) == 2332);
+    assert!(offset_of!(DecSliceParamH264, luma_weight_l0) == 2336);
+    assert!(offset_of!(DecSliceParamH264, luma_offset_l0) == 2400);
+    assert!(offset_of!(DecSliceParamH264, chroma_weight_l0_flag) == 2464);
+    assert!(offset_of!(DecSliceParamH264, chroma_weight_l0) == 2466);
+    assert!(offset_of!(DecSliceParamH264, chroma_offset_l0) == 2594);
+    assert!(offset_of!(DecSliceParamH264, luma_weight_l1_flag) == 2722);
+    assert!(offset_of!(DecSliceParamH264, luma_weight_l1) == 2724);
+    assert!(offset_of!(DecSliceParamH264, chroma_weight_l1) == 2854);
+    assert!(offset_of!(DecSliceParamH264, chroma_offset_l1) == 2982);
+    assert!(offset_of!(DecSliceParamH264, va_reserved) == 3112);
     assert!(size_of::<SeqParamH264>() == 1132);
     assert!(offset_of!(SeqParamH264, intra_period) == 4);
     assert!(offset_of!(SeqParamH264, seq_fields) == 28);

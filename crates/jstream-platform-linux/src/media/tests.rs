@@ -190,3 +190,25 @@ fn an_unknown_container_is_unsupported() {
         result.err()
     );
 }
+
+// Movies decode through VA-API, so only on Linux; elsewhere the crate is built for its
+// portable parts' tests.
+#[cfg(target_os = "linux")]
+#[test]
+fn a_movie_opens_or_names_the_missing_decoder() {
+    // On a machine with a VA-API H.264 decoder it opens; elsewhere (CI) it names what
+    // to install.
+    match LinuxMediaDecoders.open(&testdata("h264-high.mp4"), &config(true)) {
+        Ok(decoder) => {
+            let info = decoder.info();
+            let video = info.video.expect("video");
+            assert_eq!((video.size.width(), video.size.height()), (120, 90));
+            assert!(info.audio.is_some(), "MP3 audio");
+        }
+        Err(PlatformError::MissingComponent { component, remedy }) => {
+            assert!(component.contains("VA-API"), "{component}");
+            assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
+        }
+        Err(err) => panic!("{err}"),
+    }
+}

@@ -50,7 +50,7 @@ platform-independent helpers, which are tested on every platform.
 | `V4l2Devices` | `VideoDevices` | `v4l2/`, `pairing.rs` | webcams and capture cards, paired with their microphones, on the CPU or GPU path, and their camera controls (`VIDIOC_QUERYCTRL`, `VIDIOC_S_CTRL`) |
 | `LoopbackVcam` | `VcamSink` | `v4l2/loopback.rs`, `vcam.rs` | the virtual camera: I420 frames written to a v4l2loopback device the user has loaded, one labelled `JStream` first, left out of the webcam list while it writes ([ADR-0156](../../docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md)) |
 | `LinuxBackends` | | `backends.rs` | the backend set, with ADR-0060 §4's audio choice made once |
-| `LinuxMediaDecoders` | `MediaDecoders` | `media.rs`, `media/` | local media files as [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) lays out. So far: WAV, FLAC, Ogg Vorbis and MP3 files through symphonia's pure-Rust readers and decoders, mixed down to stereo where wider. Any other container or codec is `Unsupported`, naming it; AAC waits for ADR-0072 (g)'s decoder patent check |
+| `LinuxMediaDecoders` | `MediaDecoders` | `media.rs`, `media/` | local media files as [ADR-0072](../../docs/adr/0072-linux-media-file-decoding.md) lays out. So far: WAV, FLAC, Ogg Vorbis and MP3 files through symphonia's pure-Rust readers and decoders, mixed down to stereo where wider, and MP4 and MOV files through the crate's own demuxer (`media/mp4.rs`), their H.264 video decoded on the GPU through VA-API (`vaapi/decoder.rs`, from the crate's own H.264 header parser and reference planner, `media/h264/`) and their MP3 or FLAC audio through symphonia. Any other container or codec is `Unsupported`, naming it; AAC waits for ADR-0072 (g)'s decoder patent check, so a movie with AAC audio plays without sound |
 | `portal_pick_path`, `FileChoice` | | `portal/file_chooser.rs` | the desktop app's Browse dialogs through the FileChooser portal: open, save or folder, answered only by the portal's own bus connection, a local `file://` path or nothing ([ADR-0141](../../docs/adr/0141-desktop-app-on-linux.md)) |
 | `GlobalHotkeys` | | `hotkeys.rs` | X11 only: the collection's bound chords heard while another app has the focus, grabbed on the root window with `xcb_grab_key`, and wheel chords as buttons 4 and 5 with `xcb_grab_button` ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6); Wayland has no grab |
 | `PortalHotkeys` | | `portal/global_shortcuts.rs` | Wayland's global hotkeys: the GlobalShortcuts portal binds one shortcut per chord (its id the chord, its preferred trigger the same keys in the shortcuts format) and reports each activation, answered only by the portal's own bus connection; wheel chords can't be shortcuts ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5) |
@@ -63,8 +63,9 @@ JStream never ships or builds OpenH264. The stored file's SHA-256 is checked aga
 each `dlopen`, and a copy from anywhere else is never loaded.
 
 Not here yet:
-- the rest of ADR-0072's media-file decoders: MP4, MOV, Matroska and WebM files, VA-API
-  video decoding, and the system's FFmpeg as the fallback behind its two gates;
+- the rest of ADR-0072's media-file decoders: Matroska and WebM files, video codecs
+  other than H.264, H.264 field pictures and 10-bit or 4:2:2 streams, and the system's
+  FFmpeg as the fallback behind its two gates;
 - an app keeping its OAuth tokens in `LinuxSecrets` (the daemon keeps its stream keys
   there), the protocol field that tells the UI the secret store's fallback is active,
   and the `jstream.toml` setting that turns the fallback off (ADR-0071 §4, §5).
