@@ -279,3 +279,36 @@ fn its_vorbis_audio_decodes() {
         "{frames} frames"
     );
 }
+
+#[test]
+fn a_recording_cut_in_a_block_before_its_cluster_time_keeps_what_came_before() {
+    // A block shown before its cluster's time has a negative relative time, so its
+    // body starts `81 FF …`. Read as an element, that is an ID with an unknown size.
+    let blocks: Vec<Vec<u8>> = [0, 26, -3, 52]
+        .into_iter()
+        .map(|rel: i16| simple_block(rel, 0x80, &[], &[&[7; 10]]))
+        .collect();
+    for unknown_cluster in [false, true] {
+        let bytes = file(&blocks[..3], &[], unknown_cluster);
+        // Cut inside the third block, just past its header.
+        let cut = &bytes[..bytes.len() - 8];
+        let mut demuxed = open_bytes(cut).expect("Matroska");
+        assert_eq!(
+            frames(&mut demuxed).len(),
+            2,
+            "unknown size: {unknown_cluster}"
+        );
+    }
+    // The fixture cut through its Vorbis block at relative time -3.
+    let whole = std::fs::read(testdata("h264-vorbis.mkv")).expect("reads");
+    for cut in 7_682..=7_707 {
+        assert!(open_bytes(&whole[..cut]).is_some(), "cut at {cut}");
+    }
+}
+
+#[test]
+fn an_ebml_lace_of_one_frame_is_one_frame() {
+    let blocks = vec![simple_block(0, 0x80 | 0x06, &[0], &[&[9; 10]])];
+    let mut demuxed = open_bytes(&file(&blocks, &[], false)).expect("Matroska");
+    assert_eq!(frames(&mut demuxed), vec![vec![9; 10]]);
+}

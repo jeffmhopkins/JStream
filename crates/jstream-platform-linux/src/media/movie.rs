@@ -211,7 +211,7 @@ impl MediaDecoder for Movie {
                 .track
                 .samples
                 .get(audio.next)
-                .map_or(0, |n| (n.dts - sample.dts).max(0));
+                .map_or(0, |n| n.dts.saturating_sub(sample.dts).max(0));
             let packet = Packet::new(
                 audio.track.id,
                 Timestamp::new(sample.pts),

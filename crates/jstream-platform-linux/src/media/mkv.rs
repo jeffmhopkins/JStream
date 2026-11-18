@@ -567,11 +567,14 @@ fn cluster(
         if h.size.is_none() && id::TOP_LEVEL.contains(&child.id) {
             return Ok(Some(child));
         }
-        // A file cut short in the middle of an element: it ends before it.
+        // A file cut short in the middle of an element: it ends before it. The reader
+        // moves to the end, so nothing reads the cut element's body as elements.
         if child
             .size
             .is_some_and(|s| child.body.saturating_add(s) > r.len)
         {
+            let len = r.len;
+            r.seek(len)?;
             return Ok(None);
         }
         let child_end = child.end(end);
@@ -686,8 +689,10 @@ fn lace_sizes(r: &mut Reader, flags: u8, end: u64) -> Result<Vec<u32>, PlatformE
         }
         // EBML: the first size, then signed differences.
         3 => {
-            let (first, _) = r.vint()?.ok_or_else(short)?;
-            sizes.push(first);
+            if count > 1 {
+                let (first, _) = r.vint()?.ok_or_else(short)?;
+                sizes.push(first);
+            }
             for _ in 2..count {
                 let start = r.at;
                 let (raw, _) = r.vint()?.ok_or_else(short)?;
