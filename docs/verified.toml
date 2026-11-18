@@ -1980,7 +1980,7 @@ stamp = { hash = "b3:8c47ea96a265cbbd", by = "agent:ptz-builder", note = "PTZ te
 stamp = { hash = "b3:ed73b276a16e5ff2", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the controller emulator and live aim tests and their covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/ptz/controller/tests.rs"]
-stamp = { hash = "b3:4ef52071d881f27b", by = "agent:lane-d-wave-sync", note = "ptz/controller/tests.rs only lengthens the test controller's reply timeout from 300 ms to 5 s (Windows CI answered later than 300 ms); the section's list of the PTZ controller tests and what they check still holds" }
+stamp = { hash = "b3:4ce5daad482c8ff8", by = "agent:ptz-flake", note = "The controller emulator's reply loop now reads on past a Windows WSAECONNRESET and panics on a real read error; the PTZ controllers paragraph (what the tests cover) still holds unchanged." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/ptz/tests.rs"]
 stamp = { hash = "b3:1345b702ed66bc97", by = "agent:ptz-builder", note = "PTZ tests bullet names the silent head's resent and unanswered command in ptz_cameras (ADR-0155) and the engine test's profile.get listing the head while it runs and dropping it after the empty setup; FakeHead's addr is pub(crate) for that; ADR renumbered 0154 to 0155 because #1503 took 0154 on main, and the links follow" }
