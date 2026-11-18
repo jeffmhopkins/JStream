@@ -51,8 +51,11 @@ use crate::session::InProcessControl;
 #[cfg(test)]
 mod tests;
 
-/// How long a socket read waits before the thread checks whether to stop.
-const TICK: Duration = Duration::from_millis(50);
+/// How long a UDP endpoint sleeps when nothing is waiting, before it reads again and
+/// checks whether to stop. Its socket is non-blocking rather than read with a timeout:
+/// on Windows a receive that times out leaves the socket in an indeterminate state, and
+/// a datagram arriving just then can be lost (issue #1526).
+const POLL: Duration = Duration::from_millis(5);
 /// The most TCP connections one endpoint holds at once.
 const MAX_CONNECTIONS: usize = 4;
 /// Pan and tilt counts a degree, in the positions a controller reads and sends: pan
@@ -401,7 +404,7 @@ pub(crate) fn start(
         let socket = match c.transport {
             PtzTransport::ViscaIp | PtzTransport::Udp => {
                 let socket = UdpSocket::bind(c.bind)?;
-                socket.set_read_timeout(Some(TICK))?;
+                socket.set_nonblocking(true)?;
                 Socket::Udp(socket)
             }
             PtzTransport::Tcp => {
@@ -508,8 +511,9 @@ impl Endpoint {
             let (n, from) = match socket.recv_from(&mut buf) {
                 Ok(got) => got,
                 Err(_) => {
-                    // A timeout, or a datagram the OS refused: either way, a tick.
+                    // Nothing waiting, or a datagram the OS refused: either way, a tick.
                     self.check_idle();
+                    thread::sleep(POLL);
                     continue;
                 }
             };
