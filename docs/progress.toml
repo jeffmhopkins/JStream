@@ -259,6 +259,7 @@ release = "beta.1"
 title = "Every platform: the release attaches the Windows zip, the macOS disk image, and the Linux .deb and AppImage, each built from the tag"
 status = "planned"
 issues = [1515]
+prs = [1528]
 note = "CI already builds the .deb, AppImage and .dmg after review; release.yml gains the jobs that attach them"
 
 [[target]]
@@ -282,7 +283,7 @@ title = "Wanted, not waited for: browser sources on macOS through CEF, a virtual
 status = "planned"
 issues = [1516]
 prs = [1521, 1522, 1523, 1529]
-note = "each ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta)"
+note = "each ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta); browser sources on macOS (#1522) and the Linux virtual camera (#1521) are built and in the release's packages, and Linux media files play audio (#1523) and H.264 video in MP4 and MOV through VA-API (#1529)"
 
 [[milestone]]
 id = "M0"

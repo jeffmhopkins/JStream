@@ -112,7 +112,8 @@ updates what changed:
 **The desktop app** isn't the installer's: `scripts/mac/bundle-app.sh` makes
 `JStream.app` and `JStream-<version>-macos-<arch>.dmg` from a release build of
 `jstream-desktop` and the built UI, ad-hoc signed, and the after-review `macos-app` job
-uploads that image for each PR it runs on
+uploads that image for each PR it runs on; from beta.1 each release attaches it too
+([RUNBOOK-RELEASE › Cutting a release](release.md#cut))
 ([jstream-desktop › Usage](../../apps/jstream-desktop/README.md#usage)). Given the browser
 helper and CEF's folder (`scripts/mac/build-browser-helper.sh` builds the one and prints
 the other), it also bundles browser sources: CEF's framework and helper apps, each signed

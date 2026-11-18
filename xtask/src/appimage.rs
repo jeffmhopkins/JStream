@@ -24,6 +24,7 @@ use anyhow::{Context, Result, bail};
 
 use crate::browser_linux::CHROME_SANDBOX;
 use crate::dist::{copy, copy_dir};
+use crate::dist_linux;
 
 /// The program the AppImage starts: the desktop app, which runs the engine itself.
 const PROGRAM: &str = "jstream";
@@ -157,9 +158,10 @@ fn lay_out(inputs: &Inputs<'_>, appdir: &Path) -> Result<()> {
     }
     let doc = appdir.join("usr/share/doc/jstream");
     fs::create_dir_all(&doc).with_context(|| format!("creating {}", doc.display()))?;
-    for license in ["LICENSE-MIT", "LICENSE-APACHE"] {
+    for license in dist_linux::LICENSES {
         copy(&inputs.root.join(license), &doc.join(license))?;
     }
+    fs::write(doc.join("NOTICE.txt"), dist_linux::NOTICE).context("writing NOTICE.txt")?;
     Ok(())
 }
 
@@ -286,6 +288,9 @@ mod tests {
                 .join("usr/share/doc/jstream/LICENSE-APACHE")
                 .is_file()
         );
+        let notice = fs::read_to_string(appdir.join("usr/share/doc/jstream/NOTICE.txt"))
+            .expect("the licence notice");
+        assert!(notice.contains("Via LA"), "ADR-0062's AAC notice");
         let _ = fs::remove_dir_all(&scratch);
     }
 }

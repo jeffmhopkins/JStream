@@ -64,9 +64,10 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   stored relative to the collection), whether "Allow devices on my network" is on,
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
   and the JTunnel setting as it was at start with `setJtunnel`, which saves it.
-- **Browser sources** (`browser.rs`, Windows and macOS with the `cef` feature only): the
-  CEF backend the engine opens `browser` sources' pages in; on macOS its helper is in the
-  app bundle ([ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)).
+- **Browser sources** (`browser.rs`, Windows, macOS and 64-bit Linux with the `cef`
+  feature): the CEF backend the engine opens `browser` sources' pages in; on macOS its
+  helper is in the app bundle ([ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)),
+  on Linux beside the app ([ADR-0158](../../docs/adr/0158-browser-sources-in-the-linux-app.md)).
 - **Window** (`shell.rs`, Windows, macOS, and Linux with `webkitgtk`): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
   project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
@@ -292,7 +293,9 @@ folder, and its log `logs\cef.log`.
   v4l2loopback device, which the user installs and loads once
   ([ADR-0156](../../docs/adr/0156-linux-virtual-camera-through-v4l2loopback.md)); the app
   never runs anything as root, and a start without a device is refused with the
-  commands to run. There are no browser sources yet. Browse opens the desktop's own
+  commands to run. Browser sources need the `cef` feature, which the `.deb`
+  and the AppImage are built with, and the helper's `browser` folder beside the app
+  ([ADR-0158](../../docs/adr/0158-browser-sources-in-the-linux-app.md)). Browse opens the desktop's own
   dialog through the FileChooser portal, so `xdg-desktop-portal` and a backend for the
   desktop must run, as screen capture needs anyway.
 - **On macOS** the data folder is `~/Library/Application Support/JStream`, the daemon's
@@ -570,7 +573,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `cargo run` has them as the daemon's binary does. `scripts/mac/bundle-app.sh` builds
   `JStream.app`: the binary in `Contents/MacOS`, the UI in `Contents/Resources/ui`
   (`app::bundled_ui_dir`, so nothing but code sits beside the binary and the bundle can
-  be signed whole), an icon made from `icons/icon.png`, and `Info.plist` with the bundle
+  be signed whole), the licence files in `Contents/Resources`, an icon made from `icons/icon.png`, and `Info.plist` with the bundle
   keys added (macOS 14 as the floor, ADR-0063). It signs the bundle ad hoc, or with
   `--sign` a Developer ID with the hardened runtime and `entitlements.plist` (camera and
   microphone; not sandboxed), and packs it in a UDZO disk image with a link to

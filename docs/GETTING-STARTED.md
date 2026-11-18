@@ -26,6 +26,12 @@ depends_on = ["docs/ARCHITECTURE.md#packaging", "apps/jstream-desktop/README.md#
 - **WebView2**, which draws the app's window. Windows 11 comes with it.
 - Nothing else: there is no installer, and running JStream needs no administrator rights.
 
+**On macOS:** macOS 14 or later on an Apple Silicon Mac. **On Linux:** a 64-bit (x86_64)
+PC with GNOME or KDE Plasma, PipeWire and the desktop's xdg-desktop-portal, and for
+streaming either a VA-API GPU encoder (Intel or AMD) or Cisco's OpenH264, which JStream
+downloads when you ask
+([ADR-0060](adr/0060-linux-platform-support.md#decision)).
+
 <a id="install"></a>
 ## Download and first run
 <!-- @section
@@ -46,6 +52,25 @@ this only for a zip you downloaded from the releases page.
 JStream keeps its settings, scenes and logs in `%APPDATA%\JStream`. To keep them in the
 JStream folder instead (to run it from a USB stick), create an empty file named
 `portable`, with no extension, next to `jstream.exe`: they then go in its `data` folder.
+
+**On macOS** (Apple Silicon, macOS 14 or later): download
+`jstream-v<version>-macos-arm64.dmg` from the same page, open it and drag JStream to
+Applications. The app is not signed or notarised, so macOS stops it the first time: open
+it once, then choose **Open Anyway** in System Settings › Privacy & Security. macOS asks
+again for Screen Recording, Camera and Microphone after each update. Settings and scenes
+are in `~/Library/Application Support/JStream`. The macOS build has no virtual camera
+yet.
+
+**On Linux** (x86_64, GNOME or KDE Plasma): on Ubuntu 24.04 or later, download
+`jstream-v<version>-linux-amd64.deb` and run
+`sudo apt install ./jstream-v<version>-linux-amd64.deb`, then start JStream from the app
+menu. On other distributions, Debian included, download
+`jstream-v<version>-linux-x86_64.AppImage`, make it executable (`chmod +x`) and run it.
+Settings and scenes are in `~/.local/share/jstream`. Without a VA-API GPU encoder, JStream
+offers to download Cisco's OpenH264 for streaming. On Linux a media-file source plays
+audio files (WAV, FLAC, Ogg Vorbis and MP3) but not video files yet. The virtual camera
+needs the v4l2loopback module
+([The virtual camera](#vcam)).
 
 Your scenes, sources and outputs are one project file. **File › Save project as…** saves
 them to a new file, **File › Open project…** and **Open recent** switch to another, and

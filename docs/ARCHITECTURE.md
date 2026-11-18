@@ -50,7 +50,7 @@ depends_on = ["docs/adr/0001-library-first-engine.md", "docs/adr/0045-leptos-web
 
 | Host (`apps/`) | What it is |
 |---|---|
-| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. It runs on Windows (WebView2), on Linux with its `webkitgtk` feature (WebKitGTK, [ADR-0141](adr/0141-desktop-app-on-linux.md)) and on macOS (WKWebView, an unsigned `JStream.app`; [ADR-0144](adr/0144-the-desktop-app-on-macos.md)), on Windows, macOS and 64-bit Linux with the engine live as in the daemon, with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents, with "Allow devices on my network" the TLS network listener for paired devices, and with "Receive from JTunnel senders" the engine's JTunnel receiver for the senders accepted in its settings ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF. |
+| `jstream-desktop` | Tauri shell. The engine runs in-process. The webview UI connects to it over the same authenticated localhost WebSocket used remotely, so there is one code path. It runs on Windows (WebView2), on Linux with its `webkitgtk` feature (WebKitGTK, [ADR-0141](adr/0141-desktop-app-on-linux.md)) and on macOS (WKWebView, an unsigned `JStream.app`; [ADR-0144](adr/0144-the-desktop-app-on-macos.md)), on Windows, macOS and 64-bit Linux with the engine live as in the daemon, with a fresh in-memory token handed to the page at startup, or with `--mcp` a token file and MCP for agents, with "Allow devices on my network" the TLS network listener for paired devices, and with "Receive from JTunnel senders" the engine's JTunnel receiver for the senders accepted in its settings ([its README](../apps/jstream-desktop/README.md#design)). Its `cef` feature, off by default until the CEF runtime is packaged, opens browser sources' pages in CEF, on Windows, macOS ([ADR-0157](adr/0157-browser-sources-on-macos.md)) and 64-bit Linux ([ADR-0158](adr/0158-browser-sources-in-the-linux-app.md)). |
 | `jstream-daemon` | Headless engine. Serves the UI, the WebSocket API and MCP over HTTP. Can start from a collection file (`--collection`). The first cut serves the WebSocket API, MCP over streamable HTTP and the UI's built files (`--ui-dir`), and loads and saves `--collection`, with `--lan` also listens for paired devices on the network over TLS ([ADR-0104](adr/0104-network-listener-over-tls.md)), and on Windows links `jstream-platform-windows` (on macOS `jstream-platform-macos`, on the backends built so far, and on 64-bit Linux `jstream-platform-linux`) to run the media pipeline and go live over RTMP(S), on Windows registers (`--register-vcam`) and publishes (a `virtual_cam` output) the virtual camera, on Linux publishes it to a v4l2loopback device the user loads ([ADR-0156](adr/0156-linux-virtual-camera-through-v4l2loopback.md)), built with its `cef` feature (Windows and Linux), opens browser sources through CEF, and offers YouTube sign-in with JStream's own OAuth client, unavailable until that client is registered ([ADR-0058](adr/0058-youtube-sign-in-with-a-jstream-client.md), [its README](../apps/jstream-daemon/README.md#purpose)). |
 | `jstream-browser-helper` | Not a host: the sandboxed browser helper, which a host's CEF backend starts and drives over named pipes (Windows) or a socket pair (Linux and macOS). On Windows CEF's bootstrap exe renamed plus this crate's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md)), on Linux this crate's executable ([ADR-0095](adr/0095-browser-helper-on-linux.md)), on macOS the same executable in the app bundle, with copies of it as CEF's helper apps ([ADR-0157](adr/0157-browser-sources-on-macos.md)). Hosts that turn on browser sources ship it next to their own exe ([its README](../apps/jstream-browser-helper/README.md#purpose)). |
 | `jstream-cli` | Lightweight remote client: drives a running engine, and `jstream-cli mcp` runs a **stdio** MCP proxy to it. Does not link the engine. |
@@ -164,7 +164,7 @@ it sits one layer above it (L2). `jstream-mcp` is written against `dyn Control` 
 | 5 | `jstream-core` | `Engine`: executes commands, owns threads and the clock, injects platform backends, implements `InProcessControl`; draws items' motion modifiers each frame through `jstream-anim` (ADR-0099); CLAP filter kinds from plugin scans and the host supervisor (ADR-0035); WGSL effect-pack video filter kinds from a watched folder, drawn through `jstream-effects` (ADR-0035); runs WASM automation plugins on `jstream-plugin-wasm`'s host, behind the default `wasm-plugins` feature ([ADR-0075](adr/0075-wasm-plugin-host-in-the-engine.md)); drives the PTZ heads the host lists over `jstream-visca` ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md)) | no |
 | 3 | `jstream-ui` | Leptos app compiled to WASM ([ADR-0045](adr/0045-leptos-web-ui.md)); depends on `jstream-protocol` and `jstream-control` only | no |
 | 6 | `jstream-ui-e2e` | Test-only harness at `crates/jstream-ui/tests/e2e/mock-daemon`: `MockEngine` behind `jstream-server`, serving the built UI for the Playwright tests; never shipped | no |
-| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links sources, and `jstream-browser` with its `cef` feature; `jstream-daemon` always links `jstream-browser` to give the engine a browser backend, CEF's with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host (plugin-clap, which only it may link, plugin-proto, and the Windows platform crate for its shared block; [ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) and, on Linux and macOS, its executable ([ADR-0095](adr/0095-browser-helper-on-linux.md), [ADR-0157](adr/0157-browser-sources-on-macos.md)) | no |
+| 6 | `apps/*` | `jstream-desktop` and `jstream-daemon` (link core and server, and the platform crate of the OS they run on; `jstream-desktop` also links `jstream-browser` with its `cef` feature, on Windows, macOS and Linux; `jstream-daemon` always links `jstream-browser` to give the engine a browser backend, CEF's with its `cef` feature); `jstream-cli` (control and mcp only; test-only dev-dependencies, such as server for its end-to-end test, are outside this); `jstream-plugin-host`, the out-of-process CLAP host (plugin-clap, which only it may link, plugin-proto, and the Windows platform crate for its shared block; [ADR-0035](adr/0035-clap-plugins-out-of-process.md)); `jstream-browser-helper`, the sandboxed browser helper's DLL ([ADR-0048](adr/0048-sandboxed-browser-helper.md); it declares `unsafe` for its one export) and, on Linux and macOS, its executable ([ADR-0095](adr/0095-browser-helper-on-linux.md), [ADR-0157](adr/0157-browser-sources-on-macos.md)) | no |
 
 Splitting rule: start with these crates. Split one only when compile time, `unsafe`
 isolation or a dependency boundary requires it, and record the split in an ADR
@@ -1711,15 +1711,17 @@ Foundation, Direct3D 12).
   package also has the Linux helper's executable, so `dist` builds the DLL alone
   (`--lib`).
 - **The Linux `.deb`:** the desktop app on Linux ships as a Debian package
-  ([ADR-0141](adr/0141-desktop-app-on-linux.md) decision 5), built in CI and not yet
-  published or signed. `cargo xtask dist-linux`, on Linux, builds the web UI for release
+  ([ADR-0141](adr/0141-desktop-app-on-linux.md) decision 5), built in CI, published with
+  each release from beta.1 ([ROADMAP › Beta](../ROADMAP.md#beta)), and unsigned. `cargo xtask dist-linux`, on Linux, builds the web UI for release
   (or takes `--ui-dir`), builds `jstream` (with its `webkitgtk` window and `cef`),
   `jstream-daemon` (with `cef`) and `jstream-cli` for release, and lays them out under
   `/usr/lib/jstream` with the UI in `ui` and the browser helper's folder in `browser`
   beside them (where both look: the exe path resolves the link), `chrome-sandbox` in it
   setuid root, links to
   them in `/usr/bin`, an application-menu entry and the icon as `dev.jstream.desktop`,
-  and the licences. `dpkg-deb --root-owner-group` packs it as
+  and the licences with a `NOTICE.txt` that says JStream holds no AAC patent licence and
+  names Via LA, for its own AAC encoder
+  ([ADR-0062](adr/0062-aac-lc-encoder-patent-check.md)). `dpkg-deb --root-owner-group` packs it as
   `jstream_<version>_<arch>.deb` in `target/dist-linux`: the version is the workspace's (the apps') with
   a pre-release sorting before its release (`0.1.0~alpha.4`) and `+<--revision or git
   describe>`. It depends on the distribution's WebKitGTK 4.1 and GTK 3 and the libraries
@@ -1730,7 +1732,8 @@ Foundation, Direct3D 12).
   its control fields and files, fails unless `chrome-sandbox` in it is setuid root, and
   uploads it as is.
 - **The Linux AppImage:** the same decision's second package, for distributions the
-  `.deb` doesn't install on, also a CI artifact and unsigned. Given `--linuxdeploy` and
+  `.deb` doesn't install on, also built in CI, published with each release from beta.1,
+  and unsigned, with the same licences and `NOTICE.txt`. Given `--linuxdeploy` and
   `--appimage-runtime`, `dist-linux` builds `JStream-<the .deb's version>-<arch>.AppImage`
   from the same build: the desktop app alone (it runs the engine; the `.deb` has the
   daemon and the CLI) in the AppDir's `usr/bin` with `ui` and `browser` beside it, and
@@ -1770,8 +1773,8 @@ Foundation, Direct3D 12).
   CEF's framework and the five helper apps (`JStream Helper.app` and its GPU, renderer,
   plugin and alerts variants, each a copy of the helper) in `Contents/Frameworks`, and
   CEF's `CREDITS.html` and `CEF-VERSION.txt` in `Contents/Resources`. Each is signed ad
-  hoc from the inside out before the app. The after-review `macos-app` job bundles them
-  and opens a page through the bundled helper.
+  hoc from the inside out before the app. The after-review `macos-app` job and the
+  release's `macos` job bundle them and open a page through the bundled helper.
 - **Virtual camera:** registering the COM media source is **optional**, an explicit
   step the user chooses; nothing registers it or asks for elevation on its own
   ([ADR-0066](adr/0066-portable-windows-distribution-v2.md)). The step costs **one UAC
