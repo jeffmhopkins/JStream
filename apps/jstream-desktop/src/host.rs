@@ -455,8 +455,9 @@ fn new_token() -> anyhow::Result<String> {
 /// it also opens browser sources' pages, keeping CEF's cache and log under `data`
 /// (`browser::backend`). On 64-bit Linux it is live the same way on the Linux backends
 /// (`linux_backends`), with stream keys in the Secret Service, else its `0600` file
-/// (ADR-0071), and the virtual camera on a v4l2loopback device (`LoopbackVcam`,
-/// ADR-0156) unless `vcam` is false. On macOS it is live the same way on the backends the
+/// (ADR-0071), the virtual camera on a v4l2loopback device (`LoopbackVcam`, ADR-0156)
+/// unless `vcam` is false, and browser sources with the `cef` feature as on Windows
+/// (ADR-0158). On macOS it is live the same way on the backends the
 /// daemon uses there (`macos_backends`), with stream keys in the Keychain and no virtual
 /// camera, and with the `cef` feature browser sources from the helper in the app bundle
 /// (ADR-0157). Elsewhere there are no backends yet. Either way it
@@ -498,7 +499,16 @@ pub fn engine(
         if !vcam {
             backends.vcam = None;
         }
-        handled(live(engine, backends, linux_keys()?, secrets))
+        // Browser sources through the helper beside the app (ADR-0095, ADR-0158).
+        #[cfg(feature = "cef")]
+        let browser = crate::browser::backend(data, Arc::clone(&backends.clock));
+        let engine = live(engine, backends, linux_keys()?, secrets);
+        #[cfg(feature = "cef")]
+        let engine = match browser {
+            Some(browser) => engine.with_browser(browser),
+            None => engine,
+        };
+        handled(engine)
     };
     #[cfg(target_os = "macos")]
     let engine = {
@@ -683,10 +693,17 @@ struct Live {
     handle: Arc<OnceLock<Weak<Engine>>>,
 }
 
-#[cfg(all(any(windows, target_os = "macos"), feature = "cef"))]
+#[cfg(all(
+    any(
+        windows,
+        target_os = "macos",
+        all(target_os = "linux", target_pointer_width = "64")
+    ),
+    feature = "cef"
+))]
 impl Live {
     /// The engine with `browser` for browser sources.
-    fn with_browser(self, browser: Arc<dyn jstream_sources::BrowserBackend>) -> Self {
+    fn with_browser(self, browser: Arc<dyn jstream_browser::BrowserBackend>) -> Self {
         Self {
             engine: self.engine.with_browser(browser),
             handle: self.handle,

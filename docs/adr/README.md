@@ -170,4 +170,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0155](0155-ptz-cameras-counters-in-profile-get.md) | The PTZ cameras' counters in profile.get | accepted | agent |  |
 | [ADR-0156](0156-linux-virtual-camera-through-v4l2loopback.md) | The Linux virtual camera through v4l2loopback | accepted | maintainer |  |
 | [ADR-0157](0157-browser-sources-on-macos.md) | Browser sources on macOS: the Linux helper's software paints, in an unsigned app bundle | accepted | agent |  |
+| [ADR-0158](0158-browser-sources-in-the-linux-app.md) | Browser sources in the Linux desktop app | accepted | agent |  |
 <!-- @generated end adr-index -->

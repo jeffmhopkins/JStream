@@ -1,10 +1,11 @@
-//! Browser sources in the app (ADR-0021, ADR-0046, ADR-0048, ADR-0157): the CEF backend
-//! the engine opens `browser` sources' pages in, through the sandboxed browser helper, on
-//! the engine's media clock, with pages' frames on a GPU device of the media adapter on
-//! Windows and in CPU memory on macOS. Windows and macOS with the `cef` feature only; on
-//! macOS the helper is in the app bundle's `Contents/MacOS`, beside the app.
+//! Browser sources in the app (ADR-0021, ADR-0046, ADR-0048, ADR-0157, ADR-0158): the CEF
+//! backend the engine opens `browser` sources' pages in, through the sandboxed browser
+//! helper, on the engine's media clock, with pages' frames on a GPU device of the media
+//! adapter on Windows and in CPU memory on macOS and 64-bit Linux (ADR-0095). With the `cef`
+//! feature only; on macOS the helper is in the app bundle's `Contents/MacOS`, beside the
+//! app, and on Linux beside the app's executable.
 //!
-//! Docs: apps/jstream-desktop/README.md#design, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md, docs/adr/0157-browser-sources-on-macos.md
+//! Docs: apps/jstream-desktop/README.md#design, docs/adr/0021-browser-source.md, docs/adr/0046-browser-crate-and-helper.md, docs/adr/0048-sandboxed-browser-helper.md, docs/adr/0095-browser-helper-on-linux.md, docs/adr/0157-browser-sources-on-macos.md, docs/adr/0158-browser-sources-in-the-linux-app.md
 
 use jstream_browser::{BrowserBackend, CefBackend, CefConfig};
 use jstream_platform::MediaClock;
