@@ -204,6 +204,9 @@ mod tests {
     /// them (#1194).
     #[test]
     fn every_open_lends_the_one_context() {
+        // Taken first, so it drops last, after every context: WARP access-violates when
+        // several tests create and drop Dx12 devices at once (#1124, #1531).
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
         let Some((gpu, counting)) = shared() else {
             return;
         };
@@ -220,6 +223,9 @@ mod tests {
     /// once, whichever compositor saw the loss.
     #[test]
     fn a_lost_context_is_replaced_and_reported() {
+        // Taken first, so it drops last, after every context: WARP access-violates when
+        // several tests create and drop Dx12 devices at once (#1124, #1531).
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
         let Some((gpu, counting)) = shared() else {
             return;
         };
