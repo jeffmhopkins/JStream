@@ -293,6 +293,24 @@ fn a_vp8_webm_opens_or_names_the_missing_decoder() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn an_av1_webm_opens_or_names_the_missing_decoder() {
+    // Film grain on every frame: on a machine with a VA-API AV1 decoder it opens;
+    // elsewhere (CI) it names what to install.
+    match LinuxMediaDecoders.open(&testdata("av1-grain.webm"), &config(true)) {
+        Ok(decoder) => {
+            let video = decoder.info().video.expect("video");
+            assert_eq!((video.size.width(), video.size.height()), (176, 96));
+        }
+        Err(PlatformError::MissingComponent { component, remedy }) => {
+            assert!(component.contains("AV1"), "{component}");
+            assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
+        }
+        Err(err) => panic!("{err}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn vp9_beyond_profile_0_is_unsupported() {
     // An RGB (4:4:4, profile 1) VP9 stream, refused before any GPU is looked for.
     match LinuxMediaDecoders.open(&testdata("vp9-opus.webm"), &config(true)) {

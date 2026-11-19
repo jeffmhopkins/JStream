@@ -14,8 +14,20 @@
 //! and tested everywhere too. `VaapiVp9Decoder` (`vp9_decoder`) does the same for VP9
 //! from `media::vp9`'s frame headers, its parameters built in `vp9_dec`, and
 //! `VaapiVp8Decoder` (`vp8_decoder`) for VP8 from `media::vp8`'s, its parameters built
-//! in `vp8_dec`; all three share `decoder::Core`, the context, surfaces and read-back.
+//! in `vp8_dec`, and `VaapiAv1Decoder` (`av1_decoder`) for AV1 from `media::av1`'s, its
+//! parameters built in `av1_dec`; all four share `decoder::Core`, the context, surfaces
+//! and read-back.
 
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux decoder; built elsewhere for its tests"
+    )
+)]
+mod av1_dec;
+#[cfg(target_os = "linux")]
+mod av1_decoder;
 #[cfg(target_os = "linux")]
 mod decoder;
 #[cfg(target_os = "linux")]
@@ -80,6 +92,8 @@ mod vp9_decoder;
 
 use jstream_platform::media::Codec;
 
+#[cfg(target_os = "linux")]
+pub(crate) use av1_decoder::VaapiAv1Decoder;
 #[cfg(target_os = "linux")]
 pub(crate) use decoder::VaapiH264Decoder;
 #[cfg(target_os = "linux")]

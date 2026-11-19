@@ -42,6 +42,9 @@ pub(crate) enum Codec {
     Vp8,
     /// VP9: each frame carries what decoding needs.
     Vp9,
+    /// AV1, with the configuration OBUs of its `av1C` record (its sequence header),
+    /// which may be empty: key frames carry it too.
+    Av1(Vec<u8>),
     /// MPEG-1/2 Layer III audio.
     Mp3,
     /// Vorbis, with its identification and setup headers (Matroska's `CodecPrivate`,
@@ -107,7 +110,9 @@ impl Track {
                     .with_channels(Channels::Discrete(self.channels));
                 return Some(params);
             }
-            Codec::Avc(_) | Codec::Vp8 | Codec::Vp9 | Codec::Other(_) => return None,
+            Codec::Avc(_) | Codec::Vp8 | Codec::Vp9 | Codec::Av1(_) | Codec::Other(_) => {
+                return None;
+            }
         }
         params
             .with_sample_rate(self.sample_rate)

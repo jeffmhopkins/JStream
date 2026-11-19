@@ -123,3 +123,17 @@ fn a_track_lists_no_more_samples_than_the_file_can_hold() {
     assert!(table(&stsz(1, 1_000_000)).is_err());
     assert!(table(&stsz(1_000, 10)).is_err());
 }
+
+#[test]
+fn reads_an_av1_mp4s_configuration_obus() {
+    let mp4 = open("av1-aom.mp4");
+    let video = mp4.video.as_ref().expect("video");
+    let Codec::Av1(obus) = &video.codec else {
+        panic!("{:?}", video.codec);
+    };
+    assert_eq!(video.size, (208, 120));
+    let mut parser = crate::media::av1::Parser::new();
+    assert!(parser.parse(obus).expect("parses").is_empty());
+    let seq = parser.sequence().expect("av1C holds the sequence header");
+    assert_eq!((seq.max_frame_width, seq.max_frame_height), (208, 120));
+}

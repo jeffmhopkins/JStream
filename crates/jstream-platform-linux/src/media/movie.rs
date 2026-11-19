@@ -1,6 +1,6 @@
 //! A movie file (MP4, QuickTime, Matroska or WebM) as a [`MediaDecoder`]: the crate's
-//! own demuxers ([`super::mp4`], [`super::mkv`]), H.264, VP8 and VP9 video on the GPU
-//! through VA-API, and the audio through the crate's decoders (MP3, FLAC and Vorbis, and
+//! own demuxers ([`super::mp4`], [`super::mkv`]), H.264, VP8, VP9 and AV1 video on the
+//! GPU through VA-API, and the audio through the crate's decoders (MP3, FLAC and Vorbis, and
 //! Opus in Matroska and WebM; AAC waits for ADR-0072 (g), so a file with that audio
 //! plays its video without sound).
 
@@ -13,7 +13,7 @@ use symphonia::core::units::{Duration, Timestamp};
 
 use super::audio::{AudioStream, cut_before};
 use super::demux::{Codec, Demuxed, Track};
-use crate::vaapi::{VaapiH264Decoder, VaapiVp8Decoder, VaapiVp9Decoder};
+use crate::vaapi::{VaapiAv1Decoder, VaapiH264Decoder, VaapiVp8Decoder, VaapiVp9Decoder};
 
 /// The audio half: the track and its decoder.
 struct Audio {
@@ -29,6 +29,7 @@ enum VideoDecoder {
     H264(Box<VaapiH264Decoder>),
     Vp8(Box<VaapiVp8Decoder>),
     Vp9(Box<VaapiVp9Decoder>),
+    Av1(Box<VaapiAv1Decoder>),
 }
 
 impl VideoDecoder {
@@ -37,6 +38,7 @@ impl VideoDecoder {
             Self::H264(d) => d.size(),
             Self::Vp8(d) => d.size(),
             Self::Vp9(d) => d.size(),
+            Self::Av1(d) => d.size(),
         }
     }
 
@@ -45,6 +47,7 @@ impl VideoDecoder {
             Self::H264(d) => d.decode(sample, pts),
             Self::Vp8(d) => d.decode(sample, pts),
             Self::Vp9(d) => d.decode(sample, pts),
+            Self::Av1(d) => d.decode(sample, pts),
         }
     }
 
@@ -59,6 +62,10 @@ impl VideoDecoder {
                 d.flush();
                 Ok(())
             }
+            Self::Av1(d) => {
+                d.flush();
+                Ok(())
+            }
         }
     }
 
@@ -67,6 +74,7 @@ impl VideoDecoder {
             Self::H264(d) => d.reset(),
             Self::Vp8(d) => d.reset(),
             Self::Vp9(d) => d.reset(),
+            Self::Av1(d) => d.reset(),
         }
     }
 
@@ -75,6 +83,7 @@ impl VideoDecoder {
             Self::H264(d) => d.pop(),
             Self::Vp8(d) => d.pop(),
             Self::Vp9(d) => d.pop(),
+            Self::Av1(d) => d.pop(),
         }
     }
 }
@@ -156,11 +165,12 @@ fn open_video(
 ) -> Result<Video, PlatformError> {
     let unsupported = |name: &str| PlatformError::Unsupported {
         what: format!(
-            "this media file's video codec on Linux ({name}): H.264, VP8 and VP9 play so far"
+            "this media file's video codec on Linux ({name}): H.264, VP8, VP9 and AV1 play so \
+             far"
         ),
     };
     match &track.codec {
-        Codec::Avc(_) | Codec::Vp8 | Codec::Vp9 => {}
+        Codec::Avc(_) | Codec::Vp8 | Codec::Vp9 | Codec::Av1(_) => {}
         Codec::Other(name) => return Err(unsupported(name)),
         _ => return Err(unsupported("audio")),
     }
@@ -177,7 +187,7 @@ fn open_video(
             config.video_format,
         )?)),
         other => {
-            // VP8's and VP9's size and colour are in the first key frame.
+            // VP8's, VP9's and AV1's size and colour are in the first key frame.
             let first = track
                 .samples
                 .iter()
@@ -186,21 +196,18 @@ fn open_video(
                 .ok_or_else(|| PlatformError::Os {
                     call: "media file",
                     code: None,
-                    message: "a VP8 or VP9 track without a key frame".into(),
+                    message: "a video track without a key frame".into(),
                 })?;
             let data = file.read(&track, &first)?;
-            if *other == Codec::Vp8 {
-                VideoDecoder::Vp8(Box::new(VaapiVp8Decoder::open(
-                    &data,
-                    timebase,
-                    config.video_format,
-                )?))
-            } else {
-                VideoDecoder::Vp9(Box::new(VaapiVp9Decoder::open(
-                    &data,
-                    timebase,
-                    config.video_format,
-                )?))
+            let format = config.video_format;
+            match other {
+                Codec::Vp8 => {
+                    VideoDecoder::Vp8(Box::new(VaapiVp8Decoder::open(&data, timebase, format)?))
+                }
+                Codec::Av1(obus) => VideoDecoder::Av1(Box::new(VaapiAv1Decoder::open(
+                    obus, &data, timebase, format,
+                )?)),
+                _ => VideoDecoder::Vp9(Box::new(VaapiVp9Decoder::open(&data, timebase, format)?)),
             }
         }
     };

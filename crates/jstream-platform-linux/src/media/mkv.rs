@@ -278,6 +278,7 @@ fn codec(name: &str, private: Option<&[u8]>) -> Codec {
         ("V_MPEG4/ISO/AVC", Some(record)) => Codec::Avc(record.to_vec()),
         ("V_VP8", _) => Codec::Vp8,
         ("V_VP9", _) => Codec::Vp9,
+        ("V_AV1", private) => Codec::Av1(super::av1::config_obus(private.unwrap_or_default())),
         ("A_MPEG/L3", _) => Codec::Mp3,
         ("A_VORBIS", Some(headers)) => Codec::Vorbis(headers.to_vec()),
         ("A_FLAC", Some(private)) => flac_stream_info(private).map_or_else(
