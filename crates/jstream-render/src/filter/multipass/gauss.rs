@@ -86,6 +86,55 @@ pub(super) fn plan(radius: f32) -> Plan {
     }
 }
 
+/// The normalised weight of the centre texel (`[0]`) and of each texel `i` either side
+/// of it (`[i]`, for `i` up to `plan.taps`) in one pass of `plan`: `exp(-i² / 2σ²)`
+/// over the sum of all `2 * taps + 1`. The rest are zero. Padded to whole `vec4`s.
+pub(super) fn weights(plan: Plan) -> [f32; WEIGHTS] {
+    let taps = plan.taps.min(MAX_TAPS) as usize;
+    let k = 1.0 / (2.0 * plan.sigma * plan.sigma);
+    let mut weights = [0.0; WEIGHTS];
+    for (i, w) in weights.iter_mut().enumerate().take(taps + 1) {
+        let i = i as f32;
+        *w = (-i * i * k).exp();
+    }
+    let total = weights[0] + 2.0 * weights[1..].iter().sum::<f32>();
+    for w in &mut weights {
+        *w /= total;
+    }
+    weights
+}
+
+/// `weights` on each side of the centre read in pairs, as one bilinear sample of the
+/// two: pair `k` is texels `2k + 1` and `2k + 2`, its weight their sum and its offset
+/// from the centre their weighted mean, in texels. The second of the last pair is 0
+/// when `taps` is odd, so that sample lands on texel `taps` alone. Returns the pairs
+/// and how many there are.
+pub(super) fn pairs(weights: &[f32; WEIGHTS], taps: u32) -> ([[f32; 2]; PAIRS], usize) {
+    let taps = taps.min(MAX_TAPS) as usize;
+    let count = taps.div_ceil(2);
+    let mut pairs = [[0.0; 2]; PAIRS];
+    for (k, pair) in pairs.iter_mut().enumerate().take(count) {
+        let (near, far) = (2 * k + 1, 2 * k + 2);
+        let a = weights[near];
+        let b = if far <= taps { weights[far] } else { 0.0 };
+        let sum = a + b;
+        let offset = if sum > 0.0 {
+            (near as f32 * a + far as f32 * b) / sum
+        } else {
+            near as f32
+        };
+        *pair = [sum, offset];
+    }
+    (pairs, count)
+}
+
+/// The pairs a pass's uniform holds: half of [`MAX_TAPS`], rounded up to whole `vec4`s
+/// of two.
+const PAIRS: usize = (MAX_TAPS as usize).div_ceil(2).div_ceil(2) * 2;
+
+/// The weights a pass's uniform holds: [`MAX_TAPS`] + 1, rounded up to whole `vec4`s.
+const WEIGHTS: usize = (MAX_TAPS as usize + 1).div_ceil(4) * 4;
+
 /// `n` divided by `d`, rounded up, at least 1.
 pub(super) fn div_ceil(n: u32, d: u32) -> u32 {
     n.div_ceil(d.max(1)).max(1)
@@ -194,14 +243,21 @@ fn passes(
     to: &Image,
 ) -> Result<(), RenderError> {
     let across = ctx.scratch(source.width(), source.height())?;
+    let weights = weights(plan);
     for ((dx, dy), from, target) in [((1, 0), source, &across), ((0, 1), &across, to)] {
-        let params = Uniforms::new()
+        let mut params = Uniforms::new()
             .i32(dx)
             .i32(dy)
             .i32(plan.taps as i32)
-            .u32(edge.code())
-            .f32(plan.sigma)
-            .finish();
+            .u32(edge.code());
+        for four in weights.chunks_exact(4) {
+            params = params.vec4([four[0], four[1], four[2], four[3]]);
+        }
+        let (pairs, count) = pairs(&weights, plan.taps);
+        for two in pairs.chunks_exact(2) {
+            params = params.vec4([two[0][0], two[0][1], two[1][0], two[1][1]]);
+        }
+        let params = params.i32(count as i32).finish();
         ctx.draw(&Draw {
             shader: GAUSS,
             input: from,
@@ -215,7 +271,7 @@ fn passes(
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_RADIUS, MAX_TAPS, div_ceil, plan};
+    use super::{MAX_RADIUS, MAX_TAPS, div_ceil, pairs, plan, weights};
 
     #[test]
     fn the_plan_keeps_every_radius_within_the_tap_bound() {
@@ -236,6 +292,47 @@ mod tests {
                 "{r}"
             );
             r += 0.25;
+        }
+    }
+
+    #[test]
+    fn the_weights_sum_to_one_and_fall_off_from_the_centre() {
+        for radius in [0.5, 3.0, 8.0, 12.0, 100.0] {
+            let p = plan(radius);
+            let w = weights(p);
+            let taps = p.taps as usize;
+            let total = w[0] + 2.0 * w[1..=taps].iter().sum::<f32>();
+            assert!((total - 1.0).abs() < 1e-6, "{radius}: {w:?}");
+            assert!(
+                w[..=taps].windows(2).all(|pair| pair[0] >= pair[1]),
+                "{w:?}"
+            );
+            assert!(w[taps + 1..].iter().all(|&v| v == 0.0), "{w:?}");
+        }
+    }
+
+    #[test]
+    fn each_pair_reads_its_two_weights_as_one_bilinear_sample() {
+        for radius in [1.0, 3.0, 4.0, 7.5, 8.0, 12.0, 100.0] {
+            let p = plan(radius);
+            let w = weights(p);
+            let (pairs, count) = pairs(&w, p.taps);
+            assert_eq!(count, (p.taps as usize).div_ceil(2), "{radius}");
+            for (k, &[sum, offset]) in pairs.iter().enumerate().take(count) {
+                let near = 2 * k + 1;
+                let far = if near < p.taps as usize {
+                    w[near + 1]
+                } else {
+                    0.0
+                };
+                // A bilinear sample at `offset` weights texel `near` by `1 - t` and texel
+                // `near + 1` by `t`.
+                let t = offset - near as f32;
+                assert!((0.0..=1.0).contains(&t), "{radius}: {offset}");
+                assert!((sum * (1.0 - t) - w[near]).abs() < 1e-6, "{radius}: {k}");
+                assert!((sum * t - far).abs() < 1e-6, "{radius}: {k}");
+            }
+            assert!(pairs[count..].iter().all(|&pair| pair == [0.0, 0.0]));
         }
     }
 
