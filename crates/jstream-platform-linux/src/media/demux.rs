@@ -38,6 +38,8 @@ pub(crate) struct Sample {
 pub(crate) enum Codec {
     /// H.264, with its `avcC` record.
     Avc(Vec<u8>),
+    /// VP9: each frame carries what decoding needs.
+    Vp9,
     /// MPEG-1/2 Layer III audio.
     Mp3,
     /// Vorbis, with its identification and setup headers (Matroska's `CodecPrivate`,
@@ -103,7 +105,7 @@ impl Track {
                     .with_channels(Channels::Discrete(self.channels));
                 return Some(params);
             }
-            Codec::Avc(_) | Codec::Other(_) => return None,
+            Codec::Avc(_) | Codec::Vp9 | Codec::Other(_) => return None,
         }
         params
             .with_sample_rate(self.sample_rate)

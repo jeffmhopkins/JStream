@@ -297,6 +297,7 @@ fn sample_entry(stsd: &[u8], video: bool) -> Result<Entry, PlatformError> {
                 Some(avcc) => Codec::Avc(avcc.to_vec()),
                 None => Codec::Other(format!("{fourcc} without avcC")),
             },
+            b"vp09" => Codec::Vp9,
             _ => Codec::Other(fourcc),
         };
         return Ok(Entry {
