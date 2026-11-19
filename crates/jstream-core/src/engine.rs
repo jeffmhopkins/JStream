@@ -3662,17 +3662,36 @@ fn take_samples(
     // sheet uses the published snapshot, whose levels the render thread already set.
     let mut heard = scene_id.map(|_| SceneHearing::default());
     let mut samples = Vec::with_capacity(strip.count as usize);
+    let mut taken = None;
     for index in 0..strip.count {
-        let due = begin + Duration::from_millis(strip.offset_ms(index));
+        let due = sample_due(strip, begin, index, taken);
         if let Some(wait) = due.checked_duration_since(Instant::now()) {
             thread::sleep(wait);
         }
+        taken = Some(Instant::now());
         let shared = shared.upgrade().ok_or_else(|| ProtocolError::Internal {
             reason: "the engine ended while taking the frame sheet".into(),
         })?;
         samples.push(shared.sample(scene_id, heard.as_mut())?);
     }
     Ok(samples)
+}
+
+/// When picture `index` is due: `begin` plus its offset, but never sooner than
+/// `interval_ms` after the previous picture was `taken`. A sheet that starts late, or
+/// falls behind on a loaded machine, keeps its pictures apart rather than taking every
+/// overdue one at the same instant, which would show the same frame in each (#1538).
+pub(crate) fn sample_due(
+    strip: &FrameStrip,
+    begin: Instant,
+    index: u32,
+    taken: Option<Instant>,
+) -> Instant {
+    let scheduled = begin + Duration::from_millis(strip.offset_ms(index));
+    match taken {
+        Some(taken) => scheduled.max(taken + Duration::from_millis(u64::from(strip.interval_ms))),
+        None => scheduled,
+    }
 }
 
 /// The envelope a scene frame sheet keeps across its pictures.
