@@ -4,8 +4,8 @@
 
 use std::io::Write;
 use std::pin::pin;
-use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 use std::task::{Context, Poll, Waker};
 
 use jstream_platform::fake::FakeCodecs;
@@ -52,9 +52,27 @@ fn ready<F: Future>(future: F) -> Option<F::Output> {
     }
 }
 
+/// Held by the one test whose GPU context is open.
+static GPU_SLOT: Mutex<()> = Mutex::new(());
+
+/// A test's GPU context, with the lock that keeps it the only one open.
+///
+/// Fields drop in declaration order, so the device is destroyed while the lock is held.
+/// Declare the session after this value, so the session (and its encode thread) goes
+/// first.
+struct Gpu {
+    context: GpuContext,
+    _lock: MutexGuard<'static, ()>,
+}
+
 /// A context on a software adapter (else any adapter), or `None`, said, when the
 /// machine has none. CI always has one.
-fn context() -> Option<GpuContext> {
+///
+/// One at a time: WARP (Microsoft Basic Render Driver) access-violates, `0xc0000005`,
+/// when several tests create and drop Dx12 devices at once, as jstream-render's and
+/// jstream-effects' tests found (#1124, #1531).
+fn context() -> Option<Gpu> {
+    let lock = GPU_SLOT.lock().unwrap_or_else(PoisonError::into_inner);
     let instance = wgpu::Instance::new(wgpu::InstanceDescriptor::new_without_display_handle());
     let adapter = [true, false].into_iter().find_map(|fallback| {
         ready(instance.request_adapter(&wgpu::RequestAdapterOptions {
@@ -78,7 +96,10 @@ fn context() -> Option<GpuContext> {
         luid: None,
         vendor: 0,
     };
-    Some(GpuContext::new(adapter, device, queue, id, None))
+    Some(Gpu {
+        context: GpuContext::new(adapter, device, queue, id, None),
+        _lock: lock,
+    })
 }
 
 /// A hold with nothing to wait for.
@@ -280,6 +301,14 @@ fn options() -> SessionOptions {
     }
 }
 
+/// While a test's context is open, no other test can open one (#1531).
+#[test]
+fn a_test_context_holds_the_gpu_slot() {
+    let Some(gpu) = context() else { return };
+    assert!(GPU_SLOT.try_lock().is_err(), "the slot is held");
+    drop(gpu);
+}
+
 #[test]
 fn without_a_context_the_session_takes_cpu_frames() {
     let codecs = DualCodecs::new(GpuMode::Deliver);
@@ -293,7 +322,8 @@ fn without_a_context_the_session_takes_cpu_frames() {
 
 #[test]
 fn a_context_the_codecs_cannot_use_falls_back_to_cpu_frames() {
-    let Some(context) = context() else { return };
+    let Some(gpu) = context() else { return };
+    let context = &gpu.context;
     for (mode, reason) in [
         (GpuMode::None, "no GPU path"),
         (GpuMode::Refuse, "refused the GPU context"),
@@ -301,7 +331,7 @@ fn a_context_the_codecs_cannot_use_falls_back_to_cpu_frames() {
     ] {
         let codecs = DualCodecs::new(mode);
         let session =
-            VideoSession::open_on(&codecs, Some(&context), config(), options()).expect("open");
+            VideoSession::open_on(&codecs, Some(context), config(), options()).expect("open");
         match session.path() {
             VideoPath::Cpu {
                 fallback: Some(why),
@@ -316,10 +346,10 @@ fn a_context_the_codecs_cannot_use_falls_back_to_cpu_frames() {
 
 #[test]
 fn a_gpu_session_encodes_nv12_targets_and_lets_go_of_each() {
-    let Some(context) = context() else { return };
+    let Some(gpu) = context() else { return };
+    let context = &gpu.context;
     let codecs = DualCodecs::new(GpuMode::Deliver);
-    let session =
-        VideoSession::open_on(&codecs, Some(&context), config(), options()).expect("open");
+    let session = VideoSession::open_on(&codecs, Some(context), config(), options()).expect("open");
     assert_eq!(session.path(), &VideoPath::Gpu);
     assert_eq!(codecs.opened.load(Ordering::Relaxed), 1);
     // Opened for the NV12 encode targets, whatever the CPU configuration said.
@@ -327,7 +357,7 @@ fn a_gpu_session_encodes_nv12_targets_and_lets_go_of_each() {
     // A ring of two targets, as a render thread would keep.
     let ring: [Arc<dyn FrameSync>; 2] = [Arc::new(NoSync), Arc::new(NoSync)];
     let frames = (0..6)
-        .map(|i| gpu_frame(&context, &ring[i as usize % 2], i))
+        .map(|i| gpu_frame(context, &ring[i as usize % 2], i))
         .collect();
     let (packets, end) = run(&session, frames);
     assert_eq!((packets, end), (6, StreamEnd::Finished));
@@ -339,10 +369,10 @@ fn a_gpu_session_encodes_nv12_targets_and_lets_go_of_each() {
 
 #[test]
 fn a_gpu_session_fails_on_a_cpu_frame() {
-    let Some(context) = context() else { return };
+    let Some(gpu) = context() else { return };
+    let context = &gpu.context;
     let codecs = DualCodecs::new(GpuMode::Deliver);
-    let session =
-        VideoSession::open_on(&codecs, Some(&context), config(), options()).expect("open");
+    let session = VideoSession::open_on(&codecs, Some(context), config(), options()).expect("open");
     let (_, end) = run(&session, vec![cpu_frame(0)]);
     assert!(
         matches!(
