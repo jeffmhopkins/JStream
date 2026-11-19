@@ -5,8 +5,8 @@
 //! scale of 1, 2, 4, 8 or 16 (the smallest that keeps `r / scale` within [`MAX_TAPS`]):
 //! a box downsample to that scale, then a horizontal and a vertical pass of at most
 //! `2 * MAX_TAPS + 1` taps each, read back bilinear at full size. So every radius up
-//! to [`MAX_RADIUS`] costs at most 64 loads per downsampled texel and 17 per blur pass,
-//! and three scratch layers. The tap bound is low because a software rasterizer pays
+//! to [`MAX_RADIUS`] costs at most 64 loads per downsampled texel and 17 per blur pass
+//! (9 where the pass can read them in pairs, `gauss.wgsl`), and three scratch layers. The tap bound is low because a software rasterizer pays
 //! for every load (#1070): above 8 px, a blur at half scale or less costs a fraction of
 //! one at full scale, and its gaussian is still several texels wide, so the bilinear
 //! read back stays smooth.
@@ -84,6 +84,24 @@ pub(super) fn plan(radius: f32) -> Plan {
         taps: (r.ceil() as u32).min(MAX_TAPS),
         sigma: (r / 3.0).max(1e-3),
     }
+}
+
+/// The uniform of one pass of `plan` along `(dx, dy)`: `gauss.wgsl`'s `Params`.
+fn params(plan: Plan, dx: i32, dy: i32, edge: Edge) -> Vec<u8> {
+    let weights = weights(plan);
+    let mut params = Uniforms::new()
+        .i32(dx)
+        .i32(dy)
+        .i32(plan.taps as i32)
+        .u32(edge.code());
+    for four in weights.chunks_exact(4) {
+        params = params.vec4([four[0], four[1], four[2], four[3]]);
+    }
+    let (pairs, count) = pairs(&weights, plan.taps);
+    for two in pairs.chunks_exact(2) {
+        params = params.vec4([two[0][0], two[0][1], two[1][0], two[1][1]]);
+    }
+    params.i32(count as i32).finish()
 }
 
 /// The normalised weight of the centre texel (`[0]`) and of each texel `i` either side
@@ -243,21 +261,8 @@ fn passes(
     to: &Image,
 ) -> Result<(), RenderError> {
     let across = ctx.scratch(source.width(), source.height())?;
-    let weights = weights(plan);
     for ((dx, dy), from, target) in [((1, 0), source, &across), ((0, 1), &across, to)] {
-        let mut params = Uniforms::new()
-            .i32(dx)
-            .i32(dy)
-            .i32(plan.taps as i32)
-            .u32(edge.code());
-        for four in weights.chunks_exact(4) {
-            params = params.vec4([four[0], four[1], four[2], four[3]]);
-        }
-        let (pairs, count) = pairs(&weights, plan.taps);
-        for two in pairs.chunks_exact(2) {
-            params = params.vec4([two[0][0], two[0][1], two[1][0], two[1][1]]);
-        }
-        let params = params.i32(count as i32).finish();
+        let params = params(plan, dx, dy, edge);
         ctx.draw(&Draw {
             shader: GAUSS,
             input: from,
@@ -271,7 +276,9 @@ fn passes(
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_RADIUS, MAX_TAPS, div_ceil, pairs, plan, weights};
+    use super::{
+        Edge, MAX_RADIUS, MAX_TAPS, PAIRS, WEIGHTS, div_ceil, pairs, params, plan, weights,
+    };
 
     #[test]
     fn the_plan_keeps_every_radius_within_the_tap_bound() {
@@ -334,6 +341,123 @@ mod tests {
             }
             assert!(pairs[count..].iter().all(|&pair| pair == [0.0, 0.0]));
         }
+    }
+
+    /// The largest difference in any channel between two snapshots of one size.
+    fn max_diff(a: &crate::Snapshot, b: &crate::Snapshot) -> u8 {
+        let mut most = 0;
+        for y in 0..a.height() {
+            for x in 0..a.width() {
+                let (p, q) = (
+                    a.pixel(x, y).expect("inside"),
+                    b.pixel(x, y).expect("inside"),
+                );
+                for c in 0..4 {
+                    most = most.max(p[c].abs_diff(q[c]));
+                }
+            }
+        }
+        most
+    }
+
+    /// A 24x16 picture of uneven colours with `alpha` everywhere a shape covers it:
+    /// opaque everywhere when `shape` is false, else an opaque block touching the
+    /// left and top edges in a transparent frame.
+    fn picture(shape: bool) -> Vec<[u8; 4]> {
+        (0..16u32)
+            .flat_map(|y| {
+                (0..24u32).map(move |x| {
+                    let v = |k: u32| u8::try_from((x * 37 + y * 91 + k * 53) % 256).expect("byte");
+                    let covered = !shape || (x < 10 && y < 9);
+                    if covered {
+                        [v(0), v(1), v(2), 255]
+                    } else {
+                        [0, 0, 0, 0]
+                    }
+                })
+            })
+            .collect()
+    }
+
+    /// The paired bilinear reads of a premultiplied linear input (an upload) give what
+    /// the per-texel reads of any other input give: the same picture imported, so read
+    /// a texel at a time, blurs to the same pixels, a clamped edge included (#1449).
+    #[test]
+    fn paired_reads_blur_as_per_texel_reads_do() {
+        let Some(mut opened) = crate::tests::open() else {
+            return;
+        };
+        let pixels = picture(false);
+        let paired = crate::filter::testing::image(&opened, 24, &pixels);
+        let texture = crate::tests::srgb_texture_of(&opened.compositor, 24, &pixels);
+        let texel = opened
+            .compositor
+            .import_opaque(texture, None)
+            .expect("import");
+        for radius in [3.0, 8.0] {
+            let mut blur =
+                crate::filter::testing::filter("blur", serde_json::json!({ "radius": radius }));
+            let a = crate::filter::testing::run(&mut opened, &mut blur, &paired, 0.0);
+            let b = crate::filter::testing::run(&mut opened, &mut blur, &texel, 0.0);
+            let most = max_diff(&a, &b);
+            assert!(most <= 1, "radius {radius}: {most}");
+        }
+    }
+
+    /// With a transparent edge, the paired reads give the gaussian of the shape with
+    /// transparent all around it: an opaque black drop shadow, unmoved, of a block
+    /// touching the frame's corner has the alpha worked out here everywhere around the
+    /// block, where the blur's padded frame meets the input's edges too.
+    #[test]
+    fn a_shadow_at_a_transparent_edge_has_the_gaussians_alpha() {
+        let Some(mut opened) = crate::tests::open() else {
+            return;
+        };
+        let pixels = picture(true);
+        let input = crate::filter::testing::image(&opened, 24, &pixels);
+        let block =
+            |x: i32, y: i32| f32::from(u8::from((0..10).contains(&x) && (0..9).contains(&y)));
+        for radius in [3.0, 8.0] {
+            let p = plan(radius);
+            assert_eq!(p.scale, 1, "the reference below works at full scale");
+            let w = weights(p);
+            let taps = p.taps as i32;
+            let mut shadow = crate::filter::testing::filter(
+                "drop_shadow",
+                serde_json::json!({ "color": "#000000ff", "blur": radius, "offset_x": 0.0, "offset_y": 0.0 }),
+            );
+            let out = crate::filter::testing::run(&mut opened, &mut shadow, &input, 0.0);
+            for y in 0..16 {
+                for x in 0..24 {
+                    if block(x, y) > 0.0 {
+                        continue;
+                    }
+                    let mut alpha = 0.0;
+                    for j in -taps..=taps {
+                        for i in -taps..=taps {
+                            alpha += w[i.unsigned_abs() as usize]
+                                * w[j.unsigned_abs() as usize]
+                                * block(x + i, y + j);
+                        }
+                    }
+                    let want = (alpha * 255.0).round() as i32;
+                    let got = i32::from(out.pixel(x as u32, y as u32).expect("inside")[3]);
+                    assert!(
+                        (got - want).abs() <= 1,
+                        "radius {radius} at ({x}, {y}): {got} not {want}"
+                    );
+                }
+            }
+        }
+    }
+
+    /// The uniform `passes` writes is the size of `gauss.wgsl`'s `Params`: four
+    /// scalars, `weights` (3 `vec4`s), `pairs` (2) and `pair_count`, padded to 16.
+    #[test]
+    fn the_params_match_the_shaders_struct() {
+        assert_eq!(WEIGHTS, 12, "gauss.wgsl: weights: array<vec4<f32>, 3>");
+        assert_eq!(PAIRS, 4, "gauss.wgsl: pairs: array<vec4<f32>, 2>");
+        assert_eq!(params(plan(8.0), 1, 0, Edge::Clamp).len(), 112);
     }
 
     #[test]
