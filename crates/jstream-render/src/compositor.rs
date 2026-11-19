@@ -1093,6 +1093,7 @@ impl Compositor {
             max_texture_dimension_2d: self.gpu.max_texture_dimension_2d,
             max_buffer_size: self.gpu.max_buffer_size,
             max_storage_binding: self.gpu.max_storage_binding,
+            software: self.gpu.software,
             context: self.gpu.context.clone(),
             faults: Arc::clone(&self.gpu.faults),
             submit: self.gpu.submit.clone(),
@@ -1794,13 +1795,20 @@ impl Compositor {
     }
 
     /// The resolve pass: the FP16 working target to the straight sRGB output.
+    ///
+    /// Its triangle writes every texel, so what the output held before is never seen. A
+    /// GPU starts it cleared, which costs it little and spares a tiled GPU reading the
+    /// old texels in. A software rasterizer would write every texel twice for that
+    /// clear, so it starts loaded instead (#1449).
     fn record_resolve(&self, encoder: &mut wgpu::CommandEncoder, targets: &Targets) {
+        let load = if self.gpu.software {
+            wgpu::LoadOp::Load
+        } else {
+            wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT)
+        };
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some("jstream-render-resolve"),
-            color_attachments: &[Some(color_attachment(
-                &targets.output_view,
-                wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
-            ))],
+            color_attachments: &[Some(color_attachment(&targets.output_view, load))],
             depth_stencil_attachment: None,
             timestamp_writes: None,
             occlusion_query_set: None,

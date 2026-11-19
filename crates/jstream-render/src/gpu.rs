@@ -51,6 +51,9 @@ pub(crate) struct Gpu {
     /// The most bytes one storage-buffer binding may cover, which a shader that reads a
     /// whole buffer (the ingest pass) is held to as well as `max_buffer_size`.
     pub max_storage_binding: u64,
+    /// Whether the device is a software rasterizer (llvmpipe, WARP), which pays for a
+    /// clear texel by texel, where a GPU clears a whole target for little (#1449).
+    pub software: bool,
     /// The platform context the device came from, or `None` for a device of its own.
     pub context: Option<ContextKey>,
     /// How the device has failed ([`watch`]).
@@ -273,10 +276,12 @@ impl Gpu {
         faults: Arc<Faults>,
     ) -> Self {
         let limits = device.limits();
+        let software = adapter.get_info().device_type == wgpu::DeviceType::Cpu;
         Self {
             device,
             queue,
             adapter,
+            software,
             max_texture_dimension_2d: limits.max_texture_dimension_2d,
             max_buffer_size: limits.max_buffer_size,
             max_storage_binding: limits.max_storage_buffer_binding_size,
