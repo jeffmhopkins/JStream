@@ -615,7 +615,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `jstream-control`'s mock, many sessions on many threads, a headless
   `video.snapshot` on whatever adapter opens (the software one in CI), frame sheets
   (a `scene.switch_and_watch` showing a fade as it plays, judged so either blending
-  space passes, and counting its times from the switch when the sheet starts late, a scene drawn alone, a scene
+  space passes, and counting its times from the switch when the sheet starts late, overdue pictures kept an interval apart, a scene drawn alone, a scene
   sheet that hears a loud mix, the
   limits and the cap on sheets at once, in `tests/frames.rs`; the layout, tiling and
   downscale in `frames.rs`), nested-scene scheduling (order, depth
@@ -2538,7 +2538,10 @@ depends_on = ["crates/jstream-protocol/README.md#queries"]
 [jstream-protocol › Queries](../jstream-protocol/README.md#queries)) answer with a frame
 sheet: several pictures taken in real time, tiled into one PNG (`frames.rs`). Each
 sheet gets a `jstream-frames` thread, which wakes when each picture is due (the call's
-`Instant` plus `delay_ms + i × interval_ms`) and reads, under the collection lock,
+`Instant` plus `delay_ms + i × interval_ms`, but never sooner than `interval_ms` after
+the picture before was read, `engine::sample_due`: a thread that starts late or falls
+behind takes its overdue pictures an interval apart, not all at one instant showing one
+frame, so the sheet runs longer instead, #1538) and reads, under the collection lock,
 what `video.snapshot` would draw then (`Shared::sample`): the published program
 render snapshot, or for `scene_id` that scene planned alone as its preview stream plans
 it (`State::plan_scene_alone`, reaching no source, ADR-0028), with the live values,
