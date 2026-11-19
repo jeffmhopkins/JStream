@@ -1854,7 +1854,7 @@ stamp = { hash = "b3:e9dd351ad5cefdd4", by = "agent:claude-settings", note = "me
 stamp = { hash = "b3:bba98614564d363a", by = "agent:camera-controls", note = "Added camera_controls.rs to covers and a Camera controls bullet: the diff of the drawn collection against what was sent, the jstream-camera-controls thread setting the latest value, first device for empty device, later source wins. Checked against camera_controls.rs." }
 
 ["CRATE-jstream-core#contents-media"."file:crates/jstream-core/src/runtime/gpu.rs"]
-stamp = { hash = "b3:e60cb9cae76ef65f", by = "agent:claude", note = "pipeline.rs: gpu_draw asks Compositor::lost each tick; gpu.rs test loses the context through destroy_device; the module list is unchanged" }
+stamp = { hash = "b3:53752061ee167f9c", by = "agent:issues-thread", note = "runtime/gpu.rs change is test-only (#1531): its two SharedGpu tests take one_gpu_test_at_a_time; the preview/runtime contents list still matches." }
 
 ["CRATE-jstream-core#contents-media"."file:crates/jstream-core/src/runtime/mod.rs"]
 stamp = { hash = "b3:3783ae1450c72b5d", by = "agent:lane-d-wave-sync", note = "runtime/mod.rs only makes pass_guard pub(crate) so a test can read SLOW_FRAMES; gpu_capture.rs gives the GPU-time quarantine test a wall-clock bound of 30 ticks of 4 s (WARP draws its slow pass at ~1.3 s a tick, so 30 ticks outran the 30 s tick_until). The section's description of the runtime, the guard and the quarantine test still holds" }
@@ -2277,7 +2277,7 @@ stamp = { hash = "b3:e9dd351ad5cefdd4", by = "agent:claude-settings", note = "S1
 stamp = { hash = "b3:bba98614564d363a", by = "agent:camera-controls", note = "Edited Captures: SharedVideoDevices passes a camera control's read and set straight to the backend. Checked against runtime/devices.rs." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/gpu.rs"]
-stamp = { hash = "b3:e60cb9cae76ef65f", by = "agent:claude", note = "lost-device paragraph now says gpu_draw asks Compositor::lost every tick, since a destroyed device's calls can all succeed (#1457); checked against open_gpu_draw" }
+stamp = { hash = "b3:53752061ee167f9c", by = "agent:issues-thread", note = "Re-read SharedGpu's description (opens the device once, replaces a lost one); #1531 only makes its tests take the crate's GPU test slot." }
 
 ["CRATE-jstream-core#runtime"."file:crates/jstream-core/src/runtime/mod.rs"]
 stamp = { hash = "b3:3783ae1450c72b5d", by = "agent:lane-d-wave-sync", note = "runtime/mod.rs only makes pass_guard pub(crate) so a test can read SLOW_FRAMES; gpu_capture.rs gives the GPU-time quarantine test a wall-clock bound of 30 ticks of 4 s (WARP draws its slow pass at ~1.3 s a tick, so 30 ticks outran the 30 s tick_until). The section's description of the runtime, the guard and the quarantine test still holds" }
@@ -2811,7 +2811,7 @@ stamp = { hash = "b3:6cf396d8a1731016" }
 stamp = { hash = "b3:e560ed85904ef05e", by = "agent:perf-thread", note = "Stats lists late, encode_nanos and bytes; late is stamped at the push (an Instant in Msg::Item) and counted when the encode call ends past a frame period; bytes counted in fanout publish" }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/gpu_tests.rs"]
-stamp = { hash = "b3:3e1983696eb83d1b", by = "agent:claude", note = "gpu_tests.rs changed only its module doc (review N3): it now says a machine with no wgpu adapter skips the tests except on CI, where that fails, matching context()'s assert and this README's test sentence; no code change" }
+stamp = { hash = "b3:7784b0a963fd10ef", by = "agent:issues-thread", note = "Re-read the GPU path text (open_on, on_context, CPU fallback); #1531 only serialises the test contexts, no session behaviour changed." }
 
 ["CRATE-jstream-encode#design"."file:crates/jstream-encode/src/lib.rs"]
 stamp = { hash = "b3:9c0c1811b8b12a45", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
@@ -2829,7 +2829,7 @@ stamp = { hash = "b3:96cd71b98ff1e82e", by = "agent:lane-d", note = "Stats lists
 stamp = { hash = "b3:da598d986fcdf80f", by = "agent:lane-d", note = "Stats lists late, encode_nanos and bytes; late is stamped at the push (an Instant in Msg::Item) and counted when the encode call ends past a frame period; bytes counted in fanout publish | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: added the NV12 session's RGBA8/BGRA8 conversion on its encode thread and VideoInput::format to GPU frames" }
 
 ["CRATE-jstream-encode#purpose"."body"]
-stamp = { hash = "b3:e2a98d3559f5b83d", by = "agent:perf-thread", note = "VideoSession gains stats_handle (StatsHandle, a Weak reader); Purpose's API list says so" }
+stamp = { hash = "b3:417ecc80c7c9baea", by = "agent:issues-thread", note = "Test-only change for #1531: gpu_tests' context() now holds a one-at-a-time GPU slot; added a sentence saying so and why (WARP crashes on concurrent Dx12 devices). The session/thread description is unchanged." }
 
 ["CRATE-jstream-encode#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-encode"]
 stamp = { hash = "b3:ed2392b83b660388", by = "agent:claude", note = "The retargeting commit only moves ADR-0027 citations to ADR-0080 (same decision numbers §1-§3, since ADR-0080 restates them unchanged), now that ADR-0080 is accepted and ADR-0027 superseded; re-read, the text still holds." }
@@ -2850,7 +2850,7 @@ stamp = { hash = "b3:6cf396d8a1731016" }
 stamp = { hash = "b3:e560ed85904ef05e", by = "agent:perf-thread", note = "VideoSession gains stats_handle (StatsHandle, a Weak reader); Purpose's API list says so" }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/gpu_tests.rs"]
-stamp = { hash = "b3:3e1983696eb83d1b", by = "agent:claude", note = "gpu_tests.rs changed only its module doc (review N3): it now says a machine with no wgpu adapter skips the tests except on CI, where that fails, matching context()'s assert and this README's test sentence; no code change" }
+stamp = { hash = "b3:7784b0a963fd10ef", by = "agent:issues-thread", note = "Test-only change for #1531: gpu_tests' context() now holds a one-at-a-time GPU slot; added a sentence saying so and why (WARP crashes on concurrent Dx12 devices). The session/thread description is unchanged." }
 
 ["CRATE-jstream-encode#purpose"."file:crates/jstream-encode/src/lib.rs"]
 stamp = { hash = "b3:9c0c1811b8b12a45", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
