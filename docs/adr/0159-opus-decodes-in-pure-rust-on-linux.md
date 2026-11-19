@@ -45,9 +45,10 @@ Linux decodes Opus through `rusty-opus`, in place of ADR-0072 (c)'s FFmpeg path 
   WebM (through the crate's demuxer), with mapping families 0, 1 and 255.
 - Audio comes out as ADR-0072 requires: interleaved `f32`, at Opus's 48 kHz, mixed down to
   stereo beyond two channels.
-- The header's output gain is applied. The container's pre-skip is cut: Ogg's through its
-  granule positions, Matroska's through `CodecDelay`. A seek decodes from `SeekPreRoll`
-  (80 ms when the file leaves it out) before its target.
+- The header's output gain is applied. The container's pre-skip is cut: Ogg's from the
+  track's delay, which symphonia's reader leaves in its granule clock, and Matroska's
+  through `CodecDelay`. A seek decodes from 80 ms before its target, or from Matroska's
+  `SeekPreRoll` when the file gives one.
 
 ADR-0072 stays accepted. Only its Opus line changes: FFmpeg, once its gates pass, decodes
 HE-AAC and anything else (e) allows, but not Opus.

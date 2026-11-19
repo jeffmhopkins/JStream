@@ -3,9 +3,10 @@
 //! several (channel mapping families 0, 1 and 255) decoded to interleaved `f32` at
 //! 48 kHz.
 //!
-//! The container trims what the encoder put before and after the audio: Ogg through
-//! symphonia's reader (each packet's `trim_start` and `trim_end`), Matroska through
-//! its `CodecDelay` ([`super::mkv`]). This module applies the header's output gain.
+//! The container trims what the encoder put before and after the audio. Ogg's pre-skip
+//! is cut by [`super::audio::AudioFile`], from the track's delay (symphonia's reader
+//! leaves it in its packet times), and its end padding through each packet's
+//! `trim_end`; Matroska's pre-skip through its `CodecDelay` ([`super::mkv`]). This module applies the header's output gain.
 
 use rusty_opus::Error as OpusError;
 use rusty_opus::multistream::{ChannelLayout, OpusMSDecoder};

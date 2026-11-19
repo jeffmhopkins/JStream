@@ -1,7 +1,8 @@
 //! A movie file (MP4, QuickTime, Matroska or WebM) as a [`MediaDecoder`]: the crate's
 //! own demuxers ([`super::mp4`], [`super::mkv`]), H.264 video on the GPU through VA-API,
-//! and the audio through the crate's decoders (MP3, FLAC, Vorbis and Opus; AAC waits
-//! for ADR-0072 (g), so a file with that audio plays its video without sound).
+//! and the audio through the crate's decoders (MP3, FLAC and Vorbis, and Opus in
+//! Matroska and WebM; AAC waits for ADR-0072 (g), so a file with that audio plays its
+//! video without sound).
 
 use jstream_platform::media::{AudioBuffer, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{

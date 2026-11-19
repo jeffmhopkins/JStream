@@ -114,6 +114,27 @@ fn plays_ogg_opus() {
     plays_at("tone.opus", ChannelLayout::Mono, 48_000);
 }
 
+// Its pre-skip (312 frames) is cut, from the start and after a seek back to it: the
+// file's final granule position is 24 312, so exactly 24 000 frames play, from 0.
+#[test]
+fn an_ogg_opus_file_plays_without_its_pre_skip() {
+    let mut decoder = LinuxMediaDecoders
+        .open(&testdata("tone.opus"), &config(true))
+        .expect("opens");
+    for _ in 0..2 {
+        let first = decoder.next_audio().expect("decodes").expect("a block");
+        assert_eq!(first.pts().ticks(), 0);
+        let mut frames = first.frames();
+        while let Some(block) = decoder.next_audio().expect("decodes") {
+            frames += block.frames();
+        }
+        assert_eq!(frames, 24_000);
+        decoder
+            .seek(MediaTime::zero(Timebase::MICROS))
+            .expect("seeks");
+    }
+}
+
 // A WebM file goes through the crate's own demuxer and the movie decoder, built on
 // Linux only. Its audio needs no GPU.
 #[cfg(target_os = "linux")]

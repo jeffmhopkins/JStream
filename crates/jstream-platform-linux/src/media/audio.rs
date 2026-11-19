@@ -1,5 +1,5 @@
 //! Audio decoding (ADR-0072 (c)): the royalty-free codecs only, PCM, FLAC, Vorbis and
-//! MP3 through symphonia, and Opus through `opus-decoder` ([`super::opus`], ADR-0159).
+//! MP3 through symphonia, and Opus through `rusty-opus` ([`super::opus`], ADR-0159).
 //! AAC isn't built in: symphonia's `aac` feature stays off until ADR-0072 (g)'s decoder
 //! patent check says yes.
 //!
@@ -30,7 +30,7 @@ use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::units::{Time, TimeBase};
+use symphonia::core::units::{Time, TimeBase, Timestamp};
 
 /// The `call` an `Os` error names.
 const CALL: &str = "symphonia";
@@ -345,8 +345,10 @@ impl AudioStream {
             },
             Decoder::Opus(stream) => match stream.decode(&packet.data) {
                 Ok(samples) => {
-                    // Opus trims here what the container says to (Ogg's pre-skip and
-                    // end padding): symphonia's decoders do it themselves.
+                    // Opus trims here what a packet says to (Ogg's end padding):
+                    // symphonia's decoders do it themselves. The pre-skip is cut by
+                    // whoever reads the container ([`AudioFile`], or Matroska's
+                    // `CodecDelay`), which times the stream from after it.
                     let channels = stream.channels();
                     let frames = samples.len() / channels;
                     let start = usize::try_from(packet.trim_start.get())
@@ -400,7 +402,9 @@ impl AudioStream {
             .div_ceil(u64::from(self.timebase.den()));
         let tick = i64::try_from(tick).unwrap_or(i64::MAX);
         let start = match self.expected {
-            Some(expected) if (at.ticks() - expected.ticks()).abs() <= tick => expected,
+            Some(expected) if at.ticks().abs_diff(expected.ticks()) <= tick.unsigned_abs() => {
+                expected
+            }
             _ => at,
         };
         let frames = i64::try_from(frames).unwrap_or(i64::MAX);
@@ -434,7 +438,17 @@ pub(crate) struct AudioFile {
     at_end: bool,
     /// After a seek, the time the next block starts at: what decodes before it is cut.
     skip_until: Option<MediaTime>,
+    /// How far the reader's packet times run ahead of the file's timeline, in the
+    /// track's time base: an Ogg Opus stream's pre-skip, which symphonia leaves in its
+    /// granule clock (zero otherwise).
+    delay: MediaTime,
+    /// How far before its target a seek starts decoding, so the decoder has settled by
+    /// then: Opus's 80 ms (RFC 7845 §4.6), nothing for the others.
+    preroll: MediaTime,
 }
+
+/// How far before a seek's target an Opus stream starts decoding (RFC 7845 §4.6).
+const OPUS_PREROLL_MICROS: i64 = 80_000;
 
 /// Opens a reader on `file`, or `None` when symphonia can't read its container.
 fn probe(path: &Path, file: File) -> Result<Option<Box<dyn FormatReader>>, PlatformError> {
@@ -490,6 +504,19 @@ impl AudioFile {
             Some(MediaTime::new(ticks, tb))
         });
         let id = track.id;
+        let opus = params.codec == CODEC_ID_OPUS;
+        // symphonia's Ogg reader times Opus packets on the granule clock, which counts
+        // the pre-skip, and trims none of it per packet: the file's timeline starts
+        // after it.
+        let delay = MediaTime::new(
+            if opus {
+                track.delay.map_or(0, i64::from)
+            } else {
+                0
+            },
+            tb,
+        );
+        let preroll = MediaTime::new(if opus { OPUS_PREROLL_MICROS } else { 0 }, Timebase::MICROS);
         let stream = if audio {
             Some(AudioStream::new(params, tb)?)
         } else {
@@ -502,7 +529,9 @@ impl AudioFile {
             stream,
             duration,
             at_end: false,
-            skip_until: None,
+            skip_until: (delay.ticks() > 0).then_some(MediaTime::new(0, tb)),
+            delay,
+            preroll,
         }))
     }
 
@@ -525,7 +554,7 @@ impl AudioFile {
             return Ok(None);
         }
         loop {
-            let packet = match self.reader.next_packet() {
+            let mut packet = match self.reader.next_packet() {
                 Ok(Some(packet)) => packet,
                 Ok(None) => return Ok(None),
                 Err(err) if is_end(&err) => return Ok(None),
@@ -538,6 +567,7 @@ impl AudioFile {
             if packet.track_id != self.track {
                 continue;
             }
+            packet.pts = Timestamp::new(packet.pts.get().saturating_sub(self.delay.ticks()));
             let Some(block) = stream.decode(&packet)? else {
                 continue;
             };
@@ -572,17 +602,24 @@ impl AudioFile {
             stream.reset();
         }
         self.at_end = false;
-        self.skip_until = None;
         let micros = to.rescale(Timebase::MICROS, Rounding::Down)?.ticks().max(0);
-        if micros == 0 {
+        // What decodes before the target is cut, from the start of the file too (an Ogg
+        // Opus stream's pre-skip).
+        self.skip_until = Some(MediaTime::new(micros, Timebase::MICROS));
+        // The reader's own time for the target, less the pre-roll.
+        let delay = self.delay.rescale(Timebase::MICROS, Rounding::Down)?;
+        let from = micros
+            .saturating_add(delay.ticks())
+            .saturating_sub(self.preroll.ticks());
+        if micros == 0 || from <= 0 {
             return Ok(());
         }
         let seek = SeekTo::Time {
-            time: Time::from_micros(micros),
+            time: Time::from_micros(from),
             track_id: Some(self.track),
         };
         match self.reader.seek(SeekMode::Accurate, seek) {
-            Ok(_) => self.skip_until = Some(MediaTime::new(micros, Timebase::MICROS)),
+            Ok(_) => {}
             // Past the end: the next read gives the end.
             Err(Error::SeekError(SeekErrorKind::OutOfRange)) => self.at_end = true,
             Err(err) if is_end(&err) => self.at_end = true,
