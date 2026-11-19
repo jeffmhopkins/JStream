@@ -1,4 +1,4 @@
-//! libva's H.264 and HEVC encode structs, its H.264 and VP9 decode structs (ADR-0072), and their
+//! libva's H.264 and HEVC encode structs, its H.264, VP8 and VP9 decode structs (ADR-0072), and their
 //! constants, hand-written (ADR-0060 §8).
 //!
 //! Each struct mirrors its C declaration field for field, `#[repr(C)]`, with C bitfield
@@ -17,7 +17,9 @@
 //! `VAIQMatrixBufferH264` and `VASliceParameterBufferH264`) were checked the same way,
 //! against the same release, and their sizes and offsets are asserted below. So were
 //! the VP9 decode structs (`va/va_dec_vp9.h`), with the bit of each `pic_fields` and
-//! `segment_flags` field printed one at a time.
+//! `segment_flags` field printed one at a time, and the VP8 ones (`va/va_dec_vp8.h`,
+//! and `VAIQMatrixBufferVP8` and `VAProbabilityDataBufferVP8` from `va/va.h`), with
+//! the bit of each `pic_fields` field printed the same way.
 //!
 //! The surface attributes and the DRM PRIME descriptor that import an encode target
 //! (`va/va.h`, `va/va_drmcommon.h`) were checked the same way, against the same
@@ -42,6 +44,8 @@ pub(crate) mod dec_buffer {
     pub(crate) const SLICE_PARAMETER: i32 = 4;
     /// `VASliceDataBufferType`.
     pub(crate) const SLICE_DATA: i32 = 5;
+    /// `VAProbabilityBufferType`: VP8's coefficient probabilities.
+    pub(crate) const PROBABILITY: i32 = 13;
 }
 
 /// `VAPictureParameterBufferH264`: one picture to decode.
@@ -179,6 +183,77 @@ pub(crate) struct DecSliceParamVp9 {
     pub(crate) slice_data_offset: u32,
     pub(crate) slice_data_flag: u32,
     pub(crate) seg_param: [SegmentParamVp9; 8],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VABoolCoderContextVPX`: the boolean decoder's state where the frame header ends.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct BoolCoderContextVpx {
+    pub(crate) range: u8,
+    pub(crate) value: u8,
+    pub(crate) count: u8,
+}
+
+/// `VAPictureParameterBufferVP8`: one VP8 frame to decode.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecPicParamVp8 {
+    pub(crate) frame_width: u32,
+    pub(crate) frame_height: u32,
+    pub(crate) last_ref_frame: Id,
+    pub(crate) golden_ref_frame: Id,
+    pub(crate) alt_ref_frame: Id,
+    pub(crate) out_of_loop_frame: Id,
+    /// `pic_fields`: `key_frame` (bit 0, set for an inter frame), `version` (1-3),
+    /// `segmentation_enabled` (4), `update_mb_segmentation_map` (5),
+    /// `update_segment_feature_data` (6), `filter_type` (7), `sharpness_level` (8-10),
+    /// `loop_filter_adj_enable` (11), `mode_ref_lf_delta_update` (12),
+    /// `sign_bias_golden` (13), `sign_bias_alternate` (14), `mb_no_coeff_skip` (15),
+    /// `loop_filter_disable` (16).
+    pub(crate) pic_fields: u32,
+    pub(crate) mb_segment_tree_probs: [u8; 3],
+    pub(crate) loop_filter_level: [u8; 4],
+    pub(crate) loop_filter_deltas_ref_frame: [i8; 4],
+    pub(crate) loop_filter_deltas_mode: [i8; 4],
+    pub(crate) prob_skip_false: u8,
+    pub(crate) prob_intra: u8,
+    pub(crate) prob_last: u8,
+    pub(crate) prob_gf: u8,
+    pub(crate) y_mode_probs: [u8; 4],
+    pub(crate) uv_mode_probs: [u8; 3],
+    pub(crate) mv_probs: [[u8; 19]; 2],
+    pub(crate) bool_coder_ctx: BoolCoderContextVpx,
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VASliceParameterBufferVP8`: the frame's partitions, as one slice.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecSliceParamVp8 {
+    pub(crate) slice_data_size: u32,
+    pub(crate) slice_data_offset: u32,
+    pub(crate) slice_data_flag: u32,
+    pub(crate) macroblock_offset: u32,
+    pub(crate) num_of_partitions: u8,
+    pub(crate) partition_size: [u32; 9],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VAProbabilityDataBufferVP8`: the coefficient probabilities, by coefficient band.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ProbabilityDataVp8 {
+    pub(crate) dct_coeff_probs: [[[[u8; 11]; 3]; 8]; 4],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VAIQMatrixBufferVP8`: each segment's quantizer indices (Y AC, Y DC, Y2 DC, Y2 AC,
+/// UV DC, UV AC).
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct IqMatrixVp8 {
+    pub(crate) quantization_index: [[u16; 6]; 4],
     pub(crate) va_reserved: [u32; 4],
 }
 
@@ -849,6 +924,25 @@ const _: () = {
     assert!(offset_of!(DecPicParamH264, pic_fields) == 632);
     assert!(offset_of!(DecPicParamH264, frame_num) == 636);
     assert!(offset_of!(DecPicParamH264, va_reserved) == 640);
+    assert!(size_of::<DecPicParamVp8>() == 112);
+    assert!(offset_of!(DecPicParamVp8, pic_fields) == 24);
+    assert!(offset_of!(DecPicParamVp8, mb_segment_tree_probs) == 28);
+    assert!(offset_of!(DecPicParamVp8, loop_filter_level) == 31);
+    assert!(offset_of!(DecPicParamVp8, loop_filter_deltas_ref_frame) == 35);
+    assert!(offset_of!(DecPicParamVp8, prob_skip_false) == 43);
+    assert!(offset_of!(DecPicParamVp8, y_mode_probs) == 47);
+    assert!(offset_of!(DecPicParamVp8, mv_probs) == 54);
+    assert!(offset_of!(DecPicParamVp8, bool_coder_ctx) == 92);
+    assert!(offset_of!(DecPicParamVp8, va_reserved) == 96);
+    assert!(size_of::<DecSliceParamVp8>() == 72);
+    assert!(offset_of!(DecSliceParamVp8, macroblock_offset) == 12);
+    assert!(offset_of!(DecSliceParamVp8, num_of_partitions) == 16);
+    assert!(offset_of!(DecSliceParamVp8, partition_size) == 20);
+    assert!(offset_of!(DecSliceParamVp8, va_reserved) == 56);
+    assert!(size_of::<ProbabilityDataVp8>() == 1072);
+    assert!(offset_of!(ProbabilityDataVp8, va_reserved) == 1056);
+    assert!(size_of::<IqMatrixVp8>() == 64);
+    assert!(offset_of!(IqMatrixVp8, va_reserved) == 48);
     assert!(size_of::<DecPicParamVp9>() == 92);
     assert!(offset_of!(DecPicParamVp9, reference_frames) == 4);
     assert!(offset_of!(DecPicParamVp9, pic_fields) == 36);

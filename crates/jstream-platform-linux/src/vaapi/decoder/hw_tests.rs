@@ -1,7 +1,7 @@
 //! VA-API decoding on a real GPU (`hw-tests`, run by hand):
 //! `cargo test -p jstream-platform-linux --features hw-tests -- --ignored decodes_`.
 //!
-//! H.264 and VP9 decoding are exact, so each frame must match FFmpeg's software decode
+//! H.264, VP8 and VP9 decoding are exact, so each frame must match FFmpeg's software decode
 //! of the same file bit for bit: the hashes below are FNV-1a over each frame's NV12
 //! bytes from `ffmpeg -i <file> -f rawvideo -pix_fmt nv12 -`.
 
@@ -217,6 +217,74 @@ const VP9_ER: [u64; 9] = [
     0xf3ed_7696_ac34_f91f,
 ];
 
+/// `vp8-altref.webm`, decoded by libvpx and by FFmpeg's own VP8 decoder alike.
+const VP8_ALTREF: [u64; 30] = [
+    0x0d49_b89b_e8b0_2bde,
+    0xeb06_759b_d68d_149e,
+    0xe372_58ca_4de5_a45f,
+    0xa4be_77f3_03f6_8579,
+    0xb10c_56bc_e819_85b9,
+    0x4cc5_e851_f77c_be6e,
+    0x2a12_4213_1906_3866,
+    0x883b_98ec_a436_f5dc,
+    0x503c_f4ee_3bfd_652a,
+    0x1ab6_a84e_4f15_9acc,
+    0xa0f0_6873_5d91_4e4d,
+    0x6cc6_b1da_6c09_e057,
+    0x10ef_19be_8fa3_0c41,
+    0x3db5_e753_f8cd_370d,
+    0xd11d_654b_c9f8_397f,
+    0x71f7_dcc4_106f_a295,
+    0x69fc_80e5_c0e9_811c,
+    0x3361_9127_dae9_85a0,
+    0xc140_6bff_bd3e_dd74,
+    0x5ea3_bf2e_d552_9a1b,
+    0xd830_0d12_9d8d_8d9a,
+    0xe8b6_f45d_d1da_52f3,
+    0x9d31_6d3f_7092_f342,
+    0x5e95_6770_f678_25e2,
+    0xc35f_a0a6_6c53_a11e,
+    0xf263_0eee_b7b8_d43b,
+    0xc1a2_b834_00ca_c13a,
+    0xfb6c_589f_5df9_74ed,
+    0x5c8b_36d5_a3cb_3cdb,
+    0x086e_d36f_ed79_27ad,
+];
+
+/// `vp8-parts.webm`, decoded by libvpx and by FFmpeg's own VP8 decoder alike.
+const VP8_PARTS: [u64; 30] = [
+    0xea38_30f9_8aff_3d61,
+    0xf203_36b4_75d1_3ff0,
+    0xc1a0_8546_ffa8_8ad4,
+    0xbe8f_c9c4_e927_3744,
+    0xf889_d635_3bc7_4eb2,
+    0xbb8e_f477_e4cb_8f6e,
+    0xf4d4_cfed_a20a_abde,
+    0x6845_6d54_2cb3_af14,
+    0x2da3_2c99_ce68_db18,
+    0xd151_dd30_eabb_eecf,
+    0xc8ef_801d_b047_0418,
+    0x3b07_f5f0_1fef_900b,
+    0xe7e4_839d_64c0_564d,
+    0xef6b_947b_9eb3_127f,
+    0xafb0_20d2_579b_ee05,
+    0x53c2_6a4d_897d_a0fd,
+    0x50b9_468f_8fa7_39eb,
+    0x953c_fedc_5c6d_b80e,
+    0x2a11_3f08_a0f1_dcb6,
+    0x97d8_62fe_afef_19ac,
+    0x6e0e_6b18_1344_d1f8,
+    0xc797_f4ef_5cab_3c63,
+    0x756e_650c_967c_4752,
+    0x7d5c_620f_853a_7a23,
+    0x74cf_2881_9a8d_7af5,
+    0x1d28_d967_06e6_9476,
+    0x7dd4_b948_7570_da35,
+    0xf63f_9e6d_2753_1bf7,
+    0x93c1_a827_b3e4_9554,
+    0x6700_28e3_a893_3b63,
+];
+
 fn fnv(planes: &[&[u8]]) -> u64 {
     let mut x: u64 = 0xcbf2_9ce4_8422_2325;
     for plane in planes {
@@ -351,4 +419,41 @@ fn a_vp9_seek_starts_at_the_key_frame_before() {
         hashes.push(fnv(&planes));
     }
     assert_eq!(hashes, VP9_ALTREF[15..]);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP8 decoder"]
+fn decodes_vp8_with_a_hidden_alternate_reference_bit_exact() {
+    decodes("vp8-altref.webm", &VP8_ALTREF);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP8 decoder"]
+fn decodes_vp8_segmentation_and_token_partitions_bit_exact() {
+    // Version 1 (the simple loop filter), error resilient, a key frame every 10 frames,
+    // and a size that isn't a whole number of macroblocks.
+    decodes("vp8-parts.webm", &VP8_PARTS);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP8 decoder"]
+fn a_vp8_seek_starts_at_the_key_frame_before() {
+    // The partitioned stream has a key frame every 10 frames, so a seek to 0.5 s
+    // decodes from the one at 0.33 s and shows the frames from 0.5 s on, bit for bit.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/media/testdata/vp8-parts.webm");
+    let config = MediaDecoderConfig {
+        video_format: PixelFormat::Nv12,
+        hardware: HardwarePreference::Require,
+        audio: false,
+    };
+    let mut decoder = LinuxMediaDecoders.open(&path, &config).expect("opens");
+    decoder
+        .seek(MediaTime::new(500_000, Timebase::MICROS))
+        .expect("seeks");
+    let mut hashes = Vec::new();
+    while let Some(frame) = decoder.next_video().expect("decodes") {
+        let planes: Vec<&[u8]> = frame.planes().iter().map(|p| p.data()).collect();
+        hashes.push(fnv(&planes));
+    }
+    assert_eq!(hashes, VP8_PARTS[15..]);
 }
