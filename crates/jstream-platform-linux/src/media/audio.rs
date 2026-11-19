@@ -1,6 +1,7 @@
-//! Audio decoding through symphonia (ADR-0072 (c)): the royalty-free codecs only, PCM,
-//! FLAC, Vorbis and MP3. AAC isn't built in: symphonia's `aac` feature stays off until
-//! ADR-0072 (g)'s decoder patent check says yes.
+//! Audio decoding (ADR-0072 (c)): the royalty-free codecs only, PCM, FLAC, Vorbis and
+//! MP3 through symphonia, and Opus through `opus-decoder` ([`super::opus`], ADR-0159).
+//! AAC isn't built in: symphonia's `aac` feature stays off until ADR-0072 (g)'s decoder
+//! patent check says yes.
 //!
 //! [`AudioFile`] reads a file symphonia's own readers open (WAV, FLAC, Ogg and MP3) and
 //! decodes its first audio track. [`AudioStream`] is the decoding half on its own, for
@@ -18,8 +19,11 @@ use jstream_platform::media::{
     AudioBuffer, AudioFormat, ChannelLayout, MediaTime, Rounding, SampleFormat, Timebase,
 };
 use jstream_platform::{MediaAudioInfo, PlatformError};
+
+use super::opus::{self, OpusStream};
 use symphonia::core::audio::{Channels, Position};
 use symphonia::core::codecs::CodecParameters;
+use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
 use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::{Error, SeekErrorKind};
 use symphonia::core::formats::probe::Hint;
@@ -70,7 +74,21 @@ const MINUS_3DB: f32 = std::f32::consts::FRAC_1_SQRT_2;
 impl Downmix {
     /// The mix for a stream with `channels`: `None` when it has none.
     pub(crate) fn new(channels: &Channels) -> Option<Self> {
-        let count = channels.count();
+        match channels {
+            // A positioned layout stores its channels in the order of their bits,
+            // lowest first.
+            Channels::Positioned(positions) => Self::ordered(
+                channels.count(),
+                Some(&positions.iter().collect::<Vec<_>>()),
+            ),
+            // Discrete channels have no positions.
+            _ => Self::ordered(channels.count(), None),
+        }
+    }
+
+    /// The mix for `count` channels in the order `positions` lists them, when they have
+    /// positions: `None` when there are none.
+    pub(crate) fn ordered(count: usize, positions: Option<&[Position]>) -> Option<Self> {
         match count {
             0 => None,
             1 => Some(Self {
@@ -86,19 +104,17 @@ impl Downmix {
             _ => {
                 let mut left = vec![0.0; count];
                 let mut right = vec![0.0; count];
-                match channels {
-                    Channels::Positioned(positions) => {
-                        // A positioned layout stores its channels in the order of their
-                        // bits, lowest first.
+                match positions.filter(|p| p.len() == count) {
+                    Some(positions) => {
                         for (index, position) in positions.iter().enumerate() {
-                            let (l, r) = position_weights(position);
+                            let (l, r) = position_weights(*position);
                             left[index] = l;
                             right[index] = r;
                         }
                     }
-                    _ => {
-                        // Discrete channels have no positions: the first two are left
-                        // and right, and the rest are left out.
+                    None => {
+                        // Without positions, the first two are left and right, and the
+                        // rest are left out.
                         left[0] = 1.0;
                         right[1] = 1.0;
                     }
@@ -193,15 +209,35 @@ fn timebase(tb: TimeBase) -> Result<Timebase, PlatformError> {
     Ok(Timebase::new(tb.numer.get(), tb.denom.get())?)
 }
 
-/// Decodes one audio stream's packets: symphonia's decoder for the codec, and the mix
-/// to the output layout.
+/// The decoder behind an [`AudioStream`].
+enum Decoder {
+    /// symphonia's, for PCM, FLAC, Vorbis and MP3.
+    Symphonia(Box<dyn AudioDecoder>),
+    /// Opus, through `rusty-opus` (ADR-0159).
+    Opus(Box<OpusStream>),
+}
+
+/// What decoding one packet gave.
+enum Decoded {
+    /// Interleaved samples of the stream's channels, and how many frames the block
+    /// starts after the packet.
+    Samples(Vec<f32>, u64),
+    /// A damaged packet, and why.
+    Bad(String),
+}
+
+/// Decodes one audio stream's packets: the codec's decoder, and the mix to the output
+/// layout.
 pub(crate) struct AudioStream {
-    decoder: Box<dyn AudioDecoder>,
+    decoder: Decoder,
     downmix: Downmix,
     format: AudioFormat,
     /// The time base of the packets' timestamps.
     timebase: Timebase,
     bad_packets: u32,
+    /// Where the next block starts if it follows on from the last, at the stream's
+    /// rate: `None` after a reset.
+    expected: Option<MediaTime>,
 }
 
 impl AudioStream {
@@ -214,6 +250,9 @@ impl AudioStream {
         params: &AudioCodecParameters,
         timebase: Timebase,
     ) -> Result<Self, PlatformError> {
+        if params.codec == CODEC_ID_OPUS {
+            return Self::opus(params, timebase);
+        }
         let decoder = symphonia::default::get_codecs()
             .make_audio_decoder(params, &AudioDecoderOptions::default())
             .map_err(|err| platform_error(&err))?;
@@ -229,6 +268,41 @@ impl AudioStream {
             .ok_or_else(|| PlatformError::Unsupported {
                 what: "an audio stream without channels".into(),
             })?;
+        Self::with(Decoder::Symphonia(decoder), downmix, rate, timebase)
+    }
+
+    /// An Opus stream: its identification header is `params`' extra data.
+    fn opus(params: &AudioCodecParameters, timebase: Timebase) -> Result<Self, PlatformError> {
+        let head = params
+            .extra_data
+            .as_deref()
+            .and_then(opus::Head::parse)
+            .ok_or_else(|| PlatformError::Unsupported {
+                what: "an Opus stream without a header this decodes".into(),
+            })?;
+        let stream = OpusStream::new(&head).map_err(|err| PlatformError::Unsupported {
+            what: format!("this Opus stream's layout ({err})"),
+        })?;
+        let downmix =
+            Downmix::ordered(stream.channels(), head.positions().as_deref()).ok_or_else(|| {
+                PlatformError::Unsupported {
+                    what: "an audio stream without channels".into(),
+                }
+            })?;
+        Self::with(
+            Decoder::Opus(Box::new(stream)),
+            downmix,
+            opus::RATE,
+            timebase,
+        )
+    }
+
+    fn with(
+        decoder: Decoder,
+        downmix: Downmix,
+        rate: u32,
+        timebase: Timebase,
+    ) -> Result<Self, PlatformError> {
         let format = AudioFormat::new(rate, downmix.layout(), SampleFormat::F32Interleaved)?;
         Ok(Self {
             decoder,
@@ -236,6 +310,7 @@ impl AudioStream {
             format,
             timebase,
             bad_packets: 0,
+            expected: None,
         })
     }
 
@@ -255,35 +330,94 @@ impl AudioStream {
         &mut self,
         packet: &symphonia::core::packet::Packet,
     ) -> Result<Option<AudioBuffer>, PlatformError> {
-        let decoded = match self.decoder.decode(packet) {
-            Ok(decoded) => decoded,
-            Err(Error::DecodeError(why)) => {
+        let decoded = match &mut self.decoder {
+            Decoder::Symphonia(decoder) => match decoder.decode(packet) {
+                Ok(decoded) => {
+                    let mut samples = Vec::new();
+                    decoded.copy_to_vec_interleaved::<f32>(&mut samples);
+                    // Gapless decoding drops the packet's first `trim_start` frames (an
+                    // MP3's encoder delay), so the block starts that much after the
+                    // packet.
+                    Decoded::Samples(samples, packet.trim_start.get())
+                }
+                Err(Error::DecodeError(why)) => Decoded::Bad(why.to_string()),
+                Err(err) => return Err(platform_error(&err)),
+            },
+            Decoder::Opus(stream) => match stream.decode(&packet.data) {
+                Ok(samples) => {
+                    // Opus trims here what the container says to (Ogg's pre-skip and
+                    // end padding): symphonia's decoders do it themselves.
+                    let channels = stream.channels();
+                    let frames = samples.len() / channels;
+                    let start = usize::try_from(packet.trim_start.get())
+                        .unwrap_or(usize::MAX)
+                        .min(frames);
+                    let end = usize::try_from(packet.trim_end.get())
+                        .unwrap_or(usize::MAX)
+                        .min(frames - start);
+                    let kept = samples[start * channels..(frames - end) * channels].to_vec();
+                    Decoded::Samples(kept, packet.trim_start.get())
+                }
+                Err(err) => Decoded::Bad(err.to_string()),
+            },
+        };
+        let (samples, trim) = match decoded {
+            Decoded::Samples(samples, trim) => (samples, trim),
+            Decoded::Bad(why) => {
                 self.bad_packets += 1;
                 if self.bad_packets > MAX_BAD_PACKETS {
-                    return Err(platform_error(&Error::DecodeError(why)));
+                    return Err(PlatformError::Os {
+                        call: CALL,
+                        code: None,
+                        message: format!("the audio stops decoding: {why}"),
+                    });
                 }
                 tracing::debug!(why, "skipping an audio packet that didn't decode");
                 return Ok(None);
             }
-            Err(err) => return Err(platform_error(&err)),
         };
         self.bad_packets = 0;
-        if decoded.frames() == 0 {
+        if samples.is_empty() {
             return Ok(None);
         }
-        let mut samples = Vec::new();
-        decoded.copy_to_vec_interleaved::<f32>(&mut samples);
         let samples = self.downmix.apply(samples);
-        // Gapless decoding drops the packet's first `trim_start` frames (an MP3's encoder
-        // delay), so the block starts that much after the packet.
-        let trim = i64::try_from(packet.trim_start.get()).unwrap_or(0);
+        let trim = i64::try_from(trim).unwrap_or(0);
         let pts = MediaTime::new(packet.pts.get().saturating_add(trim), self.timebase);
+        let pts = self.follow_on(pts, samples.len() / self.format.channels())?;
         Ok(Some(AudioBuffer::new(self.format, pts, samples)?))
+    }
+
+    /// The time a block of `frames` decoded from a packet at `pts` starts at. A
+    /// container that times packets coarsely (Matroska in milliseconds) puts a block
+    /// up to a tick off from where the last one ended; within a tick, the block
+    /// follows on exactly, so the audio has no gaps or overlaps.
+    fn follow_on(&mut self, pts: MediaTime, frames: usize) -> Result<MediaTime, PlatformError> {
+        let rate = self.format.sample_rate();
+        let samples = Timebase::per_second(rate)?;
+        let at = pts.rescale(samples, Rounding::Nearest)?;
+        // One packet tick, in samples, rounded up.
+        let tick = (u64::from(rate) * u64::from(self.timebase.num()))
+            .div_ceil(u64::from(self.timebase.den()));
+        let tick = i64::try_from(tick).unwrap_or(i64::MAX);
+        let start = match self.expected {
+            Some(expected) if (at.ticks() - expected.ticks()).abs() <= tick => expected,
+            _ => at,
+        };
+        let frames = i64::try_from(frames).unwrap_or(i64::MAX);
+        self.expected = Some(MediaTime::new(
+            start.ticks().saturating_add(frames),
+            samples,
+        ));
+        Ok(start)
     }
 
     /// Forgets what the decoder holds, after a seek.
     pub(crate) fn reset(&mut self) {
-        self.decoder.reset();
+        self.expected = None;
+        match &mut self.decoder {
+            Decoder::Symphonia(decoder) => decoder.reset(),
+            Decoder::Opus(stream) => stream.reset(),
+        }
     }
 }
 

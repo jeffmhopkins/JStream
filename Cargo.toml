@@ -263,6 +263,10 @@ symphonia-codec-aac = { version = "0.6", default-features = false }
 # crate demuxes those itself) and, above all, no `aac`: AAC decoding waits for ADR-0072
 # (g)'s patent check. The crate turns on only the features it uses.
 symphonia = { version = "0.6", default-features = false }
+# Linux's media-file Opus audio (ADR-0159): a pure-Rust decoder (and encoder, unused),
+# BSD-3-Clause, with no dependencies and no default features. Its `unsafe` is confined to
+# SIMD kernels, each with a scalar twin it is tested against.
+rusty-opus = "1.2"
 symphonia-core = { version = "0.6", default-features = false }
 thiserror = { version = "2", default-features = false, features = ["std"] }
 tokio = { version = "1", default-features = false }
