@@ -1117,10 +1117,10 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
   of the frame). A separable gaussian (sigma radius / 3). Its cost is bounded for every
   radius: it runs at the smallest working scale of 1, 2, 4, 8 or 16 that keeps radius /
   scale at 8 or less, so a box downsample reads at most 64 texels a texel and each
-  blur pass at most 17. The bound is low for software rasterizers, which pay for every
+  blur pass at most 17 (9 where it can read them in pairs, below). The bound is low for software rasterizers, which pay for every
   load: a radius of 12 runs at half scale, about a sixth of the loads at full scale
-  (#1070). The weights are made once on the CPU, and a premultiplied linear input
-  (a layer, an upload) is read in pairs: one bilinear sample between two texels,
+  (#1070). The weights are made once on the CPU, and on every adapter a premultiplied
+  linear input (a layer, an upload) is read in pairs: one bilinear sample between two texels,
   placed by their weights, so a pass makes at most 9 reads. A transparent edge is read
   in pairs only where the whole span lies inside the input, since the sampler clamps;
   other inputs are read a texel at a time. On llvmpipe a radius of 8 costs about a

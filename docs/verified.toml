@@ -207,7 +207,7 @@ stamp = { hash = "b3:64dbb25a25fcaabd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:57c8d7720e0ae148", by = "agent:claude", note = "Re-read the one-scene compositor summary: it doesn't describe the resolve's load op or the blur's reads, and nothing it states changes." }
+stamp = { hash = "b3:290d85b67dd84ed5", by = "agent:claude", note = "The one-scene compositor summary doesn't cover the blur's reads or test helpers; nothing it states changes." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:f0debc77953a941e", by = "agent:claude", note = "Added the environment light's sky replacing the studio gradient for scene-lit models; checked against render model.wgsl. | merge: Merged #1490's round 1 fix: ModelDraw gains floor beside environment, the frame uniform's cut plane follows the environment block, and the mirrored models keep their environment while cut at the floor. The section's environment text and the fix's lines both hold. | merge: Merged wave/alpha5: #1491 depth bloom (this PR's base, squashed), #1490 reflections, #1489 shafts, #1488 shadows, #1487 volumetric fog and earlier 3D and PTZ work. The environment sky and the wave's 3D passes read as described. | kept from the merged side: Its scene-filter depth sentence still holds; depth_bloom is a filter detail in the render README. | merge: Merged #1490's round 1 fix (ModelDraw::floor and the shader's cut plane, corners_in_scene, the mirrored pass cut at its floor) under depth_bloom; the section's depth_bloom text and the fix's own lines both still hold. | merge: Merged wave/alpha5: #1490 floor reflections (this PR's base, squashed), #1489 shafts, #1488 shadows, #1487 volumetric fog and earlier 3D and PTZ work. The depth-aware filters read as described; each is benched once. | kept from the merged side: Review round 1 B1 on #1490: the mirrored floor pass is cut at the floor. ModelDraw::floor cuts models in model.wgsl fs and fs_depth (frame cut plane), draw_reflection leaves out cards whose corners_in_scene lie at or below it, and draw_view_depth takes the floor through DepthFrom. The core, render and protocol READMEs say so and name the two new tests; no other claim in the section changed. | merge: Merged wave/alpha5: #1489 light shafts, #1488 shadows, #1487 volumetric fog (this stack's bases, squashed), #1499 PTZ counters (0.121), and earlier 3D and PTZ work. The reflection pass and depth-aware filters read as described; the bench lists volumetric fog once. | kept from the merged side: B1 on #1488: the wave merge left volumetric_fog_1080p_camera listed twice in the composite bench; one entry removed, so each depth-aware filter is benched once. Section text still holds. | kept from the merged side: the depth-aware filter paragraph still holds; volumetric fog reads the same depth plus the camera view | merge: Merged wave/alpha5: #1485's squash (this PR's base, the same AO content), #1484 billboards, #1486/#1496 PTZ, #1493 and ADR-0151. Depth-aware filters, now three, still read the view depth as described. | kept from the merged side: the depth-aware filter paragraph still holds with depth_fog first; ambient occlusion reads the same view depth" }
@@ -372,7 +372,7 @@ stamp = { hash = "b3:96cc867cf8930c59", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:ae0efdf237e5f7d6", by = "agent:claude", note = "The bounded-filter sentence now names shadow and glow besides blur and mask; checked against drop_shadow.rs and glow.rs." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/gauss.rs"]
-stamp = { hash = "b3:7af6ccc22e4c8034", by = "agent:claude", note = "Re-read the one-scene compositor summary: it doesn't describe the resolve's load op or the blur's reads, and nothing it states changes." }
+stamp = { hash = "b3:0af8588cd0b7ae81", by = "agent:claude", note = "The one-scene compositor summary doesn't cover the blur's reads or test helpers; nothing it states changes." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/filter/multipass/gauss.wgsl"]
 stamp = { hash = "b3:0e03c6a3dcdf90a8", by = "agent:claude", note = "Re-read the one-scene compositor summary: it doesn't describe the resolve's load op or the blur's reads, and nothing it states changes." }
@@ -534,7 +534,7 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: five
 stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: the background sentence says the fade between backgrounds is in the project's blending space, matching color.rs and scene.rs" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:430a9c39b4010e58", by = "agent:claude", note = "light_card is one more model-pipeline draw in the compositor; the pipeline overview holds | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). Lit cards join the wave's 3D passes as described. | kept from the merged side: render changes only carry the billboard field; the pipeline is unchanged, the facing happens in protocol geometry" }
+stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "The one-scene compositor summary doesn't cover the blur's reads or test helpers; nothing it states changes." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests/blend.rs"]
 stamp = { hash = "b3:f1a28642fd1fdea0", by = "agent:claude-settings", note = "#1230: five backdrop modes; the blending space picks linear (ADR-0082) or the encoded target with one decode pass after the last item (ADR-0126); output stays premultiplied linear FP16." }
@@ -2742,7 +2742,7 @@ stamp = { hash = "b3:5486d915cde8a63c", by = "agent:ptz-builder", note = 'ADR-01
 stamp = { hash = "b3:d9b91e488d8d9030", by = "agent:shader-source", note = "Hot reload paragraph now names PackWatcher::mark_stale (forces the next poll to reload a folder a host replaced), load_pack (a poll's caught load on LOAD_THREAD, for checking a staged pack) and manifest_pack_id (the manifest's pack ID without shader validation), the three additions in pack.rs, watch.rs and lib.rs for ADR-0097." }
 
 ["CRATE-jstream-effects#purpose"."dep:crates/jstream-render/README.md#filters"]
-stamp = { hash = "b3:ad887856eb6d6d26", by = "agent:claude", note = "Re-read against the render filters section's blur change (CPU weights, paired bilinear reads): the effects crate's purpose and its use of the filter harness are unchanged." }
+stamp = { hash = "b3:df51b2006d3a32a7", by = "agent:claude", note = "The render filters section's blur wording changed (pairs on every adapter, 17 or 9 reads); the effects crate's use of the filter harness is unchanged." }
 
 ["CRATE-jstream-effects#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-effects"]
 stamp = { hash = "b3:f31c0c24cd5ef737", by = "agent:claude@session_01GC9edrfYrhXX46Dk9jVGNX", note = "X1 render hookup onto wave/m1-2: re-read; dependency paragraph names jstream-render, the Drawing paragraph matches pack.rs (ExternalFilter, video_filter, FILTER_PRELUDE) and the GPU draw/reload test; the fixture prelude is gone and covers is src/** only" }
@@ -4914,7 +4914,7 @@ stamp = { hash = "b3:96cc867cf8930c59", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:ae0efdf237e5f7d6", by = "agent:claude", note = "Re-read the render_into content paragraph and pass steps; only filter-side reach changed (shadow, glow), which this section points to Filters for." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/gauss.rs"]
-stamp = { hash = "b3:7af6ccc22e4c8034", by = "agent:claude", note = "Step 4 Resolve now says a software adapter starts the resolve pass loaded rather than cleared, since its triangle writes every texel, and a GPU still clears; the rest of the pipeline steps hold." }
+stamp = { hash = "b3:0af8588cd0b7ae81", by = "agent:claude", note = "Only tests and the params refactor in gauss.rs changed; the pipeline steps, including the resolve's load on software adapters, still hold." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/filter/multipass/gauss.wgsl"]
 stamp = { hash = "b3:0e03c6a3dcdf90a8", by = "agent:claude", note = "Step 4 Resolve now says a software adapter starts the resolve pass loaded rather than cleared, since its triangle writes every texel, and a GPU still clears; the rest of the pipeline steps hold." }
@@ -5076,7 +5076,7 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: step
 stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: the Color bullet says over_black and mix blend in the Blending space given, encoded for srgb and linear light for linear, matching color.rs and scene.rs" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:430a9c39b4010e58", by = "agent:claude", note = "Added the Lit cards paragraph: texture-space shading through CARD_BOUNDS, per-call material with card set, unpremultiplied base, emissive times base, sees_front | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). CardDraw and the five-vec4 material sit on the wave's model pipeline; still holds. | kept from the merged side: transition.rs switches billboard with the other booleans at the midpoint; the design holds" }
+stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "Only tests and the params refactor in gauss.rs changed; the pipeline steps, including the resolve's load on software adapters, still hold." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests/blend.rs"]
 stamp = { hash = "b3:f1a28642fd1fdea0", by = "agent:claude-settings", note = "#1230: step 3 now describes the Blending::Srgb pass (encoded clear, ENCODED pipelines, decode via a full backdrop copy and fs_decode) and the exact-at-1 curves; the tests in tests/blend.rs check every mode in both spaces." }
@@ -5100,7 +5100,7 @@ stamp = { hash = "b3:25a92fc0e30b4bb7", by = "agent:claude", note = "Added the L
 stamp = { hash = "b3:06836e5d0f85ce41", by = "agent:claude", note = "Composite step 3 now says a re-drawn transparent layer with known content is loaded and wiped over that content (Wipe, #1449) instead of cleared whole; matches record_composite's Start::Wipe path in render_into and render()'s unchanged clear." }
 
 ["CRATE-jstream-render#filters"."body"]
-stamp = { hash = "b3:ad887856eb6d6d26", by = "agent:claude", note = "blur now says its weights are made on the CPU and a premultiplied linear input is read in bilinear pairs (at most 9 reads a pass), a transparent edge only where the span is inside the input; tap bound, scales and scratch layers unchanged." }
+stamp = { hash = "b3:df51b2006d3a32a7", by = "agent:claude", note = "blur text now says 17 loads a pass, 9 where they pair, and that pairing runs on every adapter, as gauss.wgsl does (reviewer N1, N5 on #1541)." }
 
 ["CRATE-jstream-render#filters"."dep:docs/adr/0025-typed-settings-kind-descriptors.md"]
 stamp = { hash = "b3:b655210653447199", by = "agent:wave-owner", note = "main into wave/m1-2: main changed nothing under src/filter/ or ADR-0025/0026; the section (kinds per module, harness, V3 assets and references, not wired until V0) still matches filter/**; its wave stamp was dropped by the merge, so re-stamped here" }
@@ -5235,7 +5235,7 @@ stamp = { hash = "b3:96cc867cf8930c59", by = "agent:wave-owner", note = "main in
 stamp = { hash = "b3:ae0efdf237e5f7d6", by = "agent:claude", note = "Rewrote the Bounded filters bullet: drop shadow and glow now give their offset plus blur span and move the bound into their grown shape frame (Bound::placed); every reach is whole support, so a whole draw is zero outside the bound (review N4); opt-ins join the bounded-vs-whole test (N2). Checked against pass.rs, drop_shadow.rs, glow.rs." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/gauss.rs"]
-stamp = { hash = "b3:7af6ccc22e4c8034", by = "agent:claude", note = "blur now says its weights are made on the CPU and a premultiplied linear input is read in bilinear pairs (at most 9 reads a pass), a transparent edge only where the span is inside the input; tap bound, scales and scratch layers unchanged." }
+stamp = { hash = "b3:0af8588cd0b7ae81", by = "agent:claude", note = "blur text now says 17 loads a pass, 9 where they pair, and that pairing runs on every adapter, as gauss.wgsl does (reviewer N1, N5 on #1541)." }
 
 ["CRATE-jstream-render#filters"."file:crates/jstream-render/src/filter/multipass/gauss.wgsl"]
 stamp = { hash = "b3:0e03c6a3dcdf90a8", by = "agent:claude", note = "blur now says its weights are made on the CPU and a premultiplied linear input is read in bilinear pairs (at most 9 reads a pass), a transparent edge only where the span is inside the input; tap bound, scales and scratch layers unchanged." }
@@ -5535,7 +5535,7 @@ stamp = { hash = "b3:96cc867cf8930c59", by = "agent:claude@session_011WVSyj9Zba1
 stamp = { hash = "b3:ae0efdf237e5f7d6", by = "agent:claude", note = "Re-read: shadow and glow bounds are inside the filter harness and don't change what one scene means." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/gauss.rs"]
-stamp = { hash = "b3:7af6ccc22e4c8034", by = "agent:claude", note = "Re-read the crate's purpose against the software resolve load and the paired blur reads: neither changes what one scene means, the crate's layer or its scope." }
+stamp = { hash = "b3:0af8588cd0b7ae81", by = "agent:claude", note = "Tests and a params refactor only: the crate's purpose and scope are unchanged." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/filter/multipass/gauss.wgsl"]
 stamp = { hash = "b3:0e03c6a3dcdf90a8", by = "agent:claude", note = "Re-read the crate's purpose against the software resolve load and the paired blur reads: neither changes what one scene means, the crate's layer or its scope." }
@@ -5697,7 +5697,7 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: the 
 stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: Color::over_black and mix take a Blending; the purpose names no colour space for them, so it holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:430a9c39b4010e58", by = "agent:claude", note = "Adds Compositor::light_card and CardDraw; purpose holds | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). CardDraw and the five-vec4 material sit on the wave's model pipeline; still holds. | kept from the merged side: tests.rs and transition.rs only carry the billboard field through literals and the geometry lerp" }
+stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "Tests and a params refactor only: the crate's purpose and scope are unchanged." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests/blend.rs"]
 stamp = { hash = "b3:f1a28642fd1fdea0", by = "agent:claude-settings", note = "#1230: the blend bullet lists five backdrop modes (no _srgb), and a new bullet describes set_blending, the encoded target in srgb and the decode pass; checked against blend.rs, compositor.rs and both shaders." }
@@ -5733,7 +5733,7 @@ stamp = { hash = "b3:7db1a4e21a6cee80" }
 stamp = { hash = "b3:e2b28a2df72d9e17" }
 
 ["CRATE-jstream-render#testing"."file:crates/jstream-render/src/tests.rs"]
-stamp = { hash = "b3:430a9c39b4010e58", by = "agent:claude", note = "tests.rs only adds surface: None to geometry literals; testing holds | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). CardDraw and the five-vec4 material sit on the wave's model pipeline; still holds. | kept from the merged side: tests.rs literals gain billboard: false; the testing section holds" }
+stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "Re-read the testing section against the new gauss device tests (paired vs per-texel blur, the drop shadow's alpha against a CPU gaussian) and the srgb_texture_of helper: the section's adapters, skips and pixel-test rules still describe them." }
 
 ["CRATE-jstream-server#design"."body"]
 stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "This branch adds agent approval (ADR-0131) at 0.108. After merging wave/alpha5's network listener, the gate refuses the host UI's token there like the control token (README updated, new network test); the approval, configuration and token-file entries sit beside the wave's network listener and certificate entries. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed | merge: the wave's #1366 (Allow devices on my network turns on the network listener) merged in cleanly; this section's text is untouched by the renumber | kept from the merged side: open question 1 says the desktop app turns the listener on with Allow devices on my network; merged with #1364's N1 restamp | merge: the wave brought #1364's squash, which this branch already had; this branch's desktop network switch text is unchanged | kept from the merged side: The host's side now says pairing.start carries network (0.101), absent without a listener; open question 1 now says the panel and jstream pair show addresses and fingerprint, only the desktop setting remains; matches admitted.rs, lib.rs and the new network test | kept from the merged side: listener.rs now sets TCP_NODELAY on each accepted stream (#1440); Purpose's Listener bullet and Design's listener paragraph now say so, and it covers the WebSocket, MCP HTTP and TLS network listeners since all accept through Limited" }
