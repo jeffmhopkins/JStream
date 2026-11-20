@@ -1,9 +1,12 @@
 //! VA-API decoding on a real GPU (`hw-tests`, run by hand):
 //! `cargo test -p jstream-platform-linux --features hw-tests -- --ignored decodes_`.
 //!
-//! H.264, VP8 and VP9 decoding are exact, so each frame must match FFmpeg's software decode
-//! of the same file bit for bit: the hashes below are FNV-1a over each frame's NV12
-//! bytes from `ffmpeg -i <file> -f rawvideo -pix_fmt nv12 -`.
+//! H.264, VP8, VP9 and AV1 decoding are exact, so each frame must match FFmpeg's software
+//! decode of the same file bit for bit: the hashes below are FNV-1a over each frame's
+//! NV12 bytes from `ffmpeg -i <file> -f rawvideo -pix_fmt nv12 -` (AV1's with `-c:v
+//! libdav1d`). AV1's film grain is specified to the bit too, but conformance doesn't
+//! require a decoder to add it exactly; dav1d and libaom do, and a GPU that doesn't fails
+//! `decodes_av1_film_grain_bit_exact` alone.
 
 use std::path::Path;
 
@@ -285,6 +288,105 @@ const VP8_PARTS: [u64; 30] = [
     0x6700_28e3_a893_3b63,
 ];
 
+/// `av1-aom.webm` (libaom: 2x2 tiles, hidden frames shown later), decoded by dav1d and
+/// by libaom alike.
+const AV1_AOM: [u64; 30] = [
+    0xf8da_d663_b8b0_21b1,
+    0x9d6d_c689_416e_e405,
+    0xf0d0_9a8b_a8b1_0a4e,
+    0x4b0c_e1a7_eed2_7cbf,
+    0x30ff_d9e1_9e46_9841,
+    0x6eb2_f6c1_4fe5_fa1b,
+    0x5dd3_fd22_d95e_c889,
+    0x6b53_fe4f_3661_ee7a,
+    0xaffd_4a6f_f64a_bf70,
+    0x169c_4ccb_4ec1_bd25,
+    0x2fbc_24d3_25a6_b620,
+    0x8851_20de_254d_e459,
+    0xde60_905a_5bed_154d,
+    0x7383_2d29_d3be_2187,
+    0xd08d_2edf_dab1_508f,
+    0xaa8f_c4f1_2d00_113b,
+    0x0e02_580b_4492_d66f,
+    0x0f27_346a_4ea8_668b,
+    0xf3c8_d7e7_c545_1cf5,
+    0xf835_cdc0_7511_f43d,
+    0x0a51_42a0_510e_067b,
+    0x6606_1c2c_9354_b3ab,
+    0x6a92_185c_cd29_0c40,
+    0xdaa0_e375_aafb_d074,
+    0x65b4_8f8b_168c_8c9d,
+    0x8dd2_bdb2_3182_ef8e,
+    0xcf98_46c8_39a4_3e16,
+    0x339a_f5d4_320a_8d75,
+    0x309c_3172_f4fb_3cb8,
+    0x6a55_6515_1040_f59f,
+];
+
+/// `av1-gm.webm` (libaom: global motion, loop restoration, segmentation, delta q),
+/// decoded by dav1d and by libaom alike.
+const AV1_GM: [u64; 24] = [
+    0xb382_6ea4_7b5a_8251,
+    0xc4f0_0716_f3a0_b782,
+    0xf11c_7eaa_2e91_0648,
+    0x8a5d_d7f4_91a3_5349,
+    0xb6db_91bf_10e1_64ec,
+    0xaf2e_9163_92c8_d76a,
+    0xae6e_a05b_18c5_c709,
+    0x264e_e412_3631_5674,
+    0xed82_f59f_ae29_b1e2,
+    0x7d18_10b6_97ff_1644,
+    0xf35e_257b_d3fd_ae57,
+    0x160c_e0f0_47be_2f96,
+    0xa2fb_0b4d_62eb_1dbd,
+    0xbe2b_a4dc_8b55_be27,
+    0x8e1b_d557_7865_65f8,
+    0x7d58_a431_ee0a_e51b,
+    0x2081_d7a6_0173_df79,
+    0x2733_51c9_befa_5b51,
+    0xebdc_fec5_464d_5f01,
+    0xd4e9_f4c4_1f38_46bb,
+    0x58fa_c5f3_fea3_2d47,
+    0xcf64_dc0c_5f8c_2091,
+    0x75a0_cd99_3fc9_dfb9,
+    0x922a_76b0_bc25_b69d,
+];
+
+/// `av1-grain.webm` (SVT-AV1, film grain on every frame), decoded with its grain by dav1d
+/// and by libaom alike.
+const AV1_GRAIN: [u64; 30] = [
+    0xc686_3207_e815_70ba,
+    0xb99b_daa7_a65f_570e,
+    0xf88a_bb86_c40b_0d1e,
+    0xd86f_3950_e089_c2b2,
+    0x0786_4252_9124_58ab,
+    0x1fa0_48f0_8d9c_975e,
+    0xf4e7_4ecb_5998_6918,
+    0xb4e0_80ef_dc6d_a04f,
+    0xc10e_d7d9_e4f1_12e7,
+    0x2842_fecb_5231_d518,
+    0x8481_cae2_2d28_9b25,
+    0x0985_87c0_9910_8f12,
+    0xf05b_75b4_3b54_8e91,
+    0xa202_492d_767b_3c72,
+    0x2884_b321_7c5d_64a0,
+    0x4769_eeee_e8cb_6fc7,
+    0xd119_d5fe_22fa_3810,
+    0x7790_668e_b493_6756,
+    0x803d_3adf_acf4_ba9f,
+    0xddb3_91b1_5db1_6dc3,
+    0xd5c8_3b0a_820c_c015,
+    0x6b22_6c83_5a27_2092,
+    0xc00c_c60a_6f16_238b,
+    0x2cdb_df1f_baa3_d52d,
+    0x1b5f_1a3f_b5cf_0278,
+    0x085c_48ea_0ead_b158,
+    0x70af_b581_f016_e1e1,
+    0x42d3_0bcb_5cbc_1c04,
+    0xf723_a732_3f02_5fa9,
+    0x0844_9342_de6f_0d35,
+];
+
 fn fnv(planes: &[&[u8]]) -> u64 {
     let mut x: u64 = 0xcbf2_9ce4_8422_2325;
     for plane in planes {
@@ -456,4 +558,45 @@ fn a_vp8_seek_starts_at_the_key_frame_before() {
         hashes.push(fnv(&planes));
     }
     assert_eq!(hashes, VP8_PARTS[15..]);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API AV1 decoder"]
+fn decodes_av1_tiles_and_hidden_frames_bit_exact() {
+    decodes("av1-aom.webm", &AV1_AOM);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API AV1 decoder"]
+fn decodes_av1_global_motion_and_restoration_bit_exact() {
+    decodes("av1-gm.webm", &AV1_GM);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API AV1 decoder"]
+fn decodes_av1_film_grain_bit_exact() {
+    decodes("av1-grain.webm", &AV1_GRAIN);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API AV1 decoder"]
+fn an_av1_seek_starts_at_the_key_frame_before() {
+    // The grain stream has key frames at 0 and 0.5 s, so a seek to 0.6 s decodes from
+    // the second and shows the frames from 0.6 s on, bit for bit.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/media/testdata/av1-grain.webm");
+    let config = MediaDecoderConfig {
+        video_format: PixelFormat::Nv12,
+        hardware: HardwarePreference::Require,
+        audio: false,
+    };
+    let mut decoder = LinuxMediaDecoders.open(&path, &config).expect("opens");
+    decoder
+        .seek(MediaTime::new(600_000, Timebase::MICROS))
+        .expect("seeks");
+    let mut hashes = Vec::new();
+    while let Some(frame) = decoder.next_video().expect("decodes") {
+        let planes: Vec<&[u8]> = frame.planes().iter().map(|p| p.data()).collect();
+        hashes.push(fnv(&planes));
+    }
+    assert_eq!(hashes, AV1_GRAIN[18..]);
 }

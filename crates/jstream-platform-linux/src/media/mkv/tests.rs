@@ -356,3 +356,19 @@ fn an_ebml_lace_of_one_frame_is_one_frame() {
     let mut demuxed = open_bytes(&file(&blocks, &[], false)).expect("Matroska");
     assert_eq!(frames(&mut demuxed), vec![vec![9; 10]]);
 }
+
+#[test]
+fn reads_a_webms_av1_track_with_its_sequence_header() {
+    let webm = open("av1-aom.webm");
+    let video = webm.video.as_ref().expect("video");
+    let Codec::Av1(obus) = &video.codec else {
+        panic!("{:?}", video.codec);
+    };
+    let mut parser = crate::media::av1::Parser::new();
+    parser.parse(obus).expect("parses");
+    let seq = parser
+        .sequence()
+        .expect("CodecPrivate holds the sequence header");
+    assert_eq!((seq.max_frame_width, seq.max_frame_height), (208, 120));
+    assert!(video.samples[0].sync);
+}

@@ -69,9 +69,9 @@ menu. On other distributions, Debian included, download
 Settings and scenes are in `~/.local/share/jstream`. Without a VA-API GPU encoder, JStream
 offers to download Cisco's OpenH264 for streaming. On Linux a media-file source plays
 audio files (WAV, FLAC, Ogg Vorbis, Opus and MP3), and H.264 video in MP4, MOV and
-Matroska files and VP8 and VP9 video in WebM files through a VA-API GPU decoder, with
-MP3, FLAC or Vorbis audio (and Opus in Matroska and WebM). AV1 and AAC don't play there yet,
-and a file's AAC audio is skipped. The virtual camera needs the v4l2loopback module
+Matroska files, VP8 and VP9 video in WebM files and AV1 video in MP4, Matroska and WebM
+files through a VA-API GPU decoder, with MP3, FLAC or Vorbis audio (and Opus in Matroska
+and WebM). AAC doesn't play there yet, and a file's AAC audio is skipped. The virtual camera needs the v4l2loopback module
 ([The virtual camera](#vcam)).
 
 Your scenes, sources and outputs are one project file. **File › Save project as…** saves

@@ -18,7 +18,8 @@
 //! `LinuxMediaDecoders`, the media-file backend ADR-0072 lays out (so far symphonia's
 //! readers and decoders for WAV, FLAC, Ogg Vorbis and MP3 files, Opus in Ogg, Matroska
 //! and WebM through `rusty-opus` (ADR-0159), and H.264 video in MP4, MOV and Matroska
-//! files and VP8 and VP9 in WebM decoded through VA-API), and
+//! files, VP8 and VP9 in WebM and AV1 in MP4, Matroska and WebM decoded through
+//! VA-API), and
 //! `GlobalHotkeys`, the desktop app's global hotkeys as X11 key grabs (ADR-0112), and its
 //! Browse dialogs through the FileChooser portal (`portal_pick_path`). `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
 //! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and

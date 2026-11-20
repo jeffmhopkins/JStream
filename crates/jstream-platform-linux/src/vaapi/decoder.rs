@@ -84,24 +84,27 @@ impl Resources {
     fn buffer<T>(&self, kind: c_int, value: &T) -> Result<Id, PlatformError> {
         // SAFETY: plain data; libva copies `size_of::<T>()` bytes from the pointer while
         // `value` is borrowed and doesn't write through it.
-        unsafe { self.raw_buffer(kind, (value as *const T).cast(), size_of::<T>()) }
+        unsafe { self.raw_buffer(kind, (value as *const T).cast(), size_of::<T>(), 1) }
     }
 
     /// # Safety
-    /// `data` points to `size` readable bytes.
+    /// `data` points to `elements` items of `size` readable bytes each.
     unsafe fn raw_buffer(
         &self,
         kind: c_int,
         data: *const c_void,
         size: usize,
+        elements: usize,
     ) -> Result<Id, PlatformError> {
-        let size = c_uint::try_from(size).map_err(|_| PlatformError::InvalidState {
+        let too_large = || PlatformError::InvalidState {
             what: "vaCreateBuffer",
             state: "the buffer is larger than 4 GiB",
-        })?;
+        };
+        let size = c_uint::try_from(size).map_err(|_| too_large())?;
+        let elements = c_uint::try_from(elements).map_err(|_| too_large())?;
         let mut id = INVALID_ID;
-        // SAFETY: the context is live; `data` holds `size` bytes (this function's
-        // contract), which libva copies; `id` is a valid out-pointer.
+        // SAFETY: the context is live; `data` holds `elements` items of `size` bytes
+        // (this function's contract), which libva copies; `id` is a valid out-pointer.
         // C: `VAStatus vaCreateBuffer(VADisplay, VAContextID, VABufferType,
         // unsigned int size, unsigned int num_elements, void *data, VABufferID *buf_id)`.
         let status = unsafe {
@@ -110,7 +113,7 @@ impl Resources {
                 self.context.unwrap_or(INVALID_ID),
                 kind,
                 size,
-                1,
+                elements,
                 data.cast_mut(),
                 &mut id,
             )
@@ -347,7 +350,18 @@ impl Core {
         // SAFETY: libva copies the bytes while `data` is borrowed.
         unsafe {
             self.res
-                .raw_buffer(dec_buffer::SLICE_DATA, data.as_ptr().cast(), data.len())
+                .raw_buffer(dec_buffer::SLICE_DATA, data.as_ptr().cast(), data.len(), 1)
+        }
+    }
+
+    /// A parameter buffer of `kind` holding a copy of `values`, one element each (an
+    /// AV1 tile group's slice parameters).
+    pub(super) fn buffer_array<T>(&self, kind: c_int, values: &[T]) -> Result<Id, PlatformError> {
+        // SAFETY: plain data; libva copies `values.len()` elements of `size_of::<T>()`
+        // bytes while `values` is borrowed, and doesn't write through the pointer.
+        unsafe {
+            self.res
+                .raw_buffer(kind, values.as_ptr().cast(), size_of::<T>(), values.len())
         }
     }
 

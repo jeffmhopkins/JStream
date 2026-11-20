@@ -27,6 +27,14 @@ pub(crate) mod audio;
         reason = "used by the Linux movie decoder; built elsewhere for its tests"
     )
 )]
+pub(crate) mod av1;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
 pub(crate) mod demux;
 #[cfg_attr(
     not(target_os = "linux"),
