@@ -12,8 +12,9 @@
 //! `media::h264`'s planner lays out, and reads each frame back. The picture, scaling
 //! list and slice parameters it submits are built in `h264_dec`, platform-independent
 //! and tested everywhere too. `VaapiVp9Decoder` (`vp9_decoder`) does the same for VP9
-//! from `media::vp9`'s frame headers, its parameters built in `vp9_dec`; both share
-//! `decoder::Core`, the context, surfaces and read-back.
+//! from `media::vp9`'s frame headers, its parameters built in `vp9_dec`, and
+//! `VaapiVp8Decoder` (`vp8_decoder`) for VP8 from `media::vp8`'s, its parameters built
+//! in `vp8_dec`; all three share `decoder::Core`, the context, surfaces and read-back.
 
 #[cfg(target_os = "linux")]
 mod decoder;
@@ -63,6 +64,16 @@ mod upload;
         reason = "used by the Linux decoder; built elsewhere for its tests"
     )
 )]
+mod vp8_dec;
+#[cfg(target_os = "linux")]
+mod vp8_decoder;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux decoder; built elsewhere for its tests"
+    )
+)]
 mod vp9_dec;
 #[cfg(target_os = "linux")]
 mod vp9_decoder;
@@ -73,6 +84,8 @@ use jstream_platform::media::Codec;
 pub(crate) use decoder::VaapiH264Decoder;
 #[cfg(target_os = "linux")]
 pub(crate) use session::VaapiEncoder;
+#[cfg(target_os = "linux")]
+pub(crate) use vp8_decoder::VaapiVp8Decoder;
 #[cfg(target_os = "linux")]
 pub(crate) use vp9_decoder::VaapiVp9Decoder;
 

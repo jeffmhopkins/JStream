@@ -275,6 +275,24 @@ fn a_vp9_webm_opens_or_names_the_missing_decoder() {
 
 #[cfg(target_os = "linux")]
 #[test]
+fn a_vp8_webm_opens_or_names_the_missing_decoder() {
+    // An odd-sized stream with token partitions: on a machine with a VA-API VP8
+    // decoder it opens; elsewhere (CI) it names what to install.
+    match LinuxMediaDecoders.open(&testdata("vp8-parts.webm"), &config(true)) {
+        Ok(decoder) => {
+            let video = decoder.info().video.expect("video");
+            assert_eq!((video.size.width(), video.size.height()), (126, 70));
+        }
+        Err(PlatformError::MissingComponent { component, remedy }) => {
+            assert!(component.contains("VP8"), "{component}");
+            assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
+        }
+        Err(err) => panic!("{err}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
 fn vp9_beyond_profile_0_is_unsupported() {
     // An RGB (4:4:4, profile 1) VP9 stream, refused before any GPU is looked for.
     match LinuxMediaDecoders.open(&testdata("vp9-opus.webm"), &config(true)) {

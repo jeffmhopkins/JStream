@@ -276,6 +276,7 @@ struct Entry {
 fn codec(name: &str, private: Option<&[u8]>) -> Codec {
     match (name, private) {
         ("V_MPEG4/ISO/AVC", Some(record)) => Codec::Avc(record.to_vec()),
+        ("V_VP8", _) => Codec::Vp8,
         ("V_VP9", _) => Codec::Vp9,
         ("A_MPEG/L3", _) => Codec::Mp3,
         ("A_VORBIS", Some(headers)) => Codec::Vorbis(headers.to_vec()),
