@@ -16,7 +16,7 @@
 //! the stream-key and OAuth-token store (`LinuxSecrets`, ADR-0071): the Secret
 //! Service, else a `0600` file, the process's CPU time (`LinuxProcessCpu`) and its threads' (`LinuxThreadCpu`), and
 //! `LinuxMediaDecoders`, the media-file backend ADR-0072 lays out (so far symphonia's
-//! readers and decoders for WAV, FLAC, Ogg Vorbis and MP3 files, Opus in Ogg, Matroska
+//! readers and decoders for WAV, FLAC, Ogg Vorbis, MP3 and AAC-LC (ADR-0160) files, Opus in Ogg, Matroska
 //! and WebM through `rusty-opus` (ADR-0159), and H.264 video in MP4, MOV and Matroska
 //! files, VP8 and VP9 in WebM and AV1 in MP4, Matroska and WebM decoded through
 //! VA-API), and

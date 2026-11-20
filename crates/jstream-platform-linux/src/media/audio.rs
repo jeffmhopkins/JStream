@@ -1,9 +1,10 @@
-//! Audio decoding (ADR-0072 (c)): the royalty-free codecs only, PCM, FLAC, Vorbis and
-//! MP3 through symphonia, and Opus through `rusty-opus` ([`super::opus`], ADR-0159).
-//! AAC isn't built in: symphonia's `aac` feature stays off until ADR-0072 (g)'s decoder
-//! patent check says yes.
+//! Audio decoding (ADR-0072 (c)): PCM, FLAC, Vorbis and MP3 through symphonia, Opus
+//! through `rusty-opus` ([`super::opus`], ADR-0159), and AAC-LC through symphonia within
+//! ADR-0160's limits: never SBR or parametric stereo ([`super::aac`] refuses a stream
+//! that signals them).
 //!
-//! [`AudioFile`] reads a file symphonia's own readers open (WAV, FLAC, Ogg and MP3) and
+//! [`AudioFile`] reads a file symphonia's own readers open (WAV, FLAC, Ogg, MP3 and ADTS
+//! AAC) and
 //! decodes its first audio track. [`AudioStream`] is the decoding half on its own, for
 //! the packets of a container this crate demuxes itself.
 //!
@@ -23,7 +24,7 @@ use jstream_platform::{MediaAudioInfo, PlatformError};
 use super::opus::{self, OpusStream};
 use symphonia::core::audio::{Channels, Position};
 use symphonia::core::codecs::CodecParameters;
-use symphonia::core::codecs::audio::well_known::CODEC_ID_OPUS;
+use symphonia::core::codecs::audio::well_known::{CODEC_ID_AAC, CODEC_ID_OPUS};
 use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::{Error, SeekErrorKind};
 use symphonia::core::formats::probe::Hint;
@@ -244,8 +245,8 @@ impl AudioStream {
     /// A decoder for `params`, whose packets are timed in `timebase`.
     ///
     /// # Errors
-    /// [`PlatformError::Unsupported`] for a codec that isn't built in (AAC among them)
-    /// or a stream that doesn't say its rate or channels.
+    /// [`PlatformError::Unsupported`] for a codec that isn't built in, AAC beyond
+    /// AAC-LC, or a stream that doesn't say its rate or channels.
     pub(crate) fn new(
         params: &AudioCodecParameters,
         timebase: Timebase,
@@ -253,17 +254,26 @@ impl AudioStream {
         if params.codec == CODEC_ID_OPUS {
             return Self::opus(params, timebase);
         }
+        if params.codec == CODEC_ID_AAC {
+            super::aac::check(params.extra_data.as_deref().unwrap_or_default())?;
+        }
         let decoder = symphonia::default::get_codecs()
             .make_audio_decoder(params, &AudioDecoderOptions::default())
             .map_err(|err| platform_error(&err))?;
-        let rate = params
+        // The decoder's own rate: an AAC stream's config can say another than its
+        // container (implicit HE-AAC's LC core runs at half the rate).
+        let rate = decoder
+            .codec_params()
             .sample_rate
+            .or(params.sample_rate)
             .ok_or_else(|| PlatformError::Unsupported {
                 what: "an audio stream without a sample rate".into(),
             })?;
-        let downmix = params
+        let downmix = decoder
+            .codec_params()
             .channels
             .as_ref()
+            .or(params.channels.as_ref())
             .and_then(Downmix::new)
             .ok_or_else(|| PlatformError::Unsupported {
                 what: "an audio stream without channels".into(),

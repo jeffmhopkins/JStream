@@ -1,8 +1,8 @@
 //! A movie file (MP4, QuickTime, Matroska or WebM) as a [`MediaDecoder`]: the crate's
 //! own demuxers ([`super::mp4`], [`super::mkv`]), H.264, VP8, VP9 and AV1 video on the
-//! GPU through VA-API, and the audio through the crate's decoders (MP3, FLAC and Vorbis, and
-//! Opus in Matroska and WebM; AAC waits for ADR-0072 (g), so a file with that audio
-//! plays its video without sound).
+//! GPU through VA-API, and the audio through the crate's decoders (MP3, FLAC, Vorbis and
+//! AAC-LC, and Opus in Matroska and WebM). A file whose audio doesn't decode plays its
+//! video without sound.
 
 use jstream_platform::media::{AudioBuffer, FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{
@@ -111,8 +111,9 @@ impl Movie {
     /// Opens the decoders for `mp4`'s tracks.
     ///
     /// # Errors
-    /// [`PlatformError::Unsupported`] for a video codec other than H.264 and VP9, or a
-    /// file with neither video nor audio this decodes; the video decoder's errors.
+    /// [`PlatformError::Unsupported`] for a video codec other than H.264, VP8, VP9 and
+    /// AV1, or a file with neither video nor audio this decodes (naming why its audio
+    /// doesn't); the video decoder's errors.
     pub(crate) fn open(
         mut mp4: Demuxed,
         config: &MediaDecoderConfig,
@@ -121,9 +122,15 @@ impl Movie {
             Some(track) => Some(open_video(&mut mp4, track, config)?),
             None => None,
         };
-        let audio = match mp4.audio.take() {
-            Some(track) if config.audio => open_audio(track),
-            _ => None,
+        let (audio, audio_error) = match mp4.audio.take() {
+            Some(track) if config.audio => match open_audio(track) {
+                Ok(audio) => (Some(audio), None),
+                Err(err) => {
+                    tracing::info!(%err, "a movie file's audio doesn't decode");
+                    (None, Some(err))
+                }
+            },
+            _ => (None, None),
         };
         let duration = video
             .as_ref()
@@ -142,11 +149,11 @@ impl Movie {
             duration,
         };
         if info.video.is_none() && info.audio.is_none() {
-            return Err(PlatformError::Unsupported {
+            return Err(audio_error.unwrap_or_else(|| PlatformError::Unsupported {
                 what: "a movie file with no video, and no audio Linux decodes (MP3, FLAC, \
-                       Vorbis and Opus play; AAC waits for ADR-0072's decoder patent check)"
+                       Vorbis, AAC-LC and Opus play)"
                     .into(),
-            });
+            }));
         }
         Ok(Self {
             file: mp4,
@@ -230,26 +237,29 @@ fn open_video(
 
 /// The audio decoder for `track`, or `None` (logged) for a codec this doesn't decode:
 /// the video still plays.
-fn open_audio(track: Track) -> Option<Audio> {
+fn open_audio(track: Track) -> Result<Audio, PlatformError> {
     let Some(params) = track.audio_params() else {
-        tracing::info!(codec = ?track.codec, "a movie file's audio isn't decoded on Linux");
-        return None;
+        return Err(PlatformError::Unsupported {
+            what: format!(
+                "this movie file's audio codec on Linux ({}): MP3, FLAC, Vorbis, AAC-LC and \
+                 Opus play",
+                match &track.codec {
+                    Codec::Other(name) => name.as_str(),
+                    _ => "video",
+                }
+            ),
+        });
     };
-    let timebase = Timebase::per_second(track.timescale).ok()?;
-    match AudioStream::new(&params, timebase) {
-        Ok(stream) => Some(Audio {
-            track,
-            stream,
-            next: 0,
-            timebase,
-            // As for the video: what an edit list trims off the start isn't heard.
-            skip_until: Some(MediaTime::zero(Timebase::MICROS)),
-        }),
-        Err(err) => {
-            tracing::info!(%err, "a movie file's audio doesn't decode");
-            None
-        }
-    }
+    let timebase = Timebase::per_second(track.timescale)?;
+    let stream = AudioStream::new(&params, timebase)?;
+    Ok(Audio {
+        track,
+        stream,
+        next: 0,
+        timebase,
+        // As for the video: what an edit list trims off the start isn't heard.
+        skip_until: Some(MediaTime::zero(Timebase::MICROS)),
+    })
 }
 
 /// The first gap between decode times, in the track's ticks.

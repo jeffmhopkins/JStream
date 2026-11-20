@@ -333,10 +333,13 @@ fn sample_entry(stsd: &[u8], video: bool) -> Result<Entry, PlatformError> {
     let children = c.boxes().unwrap_or_default();
     let codec = match kind {
         b".mp3" => Codec::Mp3,
-        b"mp4a" => match child(&children, b"esds").map(esds_object_type) {
-            Some(Ok(0x69 | 0x6B)) => Codec::Mp3,
-            Some(Ok(0x40 | 0x66 | 0x67 | 0x68)) => Codec::Other("AAC".into()),
-            Some(Ok(other)) => Codec::Other(format!("mp4a object type 0x{other:02X}")),
+        b"mp4a" => match child(&children, b"esds").map(esds_config) {
+            Some(Ok((0x69 | 0x6B, _))) => Codec::Mp3,
+            // MPEG-4 audio (its config names the object type), or MPEG-2 AAC LC.
+            Some(Ok((0x40 | 0x67, config))) => Codec::Aac(config),
+            Some(Ok((0x66, _))) => Codec::Other("MPEG-2 AAC Main".into()),
+            Some(Ok((0x68, _))) => Codec::Other("MPEG-2 AAC SSR".into()),
+            Some(Ok((other, _))) => Codec::Other(format!("mp4a object type 0x{other:02X}")),
             _ => Codec::Other("mp4a".into()),
         },
         b"fLaC" => match child(&children, b"dfLa") {
@@ -357,18 +360,22 @@ fn sample_entry(stsd: &[u8], video: bool) -> Result<Entry, PlatformError> {
     })
 }
 
-/// The object type of an `esds` box's decoder configuration.
-fn esds_object_type(esds: &[u8]) -> Result<u8, PlatformError> {
+/// The object type of an `esds` box's decoder configuration, and its decoder-specific
+/// information (an AAC stream's `AudioSpecificConfig`), empty when it has none.
+fn esds_config(esds: &[u8]) -> Result<(u8, Vec<u8>), PlatformError> {
     let mut c = Cursor::new(esds);
     c.bytes(4)?;
     // ES_Descriptor: tag 3, a length, ES_ID, flags.
-    let read_len = |c: &mut Cursor<'_>| -> Result<(), PlatformError> {
+    let read_len = |c: &mut Cursor<'_>| -> Result<usize, PlatformError> {
+        let mut len = 0;
         for _ in 0..4 {
-            if c.u8()? & 0x80 == 0 {
+            let b = c.u8()?;
+            len = len << 7 | usize::from(b & 0x7F);
+            if b & 0x80 == 0 {
                 break;
             }
         }
-        Ok(())
+        Ok(len)
     };
     if c.u8()? != 3 {
         return Err(invalid("esds"));
@@ -390,7 +397,18 @@ fn esds_object_type(esds: &[u8]) -> Result<u8, PlatformError> {
         return Err(invalid("esds"));
     }
     read_len(&mut c)?;
-    c.u8()
+    let object_type = c.u8()?;
+    // streamType, bufferSizeDB, maxBitrate, avgBitrate; then DecoderSpecificInfo (tag 5).
+    let config = (|| -> Result<Vec<u8>, PlatformError> {
+        c.bytes(12)?;
+        if c.u8()? != 5 {
+            return Ok(Vec::new());
+        }
+        let len = read_len(&mut c)?;
+        Ok(c.bytes(len)?.to_vec())
+    })()
+    .unwrap_or_default();
+    Ok((object_type, config))
 }
 
 /// How far the edit list moves the media's times: the presentation time of media time
