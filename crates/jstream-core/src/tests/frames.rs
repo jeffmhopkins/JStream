@@ -162,6 +162,36 @@ fn a_late_sheet_counts_from_the_switch() {
     }
 }
 
+/// Pictures a sheet is late for are taken `interval_ms` apart, not all at once, so
+/// each shows its own frame (#1538: on a loaded runner three came back at one instant).
+#[test]
+fn overdue_pictures_keep_their_interval() {
+    use std::time::{Duration, Instant};
+    let strip = FrameStrip::new(4, 250);
+    let begin = Instant::now();
+    let ms = |at: Instant| at.duration_since(begin).as_millis();
+    // On time: each at its offset.
+    let mut taken = None;
+    let mut on_time = Vec::new();
+    for index in 0..4 {
+        let due = crate::engine::sample_due(&strip, begin, index, taken);
+        on_time.push(ms(due));
+        taken = Some(due);
+    }
+    assert_eq!(on_time, [0, 250, 500, 750]);
+    // The thread starts 1 s late, past three offsets: each picture still waits an
+    // interval after the one before.
+    let mut taken = None;
+    let mut late = Vec::new();
+    for index in 0..4 {
+        let due = crate::engine::sample_due(&strip, begin, index, taken);
+        let at = due.max(begin + Duration::from_millis(1_000));
+        late.push(ms(at));
+        taken = Some(at);
+    }
+    assert_eq!(late, [1_000, 1_250, 1_500, 1_750]);
+}
+
 /// [`a_switch_and_watch_shows_the_fade_as_it_plays`] with the sheet started `stall_ms`
 /// after the switch.
 fn watch_the_fade(stall_ms: u32) {
