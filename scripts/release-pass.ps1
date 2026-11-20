@@ -588,7 +588,9 @@ function Test-Projects($d) {
     $hasIn = { param($r) ($r | ConvertTo-Json -Depth 10 -Compress) -match '"saved"' }
     $norm = { param($p) ("$p" -replace '/', '\').ToLower() }
     $recent = @()
-    if ($info) { $recent = @($info.result.result.recent | ForEach-Object { & $norm $_ }) }
+    # collection.info leaves out an empty recent list, and StrictMode throws on a missing
+    # property, so read it only when it is there.
+    if ($info -and $info.result.result.PSObject.Properties['recent']) { $recent = @($info.result.result.recent | ForEach-Object { & $norm $_ }) }
     $path = ''
     if ($info) { $path = & $norm $info.result.result.path }
     Check ((Test-Path -LiteralPath $b) -and -not (& $hasIn $before) -and (& $hasIn $after)) 'save, new, open' "second.json written: $(Test-Path -LiteralPath $b); the new project is empty: $(-not (& $hasIn $before)); opening second.json brings its scene back: $(& $hasIn $after)"
