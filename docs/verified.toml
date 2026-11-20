@@ -7605,7 +7605,7 @@ stamp = { hash = "b3:b05c400bf5e206e6", by = "agent:ptz-builder", note = "ARCH#p
 stamp = { hash = "b3:d1ff0b959a53f89d", by = "agent:frame-probe", note = "Re-read R-DEP-002 for ADR-0140's acceptance: it cites ADR-0140 in place of the superseded ADR-0061, and its OpenH264 sentence now says Cisco's binary is also the decoder of the engine's own H.264 streams, as ADR-0140's consequences word it; the openh264 crate bans, deny.toml and lint-deps are unchanged" }
 
 ["RULES#dependencies"."dep:docs/adr/0072-linux-media-file-decoding.md"]
-stamp = { hash = "b3:19debb0488bf888b", by = "agent:linux-decoders", note = "ADR-0072's table now marks symphonia's AAC-LC settled by ADR-0160; symphonia is pure Rust, so R-DEP-002's C-library ban and its exceptions are unchanged" }
+stamp = { hash = "b3:d5af31a22ac8e5e3", by = "agent:linux-decoders", note = "ADR-0072 unchanged after all (R-DOC-009); symphonia's AAC-LC is pure Rust under ADR-0160, so R-DEP-002's C-library ban and its exceptions are unchanged" }
 
 ["RULES#dependencies"."dep:docs/adr/0140-source-types-and-decoding-scope-v3.md"]
 stamp = { hash = "b3:469e300ae477e5ef", by = "agent:frame-probe", note = "Re-read R-DEP-002 for ADR-0140's acceptance: it cites ADR-0140 in place of the superseded ADR-0061, and its OpenH264 sentence now says Cisco's binary is also the decoder of the engine's own H.264 streams, as ADR-0140's consequences word it; the openh264 crate bans, deny.toml and lint-deps are unchanged" }
