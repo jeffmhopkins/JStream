@@ -82,7 +82,7 @@ fn reads_the_same_h264_frames_as_the_mp4_it_was_remuxed_from() {
 fn reads_a_webms_vp9_and_opus_tracks() {
     let webm = open("vp9-opus.webm");
     let video = webm.video.as_ref().expect("video");
-    assert_eq!(video.codec, Codec::Other("V_VP9".into()));
+    assert_eq!(video.codec, Codec::Vp9);
     let audio = webm.audio.as_ref().expect("audio");
     let Codec::Opus(head) = &audio.codec else {
         panic!("{:?}", audio.codec);

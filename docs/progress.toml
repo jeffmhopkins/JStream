@@ -285,7 +285,7 @@ title = "Wanted, not waited for: browser sources on macOS through CEF, a virtual
 status = "planned"
 issues = [1516]
 prs = [1521, 1522, 1523, 1529, 1532, 1537]
-note = "each ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta); browser sources on macOS (#1522) and the Linux virtual camera (#1521) are built and in the release's packages, and Linux media files play audio (#1523) and H.264 video in MP4 and MOV (#1529) and in Matroska and WebM (#1532) through VA-API, and Opus audio in WebM and Ogg (#1537)"
+note = "each ships in beta.1 if it is done and passes its platform's pass, otherwise in the release after (ROADMAP.md#beta); browser sources on macOS (#1522) and the Linux virtual camera (#1521) are built and in the release's packages, and Linux media files play audio (#1523) and H.264 video in MP4 and MOV (#1529) and in Matroska and WebM (#1532) through VA-API, and Opus audio in WebM and Ogg (#1537), and VP9 video in WebM (#1545)"
 
 [[milestone]]
 id = "M0"

@@ -1,4 +1,4 @@
-//! libva's H.264 and HEVC encode structs, its H.264 decode structs (ADR-0072), and their
+//! libva's H.264 and HEVC encode structs, its H.264 and VP9 decode structs (ADR-0072), and their
 //! constants, hand-written (ADR-0060 §8).
 //!
 //! Each struct mirrors its C declaration field for field, `#[repr(C)]`, with C bitfield
@@ -15,7 +15,9 @@
 //!
 //! The H.264 decode structs (`va/va.h`'s `VAPictureParameterBufferH264`,
 //! `VAIQMatrixBufferH264` and `VASliceParameterBufferH264`) were checked the same way,
-//! against the same release, and their sizes and offsets are asserted below.
+//! against the same release, and their sizes and offsets are asserted below. So were
+//! the VP9 decode structs (`va/va_dec_vp9.h`), with the bit of each `pic_fields` and
+//! `segment_flags` field printed one at a time.
 //!
 //! The surface attributes and the DRM PRIME descriptor that import an encode target
 //! (`va/va.h`, `va/va_drmcommon.h`) were checked the same way, against the same
@@ -120,6 +122,63 @@ pub(crate) struct DecSliceParamH264 {
     pub(crate) chroma_weight_l1_flag: u8,
     pub(crate) chroma_weight_l1: [[i16; 2]; 32],
     pub(crate) chroma_offset_l1: [[i16; 2]; 32],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VADecPictureParameterBufferVP9`: one VP9 frame to decode.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecPicParamVp9 {
+    pub(crate) frame_width: u16,
+    pub(crate) frame_height: u16,
+    pub(crate) reference_frames: [Id; 8],
+    /// `pic_fields`: `subsampling_x` (bit 0), `subsampling_y` (1), `frame_type` (2),
+    /// `show_frame` (3), `error_resilient_mode` (4), `intra_only` (5),
+    /// `allow_high_precision_mv` (6), `mcomp_filter_type` (7-9),
+    /// `frame_parallel_decoding_mode` (10), `reset_frame_context` (11-12),
+    /// `refresh_frame_context` (13), `frame_context_idx` (14-15),
+    /// `segmentation_enabled` (16), `segmentation_temporal_update` (17),
+    /// `segmentation_update_map` (18), `last_ref_frame` (19-21),
+    /// `last_ref_frame_sign_bias` (22), `golden_ref_frame` (23-25),
+    /// `golden_ref_frame_sign_bias` (26), `alt_ref_frame` (27-29),
+    /// `alt_ref_frame_sign_bias` (30), `lossless_flag` (31).
+    pub(crate) pic_fields: u32,
+    pub(crate) filter_level: u8,
+    pub(crate) sharpness_level: u8,
+    pub(crate) log2_tile_rows: u8,
+    pub(crate) log2_tile_columns: u8,
+    pub(crate) frame_header_length_in_bytes: u8,
+    pub(crate) first_partition_size: u16,
+    pub(crate) mb_segment_tree_probs: [u8; 7],
+    pub(crate) segment_pred_probs: [u8; 3],
+    pub(crate) profile: u8,
+    pub(crate) bit_depth: u8,
+    pub(crate) va_reserved: [u32; 8],
+}
+
+/// `VASegmentParameterVP9`: one segment's parameters.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SegmentParamVp9 {
+    /// `segment_reference_enabled` (bit 0), `segment_reference` (1-2),
+    /// `segment_reference_skipped` (3).
+    pub(crate) segment_flags: u16,
+    pub(crate) filter_level: [[u8; 2]; 4],
+    pub(crate) luma_ac_quant_scale: i16,
+    pub(crate) luma_dc_quant_scale: i16,
+    pub(crate) chroma_ac_quant_scale: i16,
+    pub(crate) chroma_dc_quant_scale: i16,
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VASliceParameterBufferVP9`: the whole frame, as one slice.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecSliceParamVp9 {
+    pub(crate) slice_data_size: u32,
+    pub(crate) slice_data_offset: u32,
+    pub(crate) slice_data_flag: u32,
+    pub(crate) seg_param: [SegmentParamVp9; 8],
     pub(crate) va_reserved: [u32; 4],
 }
 
@@ -790,6 +849,24 @@ const _: () = {
     assert!(offset_of!(DecPicParamH264, pic_fields) == 632);
     assert!(offset_of!(DecPicParamH264, frame_num) == 636);
     assert!(offset_of!(DecPicParamH264, va_reserved) == 640);
+    assert!(size_of::<DecPicParamVp9>() == 92);
+    assert!(offset_of!(DecPicParamVp9, reference_frames) == 4);
+    assert!(offset_of!(DecPicParamVp9, pic_fields) == 36);
+    assert!(offset_of!(DecPicParamVp9, filter_level) == 40);
+    assert!(offset_of!(DecPicParamVp9, frame_header_length_in_bytes) == 44);
+    assert!(offset_of!(DecPicParamVp9, first_partition_size) == 46);
+    assert!(offset_of!(DecPicParamVp9, mb_segment_tree_probs) == 48);
+    assert!(offset_of!(DecPicParamVp9, segment_pred_probs) == 55);
+    assert!(offset_of!(DecPicParamVp9, profile) == 58);
+    assert!(offset_of!(DecPicParamVp9, bit_depth) == 59);
+    assert!(offset_of!(DecPicParamVp9, va_reserved) == 60);
+    assert!(size_of::<SegmentParamVp9>() == 36);
+    assert!(offset_of!(SegmentParamVp9, filter_level) == 2);
+    assert!(offset_of!(SegmentParamVp9, luma_ac_quant_scale) == 10);
+    assert!(offset_of!(SegmentParamVp9, va_reserved) == 20);
+    assert!(size_of::<DecSliceParamVp9>() == 316);
+    assert!(offset_of!(DecSliceParamVp9, seg_param) == 12);
+    assert!(offset_of!(DecSliceParamVp9, va_reserved) == 300);
     assert!(size_of::<IqMatrixH264>() == 240);
     assert!(offset_of!(IqMatrixH264, scaling_list_8x8) == 96);
     assert!(size_of::<DecSliceParamH264>() == 3128);
