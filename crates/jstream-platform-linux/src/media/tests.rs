@@ -221,6 +221,28 @@ fn adts_beyond_aac_lc_is_unsupported() {
     }
 }
 
+// An ID3v2 tag ahead of the ADTS stream, whose data looks like an AAC Main header: the
+// check skips the tag, as symphonia's reader does, and the file still plays.
+#[test]
+fn a_tagged_adts_file_still_plays() {
+    let frame = [
+        &b"PRIV"[..],
+        &[0, 0, 0, 8, 0, 0],
+        &[0xFF, 0xF1, 0x10, 0x80, 0, 0, 0, 0],
+    ]
+    .concat();
+    let mut bytes = b"ID3\x04\x00\x00\x00\x00\x00".to_vec();
+    bytes.push(u8::try_from(frame.len()).expect("small"));
+    bytes.extend_from_slice(&frame);
+    bytes.extend_from_slice(&std::fs::read(testdata("tone.aac")).expect("reads"));
+    let file = TempFile::new("tagged.aac", &bytes);
+    let mut decoder = LinuxMediaDecoders
+        .open(&file.0, &config(true))
+        .unwrap_or_else(|err| panic!("{err}"));
+    let (frames, _, _) = read_all(decoder.as_mut());
+    assert!(frames >= 22_050, "{frames} frames");
+}
+
 // The same MP4 with its AudioSpecificConfig's backward-compatible extension saying SBR
 // is present: explicit HE-AAC, refused by name rather than played as its LC core.
 #[cfg(target_os = "linux")]

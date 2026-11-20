@@ -3504,7 +3504,7 @@ stamp = { hash = "b3:3b784d57da25fc79", by = "agent:linux-decoders", note = "re-
 stamp = { hash = "b3:4bcbab1a31f2e9f6", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/aac.rs"]
-stamp = { hash = "b3:dbf6509cdf5e2643", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
+stamp = { hash = "b3:41deeafaabbecb52", by = "agent:linux-decoders", note = "re-read after the ADTS fix: an ID3v2 tag is skipped and a header counts only when the next one follows at its frame length, so the row's 'as is AAC Main, more than two channels' holds for tagged ADTS files too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/audio.rs"]
 stamp = { hash = "b3:0fc3b7565e4c6018", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
@@ -3633,7 +3633,7 @@ stamp = { hash = "b3:ac525152569334ac", by = "agent:linux-media", note = "LinuxM
 stamp = { hash = "b3:a3aec4c1015890a9", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row and not-here list against the VP9 decoder: media/vp9.rs, vaapi/vp9_decoder.rs, profile 0 only, mid-stream size change refused, VP8 and AV1 still missing" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/tests.rs"]
-stamp = { hash = "b3:2fb21140ccc0e423", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
+stamp = { hash = "b3:1de3a58777e91a93", by = "agent:linux-decoders", note = "re-read after the ADTS fix: an ID3v2 tag is skipped and a header counts only when the next one follows at its frame length, so the row's 'as is AAC Main, more than two channels' holds for tagged ADTS files too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/vp8.rs"]
 stamp = { hash = "b3:189e4f9744356f7f", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row and not-here list against the VP8 decoder: media/vp8.rs, vaapi/vp8_decoder.rs, a mid-stream size change refused, AV1 still missing" }
