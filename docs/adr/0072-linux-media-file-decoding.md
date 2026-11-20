@@ -161,7 +161,7 @@ every codec decoded through FFmpeg, not only H.264 and AAC:
 |---|---|---|
 | FFmpeg: H.264, AAC (LC and HE) | needed | needed |
 | FFmpeg: VP8, VP9, AV1, Opus, the extra containers | needed | needed |
-| symphonia: AAC-LC | not needed (no FFmpeg) | settled: [ADR-0160](0160-aac-lc-decoder-patent-check.md) |
+| symphonia: AAC-LC | not needed (no FFmpeg) | needed |
 | symphonia: PCM, FLAC, Vorbis, MP3 | not needed | not needed |
 | VA-API | not needed | not needed |
 
