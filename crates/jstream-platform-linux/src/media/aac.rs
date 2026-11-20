@@ -90,9 +90,27 @@ pub(crate) fn check(asc: &[u8]) -> Result<(), PlatformError> {
     Ok(())
 }
 
+/// The `AudioSpecificConfig` the first ADTS frame header in `head` stands for (its
+/// profile, sampling frequency index and channel configuration), or `None` when `head`
+/// has no ADTS header.
+pub(crate) fn adts_config(head: &[u8]) -> Option<[u8; 2]> {
+    // A syncword of twelve ones, MPEG layer 0; the profile is the object type less one.
+    let at = head
+        .windows(4)
+        .position(|w| w[0] == 0xFF && w[1] & 0xF6 == 0xF0)?;
+    let h = &head[at..at + 4];
+    let kind = (h[2] >> 6) + 1;
+    let frequency = (h[2] >> 2) & 0x0F;
+    let channels = (h[2] & 1) << 2 | h[3] >> 6;
+    Some([
+        kind << 3 | frequency >> 1,
+        (frequency & 1) << 7 | channels << 3,
+    ])
+}
+
 #[cfg(test)]
 mod tests {
-    use super::check;
+    use super::{adts_config, check};
     use jstream_platform::PlatformError;
 
     fn refused(asc: &[u8]) -> String {
@@ -131,6 +149,19 @@ mod tests {
         // 5.1 (channel configuration 6), and a program config element (0).
         assert!(refused(&[0x11, 0xB0]).contains("more than two channels"));
         assert!(refused(&[0x12, 0x00]).contains("program config element"));
+    }
+
+    #[test]
+    fn an_adts_header_stands_for_its_config() {
+        // After a tag's bytes: AAC-LC (profile 1), 44.1 kHz (4), stereo.
+        let lc = [0x49, 0x44, 0xFF, 0xF1, 0x50, 0x80, 0x2E, 0x7F, 0xFC];
+        assert_eq!(adts_config(&lc), Some([0x12, 0x10]));
+        // AAC Main (profile 0) is refused by name; 5.1 (channel configuration 6) too.
+        let main = adts_config(&[0xFF, 0xF1, 0x10, 0x80]).expect("main");
+        assert!(refused(&main).contains("object type 1"));
+        let surround = adts_config(&[0xFF, 0xF1, 0x51, 0x80]).expect("5.1");
+        assert!(refused(&surround).contains("more than two channels"));
+        assert_eq!(adts_config(&[0x00, 0x11, 0x22, 0x33]), None);
     }
 
     #[test]

@@ -235,8 +235,11 @@ fn open_video(
     })
 }
 
-/// The audio decoder for `track`, or `None` (logged) for a codec this doesn't decode:
-/// the video still plays.
+/// The audio decoder for `track`.
+///
+/// # Errors
+/// [`PlatformError::Unsupported`] for a codec this doesn't decode, naming it (the caller
+/// logs it and plays the video without sound), and the decoder's own errors.
 fn open_audio(track: Track) -> Result<Audio, PlatformError> {
     let Some(params) = track.audio_params() else {
         return Err(PlatformError::Unsupported {
