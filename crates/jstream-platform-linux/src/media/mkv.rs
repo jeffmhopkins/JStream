@@ -9,17 +9,18 @@
 //! prefix; other compression and encryption are refused. A file whose sizes are unknown
 //! (a live recording) or that ends early (a recorder that stopped) reads up to where it
 //! ends. Matroska has no decode times, so each track's decode times are its
-//! presentation times in order, which is all the decoder needs of them.
+//! presentation times in order, which is all the decoder needs of them. A track's
+//! `CodecDelay` (Opus's pre-skip) moves its samples that much earlier, so the decoded
+//! audio before the timeline's start is cut, and its `SeekPreRoll` is how far before a
+//! seek's target decoding starts.
 
 use std::fs::File;
 use std::io::{BufReader, Read, Seek};
 
 use jstream_platform::PlatformError;
 
-use super::demux::{Codec, Demuxed, Sample, Track};
+use super::demux::{Codec, Demuxed, Sample, Track, max_samples};
 
-/// The most frames a track may list.
-const MAX_SAMPLES: usize = 20_000_000;
 /// The largest element read whole (a track's private data, a header).
 const MAX_ELEMENT: u64 = 16 << 20;
 
@@ -37,6 +38,8 @@ mod id {
     pub(super) const CODEC_ID: u32 = 0x86;
     pub(super) const CODEC_PRIVATE: u32 = 0x63A2;
     pub(super) const DEFAULT_DURATION: u32 = 0x23_E383;
+    pub(super) const CODEC_DELAY: u32 = 0x56AA;
+    pub(super) const SEEK_PRE_ROLL: u32 = 0x56BB;
     pub(super) const VIDEO: u32 = 0xE0;
     pub(super) const PIXEL_WIDTH: u32 = 0xB0;
     pub(super) const PIXEL_HEIGHT: u32 = 0xBA;
@@ -262,6 +265,11 @@ struct Entry {
     /// Nanoseconds per frame, when the file says.
     default_duration: Option<u64>,
     prefix: Vec<u8>,
+    /// Nanoseconds of decoded audio before the first one shown (`CodecDelay`, or Opus's
+    /// pre-skip where the file leaves it out).
+    delay: u64,
+    /// Nanoseconds to decode before a seek's target (`SeekPreRoll`).
+    preroll: u64,
 }
 
 /// The codec a `CodecID` names, from its private data.
@@ -275,7 +283,8 @@ fn codec(name: &str, private: Option<&[u8]>) -> Codec {
             Codec::Flac,
         ),
         (name, _) if name.starts_with("A_AAC") => Codec::Other("AAC".into()),
-        ("A_OPUS", _) => Codec::Other("Opus".into()),
+        ("A_OPUS", Some(head)) if head.starts_with(b"OpusHead") => Codec::Opus(head.to_vec()),
+        ("A_OPUS", _) => Codec::Other("Opus without its OpusHead".into()),
         (name, _) => Codec::Other(name.to_string()),
     }
 }
@@ -309,6 +318,8 @@ fn entry(data: &[u8]) -> Option<Entry> {
     let mut sample_rate = 8000.0;
     let mut prefix = Vec::new();
     let mut refused = None;
+    let mut delay = None;
+    let mut preroll = None;
     for (id, body) in children(data) {
         match id {
             id::TRACK_NUMBER => number = Some(uint(body)),
@@ -317,6 +328,8 @@ fn entry(data: &[u8]) -> Option<Entry> {
             id::CODEC_ID => name = String::from_utf8_lossy(body).trim_end_matches('\0').into(),
             id::CODEC_PRIVATE => private = Some(body),
             id::DEFAULT_DURATION => default_duration = Some(uint(body)).filter(|d| *d > 0),
+            id::CODEC_DELAY => delay = Some(uint(body)),
+            id::SEEK_PRE_ROLL => preroll = Some(uint(body)),
             id::VIDEO => {
                 for (id, body) in children(body) {
                     match id {
@@ -379,6 +392,15 @@ fn entry(data: &[u8]) -> Option<Entry> {
         Some(why) => Codec::Other(why),
         None => codec(&name, private),
     };
+    // Opus: the encoder's pre-skip, from its header where `CodecDelay` is missing, and
+    // RFC 7845's 80 ms run-in where `SeekPreRoll` is.
+    if let Codec::Opus(head) = &codec {
+        let pre_skip = head
+            .get(10..12)
+            .map_or(0, |b| u16::from_le_bytes([b[0], b[1]]));
+        delay = delay.or(Some(u64::from(pre_skip) * 1_000_000_000 / 48_000));
+        preroll = preroll.or(Some(80_000_000));
+    }
     Some(Entry {
         number: number?,
         video,
@@ -389,6 +411,8 @@ fn entry(data: &[u8]) -> Option<Entry> {
         sample_rate: format!("{sample_rate:.0}").parse().unwrap_or(0),
         default_duration,
         prefix,
+        delay: delay.unwrap_or(0),
+        preroll: preroll.unwrap_or(0),
     })
 }
 
@@ -635,7 +659,7 @@ fn block(
     let key = key.unwrap_or(flags & 0x80 != 0) || !track.entry.video;
     let pts = scale.ticks(base.saturating_add(i64::from(rel)));
     let sizes = lace_sizes(r, flags, end)?;
-    if track.samples.len() + sizes.len() > MAX_SAMPLES {
+    if track.samples.len() + sizes.len() > max_samples(r.len) {
         return Err(invalid("more frames than a track may have"));
     }
     let first = track.samples.len();
@@ -745,6 +769,14 @@ fn finish(mut b: Building, scale: &Scale) -> Track {
                 start.saturating_add(i64::try_from(between).unwrap_or(i64::MAX));
         }
     }
+    // The codec's delay: what decodes before it comes before the timeline's start, so
+    // the decoder cuts it as it cuts an edit list's trim.
+    let delay = scale.nanos_to_ticks(b.entry.delay);
+    if delay > 0 {
+        for s in &mut b.samples {
+            s.pts = s.pts.saturating_sub(delay);
+        }
+    }
     let mut times: Vec<i64> = b.samples.iter().map(|s| s.pts).collect();
     times.sort_unstable();
     for (s, dts) in b.samples.iter_mut().zip(times) {
@@ -760,6 +792,7 @@ fn finish(mut b: Building, scale: &Scale) -> Track {
         sample_rate: b.entry.sample_rate,
         samples: b.samples,
         prefix: b.entry.prefix,
+        preroll: scale.nanos_to_ticks(b.entry.preroll),
     }
 }
 

@@ -48,20 +48,26 @@ fn read_all(decoder: &mut dyn MediaDecoder) -> (usize, f64, f32) {
 }
 
 fn plays(name: &str, layout: ChannelLayout) {
+    plays_at(name, layout, 44_100);
+}
+
+/// As [`plays`], for a file whose audio decodes at `rate`.
+fn plays_at(name: &str, layout: ChannelLayout, rate: u32) {
     let mut decoder = LinuxMediaDecoders
         .open(&testdata(name), &config(true))
         .unwrap_or_else(|err| panic!("{name}: {err}"));
     let info = *decoder.info();
     assert_eq!(info.video, None, "{name}");
     let audio = info.audio.expect("audio");
-    assert_eq!(audio.format.sample_rate(), 44_100, "{name}");
+    assert_eq!(audio.format.sample_rate(), rate, "{name}");
     assert_eq!(audio.format.layout(), layout, "{name}");
     assert!(decoder.next_video().expect("no video").is_none());
 
     let (frames, first, peak) = read_all(decoder.as_mut());
     // Half a second, give or take a codec frame of padding the stream doesn't declare.
+    let half = usize::try_from(rate / 2).expect("fits");
     assert!(
-        (22_050..=22_050 + 2_048).contains(&frames),
+        (half..=half + 2_048).contains(&frames),
         "{name}: {frames} frames"
     );
     assert!(first.abs() < 1e-9, "{name}: starts at {first}");
@@ -101,6 +107,40 @@ fn plays_mp3() {
 #[test]
 fn plays_ogg_vorbis() {
     plays("tone.ogg", ChannelLayout::Mono);
+}
+
+#[test]
+fn plays_ogg_opus() {
+    plays_at("tone.opus", ChannelLayout::Mono, 48_000);
+}
+
+// Its pre-skip (312 frames) is cut, from the start and after a seek back to it: the
+// file's final granule position is 24 312, so exactly 24 000 frames play, from 0.
+#[test]
+fn an_ogg_opus_file_plays_without_its_pre_skip() {
+    let mut decoder = LinuxMediaDecoders
+        .open(&testdata("tone.opus"), &config(true))
+        .expect("opens");
+    for _ in 0..2 {
+        let first = decoder.next_audio().expect("decodes").expect("a block");
+        assert_eq!(first.pts().ticks(), 0);
+        let mut frames = first.frames();
+        while let Some(block) = decoder.next_audio().expect("decodes") {
+            frames += block.frames();
+        }
+        assert_eq!(frames, 24_000);
+        decoder
+            .seek(MediaTime::zero(Timebase::MICROS))
+            .expect("seeks");
+    }
+}
+
+// A WebM file goes through the crate's own demuxer and the movie decoder, built on
+// Linux only. Its audio needs no GPU.
+#[cfg(target_os = "linux")]
+#[test]
+fn plays_webm_opus_and_mixes_five_one_to_stereo() {
+    plays_at("tone-5.1.webm", ChannelLayout::Stereo, 48_000);
 }
 
 /// A 16-bit PCM WAV of `channels` at 48 kHz, `frames` long, every sample `value`.

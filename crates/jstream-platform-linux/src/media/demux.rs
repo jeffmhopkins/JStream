@@ -8,7 +8,17 @@ use std::io::{Read, Seek, SeekFrom};
 use jstream_platform::PlatformError;
 use symphonia::core::audio::Channels;
 use symphonia::core::codecs::audio::AudioCodecParameters;
-use symphonia::core::codecs::audio::well_known::{CODEC_ID_FLAC, CODEC_ID_MP3, CODEC_ID_VORBIS};
+use symphonia::core::codecs::audio::well_known::{
+    CODEC_ID_FLAC, CODEC_ID_MP3, CODEC_ID_OPUS, CODEC_ID_VORBIS,
+};
+
+/// The most samples a track may list: 20 million, and never more than the file has
+/// bytes. Every sample worth decoding takes at least a byte, so a crafted table of
+/// empty samples can't make a small file cost gigabytes of sample list (#1533).
+pub(crate) fn max_samples(file_len: u64) -> usize {
+    const MAX: u64 = 20_000_000;
+    usize::try_from(MAX.min(file_len)).unwrap_or(0)
+}
 
 /// One sample: where it is and when.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -35,6 +45,8 @@ pub(crate) enum Codec {
     Vorbis(Vec<u8>),
     /// FLAC, with its `STREAMINFO` block.
     Flac(Vec<u8>),
+    /// Opus, with its identification header (`OpusHead`, RFC 7845 §5.1).
+    Opus(Vec<u8>),
     /// Anything else, by its sample entry's four-character code or, for `mp4a`, its
     /// object type.
     Other(String),
@@ -58,6 +70,9 @@ pub(crate) struct Track {
     /// Bytes every sample starts with that the file leaves out (Matroska's header
     /// stripping); empty for most files.
     pub(crate) prefix: Vec<u8>,
+    /// Audio: how far before a seek's target decoding starts, in the track's time scale,
+    /// so a decoder that needs a run-in (Opus's 80 ms) has settled by then. 0 for most.
+    pub(crate) preroll: i64,
 }
 
 impl Track {
@@ -78,6 +93,15 @@ impl Track {
                 params
                     .for_codec(CODEC_ID_VORBIS)
                     .with_extra_data(headers.clone().into_boxed_slice());
+            }
+            Codec::Opus(head) => {
+                // Opus always decodes at 48 kHz, whatever the container says.
+                params
+                    .for_codec(CODEC_ID_OPUS)
+                    .with_extra_data(head.clone().into_boxed_slice())
+                    .with_sample_rate(48_000)
+                    .with_channels(Channels::Discrete(self.channels));
+                return Some(params);
             }
             Codec::Avc(_) | Codec::Other(_) => return None,
         }

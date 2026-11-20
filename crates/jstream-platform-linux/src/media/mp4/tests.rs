@@ -92,3 +92,34 @@ fn a_box_claiming_the_largest_size_doesnt_overflow() {
     let _ = std::fs::remove_file(&path);
     assert!(super::open(file).is_err());
 }
+
+#[test]
+fn a_track_lists_no_more_samples_than_the_file_can_hold() {
+    // `stsz` with one size for every sample: version and flags, the size, the count.
+    let stsz = |size: u32, count: u32| {
+        let mut b = vec![0; 4];
+        b.extend_from_slice(&size.to_be_bytes());
+        b.extend_from_slice(&count.to_be_bytes());
+        b
+    };
+    let table = |stsz: &[u8]| {
+        // One chunk at 0 holding every sample, and one time step.
+        let stco = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+        let stsc = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 1];
+        let stts = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 1];
+        super::sample_table(
+            &[
+                (*b"stsz", stsz),
+                (*b"stco", &stco),
+                (*b"stsc", &stsc),
+                (*b"stts", &stts),
+            ],
+            0,
+            1_000,
+        )
+    };
+    assert_eq!(table(&stsz(10, 10)).expect("fits").len(), 10);
+    // A million one-byte samples in a thousand-byte file, or ten of a kilobyte each.
+    assert!(table(&stsz(1, 1_000_000)).is_err());
+    assert!(table(&stsz(1_000, 10)).is_err());
+}

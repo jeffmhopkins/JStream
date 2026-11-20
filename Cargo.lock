@@ -3058,6 +3058,7 @@ dependencies = [
  "ring",
  "rustls",
  "rustls-native-certs",
+ "rusty-opus",
  "symphonia",
  "tracing",
  "wgpu",
@@ -5132,6 +5133,12 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "rusty-opus"
+version = "1.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9e0955c164ddbc021a96621f850ea0cf893d78aaf61e76c19a5a27f063f9ce24"
 
 [[package]]
 name = "same-file"

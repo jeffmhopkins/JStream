@@ -1,8 +1,8 @@
 //! A movie file (MP4, QuickTime, Matroska or WebM) as a [`MediaDecoder`]: the crate's
 //! own demuxers ([`super::mp4`], [`super::mkv`]), H.264 video on the GPU through VA-API,
-//! and the audio through symphonia's decoders (MP3, FLAC and Vorbis; AAC waits for
-//! ADR-0072 (g), and Opus for its FFmpeg path, so a file with that audio plays its video
-//! without sound).
+//! and the audio through the crate's decoders (MP3, FLAC and Vorbis, and Opus in
+//! Matroska and WebM; AAC waits for ADR-0072 (g), so a file with that audio plays its
+//! video without sound).
 
 use jstream_platform::media::{AudioBuffer, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{
@@ -79,8 +79,8 @@ impl Movie {
         };
         if info.video.is_none() && info.audio.is_none() {
             return Err(PlatformError::Unsupported {
-                what: "a movie file with no video, and no audio Linux decodes (MP3, FLAC \
-                       and Vorbis play; AAC waits for ADR-0072's decoder patent check)"
+                what: "a movie file with no video, and no audio Linux decodes (MP3, FLAC, \
+                       Vorbis and Opus play; AAC waits for ADR-0072's decoder patent check)"
                     .into(),
             });
         }
@@ -246,15 +246,20 @@ impl MediaDecoder for Movie {
         }
         if let Some(audio) = self.audio.as_mut() {
             let target = to.rescale(audio.timebase, Rounding::Down)?.ticks();
+            // A codec that needs a run-in (Opus) starts that far before the target; what
+            // decodes before the target is cut below.
+            let start = target.saturating_sub(audio.track.preroll);
             audio.next = audio
                 .track
                 .samples
                 .iter()
-                .rposition(|s| s.pts <= target)
+                .rposition(|s| s.pts <= start)
                 .unwrap_or(0);
             audio.stream.reset();
             let micros = to.rescale(Timebase::MICROS, Rounding::Down)?;
-            audio.skip_until = (micros.ticks() > 0).then_some(micros);
+            // At 0 too: what decodes before the start (an edit list's trim, Opus's
+            // pre-skip) is cut as it was when the file opened.
+            audio.skip_until = Some(micros);
         }
         Ok(())
     }

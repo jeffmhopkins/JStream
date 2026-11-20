@@ -12,13 +12,11 @@ use std::io::{Read, Seek, SeekFrom};
 
 use jstream_platform::PlatformError;
 
-use super::demux::Demuxed;
 pub(crate) use super::demux::{Codec, Sample, Track};
+use super::demux::{Demuxed, max_samples};
 
 /// The largest movie box read: a few hours of 60 fps video stays far below it.
 const MAX_MOOV: u64 = 256 << 20;
-/// The most samples a track may list.
-const MAX_SAMPLES: u64 = 20_000_000;
 
 /// What `Unsupported` and `Os` errors name.
 fn invalid(what: &str) -> PlatformError {
@@ -98,7 +96,7 @@ pub(crate) fn open(mut file: File) -> Result<Option<Demuxed>, PlatformError> {
         }
         return Ok(None);
     };
-    let movie = parse_moov(&moov)?;
+    let movie = parse_moov(&moov, len)?;
     if fragmented && movie.iter().all(|t| t.samples.is_empty()) {
         return Err(PlatformError::Unsupported {
             what: "fragmented MP4 files on Linux".into(),
@@ -186,7 +184,8 @@ fn child<'a>(boxes: &[Child<'a>], kind: &[u8; 4]) -> Option<&'a [u8]> {
 }
 
 /// The movie box's tracks.
-fn parse_moov(moov: &[u8]) -> Result<Vec<Track>, PlatformError> {
+/// `len` is the file's length, which bounds how many samples a track may list.
+fn parse_moov(moov: &[u8], len: u64) -> Result<Vec<Track>, PlatformError> {
     let boxes = Cursor::new(moov).boxes()?;
     let movie_timescale = match child(&boxes, b"mvhd") {
         Some(mvhd) => {
@@ -203,7 +202,7 @@ fn parse_moov(moov: &[u8]) -> Result<Vec<Track>, PlatformError> {
         if kind != b"trak" {
             continue;
         }
-        match parse_trak(body, movie_timescale) {
+        match parse_trak(body, movie_timescale, len) {
             Ok(Some(track)) => tracks.push(track),
             Ok(None) => {}
             Err(err) => tracing::debug!(%err, "skipping an MP4 track that doesn't parse"),
@@ -213,7 +212,7 @@ fn parse_moov(moov: &[u8]) -> Result<Vec<Track>, PlatformError> {
 }
 
 /// One track box, or `None` for a track that isn't video or audio.
-fn parse_trak(trak: &[u8], movie_timescale: u32) -> Result<Option<Track>, PlatformError> {
+fn parse_trak(trak: &[u8], movie_timescale: u32, len: u64) -> Result<Option<Track>, PlatformError> {
     let boxes = Cursor::new(trak).boxes()?;
     let tkhd = child(&boxes, b"tkhd").ok_or_else(|| invalid("a track without tkhd"))?;
     let mut c = Cursor::new(tkhd);
@@ -255,7 +254,7 @@ fn parse_trak(trak: &[u8], movie_timescale: u32) -> Result<Option<Track>, Platfo
         }
     }
 
-    let samples = sample_table(&stbl, shift)?;
+    let samples = sample_table(&stbl, shift, len)?;
     Ok(Some(Track {
         id,
         video,
@@ -266,6 +265,7 @@ fn parse_trak(trak: &[u8], movie_timescale: u32) -> Result<Option<Track>, Platfo
         sample_rate: entry.sample_rate,
         samples,
         prefix: Vec::new(),
+        preroll: 0,
     }))
 }
 
@@ -419,8 +419,10 @@ fn edit_shift(elst: &[u8], movie_timescale: u32, timescale: u32) -> Result<i64, 
     Ok(delay)
 }
 
-/// Every sample of a sample table box, in decoding order.
-fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformError> {
+/// Every sample of a sample table box, in decoding order. A file of `len` bytes lists
+/// at most [`max_samples`] of them, and samples of one fixed size must fit in it.
+fn sample_table(stbl: &[Child<'_>], shift: i64, len: u64) -> Result<Vec<Sample>, PlatformError> {
+    let limit = u64::try_from(max_samples(len)).unwrap_or(0);
     // Sizes.
     let mut sizes = Vec::new();
     if let Some(stsz) = child(stbl, b"stsz") {
@@ -428,8 +430,11 @@ fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformE
         c.bytes(4)?;
         let fixed = c.u32()?;
         let count = c.u32()?;
-        if u64::from(count) > MAX_SAMPLES {
+        if u64::from(count) > limit {
             return Err(invalid("too many samples"));
+        }
+        if u64::from(count).saturating_mul(u64::from(fixed)) > len {
+            return Err(invalid("samples larger than the file"));
         }
         if fixed != 0 {
             sizes = vec![fixed; count as usize];
@@ -444,7 +449,7 @@ fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformE
         c.bytes(7)?;
         let field = c.u8()?;
         let count = c.u32()?;
-        if u64::from(count) > MAX_SAMPLES {
+        if u64::from(count) > limit {
             return Err(invalid("too many samples"));
         }
         match field {
@@ -479,14 +484,14 @@ fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformE
         let mut c = Cursor::new(stco);
         c.bytes(4)?;
         let n = c.u32()?;
-        for _ in 0..n.min(MAX_SAMPLES as u32) {
+        for _ in 0..n.min(u32::try_from(limit).unwrap_or(u32::MAX)) {
             chunks.push(u64::from(c.u32()?));
         }
     } else if let Some(co64) = child(stbl, b"co64") {
         let mut c = Cursor::new(co64);
         c.bytes(4)?;
         let n = c.u32()?;
-        for _ in 0..n.min(MAX_SAMPLES as u32) {
+        for _ in 0..n.min(u32::try_from(limit).unwrap_or(u32::MAX)) {
             chunks.push(c.u64()?);
         }
     }
@@ -496,7 +501,7 @@ fn sample_table(stbl: &[Child<'_>], shift: i64) -> Result<Vec<Sample>, PlatformE
     c.bytes(4)?;
     let n = c.u32()?;
     let mut runs = Vec::new();
-    for _ in 0..n.min(MAX_SAMPLES as u32) {
+    for _ in 0..n.min(u32::try_from(limit).unwrap_or(u32::MAX)) {
         let first = c.u32()?;
         let per = c.u32()?;
         c.u32()?;

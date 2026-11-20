@@ -17,8 +17,8 @@ fn open(name: &str) -> Demuxed {
         .expect("is a Matroska file")
 }
 
-/// Opens `bytes` written to a temporary file.
-fn open_bytes(bytes: &[u8]) -> Option<Demuxed> {
+/// `bytes` in a temporary file, already removed from its directory.
+fn temp_file(bytes: &[u8]) -> File {
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let path = std::env::temp_dir().join(format!(
         "jstream-mkv-test-{}-{}.mkv",
@@ -30,7 +30,12 @@ fn open_bytes(bytes: &[u8]) -> Option<Demuxed> {
         .expect("writes");
     let file = File::open(&path).expect("opens");
     let _ = std::fs::remove_file(&path);
-    super::open(file).expect("parses")
+    file
+}
+
+/// Opens `bytes` written to a temporary file.
+fn open_bytes(bytes: &[u8]) -> Option<Demuxed> {
+    super::open(temp_file(bytes)).expect("parses")
 }
 
 #[test]
@@ -74,12 +79,51 @@ fn reads_the_same_h264_frames_as_the_mp4_it_was_remuxed_from() {
 }
 
 #[test]
-fn names_webm_codecs_it_doesnt_decode() {
+fn reads_a_webms_vp9_and_opus_tracks() {
     let webm = open("vp9-opus.webm");
     let video = webm.video.as_ref().expect("video");
     assert_eq!(video.codec, Codec::Other("V_VP9".into()));
     let audio = webm.audio.as_ref().expect("audio");
-    assert_eq!(audio.codec, Codec::Other("Opus".into()));
+    let Codec::Opus(head) = &audio.codec else {
+        panic!("{:?}", audio.codec);
+    };
+    assert!(head.starts_with(b"OpusHead"));
+    // RFC 7845's 80 ms run-in, in milliseconds.
+    assert_eq!(audio.preroll, 80);
+}
+
+#[test]
+fn opus_starts_its_codec_delay_before_zero() {
+    // ffmpeg writes the 6.5 ms pre-skip as `CodecDelay`, and the first block at 0.
+    let webm = open("tone-5.1.webm");
+    let audio = webm.audio.as_ref().expect("audio");
+    assert_eq!(audio.channels, 6);
+    assert_eq!(audio.samples.first().map(|s| s.pts), Some(-6));
+}
+
+#[test]
+fn a_track_lists_no_more_frames_than_the_file_has_bytes() {
+    // One audio track, then a cluster of blocks of 256 empty frames each (fixed
+    // lacing): about 6 bytes a block, so far more frames than bytes.
+    let entry = [el(0xD7, &[1]), el(0x83, &[2]), el(0x86, b"A_MPEG/L3")].concat();
+    let tracks = el(0x1654_AE6B, &el(0xAE, &entry));
+    let mut cluster = el(0xE7, &[0]);
+    for _ in 0..200 {
+        // Track 1, time 0, keyframe with fixed lacing, 256 frames, no data.
+        cluster.extend(el(0xA3, &[0x81, 0, 0, 0x84, 0xFF]));
+    }
+    let segment = [tracks, el(0x1F43_B675, &cluster)].concat();
+    let file = [
+        el(0x1A45_DFA3, &el(0x4282, b"webm")),
+        el(0x1853_8067, &segment),
+    ]
+    .concat();
+    let total = 200 * 256;
+    assert!(total > file.len());
+    match super::open(temp_file(&file)) {
+        Err(err) => assert!(err.to_string().contains("more frames"), "{err}"),
+        Ok(other) => panic!("{:?}", other.map(|d| d.audio.map(|a| a.samples.len()))),
+    }
 }
 
 #[test]
