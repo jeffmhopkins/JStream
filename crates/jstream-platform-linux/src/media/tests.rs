@@ -114,6 +114,14 @@ fn plays_ogg_opus() {
     plays_at("tone.opus", ChannelLayout::Mono, 48_000);
 }
 
+// AAC-LC (ADR-0160): an ADTS stream through symphonia's reader. ADTS declares no
+// encoder delay, so its first 1 024 frames are the encoder's priming, within `plays`'s
+// allowance.
+#[test]
+fn plays_adts_aac() {
+    plays("tone.aac", ChannelLayout::Stereo);
+}
+
 // Its pre-skip (312 frames) is cut, from the start and after a seek back to it: the
 // file's final granule position is 24 312, so exactly 24 000 frames play, from 0.
 #[test]
@@ -141,6 +149,15 @@ fn an_ogg_opus_file_plays_without_its_pre_skip() {
 #[test]
 fn plays_webm_opus_and_mixes_five_one_to_stereo() {
     plays_at("tone-5.1.webm", ChannelLayout::Stereo, 48_000);
+}
+
+// AAC-LC in MP4 and Matroska, through the crate's demuxers: the MP4's edit list cuts
+// the encoder's priming.
+#[cfg(target_os = "linux")]
+#[test]
+fn plays_aac_in_mp4_and_matroska() {
+    plays("tone-aac.m4a", ChannelLayout::Stereo);
+    plays("tone-aac.mkv", ChannelLayout::Stereo);
 }
 
 /// A 16-bit PCM WAV of `channels` at 48 kHz, `frames` long, every sample `value`.
@@ -181,6 +198,29 @@ impl TempFile {
 impl Drop for TempFile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+// The same MP4 with its AudioSpecificConfig's backward-compatible extension saying SBR
+// is present: explicit HE-AAC, refused by name rather than played as its LC core.
+#[cfg(target_os = "linux")]
+#[test]
+fn explicit_he_aac_is_unsupported() {
+    let mut bytes = std::fs::read(testdata("tone-aac.m4a")).expect("reads");
+    // DecoderSpecificInfo: AAC-LC, 44.1 kHz, stereo, then 0x2B7, SBR, absent.
+    let asc = [0x12, 0x10, 0x56, 0xE5, 0x00];
+    let at = bytes
+        .windows(asc.len())
+        .position(|w| w == asc)
+        .expect("the config");
+    bytes[at + 4] = 0x98;
+    let file = TempFile::new("he-aac.m4a", &bytes);
+    match LinuxMediaDecoders.open(&file.0, &config(true)) {
+        Err(PlatformError::Unsupported { what }) => {
+            assert!(what.contains("HE-AAC"), "{what}");
+        }
+        Err(err) => panic!("{err}"),
+        Ok(_) => panic!("explicit HE-AAC doesn't decode"),
     }
 }
 

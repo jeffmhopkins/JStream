@@ -285,7 +285,12 @@ fn codec(name: &str, private: Option<&[u8]>) -> Codec {
             || Codec::Other("FLAC without STREAMINFO".into()),
             Codec::Flac,
         ),
-        (name, _) if name.starts_with("A_AAC") => Codec::Other("AAC".into()),
+        // `A_AAC` with its AudioSpecificConfig, or the old IDs that name the profile.
+        ("A_AAC", Some(config)) => Codec::Aac(config.to_vec()),
+        ("A_AAC/MPEG4/LC" | "A_AAC/MPEG2/LC", config) => {
+            Codec::Aac(config.map(<[u8]>::to_vec).unwrap_or_default())
+        }
+        (name, _) if name.starts_with("A_AAC") => Codec::Other(name.into()),
         ("A_OPUS", Some(head)) if head.starts_with(b"OpusHead") => Codec::Opus(head.to_vec()),
         ("A_OPUS", _) => Codec::Other("Opus without its OpusHead".into()),
         (name, _) => Codec::Other(name.to_string()),

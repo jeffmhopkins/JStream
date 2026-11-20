@@ -19,6 +19,14 @@
 //!
 //! Everything here is pure Rust and platform-independent, and tested everywhere.
 
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod aac;
 pub(crate) mod audio;
 #[cfg_attr(
     not(target_os = "linux"),
@@ -126,7 +134,7 @@ impl MediaDecoders for LinuxMediaDecoders {
         Err(PlatformError::Unsupported {
             what: format!(
                 "this media file's container on Linux ({}): MP4, MOV, Matroska, WebM, WAV, \
-                 FLAC, Ogg and MP3 play so far",
+                 FLAC, Ogg, MP3 and ADTS AAC play so far",
                 path.extension()
                     .and_then(|e| e.to_str())
                     .unwrap_or("no extension")

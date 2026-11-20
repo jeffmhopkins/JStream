@@ -9,7 +9,7 @@ use jstream_platform::PlatformError;
 use symphonia::core::audio::Channels;
 use symphonia::core::codecs::audio::AudioCodecParameters;
 use symphonia::core::codecs::audio::well_known::{
-    CODEC_ID_FLAC, CODEC_ID_MP3, CODEC_ID_OPUS, CODEC_ID_VORBIS,
+    CODEC_ID_AAC, CODEC_ID_FLAC, CODEC_ID_MP3, CODEC_ID_OPUS, CODEC_ID_VORBIS,
 };
 
 /// The most samples a track may list: 20 million, and never more than the file has
@@ -47,6 +47,9 @@ pub(crate) enum Codec {
     Av1(Vec<u8>),
     /// MPEG-1/2 Layer III audio.
     Mp3,
+    /// AAC-LC, with its `AudioSpecificConfig` (MP4's `esds`, Matroska's
+    /// `CodecPrivate`), or none, when the track's rate and channels describe it.
+    Aac(Vec<u8>),
     /// Vorbis, with its identification and setup headers (Matroska's `CodecPrivate`,
     /// Xiph-laced).
     Vorbis(Vec<u8>),
@@ -90,6 +93,12 @@ impl Track {
         match &self.codec {
             Codec::Mp3 => {
                 params.for_codec(CODEC_ID_MP3);
+            }
+            Codec::Aac(config) => {
+                params.for_codec(CODEC_ID_AAC);
+                if !config.is_empty() {
+                    params.with_extra_data(config.clone().into_boxed_slice());
+                }
             }
             Codec::Flac(info) => {
                 params
