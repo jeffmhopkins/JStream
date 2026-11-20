@@ -420,6 +420,28 @@ pub fn Canvas() -> impl IntoView {
             switch(current, next);
         }
     });
+    // The stage resized (the window, or the dock around it): once it holds for
+    // `preview::SETTLE`, a stream sized for it, when it differs enough from this one.
+    let restage = move || {
+        let (Some(current), Some(element)) = (
+            stream.try_get_value().flatten(),
+            stage.try_get_untracked().flatten(),
+        ) else {
+            return;
+        };
+        let size = (
+            element.client_width() as f32,
+            element.client_height() as f32,
+            window().device_pixel_ratio() as f32,
+        );
+        if let Some(next) = current.at_stage(size) {
+            switch(current, next);
+        }
+    };
+    Effect::new(move |_| {
+        viewport.track();
+        set_timeout(restage, preview::SETTLE);
+    });
     Effect::new(move |_| {
         let want = wanted.get();
         if stream

@@ -132,6 +132,29 @@ impl Stream {
         })
     }
 
+    /// The same stream for a stage now `stage`, on the next channel, or `None` while the
+    /// picture it asks for is within a quarter of the one it has: a stage that grew (a
+    /// window maximized, a dock resized) gets a sharper picture, and one that shrank a
+    /// cheaper one, without a new stream for every pixel of a drag.
+    pub fn at_stage(&self, stage: (f32, f32, f32)) -> Option<Stream> {
+        let size = |(w, h, ratio): (f32, f32, f32)| match subscribe(w, h, ratio, false, FPS) {
+            Action::PreviewSubscribe {
+                max_width: Some(w),
+                max_height: Some(h),
+                ..
+            } => (w as f32, h as f32),
+            _ => (0.0, 0.0),
+        };
+        let (now_w, now_h) = size(self.stage);
+        let (next_w, next_h) = size(stage);
+        let off = |now: f32, next: f32| now <= 0.0 || (next - now).abs() / now >= 0.25;
+        (off(now_w, next_w) || off(now_h, next_h)).then(|| Stream {
+            channel: self.channel.wrapping_add(1).max(1),
+            stage,
+            ..self.clone()
+        })
+    }
+
     /// The stream that shows `scene` next, on the next channel.
     pub fn showing(&self, scene: Option<SceneId>) -> Stream {
         Stream {
@@ -505,6 +528,28 @@ mod tests {
         assert_ne!(next.channel, program.channel);
         // B shown already: a second settle of the same change does nothing.
         assert_eq!(settled_switch(&next, &b, &b), None);
+    }
+
+    #[test]
+    fn a_stage_that_grows_or_shrinks_a_quarter_gets_a_new_stream() {
+        // The docked canvas asked once, at the size it opened at, so maximizing the
+        // window kept the small picture while a pop-out was sharp.
+        let first = Stream::first((640.0, 360.0, 1.0), true, FPS);
+        let bigger = first
+            .at_stage((1600.0, 900.0, 1.0))
+            .expect("a sharper stream");
+        assert_ne!(bigger.channel, first.channel);
+        let Action::PreviewSubscribe { max_width, .. } = bigger.subscribe() else {
+            panic!("a subscribe");
+        };
+        assert_eq!(max_width, Some(1600));
+        // A few pixels of a drag: the same stream.
+        assert_eq!(bigger.at_stage((1580.0, 890.0, 1.0)), None);
+        // Past the engine's largest picture nothing changes either.
+        let full = Stream::first((1920.0, 1080.0, 1.0), true, FPS);
+        assert_eq!(full.at_stage((3840.0, 2160.0, 1.0)), None);
+        // Much smaller: a cheaper stream.
+        assert!(bigger.at_stage((800.0, 450.0, 1.0)).is_some());
     }
 
     #[test]
