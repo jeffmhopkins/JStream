@@ -3501,13 +3501,13 @@ stamp = { hash = "b3:d3a809e74c337f22", by = "agent:claude-settings", note = "Th
 stamp = { hash = "b3:3b784d57da25fc79", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media.rs"]
-stamp = { hash = "b3:e39179ac7e53f594", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
+stamp = { hash = "b3:4bcbab1a31f2e9f6", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/aac.rs"]
-stamp = { hash = "b3:663f3076eee1a95e", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
+stamp = { hash = "b3:dbf6509cdf5e2643", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/audio.rs"]
-stamp = { hash = "b3:f5987ae2d958c3c6", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
+stamp = { hash = "b3:0fc3b7565e4c6018", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/audio/tests.rs"]
 stamp = { hash = "b3:8a92e297185d6d76", by = "agent:linux-media", note = "Re-read: the table's NoMediaDecoders row becomes LinuxMediaDecoders (media.rs, media/: WAV, FLAC, Ogg Vorbis, MP3 through symphonia, mixed to stereo, blocks stamped at their first kept frame after gapless trimming, others Unsupported, AAC behind ADR-0072 (g)); Not-here-yet lists the rest of ADR-0072 (MP4/MOV/MKV/WebM, VA-API decode, the FFmpeg fallback); depends_on gains ADR-0072; lib.rs's module doc and Docs: line name LinuxMediaDecoders and ADR-0072, and it exports LinuxMediaDecoders on every target (the module is portable; only code that calls Linux is cfg-gated, as the section says); the Cargo.toml summary and the symphonia dep match | merge: #1521 added LoopbackVcam/vcam.rs, ADR-0156 and the threat-model link; resolved the conflicts by keeping both: depends_on has ADR-0072 and ADR-0156, the Docs: line both, the summary says media files through symphonia and the v4l2loopback camera; Not-here-yet still lists the rest of ADR-0072" }
@@ -3549,10 +3549,10 @@ stamp = { hash = "b3:880045d97d194f31", by = "agent:linux-decoders", note = "re-
 stamp = { hash = "b3:e74299b3a3540fcb", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row and not-here list against the AV1 decoder: media/av1.rs, vaapi/av1_decoder.rs, film grain on the GPU, 8-bit profile 0 only, no spatial layers or large-scale tiles, AAC still missing" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/movie.rs"]
-stamp = { hash = "b3:44e97c2079997137", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
+stamp = { hash = "b3:22c7f9e1d7fd9b3d", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/mp4.rs"]
-stamp = { hash = "b3:d84f2fa23eb26dba", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
+stamp = { hash = "b3:dc803534e77e694a", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/mp4/tests.rs"]
 stamp = { hash = "b3:415115cb057e9a82", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row and not-here list against the AV1 decoder: media/av1.rs, vaapi/av1_decoder.rs, film grain on the GPU, 8-bit profile 0 only, no spatial layers or large-scale tiles, AAC still missing" }
@@ -3596,6 +3596,9 @@ stamp = { hash = "b3:87b1d287f2b34418", by = "agent:linux-decoders", note = "re-
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/testdata/tone-aac.mkv"]
 stamp = { hash = "b3:2f7f294d860c3901", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
 
+["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/testdata/tone-aac.mov"]
+stamp = { hash = "b3:4668bd25e6807410", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
+
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/testdata/tone.aac"]
 stamp = { hash = "b3:4f1ee2df616516d1", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
 
@@ -3630,7 +3633,7 @@ stamp = { hash = "b3:ac525152569334ac", by = "agent:linux-media", note = "LinuxM
 stamp = { hash = "b3:a3aec4c1015890a9", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row and not-here list against the VP9 decoder: media/vp9.rs, vaapi/vp9_decoder.rs, profile 0 only, mid-stream size change refused, VP8 and AV1 still missing" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/tests.rs"]
-stamp = { hash = "b3:164d8a2df1ea3085", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row against AAC-LC: MP4/MOV/Matroska and ADTS through symphonia (ADR-0160), media/aac.rs refuses explicit HE-AAC, other object types, >2 channels and a PCE by name; implicit HE-AAC plays its LC core" }
+stamp = { hash = "b3:2fb21140ccc0e423", by = "agent:linux-decoders", note = "re-read the row against the follow-up: AAC in a QuickTime v1 sound description's wave box now plays, so 'MOV' holds; ADTS's first frame header is checked, so 'as is AAC Main, more than two channels' now holds for ADTS too" }
 
 ["CRATE-jstream-platform-linux#purpose"."file:crates/jstream-platform-linux/src/media/vp8.rs"]
 stamp = { hash = "b3:189e4f9744356f7f", by = "agent:linux-decoders", note = "re-read the LinuxMediaDecoders row and not-here list against the VP8 decoder: media/vp8.rs, vaapi/vp8_decoder.rs, a mid-stream size change refused, AV1 still missing" }
