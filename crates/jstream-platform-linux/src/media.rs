@@ -9,7 +9,8 @@
 //!   Ogg and MP3, with PCM, FLAC, Vorbis and MP3 audio, and Opus through `rusty-opus`
 //!   ([`opus`], ADR-0159).
 //! - **Movie files** (MP4, MOV, Matroska and WebM) through the crate's own demuxers,
-//!   their H.264 video through VA-API and their audio as above (Linux only).
+//!   their H.264 and VP9 (profile 0) video through VA-API ([`h264`], [`vp9`]) and
+//!   their audio as above (Linux only).
 //!
 //! A container this backend can't read, or a codec it can't decode, is
 //! [`PlatformError::Unsupported`], naming it. AAC audio stays off until ADR-0072 (g)'s
@@ -53,6 +54,14 @@ mod movie;
 )]
 pub(crate) mod mp4;
 pub(crate) mod opus;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod vp9;
 #[cfg_attr(
     not(target_os = "linux"),
     allow(

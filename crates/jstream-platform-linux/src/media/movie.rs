@@ -1,10 +1,10 @@
 //! A movie file (MP4, QuickTime, Matroska or WebM) as a [`MediaDecoder`]: the crate's
-//! own demuxers ([`super::mp4`], [`super::mkv`]), H.264 video on the GPU through VA-API,
-//! and the audio through the crate's decoders (MP3, FLAC and Vorbis, and Opus in
+//! own demuxers ([`super::mp4`], [`super::mkv`]), H.264 and VP9 video on the GPU through
+//! VA-API, and the audio through the crate's decoders (MP3, FLAC and Vorbis, and Opus in
 //! Matroska and WebM; AAC waits for ADR-0072 (g), so a file with that audio plays its
 //! video without sound).
 
-use jstream_platform::media::{AudioBuffer, MediaTime, Rounding, Timebase, VideoFrame};
+use jstream_platform::media::{AudioBuffer, FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{
     HardwarePreference, MediaDecoder, MediaDecoderConfig, MediaInfo, MediaVideoInfo, PlatformError,
 };
@@ -13,7 +13,7 @@ use symphonia::core::units::{Duration, Timestamp};
 
 use super::audio::{AudioStream, cut_before};
 use super::demux::{Codec, Demuxed, Track};
-use crate::vaapi::VaapiH264Decoder;
+use crate::vaapi::{VaapiH264Decoder, VaapiVp9Decoder};
 
 /// The audio half: the track and its decoder.
 struct Audio {
@@ -24,10 +24,56 @@ struct Audio {
     skip_until: Option<MediaTime>,
 }
 
+/// A video track's decoder, by codec.
+enum VideoDecoder {
+    H264(Box<VaapiH264Decoder>),
+    Vp9(Box<VaapiVp9Decoder>),
+}
+
+impl VideoDecoder {
+    fn size(&self) -> FrameSize {
+        match self {
+            Self::H264(d) => d.size(),
+            Self::Vp9(d) => d.size(),
+        }
+    }
+
+    fn decode(&mut self, sample: &[u8], pts: i64) -> Result<(), PlatformError> {
+        match self {
+            Self::H264(d) => d.decode(sample, pts),
+            Self::Vp9(d) => d.decode(sample, pts),
+        }
+    }
+
+    fn flush(&mut self) -> Result<(), PlatformError> {
+        match self {
+            Self::H264(d) => d.flush(),
+            Self::Vp9(d) => {
+                d.flush();
+                Ok(())
+            }
+        }
+    }
+
+    fn reset(&mut self) {
+        match self {
+            Self::H264(d) => d.reset(),
+            Self::Vp9(d) => d.reset(),
+        }
+    }
+
+    fn pop(&mut self) -> Option<VideoFrame> {
+        match self {
+            Self::H264(d) => d.pop(),
+            Self::Vp9(d) => d.pop(),
+        }
+    }
+}
+
 /// The video half.
 struct Video {
     track: Track,
-    decoder: VaapiH264Decoder,
+    decoder: VideoDecoder,
     next: usize,
     flushed: bool,
     timebase: Timebase,
@@ -47,14 +93,14 @@ impl Movie {
     /// Opens the decoders for `mp4`'s tracks.
     ///
     /// # Errors
-    /// [`PlatformError::Unsupported`] for a video codec other than H.264, or a file with
-    /// neither video nor audio this decodes; [`VaapiH264Decoder::open`]'s errors.
+    /// [`PlatformError::Unsupported`] for a video codec other than H.264 and VP9, or a
+    /// file with neither video nor audio this decodes; the video decoder's errors.
     pub(crate) fn open(
         mut mp4: Demuxed,
         config: &MediaDecoderConfig,
     ) -> Result<Self, PlatformError> {
         let video = match mp4.video.take() {
-            Some(track) => Some(open_video(track, config)?),
+            Some(track) => Some(open_video(&mut mp4, track, config)?),
             None => None,
         };
         let audio = match mp4.audio.take() {
@@ -93,29 +139,55 @@ impl Movie {
     }
 }
 
-/// The video decoder for `track`.
-fn open_video(track: Track, config: &MediaDecoderConfig) -> Result<Video, PlatformError> {
-    let Codec::Avc(record) = &track.codec else {
-        return Err(PlatformError::Unsupported {
-            what: format!(
-                "this media file's video codec on Linux ({}): H.264 plays so far",
-                match &track.codec {
-                    Codec::Other(name) => name.as_str(),
-                    _ => "audio",
-                }
-            ),
-        });
+/// The video decoder for `track`, whose samples `file` reads.
+fn open_video(
+    file: &mut Demuxed,
+    track: Track,
+    config: &MediaDecoderConfig,
+) -> Result<Video, PlatformError> {
+    let unsupported = |name: &str| PlatformError::Unsupported {
+        what: format!("this media file's video codec on Linux ({name}): H.264 and VP9 play so far"),
     };
+    match &track.codec {
+        Codec::Avc(_) | Codec::Vp9 => {}
+        Codec::Other(name) => return Err(unsupported(name)),
+        _ => return Err(unsupported("audio")),
+    }
     if config.hardware == HardwarePreference::Avoid {
         return Err(PlatformError::Unsupported {
             what: "software video decoding of media files on Linux".into(),
         });
     }
     let timebase = Timebase::per_second(track.timescale)?;
-    let decoder = VaapiH264Decoder::open(record, timebase, config.video_format)?;
+    let decoder = match &track.codec {
+        Codec::Avc(record) => VideoDecoder::H264(Box::new(VaapiH264Decoder::open(
+            record,
+            timebase,
+            config.video_format,
+        )?)),
+        _ => {
+            // VP9's size and colour are in its first key frame.
+            let first = track
+                .samples
+                .iter()
+                .find(|s| s.sync)
+                .copied()
+                .ok_or_else(|| PlatformError::Os {
+                    call: "VP9 parser",
+                    code: None,
+                    message: "a VP9 track without a key frame".into(),
+                })?;
+            let data = file.read(&track, &first)?;
+            VideoDecoder::Vp9(Box::new(VaapiVp9Decoder::open(
+                &data,
+                timebase,
+                config.video_format,
+            )?))
+        }
+    };
     let size = decoder.size();
     if (size.width(), size.height()) != track.size {
-        tracing::debug!(?size, sample_entry = ?track.size, "the SPS and the sample entry disagree on the size; the SPS wins");
+        tracing::debug!(?size, container = ?track.size, "the stream and its container disagree on the size; the stream wins");
     }
     // An edit list that trims the start leaves the cut frames before 0: decoded, as
     // later frames reference them, but not shown, as after `seek(0)`.

@@ -1,9 +1,9 @@
 //! VA-API decoding on a real GPU (`hw-tests`, run by hand):
 //! `cargo test -p jstream-platform-linux --features hw-tests -- --ignored decodes_`.
 //!
-//! H.264 decoding is exact, so each frame must match FFmpeg's software decode of the
-//! same file bit for bit: the hashes below are FNV-1a over each frame's NV12 bytes from
-//! `ffmpeg -i <file> -f rawvideo -pix_fmt nv12 -`.
+//! H.264 and VP9 decoding are exact, so each frame must match FFmpeg's software decode
+//! of the same file bit for bit: the hashes below are FNV-1a over each frame's NV12
+//! bytes from `ffmpeg -i <file> -f rawvideo -pix_fmt nv12 -`.
 
 use std::path::Path;
 
@@ -157,6 +157,66 @@ const OPEN_GOP: [u64; 90] = [
     0x4f30_7889_dadf_e9ee,
 ];
 
+/// `vp9-altref.webm`, decoded by libvpx and by FFmpeg's own VP9 decoder alike.
+const VP9_ALTREF: [u64; 30] = [
+    0xfd4c_44ee_35d7_5808,
+    0xd9ac_f466_76e6_2f05,
+    0xddd5_08f9_7e9b_a312,
+    0x6177_22e4_f086_dc81,
+    0xb5cc_78a9_aceb_5ace,
+    0x5106_f336_50a7_fdfa,
+    0xd184_83b5_f258_6784,
+    0x76c8_e0bf_beff_5ae9,
+    0x8507_3d02_f956_bb1f,
+    0x1e84_f60c_afac_9893,
+    0x2f1f_2f2d_f03f_df55,
+    0x14ae_d6c9_ec8c_5165,
+    0x9d93_5bdc_dc6d_34d9,
+    0xdbd2_f908_bb44_f543,
+    0x3624_8ab2_7dcf_db51,
+    0xd19f_ce61_2f1b_e4da,
+    0x8535_072b_d786_967a,
+    0x0f38_54d2_2948_33d3,
+    0xaddb_4211_43ae_c54a,
+    0x9f40_cf6f_fbe3_f774,
+    0xdbe9_922c_11d7_db5a,
+    0xa3e5_baed_39fa_3c6e,
+    0x5457_cb4d_2a81_711f,
+    0x0406_c87e_12aa_7757,
+    0x784f_5fb2_d632_4026,
+    0xc6ea_8fa1_6076_1580,
+    0xcfb2_5ddd_b06d_e4b8,
+    0x2920_3d58_cb8e_6847,
+    0xbd2f_5b2d_bc30_332e,
+    0x5011_f65b_1385_8cf1,
+];
+
+/// `vp9-seg-tiles.webm`, decoded by libvpx and by FFmpeg's own VP9 decoder alike.
+const VP9_SEG_TILES: [u64; 9] = [
+    0x9194_39ee_7986_3962,
+    0x225d_cec9_a92c_6041,
+    0xb106_505c_ec3f_b409,
+    0xdcd3_e772_1c83_7a67,
+    0x093d_b25b_c32c_e3de,
+    0x5ae8_04dc_caae_98c3,
+    0x0638_8e4d_e8e5_6e77,
+    0x4d61_a502_f6d0_36f8,
+    0x34e6_09c6_36b5_d4ee,
+];
+
+/// `vp9-er.webm`, decoded by libvpx and by FFmpeg's own VP9 decoder alike.
+const VP9_ER: [u64; 9] = [
+    0x420f_3de5_7ed5_97c8,
+    0x3171_9138_8209_27e1,
+    0x1cfd_d1cc_617d_421b,
+    0x30d3_eacf_d97f_4921,
+    0x1503_d635_d807_51ac,
+    0x1526_adb5_884e_b609,
+    0x79c0_19eb_3a3b_195c,
+    0x16d0_1c21_5351_30e8,
+    0xf3ed_7696_ac34_f91f,
+];
+
 fn fnv(planes: &[&[u8]]) -> u64 {
     let mut x: u64 = 0xcbf2_9ce4_8422_2325;
     for plane in planes {
@@ -250,4 +310,45 @@ fn decodes_an_open_gop_stream_and_seeks_to_its_recovery_point() {
 fn decodes_the_same_stream_from_matroska_bit_exact() {
     // The MP4's video remuxed into Matroska with `-c:v copy`: the same frames.
     decodes("h264-vorbis.mkv", &HIGH);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP9 decoder"]
+fn decodes_vp9_with_a_hidden_alternate_reference_bit_exact() {
+    decodes("vp9-altref.webm", &VP9_ALTREF);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP9 decoder"]
+fn decodes_vp9_segmentation_and_tiles_bit_exact() {
+    decodes("vp9-seg-tiles.webm", &VP9_SEG_TILES);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP9 decoder"]
+fn decodes_error_resilient_vp9_bit_exact() {
+    decodes("vp9-er.webm", &VP9_ER);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP9 decoder"]
+fn a_vp9_seek_starts_at_the_key_frame_before() {
+    // The alternate-reference stream's one key frame is its first, so a seek to 0.5 s
+    // decodes from 0 and shows the frames from 0.5 s on, bit for bit.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/media/testdata/vp9-altref.webm");
+    let config = MediaDecoderConfig {
+        video_format: PixelFormat::Nv12,
+        hardware: HardwarePreference::Require,
+        audio: false,
+    };
+    let mut decoder = LinuxMediaDecoders.open(&path, &config).expect("opens");
+    decoder
+        .seek(MediaTime::new(500_000, Timebase::MICROS))
+        .expect("seeks");
+    let mut hashes = Vec::new();
+    while let Some(frame) = decoder.next_video().expect("decodes") {
+        let planes: Vec<&[u8]> = frame.planes().iter().map(|p| p.data()).collect();
+        hashes.push(fnv(&planes));
+    }
+    assert_eq!(hashes, VP9_ALTREF[15..]);
 }

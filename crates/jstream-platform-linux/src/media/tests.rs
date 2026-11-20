@@ -257,10 +257,29 @@ fn a_movie_opens_or_names_the_missing_decoder() {
 
 #[cfg(target_os = "linux")]
 #[test]
-fn a_webm_names_its_video_codec() {
-    match LinuxMediaDecoders.open(&testdata("vp9-opus.webm"), &config(true)) {
-        Err(PlatformError::Unsupported { what }) => assert!(what.contains("V_VP9"), "{what}"),
+fn a_vp9_webm_opens_or_names_the_missing_decoder() {
+    // Profile 0, with a hidden alternate reference: on a machine with a VA-API VP9
+    // decoder it opens; elsewhere (CI) it names what to install.
+    match LinuxMediaDecoders.open(&testdata("vp9-altref.webm"), &config(true)) {
+        Ok(decoder) => {
+            let video = decoder.info().video.expect("video");
+            assert_eq!((video.size.width(), video.size.height()), (96, 64));
+        }
+        Err(PlatformError::MissingComponent { component, remedy }) => {
+            assert!(component.contains("VP9"), "{component}");
+            assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
+        }
         Err(err) => panic!("{err}"),
-        Ok(_) => panic!("VP9 doesn't decode yet"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn vp9_beyond_profile_0_is_unsupported() {
+    // An RGB (4:4:4, profile 1) VP9 stream, refused before any GPU is looked for.
+    match LinuxMediaDecoders.open(&testdata("vp9-opus.webm"), &config(true)) {
+        Err(PlatformError::Unsupported { what }) => assert!(what.contains("profile 1"), "{what}"),
+        Err(err) => panic!("{err}"),
+        Ok(_) => panic!("profile 1 doesn't decode"),
     }
 }
