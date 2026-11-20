@@ -151,13 +151,15 @@ fn plays_webm_opus_and_mixes_five_one_to_stereo() {
     plays_at("tone-5.1.webm", ChannelLayout::Stereo, 48_000);
 }
 
-// AAC-LC in MP4 and Matroska, through the crate's demuxers: the MP4's edit list cuts
+// AAC-LC in MP4, MOV and Matroska, through the crate's demuxers: the MP4's edit list cuts
 // the encoder's priming.
 #[cfg(target_os = "linux")]
 #[test]
 fn plays_aac_in_mp4_and_matroska() {
     plays("tone-aac.m4a", ChannelLayout::Stereo);
     plays("tone-aac.mkv", ChannelLayout::Stereo);
+    // QuickTime's version 1 sound description: its `esds` is inside a `wave` box.
+    plays("tone-aac.mov", ChannelLayout::Stereo);
 }
 
 /// A 16-bit PCM WAV of `channels` at 48 kHz, `frames` long, every sample `value`.
@@ -199,6 +201,46 @@ impl Drop for TempFile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
     }
+}
+
+// An ADTS stream whose header says AAC Main: symphonia would decode it with the LC
+// tools, so it is refused by name instead.
+#[test]
+fn adts_beyond_aac_lc_is_unsupported() {
+    let mut bytes = std::fs::read(testdata("tone.aac")).expect("reads");
+    // The first frame's profile bits: LC (1) to Main (0).
+    assert_eq!(&bytes[..3], &[0xFF, 0xF1, 0x50]);
+    bytes[2] = 0x10;
+    let file = TempFile::new("main.aac", &bytes);
+    match LinuxMediaDecoders.open(&file.0, &config(true)) {
+        Err(PlatformError::Unsupported { what }) => {
+            assert!(what.contains("object type 1"), "{what}");
+        }
+        Err(err) => panic!("{err}"),
+        Ok(_) => panic!("AAC Main doesn't decode"),
+    }
+}
+
+// An ID3v2 tag ahead of the ADTS stream, whose data looks like an AAC Main header: the
+// check skips the tag, as symphonia's reader does, and the file still plays.
+#[test]
+fn a_tagged_adts_file_still_plays() {
+    let frame = [
+        &b"PRIV"[..],
+        &[0, 0, 0, 8, 0, 0],
+        &[0xFF, 0xF1, 0x10, 0x80, 0, 0, 0, 0],
+    ]
+    .concat();
+    let mut bytes = b"ID3\x04\x00\x00\x00\x00\x00".to_vec();
+    bytes.push(u8::try_from(frame.len()).expect("small"));
+    bytes.extend_from_slice(&frame);
+    bytes.extend_from_slice(&std::fs::read(testdata("tone.aac")).expect("reads"));
+    let file = TempFile::new("tagged.aac", &bytes);
+    let mut decoder = LinuxMediaDecoders
+        .open(&file.0, &config(true))
+        .unwrap_or_else(|err| panic!("{err}"));
+    let (frames, _, _) = read_all(decoder.as_mut());
+    assert!(frames >= 22_050, "{frames} frames");
 }
 
 // The same MP4 with its AudioSpecificConfig's backward-compatible extension saying SBR

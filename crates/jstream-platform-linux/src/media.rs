@@ -6,16 +6,15 @@
 //!
 //! What plays so far:
 //! - **Audio files** through symphonia's readers and decoders ([`audio`]): WAV, FLAC,
-//!   Ogg and MP3, with PCM, FLAC, Vorbis and MP3 audio, and Opus through `rusty-opus`
-//!   ([`opus`], ADR-0159).
+//!   Ogg, MP3 and ADTS AAC, with PCM, FLAC, Vorbis, MP3 and AAC-LC audio, and Opus
+//!   through `rusty-opus` ([`opus`], ADR-0159).
 //! - **Movie files** (MP4, MOV, Matroska and WebM) through the crate's own demuxers,
-//!   their H.264, VP8 and VP9 (profile 0) video through VA-API ([`h264`], [`vp8`],
-//!   [`vp9`]) and
-//!   their audio as above (Linux only).
+//!   their H.264, VP8, VP9 and AV1 (profile 0) video through VA-API ([`h264`], [`vp8`],
+//!   [`vp9`], [`av1`]) and their audio as above (Linux only).
 //!
-//! A container this backend can't read, or a codec it can't decode, is
-//! [`PlatformError::Unsupported`], naming it. AAC audio stays off until ADR-0072 (g)'s
-//! decoder patent check says yes.
+//! AAC is AAC-LC only (ADR-0160): [`aac`] refuses, by name, a stream that needs more,
+//! such as HE-AAC that it declares. A container this backend can't read, or a codec it
+//! can't decode, is [`PlatformError::Unsupported`], naming it.
 //!
 //! Everything here is pure Rust and platform-independent, and tested everywhere.
 

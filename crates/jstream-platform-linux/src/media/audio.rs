@@ -460,6 +460,19 @@ pub(crate) struct AudioFile {
 /// How far before a seek's target an Opus stream starts decoding (RFC 7845 §4.6).
 const OPUS_PREROLL_MICROS: i64 = 80_000;
 
+/// The first 64 KiB of `path`, where an ADTS stream's first frame header is (after any
+/// ID3 tag); `None` when it can't be read.
+fn adts_head(path: &Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut head = Vec::new();
+    File::open(path)
+        .ok()?
+        .take(64 * 1024)
+        .read_to_end(&mut head)
+        .ok()?;
+    Some(head)
+}
+
 /// Opens a reader on `file`, or `None` when symphonia can't read its container.
 fn probe(path: &Path, file: File) -> Result<Option<Box<dyn FormatReader>>, PlatformError> {
     let mut hint = Hint::new();
@@ -527,6 +540,15 @@ impl AudioFile {
             tb,
         );
         let preroll = MediaTime::new(if opus { OPUS_PREROLL_MICROS } else { 0 }, Timebase::MICROS);
+        // An ADTS stream carries no AudioSpecificConfig: its first frame header says the
+        // profile and channels, which symphonia's decoder doesn't check.
+        if audio
+            && params.codec == CODEC_ID_AAC
+            && params.extra_data.is_none()
+            && let Some(asc) = adts_head(path).as_deref().and_then(super::aac::adts_config)
+        {
+            super::aac::check(&asc)?;
+        }
         let stream = if audio {
             Some(AudioStream::new(params, tb)?)
         } else {

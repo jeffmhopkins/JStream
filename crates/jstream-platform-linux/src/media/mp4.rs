@@ -333,7 +333,7 @@ fn sample_entry(stsd: &[u8], video: bool) -> Result<Entry, PlatformError> {
     let children = c.boxes().unwrap_or_default();
     let codec = match kind {
         b".mp3" => Codec::Mp3,
-        b"mp4a" => match child(&children, b"esds").map(esds_config) {
+        b"mp4a" => match esds(&children).map(esds_config) {
             Some(Ok((0x69 | 0x6B, _))) => Codec::Mp3,
             // MPEG-4 audio (its config names the object type), or MPEG-2 AAC LC.
             Some(Ok((0x40 | 0x67, config))) => Codec::Aac(config),
@@ -357,6 +357,15 @@ fn sample_entry(stsd: &[u8], video: bool) -> Result<Entry, PlatformError> {
         size: (0, 0),
         channels,
         sample_rate,
+    })
+}
+
+/// An `mp4a` entry's `esds` box: its own child, or, in a QuickTime sound description
+/// of version 1 or 2, inside its `wave` box.
+fn esds<'a>(children: &[Child<'a>]) -> Option<&'a [u8]> {
+    child(children, b"esds").or_else(|| {
+        let wave = Cursor::new(child(children, b"wave")?).boxes().ok()?;
+        child(&wave, b"esds")
     })
 }
 

@@ -90,9 +90,49 @@ pub(crate) fn check(asc: &[u8]) -> Result<(), PlatformError> {
     Ok(())
 }
 
+/// The `AudioSpecificConfig` the first ADTS frame header in `head` stands for (its
+/// profile, sampling frequency index and channel configuration), or `None` when `head`
+/// has no ADTS header. An ID3v2 tag at the start is skipped, and a header counts only
+/// when another follows it where its frame length says (or `head` ends first), so bytes
+/// in a tag or a frame that merely look like one are passed over.
+pub(crate) fn adts_config(head: &[u8]) -> Option<[u8; 2]> {
+    let mut from = 0;
+    // ID3v2 tags, each "ID3", a version, flags, and a 28-bit syncsafe size; a footer
+    // (flag 0x10) adds ten bytes.
+    while let Some(tag) = head.get(from..from + 10).filter(|t| t.starts_with(b"ID3")) {
+        let size = tag[6..10]
+            .iter()
+            .fold(0_usize, |n, b| n << 7 | usize::from(b & 0x7F));
+        from += 10 + size + if tag[5] & 0x10 != 0 { 10 } else { 0 };
+    }
+    // A syncword of twelve ones and MPEG layer 0.
+    let is_header = |at: usize| {
+        head.get(at..at + 2)
+            .is_some_and(|w| w[0] == 0xFF && w[1] & 0xF6 == 0xF0)
+    };
+    let at = (from..head.len().saturating_sub(6)).find(|&at| {
+        if !is_header(at) {
+            return false;
+        }
+        let h = &head[at..at + 6];
+        // frame_length: 13 bits, the header included.
+        let len = usize::from(h[3] & 0x03) << 11 | usize::from(h[4]) << 3 | usize::from(h[5] >> 5);
+        len >= 7 && (at + len + 2 > head.len() || is_header(at + len))
+    })?;
+    let h = &head[at..at + 4];
+    // The profile is the object type less one.
+    let kind = (h[2] >> 6) + 1;
+    let frequency = (h[2] >> 2) & 0x0F;
+    let channels = (h[2] & 1) << 2 | h[3] >> 6;
+    Some([
+        kind << 3 | frequency >> 1,
+        (frequency & 1) << 7 | channels << 3,
+    ])
+}
+
 #[cfg(test)]
 mod tests {
-    use super::check;
+    use super::{adts_config, check};
     use jstream_platform::PlatformError;
 
     fn refused(asc: &[u8]) -> String {
@@ -131,6 +171,55 @@ mod tests {
         // 5.1 (channel configuration 6), and a program config element (0).
         assert!(refused(&[0x11, 0xB0]).contains("more than two channels"));
         assert!(refused(&[0x12, 0x00]).contains("program config element"));
+    }
+
+    /// An ADTS header of a 9-byte frame: the given profile and channel configuration,
+    /// 44.1 kHz.
+    fn adts(profile: u8, channels: u8) -> [u8; 9] {
+        [
+            0xFF,
+            0xF1,
+            profile << 6 | 4 << 2 | channels >> 2,
+            (channels & 3) << 6,
+            9 >> 3,
+            (9 & 7) << 5 | 0x1F,
+            0xFC,
+            0,
+            0,
+        ]
+    }
+
+    #[test]
+    fn an_adts_header_stands_for_its_config() {
+        let two = |profile, channels| {
+            let frame = adts(profile, channels);
+            adts_config(&[frame, frame].concat()).expect("a header")
+        };
+        // AAC-LC (profile 1), 44.1 kHz, stereo.
+        assert_eq!(two(1, 2), [0x12, 0x10]);
+        // AAC Main (profile 0) and LTP (3) are refused by name; 5.1 too.
+        assert!(refused(&two(0, 2)).contains("object type 1"));
+        assert!(refused(&two(3, 2)).contains("object type 4"));
+        assert!(refused(&two(1, 6)).contains("more than two channels"));
+        // One frame at the end of what was read counts.
+        assert_eq!(adts_config(&adts(1, 2)), Some([0x12, 0x10]));
+        assert_eq!(
+            adts_config(&[0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66]),
+            None
+        );
+    }
+
+    #[test]
+    fn a_sync_word_in_an_id3_tag_or_a_frame_is_passed_over() {
+        let lc = adts(1, 2);
+        // An ID3v2.4 tag of 8 bytes whose data looks like an AAC Main header.
+        let mut file = b"ID3\x04\x00\x00\x00\x00\x00\x08".to_vec();
+        file.extend_from_slice(&[0xFF, 0xF1, 0x10, 0x80, 0, 0, 0, 0]);
+        file.extend_from_slice(&[lc, lc].concat());
+        assert_eq!(adts_config(&file), Some([0x12, 0x10]));
+        // Without the tag's header, the look-alike isn't followed by a header where its
+        // length (0) says, so it is passed over too.
+        assert_eq!(adts_config(&file[10..]), Some([0x12, 0x10]));
     }
 
     #[test]
