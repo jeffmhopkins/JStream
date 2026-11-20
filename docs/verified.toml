@@ -6651,10 +6651,10 @@ stamp = { hash = "b3:cb9ccbe7df38b064", by = "agent:claude-perf-suite", note = "
 stamp = { hash = "b3:e938eec1c747d6e8", by = "agent:claude-perf-suite", note = "new section: each count's source checked against views.rs, screen.rs, the canvas's run_preview/resubscribe and projector Picture; labels as built by views::label" }
 
 ["CRATE-jstream-ui-e2e#harness"."body"]
-stamp = { hash = "b3:a2d55e5041153b80", by = "agent:claude-settings", note = "This branch (#1338) adds the agent prompt, the always-allowed list on Devices, the Ask setting and the webview's in-memory UI token (ADR-0131). Merged wave/alpha5 (CLAP scan page, network access setting, wheel chords, camera controls) and #1334 at protocol 0.108. The mock daemon serves agent.* as before; the wave's harness changes don't touch the agents spec." }
+stamp = { hash = "b3:57e95c0f06b82238", by = "agent:release-thread", note = "openAddSource now waits for the Sources panel's scene caption before its right-click; added that to the section's openAddSource description. The rest of the harness list is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/fixtures.js"]
-stamp = { hash = "b3:887d8011c5706dcf", by = "agent:claude-settings", note = "This branch (#1338) adds the agent prompt, the always-allowed list on Devices, the Ask setting and the webview's in-memory UI token (ADR-0131). Merged wave/alpha5 (CLAP scan page, network access setting, wheel chords, camera controls) and #1334 at protocol 0.108. The mock daemon serves agent.* as before; the wave's harness changes don't touch the agents spec." }
+stamp = { hash = "b3:da7ee4209f1193eb", by = "agent:release-thread", note = "openAddSource now waits for the Sources panel's scene caption before its right-click; added that to the section's openAddSource description. The rest of the harness list is unchanged." }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/global-setup.js"]
 stamp = { hash = "b3:cd1222001aad0cda" }
@@ -7692,7 +7692,7 @@ stamp = { hash = "b3:633b20ae9ca5334b", by = "agent:claude", note = "release.yml
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:cd2cd9d29fcef621", by = "agent:claude", note = "The root Cargo.toml change only adds the rusty-opus workspace dependency (ADR-0159); [workspace.package] version is unchanged, so this section holds." }
+stamp = { hash = "b3:5657e739d8e97fa6", by = "agent:release-thread", note = "Bumped [workspace.package] version to 0.1.0-alpha.6 with cargo update -w; the section's rule (apps take version.workspace, pre-release part for test builds, bump in its own PR) still holds unchanged." }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }

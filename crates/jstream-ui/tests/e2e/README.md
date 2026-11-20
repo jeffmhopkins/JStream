@@ -44,7 +44,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   and connects; `disconnect` disconnects through the header's File menu;
   `openAddSource` opens the Add source dialog from the Sources panel's menu, by a
   right-click just under its last row (or under the empty scene's hint, since the tool
-  bar at the panel's foot opens no menu), and
+  bar at the panel's foot opens no menu), once the panel shows a scene (before the
+  first snapshot picks one, a right-click opens no menu), and
   `nestScene` nests a scene through it; `outputRow` finds an output's row in the
   Outputs panel, `addOutput` adds one through its "+ Add output" dialog,
   `openOutputSettings` opens an output's settings dialog from its row's ⋯ menu, and
