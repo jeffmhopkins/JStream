@@ -104,7 +104,8 @@ does each step only when it is needed, so running it again updates what changed:
 7. **Stage:** the daemon, the UI, the launcher, the `browser` folder (with `libcef.so`
    stripped of its debug symbols, which takes it from about 1.4 GB to about 270 MB), the licence files
    and a `NOTICE.txt` that says JStream holds no AAC patent licence and names Via LA
-   ([ADR-0062](../adr/0062-aac-lc-encoder-patent-check.md)), beside the install.
+   ([ADR-0062](../adr/0062-aac-lc-encoder-patent-check.md),
+   [ADR-0160](../adr/0160-aac-lc-decoder-patent-check.md)), beside the install.
 8. **Browser sandbox:** where the kernel restricts unprivileged user namespaces (Ubuntu's
    AppArmor setting, or the older Debian switch), `chrome-sandbox` is made setuid root, as
    ADR-0095 says an install must, in one root step that refuses a symlink or a file the
