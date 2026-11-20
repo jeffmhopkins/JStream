@@ -2,14 +2,14 @@
 id = "ADR-0160"
 title = "AAC-LC decoder patent check: may Linux decode AAC-LC through symphonia?"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0160: AAC-LC decoder patent check: may Linux decode AAC-LC through symphonia?
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
@@ -98,7 +98,7 @@ ADR-0062's findings apply to decoding as they do to encoding, with these differe
 
 <a id="decision"></a>
 ## Decision
-**Proposed: option A.** Linux turns on symphonia's `aac` feature for media files:
+**Option A.** Linux turns on symphonia's `aac` feature for media files:
 - **Tools.** AAC-LC only, as `symphonia-codec-aac` decodes it: the MPEG-2 AAC LC tools and
   PNS. Never SBR, parametric stereo, or any later profile's tools. A change that would
   decode one needs a new maintainer-tier ADR.
@@ -118,6 +118,10 @@ ADR-0062's findings apply to decoding as they do to encoding, with these differe
    first (a spending decision)?
 3. **HE-AAC:** do you accept playing an implicit HE-AAC stream's LC core (A), or should
    HE-AAC be refused (B)?
+
+**Answered by the maintainer's acceptance of the recommendation:** option A; ADR-0062's
+evidence is enough for decoding, with no legal opinion first; an implicit HE-AAC stream
+plays its LC core.
 
 <a id="consequences"></a>
 ## Consequences
