@@ -15,9 +15,20 @@
 //!   titled, not owned by another window, not tool windows, not cloaked, and not this
 //!   process's own. A display's `DeviceId` is `monitor:` and its GDI device name
 //!   (`monitor:\\.\DISPLAY1`); its name is the device name (`DISPLAY1`), with the current
-//!   mode's size. A window's is `hwnd:` and its handle in hex (`hwnd:0x1a2b`); its name is
-//!   its title. Windows may renumber displays when the topology changes, and may reuse a
-//!   handle once its window is destroyed.
+//!   mode's size. A window's is `hwnd:` and its handle in hex, then `;` and its key
+//!   (`hwnd:0x1a2b;w1.…`); its name is its title. Windows may renumber displays when the
+//!   topology changes, and may reuse a handle once its window is destroyed.
+//! - **Windows found again** (`capture/id.rs`): a window's key is hashes of its program's
+//!   file name, its class and its title, so the ID holds no window text. Starting a
+//!   capture takes the ID's handle while it still names a window of that program and
+//!   class (a title can change while the window is open), else the topmost listed window
+//!   with the same program, class and title, else the topmost of the same program and
+//!   class, unless the program is unknown (`OpenProcess` refused, as for an elevated
+//!   window) or is the UWP host, `ApplicationFrameHost.exe`, which only the title tells
+//!   apart. So a source picks its window up again after the program is restarted or
+//!   Windows is: the engine retries a capture that didn't start (or whose window closed)
+//!   every two seconds. Nothing found is `NotFound`. An ID without a key, as saved before
+//!   keys, takes its handle alone.
 //! - **Device:** each capture creates its own D3D11 device, on the adapter that drives the
 //!   display (for a window, the display it is on), else on the default hardware adapter.
 //! - **Frames:** a free-threaded frame pool of two BGRA buffers. On each `FrameArrived`,
