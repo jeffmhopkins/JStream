@@ -5,7 +5,9 @@
 //! The engine draws the picture under the boxes. This module only has to agree with
 //! it, and it does so through the same `jstream-protocol` functions the compositor
 //! uses (`drawn_polygon_seen`, clipped to the near plane as the compositor clips it,
-//! `CameraView::depth_of` and `CameraView::on_plane`).
+//! `CameraView::depth_of` and `CameraView::on_plane`). An item that shows a 3D model is
+//! outlined and hit by the model's bounds instead (ADR-0107 decision 8): its box extruded
+//! by the model's depth, through `ItemGeometry::solid_outline`.
 //!
 //! Docs: crates/jstream-ui/README.md#canvas, docs/adr/0094-scene-cameras.md,
 //! docs/adr/0111-camera-up-at-the-poles.md
@@ -13,7 +15,7 @@
 use crate::canvas::transform::Point;
 use jstream_control::protocol::{
     CameraView, Canvas, CanvasPoint, ContentRect, Finite32, ItemGeometry, SceneCamera, SceneId,
-    Size, Vec2, Vec3,
+    Size, SolidBounds, Vec2, Vec3,
 };
 
 /// The camera an orbit or dolly shows until the collection has it, kept with the scene it
@@ -91,7 +93,23 @@ pub fn view(camera: Option<SceneCamera>, canvas: Canvas) -> Option<CameraView> {
 /// clipped to the near plane, three to five corners on the canvas (#1054). `None` when
 /// none of it is in front of the camera or it is seen edge-on. Convex, as a clipped
 /// rectangle is.
-pub fn polygon(geometry: &ItemGeometry, view: &CameraView) -> Option<Vec<Point>> {
+///
+/// For an item that shows a model (`solid`), the outline of the model's bounds as the
+/// item places them: the hull of their eight corners, `None` when one is behind the
+/// camera.
+pub fn polygon(
+    geometry: &ItemGeometry,
+    solid: Option<SolidBounds>,
+    view: &CameraView,
+) -> Option<Vec<Point>> {
+    if let Some(bounds) = solid {
+        let hull = geometry.solid_outline(bounds, Some(view))?;
+        return Some(
+            hull.into_iter()
+                .map(|at| Point { x: at.x, y: at.y })
+                .collect(),
+        );
+    }
     let width = geometry.size.width.get();
     let height = geometry.size.height.get();
     let whole_box = ContentRect {
@@ -119,8 +137,13 @@ pub fn polygon(geometry: &ItemGeometry, view: &CameraView) -> Option<Vec<Point>>
 
 /// Whether `point` is inside the box as the camera shows it: inside the part of it in
 /// front of the camera, either winding (a box seen from behind is mirrored).
-pub fn contains(geometry: &ItemGeometry, view: &CameraView, point: Point) -> bool {
-    let Some(outline) = polygon(geometry, view) else {
+pub fn contains(
+    geometry: &ItemGeometry,
+    solid: Option<SolidBounds>,
+    view: &CameraView,
+    point: Point,
+) -> bool {
+    let Some(outline) = polygon(geometry, solid, view) else {
         return false;
     };
     let len = outline.len();
@@ -135,13 +158,13 @@ pub fn contains(geometry: &ItemGeometry, view: &CameraView, point: Point) -> boo
 /// axis when the camera sorts by depth, ties and an unsorted camera going to the later
 /// in stacking order, as the compositor draws them.
 pub fn topmost_at<'a, T>(
-    items: impl DoubleEndedIterator<Item = (T, &'a ItemGeometry)>,
+    items: impl DoubleEndedIterator<Item = (T, &'a ItemGeometry, Option<SolidBounds>)>,
     view: &CameraView,
     point: Point,
 ) -> Option<T> {
     let mut best: Option<(f64, T)> = None;
-    for (id, geometry) in items {
-        if !contains(geometry, view, point) {
+    for (id, geometry, solid) in items {
+        if !contains(geometry, solid, view, point) {
             continue;
         }
         let depth = if view.depth_sort() {
@@ -159,8 +182,8 @@ pub fn topmost_at<'a, T>(
 
 /// The outline of the part of the box in front of the camera as SVG `points`, or empty
 /// when none of it is.
-pub fn outline(geometry: &ItemGeometry, view: &CameraView) -> String {
-    polygon(geometry, view).map_or_else(String::new, |outline| {
+pub fn outline(geometry: &ItemGeometry, solid: Option<SolidBounds>, view: &CameraView) -> String {
+    polygon(geometry, solid, view).map_or_else(String::new, |outline| {
         outline.iter().fold(String::new(), |mut points, at| {
             points.push_str(&format!("{},{} ", at.x, at.y));
             points
@@ -172,8 +195,12 @@ pub fn outline(geometry: &ItemGeometry, view: &CameraView) -> String {
 /// touch, or `None` when none of it is. A name whose top edge is in front of the camera
 /// sits on that corner instead; one whose top edge is behind or edge-on uses these
 /// bounds.
-pub fn screen_box(geometry: &ItemGeometry, view: &CameraView) -> Option<ItemGeometry> {
-    let quad = polygon(geometry, view)?;
+pub fn screen_box(
+    geometry: &ItemGeometry,
+    solid: Option<SolidBounds>,
+    view: &CameraView,
+) -> Option<ItemGeometry> {
+    let quad = polygon(geometry, solid, view)?;
     let (mut left, mut top, mut right, mut bottom) = (f32::MAX, f32::MAX, f32::MIN, f32::MIN);
     for at in quad {
         left = left.min(at.x);
@@ -336,8 +363,8 @@ mod tests {
                 "{a:?} vs {b:?}"
             );
         }
-        assert!(contains(&g, &seen, Point { x: 650.0, y: 350.0 }));
-        assert!(!contains(&g, &seen, Point { x: 750.0, y: 350.0 }));
+        assert!(contains(&g, None, &seen, Point { x: 650.0, y: 350.0 }));
+        assert!(!contains(&g, None, &seen, Point { x: 750.0, y: 350.0 }));
     }
 
     #[test]
@@ -346,7 +373,7 @@ mod tests {
         let near = item(960.0, 540.0, 300.0, 300.0, 200.0);
         let far = item(960.0, 540.0, 300.0, 300.0, -400.0);
         // The near box is first in stacking order, under the far one.
-        let items = [("near", &near), ("far", &far)];
+        let items = [("near", &near, None), ("far", &far, None)];
         let centre = Point { x: 960.0, y: 540.0 };
         assert_eq!(topmost_at(items.into_iter(), &seen, centre), Some("near"));
         // With depth sorting off, stacking order decides, as the compositor draws.
@@ -499,7 +526,7 @@ mod tests {
             corners(&g, &seen).is_none(),
             "a corner is behind the camera"
         );
-        let front = polygon(&g, &seen).expect("its front is drawn");
+        let front = polygon(&g, None, &seen).expect("its front is drawn");
         assert!((3..=5).contains(&front.len()), "{front:?}");
         let Placed::At(centre) =
             seen.place(Vec3::new(960.0, 560.0, camera_z - 200.0).expect("finite"))
@@ -511,19 +538,19 @@ mod tests {
             y: centre.y,
         };
         assert!(
-            contains(&g, &seen, centre),
+            contains(&g, None, &seen, centre),
             "its centre, at {centre:?}, is hit"
         );
-        assert!(!contains(&g, &seen, Point { x: 100.0, y: 100.0 }));
-        assert!(!outline(&g, &seen).is_empty());
-        assert!(screen_box(&g, &seen).is_some());
+        assert!(!contains(&g, None, &seen, Point { x: 100.0, y: 100.0 }));
+        assert!(!outline(&g, None, &seen).is_empty());
+        assert!(screen_box(&g, None, &seen).is_some());
     }
 
     #[test]
     fn a_marquee_box_bounds_the_projected_corners() {
         let seen = framing();
         let g = item(500.0, 300.0, 400.0, 200.0, 0.0);
-        let bounds = screen_box(&g, &seen).expect("in front");
+        let bounds = screen_box(&g, None, &seen).expect("in front");
         assert!((bounds.center.x.get() - 500.0).abs() < 0.05);
         assert!((bounds.size.width.get() - 400.0).abs() < 0.1);
     }

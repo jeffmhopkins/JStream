@@ -1714,6 +1714,7 @@ fn an_asset_install_announces_the_sizes_its_plan_changed() {
                 width: 2,
                 height: 2,
             }),
+            depth: None,
         }]
     );
     let _ = fs::remove_dir_all(dir);

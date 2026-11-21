@@ -123,7 +123,8 @@ Contents ([Design](#design) explains the choices):
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
   in either mode, and `followed_preview`, the scene the canvas moves to when the preview
   scene changes in studio mode), the `Selection`,
-  each source's size (`Sizes`, from `source.sizes` and `source.size_changed`;
+  each source's size (`Sizes`, from `source.sizes` and `source.size_changed`, and a
+  3D model's depth, `SourceDepths`, from the same;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
   and the kind descriptors read so far, the last failed call, the toast's confirmation
@@ -1493,7 +1494,12 @@ beside it ([Design › Studio mode](#design)).
   parent's, from `Collection::camera_of`) draws each outline through the camera as the
   compositor draws the box, `drawn_polygon_seen` clipped to the near plane, so a box
   partly behind the camera is outlined, labelled and hit by the part in front of it
-  (`camera::polygon`, #1054). The name uses the projected top-left when that corner and
+  (`camera::polygon`, #1054). An item whose source has a depth (a 3D model,
+  `CanvasItem::solid`, [ADR-0107](../../docs/adr/0107-3d-models.md) decision 8) is
+  outlined, labelled, hit and touched by a marquee by its model's bounds instead: its box
+  extruded by the model's depth, the hull of their eight corners through the camera
+  (`ItemGeometry::solid_outline`), none while a corner is behind it. In a 2D scene it
+  keeps its box, as cards keep theirs. The name uses the projected top-left when that corner and
   the far end of the top edge are both in front of the camera, and stays upright on the
   visible part's bounds when either is not. A press hits the box the engine
   draws on top: the nearest along the view (`CameraView::depth_of`) when the

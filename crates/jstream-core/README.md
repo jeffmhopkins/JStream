@@ -2324,6 +2324,9 @@ stored frame's when `set_source_frame` gave one, as that frame is what it shows,
 live source's: the first frame's, which the `jstream-sources` thread reads when it
 builds the source (its frame at time zero, which a plan shows first anyway), then each
 new frame's that a plan takes, so a source no plan reaches keeps its first size. A
+source that shows a 3D model also has a depth (`model_depth`, ADR-0107 decision 8): its
+bounds front to back at the scale of its stand-in's size, kept beside the size and sent
+with it, so a change of depth alone is a size change too. A
 source drawn at a density reports its extent, the size its frames are placed at
 ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). A capture
 source's (`display`, `window`, `webcam`) is the frame size of the capture the program

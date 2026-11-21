@@ -168,6 +168,23 @@ fn model_key(model: Option<&ShownModel>) -> Option<(u64, Lighting, Option<*const
     })
 }
 
+/// A model's depth in the pixels of `extent`, the size its stand-in is placed at: its
+/// bounds front to back, at the scale its width and height are (ADR-0107 decision 8). A
+/// model with no width or height but some depth takes the extent's larger side.
+pub(crate) fn model_depth(shown: &ShownModel, extent: [u32; 2]) -> u32 {
+    let [w, h, d] = shown.model.bounds().size();
+    let longest = w.max(h);
+    let side = extent[0].max(extent[1]) as f32;
+    let depth = if longest > 0.0 {
+        d.max(0.0) / longest * side
+    } else if d > 0.0 {
+        side
+    } else {
+        0.0
+    };
+    depth.round() as u32
+}
+
 impl Frame {
     pub(crate) fn new(
         width: u32,
@@ -259,6 +276,13 @@ impl Frame {
     /// The size it is placed at, which `source.sizes` reports (ADR-0073).
     pub(crate) fn extent(&self) -> Option<FrameSize> {
         FrameSize::new(self.extent[0], self.extent[1]).ok()
+    }
+
+    /// The depth of a source with depth, in the pixels of [`Self::extent`]: a model's
+    /// bounds front to back, at the scale its width and height are placed at (ADR-0107
+    /// decision 8), which `source.sizes` reports. `None` for any other frame.
+    pub(crate) fn depth(&self) -> Option<u32> {
+        Some(model_depth(self.model.as_ref()?, self.extent))
     }
 
     /// The same frame placed as if it were `extent`: a frame its source drew at a
