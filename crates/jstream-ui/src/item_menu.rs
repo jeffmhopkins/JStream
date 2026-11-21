@@ -1672,6 +1672,7 @@ mod tests {
                 options: Default::default(),
                 variant_of: None,
                 overrides: Vec::new(),
+                camera_anchor: None,
                 camera_motion: Vec::new(),
                 ptz_shots: Vec::new(),
                 camera_follow: None,

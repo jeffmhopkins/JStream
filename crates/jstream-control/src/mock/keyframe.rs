@@ -384,6 +384,7 @@ impl Collection {
             meta: Default::default(),
             options: Default::default(),
             camera: None,
+            camera_anchor: None,
             camera_motion: Vec::new(),
             ptz_shots: Vec::new(),
             camera_follow: None,
