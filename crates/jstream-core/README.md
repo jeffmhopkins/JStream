@@ -360,7 +360,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   most and the least it reaches.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
-  camera motion and follow camera, planned with the shot.
+  camera motion and follow camera, planned with the shot. A follow camera holds its
+  zoom by default and only pans at the box's edges
+  ([ADR-0161](../../docs/adr/0161-follow-camera-holds-its-zoom.md)).
 - **Live aim** (`aim.rs`,
   [ADR-0152](../../docs/adr/0152-a-ptz-controller-drives-scene-cameras.md)): each
   scene family's runtime pan, tilt and zoom, which `scene.drive_camera` and
