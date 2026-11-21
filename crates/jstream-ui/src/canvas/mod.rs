@@ -22,6 +22,7 @@ pub mod crop;
 pub mod group;
 pub mod live;
 pub mod model;
+pub mod monitor;
 pub mod preview;
 pub mod screen;
 pub mod snap;

@@ -46,5 +46,5 @@ pub use outputs::Outputs;
 pub use scenes::Scenes;
 pub use sources::Sources;
 pub use stats::StreamStats;
-pub use studio::StudioMode;
+pub use studio::{Side, StageLabel, StudioControls, StudioMode};
 pub use transform::Transform;
