@@ -551,6 +551,15 @@ pub fn duplicate_scene_edits(
         fresh,
         &mut placed,
     ));
+    // The group its camera rides with (ADR-0164 §5), as the copy of that item.
+    if let Some(anchor) = &scene.camera_anchor
+        && let Some((_, copy)) = placed.iter().find(|(from, _)| from == anchor)
+    {
+        edits.push(Edit::SceneSetCameraAnchor {
+            scene_id: new_id.clone(),
+            anchor: Some(copy.clone()),
+        });
+    }
     edits
 }
 
@@ -615,6 +624,7 @@ mod tests {
             items,
             filters: Default::default(),
             camera: None,
+            camera_anchor: None,
             camera_motion: Vec::new(),
             ptz_shots: Vec::new(),
             camera_follow: None,

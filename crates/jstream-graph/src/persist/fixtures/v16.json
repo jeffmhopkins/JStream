@@ -12,6 +12,7 @@
       "name": "B",
       "role": "group",
       "keep_warm": true,
+      "share_space": true,
       "items": [
         {
           "id": "i4",
@@ -88,20 +89,6 @@
               "period_ms": 500,
               "phase": 0.0,
               "clock": "engine"
-            },
-            {
-              "modifier_id": "glow",
-              "property": "source",
-              "source": {
-                "param": "emissive_strength",
-                "material": "led"
-              },
-              "kind": "oscillate",
-              "shape": "square",
-              "amplitude": 1.0,
-              "period_ms": 1000,
-              "phase": 0.0,
-              "clock": "engine"
             }
           ]
         }
@@ -136,6 +123,7 @@
           "clock": "engine"
         }
       ],
+      "camera_anchor": "i2",
       "ptz_shots": [
         {
           "camera": "wide",

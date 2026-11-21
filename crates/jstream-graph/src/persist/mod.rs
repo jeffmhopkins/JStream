@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 16;
+pub const SCHEMA_VERSION: u32 = 17;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -64,7 +64,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 /// `MIGRATIONS[v - 1..]`.
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
-    v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16,
+    v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16, v16_to_v17,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -411,11 +411,27 @@ fn v14_to_v15(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
-/// Version 16 adds motion modifiers that drive a setting of their item's source
-/// (ADR-0171 decision 4): property `source` with its `source` target, on an item's motion
-/// or a keyframe override's. A version 15 file has none, so it upgrades unchanged; one
-/// there is refused, as version 15 refused it.
+/// Version 16 adds a group that shares its 3D scene's space (`scenes[].share_space`)
+/// and the group a scene's camera rides with (`scenes[].camera_anchor`, ADR-0164). A
+/// version 15 file has neither, so it upgrades unchanged, and either there is refused.
 fn v15_to_v16(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    for scene in scenes.into_iter().flatten() {
+        if scene.get("share_space").is_some() {
+            return Err("a version 15 scene has no `share_space`".into());
+        }
+        if scene.get("camera_anchor").is_some() {
+            return Err("a version 15 scene has no `camera_anchor`".into());
+        }
+    }
+    Ok(())
+}
+
+/// Version 17 adds motion modifiers that drive a setting of their item's source
+/// (ADR-0171 decision 4): property `source` with its `source` target, on an item's motion
+/// or a keyframe override's. A version 16 file has none, so it upgrades unchanged; one
+/// there is refused, as version 16 refused it.
+fn v16_to_v17(value: &mut Value) -> Result<(), String> {
     let drives = |motion: Option<&Value>| {
         motion
             .and_then(Value::as_array)
@@ -436,7 +452,7 @@ fn v15_to_v16(value: &mut Value) -> Result<(), String> {
             .chain(overrides.into_iter().flatten())
             .any(|holder| drives(holder.get("motion")))
         {
-            return Err("a version 15 motion modifier drives no source setting".into());
+            return Err("a version 16 motion modifier drives no source setting".into());
         }
     }
     Ok(())
@@ -637,6 +653,10 @@ struct FileScene {
     /// `false`.
     #[serde(default, skip_serializing_if = "is_false")]
     keep_warm: bool,
+    /// Whether a group shares its 3D scene's space (ADR-0164 §1, schema_version 16);
+    /// omitted for `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    share_space: bool,
     /// Its camera (ADR-0094), or a keyframe scene's override of its parent's; omitted
     /// for none, so a file without cameras is unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -645,6 +665,10 @@ struct FileScene {
     /// for a keyframe scene.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     camera_motion: Vec<CameraMotionModifier>,
+    /// The group item its camera rides with (ADR-0164 §5, schema_version 16); omitted
+    /// for none, and always for a keyframe scene.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    camera_anchor: Option<ItemId>,
     /// Its PTZ shots (ADR-0146, schema_version 14), a keyframe scene's own included;
     /// omitted when empty.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -973,8 +997,10 @@ impl Graph {
                     include_audio: scene.options.include_audio,
                     background: scene.options.background.clone(),
                     keep_warm: scene.options.keep_warm,
+                    share_space: scene.options.share_space,
                     camera: scene.camera,
                     camera_motion: scene.camera_motion.clone(),
+                    camera_anchor: scene.camera_anchor.clone(),
                     ptz_shots: scene.ptz_shots.clone(),
                     timelines: scene.timelines.values().cloned().collect(),
                     variant_of: scene.variant_of.clone(),
@@ -1455,6 +1481,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             include_audio: scene.include_audio,
             background: scene.background.clone(),
             keep_warm: scene.keep_warm,
+            share_space: scene.share_space,
         };
         if !options.is_default() {
             edits.push((
@@ -1712,6 +1739,15 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
     }
     // Once every item exists.
     for scene in &file.scenes {
+        if let Some(anchor) = &scene.camera_anchor {
+            edits.push((
+                format!("scene `{}`", scene.id),
+                Edit::SceneSetCameraAnchor {
+                    scene_id: scene.id.clone(),
+                    anchor: Some(anchor.clone()),
+                },
+            ));
+        }
         if !scene.camera_motion.is_empty() {
             edits.push((
                 format!("scene `{}`", scene.id),

@@ -55,7 +55,7 @@ impl Vec3 {
         }
     }
 
-    fn get(self) -> [f64; 3] {
+    pub(super) fn get(self) -> [f64; 3] {
         [
             f64::from(self.x.get()),
             f64::from(self.y.get()),

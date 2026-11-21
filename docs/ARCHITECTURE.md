@@ -184,7 +184,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          camera?, camera_motion[], camera_follow?, ptz_shots[], timelines[], filters { video[] }, items[] }   flat display order
+│                          camera?, camera_anchor?, camera_motion[], camera_follow?, ptz_shots[], timelines[], filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
@@ -777,6 +777,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   A follow camera holds that zoom and only pans at the item's edges unless its
   `hold_zoom` is off ([ADR-0161](adr/0161-follow-camera-holds-its-zoom.md), protocol
   0.124).
+- **3D groups** ([ADR-0164](adr/0164-3d-groups-share-their-scenes-space.md), protocol
+  0.127): a group with `share_space` in its `scene.set_options`, placed in a 3D scene,
+  draws its children in that scene's space through the group item's pose, each sorted,
+  focused and lit as an item of the scene, so the group item's live values, motion and
+  keyframes move them all. `scene.set_camera_anchor` names such a group item for the
+  family's camera to ride with: its position and target are then in the group's space.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1611,9 +1617,10 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   its scenes keep their look. Version 13 (ADR-0138) adds motion modifiers that drive an
   effect's setting (`property` `effect` with its `effect` target), with a migration that
   refuses one in an older file. Version 14 (ADR-0146) adds a scene's PTZ `ptz_shots`,
-  with a migration that refuses them in an older file. Version 16 (ADR-0171) adds motion
-  modifiers that drive a setting of their item's source (`property` `source` with its
-  `source` target), with a migration that refuses one in an older file. `jstream-core`
+  with a migration that refuses them in an older file. Version 16 (ADR-0164) adds a
+  group's `share_space` and a scene's `camera_anchor`, refused the same way. Version 17
+  (ADR-0171) adds motion modifiers that drive a setting of their item's source
+  (`property` `source` with its `source` target), refused the same way. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

@@ -489,6 +489,7 @@ pub(crate) fn edits() -> Vec<Edit> {
                 include_audio: false,
                 background: Some("#0f1115".into()),
                 keep_warm: true,
+                share_space: true,
             },
         },
         Edit::SceneSetCamera {
@@ -502,6 +503,15 @@ pub(crate) fn edits() -> Vec<Edit> {
                 blur_px: crate::Finite32::new(6.0).unwrap_or(crate::Finite32::ZERO),
                 ..SceneCamera::framing(CameraCanvas::DEFAULT)
             }),
+        },
+        // A camera that rides with a 3D group, and one that stops (ADR-0164 §5).
+        Edit::SceneSetCameraAnchor {
+            scene_id: SceneId::new("scn_1"),
+            anchor: Some(ItemId::new("itm_rig")),
+        },
+        Edit::SceneSetCameraAnchor {
+            scene_id: SceneId::new("scn_1"),
+            anchor: None,
         },
         // A camera's motion, every property (ADR-0113), and a follow camera on and off.
         Edit::SceneSetCameraMotion {
@@ -2789,6 +2799,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Scene,
                     transition_in: Some(TransitionPresetId::new("tr_move")),
                     transition_out: None,
+                    camera_anchor: None,
                     camera_motion: Vec::new(),
                     ptz_shots: Vec::new(),
                     camera_follow: None,
@@ -2800,6 +2811,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         include_audio: false,
                         background: Some("#0f1115".into()),
                         keep_warm: true,
+                        share_space: false,
                     },
                     camera: None,
                 },
@@ -2812,6 +2824,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Scene,
                     transition_in: None,
                     transition_out: None,
+                    camera_anchor: None,
                     camera_motion: Vec::new(),
                     ptz_shots: Vec::new(),
                     camera_follow: None,
@@ -2831,6 +2844,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                     role: SceneRole::Group,
                     transition_in: None,
                     transition_out: Some(TransitionPresetId::new("cut")),
+                    camera_anchor: None,
                     camera_motion: Vec::new(),
                     ptz_shots: Vec::new(),
                     camera_follow: None,
