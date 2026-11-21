@@ -62,8 +62,8 @@ the function cards use. Without depth of field, or without a camera, the model d
 before, with no extra pass.
 
 **2. Drawn as a gather that acts like a scatter.** `Compositor::draw_model` draws the model
-into a scratch layer and its view depth into another, then fills the item's layer from
-them in five fullscreen passes:
+into a layer the compositor keeps and its view depth into another, then fills the item's
+layer from them in five fullscreen passes:
 1. **Tiles.** For each 8 × 8 block of pixels, the largest `r` in it.
 2. **Reach.** For each tile, the largest `r` of the tiles whose blur reaches it, so a
    pixel knows how far it must look.

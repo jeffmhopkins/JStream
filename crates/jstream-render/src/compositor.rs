@@ -781,7 +781,12 @@ impl Compositor {
         self.draw_view_depth(&empty, &depth)?;
         self.models
             .draw_depth(&self.gpu, &self.owner, draw, &depth)?;
-        let mut focus = self.model_focus.filter.take().unwrap_or_else(|| {
+        let slot = self
+            .model_focus
+            .filter
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        let mut focus = slot.take().unwrap_or_else(|| {
             filter::VideoFilter::of(
                 crate::model::focus::KIND,
                 Box::new(crate::model::focus::ModelFocus::default()),
@@ -793,7 +798,11 @@ impl Compositor {
         }));
         let drawn = self.filter_into(&mut focus, &colour, target, FilterClock::default());
         focus.set_depth(None);
-        self.model_focus.filter = Some(focus);
+        *self
+            .model_focus
+            .filter
+            .get_mut()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(focus);
         drawn
     }
 
@@ -2313,8 +2322,10 @@ fn color_attachment(
 /// The compositor's state for depth of field on models (ADR-0165).
 #[derive(Default)]
 struct ModelFocusRun {
-    /// The passes, as a filter so they draw through the filter runtime.
-    filter: Option<filter::VideoFilter>,
+    /// The passes, as a filter so they draw through the filter runtime. A filter is
+    /// `Send` but not `Sync`, and the compositor must be both; only `&mut self` reaches
+    /// it, through `Mutex::get_mut`, so it never locks.
+    filter: std::sync::Mutex<Option<filter::VideoFilter>>,
     /// The model's colour and its view depth, drawn before the passes blur them.
     layers: Option<(Image, Image)>,
 }

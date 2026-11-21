@@ -534,7 +534,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
-| Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, one canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
+| Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |
 | `Nv12Pass` bind group, source view, uniform and plane views | The pass; made again by `bind` when the source or target is replaced |
