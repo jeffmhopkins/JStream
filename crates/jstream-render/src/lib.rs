@@ -23,6 +23,7 @@ mod model;
 mod place;
 mod readback;
 mod scene;
+mod sky;
 mod timer;
 pub mod transition;
 mod turn;
@@ -50,6 +51,7 @@ pub use model::{
 };
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
+pub use sky::{DeepSky, MAX_STAR_BRIGHTNESS, SkyDraw};
 
 #[cfg(test)]
 mod tests;
