@@ -213,27 +213,50 @@ fn rapidity() -> f32 {
     return 0.5 * log((1.0 + b) / (1.0 - b));
 }
 
-// Light seen along `d` at the warp, shifted by its Doppler factor (above 1 ahead, below 1
-// behind): bluer and brighter toward the travel, redder and dimmer away from it. The
-// brightness follows the factor squared, a softened form of the real cube, held between
-// a fifth and four times so a star ahead doesn't burn out and one behind still shows red.
+// The Doppler factor along `d` at the warp: above 1 toward the travel, below 1 away.
+fn doppler_factor(d: vec3<f32>) -> f32 {
+    let b = beta();
+    return (1.0 + b * -d.z) / sqrt(1.0 - b * b);
+}
+
+// Light seen along `d` at the warp, shifted by its Doppler factor: bluer and brighter
+// toward the travel, redder and dimmer away from it. The colour leans cool, more than
+// the real shift would, so the side and most of the sky read blue and only the light
+// well behind turns red. The brightness follows the factor squared, a softened form of
+// the real cube, held between a fifth and four times so a star ahead doesn't burn out
+// and one behind still shows red.
 fn doppler(c: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
     let b = beta();
     if b <= 0.0 {
         return c;
     }
-    let factor = (1.0 + b * -d.z) / sqrt(1.0 - b * b);
-    let x = clamp(log2(factor), -3.0, 3.0);
+    let factor = doppler_factor(d);
+    let x = clamp(log2(factor) + 0.8 * b, -3.0, 3.0);
     // Shift the colour: toward blue ahead, losing blue then green behind.
     var shifted = c;
     if x > 0.0 {
-        shifted = c * vec3<f32>(exp2(-0.6 * x), exp2(-0.2 * x), 1.0 + 0.25 * x);
+        shifted = c * vec3<f32>(exp2(-1.0 * x), exp2(-0.45 * x), 1.0 + 0.45 * x);
         // Light shifted past the blue still shows as a blue-white glow.
-        shifted += vec3<f32>(0.25, 0.35, 0.6) * dot(c, vec3<f32>(0.33)) * 0.3 * x;
+        shifted += vec3<f32>(0.2, 0.4, 0.9) * dot(c, vec3<f32>(0.33)) * 0.35 * x;
     } else {
         shifted = c * vec3<f32>(1.0 + 0.15 * -x, exp2(0.7 * x), exp2(1.6 * x));
     }
     return shifted * clamp(factor * factor, 0.2, 4.0);
+}
+
+// The background radiation seen at the warp: the faint glow of the whole sky, shifted
+// from the invisible into blue light where the Doppler factor is above 1: brightest
+// toward the travel, faint at the sides and gone behind.
+fn radiation(d: vec3<f32>) -> vec3<f32> {
+    let b = beta();
+    if b <= 0.0 {
+        return vec3<f32>(0.0);
+    }
+    let ahead = clamp((doppler_factor(d) - 1.0) / 2.5, 0.0, 1.0);
+    let glow = pow(ahead, 1.6);
+    // A deep blue haze, with a paler heart dead ahead.
+    return (vec3<f32>(0.02, 0.07, 0.3) * glow + vec3<f32>(0.08, 0.14, 0.3) * pow(ahead, 6.0))
+        * smoothstep(0.0, 0.6, b);
 }
 
 // `d` around the travel (-z): its angle about the axis and the log of the tangent of half
@@ -332,7 +355,7 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     let length_v = u.stars.w;
     // The deep sky blurs along the streaks as the warp builds, and fades out by the time
     // it's at speed: at warp only the stars are seen.
-    let deep = 1.0 - smoothstep(0.1, 0.65, beta() / 0.9);
+    let deep = 1.0 - smoothstep(0.0, 0.25, beta() / 0.9);
     if (u.nebula.w > 0.0 || u.nebula_2.w > 0.0) && deep > 0.0 {
         if length_v > 0.01 {
             let at = about_travel(d);
@@ -357,6 +380,9 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
             / (1.0 + length_v * 12.0);
         let bright = stars(d, BRIGHT_COLUMNS, amount * 0.3, 2u, bitcast<u32>(u.travel.y), u.travel.x, length_v / bright_cell, pixel, 1.0) * 1.6;
         c += doppler(faint + bright, d) * u.stars.y;
+    }
+    if amount > 0.0 || u.nebula.w > 0.0 || u.nebula_2.w > 0.0 {
+        c += radiation(d) * u.stars.z;
     }
     let a = clamp(u.sky.w, 0.0, 1.0);
     return vec4<f32>(c * a, a);

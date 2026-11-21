@@ -125,17 +125,22 @@ converge on the point being left, each as the camera sees it. A streak's length 
 rises with the square of `warp`, to 1.2 at 1 (about 70 degrees at right angles to the
 travel), and it fades from its head to its tail; a streak's light is spread along it,
 so a long one is dimmer per pixel. Faint stars dim out as the warp grows. The nebulae and
-the band blur along the same lines as the warp builds and fade out by the time it is at
-speed (out from a tenth of full warp to about two thirds), so at warp only the stars
-are seen.
+the band blur along the same lines as the warp builds and fade out fast, gone by a
+quarter of full warp, so at warp only the stars are seen.
 - **Aberration and Doppler.** Warp 1 shifts the stars' light as a speed of 0.9 of
   light's would, a mix of the real effect and the familiar streaks. Aberration crowds
   the stars toward the direction of travel: in `v` it is exactly a shift by the speed's
   rapidity, so the stars a pixel sees are the still sky's at its `v` plus that. Their
   light is shifted by the Doppler factor `γ(1 + β cos θ)`: ahead toward blue, with a
-  blue-white glow for light pushed past it, behind losing its blue and then its green;
-  and brightened by the factor squared, softer than the real cube and held between a
-  fifth and four times, so stars ahead don't burn out and those behind still show red.
+  blue-white glow for light pushed past it, behind losing its blue and then its green.
+  The shift leans cooler than the real one (its log is raised by 0.8 β), so most of the
+  sky reads blue and only the light well behind turns warm. The light is brightened by
+  the factor squared, softer than the real cube and held between a fifth and four
+  times, so stars ahead don't burn out and those behind still show.
+- **Background radiation.** At warp the whole sky's faint background glow is shifted
+  into blue light where the Doppler factor is above 1: a deep blue haze brightest dead
+  ahead, with a paler heart, faint at the sides and gone behind, at the light's
+  intensity.
 - **Ramp and travel.** A source's settings aren't keyed by keyframe scenes or driven by
   motion, so the sky ramps itself: the render thread keeps, per scene, the warp it
   streams at now and how far the stars have moved. Each frame the warp moves toward the

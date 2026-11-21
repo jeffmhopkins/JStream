@@ -337,8 +337,8 @@ impl LightKind {
                      sky's centre ahead (the item's turn sets where that is): the stars \
                      move away from it and stretch into streaks, at any angle the camera \
                      looks, crowding ahead in bluer, brighter light and thinning behind \
-                     in redder, dimmer light, while the nebulae and band fade out; 0 is \
-                     still. A change ramps over the warp ramp, so setting \
+                     in redder, dimmer light over a blue glow ahead, while the nebulae \
+                     and band fade out; 0 is still. A change ramps over the warp ramp, so setting \
                      it jumps in and setting 0 drops out.",
                 )),
                 sky(p(

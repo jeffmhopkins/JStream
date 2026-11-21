@@ -409,21 +409,29 @@ fn golden_sky_warp_streaks_the_stars_at_any_angle() {
     }
 }
 
-/// At warp the nebulae fade out, and the stars' light is Doppler shifted: ahead they are
-/// bluer and brighter, behind redder and dimmer.
+/// At warp the nebulae fade out, the background radiation glows blue ahead, and the
+/// stars' light is Doppler shifted: ahead they are bluer and brighter, behind redder and
+/// dimmer.
 #[test]
 fn golden_sky_warp_fades_the_nebulae_and_shifts_the_stars_light() {
     let Some(mut opened) = open() else {
         return;
     };
-    let gas = |warp| SkyDraw {
+    // Looking back, where the background radiation doesn't reach.
+    let gas = |warp, aim| SkyDraw {
         warp,
+        camera: looking([0.0; 3], aim),
         ..deep(1.0, 0.0, 1)
     };
-    let still = total(&shot(&mut opened.compositor, &gas(0.0)));
-    let fast = total(&shot(&mut opened.compositor, &gas(0.9)));
+    let back = [0.0, 0.0, 1.0];
+    let still = total(&shot(&mut opened.compositor, &gas(0.0, back)));
+    let fast = total(&shot(&mut opened.compositor, &gas(0.9, back)));
     assert!(still > 20_000, "the nebulae glow when still: {still}");
     assert!(fast * 20 < still, "they fade at warp: {fast} of {still}");
+    // Ahead, the background radiation glows blue.
+    let ahead = shot(&mut opened.compositor, &gas(0.9, [0.0, 0.0, -1.0]));
+    let [r, _, b] = rgb(&ahead, WIDTH / 2, HEIGHT / 2);
+    assert!(b > 40 && b > r * 2, "a blue glow ahead: {:?}", [r, b]);
 
     let warp = |aim| SkyDraw {
         stars: 1.0,

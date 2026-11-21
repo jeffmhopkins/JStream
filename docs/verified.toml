@@ -207,7 +207,7 @@ stamp = { hash = "b3:64dbb25a25fcaabd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:98567cc1776c3dfc", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; Doppler, aberration and nebula styles are details in the render README and ADR-0167." }
+stamp = { hash = "b3:ad252b9ba0942b42", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the blue glow and cooler shift are shader details in the render README and ADR-0167." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:f0debc77953a941e", by = "agent:claude", note = "Added the environment light's sky replacing the studio gradient for scene-lit models; checked against render model.wgsl. | merge: Merged #1490's round 1 fix: ModelDraw gains floor beside environment, the frame uniform's cut plane follows the environment block, and the mirrored models keep their environment while cut at the floor. The section's environment text and the fix's lines both hold. | merge: Merged wave/alpha5: #1491 depth bloom (this PR's base, squashed), #1490 reflections, #1489 shafts, #1488 shadows, #1487 volumetric fog and earlier 3D and PTZ work. The environment sky and the wave's 3D passes read as described. | kept from the merged side: Its scene-filter depth sentence still holds; depth_bloom is a filter detail in the render README. | merge: Merged #1490's round 1 fix (ModelDraw::floor and the shader's cut plane, corners_in_scene, the mirrored pass cut at its floor) under depth_bloom; the section's depth_bloom text and the fix's own lines both still hold. | merge: Merged wave/alpha5: #1490 floor reflections (this PR's base, squashed), #1489 shafts, #1488 shadows, #1487 volumetric fog and earlier 3D and PTZ work. The depth-aware filters read as described; each is benched once. | kept from the merged side: Review round 1 B1 on #1490: the mirrored floor pass is cut at the floor. ModelDraw::floor cuts models in model.wgsl fs and fs_depth (frame cut plane), draw_reflection leaves out cards whose corners_in_scene lie at or below it, and draw_view_depth takes the floor through DepthFrom. The core, render and protocol READMEs say so and name the two new tests; no other claim in the section changed. | merge: Merged wave/alpha5: #1489 light shafts, #1488 shadows, #1487 volumetric fog (this stack's bases, squashed), #1499 PTZ counters (0.121), and earlier 3D and PTZ work. The reflection pass and depth-aware filters read as described; the bench lists volumetric fog once. | kept from the merged side: B1 on #1488: the wave merge left volumetric_fog_1080p_camera listed twice in the composite bench; one entry removed, so each depth-aware filter is benched once. Section text still holds. | kept from the merged side: the depth-aware filter paragraph still holds; volumetric fog reads the same depth plus the camera view | merge: Merged wave/alpha5: #1485's squash (this PR's base, the same AO content), #1484 billboards, #1486/#1496 PTZ, #1493 and ADR-0151. Depth-aware filters, now three, still read the view depth as described. | kept from the merged side: the depth-aware filter paragraph still holds with depth_fog first; ambient occlusion reads the same view depth" }
@@ -543,10 +543,10 @@ stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:b43fe5d74e8c36e3", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; Doppler, aberration and nebula styles are details in the render README and ADR-0167." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:a44422f8feb271c1", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; Doppler, aberration and nebula styles are details in the render README and ADR-0167." }
+stamp = { hash = "b3:2d2ba70671282976", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the blue glow and cooler shift are shader details in the render README and ADR-0167." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:6c2c9daa12017a6e", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; Doppler, aberration and nebula styles are details in the render README and ADR-0167." }
+stamp = { hash = "b3:82678af0adc77d49", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the blue glow and cooler shift are shader details in the render README and ADR-0167." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "The one-scene compositor summary doesn't cover the blur's reads or test helpers; nothing it states changes." }
@@ -600,7 +600,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:a9cebaf0d538076a", by = "agent:hold-zoom", note = "MCP architecture unchanged: tools.snap differs by the CameraFollow hold_zoom field and version, design.rs by one guidance sentence" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:e1bc1cd045253201", by = "agent:sky-backdrop", note = "Re-read: MCP tool grouping and rules unchanged; only design guidance text changed." }
+stamp = { hash = "b3:7cc5118e7c6596e8", by = "agent:sky-backdrop", note = "Re-read: MCP tool grouping and rules unchanged; only design guidance wording changed." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3072,7 +3072,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:e1bc1cd045253201", by = "agent:sky-backdrop", note = "Re-read the design-list entry (backdrop, stars, nebula, galaxy, panorama, self-ramping warp): still accurate after the design.rs guidance on seed kinds, per-scene skies and Doppler." }
+stamp = { hash = "b3:7cc5118e7c6596e8", by = "agent:sky-backdrop", note = "Re-read the design-list sky entry: still accurate after the guidance names the blue glow ahead at warp." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3105,7 +3105,7 @@ stamp = { hash = "b3:af5c949db44560d1", by = "agent:ptz-builder", note = "OPEN_W
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:e1bc1cd045253201", by = "agent:sky-backdrop", note = "Re-read: design.rs gained seed-kinds, per-scene lights for keyframed skies, and the warp's Doppler and nebula fade; the crate's purpose is unchanged." }
+stamp = { hash = "b3:7cc5118e7c6596e8", by = "agent:sky-backdrop", note = "Re-read: design.rs only adds the warp's blue glow ahead to the sky guidance; the crate's purpose is unchanged." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -5214,10 +5214,10 @@ stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:b43fe5d74e8c36e3", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: the Doppler, aberration and nebula styles are shader-only, one more uniform lane (seed.y = beta), no new resource or draw path." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:a44422f8feb271c1", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: the Doppler, aberration and nebula styles are shader-only, one more uniform lane (seed.y = beta), no new resource or draw path." }
+stamp = { hash = "b3:2d2ba70671282976", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: the glow and cooler shift are shader-only, no new resource, uniform lane or draw path." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:6c2c9daa12017a6e", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: the Doppler, aberration and nebula styles are shader-only, one more uniform lane (seed.y = beta), no new resource or draw path." }
+stamp = { hash = "b3:82678af0adc77d49", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: the glow and cooler shift are shader-only, no new resource, uniform lane or draw path." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "Only tests and the params refactor in gauss.rs changed; the pipeline steps, including the resolve's load on software adapters, still hold." }
@@ -5505,7 +5505,7 @@ stamp = { hash = "b3:a4fdee2216af9c7a", by = "agent:shader-source", note = "Prog
 stamp = { hash = "b3:73fa9d7c864c0a4f", by = "agent:lane-d", note = "border gains speed_unit (px_s default) and lap_beats (-64..64, default 4, 0 still); the paragraph gives the beats rule (perimeter x FilterClock::beat / lap_beats) matching border.rs uniforms; apply_filter's clock now also carries beat (ADR-0148) | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Added depth to the module list and a Depth-aware kinds paragraph: set_depth/ViewDepth, reads_depth, pass-through, listed by depth_filter_descriptors not video_filter_descriptors yet, and depth_fog's settings and formula as fog.rs and fog.wgsl draw them." }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:2f15d1cdb25c92b3", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: seed Style (size, cover, churn, wisps, dust, gathering), seeded band tilt, deep sky fading at warp, aberration as a rapidity shift in log-tan, Doppler tint and squared brightness clamp; matches." }
+stamp = { hash = "b3:bea1689e59afc377", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: faster deep-sky fade, cooler-leaning Doppler, and the radiation() blue glow where the Doppler factor exceeds 1; the bullet now names them." }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:5d8e0c98027957ce", by = "agent:lane-a", note = "S1 (#1194): compositors on one context share its loss watch, context_lost added; per-device error handler note now names the preview's and snapshot compositors" }
@@ -5856,10 +5856,10 @@ stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:b43fe5d74e8c36e3", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: seed Style (size, cover, churn, wisps, dust, gathering), seeded band tilt, deep sky fading at warp, aberration as a rapidity shift in log-tan, Doppler tint and squared brightness clamp; matches." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:a44422f8feb271c1", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: seed Style (size, cover, churn, wisps, dust, gathering), seeded band tilt, deep sky fading at warp, aberration as a rapidity shift in log-tan, Doppler tint and squared brightness clamp; matches." }
+stamp = { hash = "b3:2d2ba70671282976", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: faster deep-sky fade, cooler-leaning Doppler, and the radiation() blue glow where the Doppler factor exceeds 1; the bullet now names them." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:6c2c9daa12017a6e", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: seed Style (size, cover, churn, wisps, dust, gathering), seeded band tilt, deep sky fading at warp, aberration as a rapidity shift in log-tan, Doppler tint and squared brightness clamp; matches." }
+stamp = { hash = "b3:82678af0adc77d49", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: faster deep-sky fade, cooler-leaning Doppler, and the radiation() blue glow where the Doppler factor exceeds 1; the bullet now names them." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "Tests and a params refactor only: the crate's purpose and scope are unchanged." }
@@ -6117,7 +6117,7 @@ stamp = { hash = "b3:83423ce2603cbd75", by = "agent:claude", note = "Added the S
 stamp = { hash = "b3:4dc0f32161ea9311", by = "agent:claude", note = "light entry gains the environment type, its sky_color, horizon_color, ground_color and image settings and ShownEnvironment, checked against light.rs and its test. | merge: Merged #1490's round 1 fix: ModelDraw gains floor beside environment, the frame uniform's cut plane follows the environment block, and the mirrored models keep their environment while cut at the floor. The section's environment text and the fix's lines both hold." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/light.rs"]
-stamp = { hash = "b3:8ba1cfb6c9ce97e9", by = "agent:sky-backdrop", note = "Re-read the light entry against light.rs: sky_seed now described as picking the nebula kind, warp as Doppler shifted with nebulae fading; ranges and defaults unchanged." }
+stamp = { hash = "b3:26fb3f105faa8457", by = "agent:sky-backdrop", note = "Re-read the light entry: warp described as Doppler shifted with the nebulae fading; the descriptor's added blue-glow wording doesn't change ranges or defaults." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/light/tests.rs"]
 stamp = { hash = "b3:a14338d20ad02a18", by = "agent:sky-backdrop", note = "Re-read the light entry against light.rs: backdrop, stars, star_brightness, nebula and its two colours, galaxy, sky_seed, warp and warp_ramp_s with their ranges and defaults; old settings read as defaults." }

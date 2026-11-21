@@ -2403,7 +2403,7 @@ source: crates/jstream-core/src/kinds.rs
         "step": 0.01,
         "default": 0.0,
         "label": "Warp",
-        "description": "How fast the backdrop streams past, as if travelling toward the sky's centre ahead (the item's turn sets where that is): the stars move away from it and stretch into streaks, at any angle the camera looks, crowding ahead in bluer, brighter light and thinning behind in redder, dimmer light, while the nebulae and band fade out; 0 is still. A change ramps over the warp ramp, so setting it jumps in and setting 0 drops out.",
+        "description": "How fast the backdrop streams past, as if travelling toward the sky's centre ahead (the item's turn sets where that is): the stars move away from it and stretch into streaks, at any angle the camera looks, crowding ahead in bluer, brighter light and thinning behind in redder, dimmer light over a blue glow ahead, while the nebulae and band fade out; 0 is still. A change ramps over the warp ramp, so setting it jumps in and setting 0 drops out.",
         "visible_if": {
           "param": "type",
           "equals": "environment"
