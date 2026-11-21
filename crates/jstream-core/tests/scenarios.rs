@@ -181,15 +181,11 @@ fn overload_drops_and_counts() {
         bus_drops.audio_frames
     );
 
-    // What the render thread publishes for a capture stream: the mailbox's skips. The
-    // fake generates a frame when it is read, so it never replaces one; a real mailbox
-    // does, and this is that counter. The render thread publishes its skipped ticks
-    // into the same cell; `render_tick_drops(2)` stands in for them here.
-    let capture = capture_drops(CaptureStats {
-        frames_captured: 30,
-        frames_skipped: 4,
-        frames_undecodable: 0,
-    });
+    // What the render thread publishes for its captures: the replaced frames the canvas
+    // could have shown. The fake generates a frame when it is read, so it never replaces
+    // one; a real mailbox does, and this is that count. The render thread publishes its
+    // skipped ticks into the same cell; `render_tick_drops(2)` stands in for them here.
+    let capture = capture_drops(4);
     let render = render_tick_drops(2);
     let output = output_packet_drops(3);
     let published = DropSnapshot::new();

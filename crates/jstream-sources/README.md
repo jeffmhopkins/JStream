@@ -457,7 +457,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   `text` does.
 - `display` and `window`: what the platform captures, by the `target` setting, a
   capture-backend target ID (on Windows `monitor:` and the display's GDI device name, or
-  `hwnd:0x` and the window handle). An empty `display` target is the primary display,
+  `hwnd:0x`, the window handle, `;` and a key that finds the window again once it is
+  opened again, after a restart of its program or of Windows). An empty `display` target is the primary display,
   which is what a `display` source showed before it had settings, so the kind keeps
   version 1 ([ADR-0025](../../docs/adr/0025-typed-settings-kind-descriptors.md)). An
   empty `window` target captures nothing. A new target needs a new source. The engine's
