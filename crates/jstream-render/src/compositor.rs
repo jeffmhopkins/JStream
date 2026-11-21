@@ -738,9 +738,35 @@ impl Compositor {
     /// # Errors
     /// [`RenderError::Invalid`] when the model or the layer came from another compositor
     /// or the target is not a layer, or when the placement or camera can't be drawn.
+    ///
+    /// A live `texture` (ADR-0107 decision 5) is sampled through a mip chain of its
+    /// whole picture, kept on its image and rebuilt here only when the image changed
+    /// since, as a 3D item's is; a `reflection` is read as a scene's sky picture is.
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
         let errors = self.errors();
-        errors.close(self.models.draw(&self.gpu, &self.owner, draw, target))
+        let chain = draw
+            .texture
+            .and_then(|texture| texture.image)
+            .filter(|image| image.owner().is(&self.owner))
+            .map(|image| {
+                let chain = self.chain_of(image, Region::whole(image.width(), image.height()), 0);
+                if chain.claim(image) {
+                    let lock = self.gpu.submit.clone();
+                    let submitting = lock.lock();
+                    let mut encoder =
+                        self.gpu
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("jstream-render-model-texture"),
+                            });
+                    chain.record(&mut encoder, &self.mip_pipelines, image);
+                    self.gpu.queue.submit([encoder.finish()]);
+                    drop(submitting);
+                }
+                chain
+            });
+        let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
+        errors.close(self.models.draw(&self.gpu, &self.owner, draw, target, live))
     }
 
     /// Lights a card's picture by its 3D scene (ADR-0151 decision 10): `card.image`, the

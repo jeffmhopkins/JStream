@@ -119,6 +119,18 @@ fn an_environment_light_carries_its_sky() {
     assert_eq!(sky.sky, [0.0, 0.0, 1.0]);
     assert_eq!(sky.horizon, [1.0; 3]);
     assert_eq!(sky.image, Some(jstream_protocol::SourceId::new("hdri")));
+    // The parameter's type checks a source reference, which names it too.
+    let referenced = create(json!({
+        "type": "environment",
+        "image": {"type": "source", "source_id": "hdri"},
+    }));
+    assert_eq!(
+        referenced
+            .light()
+            .and_then(|light| light.environment)
+            .and_then(|sky| sky.image),
+        Some(jstream_protocol::SourceId::new("hdri"))
+    );
     let mut older = settings(json!({"type": "environment"}));
     for id in ["sky_color", "horizon_color", "ground_color", "image"] {
         older.0.remove(id);

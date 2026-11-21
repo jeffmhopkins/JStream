@@ -3182,6 +3182,34 @@ source: crates/jstream-core/src/kinds.rs
         "live": true
       },
       {
+        "id": "texture",
+        "type": "source",
+        "media": "video",
+        "default": null,
+        "label": "Texture",
+        "description": "A source whose picture, live and after its own filters, replaces the base-colour texture: a webcam, a browser page, a shader, a scene. Missing or not yet drawing, it reads transparent.",
+        "live": true
+      },
+      {
+        "id": "texture_material",
+        "type": "string",
+        "multiline": false,
+        "max_len": 256,
+        "default": "",
+        "label": "Textured material",
+        "description": "Which of a file's materials, by name, the texture replaces; empty replaces every material's.",
+        "live": true
+      },
+      {
+        "id": "reflection",
+        "type": "source",
+        "media": "video",
+        "default": null,
+        "label": "Reflection",
+        "description": "A source the model reflects, read as an equirectangular panorama: it replaces the studio environment (or its scene's sky) for its reflections and ambient light. A scene source makes it reflect that scene.",
+        "live": true
+      },
+      {
         "id": "double_sided",
         "type": "bool",
         "default": false,

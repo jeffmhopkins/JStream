@@ -98,6 +98,8 @@ fn draw_lit(
                 shadows: &[],
                 environment: None,
                 floor: None,
+                texture: None,
+                reflection: None,
             },
             &layer,
         )
@@ -435,6 +437,8 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     shadows: &[],
                     environment: None,
                     floor: None,
+                    texture: None,
+                    reflection: None,
                 },
                 &layer,
             )
@@ -476,6 +480,8 @@ fn a_model_from_another_compositor_is_refused() {
             shadows: &[],
             environment: None,
             floor: None,
+            texture: None,
+            reflection: None,
         },
         &layer,
     );
@@ -575,6 +581,8 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     shadows: &[],
                     environment: None,
                     floor: None,
+                    texture: None,
+                    reflection: None,
                 },
                 &layer,
             )
@@ -957,6 +965,8 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                 shadows: &[],
                 environment: None,
                 floor: None,
+                texture: None,
+                reflection: None,
             },
             &map,
         )
@@ -1006,6 +1016,8 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                     shadows,
                     environment: None,
                     floor: None,
+                    texture: None,
+                    reflection: None,
                 },
                 &layer,
             )
@@ -1061,6 +1073,8 @@ fn sky_sphere(
                 shadows: &[],
                 environment: Some(environment),
                 floor: None,
+                texture: None,
+                reflection: None,
             },
             &layer,
         )
@@ -1208,6 +1222,8 @@ fn golden_model_a_floor_cuts_what_is_below_it() {
         shadows: &[],
         environment: None,
         floor: Some(50.0),
+        texture: None,
+        reflection: None,
     };
     let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
     compositor
@@ -1292,6 +1308,8 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
                     shadows: &[],
                     environment: None,
                     floor: None,
+                    texture: None,
+                    reflection: None,
                 },
                 &layer,
             )
@@ -1328,4 +1346,178 @@ fn identity_f32() -> [f32; 16] {
     [
         1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ]
+}
+
+/// Draws an unlit white plane with `texture` (ADR-0107 decision 5) and reads it back.
+fn textured_plane(
+    compositor: &mut Compositor,
+    texture: Option<super::LiveTexture<'_>>,
+) -> Snapshot {
+    let plane = Shape::Plane
+        .model(Material {
+            unlit: true,
+            ..Material::default()
+        })
+        .expect("the plane builds");
+    let uploaded = compositor.upload_model(&plane).expect("the model uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera: None,
+                lighting: Lighting::Unlit,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+                texture,
+                reflection: None,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [crate::tests::item(
+        &layer,
+        Placement::Layer(geometry),
+        Crop::NONE,
+        1.0,
+    )];
+    render(compositor, &items)
+}
+
+/// ADR-0107 decision 5: a live texture replaces the base colour of the material it
+/// names, or of every material, and follows its picture as that changes; one for
+/// another material leaves the model's own, and a picture that isn't there reads
+/// transparent.
+#[test]
+fn golden_model_a_live_texture_replaces_the_base_colour() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    // 8x8 texels: red over its top half, blue under it.
+    let rgba: Vec<u8> = (0..8)
+        .flat_map(|y| {
+            (0..8).flat_map(move |_| {
+                if y < 4 {
+                    [255, 0, 0, 255]
+                } else {
+                    [0, 0, 255, 255]
+                }
+            })
+        })
+        .collect();
+    let picture = compositor
+        .upload_rgba8(8, 8, &rgba)
+        .expect("the picture uploads");
+    let live = |material| super::LiveTexture {
+        image: Some(&picture),
+        material,
+    };
+    let shot = textured_plane(compositor, Some(live(None)));
+    assert_near(rgb(&shot, 80, 30), [255, 0, 0], (80, 30));
+    assert_near(rgb(&shot, 80, 70), [0, 0, 255], (80, 70));
+    let named = textured_plane(compositor, Some(live(Some("shape"))));
+    assert_near(rgb(&named, 80, 30), [255, 0, 0], (80, 30));
+    let other = textured_plane(compositor, Some(live(Some("another"))));
+    assert_near(rgb(&other, 80, 30), [255, 255, 255], (80, 30));
+    let missing = textured_plane(
+        compositor,
+        Some(super::LiveTexture {
+            image: None,
+            material: None,
+        }),
+    );
+    assert_near(rgb(&missing, 80, 50), [0, 0, 0], (80, 50));
+    // A layer drawn again: its mip chain is rebuilt, and the model shows the new picture.
+    let layer = compositor.layer(16, 16).expect("a layer");
+    for colour in [Color::rgb(0.0, 1.0, 0.0), Color::rgb(1.0, 0.0, 1.0)] {
+        compositor
+            .render_into(
+                &Scene {
+                    canvas: FrameSize::new(16, 16).expect("non-zero"),
+                    background: colour,
+                    items: &[],
+                },
+                &layer,
+            )
+            .expect("the layer draws");
+        let shot = textured_plane(
+            compositor,
+            Some(super::LiveTexture {
+                image: Some(&layer),
+                material: None,
+            }),
+        );
+        let want = if colour.g > 0.5 {
+            [0, 255, 0]
+        } else {
+            [255, 0, 255]
+        };
+        assert_near(rgb(&shot, 80, 50), want, (80, 50));
+    }
+}
+
+/// ADR-0107 decision 5: a studio-lit mirror reflects its `reflection` picture in place
+/// of the studio gradient, and an unlit model ignores it.
+#[test]
+fn golden_model_a_reflection_replaces_the_studio_environment() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let mirror = Shape::Sphere
+        .model(Material {
+            metallic: 1.0,
+            roughness: 0.05,
+            ..Material::default()
+        })
+        .expect("the sphere builds");
+    let uploaded = compositor.upload_model(&mirror).expect("the model uploads");
+    let green = compositor
+        .upload_rgba8(8, 4, &[0, 255, 0, 255].repeat(32))
+        .expect("the panorama uploads");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let seen = |compositor: &mut Compositor, lighting, reflection| {
+        let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+        compositor
+            .draw_model(
+                &ModelDraw {
+                    model: &uploaded,
+                    geometry,
+                    camera: None,
+                    lighting,
+                    lights: None,
+                    shadows: &[],
+                    environment: None,
+                    floor: None,
+                    texture: None,
+                    reflection,
+                },
+                &layer,
+            )
+            .expect("the model draws");
+        let items = [crate::tests::item(
+            &layer,
+            Placement::Layer(geometry),
+            Crop::NONE,
+            1.0,
+        )];
+        rgb(&render(compositor, &items), 80, 50)
+    };
+    let studio = seen(compositor, Lighting::Studio, None);
+    let reflecting = seen(compositor, Lighting::Studio, Some(&green));
+    assert!(
+        studio[0].abs_diff(studio[1]) < 30,
+        "the studio gradient is grey: {studio:?}"
+    );
+    assert!(
+        reflecting[1] > reflecting[0] + 60 && reflecting[1] > reflecting[2] + 60,
+        "the mirror reflects green: {reflecting:?}"
+    );
+    let unlit = seen(compositor, Lighting::Unlit, Some(&green));
+    assert_near(unlit, [255, 255, 255], (80, 50));
 }

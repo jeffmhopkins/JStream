@@ -6,7 +6,7 @@
 //! scene places it with [`crate::Placement::Layer`], which sorts it with the scene's other
 //! items at the model's centre.
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, PoisonError};
 
 use jstream_media::model::{AlphaMode, Model, ModelTexture, TextureColor, TextureRef, rig};
 use jstream_protocol::{Canvas, ItemGeometry, SceneCamera, Solid, SolidBounds};
@@ -70,6 +70,20 @@ struct Uploaded {
     /// A rigged model's palette (ADR-0151 decision 7): its buffer, which
     /// [`crate::Compositor::pose_model`] writes, its bind group and its slot count.
     pose: Option<(wgpu::Buffer, wgpu::BindGroup, usize)>,
+    /// The material bind groups of its last draw with a live texture (ADR-0107
+    /// decision 5), kept while that texture and the material it replaces stay the same,
+    /// so a steady frame makes none.
+    live: Mutex<Option<LiveBinds>>,
+}
+
+/// Material bind groups with a live texture in place of their base colour's.
+struct LiveBinds {
+    /// The texture they bind: a source's mip chain, or the transparent stand-in.
+    texture: wgpu::Texture,
+    /// The material they replace it in, or every material.
+    material: Option<String>,
+    /// One per material: `Some` for a material whose texture is replaced.
+    binds: Vec<Option<wgpu::BindGroup>>,
 }
 
 struct GpuPrimitive {
@@ -84,6 +98,12 @@ struct GpuPrimitive {
 struct GpuMaterial {
     bind: wgpu::BindGroup,
     blended: bool,
+    /// Its name in the file, which a live texture's material is matched by.
+    name: String,
+    /// Its uniform's values and its textures' views, to bind it again with a live
+    /// texture (ADR-0107 decision 5).
+    values: [f32; 20],
+    views: [wgpu::TextureView; 5],
 }
 
 impl GpuModel {
@@ -140,6 +160,26 @@ pub struct ModelDraw<'a> {
     /// depth, so a scene drawn mirrored in its floor shows only what stands above it.
     /// `None` draws all of it; ignored without a `camera`.
     pub floor: Option<f32>,
+    /// Another source's picture in place of the base-colour texture (ADR-0107
+    /// decision 5), sampled through a mip chain the compositor builds from it once per
+    /// change. `None` keeps the model's own textures.
+    pub texture: Option<LiveTexture<'a>>,
+    /// Another source's picture the model reflects (ADR-0107 decision 5), read as an
+    /// equirectangular panorama as a scene's sky is: it replaces the studio
+    /// environment, or for a model lit by its scene that scene's sky, for its
+    /// reflections and ambient light. An unlit model ignores it.
+    pub reflection: Option<&'a Image>,
+}
+
+/// A source's picture on a model's surfaces (ADR-0107 decision 5).
+#[derive(Clone, Copy, Debug)]
+pub struct LiveTexture<'a> {
+    /// The picture, made by the compositor that draws the model. `None` for a source
+    /// that is missing or not drawing yet: the texture then reads transparent.
+    pub image: Option<&'a Image>,
+    /// The material, by its name in the file, whose base-colour texture it replaces;
+    /// `None` replaces every material's.
+    pub material: Option<&'a str>,
 }
 
 /// The bounds of the quad a lit card is shaded on: a unit square, flat.
@@ -273,6 +313,9 @@ pub(crate) struct ModelRuntime {
     /// and metal-roughness, and a flat normal.
     white: wgpu::TextureView,
     flat_normal: wgpu::TextureView,
+    /// A live texture whose source isn't drawing: transparent, and its texture, which
+    /// [`LiveBinds`] tells apart from a mip chain's.
+    clear: (wgpu::Texture, wgpu::TextureView),
     depth: Option<(u32, u32, wgpu::TextureView)>,
     /// Blended primitives in the order they draw, kept to reuse the allocation.
     order: Vec<(f64, usize)>,
@@ -526,10 +569,14 @@ impl ModelRuntime {
                 wgpu::util::TextureDataOrder::LayerMajor,
                 &rgba,
             );
-            texture.create_view(&wgpu::TextureViewDescriptor::default())
+            (
+                texture.create_view(&wgpu::TextureViewDescriptor::default()),
+                texture,
+            )
         };
-        let white = pixel("jstream-render-model-white", [255; 4]);
-        let flat_normal = pixel("jstream-render-model-normal", [128, 128, 255, 255]);
+        let white = pixel("jstream-render-model-white", [255; 4]).0;
+        let flat_normal = pixel("jstream-render-model-normal", [128, 128, 255, 255]).0;
+        let (clear_view, clear_texture) = pixel("jstream-render-model-clear", [0; 4]);
         let frame_bind = frame_bind_group(
             device,
             &frame_layout,
@@ -550,6 +597,7 @@ impl ModelRuntime {
             frame_bind,
             white,
             flat_normal,
+            clear: (clear_texture, clear_view),
             depth: None,
             order: Vec::new(),
             card: None,
@@ -660,6 +708,9 @@ impl ModelRuntime {
             materials.push(GpuMaterial {
                 bind,
                 blended: matches!(m.alpha_mode, AlphaMode::Blend),
+                name: m.name.clone(),
+                values,
+                views,
             });
         }
         let rest = model.rig().map(|r| r.rest()).unwrap_or_default();
@@ -732,6 +783,7 @@ impl ModelRuntime {
                     let (buffer, bind) = pose_bind(gpu, &self.pose_layout, &rest);
                     (buffer, bind, rest.len())
                 }),
+                live: Mutex::new(None),
             }),
         })
     }
@@ -787,14 +839,88 @@ impl ModelRuntime {
 
     /// Draws `draw` into `target`, replacing what it held: transparent wherever the
     /// model isn't.
+    /// `live` is `draw.texture`'s mip chain, its texture and its whole view, when its
+    /// picture is drawing.
     pub(crate) fn draw(
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
         draw: &ModelDraw<'_>,
         target: &Image,
+        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
     ) -> Result<(), RenderError> {
-        self.draw_as(gpu, owner, draw, target, false)
+        self.draw_as(gpu, owner, draw, target, live, false)
+    }
+
+    /// The material bind groups `draw` binds with its live texture `live` (the clear
+    /// stand-in for `None`), from those kept on its model when they match, else made
+    /// and kept. Each is the material's own, its base colour's view replaced and its
+    /// uniform marking that view as a premultiplied linear picture.
+    fn live_binds(
+        &self,
+        gpu: &Gpu,
+        model: &Uploaded,
+        material: Option<&str>,
+        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+    ) -> Vec<Option<wgpu::BindGroup>> {
+        let (texture, view) = live.unwrap_or((&self.clear.0, &self.clear.1));
+        let mut kept = model.live.lock().unwrap_or_else(PoisonError::into_inner);
+        if let Some(binds) = kept.as_ref()
+            && binds.texture == *texture
+            && binds.material.as_deref() == material
+        {
+            return binds.binds.clone();
+        }
+        let binds: Vec<Option<wgpu::BindGroup>> = model
+            .materials
+            .iter()
+            .map(|m| {
+                if material.is_some_and(|name| name != m.name) {
+                    return None;
+                }
+                let mut values = m.values;
+                // The material's base colour texture is a source's picture.
+                values[17] = 1.0;
+                let uniform = gpu
+                    .device
+                    .create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("jstream-render-model-live-material"),
+                        contents: &f32_bytes(&values),
+                        usage: wgpu::BufferUsages::UNIFORM,
+                    });
+                let mut entries = vec![
+                    wgpu::BindGroupEntry {
+                        binding: 0,
+                        resource: uniform.as_entire_binding(),
+                    },
+                    wgpu::BindGroupEntry {
+                        binding: 1,
+                        resource: wgpu::BindingResource::Sampler(&self.sampler),
+                    },
+                ];
+                for (i, own) in m.views.iter().enumerate() {
+                    entries.push(wgpu::BindGroupEntry {
+                        binding: 2 + i as u32,
+                        resource: wgpu::BindingResource::TextureView(if i == 0 {
+                            view
+                        } else {
+                            own
+                        }),
+                    });
+                }
+                Some(gpu.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                    label: Some("jstream-render-model-live-material"),
+                    layout: &self.material_layout,
+                    entries: &entries,
+                }))
+            })
+            .collect();
+        *kept = Some(LiveBinds {
+            texture: texture.clone(),
+            material: material.map(str::to_owned),
+            binds: binds.clone(),
+        });
+        binds
     }
 
     /// Lights `card.image`, a card's picture flat in its box layer, into `target`, a
@@ -883,6 +1009,7 @@ impl ModelRuntime {
             layout: &self.material_layout,
             entries: &entries,
         });
+        let views: [wgpu::TextureView; 5] = views.map(Clone::clone);
         let (vertices, indices) = self.card_quad(gpu);
         let model = GpuModel {
             inner: Arc::new(Uploaded {
@@ -900,8 +1027,12 @@ impl ModelRuntime {
                     bind,
                     // Drawn as it is: its texels replace the cleared layer's.
                     blended: false,
+                    name: String::new(),
+                    values,
+                    views,
                 }],
                 pose: None,
+                live: Mutex::new(None),
             }),
         };
         let draw = ModelDraw {
@@ -918,8 +1049,10 @@ impl ModelRuntime {
             shadows: card.shadows,
             environment: card.environment,
             floor: None,
+            texture: None,
+            reflection: None,
         };
-        self.draw_as(gpu, owner, &draw, target, true)
+        self.draw_as(gpu, owner, &draw, target, None, true)
     }
 
     /// The quad a card is lit on: a unit square in its own plane, facing the viewer,
@@ -986,6 +1119,7 @@ impl ModelRuntime {
         owner: &Owner,
         draw: &ModelDraw<'_>,
         target: &Image,
+        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
         in_texture: bool,
     ) -> Result<(), RenderError> {
         let model = &draw.model.inner;
@@ -1059,9 +1193,24 @@ impl ModelRuntime {
                 }
             }
         }
+        // What the model reflects (ADR-0107 decision 5), in place of the studio
+        // gradient or its scene's sky: a picture seen as a panorama about the viewing
+        // frame, unscaled by any ambient light unless the scene has one.
+        let reflection = draw
+            .reflection
+            .filter(|image| image.owner().is(owner) && draw.lighting != Lighting::Unlit);
         // The scene's sky, for a model lit by its scene (ADR-0151 decision 9).
-        let sky = match (draw.environment, lights.as_ref(), camera.as_ref()) {
-            (Some(environment), Some(lighting), Some(view)) => {
+        let sky = match (
+            reflection,
+            draw.environment,
+            lights.as_ref(),
+            camera.as_ref(),
+        ) {
+            (Some(image), ..) => {
+                maps[MAX_SHADOW_MAPS] = Some(image);
+                Some(reflection_values(image, lights.as_ref(), camera.as_ref()))
+            }
+            (None, Some(environment), Some(lighting), Some(view)) => {
                 let image = environment.image.filter(|image| image.owner().is(owner));
                 maps[MAX_SHADOW_MAPS] = image;
                 Some(environment_values(&environment, image, lighting, view))
@@ -1080,6 +1229,9 @@ impl ModelRuntime {
             ),
         );
         let frame_bind = self.frame_bind_for(gpu, maps);
+        let live_binds = draw
+            .texture
+            .map(|texture| self.live_binds(gpu, model, texture.material, live));
         let depth = self.depth_view(gpu, width, height);
         // Blended primitives far to near by their centres.
         self.order.clear();
@@ -1132,7 +1284,11 @@ impl ModelRuntime {
                 let Some(material) = model.materials.get(p.material) else {
                     return;
                 };
-                pass.set_bind_group(1, &material.bind, &[]);
+                let bind = live_binds
+                    .as_ref()
+                    .and_then(|binds| binds.get(p.material)?.as_ref())
+                    .unwrap_or(&material.bind);
+                pass.set_bind_group(1, bind, &[]);
                 pass.set_vertex_buffer(0, p.vertices.slice(..));
                 pass.set_index_buffer(p.indices.slice(..), wgpu::IndexFormat::Uint32);
                 pass.draw_indexed(0..p.index_count, 0, 0..1);
@@ -1518,6 +1674,48 @@ fn environment_values(
         down[1],
         down[2],
         intensity,
+        forward[0],
+        forward[1],
+        forward[2],
+        0.0,
+    ]
+}
+
+/// The environment uniform for a model's `reflection` (ADR-0107 decision 5): no
+/// gradient, the picture at intensity 1 and no turn, its panorama about the camera's
+/// axes in a 3D scene, about the viewing frame (x right, y down, looking along -z) in a
+/// 2D one. Ambient light scales it only for a model lit by a scene that has some.
+fn reflection_values(
+    image: &Image,
+    lighting: Option<&SceneLighting>,
+    view: Option<&jstream_protocol::CameraView>,
+) -> [f32; 24] {
+    let [right, down, forward] = view.map_or(
+        [[1.0, 0.0, 0.0], [0.0, 1.0, 0.0], [0.0, 0.0, -1.0]],
+        |view| view.axes().map(|axis| axis.map(|c| c as f32)),
+    );
+    let ambient = lighting.is_some_and(|l| l.has_ambient);
+    [
+        0.0,
+        0.0,
+        0.0,
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        image.alpha().shader_mode(),
+        right[0],
+        right[1],
+        right[2],
+        if ambient { 1.0 } else { 0.0 },
+        down[0],
+        down[1],
+        down[2],
+        1.0,
         forward[0],
         forward[1],
         forward[2],
