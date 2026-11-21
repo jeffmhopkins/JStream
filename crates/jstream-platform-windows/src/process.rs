@@ -7,10 +7,25 @@
 //! **`WindowsProcessCpu`** (`ProcessCpu`): the process's kernel and user time from
 //! `GetProcessTimes`, for `stats.tick`'s load. **`WindowsThreadCpu`** (`ThreadCpu`): the
 //! process's threads from a ToolHelp snapshot, each one's kernel and user time from
-//! `GetThreadTimes` and its name from `GetThreadDescription`, for `profile.get`.
+//! `GetThreadTimes` and its name from `GetThreadDescription`, for `profile.get`. A
+//! thread with no description (one the OS, a driver or a library started) is named
+//! after the module its start address is in, as `unnamed: mfplat.dll`, so the profile
+//! splits them by where they came from instead of summing them under no name (#1556).
 //! **`WindowsThreadPriority`** (`ThreadPriority`): MMCSS through
 //! `AvSetMmThreadCharacteristicsW`, the `Playback` task for video and `Pro Audio` for
 //! audio, reverted when the guard drops.
+
+/// The name an unnamed thread is listed by: `unnamed: ` and the file name of the module
+/// its start address is in, from that module's path.
+#[cfg(any(windows, test))]
+fn unnamed_in(module_path: &str) -> String {
+    let file = module_path
+        .rsplit(['\\', '/'])
+        .next()
+        .filter(|file| !file.is_empty())
+        .unwrap_or(module_path);
+    format!("unnamed: {file}")
+}
 
 /// Adds a FILETIME's two halves into its 100 ns count, as `GetProcessTimes` reports
 /// kernel and user time.
@@ -29,18 +44,26 @@ mod os {
     use jstream_platform::{
         ProcessCpu, RaisedThread, ThreadCpu, ThreadPriority, ThreadRole, ThreadTime,
     };
+    use windows::Wdk::System::Threading::{
+        NtQueryInformationThread, ThreadQuerySetWin32StartAddress,
+    };
+    use windows::Win32::Foundation::HMODULE;
     use windows::Win32::Foundation::{CloseHandle, FILETIME, HANDLE, HLOCAL, LocalFree};
     use windows::Win32::System::Diagnostics::ToolHelp::{
         CreateToolhelp32Snapshot, TH32CS_SNAPTHREAD, THREADENTRY32, Thread32First, Thread32Next,
     };
+    use windows::Win32::System::LibraryLoader::{
+        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS, GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+        GetModuleFileNameW, GetModuleHandleExW,
+    };
     use windows::Win32::System::Threading::{
         AvRevertMmThreadCharacteristics, AvSetMmThreadCharacteristicsW, GetCurrentProcess,
         GetCurrentProcessId, GetProcessTimes, GetThreadDescription, GetThreadTimes, OpenThread,
-        THREAD_QUERY_LIMITED_INFORMATION,
+        THREAD_QUERY_INFORMATION, THREAD_QUERY_LIMITED_INFORMATION,
     };
-    use windows::core::w;
+    use windows::core::{PCWSTR, w};
 
-    use super::filetime_hns;
+    use super::{filetime_hns, unnamed_in};
 
     /// The engine process's CPU time, from `GetProcessTimes`: kernel plus user time
     /// across every thread.
@@ -138,11 +161,19 @@ mod os {
         }
     }
 
-    /// One thread's time and name, or `None` when it can't be opened (it ended).
+    /// One thread's time and name, or `None` when it can't be opened (it ended). Opened
+    /// with full query access where the OS allows it, which reading its start address
+    /// needs, else with limited access, which its time and description need.
     fn read_thread(id: u32) -> Option<ThreadTime> {
-        // SAFETY: plain call; the handle is owned by `Owned`.
-        let thread =
-            Owned(unsafe { OpenThread(THREAD_QUERY_LIMITED_INFORMATION, false, id) }.ok()?);
+        let open = |access| {
+            // SAFETY: plain call; the handle is owned by `Owned`.
+            unsafe { OpenThread(access, false, id) }
+        };
+        let thread = Owned(
+            open(THREAD_QUERY_INFORMATION)
+                .or_else(|_| open(THREAD_QUERY_LIMITED_INFORMATION))
+                .ok()?,
+        );
         let mut created = FILETIME::default();
         let mut exited = FILETIME::default();
         let mut kernel = FILETIME::default();
@@ -155,7 +186,9 @@ mod os {
             .saturating_add(filetime_hns(user.dwHighDateTime, user.dwLowDateTime));
         Some(ThreadTime {
             id: u64::from(id),
-            name: description(&thread).unwrap_or_default(),
+            name: description(&thread)
+                .or_else(|| start_module(&thread).map(|module| unnamed_in(&module)))
+                .unwrap_or_default(),
             cpu: Duration::from_nanos(hns.saturating_mul(100)),
         })
     }
@@ -172,6 +205,47 @@ mod os {
         // SAFETY: the string was allocated by the OS with LocalAlloc and is freed once.
         let _ = unsafe { LocalFree(Some(HLOCAL(text.0.cast()))) };
         name.filter(|name| !name.is_empty())
+    }
+
+    /// The path of the module the thread's start address is in, or `None` when the OS
+    /// won't say (the handle has only limited access) or no module holds the address.
+    fn start_module(thread: &Owned) -> Option<String> {
+        let mut start: usize = 0;
+        // SAFETY: `thread.0` is an open thread handle, and `start` is a local of the
+        // pointer size this information class writes, which outlives the call.
+        let status = unsafe {
+            NtQueryInformationThread(
+                thread.0,
+                ThreadQuerySetWin32StartAddress,
+                (&raw mut start).cast(),
+                u32::try_from(size_of::<usize>()).ok()?,
+                std::ptr::null_mut(),
+            )
+        };
+        if status.is_err() || start == 0 {
+            return None;
+        }
+        let mut module = HMODULE::default();
+        // SAFETY: with FROM_ADDRESS the "name" is only an address inside a module, read
+        // as a number; UNCHANGED_REFCOUNT takes no reference, so nothing is to be freed.
+        // `module` is a local that outlives the call.
+        unsafe {
+            GetModuleHandleExW(
+                GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                    | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                PCWSTR(start as *const u16),
+                &mut module,
+            )
+        }
+        .ok()?;
+        let mut path = [0u16; 512];
+        // SAFETY: `module` is a module loaded in this process, and `path` a local buffer
+        // whose length the call is given.
+        let len = unsafe { GetModuleFileNameW(Some(module), &mut path) } as usize;
+        if len == 0 || len >= path.len() {
+            return None;
+        }
+        Some(String::from_utf16_lossy(&path[..len]))
     }
 
     #[cfg(test)]
@@ -242,12 +316,46 @@ mod os {
             drop(tx);
             handle.join().expect("joins");
         }
+
+        /// A thread with no name is listed after the module it started in: a Rust
+        /// thread starts in the test binary itself (#1556).
+        #[test]
+        fn an_unnamed_thread_is_listed_after_its_module() {
+            let (tx, rx) = std::sync::mpsc::channel::<()>();
+            let handle = std::thread::spawn(move || {
+                let _ = rx.recv();
+            });
+            let threads = WindowsThreadCpu.threads().expect("lists");
+            assert!(
+                threads
+                    .iter()
+                    .any(|t| t.name.starts_with("unnamed: ") && t.name.ends_with(".exe")),
+                "an unnamed thread of the test binary: {threads:?}"
+            );
+            drop(tx);
+            handle.join().expect("joins");
+        }
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::filetime_hns;
+    use super::{filetime_hns, unnamed_in};
+
+    #[test]
+    fn an_unnamed_thread_is_named_after_its_modules_file() {
+        assert_eq!(
+            unnamed_in(r"C:\Windows\System32\mfplat.dll"),
+            "unnamed: mfplat.dll"
+        );
+        assert_eq!(unnamed_in("ntdll.dll"), "unnamed: ntdll.dll");
+        assert_eq!(unnamed_in("C:/app/jstream.exe"), "unnamed: jstream.exe");
+        assert_eq!(
+            unnamed_in(r"odd\"),
+            r"unnamed: odd\",
+            "no file name: the whole path"
+        );
+    }
 
     #[test]
     fn a_filetime_joins_its_halves() {

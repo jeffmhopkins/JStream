@@ -1373,7 +1373,9 @@ beside it ([Design › Studio mode](#design)).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
-  decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap` one at a
+  decoder's queue passes 12 chunks (about a fifth of a second at 60 fps, so a busy
+  main thread's short stall, which also holds chunks in that queue, doesn't freeze the
+  picture until the next keyframe; #1556); JPEG frames go through `createImageBitmap` one at a
   time, and while one decodes only the newest that arrives waits, so the last picture
   is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes
