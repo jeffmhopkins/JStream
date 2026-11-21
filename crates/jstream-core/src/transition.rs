@@ -295,12 +295,10 @@ pub(crate) fn check_via(
 }
 
 /// The camera scene `id` draws through (ADR-0094): its own, or a keyframe scene's
-/// parent's. `None` for a 2D scene or a scene that doesn't exist.
+/// parent's, placed through the group its family's camera rides with (ADR-0164 §5).
+/// `None` for a 2D scene or a scene that doesn't exist.
 pub(crate) fn camera_of(graph: &Graph, id: &SceneId) -> Option<SceneCamera> {
-    let state = graph.state();
-    state
-        .scene(id)
-        .and_then(|scene| state.effective_camera(scene))
+    crate::snapshot::placed_camera(graph.state(), id)
 }
 
 /// Milliseconds from `start` to `at`, on the same clock.

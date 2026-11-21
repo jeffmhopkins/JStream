@@ -11,7 +11,8 @@
 //! light by role, use the light and framing filters (bloom, glow, vignette, scanlines) and
 //! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
 //! set with a scene camera (ADR-0094), its depth of field (ADR-0108), a sky backdrop
-//! (ADR-0167) and its paths through keyframes and orbits (ADR-0166), which
+//! (ADR-0167), 3D groups and a camera that rides with one (ADR-0164), and its paths
+//! through keyframes and orbits (ADR-0166), which
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
@@ -263,6 +264,21 @@ One `source.set_settings` of `warp` jumps: the sky accelerates to it over \
 jump, about 0.05-0.15 a slow cruise. Add a brief white flash card or `bloom` at the \
 jump for punch. A flat photo stretched as a panorama smears toward \
 the top and bottom, so prefer a real panorama or the procedural sky. \
+A group placed in a 3D scene is one flat card unless it shares the space: \
+`scene.set_options` with `share_space` on the group draws each of its children in the \
+scene, placed through the group item's pose (its centre, `depth_px`, rotation, tilt, \
+turn and a uniform scale), so a rig of models, cards and lights moves, sways and \
+keyframes as one through its one item while each part keeps its own sort, focus, light \
+and shadow; nested sharing groups compose. Such a group drops its own crop, flips, \
+blend, effects and filters (put them on the children), and its item's opacity \
+multiplies theirs. A sharing group is also a pivot: put a moving part (a lever, a door) \
+in one whose centre is on the hinge, and drive the group item's `tilt_deg`, `turn_deg` \
+or rotation to swing it. `scene.set_camera_anchor` names such a group item to make the \
+scene's camera ride with it: its `position` and `target` are then in the group's \
+pixels, so a camera set inside a moving rig stays there, aimed live from inside it. \
+The anchor belongs to the family, and is ignored while a follow camera is set, or \
+when it names anything but a sharing group's item: it is stored without an error, so \
+read back `camera_anchor` and look. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \
