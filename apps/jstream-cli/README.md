@@ -315,7 +315,9 @@ measured the same way on every machine (#1220).
   outside source once that source shows a picture, counting from the latest tick then,
   and lasts `--seconds` (5 to 60, default 20). Every `--switch-every` milliseconds (default 4000, at least 500) it
   switches to the other scene with `scene.switch_and_watch` and the `--preset`
-  transition (default `fade`), saving the frame sheet as `<dir>/<scenario>-switch-<n>.png`, then
+  transition (default `fade`; when the collection has no `fade` preset, as a new one
+  doesn't, the bench adds a 400 ms fade of its own for the run and deletes it after),
+  saving the frame sheet as `<dir>/<scenario>-switch-<n>.png`, then
   probes the recording's stream with `quality.probe` (three frames, protocol 0.110,
   [ADR-0145](../../docs/adr/0145-the-quality-probe-reads-back-the-compositor.md)). At the
   end it waits for one more `stats.tick`, reads `profile.get` over the window, then

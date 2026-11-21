@@ -127,6 +127,12 @@ impl ProjectAsk {
         }
     }
 
+    /// The folder the dialogs browse in while the field names none: the open project's,
+    /// so Open looks where Save as and New put files.
+    pub fn browse_folder(open: Option<&str>) -> String {
+        open.map(folder_of).unwrap_or_default()
+    }
+
     /// The path the field starts with, beside the open project.
     pub fn suggested(self, open: Option<&str>) -> String {
         let folder = open.map(folder_of).unwrap_or_default();
@@ -231,6 +237,9 @@ pub fn ProjectDialog(
     ask: ProjectAsk,
     /// The path the field starts with.
     start: String,
+    /// The folder Browse… opens in while the field names none: the open project's.
+    #[prop(optional)]
+    folder: String,
     /// How many outputs are running, which an open or a new stops.
     running: usize,
     /// Closes the dialog.
@@ -282,7 +291,14 @@ pub fn ProjectDialog(
         ask.title().to_owned(),
         || true,
         move || file_name(&path.get_untracked()),
-        move || folder_of(&path.get_untracked()),
+        move || {
+            let typed = folder_of(&path.get_untracked());
+            if typed.is_empty() {
+                folder.clone()
+            } else {
+                typed
+            }
+        },
         move |picked: String| path.set(picked),
     );
     let warning = ask.warning(running);
@@ -367,6 +383,10 @@ mod tests {
             "/home/me/shows/Untitled.json"
         );
         assert_eq!(ProjectAsk::Open.suggested(open), "");
+        // Open's field starts empty, but Browse… opens where Save as saved (alpha.6
+        // Windows pass: it opened in Documents while Save as wrote to AppData).
+        assert_eq!(ProjectAsk::browse_folder(open), "/home/me/shows");
+        assert_eq!(ProjectAsk::browse_folder(None), "");
         assert_eq!(
             ProjectAsk::SaveAs.action("/p.json".into()),
             Action::CollectionSaveAs {
