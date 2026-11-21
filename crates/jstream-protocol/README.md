@@ -351,7 +351,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.127 because a group can share its 3D scene's space and a camera
+`PROTOCOL_VERSION` is 0.128 because a client can hold and step the engine's media clock
+to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
+0.127 because a group can share its 3D scene's space and a camera
 can ride with one: `SceneOptions`' `share_space`, `SceneInfo`'s `camera_anchor` and
 `scene.set_camera_anchor`
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md));

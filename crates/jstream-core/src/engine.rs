@@ -1321,8 +1321,11 @@ impl Engine {
             let state = &mut *state;
             state.live.set_clock(Arc::clone(&backends.clock));
             // MIDI is stamped on the media clock, and the sources draw against it.
+            // The engine's own clock, which a client may hold (ADR-0172), over the
+            // platform's.
+            let clock = Arc::clone(state.live.clock()) as Arc<dyn jstream_platform::MediaClock>;
             if let Some(midi) = state.live.midi() {
-                midi.set_clock(Arc::clone(&backends.clock));
+                midi.set_clock(clock);
             }
             state
                 .live
@@ -2980,6 +2983,9 @@ impl Engine {
                 continue;
             }
             let current = state.outputs.state(&output_id)?;
+            if state.live.clock().is_held() {
+                return Err(clock_held("output.start"));
+            }
             let idle = matches!(current, OutputState::Stopped | OutputState::Failed);
             if !idle {
                 return Err(already_running(&output_id));
@@ -3620,6 +3626,12 @@ impl Engine {
         };
         LiveHost::install_asset(&*self.shared, loaded);
         true
+    }
+
+    /// The engine's media clock now (ADR-0172), for tests.
+    #[cfg(test)]
+    pub(crate) fn media_now(&self) -> jstream_media::MediaTime {
+        lock(&self.shared.state).live.now()
     }
 
     /// Runs the live sources on `clock`, for tests that move time by hand.
@@ -5607,6 +5619,9 @@ impl State {
             return Ok(CallResult::action());
         }
         let (output_id, start) = match action {
+            Action::OutputStart { .. } if self.live.clock().is_held() => {
+                return Err(clock_held("output.start"));
+            }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
             Action::LiveSet { gesture_id, values } => {
@@ -5706,6 +5721,42 @@ impl State {
                     preset_id,
                     wake,
                 )?;
+                return Ok(CallResult::action());
+            }
+            // The media clock (ADR-0172): held and stepped to render frame by frame.
+            Action::ClockHold => {
+                let running = self.outputs.running();
+                if let Some(output_id) = running.first() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: format!(
+                            "output `{output_id}` is running, and an output follows real \
+                             time: stop it before holding the clock"
+                        ),
+                    });
+                }
+                self.live.clock().hold();
+                self.live.clock_moved();
+                return Ok(CallResult::action());
+            }
+            Action::ClockStep { ms } => {
+                if !(1..=MAX_CLOCK_STEP_MS).contains(&ms) {
+                    return Err(ProtocolError::invalid_argument(
+                        "ms",
+                        format!("a step is 1 to {MAX_CLOCK_STEP_MS} ms"),
+                    ));
+                }
+                if self.live.clock().step(ms).is_none() {
+                    return Err(ProtocolError::ActionFailed {
+                        reason: "the clock isn't held: send `clock.hold` first".into(),
+                    });
+                }
+                self.live.clock_moved();
+                return Ok(CallResult::action());
+            }
+            Action::ClockRelease => {
+                if self.live.clock().release() {
+                    self.live.clock_moved();
+                }
                 return Ok(CallResult::action());
             }
             Action::SourceRestart { source_id } => {
@@ -7455,6 +7506,20 @@ fn action_field(error: ProtocolError) -> ProtocolError {
 /// `device.list`, `device.revoke`) and the UI settings it keeps (`ui_settings.get`,
 /// `ui_settings.set`): the server in front of the engine answers them (ADR-0044,
 /// ADR-0084), so one that reaches the engine came from a client with no server between.
+/// Why `call` fails while the media clock is held (ADR-0172): an output follows real
+/// time.
+fn clock_held(call: &str) -> ProtocolError {
+    ProtocolError::ActionFailed {
+        reason: format!(
+            "the clock is held for a frame-by-frame render, and an output follows real \
+             time: send `clock.release` before `{call}`"
+        ),
+    }
+}
+
+/// The longest `clock.step`, in milliseconds (ADR-0172).
+const MAX_CLOCK_STEP_MS: u32 = 10_000;
+
 fn served_by_the_server(call: &str) -> ProtocolError {
     ProtocolError::Unsupported { call: call.into() }
 }

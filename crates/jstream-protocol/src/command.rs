@@ -1977,6 +1977,31 @@ pub enum Action {
         /// Where to play it from, in milliseconds from its start.
         at_ms: u32,
     },
+    /// Holds the engine's media clock where it is now (ADR-0172, since 0.128): every
+    /// animation it draws (transitions and Moves, motion modifiers, timelines, a sky's
+    /// warp, animated sources) and what `video.snapshot` and `video.frames` draw stand
+    /// still at that moment until `clock.step` moves them on. It is for rendering a
+    /// move frame by frame on a machine too slow to draw it in real time: hold, then
+    /// `clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding
+    /// it again keeps the time it is held at. Runtime state: it changes no `rev`, is
+    /// never undone and is not saved. Fails with `action_failed` while an output is
+    /// running, since an output's pictures and sound follow real time.
+    #[serde(rename = "clock.hold")]
+    ClockHold,
+    /// Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.128), one
+    /// frame's worth at a time for a render: 33 for 30 fps. Fails with
+    /// `invalid_argument` on `ms` for 0 or more than 10000, and with `action_failed`
+    /// when the clock isn't held.
+    #[serde(rename = "clock.step")]
+    ClockStep {
+        /// How far to move it, in milliseconds, 1 to 10000.
+        ms: u32,
+    },
+    /// Lets the media clock run again (ADR-0172, since 0.128). It never runs backward:
+    /// it waits at the held time until real time passes it, then runs with real time.
+    /// Succeeds and does nothing when it isn't held.
+    #[serde(rename = "clock.release")]
+    ClockRelease,
     /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page
     /// loads again, and a `media` file plays from its start. Other kinds have nothing to
     /// restart, so for them it succeeds and does nothing, as it does for a source no mix
@@ -2289,6 +2314,9 @@ impl Action {
             Action::TimelinePlay { .. } => "timeline.play",
             Action::TimelineStop { .. } => "timeline.stop",
             Action::TimelineSeek { .. } => "timeline.seek",
+            Action::ClockHold => "clock.hold",
+            Action::ClockStep { .. } => "clock.step",
+            Action::ClockRelease => "clock.release",
             Action::SourceRestart { .. } => "source.restart",
             Action::PrivacySet { .. } => "privacy.set",
             Action::PluginInstall { .. } => "plugin.install",
@@ -2409,7 +2437,10 @@ impl Action {
             | Action::ValuesSet { .. }
             | Action::CollectionOpen { .. }
             | Action::CollectionNew { .. }
-            | Action::CollectionSaveAs { .. } => vec![],
+            | Action::CollectionSaveAs { .. }
+            | Action::ClockHold
+            | Action::ClockStep { .. }
+            | Action::ClockRelease => vec![],
         }
     }
 
@@ -2483,6 +2514,11 @@ impl Action {
                 "type",
                 "`plugin.clap_rescan` can't be bound: a person rescans the CLAP plugins \
                  through the UI (ADR-0035)",
+            )),
+            Action::ClockHold | Action::ClockStep { .. } | Action::ClockRelease => Some((
+                "type",
+                "a `clock` action can't be bound: a client holds and steps the media clock \
+                 to render frame by frame (ADR-0172)",
             )),
             Action::EffectEnable { .. } => Some((
                 "type",
@@ -2563,7 +2599,10 @@ impl Action {
     pub fn takes_steps(&self) -> bool {
         match self {
             Action::SceneZoomCamera { .. } => true,
-            Action::SceneDriveCamera { .. }
+            Action::ClockHold
+            | Action::ClockStep { .. }
+            | Action::ClockRelease
+            | Action::SceneDriveCamera { .. }
             | Action::SceneAimCamera { .. }
             | Action::PtzDrive { .. }
             | Action::PtzAim { .. }
