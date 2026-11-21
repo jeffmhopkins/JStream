@@ -69,14 +69,13 @@ along the same arc.
 - The camera has no angles of its own besides `roll_deg`, which still takes the shortest
   way. Where it points follows its position and target.
 
-**2. A Move may pass through keyframes on its way: `via`.** `scene.switch`,
-`scene.switch_and_watch` and `scene.set_keyframe` gain an optional `via`, a list of up to
-eight scenes the Move passes through, in order, before it ends on the one it names.
-- **What may be named.** For `scene.switch`, each entry is a member of the destination's
-  family (ADR-0049 §3), other than the destination itself. For `scene.set_keyframe`, each
-  is one of `scene_id`'s keyframe scenes, or `scene_id` itself for its own values. A
-  missing scene is `not_found`. Any other entry, a repeat of the entry before it, or more
-  than eight is `invalid_argument` on `via`.
+**2. A Move may pass through keyframes on its way: `via`.** `scene.switch` and
+`scene.switch_and_watch` gain an optional `via`, a list of up to eight scenes the Move
+passes through, in order, before it ends on the one it names.
+- **What may be named.** Each entry is a member of the destination's family (ADR-0049
+  §3), other than the destination itself. A missing scene is `not_found`. Any other
+  entry, a repeat of the entry before it, or more than eight is `invalid_argument` on
+  `via`.
 - **When it applies.** Only a Move between members of one family follows `via`: the
   Move pairs by item there, so each item has a value at every stop. A Fade, a cut, a
   stinger, or a Move from a scene outside the family runs as it would without `via`.
@@ -102,8 +101,7 @@ eight scenes the Move passes through, in order, before it ends on the one it nam
 - **Cutting it short.** A switch while a path runs starts from what is on screen, as
   ADR-0029 §7 retargets any transition.
 - **What a path reports.** The switch reports only its destination, as it would without
-  `via` (`studio.changed`, `scene.keyframe_changed`): the `via` scenes are never on
-  program.
+  `via` (`studio.changed`): the `via` scenes are never on program.
 
 **3. A Move may orbit the camera around its target.** The `move` transition kind gains a
 setting, `camera_path`: `line` (the default) or `orbit`.
@@ -148,6 +146,8 @@ at either end.
     the next short;
   - per-stop times along a path;
   - the children of a group drawn as one layer following the path inside it;
+  - `via` on `scene.set_keyframe` (ADR-0116), which would plan the program through each
+    stop's placed keyframe. Decisions 1 and 3 already apply to its Moves;
   - a curve that reaches back past the scene on screen (a path's first leg takes the
     one-sided tangent).
 - **Follow-up implementation PRs:**
