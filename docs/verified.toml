@@ -582,7 +582,7 @@ stamp = { hash = "b3:6f84241d4476a9fc", by = "agent:plugin-uninstall", note = "r
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:a9cebaf0d538076a", by = "agent:hold-zoom", note = "MCP architecture unchanged: tools.snap differs by the CameraFollow hold_zoom field and version, design.rs by one guidance sentence" }
+stamp = { hash = "b3:c30cd0e62fedd275", by = "agent:plugin-uninstall", note = "re-read: plugin.* ops and events still get no tool and stay out of the feed; plugin.uninstalled is a plugin.* event, dropped by the PEOPLE_ONLY prefix; tools.snap now shows plugin.uninstall only inside the action schema hotkey and binding carry, which bind_problem refuses" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:d7b526cf1e63a0fe", by = "agent:hold-zoom", note = "MCP architecture unchanged: tools.snap differs by the CameraFollow hold_zoom field and version, design.rs by one guidance sentence" }
