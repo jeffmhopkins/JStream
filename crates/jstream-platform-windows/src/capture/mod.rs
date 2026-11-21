@@ -25,7 +25,9 @@
 //!   with the same program, class and title, else the topmost of the same program and
 //!   class, unless the program is unknown (`OpenProcess` refused, as for an elevated
 //!   window) or is the UWP host, `ApplicationFrameHost.exe`, which only the title tells
-//!   apart. So a source picks its window up again after the program is restarted or
+//!   apart, so its key leaves the program out (`-`), as for an unknown one. A program's
+//!   path is read into a `MAX_PATH` buffer on the stack, and a longer one into a heap
+//!   buffer only for that process. So a source picks its window up again after the program is restarted or
 //!   Windows is: the engine retries a capture that didn't start (or whose window closed)
 //!   every two seconds. Nothing found is `NotFound`. An ID without a key, as saved before
 //!   keys, takes its handle alone.
