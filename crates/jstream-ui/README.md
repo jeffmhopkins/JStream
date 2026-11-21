@@ -660,9 +660,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `target`, or a `webcam`'s `device`) lists the targets of its kind that
   `capture.targets` reports, each by name and size, after "Primary display", "First
   device listed" or "None" for the empty value. A target the source names that isn't
-  listed as is but has a listed target's key (the part after `;`, which finds a window
-  again once it is opened again), else the same part before it (the same window, its
-  title changed), shows as that target. Any other one not listed now (a closed window,
+  listed as is but, for a window, has a listed window's key (the part after `;`, which
+  finds a window again once it is opened again), else the same part before it (the same
+  window, its title changed), else the same key but for its last field, with the others
+  known (the same program and class under another title, which the engine takes when no
+  window has the old one), shows as that target. Any other one not listed now (a closed window,
   an unplugged device) shows as "Window not open (<ID>)" or "Device not connected
   (<ID>)". It asks again each time the field gets focus, so a
   window opened since shows up; until the first list arrives, or while the engine can't
@@ -1384,7 +1386,9 @@ beside it ([Design › Studio mode](#design)).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
-  decoder's queue passes 3 chunks; JPEG frames go through `createImageBitmap` one at a
+  decoder's queue passes 12 chunks (about a fifth of a second at 60 fps, so a busy
+  main thread's short stall, which also holds chunks in that queue, doesn't freeze the
+  picture until the next keyframe; #1556); JPEG frames go through `createImageBitmap` one at a
   time, and while one decodes only the newest that arrives waits, so the last picture
   is never lost. Each decoded picture is drawn into a `<canvas>` placed with the
   canvas's own fit, so the picture lies exactly under the boxes. If the decoder fails, the canvas closes the stream and subscribes

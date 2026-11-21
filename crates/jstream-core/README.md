@@ -2458,7 +2458,13 @@ and a preview stream that skips an unchanged picture draws one whose slots chang
 asks for, since where it is placed depends on its size. A painter whose frames aren't
 packed RGBA8 has no slot and re-plans as other animations do. The thread paints only the painters the latest round of plans looked at, the
 program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
-while something else re-plans every frame; a plan that reaches one again paints it for
+while something else re-plans every frame, and of those it paints one with a slot only
+once the time its last paint's `next_change` gave has come (rounded as its wake is), so
+a tick another source asked for (a page re-plans every program frame) leaves a timer
+whose text changes once a second alone, and `profile.get`'s `paints` counts its
+redraws, not the program's frames (#1556). A painter that polls (a settled scope or MIDI
+source every 250 ms, `chat_message` every 100 ms) so notices new sound, notes or a
+featured message within its own interval, as it does when it is alone; a plan that reaches one again paints it for
 the current time first, under the lock, so it never shows the frame it had when it was
 last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
 them ahead on a thread of its own, so apart from that catch-up the plan's `frame`
