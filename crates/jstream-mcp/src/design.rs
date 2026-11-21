@@ -244,8 +244,9 @@ assets; `scene` lights it with the scene's light sources. To put a live picture 
 (a camera on a screen, a page on a panel, a shader on a sphere), set `texture` to that \
 source; `texture_material` names the one material of a file it goes on, such as its \
 screen. `reflection` gives it surroundings to reflect: a sky or studio still, a shader, \
-or a `scene` source of its own set so a glossy model mirrors the room (a source can't \
-show a scene that shows the model itself). Pair a low `roughness` with `metallic` 1 for \
+or a `scene` source of a separate scene built as its surroundings so a glossy model \
+mirrors a room (not the scene the model is in, which shows the model itself and is \
+refused as a cycle). Pair a low `roughness` with `metallic` 1 for \
 chrome, and keep `roughness` 0.4-0.7 for most props, which read better than mirrors. \
 A sky all around a 3D set (open sky, a city, space) is a `light` source of `type` \
 `environment` placed in the scene with `backdrop` on: it fills everything behind the \

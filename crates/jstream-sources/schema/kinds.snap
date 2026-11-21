@@ -1761,7 +1761,7 @@ source: crates/jstream-sources/tests/kinds.rs
         "media": "video",
         "default": null,
         "label": "Texture",
-        "description": "A source whose picture, live and after its own filters, replaces the base-colour texture: a webcam, a browser page, a shader, a scene. Missing or not yet drawing, it reads transparent.",
+        "description": "A source whose picture, live and after its own filters, replaces the base-colour texture: a webcam, a browser page, a shader, a scene. Not another model, whose picture is drawn only where an item places it. Missing or not yet drawing, it reads transparent.",
         "live": true
       },
       {
