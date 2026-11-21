@@ -239,6 +239,7 @@ pub fn scene_edits(
                 action: Action::SceneSwitch {
                     scene_id: scene_id.clone(),
                     preset_id,
+                    via: Vec::new(),
                 },
             });
             if !labels.is_empty() {
@@ -933,6 +934,7 @@ mod tests {
         Action::SceneSwitch {
             scene_id: SceneId::new(id),
             preset_id: None,
+            via: Vec::new(),
         }
     }
 
@@ -1419,6 +1421,7 @@ mod tests {
         let fade = Action::SceneSwitch {
             scene_id: SceneId::new("a"),
             preset_id: Some(TransitionPresetId::new("fade")),
+            via: Vec::new(),
         };
         let c = Collection {
             hotkeys: vec![HotkeyBinding::new(Chord::new("F1"), &fade)],

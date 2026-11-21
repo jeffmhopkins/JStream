@@ -41,6 +41,7 @@ fn switch(control: &dyn Control, scene: &str, preset: Option<&str>) {
     let action = Action::SceneSwitch {
         scene_id: SceneId::new(scene),
         preset_id: preset.map(TransitionPresetId::new),
+        via: Vec::new(),
     };
     call(control, action).expect("scene.switch");
 }

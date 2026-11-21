@@ -4081,9 +4081,11 @@ mod tests {
                 unmatched: jstream_protocol::TransitionEffect::None,
                 stagger_ms: 0,
                 stinger: None,
+                orbit: false,
             },
             by_item: true,
             from_camera: crate::transition::camera_of(&graph, &main),
+            via: Vec::new(),
         };
         let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
         let Some(landed) = lit_centre(&graph, light.clone()) else {

@@ -28,7 +28,7 @@ use jstream_protocol::{
     STINGER, SceneCamera, SceneId, Settings, SourceId, TransitionEffect, TransitionPresetId,
     TransitionStarted,
 };
-use jstream_render::transition::{Effect, Endpoint, Timing, Track};
+use jstream_render::transition::{Effect, Endpoint, Stops, Timing, Track};
 
 use crate::motion::TrackMotion;
 use crate::snapshot::SourceRef;
@@ -44,6 +44,9 @@ pub(crate) struct Run {
     pub(crate) stagger_ms: u32,
     /// For a `stinger`, what it plays over the switch; `None` for every other kind.
     pub(crate) stinger: Option<Stinger>,
+    /// Whether a Move circles a 3D scene's camera around its target: the `move` kind's
+    /// `camera_path` of `orbit` (ADR-0166 decision 3).
+    pub(crate) orbit: bool,
 }
 
 /// A `stinger` transition's settings, resolved.
@@ -125,6 +128,9 @@ pub(crate) fn resolve(
         unmatched: TransitionEffect::from_setting(settings.get("unmatched")),
         stagger_ms,
         stinger,
+        orbit: preset.kind() == MOVE
+            && settings.get("camera_path").and_then(|value| value.as_str())
+                == Some(jstream_protocol::CAMERA_ORBIT),
     };
     Ok((id, Some(run)))
 }
@@ -229,6 +235,9 @@ pub(crate) struct Running {
     /// The camera it moves from (ADR-0094 decision 7): the scene it leaves's, or the one
     /// on screen when it cut a transition short. `None` from a 2D scene.
     pub(crate) from_camera: Option<SceneCamera>,
+    /// The members of its family a Move passes through on its way, in order
+    /// (ADR-0166 decision 2); empty for a straight one.
+    pub(crate) via: Vec<SceneId>,
 }
 
 impl Running {
@@ -236,6 +245,53 @@ impl Running {
     pub(crate) fn elapsed_ms(&self, at: MediaTime) -> f32 {
         elapsed_ms(self.start, at)
     }
+}
+
+/// Checks a switch's `via` (ADR-0166 decision 2): at most [`MAX_VIA`] scenes, each in
+/// the collection (`not_found`) and a member of `to`'s family other than `to`, none the
+/// same as the one before it (`invalid_argument` on `via.<index>`).
+///
+/// [`MAX_VIA`]: jstream_protocol::MAX_VIA
+pub(crate) fn check_via(
+    state: &jstream_graph::State,
+    to: &SceneId,
+    via: &[SceneId],
+) -> Result<(), ProtocolError> {
+    if via.len() > jstream_protocol::MAX_VIA {
+        return Err(ProtocolError::invalid_argument(
+            "via",
+            format!("at most {} keyframes", jstream_protocol::MAX_VIA),
+        ));
+    }
+    let family = state.family_of(to);
+    for (index, id) in via.iter().enumerate() {
+        if state.scene(id).is_none() {
+            return Err(ProtocolError::NotFound {
+                entity: EntityKind::Scene,
+                id: id.as_str().to_owned(),
+            });
+        }
+        let field = format!("via.{index}");
+        if id == to {
+            return Err(ProtocolError::invalid_argument(
+                field,
+                "the scene the switch ends on",
+            ));
+        }
+        if state.family_of(id) != family {
+            return Err(ProtocolError::invalid_argument(
+                field,
+                "not a keyframe of the scene's family",
+            ));
+        }
+        if index > 0 && via[index - 1] == *id {
+            return Err(ProtocolError::invalid_argument(
+                field,
+                "the same as the stop before it",
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// The camera scene `id` draws through (ADR-0094): its own, or a keyframe scene's
@@ -315,6 +371,7 @@ impl Planned {
                     to: visual.at,
                     timing: still,
                     source: visual.size,
+                    via: Stops::NONE,
                 };
                 (visual, track)
             })
@@ -476,6 +533,7 @@ pub(crate) fn plan(
                     to: item.at,
                     timing: timing(own, delay_ms),
                     source: item.size,
+                    via: Stops::NONE,
                 }
             }
             None => Track::Appear {
@@ -586,12 +644,17 @@ pub(crate) fn through(
 pub(crate) fn with_timing(track: Track, timing: Timing) -> Track {
     match track {
         Track::Pair {
-            from, to, source, ..
+            from,
+            to,
+            source,
+            via,
+            ..
         } => Track::Pair {
             from,
             to,
             timing,
             source,
+            via,
         },
         Track::Appear { to, effect, .. } => Track::Appear { to, effect, timing },
         Track::Disappear { from, effect, .. } => Track::Disappear {
@@ -724,6 +787,7 @@ mod tests {
             unmatched: TransitionEffect::Scale,
             stagger_ms: 100,
             stinger: None,
+            orbit: false,
         }
     }
 

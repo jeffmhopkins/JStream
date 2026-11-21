@@ -178,6 +178,7 @@ pub fn switch_to(scene_id: &SceneId) -> Action {
     Action::SceneSwitch {
         scene_id: scene_id.clone(),
         preset_id: None,
+        via: Vec::new(),
     }
 }
 

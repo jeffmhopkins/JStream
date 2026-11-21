@@ -1089,8 +1089,13 @@ impl State {
             Action::SceneSwitch {
                 scene_id,
                 preset_id,
+                via,
             } => {
                 self.collection.existing_scene(&scene_id)?;
+                // The mock only cuts, so a path's stops are only checked to exist.
+                for id in &via {
+                    self.collection.existing_scene(id)?;
+                }
                 // The only preset the mock knows is the initial `cut`.
                 let initial = TransitionPresetId::new(INITIAL_PRESET);
                 if let Some(id) = preset_id.filter(|id| *id != initial) {
@@ -5411,6 +5416,7 @@ mod tests {
         let refused = bind(Action::SceneSwitch {
             scene_id: SceneId::new("missing"),
             preset_id: None,
+            via: Vec::new(),
         })
         .expect_err("a switch takes no steps");
         assert!(
