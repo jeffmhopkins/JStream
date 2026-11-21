@@ -777,7 +777,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:c1587cb921d8c86b", by = "agent:claude", note = "added the 0.125 midi motion kind (ADR-0168) beside audio and effect modifiers" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:5659a5571c82b560", by = "agent:claude-1555", note = "#1555: snapshot and event.rs change only a field description; the architecture's protocol section still holds" }
+stamp = { hash = "b3:527c214a82c3e6cb", by = "agent:claude", note = "added the 0.125 midi motion kind (ADR-0168) beside audio and effect modifiers | merge: #1573 changed one doc line in protocol.snap (capture drop counting); the snapshot still holds the midi kind and this section still holds | kept from the merged side: #1555: snapshot and event.rs change only a field description; the architecture's protocol section still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -4386,7 +4386,7 @@ stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:c1587cb921d8c86b", by = "agent:claude", note = "MotionMidiControl parses unknown values as Unknown; schema snapshots regenerated for 0.125" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:5659a5571c82b560", by = "agent:claude-1555", note = "#1555: protocol.snap changes only capture_frames' description; no wire change, no version bump" }
+stamp = { hash = "b3:527c214a82c3e6cb", by = "agent:claude", note = "MotionMidiControl parses unknown values as Unknown; schema snapshots regenerated for 0.125 | merge: #1573 changed one doc line in protocol.snap (capture drop counting); the snapshot still holds the midi kind and this section still holds | kept from the merged side: #1555: protocol.snap changes only capture_frames' description; no wire change, no version bump" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
