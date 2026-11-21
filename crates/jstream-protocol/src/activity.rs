@@ -8,6 +8,11 @@ use serde::{Deserialize, Serialize};
 /// How many entries the engine keeps, and the most one `activity.list` answers.
 pub const MAX_ACTIVITY_ENTRIES: u32 = 100;
 
+/// The client name the desktop app's global hotkeys connect with. Their calls are the
+/// user's own key presses, so the Agent activity panel leaves them out, as it does the
+/// UI's own calls.
+pub const HOTKEYS_CLIENT_NAME: &str = "jstream-desktop hotkeys";
+
 /// The longest `summary` the engine keeps, in characters; a longer sentence is cut and
 /// ends with `…`.
 pub const MAX_ACTIVITY_SUMMARY_CHARS: usize = 256;
