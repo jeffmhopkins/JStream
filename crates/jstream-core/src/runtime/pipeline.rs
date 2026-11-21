@@ -4087,7 +4087,7 @@ fn render_loop(job: RenderJob) {
             unread = unread.saturating_add(frame.take_unread());
         }
         drops.publish(
-            capture_drops(captures.stats())
+            capture_drops(captures.dropped())
                 .saturating_add(render_tick_drops(skipped.saturating_add(unread)))
                 .saturating_add(encode_frame_drops(encode_held)),
         );
