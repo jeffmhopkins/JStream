@@ -778,7 +778,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `hold_zoom` is off ([ADR-0161](adr/0161-follow-camera-holds-its-zoom.md), protocol
   0.124).
 - **3D groups** ([ADR-0164](adr/0164-3d-groups-share-their-scenes-space.md), protocol
-  0.125): a group with `share_space` in its `scene.set_options`, placed in a 3D scene,
+  0.127): a group with `share_space` in its `scene.set_options`, placed in a 3D scene,
   draws its children in that scene's space through the group item's pose, each sorted,
   focused and lit as an item of the scene, so the group item's live values, motion and
   keyframes move them all. `scene.set_camera_anchor` names such a group item for the

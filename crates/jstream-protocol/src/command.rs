@@ -879,12 +879,12 @@ pub enum Edit {
         shots: Vec<crate::ptz::PtzShot>,
     },
     /// Sets or removes the 3D group a scene's camera rides with (ADR-0164 §5, since
-    /// 0.125). With an anchor, the camera's position and target are points of that
+    /// 0.127). With an anchor, the camera's position and target are points of that
     /// group's own space, and the camera moves with the group item's pose as it is drawn.
     /// It belongs to the scene family: `invalid_argument` on a keyframe scene, which
-    /// rides with its parent's anchor, on a scene without a camera, and for an item that
-    /// isn't in the scene or doesn't place a group. An anchor that later names no 3D
-    /// group is kept and ignored. Inverse: `scene.set_camera_anchor` with the previous
+    /// rides with its parent's anchor. Any other anchor is stored, and one that names no
+    /// item of the scene placing a group sharing the space, or is on a scene without a
+    /// camera, is kept and ignored. Inverse: `scene.set_camera_anchor` with the previous
     /// anchor.
     #[serde(rename = "scene.set_camera_anchor")]
     SceneSetCameraAnchor {

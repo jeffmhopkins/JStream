@@ -588,7 +588,7 @@ stamp = { hash = "b3:02ccb8a9a71f5a32", by = "agent:3d-groups", note = "Re-read 
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/schema/tools.snap"]
-stamp = { hash = "b3:eba6aca269863af5", by = "agent:3d-groups", note = "Re-read the tool grouping, schema size and annotations bullets: scene.set_camera_anchor is a reversible edit op of the scene tool, so no tool, class or annotation changes, and tools.snap grew only by its schema." }
+stamp = { hash = "b3:c82a7ac016108ea4", by = "agent:3d-groups", note = "tools.snap regenerated for the anchor edit's reworded doc and 0.127; tool grouping and annotations are unchanged." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
 stamp = { hash = "b3:b31be9f7a2b0e20c", by = "agent:3d-groups", note = "Re-read after design.rs gained a line on a sharing group as a pivot for a moving part; the section's account of the design guidance still holds." }
@@ -726,7 +726,7 @@ stamp = { hash = "b3:dfafd6bdd1057e8a" }
 stamp = { hash = "b3:469e300ae477e5ef", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["ARCH#protocol"."body"]
-stamp = { hash = "b3:9a77b8df3291a020", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
+stamp = { hash = "b3:19850ada3551f0e5", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."dep:crates/jstream-protocol/README.md#compatibility"]
 stamp = { hash = "b3:b7d5b2a09a619446", by = "agent:claude-settings", note = "#1230: canvas.set_blending added beside canvas.set_frame_rate (0.98 placeholder); the mock keeps the space and undoes it. | merge: Merged wave/alpha5: it brought protocol 0.96 to 0.100 (controller bindings, the pairing network listener, 2D/3D moves, keyframe timing and easings, hotkey and timeline labels) and collection schema 8 to 11. This branch is renumbered on top: protocol 0.101 and schema 12 (v11_to_v12 migration, v12.json fixture, the since-0.101 notes). Its blending text stands beside the wave's, and nothing in the wave touches blend modes or the blending space. | kept from the merged side: This PR: item.set_timing, the timing override field and the three easings at 0.99. The protocol files and the compatibility section gained the merge's #1272, #1280, #1281, #1289, #1299, #1307, #1314, #1315, #1316, #1329, #1364, #1366, #1368 and #1374 (0.95 to 0.98). The body's account holds. | kept from the merged side: Added binding.set/clear, removed_bindings, delete.plan's bindings and the collection's bindings at schema 8 for controller bindings (ADR-0122, protocol 0.96) | merge: Merged wave/alpha5 (page API schema 8, projects 0.94, collection tool, #1272's crates): re-read for what it changed here; the binding text holds beside it | kept from the merged side: Added the Projects bullet for 0.93: the three actions, collection.info, collection.file_changed, what an open does, the path rules, unsupported without a file, no plugin or hotkey. | merge: the merge brought wave/alpha5's #1287 (ADR-0124 page API checkboxes and warnings, protocol 0.93, collection schema Version 8); the projects bullet now says protocol 0.94; 0.93 is ADR-0124's descriptor warning" }
@@ -765,7 +765,7 @@ stamp = { hash = "b3:2134a22b1a67768b", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:6c75f8ae9ca9d681", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/mock/organise.rs"]
-stamp = { hash = "b3:f94746bf68142661", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
+stamp = { hash = "b3:ea3499ed937bde6e", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:1fb6803a7c4f8625", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): Binary streams bullet holds at protocol 0.20 (version.rs), 32-byte header per BinaryFrame, meters still meters.tick" }
@@ -777,10 +777,10 @@ stamp = { hash = "b3:a1b61e848724b465", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main at f0cb974 (#301 close handshake, #324 browser error event, #247 --ui-dir, #373 asset paths): Binary streams bullet holds at 0.20 (main still 0.19); server and ws_web changes from main don't touch the frame path" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:2cd90238d7f99ce3", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
+stamp = { hash = "b3:11be16d113e8135f", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:a81c99bf98b0ec6a", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
+stamp = { hash = "b3:3725984fdc171038", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -804,7 +804,7 @@ stamp = { hash = "b3:09782a68e22314bd", by = "agent:hold-zoom", note = "camera_m
 stamp = { hash = "b3:346b89300e9dc7a9", by = "agent:claude-settings", note = "Re-read: the protocol section's envelope, versioning and command model still hold for an additive 0.94 query and action; the mock answers them as an engine without CLAP | merge: wave/alpha5 brought #1275's final Settings dialog, #1269's projects (protocol 0.94, collection.* calls, File menu project items), #1272's MIDI/JTunnel crates and main's #1301/#1302/#1308/#1309; re-read: the CLAP scan text this branch wrote (plugin.clap_scan, plugin.clap_rescan, the Audio plugins page) is independent of what the wave changed here, and any CLAP version it names is now 0.95 | merge: Merged wave/alpha5 (protocol 0.96 to 0.105: controller bindings, the network listener, keyframe timing, labels, blending space, effect quarantine, view reports, wheel chords and camera controls; READMEs trimmed to maps). This branch is renumbered on top as protocol 0.106 (plugin.clap_scan, plugin.clap_rescan, with the since-0.106 notes, and PluginClapRescan classified in Action::takes_steps). The Settings dialog keeps Audio plugins beside the wave's Devices page with its network setting. The core README's CLAP lines sit in the trimmed map, and the platform-windows README takes the wave's map. Snapshots are regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:19f42f206cfc1496", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
+stamp = { hash = "b3:699748e922034306", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:e81629be10e7bfde", by = "agent:grok", note = "Re-read the canvas sentence. canvas.set_frame_rate sets the base rate to 30 or 60 at protocol 0.89, beside canvas.set_size." }
@@ -846,7 +846,7 @@ stamp = { hash = "b3:7807590bfb5363c6", by = "agent:claude", note = "ItemGeometr
 stamp = { hash = "b3:3ba1c41bceebd573", by = "agent:claude", note = "ItemGeometry gains optional surface at 0.119; the protocol overview holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry/group.rs"]
-stamp = { hash = "b3:b2f915c1794a3611", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
+stamp = { hash = "b3:a7da933b1a640b96", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/geometry/solid.rs"]
 stamp = { hash = "b3:1ff9bcc5fa0eb1bf", by = "agent:claude", note = "billboard is an additive ItemGeometry field at 0.118; the protocol section's description holds" }
@@ -906,7 +906,7 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:58ce768807f20d6f", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
+stamp = { hash = "b3:8e2eadd77a339679", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -924,7 +924,7 @@ stamp = { hash = "b3:66b0e04dc862cd93", by = "agent:claude", note = "This PR: it
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "Re-read and edited: adds values.set, values.list and values.changed (0.78, ADR-0102) as runtime state never saved nor undone, beside the pack commands; the mock answers them as the engine Review round 1: bind_problem now refuses a hotkey-bound values.set with a bad name or oversized value, the protocol README's values paragraph says so, values.rs's doc says pages will read values in part 2, and the mock gained a values test; the paragraph still holds." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f2088b24f5a62bcf", by = "agent:3d-groups", note = "Added a 3D groups bullet (ADR-0164, protocol 0.125): share_space in scene.set_options and the scene.set_camera_anchor edit, as command.rs and query.rs have them; the mock mirrors both." }
+stamp = { hash = "b3:47b575c44115fc8a", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: the YouTube bullet says that since 0.38 a running output's audience comes in the youtube.stats event and the query lists it with the day's quota estimate, by which audience reads slow and stop first (ADR-0041 §3, §5), the chat rate following with chat polling; its protocol README input changed by B1's version-paragraph wording only; matches the README, the schema snapshots and the examples; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's parity fixture text into the protocol README's Contents (display capture screen, a webcam with its paired input), which this section doesn't describe; the body, snapshots and sources came in unchanged, so the YouTube bullet holds" }
@@ -1551,7 +1551,7 @@ stamp = { hash = "b3:cb2e88cc7f3f5138", by = "agent:mac-browser", note = "The RE
 stamp = { hash = "b3:6b139f7a258f08e0", by = "agent:claude-perf-suite", note = "The bench stays a protocol client; its design now names every call it uses (adding quality.probe and kind.list); scenario sources are made by its batch and cleaned up." }
 
 ["CRATE-jstream-cli#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:959b82175a09efe1", by = "agent:3d-groups", note = "Re-read the runtime and connection bullets against jstream-control's design change (the mock's scene.set_camera_anchor): the CLI sends any edit through Control unchanged, so it holds." }
+stamp = { hash = "b3:d5d9de497ca8fa2e", by = "agent:3d-groups", note = "Dependency jstream-control#design reworded the mock's anchor checks; the CLI's design is unaffected." }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/Cargo.toml"]
 stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
@@ -1629,10 +1629,10 @@ stamp = { hash = "b3:27f4505ffe21a4f8" }
 stamp = { hash = "b3:c486977d3fcf67ab", by = "agent:camera-controls", note = "Edited the capture targets row: each device's camera controls are listed after its formats (name, value, range, step, default, auto or manual). Checked against run.rs and capture_targets_prints_each_target." }
 
 ["CRATE-jstream-control#design"."body"]
-stamp = { hash = "b3:959b82175a09efe1", by = "agent:3d-groups", note = "Re-read the mock's edit checks and its camera bullet; added scene.set_camera_anchor (ADR-0164) with the graph's checks, family ownership and restore on delete, as mock/organise.rs and mock.rs now do. scene.set_options stores share_space as sent." }
+stamp = { hash = "b3:d5d9de497ca8fa2e", by = "agent:3d-groups", note = "Review round 1 B2: the mock's scene.set_camera_anchor now refuses only a keyframe scene, as the graph; rewrote its sentence to match mock/organise.rs." }
 
 ["CRATE-jstream-control#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:9a77b8df3291a020", by = "agent:3d-groups", note = "Re-read the mock's edit checks and its camera bullet; added scene.set_camera_anchor (ADR-0164) with the graph's checks, family ownership and restore on delete, as mock/organise.rs and mock.rs now do. scene.set_options stores share_space as sent." }
+stamp = { hash = "b3:19850ada3551f0e5", by = "agent:3d-groups", note = "Review round 1 B2: the mock's scene.set_camera_anchor now refuses only a keyframe scene, as the graph; rewrote its sentence to match mock/organise.rs." }
 
 ["CRATE-jstream-control#design"."dep:docs/adr/0006-mcp-full-access.md"]
 stamp = { hash = "b3:fbe7c61707faa7bd" }
@@ -1665,7 +1665,7 @@ stamp = { hash = "b3:2134a22b1a67768b", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:6c75f8ae9ca9d681", by = "agent:3d-groups", note = "Re-read the mock's edit checks and its camera bullet; added scene.set_camera_anchor (ADR-0164) with the graph's checks, family ownership and restore on delete, as mock/organise.rs and mock.rs now do. scene.set_options stores share_space as sent." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/mock/organise.rs"]
-stamp = { hash = "b3:f94746bf68142661", by = "agent:3d-groups", note = "Re-read the mock's edit checks and its camera bullet; added scene.set_camera_anchor (ADR-0164) with the graph's checks, family ownership and restore on delete, as mock/organise.rs and mock.rs now do. scene.set_options stores share_space as sent." }
+stamp = { hash = "b3:ea3499ed937bde6e", by = "agent:3d-groups", note = "Review round 1 B2: the mock's scene.set_camera_anchor now refuses only a keyframe scene, as the graph; rewrote its sentence to match mock/organise.rs." }
 
 ["CRATE-jstream-control#design"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:1fb6803a7c4f8625", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
@@ -1704,7 +1704,7 @@ stamp = { hash = "b3:2134a22b1a67768b", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:6c75f8ae9ca9d681", by = "agent:3d-groups", note = "Re-read the mock bullet: it still lists mock.rs, mock/organise.rs and mock/keyframe.rs, where the camera anchor's state, edit and keyframe initialiser were added; the description holds." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/mock/organise.rs"]
-stamp = { hash = "b3:f94746bf68142661", by = "agent:3d-groups", note = "Re-read the mock bullet: it still lists mock.rs, mock/organise.rs and mock/keyframe.rs, where the camera anchor's state, edit and keyframe initialiser were added; the description holds." }
+stamp = { hash = "b3:ea3499ed937bde6e", by = "agent:3d-groups", note = "mock/organise.rs's anchor checks narrowed to a keyframe scene; the mock bullet holds." }
 
 ["CRATE-jstream-control#purpose"."file:crates/jstream-control/src/ws.rs"]
 stamp = { hash = "b3:1fb6803a7c4f8625", by = "agent:claude@session_016ERA9mo5DEBTfSnbDSx5n6", note = "U1 after merging main (#376 per-input stamps, D6, K2): control.rs/ws.rs/ws_web.rs binary() and BinaryStream as described (round-2 N3/N5 wording); holds" }
@@ -2112,7 +2112,7 @@ stamp = { hash = "b3:33fcb69cb463e192", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:b7da1bb7fcee80e0", by = "agent:claude", note = "Added that Engine::handles counts the handles and sessions to the Engine and sessions part; the rest of the design is unchanged by this diff." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:959b82175a09efe1", by = "agent:3d-groups", note = "Re-read Engine and sessions against ARCH#protocol's new 3D groups bullet: scene.set_camera_anchor is an ordinary batched edit, so the envelope, handshake and call handling here are unchanged." }
+stamp = { hash = "b3:d5d9de497ca8fa2e", by = "agent:3d-groups", note = "Dependencies ARCH#protocol (0.127) and jstream-control#design (the mock's anchor checks) changed; the engine's session design holds." }
 
 ["CRATE-jstream-core#design"."dep:crates/jstream-protocol/README.md#calls"]
 stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
@@ -2121,7 +2121,7 @@ stamp = { hash = "b3:f01b91af97ab0944", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now Design plus Engine and sessions; the other subsections moved out unchanged as their own sections. Re-read against lib.rs, engine.rs and session.rs, the narrowed covers: the shared-state handle, hello and client IDs, handshake_required, request IDs, completed futures, and the calls the server answers all hold; Cargo.toml moved to #dependencies. depends_on keeps ARCH#protocol, ADR-0013 and control#design, and names the protocol's #design and #calls (the envelope and the call model it follows) instead of its whole design; R-API-004 moved to #calls" }
 
 ["CRATE-jstream-core#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:9a77b8df3291a020", by = "agent:3d-groups", note = "Re-read Engine and sessions against ARCH#protocol's new 3D groups bullet: scene.set_camera_anchor is an ordinary batched edit, so the envelope, handshake and call handling here are unchanged." }
+stamp = { hash = "b3:19850ada3551f0e5", by = "agent:3d-groups", note = "Dependencies ARCH#protocol (0.127) and jstream-control#design (the mock's anchor checks) changed; the engine's session design holds." }
 
 ["CRATE-jstream-core#design"."dep:docs/adr/0013-command-model.md"]
 stamp = { hash = "b3:dfafd6bdd1057e8a" }
@@ -2331,7 +2331,7 @@ stamp = { hash = "b3:e45f0601881425f9", by = "agent:3d-groups", note = "Re-read 
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#geometry"]
-stamp = { hash = "b3:4d97f9731802f108", by = "agent:3d-groups", note = "Re-read the 3D groups sentence against the protocol's new GroupPose geometry bullet: the children are placed through it as it describes." }
+stamp = { hash = "b3:c802a93fc0f13af0", by = "agent:3d-groups", note = "Dependency jstream-protocol#geometry reworded how GroupPose writes angles back (B1); the snapshot section's 3D groups sentence holds." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/audio_sources.rs"]
 stamp = { hash = "b3:25f2f3b47ccb9f93", by = "agent:claude", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds | merge: #1375 brought in JTunnel senders received into network_audio sources; it touches this section's inputs alongside this branch's change without contradicting it, and wave/alpha5 verified its text for #1375 | kept from the merged side: audio_sources.rs gains the Network want and the receiver slot in Wanted; nothing about snapshots or kinds' building changed." }
@@ -2886,7 +2886,7 @@ stamp = { hash = "b3:96cd71b98ff1e82e", by = "agent:lane-d", note = "VideoSessio
 stamp = { hash = "b3:da598d986fcdf80f", by = "agent:lane-d", note = "VideoSession gains stats_handle (StatsHandle, a Weak reader); Purpose's API list says so | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: VideoInput::format and NV12 sessions converting RGBA8/BGRA8 on the encode thread fit the crate's purpose; unchanged" }
 
 ["CRATE-jstream-graph#purpose"."body"]
-stamp = { hash = "b3:e68a014aab674d01", by = "agent:3d-groups", note = "Added Scene::camera_anchor, scene.set_camera_anchor's checks and undo, share_space among the scene options, and schema 16 with v15_to_v16 and the anchor set after items on load; matches camera.rs, model/mod.rs and persist/mod.rs." }
+stamp = { hash = "b3:dde76fdbde14f05d", by = "agent:3d-groups", note = "Review round 1 B2: set_anchor now refuses only a keyframe scene and keeps any other anchor, so a stale one saves, loads and comes back with its scene; rewrote the paragraph and checked it against camera.rs and the new a_stale_anchor_saves_loads_and_comes_back_with_its_scene test." }
 
 ["CRATE-jstream-graph#purpose"."dep:crates/jstream-protocol/README.md#batches"]
 stamp = { hash = "b3:0dcff9dcf478c378", by = "agent:r9bzj2", note = "Added bindings to the state, the controller bindings bullet, delete.plan and state.get, the file's bindings, schema 8 and its migration, the rebuild order and the tests for controller bindings (ADR-0122, protocol 0.96); SCHEMA_VERSION now 8 (was written 6)" }
@@ -2913,7 +2913,7 @@ stamp = { hash = "b3:603e5cdff5a7d9e1", by = "agent:3d-groups", note = "Added Sc
 stamp = { hash = "b3:aef5b4773071e6a3", by = "agent:bus-outputs", note = "Re-read for output.set_audio_buses (checks in order, then a running output may not move, inverse), apply_with_running naming the move, the output blocker on bus.delete and delete.plan's move to master, touched sets, Output.audio_bus, to_info and persistence of audio_bus; the merge added keyframe_children (#970) and without_kinds (#971), unrelated to buses" }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/camera.rs"]
-stamp = { hash = "b3:21666d35cd5ad6c9", by = "agent:3d-groups", note = "Added Scene::camera_anchor, scene.set_camera_anchor's checks and undo, share_space among the scene options, and schema 16 with v15_to_v16 and the anchor set after items on load; matches camera.rs, model/mod.rs and persist/mod.rs." }
+stamp = { hash = "b3:89befc0ac0fac676", by = "agent:3d-groups", note = "Review round 1 B2: set_anchor now refuses only a keyframe scene and keeps any other anchor, so a stale one saves, loads and comes back with its scene; rewrote the paragraph and checked it against camera.rs and the new a_stale_anchor_saves_loads_and_comes_back_with_its_scene test." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/deps.rs"]
 stamp = { hash = "b3:a9f2141f4d7dd0e4", by = "agent:claude", note = "Review B2: deps::blockers now lists transition presets whose settings refer to the target (entity transition, settings.<param>), and delete.plan sets them to null with one transition.update per preset; the reference-rule and delete.plan paragraphs now say so. The new graph test covers the refusal, the plan and its undo." }
@@ -3012,7 +3012,7 @@ stamp = { hash = "b3:8960b4b274aed818", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:3ff30c4459581e42", by = "agent:3d-groups", note = "Added Scene::camera_anchor, scene.set_camera_anchor's checks and undo, share_space among the scene options, and schema 16 with v15_to_v16 and the anchor set after items on load; matches camera.rs, model/mod.rs and persist/mod.rs." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/cameras.rs"]
-stamp = { hash = "b3:8995332ecdbd2f33", by = "agent:3d-groups", note = "Added Scene::camera_anchor, scene.set_camera_anchor's checks and undo, share_space among the scene options, and schema 16 with v15_to_v16 and the anchor set after items on load; matches camera.rs, model/mod.rs and persist/mod.rs." }
+stamp = { hash = "b3:37a598fefefde2d0", by = "agent:3d-groups", note = "Review round 1 B2: set_anchor now refuses only a keyframe scene and keeps any other anchor, so a stale one saves, loads and comes back with its scene; rewrote the paragraph and checked it against camera.rs and the new a_stale_anchor_saves_loads_and_comes_back_with_its_scene test." }
 
 ["CRATE-jstream-graph#purpose"."file:crates/jstream-graph/src/tests/filters.rs"]
 stamp = { hash = "b3:0e64a8ec7b27f5b7", by = "agent:lane-d", note = "Schema 8: v7_to_v8 turns a browser source's page_api_shared_values or page_api_audio on where page_api_values or page_api_bus already grant; v8.json fixture added; README's save and load text say so | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: This branch (#1418): upgrade_kinds is a revision when a described kind's version changes even with nothing moved (empty set). Merging main's #1414 renamed upgrade_filters to upgrade_kinds and added sources; the README text now says both, sources included in the deleted-object case. | kept from the merged side: Merged the #1411 r1 fixes into #1414 and carried them to builtin sources: rewrote the load paragraph: any builtin source of a missing kind loads verbatim (not only shader sources, r1 N1 on #1414), upgrade_kinds leaves same-version settings alone, keeps unknown values, records and saves newer versions, without_kinds stamps sources and filters, patches hold changed keys; tests in tests/filters.rs cover each | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Re-read against the #1411 r1 fixes: rewrote the upgrade paragraph (same-version untouched, undeclared values kept, defaults only for missing params, newer version recorded and saved, without_kinds stamps the removed kind's version, patch of changed keys only); tests in tests/filters.rs cover each" }
@@ -4335,7 +4335,7 @@ stamp = { hash = "b3:0dcff9dcf478c378", by = "agent:r9bzj2", note = "The batch r
 stamp = { hash = "b3:2d6cfa635e9b2786", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to command.rs, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-004, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#batches"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:19f42f206cfc1496", by = "agent:3d-groups", note = "Re-read: scene.set_camera_anchor is an edit like any other, so rev, atomicity, expected_rev, idempotency and results hold." }
+stamp = { hash = "b3:699748e922034306", by = "agent:3d-groups", note = "command.rs only changed scene.set_camera_anchor's doc; batch semantics hold." }
 
 ["CRATE-jstream-protocol#binary-streams"."body"]
 stamp = { hash = "b3:e90844923a76aa3e", by = "agent:claude-perf-suite", note = "added 'Views report back': preview.report's label rules, ViewCounts fields, run restart, session-only, 16-view limit, errors; checked against command.rs, preview.rs and the engine | merge: Merged wave/alpha5 (protocol 0.95-0.101: preview fps at the base rate, controller bindings, pairing network, 2D/3D moves, keyframe timing, labels on hotkeys/timelines, one blending space; main syncs incl. frame slots, perf thresholds). Re-read against this branch's 0.103 preview.report / profile.get views / bench gates text: version list is 0.103 then 0.101 (0.102 is #1313's), the canvas reports its view through the wave's new stream switch (base-rate reopen counts as opened), core tests keep both the views and base-rate tests | kept from the merged side: Merged wave/alpha5 (#1270 follow-pointer filter, #1271 stream profiles, #1282 main sync, #1287 page-API warnings, #1269 projects): both sides kept; this PR's preview rate up to 60 and its protocol 0.95 still hold" }
@@ -4362,13 +4362,13 @@ stamp = { hash = "b3:24e470838185e418", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:dfafd6bdd1057e8a", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to command.rs, envelope.rs, query.rs, the modules its text names; #purpose still covers all of src/**; depends_on 0013-command-model.md, RULES.md#R-ARCH-006, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:19f42f206cfc1496", by = "agent:3d-groups", note = "Re-read the edit and action classification: scene.set_camera_anchor changes only collection state and its inverse is the old anchor, so it is an edit, as command.rs and plugin.rs class it." }
+stamp = { hash = "b3:699748e922034306", by = "agent:3d-groups", note = "scene.set_camera_anchor still only changes state with the old value as its inverse; its refusals narrowed to a keyframe scene, so it stays an edit." }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/envelope.rs"]
 stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed" }
 
 ["CRATE-jstream-protocol#calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:58ce768807f20d6f", by = "agent:3d-groups", note = "Re-read the edit and action classification: scene.set_camera_anchor changes only collection state and its inverse is the old anchor, so it is an edit, as command.rs and plugin.rs class it." }
+stamp = { hash = "b3:8e2eadd77a339679", by = "agent:3d-groups", note = "scene.set_camera_anchor still only changes state with the old value as its inverse; its refusals narrowed to a keyframe scene, so it stays an edit." }
 
 ["CRATE-jstream-protocol#camera-aim"."body"]
 stamp = { hash = "b3:beaf081f013c6b07", by = "agent:ptz-builder", note = "new section for camera_aim.rs: the actions, the query, the checks, binding and plugin classes, matching the code; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -4392,19 +4392,19 @@ stamp = { hash = "b3:b7d5b2a09a619446", by = "agent:claude-settings", note = "#1
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/examples.snap"]
-stamp = { hash = "b3:2cd90238d7f99ce3", by = "agent:3d-groups", note = "Re-read: protocol.snap and examples.snap were regenerated for the new optional field, the new SceneInfo field and the new edit, all additive minor changes as this section classes them." }
+stamp = { hash = "b3:11be16d113e8135f", by = "agent:3d-groups", note = "protocol.snap and examples.snap regenerated for 0.127 and the reworded anchor docs; still additive minor changes." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:a81c99bf98b0ec6a", by = "agent:3d-groups", note = "Re-read: protocol.snap and examples.snap were regenerated for the new optional field, the new SceneInfo field and the new edit, all additive minor changes as this section classes them." }
+stamp = { hash = "b3:3725984fdc171038", by = "agent:3d-groups", note = "protocol.snap and examples.snap regenerated for 0.127 and the reworded anchor docs; still additive minor changes." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f2088b24f5a62bcf", by = "agent:3d-groups", note = "Re-read: protocol.snap and examples.snap were regenerated for the new optional field, the new SceneInfo field and the new edit, all additive minor changes as this section classes them." }
+stamp = { hash = "b3:47b575c44115fc8a", by = "agent:3d-groups", note = "protocol.snap and examples.snap regenerated for 0.127 and the reworded anchor docs; still additive minor changes." }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
-stamp = { hash = "b3:c1fcaa36a8311236", by = "agent:3d-groups", note = "Re-read the queries bullet: SceneInfo's fields now list camera_anchor (since 0.125, ADR-0164, omitted while absent); the plugin.rs entry is described under Plugins." }
+stamp = { hash = "b3:73962202c8f7b380", by = "agent:3d-groups", note = "Updated SceneInfo's camera_anchor to since 0.127, as query.rs now says." }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -4431,7 +4431,7 @@ stamp = { hash = "b3:c5a5fbb385c2c302", by = "agent:ptz-builder", note = "profil
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:58ce768807f20d6f", by = "agent:3d-groups", note = "Re-read the queries bullet: SceneInfo's fields now list camera_anchor (since 0.125, ADR-0164, omitted while absent); the plugin.rs entry is described under Plugins." }
+stamp = { hash = "b3:8e2eadd77a339679", by = "agent:3d-groups", note = "Updated SceneInfo's camera_anchor to since 0.127, as query.rs now says." }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/settings.rs"]
 stamp = { hash = "b3:12085313843efe02", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to query.rs, keyframe.rs, youtube.rs, transition.rs, kind.rs, settings.rs, event.rs, plugin.rs, preview.rs, profile.rs, activity.rs, the modules its text names; #purpose still covers all of src/**" }
@@ -4446,7 +4446,7 @@ stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:5db0fcada3c5e8a2", by = "agent:3d-groups", note = "Re-read: the edit list names scene.set_camera_anchor beside the other camera edits, as command.rs defines it." }
 
 ["CRATE-jstream-protocol#contents-commands"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:19f42f206cfc1496", by = "agent:3d-groups", note = "Re-read: the edit list names scene.set_camera_anchor beside the other camera edits, as command.rs defines it." }
+stamp = { hash = "b3:699748e922034306", by = "agent:3d-groups", note = "Review round 1: SceneSetCameraAnchor's doc now says only a keyframe scene refuses it and any other anchor is kept, since 0.127; the edit list here is unchanged." }
 
 ["CRATE-jstream-protocol#contents-errors"."body"]
 stamp = { hash = "b3:48cac978f9b0df1d", by = "agent:claude-timelines", note = "Added TimelineId as a client-chosen ID; EntityKind::Timeline is described under compatibility and Timelines; version.rs is at minor 87 (placeholder)." }
@@ -4461,7 +4461,7 @@ stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read aga
 stamp = { hash = "b3:aad569e164efdd2d", by = "agent:claude-timelines", note = "Renumber only: the timelines ADR moved from ADR-0114 to ADR-0115 (#1161 took 0114 on main); re-checked that this section's links and the code it covers changed only in that number." }
 
 ["CRATE-jstream-protocol#contents-errors"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f2088b24f5a62bcf", by = "agent:3d-groups", note = "Re-read: version.rs only moved PROTOCOL_VERSION to 0.125; IDs, errors and numbers are as described." }
+stamp = { hash = "b3:47b575c44115fc8a", by = "agent:3d-groups", note = "version.rs moved PROTOCOL_VERSION to 0.127; nothing else here changed." }
 
 ["CRATE-jstream-protocol#contents-geometry"."body"]
 stamp = { hash = "b3:9f60864f9ad21d46", by = "agent:3d-groups", note = "Re-read: the contents now name geometry/group.rs and GroupPose with place and place_camera; camera.rs only made Vec3::get pub(super) for it." }
@@ -4482,7 +4482,7 @@ stamp = { hash = "b3:7807590bfb5363c6", by = "agent:claude", note = "geometry.rs
 stamp = { hash = "b3:3ba1c41bceebd573", by = "agent:claude", note = "geometry.rs gains Surface and CardBack, drawn.rs hides a back; the module list holds" }
 
 ["CRATE-jstream-protocol#contents-geometry"."file:crates/jstream-protocol/src/geometry/group.rs"]
-stamp = { hash = "b3:b2f915c1794a3611", by = "agent:3d-groups", note = "Re-read: the contents now name geometry/group.rs and GroupPose with place and place_camera; camera.rs only made Vec3::get pub(super) for it." }
+stamp = { hash = "b3:a7da933b1a640b96", by = "agent:3d-groups", note = "Review round 1 B1: group.rs's angles_of changed (no gimbal branch, a quarter-turn regression test); the contents' description of GroupPose, place and place_camera holds." }
 
 ["CRATE-jstream-protocol#contents-geometry"."file:crates/jstream-protocol/src/geometry/solid.rs"]
 stamp = { hash = "b3:1ff9bcc5fa0eb1bf", by = "agent:claude", note = "facing, light_pose_seen and the billboard field sit in geometry/camera.rs and solid.rs as listed; the geometry contents still hold" }
@@ -4524,7 +4524,7 @@ stamp = { hash = "b3:2031d27ef862a130", by = "agent:claude", note = "Edited: Hot
 stamp = { hash = "b3:058a20509ea722cf", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): text moved unchanged as its own section (a list continued under a new heading). Its text and files are those it was verified against there; covers narrowed to filter.rs, output.rs, hotkey.rs, encoder.rs, mix.rs, audio.rs, organise.rs, query.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#contents-state"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:58ce768807f20d6f", by = "agent:3d-groups", note = "Re-read: SceneInfo's fields now include camera_anchor (since 0.125, omitted while absent), and SceneOptions gained share_space, described under Organisation." }
+stamp = { hash = "b3:8e2eadd77a339679", by = "agent:3d-groups", note = "Version moved to 0.127 in query.rs's camera_anchor and share_space docs; the state contents described here hold." }
 
 ["CRATE-jstream-protocol#design"."body"]
 stamp = { hash = "b3:4ee9cbb0a1cf48c1", by = "agent:narrow-hot-sections", note = "Now the preface plus Envelope and versioning and Tagging; the other subsections moved out unchanged as their own sections. Re-read: the envelope, handshake, message size, semver rule and tagging hold against envelope.rs, version.rs (can_serve) and lib.rs, the narrowed covers; depends_on keeps R-API-001 and R-API-002, which these two subsections cite; ADR-0013, R-ARCH-006 and R-API-004 moved with the subsections that cite them (#calls, #batches); the schema files moved to #compatibility" }
@@ -4542,7 +4542,7 @@ stamp = { hash = "b3:64afda8ae42e8f88", by = "agent:wave-owner", note = "Renumbe
 stamp = { hash = "b3:9c80599ab79552a7", by = "agent:3d-groups", note = "Re-read the envelope and kind design: lib.rs only re-exports GroupPose and version.rs bumps to 0.125, so the design holds." }
 
 ["CRATE-jstream-protocol#design"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f2088b24f5a62bcf", by = "agent:3d-groups", note = "Re-read the envelope and kind design: lib.rs only re-exports GroupPose and version.rs bumps to 0.125, so the design holds." }
+stamp = { hash = "b3:47b575c44115fc8a", by = "agent:3d-groups", note = "version.rs moved to 0.127; the envelope and version design described here holds." }
 
 ["CRATE-jstream-protocol#encoder-profiles"."body"]
 stamp = { hash = "b3:0f6b3480cfa1b136", by = "agent:claude", note = "edited: the engine's default is H.264 CBR 8000 kbit/s, matching EncoderProfile::DEFAULT" }
@@ -4572,7 +4572,7 @@ stamp = { hash = "b3:54af259d299228fc", by = "agent:claude@session_01FGswf8bzTLh
 stamp = { hash = "b3:db97a2e123937010", by = "agent:claude", note = "Re-read against ADR-0129 (keyframe timing in switches into a keyframe, item.set_timing, ease_in/hold/cubic_bezier, protocol 0.99 and schema 9 placeholders); holds" }
 
 ["CRATE-jstream-protocol#geometry"."body"]
-stamp = { hash = "b3:4d97f9731802f108", by = "agent:3d-groups", note = "Added a 3D groups bullet for geometry/group.rs: GroupPose::of's uniform scale by fit mode (fill the larger, else the smaller), rotation order and centre, place composing orientation back to angles with the gimbal fallback, and place_camera's roll and focus scaling, as the code and its tests do." }
+stamp = { hash = "b3:c802a93fc0f13af0", by = "agent:3d-groups", note = "Review round 1 B1: angles_of now reads the tilt from column 2 and the rotation and turn from Rx(tilt)ᵀ·R, so a composed quarter turn keeps the orientation; the 3D groups bullet now says so instead of a gimbal fallback. Checked against group.rs and its new quarter-turn test." }
 
 ["CRATE-jstream-protocol#geometry"."dep:docs/RULES.md#R-API-001"]
 stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to geometry.rs, geometry/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
@@ -4593,7 +4593,7 @@ stamp = { hash = "b3:7807590bfb5363c6", by = "agent:claude", note = "The surface
 stamp = { hash = "b3:3ba1c41bceebd573", by = "agent:claude", note = "The surface bullet matches Surface's fields, defaults and ranges, check_drawable's refusal and drawn_polygon_seen's hidden back" }
 
 ["CRATE-jstream-protocol#geometry"."file:crates/jstream-protocol/src/geometry/group.rs"]
-stamp = { hash = "b3:b2f915c1794a3611", by = "agent:3d-groups", note = "Added a 3D groups bullet for geometry/group.rs: GroupPose::of's uniform scale by fit mode (fill the larger, else the smaller), rotation order and centre, place composing orientation back to angles with the gimbal fallback, and place_camera's roll and focus scaling, as the code and its tests do." }
+stamp = { hash = "b3:a7da933b1a640b96", by = "agent:3d-groups", note = "Review round 1: B1 rewrote GroupPose's angles_of to read each angle against the others (stable near a quarter turn), B2 makes scene.set_camera_anchor refuse only a keyframe scene and keep any other anchor, and the version moved to 0.127 (0.125 and 0.126 are claimed by open PRs). The 3D groups bullet's 'falling back at gimbal lock' no longer holds; checked it against the new angles_of." }
 
 ["CRATE-jstream-protocol#geometry"."file:crates/jstream-protocol/src/geometry/solid.rs"]
 stamp = { hash = "b3:1ff9bcc5fa0eb1bf", by = "agent:claude", note = "added the billboard bullet: facing replaces turn and tilt, keeps the roll, every camera placement goes through it, a 2D scene is unchanged" }
@@ -4632,7 +4632,7 @@ stamp = { hash = "b3:7f654dc4d51ca415", by = "agent:pulse-thread", note = "added
 stamp = { hash = "b3:29f54a19ebd8e3bb", by = "agent:pulse-thread", note = "added the Effect settings bullet: effect target, number and colour rules, check at motion.N.effect, older clients read Unknown" }
 
 ["CRATE-jstream-protocol#organisation"."body"]
-stamp = { hash = "b3:27e075485a86283b", by = "agent:3d-groups", note = "Added share_space to the scene options (0.125, on a group in a 3D scene, kept and ignored elsewhere) and a scene.set_camera_anchor paragraph after the camera: family-owned, its refusals and field, kept and ignored when stale or under a follow camera, SceneInfo.camera_anchor, its inverse; matches command.rs, query.rs and the graph." }
+stamp = { hash = "b3:9b29d9535902ce2a", by = "agent:3d-groups", note = "Review round 1: B1 rewrote GroupPose's angles_of to read each angle against the others (stable near a quarter turn), B2 makes scene.set_camera_anchor refuse only a keyframe scene and keep any other anchor, and the version moved to 0.127 (0.125 and 0.126 are claimed by open PRs). Rewrote the anchor paragraph: refused only on a keyframe scene, any other anchor kept and ignored; since 0.127." }
 
 ["CRATE-jstream-protocol#organisation"."file:crates/jstream-protocol/src/geometry/camera.rs"]
 stamp = { hash = "b3:0bad58529f501086", by = "agent:3d-groups", note = "Added share_space to the scene options (0.125, on a group in a 3D scene, kept and ignored elsewhere) and a scene.set_camera_anchor paragraph after the camera: family-owned, its refusals and field, kept and ignored when stale or under a follow camera, SceneInfo.camera_anchor, its inverse; matches command.rs, query.rs and the graph." }
@@ -4650,7 +4650,7 @@ stamp = { hash = "b3:058a20509ea722cf", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:13b8346827f3b8ac", by = "agent:claude", note = "Edited: a Timing bullet for item.set_timing (keyframe only, range checks, empty clears, inverse) and what a switch into the keyframe uses" }
 
 ["CRATE-jstream-protocol#placement"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:19f42f206cfc1496", by = "agent:3d-groups", note = "Re-read the group and role paragraphs: a group is still a scene with role group; share_space is a scene option described under Organisation, and nothing here about grouping or item.move changed." }
+stamp = { hash = "b3:699748e922034306", by = "agent:3d-groups", note = "command.rs only changed scene.set_camera_anchor's doc; grouping and roles here are unchanged." }
 
 ["CRATE-jstream-protocol#placement"."file:crates/jstream-protocol/src/keyframe.rs"]
 stamp = { hash = "b3:0abc1408609095ff", by = "agent:claude", note = "Edited: a Timing bullet for item.set_timing (keyframe only, range checks, empty clears, inverse) and what a switch into the keyframe uses" }
@@ -4698,7 +4698,7 @@ stamp = { hash = "b3:09782a68e22314bd", by = "agent:hold-zoom", note = "camera_m
 stamp = { hash = "b3:346b89300e9dc7a9", by = "agent:claude-settings", note = "Re-read: clap.rs is a new module of plain wire types (ClapScanInfo, ClapFolder, ClapFound, ClapFailed), within the crate's purpose; the Contents sections list it | merge: wave/alpha5 brought #1275's final Settings dialog, #1269's projects (protocol 0.94, collection.* calls, File menu project items), #1272's MIDI/JTunnel crates and main's #1301/#1302/#1308/#1309; re-read: the CLAP scan text this branch wrote (plugin.clap_scan, plugin.clap_rescan, the Audio plugins page) is independent of what the wave changed here, and any CLAP version it names is now 0.95 | merge: Merged wave/alpha5 (protocol 0.96 to 0.105: controller bindings, the network listener, keyframe timing, labels, blending space, effect quarantine, view reports, wheel chords and camera controls; READMEs trimmed to maps). This branch is renumbered on top as protocol 0.106 (plugin.clap_scan, plugin.clap_rescan, with the since-0.106 notes, and PluginClapRescan classified in Action::takes_steps). The Settings dialog keeps Audio plugins beside the wave's Devices page with its network setting. The core README's CLAP lines sit in the trimmed map, and the platform-windows README takes the wave's map. Snapshots are regenerated." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/command.rs"]
-stamp = { hash = "b3:19f42f206cfc1496", by = "agent:3d-groups", note = "Re-read the purpose: the crate gains GroupPose, one edit and two optional fields, all within what it describes as the shared wire types and geometry." }
+stamp = { hash = "b3:699748e922034306", by = "agent:3d-groups", note = "Review round 1 changes (angles_of, the anchor's refusals, 0.127) stay within the crate's purpose." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/encoder.rs"]
 stamp = { hash = "b3:e81629be10e7bfde", by = "agent:grok", note = "Re-read the overview. It points at the version section, which is now 0.89 for canvas.set_frame_rate." }
@@ -4740,7 +4740,7 @@ stamp = { hash = "b3:7807590bfb5363c6", by = "agent:claude", note = "Surface and
 stamp = { hash = "b3:3ba1c41bceebd573", by = "agent:claude", note = "Surface and CardBack join ItemGeometry at 0.119; the purpose (the wire types) holds" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry/group.rs"]
-stamp = { hash = "b3:b2f915c1794a3611", by = "agent:3d-groups", note = "Re-read the purpose: the crate gains GroupPose, one edit and two optional fields, all within what it describes as the shared wire types and geometry." }
+stamp = { hash = "b3:a7da933b1a640b96", by = "agent:3d-groups", note = "Review round 1 changes (angles_of, the anchor's refusals, 0.127) stay within the crate's purpose." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/geometry/solid.rs"]
 stamp = { hash = "b3:1ff9bcc5fa0eb1bf", by = "agent:claude", note = "ItemGeometry gains billboard and facing(view); the crate's purpose is unchanged" }
@@ -4800,7 +4800,7 @@ stamp = { hash = "b3:10954c47b156fcf5", by = "agent:ptz-builder", note = "renumb
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:58ce768807f20d6f", by = "agent:3d-groups", note = "Re-read the purpose: the crate gains GroupPose, one edit and two optional fields, all within what it describes as the shared wire types and geometry." }
+stamp = { hash = "b3:8e2eadd77a339679", by = "agent:3d-groups", note = "Review round 1 changes (angles_of, the anchor's refusals, 0.127) stay within the crate's purpose." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced" }
@@ -4818,7 +4818,7 @@ stamp = { hash = "b3:66b0e04dc862cd93", by = "agent:claude", note = "This PR: it
 stamp = { hash = "b3:014a6aa1472c4ea8", by = "agent:claude", note = "New file in this PR: names, sizes, prefix_covers, SharedValue and the limits. It is described in the shared-values section, which covers it; the Purpose text holds." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f2088b24f5a62bcf", by = "agent:3d-groups", note = "Re-read the purpose: the crate gains GroupPose, one edit and two optional fields, all within what it describes as the shared wire types and geometry." }
+stamp = { hash = "b3:47b575c44115fc8a", by = "agent:3d-groups", note = "Review round 1 changes (angles_of, the anchor's refusals, 0.127) stay within the crate's purpose." }
 
 ["CRATE-jstream-protocol#purpose"."file:crates/jstream-protocol/src/youtube.rs"]
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:claude", note = "whole PR: contents list youtube.stats among the queries and events and AudienceStatsInfo, QuotaInfo and StatsPolling in youtube.rs; the version paragraph says 0.38 for YouTube audience stats and, after review B1, that 0.34 to 0.37 are assigned to other open bumps (#629, #642, #682, #653), which the PR API confirms are open, with only #653 on wave/m1-3; matches event.rs, query.rs, youtube.rs, lib.rs, version.rs and the fixtures; merging sync head 4dad0e5 brought #695 B2 (a lost context under a GPU encoder fails at once, the NV12 bind error) and #607's filter assets (apply_lut, image_mask through filter_assets.rs), neither touching YouTube stats; re-read, holds | merge: wave/m1-4 at 7d24529 (main with #754, wave/m1-3's squash landing; this branch already held that wave up to ed74779) brought #726's Contents text on the parity fixture (a display capture screen never placed for no-audio cases, a webcam with its paired input); event.rs, fixtures.rs, lib.rs, query.rs, version.rs and youtube.rs came in unchanged, so the youtube contents and 0.38 version text hold" }
@@ -4842,7 +4842,7 @@ stamp = { hash = "b3:c5a5fbb385c2c302", by = "agent:ptz-builder", note = "profil
 stamp = { hash = "b3:e99368087bddda14", by = "agent:claude", note = "quality.probe (protocol 0.110): re-read against the probe's protocol query, engine tap and thread, CLI command, MCP tool and bench gates; its ADR is now ADR-0145 (renumbered from 0143, which the scene-lights ADR holds)" }
 
 ["CRATE-jstream-protocol#queries"."file:crates/jstream-protocol/src/query.rs"]
-stamp = { hash = "b3:58ce768807f20d6f", by = "agent:3d-groups", note = "Re-read the state.get and scene.list bullets: they report scenes as SceneInfo, which gained camera_anchor, documented in Contents and Organisation; nothing in this list changed." }
+stamp = { hash = "b3:8e2eadd77a339679", by = "agent:3d-groups", note = "query.rs only moved two 'since' versions to 0.127; the queries listed hold." }
 
 ["CRATE-jstream-protocol#shared-values"."body"]
 stamp = { hash = "b3:1a6b4bf810de3cb0", by = "agent:claude", note = "Edited: the tempo.* bullet says a page reads them only with page_api_tempo, never through page_api_values." }
@@ -4872,13 +4872,13 @@ stamp = { hash = "b3:26ea7e2a977f5c8b", by = "agent:release-thread", note = "mer
 stamp = { hash = "b3:abc973f4355bada5", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to history.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-protocol#versions"."body"]
-stamp = { hash = "b3:68393170afa69c31", by = "agent:3d-groups", note = "Re-read: the version paragraph opens with 0.125 and why (share_space, camera_anchor, scene.set_camera_anchor), and version.rs says 0.125." }
+stamp = { hash = "b3:cb1e11781e0be7e3", by = "agent:3d-groups", note = "Review round 1: B1 rewrote GroupPose's angles_of to read each angle against the others (stable near a quarter turn), B2 makes scene.set_camera_anchor refuse only a keyframe scene and keep any other anchor, and the version moved to 0.127 (0.125 and 0.126 are claimed by open PRs). The version paragraph now opens with 0.127, matching version.rs." }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/pack.rs"]
 stamp = { hash = "b3:a917a113335c2bb5", by = "agent:narrow-hot-sections", note = "Split out of #purpose (fresh on main): the PROTOCOL_VERSION changelog that ended the Geometry bullet, moved unchanged as its own paragraph. Its text and files are those it was verified against there; covers narrowed to version.rs, pack.rs, the modules its text names; #purpose still covers all of src/**" }
 
 ["CRATE-jstream-protocol#versions"."file:crates/jstream-protocol/src/version.rs"]
-stamp = { hash = "b3:f2088b24f5a62bcf", by = "agent:3d-groups", note = "Re-read: the version paragraph opens with 0.125 and why (share_space, camera_anchor, scene.set_camera_anchor), and version.rs says 0.125." }
+stamp = { hash = "b3:47b575c44115fc8a", by = "agent:3d-groups", note = "Review round 1: B1 rewrote GroupPose's angles_of to read each angle against the others (stable near a quarter turn), B2 makes scene.set_camera_anchor refuse only a keyframe scene and keep any other anchor, and the version moved to 0.127 (0.125 and 0.126 are claimed by open PRs). The version paragraph now opens with 0.127, matching version.rs." }
 
 ["CRATE-jstream-protocol#video-mixes"."body"]
 stamp = { hash = "b3:3e94b7834ed65fd5", by = "agent:grok", note = "Re-read the divisor sentence. fps_divisor is relative to the base rate, 30 by default or 60 after canvas.set_frame_rate, so 60 doubles every mix." }
@@ -5901,10 +5901,10 @@ stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "Re-read the
 stamp = { hash = "b3:3db70b09c2b960ed", by = "agent:lane-d", note = "This branch adds agent approval (ADR-0131) at 0.108. After merging wave/alpha5's network listener, the gate refuses the host UI's token there like the control token (README updated, new network test); the approval, configuration and token-file entries sit beside the wave's network listener and certificate entries. | merge: main→wave sync brings #1264 (one shared engine GPU context; snapshots draw pages and captures), #1353/#1412/#1414/#1418/#1438 (effect-pack and shader-source renames, undo conflicts), #1395/#1401 (shader source from Add source), #1405/#1416 (browser follows program fps), #1408/#1409/#1425 (render bounds and mips), #1391, #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY); re-read against the merged inputs, the wave's text and main's auto-merged edits both still hold | kept from the merged side: Renumber only: #1364 (pairing.start's network, ADR-0130) merged into the wave with its placeholder protocol 0.101; the release queue gives it 0.97, the next number after 0.96, so every 0.101 in code comments, docs and the schema snapshots now reads 0.97 and nothing else changed | merge: the wave's #1366 (Allow devices on my network turns on the network listener) merged in cleanly; this section's text is untouched by the renumber | kept from the merged side: open question 1 says the desktop app turns the listener on with Allow devices on my network; merged with #1364's N1 restamp | merge: the wave brought #1364's squash, which this branch already had; this branch's desktop network switch text is unchanged | kept from the merged side: The host's side now says pairing.start carries network (0.101), absent without a listener; open question 1 now says the panel and jstream pair show addresses and fingerprint, only the desktop setting remains; matches admitted.rs, lib.rs and the new network test | kept from the merged side: listener.rs now sets TCP_NODELAY on each accepted stream (#1440); Purpose's Listener bullet and Design's listener paragraph now say so, and it covers the WebSocket, MCP HTTP and TLS network listeners since all accept through Limited" }
 
 ["CRATE-jstream-server#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:959b82175a09efe1", by = "agent:3d-groups", note = "Re-read listening, admission and session handling against ARCH#protocol's new 3D groups bullet: a new edit passes through the server unchanged, so nothing here changes." }
+stamp = { hash = "b3:d5d9de497ca8fa2e", by = "agent:3d-groups", note = "Dependencies ARCH#protocol (0.127) and jstream-control#design changed; the server passes edits through unchanged." }
 
 ["CRATE-jstream-server#design"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:9a77b8df3291a020", by = "agent:3d-groups", note = "Re-read listening, admission and session handling against ARCH#protocol's new 3D groups bullet: a new edit passes through the server unchanged, so nothing here changes." }
+stamp = { hash = "b3:19850ada3551f0e5", by = "agent:3d-groups", note = "Dependencies ARCH#protocol (0.127) and jstream-control#design changed; the server passes edits through unchanged." }
 
 ["CRATE-jstream-server#design"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:r9bzj2", note = "R-SEC-002 gained one sentence: the JTunnel and VISCA sockets (ADR-0123) are not control listeners and run only bindings or camera actions; the server's Host, Origin and token checks are unchanged" }
@@ -6321,10 +6321,10 @@ stamp = { hash = "b3:8207aab1afa325b5", by = "agent:claude", note = "The preview
 stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-read against the whole PR. Body: the Crop bullet (crop mode from the tool, C or the menu; V, Move, Escape and a scene switch leave it; Alt crops on the box's handles; amber chrome and the ghost; the readout's crop, cropped and no source size yet, and with no size the box's handles resize as usual, review N1) and Layout::sized. crop.rs (new): Picture::of over ItemGeometry::content with flips and fill clipping, CropGesture in the rotated frame clamped to the extent and MIN_SIZE, settled, clear and readout. mod.rs: Action::Crop, single_handle (crop handles on the picture; without a picture the box's handles resize, with Alt too), on_move, end and cancel, the keys, the drawing and the toolbar. model.rs: CanvasItem.crop and source_size, Layout::sized and item, and the commit's crops after its geometries in one ends_gesture batch. live.rs: Values carries crops, so live.set sends item.set_crop beside item.set_geometry. transform.rs: rotate and from_local are pub(crate) for crop.rs, otherwise unchanged." }
 
 ["CRATE-jstream-ui#design"."body"]
-stamp = { hash = "b3:3a37bcd13757715a", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers. | merge: Main's #1585 adds the design-language sentence to this section and restyles scenes.rs and sources.rs; re-read the scene Properties and Duplicate scene text this branch added, which still holds beside it. | kept from the merged side: Added that menus, dialogs and secondary panels follow docs/UI-DESIGN.md and that a deleting menu item uses Entry::danger; rest of the section (connecting, session, events, styles via classes) unaffected by the CSS restyle." }
+stamp = { hash = "b3:6c0b49133236d56b", by = "agent:3d-groups", note = "Review round 1 N4: the Moves with picker lists a stored anchor that names no group here as '(ignored)', with a kept-but-ignored note, and notes a flat group's; rewrote the sentence to match scene_properties.rs." }
 
 ["CRATE-jstream-ui#design"."dep:crates/jstream-control/README.md#design"]
-stamp = { hash = "b3:959b82175a09efe1", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers." }
+stamp = { hash = "b3:d5d9de497ca8fa2e", by = "agent:3d-groups", note = "Review round 1 N4: the Moves with picker lists a stored anchor that names no group here as '(ignored)', with a kept-but-ignored note, and notes a flat group's; rewrote the sentence to match scene_properties.rs." }
 
 ["CRATE-jstream-ui#design"."dep:docs/adr/0045-leptos-web-ui.md"]
 stamp = { hash = "b3:b0a2a9cd68f6facd" }
@@ -6480,7 +6480,7 @@ stamp = { hash = "b3:8103b1183d12f484", by = "agent:ui-design", note = "Added th
 stamp = { hash = "b3:9cd292ac092df3b7", by = "agent:camera-controls", note = "Review N7: rows are keyed on control_identity (no reported value or auto state), and each row reads those from the latest list, so a re-list after a set redraws no row. Checked against camera_controls_input and camera_control_row." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:03d620f3f03e9d11", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers." }
+stamp = { hash = "b3:65738bc4776fbd0f", by = "agent:3d-groups", note = "Review round 1 N4: the Moves with picker lists a stored anchor that names no group here as '(ignored)', with a kept-but-ignored note, and notes a flat group's; rewrote the sentence to match scene_properties.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:49153b28401783bb", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers. | merge: Main's #1585 adds the design-language sentence to this section and restyles scenes.rs and sources.rs; re-read the scene Properties and Duplicate scene text this branch added, which still holds beside it. | kept from the merged side: Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The design-language paragraph still holds: Entry::danger is the builder, now used by an output's Delete…." }
@@ -6705,7 +6705,7 @@ stamp = { hash = "b3:8103b1183d12f484", by = "agent:ui-design", note = "Re-read 
 stamp = { hash = "b3:9cd292ac092df3b7", by = "agent:camera-controls", note = "Re-read against properties.rs's N7 fix (rows keyed on control_identity); the contents line holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:03d620f3f03e9d11", by = "agent:3d-groups", note = "Re-read the store and scene Properties bullets: Collection still carries SceneInfo as reported, now with camera_anchor, and the dialog's edits stay tested natively (a new test covers the share switch and anchor). The covered files' other changes are test initialisers." }
+stamp = { hash = "b3:65738bc4776fbd0f", by = "agent:3d-groups", note = "scene_properties.rs's anchor picker gained the ignored and flat notes; the scene Properties bullet holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
 stamp = { hash = "b3:49153b28401783bb", by = "agent:3d-groups", note = "Re-read the store and scene Properties bullets: Collection still carries SceneInfo as reported, now with camera_anchor, and the dialog's edits stay tested natively (a new test covers the share switch and anchor). The covered files' other changes are test initialisers. | merge: Main's #1585 restyles scenes.rs and sources.rs to the shared design language; the bullets here, scene Properties included, still hold. | kept from the merged side: Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The contents list holds." }
@@ -7476,7 +7476,7 @@ stamp = { hash = "b3:267d80a5079cd31d", by = "agent:studio-two-up", note = "Step
 stamp = { hash = "b3:9a13d796085d2527", by = "agent:studio-two-up", note = "Step 5 now describes studio mode as the canvas as preview with the live program beside it, Transition or Cut between them, Swap, and presets in the Transitions panel. | merge: #1567 sizes the canvas's stream at full resolution only on the desktop app's own engine (host::own_engine) and restages only on the newest resize; the merge gives the program monitor the same two rules, which the canvas section's description of its sizing covers. Studio mode text still holds. | kept from the merged side: #1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#dialogs"]
-stamp = { hash = "b3:b8a6dab95db6c7cc", by = "agent:3d-groups", note = "Re-read the first-scene walkthrough against UI-FEATURES#dialogs' new group and camera controls: it doesn't cover 3D groups, and nothing it says changed." }
+stamp = { hash = "b3:bc07351e00424692", by = "agent:3d-groups", note = "Dependency UI-FEATURES#dialogs gained the anchor picker's ignored note; the first-scene walkthrough doesn't cover it." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#docking"]
 stamp = { hash = "b3:ffe5375ee59009fd", by = "agent:studio-two-up", note = "Step 5 now describes studio mode as the canvas as preview with the live program beside it, Transition or Cut between them, Swap, and presets in the Transitions panel." }
@@ -7659,7 +7659,7 @@ stamp = { hash = "b3:cff01f3b41e04a7a", by = "agent:claude@session_01K4N6DrL8C1K
 stamp = { hash = "b3:6883940c7de4a536", by = "agent:3d-groups", note = "Re-read R-API-001/002 against ARCH#protocol's 3D groups bullet and ARCH#persistence's version 16: both are additions (a minor protocol bump, a schema bump with a refusing migration), named noun.verb, so the rules hold unchanged." }
 
 ["RULES#compatibility"."dep:docs/ARCHITECTURE.md#protocol"]
-stamp = { hash = "b3:9a77b8df3291a020", by = "agent:3d-groups", note = "Re-read R-API-001/002 against ARCH#protocol's 3D groups bullet and ARCH#persistence's version 16: both are additions (a minor protocol bump, a schema bump with a refusing migration), named noun.verb, so the rules hold unchanged." }
+stamp = { hash = "b3:19850ada3551f0e5", by = "agent:3d-groups", note = "ARCH#protocol's 3D groups bullet moved to 0.127; still an additive minor change under R-API-001." }
 
 ["RULES#dependencies"."body"]
 stamp = { hash = "b3:d1ff0b959a53f89d", by = "agent:frame-probe", note = "Re-read R-DEP-002 for ADR-0140's acceptance: it cites ADR-0140 in place of the superseded ADR-0061, and its OpenH264 sentence now says Cisco's binary is also the decoder of the engine's own H.264 streams, as ADR-0140's consequences word it; the openh264 crate bans, deny.toml and lint-deps are unchanged" }
@@ -8214,7 +8214,7 @@ stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:20aca56153851361", by = "agent:claude", note = "Re-read CV-02/CV-03: the studio_seq bump on the optimistic program only drops stale studio.get answers; nothing stated changes. | merge: main's #1568 made studio mode a two-up (canvas as preview, canvas/monitor.rs program monitor, followed_preview in take_program_and_preview); re-read beside this branch's press pick and optimistic program: picks in studio mode still send studio.set_preview, the hover Program button's scene.switch moves the program label at once, no conflict; store.rs merged keeping both, 496 lib tests and the scenes/studio e2e specs pass. | kept from the merged side: CV-02 notes the canvas follows a new preview scene in studio mode (followed_preview); monitor.rs is the program monitor, described under TR-06; other rows hold." }
 
 ["UI-FEATURES#dialogs"."body"]
-stamp = { hash = "b3:b8a6dab95db6c7cc", by = "agent:3d-groups", note = "DL-03 now describes the group's Share the 3D space check and the camera's Moves with picker, their notes and the edits they send, as scene_properties.rs builds them." }
+stamp = { hash = "b3:bc07351e00424692", by = "agent:3d-groups", note = "DL-03 now says the Moves with note covers a flat group and that a stored anchor naming no group placed here shows as '(ignored)', kept but ignored, as scene_properties.rs does; protocol 0.127." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/dialog.rs"]
 stamp = { hash = "b3:32fff14afec26d55", by = "agent:grok", note = "Re-read DL-01 against dialog.rs: a header drag is a translate from the centred place, the box stays inside the window or covers it when wider, the top never goes above the window, and the place is remembered for the dialog's label until reload (the shell's DialogPlaces, not ADR-0084 settings). A double-click centres it, timed from the pointer event's timeStamp so it does not trap on wasm32. A control in the header, including ×, keeps its press. DL-02 through DL-08 are unchanged and still match their files." }
@@ -8226,7 +8226,7 @@ stamp = { hash = "b3:b1b6978fef8b3e9b", by = "agent:3d-groups", note = "DL-03 no
 stamp = { hash = "b3:44587926fc590102", by = "agent:claude-ui-features", note = "panels/confirm.rs: Confirm is the inline delete confirmation showing the plan summary, the only dialog-like UI today, which DL-01 keeps; the rest (DL-02 Properties tab, DL-06 add-under-list) live in other panels as the notes say." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/scene_properties.rs"]
-stamp = { hash = "b3:03d620f3f03e9d11", by = "agent:3d-groups", note = "DL-03 now describes the group's Share the 3D space check and the camera's Moves with picker, their notes and the edits they send, as scene_properties.rs builds them." }
+stamp = { hash = "b3:65738bc4776fbd0f", by = "agent:3d-groups", note = "DL-03 now says the Moves with note covers a flat group and that a stored anchor naming no group placed here shows as '(ignored)', kept but ignored, as scene_properties.rs does; protocol 0.127." }
 
 ["UI-FEATURES#dialogs"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:e67ab2ae67f77a6e", by = "agent:claude", note = "Edited DL-02: a model source's Properties form is its own descriptor via kind.describe's source_id (0.123), naming its animations." }

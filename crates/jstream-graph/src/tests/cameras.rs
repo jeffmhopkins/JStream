@@ -486,19 +486,62 @@ fn a_camera_anchor_is_set_reported_and_undone() {
     );
 }
 
+/// Only a keyframe scene is refused: it rides with its parent's anchor. Any other anchor
+/// is stored, and one that names no group item of a 3D scene is ignored where the scene
+/// is drawn.
 #[test]
-fn a_camera_anchor_must_be_a_group_item_of_a_3d_family_scene() {
+fn only_a_keyframe_scene_refuses_a_camera_anchor() {
     let mut graph = with_rig();
-    // Not a group, not in the scene, and a scene without a camera.
+    // Not a group, not in the scene, and a scene without a camera: kept.
     for (scene, item) in [("a", "cam_item"), ("a", "nowhere"), ("c", "rig")] {
-        let (field, _) = invalid_reason(apply_err(&mut graph, vec![set_anchor(scene, Some(item))]));
-        assert_eq!(field, "edits.0.anchor", "{scene} {item}");
+        apply_ok(&mut graph, vec![set_anchor(scene, Some(item))]);
+        assert_eq!(info(&graph, scene).camera_anchor, Some(ItemId::new(item)));
     }
-    // A keyframe scene rides with its parent's anchor.
     apply_ok(&mut graph, vec![variant("k", "a")]);
     let (field, reason) = invalid_reason(apply_err(&mut graph, vec![set_anchor("k", Some("rig"))]));
     assert_eq!(field, "edits.0.anchor");
     assert!(reason.contains("anchor"), "{reason}");
+}
+
+/// An anchor left naming no 3D group (its item removed, the camera removed, or the group
+/// turned into a scene) survives a save and load, and the undo of its scene's delete.
+#[test]
+fn a_stale_anchor_saves_loads_and_comes_back_with_its_scene() {
+    let stale = [
+        Edit::ItemRemove {
+            item_id: ItemId::new("rig"),
+        },
+        set("a", None),
+        Edit::SceneSetRole {
+            scene_id: SceneId::new("b"),
+            role: jstream_protocol::SceneRole::Scene,
+        },
+    ];
+    for edit in stale {
+        let mut graph = with_rig();
+        apply_ok(&mut graph, vec![set_anchor("a", Some("rig")), edit.clone()]);
+        let json = graph.to_collection_json();
+        let loaded = Graph::new()
+            .with_collection_json(&json)
+            .unwrap_or_else(|e| panic!("{edit:?}: {e}"));
+        assert_eq!(
+            info(&loaded, "a").camera_anchor,
+            Some(ItemId::new("rig")),
+            "{edit:?}"
+        );
+        // `apply_ok` applies the delete's inverse too.
+        apply_ok(
+            &mut graph,
+            vec![
+                Edit::SourceDelete {
+                    source_id: jstream_protocol::SourceId::new("sa"),
+                },
+                Edit::SceneDelete {
+                    scene_id: SceneId::new("a"),
+                },
+            ],
+        );
+    }
 }
 
 /// An anchor whose item goes is kept, and ignored where the scene is drawn.

@@ -777,7 +777,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   or each item placing a group, "(flat)" while it doesn't share the space), sent after
   the camera as `scene.set_camera_anchor`
   ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)); its note
-  says it is ignored while the camera follows the pointer.
+  says it is ignored while the camera follows the pointer or the group is flat, and a
+  stored anchor naming no group placed in the scene is listed as "(ignored)", kept but
+  ignored.
   Duplicate scene copies the scene's options and camera with it, and its camera motion
   and the group item its camera rides with (ADR-0164), as the copy of that item;
   the follow camera, a filter on the item it follows, goes with the copy of that item. As in the source Properties dialog

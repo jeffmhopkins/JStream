@@ -400,6 +400,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     });
     let camera_label = if keyframe { "Own camera" } else { "3D camera" };
     // 3D groups (ADR-0164): a group's switch, and the groups a camera can ride with.
+    let opened_anchor = before.with_value(|b| b.camera_anchor.clone());
     let (is_group, anchors, follows) = studio.collection.with_untracked(|c| {
         c.as_ref().map_or((false, Vec::new(), false), |c| {
             let scene = c.scene(&scene_id);
@@ -410,14 +411,28 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             )
         })
     });
+    // A stored anchor that names no group item here is kept, and listed so it shows.
+    let kept = opened_anchor.filter(|anchor| anchors.iter().all(|(item, _)| item != anchor));
+    let flat: Vec<ItemId> = anchors
+        .iter()
+        .filter(|(_, name)| name.ends_with(" (flat)"))
+        .map(|(item, _)| item.clone())
+        .collect();
     let anchors = StoredValue::new(anchors);
+    let kept = StoredValue::new(kept);
+    let flat = StoredValue::new(flat);
     let anchor_note = move || {
-        if follows {
-            "Ignored while the camera follows the pointer."
-        } else if draft.with(|d| d.camera_anchor.is_some()) {
-            "Its position and target are in the group's space and move with it."
-        } else {
-            "Fixed in the scene. Pick a group that shares the 3D space to ride with it."
+        let anchor = draft.with(|d| d.camera_anchor.clone());
+        match anchor {
+            _ if follows => "Ignored while the camera follows the pointer.",
+            Some(a) if kept.with_value(|k| k.as_ref() == Some(&a)) => {
+                "Kept but ignored: it names no group placed in this scene."
+            }
+            Some(a) if flat.with_value(|f| f.contains(&a)) => {
+                "Ignored until that group shares the 3D space."
+            }
+            Some(_) => "Its position and target are in the group's space and move with it.",
+            None => "Fixed in the scene. Pick a group that shares the 3D space to ride with it.",
         }
     };
     let start = studio
@@ -523,7 +538,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             <span class="unit">"°"</span>
                         </div>
                     </div>
-                    {(!keyframe && !anchors.with_value(Vec::is_empty)).then(|| view! {
+                    {(!keyframe && !(anchors.with_value(Vec::is_empty) && kept.with_value(Option::is_none))).then(|| view! {
                         <div class="axis-row camera-row">
                             <span class="label">"Moves with"</span>
                             <select
@@ -547,6 +562,10 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                                         </option>
                                     }
                                 }).collect_view()}
+                                {kept.get_value().map(|item| {
+                                    let name = format!("{item} (ignored)");
+                                    view! { <option value=item.to_string() selected=true>{name}</option> }
+                                })}
                             </select>
                         </div>
                         <span class="field-note">{anchor_note}</span>

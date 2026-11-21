@@ -150,12 +150,13 @@ space, so it scales by `s` with it.
   a keyframe scene is `invalid_argument`. A Move glides between the two ends' cameras as
   they are placed, in the scene's space, as decision 7 of ADR-0094 glides any two.
 - **Editing.** The edit is a state edit, batchable, one undo step; its inverse is itself
-  with the previous value, and it bumps `rev`. An anchor that names no item of the scene
-  whose source is a group is `invalid_argument`, and so is one on a scene without a camera.
-  One that later names no 3D group (the item removed, its group turned flat or to a scene,
-  the camera removed) is kept and ignored, the camera drawn in the scene's space by its own
-  numbers, and the scene's Properties say so. Collection files store it on the scene,
-  omitted when absent.
+  with the previous value, and it bumps `rev`. Only a keyframe scene refuses it. An anchor
+  that names no 3D group item of the scene, set so or left so later (the item removed, its
+  group turned flat or to a scene, the camera removed), is kept and ignored: the camera is
+  drawn in the scene's space by its own numbers, and the scene's Properties say so. The
+  edit can't refuse what it could later be left holding, since a collection file and a
+  deleted scene's undo write the anchor back with this same edit. Collection files store
+  it on the scene, omitted when absent.
 
 **6. Agents and people.** `share_space` and the anchor reach agents through
 `scene.set_options` and `scene.set_camera_anchor` with their schemas, and `jstream-mcp`'s

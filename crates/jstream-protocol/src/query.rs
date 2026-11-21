@@ -1250,7 +1250,7 @@ pub struct SceneInfo {
     /// 2D scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCamera>,
-    /// The 3D group item its camera rides with (ADR-0164 §5, since 0.125): the camera's
+    /// The 3D group item its camera rides with (ADR-0164 §5, since 0.127): the camera's
     /// position and target are then points of that group's space, placed through the
     /// group item's pose as the scene is drawn. It belongs to the family, so a keyframe
     /// scene reports none and rides with its parent's. Omitted for none.
@@ -1312,7 +1312,7 @@ pub struct SceneOptions {
     #[serde(skip_serializing_if = "is_false")]
     pub keep_warm: bool,
     /// Whether a group shares the 3D space of the scene that places it (ADR-0164 §1,
-    /// since 0.125): placed in a 3D scene, it has no layer, and each of its children is
+    /// since 0.127): placed in a 3D scene, it has no layer, and each of its children is
     /// placed in that scene's space through the group item's pose and drawn as an item
     /// of that scene, sorting, lit and in focus on its own. The group item's opacity
     /// multiplies its children's; its crop, flips, blend, effects, the scene source's

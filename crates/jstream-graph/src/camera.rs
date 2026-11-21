@@ -167,8 +167,10 @@ fn set_motion(
     }])
 }
 
-/// `scene.set_camera_anchor` (ADR-0164 §5): the family's scene only, which has a camera,
-/// and an anchor that is one of its items placing a group.
+/// `scene.set_camera_anchor` (ADR-0164 §5): the family's scene only. Any anchor is
+/// stored: one that names no group item of the scene, or a scene without a camera, is
+/// kept and ignored where the scene is drawn, as it is when it later goes stale, so a
+/// saved or deleted scene's anchor always comes back as it was.
 fn set_anchor(
     state: &mut State,
     scene_id: &SceneId,
@@ -176,41 +178,6 @@ fn set_anchor(
     at: usize,
 ) -> Result<Vec<Edit>, ProtocolError> {
     let si = family_scene(state, scene_id, at, "anchor")?;
-    if let Some(item_id) = anchor {
-        let scene = &state.scenes[si];
-        if scene.camera.is_none() {
-            return Err(invalid(
-                at,
-                "anchor",
-                format!("scene `{scene_id}` has no camera to anchor"),
-            ));
-        }
-        let item = scene
-            .items
-            .iter()
-            .find(|item| item.id() == item_id)
-            .ok_or_else(|| {
-                invalid(
-                    at,
-                    "anchor",
-                    format!("item `{item_id}` is not in scene `{scene_id}`"),
-                )
-            })?;
-        let group = state
-            .source(item.source_id())
-            .and_then(|source| match source.kind() {
-                SourceKind::Scene { scene_id } => state.scene(scene_id),
-                _ => None,
-            })
-            .is_some_and(|scene| scene.role() == jstream_protocol::SceneRole::Group);
-        if !group {
-            return Err(invalid(
-                at,
-                "anchor",
-                format!("item `{item_id}` doesn't place a group"),
-            ));
-        }
-    }
     let old = std::mem::replace(&mut state.scenes[si].camera_anchor, anchor.cloned());
     Ok(vec![Edit::SceneSetCameraAnchor {
         scene_id: scene_id.clone(),

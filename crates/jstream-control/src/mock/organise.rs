@@ -459,47 +459,16 @@ impl Collection {
         }])
     }
 
-    /// `scene.set_camera_anchor` (ADR-0164 §5), as the engine applies it: the family's
-    /// scene, with a camera, and one of its items that places a group.
+    /// `scene.set_camera_anchor` (ADR-0164 §5), as the engine applies it: refused only on
+    /// a keyframe scene, whose family's anchor it is.
     fn set_camera_anchor(
         &mut self,
         scene_id: &SceneId,
         anchor: Option<&jstream_protocol::ItemId>,
         at: usize,
     ) -> Result<Vec<Edit>, ProtocolError> {
+        // Any anchor is kept, and one that names no 3D group is ignored (ADR-0164 §5).
         let si = self.family_scene(scene_id, at, "anchor")?;
-        if let Some(item_id) = anchor {
-            if self.scenes[si].camera.is_none() {
-                return Err(invalid(
-                    at,
-                    "anchor",
-                    format!("scene `{scene_id}` has no camera to anchor"),
-                ));
-            }
-            if !self.scenes[si].items.contains(item_id) {
-                return Err(invalid(
-                    at,
-                    "anchor",
-                    format!("item `{item_id}` is not in scene `{scene_id}`"),
-                ));
-            }
-            let group = self
-                .items
-                .get(item_id)
-                .and_then(|item| self.sources.get(&item.source_id))
-                .and_then(|source| match &source.kind {
-                    jstream_protocol::SourceKind::Scene { scene_id } => self.scene_index(scene_id),
-                    _ => None,
-                })
-                .is_some_and(|group| self.scenes[group].role == jstream_protocol::SceneRole::Group);
-            if !group {
-                return Err(invalid(
-                    at,
-                    "anchor",
-                    format!("item `{item_id}` doesn't place a group"),
-                ));
-            }
-        }
         let old = std::mem::replace(&mut self.scenes[si].camera_anchor, anchor.cloned());
         Ok(vec![Edit::SceneSetCameraAnchor {
             scene_id: scene_id.clone(),

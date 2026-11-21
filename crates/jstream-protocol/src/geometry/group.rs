@@ -12,10 +12,6 @@ use super::{Canvas, FitMode, GeometryError, ItemGeometry, Size, rotate_x, rotate
 use crate::command::Vec2;
 use crate::finite::Finite32;
 
-/// Below this `cos` of the middle angle, a rotation is treated as turned a quarter, and
-/// its in-plane rotation is folded into its tilt (gimbal lock).
-const GIMBAL: f64 = 1e-9;
-
 /// Where a 3D group puts its own space in its scene's (ADR-0164 decision 2): a point of
 /// the group's canvas, `p`, lands at `origin + scale · R · (p − centre)`, with the group
 /// canvas's centre at `z = 0`.
@@ -58,20 +54,17 @@ fn multiply(a: &[[f64; 3]; 3], b: &[[f64; 3]; 3]) -> [[f64; 3]; 3] {
 }
 
 /// The three angles, in degrees, of ADR-0022's order that make `m`: `R = Rx(tilt) ·
-/// Ry(turn) · Rz(rotation)`, so `m[0][2] = sin turn`, `m[0][0], m[0][1]` give the
-/// rotation and `m[1][2], m[2][2]` the tilt. A quarter turn folds the rotation into the
-/// tilt, which draws the same.
+/// Ry(turn) · Rz(rotation)`. The tilt comes from column 2, and the rotation and turn
+/// from `Rx(tilt)ᵀ · R = Ry(turn) · Rz(rotation)`, so each angle is read against the
+/// others already taken out. That stays exact near a quarter turn, where the tilt and
+/// the rotation fold into one angle: whatever tilt the noise there gives, the other two
+/// make up the same matrix.
 fn angles_of(m: &[[f64; 3]; 3]) -> (f64, f64, f64) {
-    let turn = m[0][2].clamp(-1.0, 1.0).asin();
-    if turn.cos() > GIMBAL {
-        let rotation = (-m[0][1]).atan2(m[0][0]);
-        let tilt = (-m[1][2]).atan2(m[2][2]);
-        (rotation.to_degrees(), turn.to_degrees(), tilt.to_degrees())
-    } else {
-        // With rotation 0, rows 1 and 2 of column 1 are `cos tilt` and `sin tilt`.
-        let tilt = m[2][1].atan2(m[1][1]);
-        (0.0, turn.to_degrees(), tilt.to_degrees())
-    }
+    let tilt = (-m[1][2]).atan2(m[2][2]);
+    let (st, ct) = tilt.sin_cos();
+    let rotation = (ct * m[1][0] + st * m[2][0]).atan2(ct * m[1][1] + st * m[2][1]);
+    let turn = m[0][2].atan2(ct * m[2][2] - st * m[1][2]);
+    (rotation.to_degrees(), turn.to_degrees(), tilt.to_degrees())
 }
 
 fn finite(value: f64) -> Result<Finite32, GeometryError> {
@@ -363,6 +356,39 @@ mod tests {
         for (p, q) in corners(placed).iter().zip(by_points.iter()) {
             for i in 0..3 {
                 assert!((p[i] - q[i]).abs() < 1e-2, "{p:?} against {q:?}");
+            }
+        }
+    }
+
+    /// Two 45° turns add to a quarter turn, where the tilt and the rotation fold into one
+    /// angle: the child still lands where placing its corners point by point puts them.
+    #[test]
+    fn a_composed_quarter_turn_keeps_the_childs_orientation() {
+        for ((gr, gt, gx), (cr, ct, cx)) in [
+            ((0.0, 45.0, 20.0), (15.0, 45.0, 0.0)),
+            ((30.0, 45.0, 0.0), (0.0, 45.0, -25.0)),
+            ((0.0, -45.0, 10.0), (-20.0, -45.0, 35.0)),
+            ((0.0, 45.0, 0.0), (0.0, 45.0, 0.0)),
+        ] {
+            let group = ItemGeometry {
+                rotation_deg: f(gr),
+                turn_deg: f(gt),
+                tilt_deg: f(gx),
+                ..boxed(800.0, 500.0, 960.0, 540.0)
+            };
+            let child = ItemGeometry {
+                rotation_deg: f(cr),
+                turn_deg: f(ct),
+                tilt_deg: f(cx),
+                ..boxed(300.0, 900.0, 200.0, 120.0)
+            };
+            let pose = GroupPose::of(group, CANVAS).expect("pose");
+            let placed = pose.place(child).expect("child");
+            for (p, corner) in corners(placed).iter().zip(corners(child).iter()) {
+                let q = pose.place_point(*corner);
+                for i in 0..3 {
+                    assert!((p[i] - q[i]).abs() < 1e-2, "{p:?} against {q:?}");
+                }
             }
         }
     }

@@ -182,7 +182,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent;
   since 0.91 `camera_follow` is read from its items' `follow_pointer` filters, ADR-0120)
   and its `timelines` (since 0.87, ADR-0115, omitted while empty) and its
-  `camera_anchor` (since 0.125, ADR-0164, omitted while absent), and `studio.get`
+  `camera_anchor` (since 0.127, ADR-0164, omitted while absent), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
   (`warm_scenes`, with `warm_gpu_mib` since 0.117), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
@@ -351,7 +351,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.125 because a group can share its 3D scene's space and a camera
+`PROTOCOL_VERSION` is 0.127 because a group can share its 3D scene's space and a camera
 can ride with one: `SceneOptions`' `share_space`, `SceneInfo`'s `camera_anchor` and
 `scene.set_camera_anchor`
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md));
@@ -1444,7 +1444,7 @@ none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn
 scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it), and
 since 0.116 `keep_warm` (default `false`), which keeps the scene warm while it is off
 program, ranked after the Preview scene within the warm budget
-([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)), and since 0.125
+([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)), and since 0.127
 `share_space` (default `false`), which on a group placed in a 3D scene draws its children
 in that scene's space through the group item's pose instead of as one card
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), kept and ignored
@@ -1469,14 +1469,14 @@ keyframe of a 2D scene may have too ([ADR-0128](../../docs/adr/0128-moves-betwee
 removing the parent's camera drops its variants' overrides (a removal on a parent with
 none drops nothing), and its inverse restores them. `SceneInfo.camera` reports the scene's own
 camera, on a keyframe scene its override (it shows its parent's where it has none), and
-is omitted when there is none. It is live-adjustable. Since 0.125
+is omitted when there is none. It is live-adjustable. Since 0.127
 `scene.set_camera_anchor {scene_id, anchor?}` (ADR-0164) names the item of the scene,
 placing a `group`-role scene, that the camera rides with: its position and target are
 then in that group's space, placed through the group item each frame (`GroupPose`,
-[Geometry](#geometry)). It belongs to the family: refused on a keyframe scene
-(`edits.N.anchor`), on a scene without a camera, and for an item not of the scene or not
-placing a group (`invalid_argument`); one that later names no group sharing the space
-is kept and ignored, as it is while the family has a follow camera. `SceneInfo.camera_anchor`
+[Geometry](#geometry)). It belongs to the family, so it is refused on a keyframe scene
+(`edits.N.anchor`, `invalid_argument`), and only there: an anchor that names no group
+sharing the space, on a scene without a camera, set so or left so later, is kept and
+ignored, as it is while the family has a follow camera. `SceneInfo.camera_anchor`
 reports it, omitted when absent, and its inverse is itself with the old value. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
 bytes). Since 0.100 hotkey bindings ([Hotkeys](#hotkeys)) and timelines
@@ -3057,7 +3057,7 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   centre at `depth_px`. `place` maps a child's geometry, in the group's canvas pixels,
   to an ordinary geometry in the scene's space: its centre through the pose, its size
   and depth scaled, and its orientation composed and written back as the three angles
-  (falling back at gimbal lock), so nested groups compose by placing each pose through
+  (each read against the others, so a quarter turn keeps it), so nested groups compose by placing each pose through
   the one outside it. `place_camera` maps a camera the same way, its roll worked out
   from the group's placed up and its `focus_px` scaled, so it sees the group's points
   where its own numbers would.

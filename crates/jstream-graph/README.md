@@ -429,11 +429,11 @@ that does not want to change the graph it has.
   motion and its camera anchor after its items (`camera::restore`), and its follow with
   their effects. `scene.set_camera_anchor` (`camera.rs`,
   [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)) sets or clears
-  the item a scene's camera rides with, undone by the old value: refused on a keyframe
-  scene (field `anchor`, the family's), on a scene without a camera, and for an item
-  that isn't the scene's or whose source isn't a `scene` source of a `group`-role
-  scene (`invalid_argument`). One that later names no such item is kept, and the engine
-  ignores it. `camera_anim_modifiers` turns a motion list into
+  the item a scene's camera rides with, undone by the old value, and refused only on a
+  keyframe scene (field `anchor`, the family's). Any other anchor is stored, so a file
+  and a deleted scene's inverse always write it back: one that names no item of the
+  scene placing a `group`-role scene, or is on a scene without a camera, set so or left
+  so later, is kept, and the engine ignores it. `camera_anim_modifiers` turns a motion list into
   `jstream-anim`'s for the engine.
 - **Timelines** (`timeline.rs`, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
   `timeline.set` stores a timeline in a scene (the scene `not_found`, then
