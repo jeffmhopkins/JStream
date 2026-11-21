@@ -103,7 +103,8 @@ Contents ([Design](#design) explains the choices):
   JTunnel senders" as a `JtunnelSetting` (its JSON tested natively), and `desktop_ptz()`
   and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
   `same_engine` says
-  whether the open session is that app's own engine.
+  whether the open session is that app's own engine, and `own_engine` asks it of the
+  session's `ConnectedEngine` (for Browse… and the canvas's full-resolution preview).
 - **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
   file is stored (`place_asset`, tested natively): under the collection folder as a
   `collection` path, otherwise `absolute`. App assets offer no button. With no desktop
@@ -1359,7 +1360,7 @@ beside it ([Design › Studio mode](#design)).
   `taps.rs`, the Properties dialog's picture and studio mode's program monitor) and one `preview.subscribe` stream on it, at the
   collection's base rate (30 or 60, `live_fps`; 30 until the collection is read, and a
   new stream of the same picture when the rate changes) and as
-  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends); when the stage settles at a size whose picture differs by a quarter or more, as when the window is maximized or the dock resized, the canvas opens a stream at the new size on a new channel. In the desktop app (`host::desktop_host()`), where the engine is local and pictures cost no network, `preview::stage` always asks for the largest picture, so the docked canvas is full resolution at any size and a resize never restarts it).
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends); when the stage settles at a size whose picture differs by a quarter or more, as when the window is maximized or the dock resized, the canvas opens a stream at the new size on a new channel. In the desktop app on its own engine (`host::own_engine`, false when the app is connected to another engine), where pictures cost no network, `preview::stage` always asks for the largest picture, so the docked canvas is full resolution at any size and a resize never restarts it. A resize restages only from its newest timeout, so a long drag opens one stream).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the

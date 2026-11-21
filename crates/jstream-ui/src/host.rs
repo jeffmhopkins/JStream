@@ -95,6 +95,16 @@ pub fn has_browse() -> bool {
         .is_some_and(|value| value.is_function())
 }
 
+/// Whether the open session (`connected`) is the desktop app's own engine: false in a
+/// browser, and false in the desktop app connected to another engine.
+pub fn own_engine(connected: Option<ConnectedEngine>) -> bool {
+    let Some(engine) = desktop() else {
+        return false;
+    };
+    use leptos::prelude::With;
+    connected.is_some_and(|connected| connected.0.with(|url| same_engine(&engine.url, url)))
+}
+
 /// Whether `session` is the desktop app's own engine. A different URL is another
 /// machine, or another engine, and a native dialog would name files the engine cannot
 /// see.

@@ -1,10 +1,11 @@
 //! Studio mode's program monitor: the program mix, live, beside the canvas, which shows
 //! the preview scene. It is a `preview.subscribe` of the program mix (no `scene_id`) on a
 //! channel tapped from the canvas's binary channel ([`taps`](super::taps)), sized for
-//! its box as the canvas's own stream is ([`preview::stage`]), so the desktop app gets
-//! the sharpest picture and a browser only what it shows. A new base rate, or a box that
-//! changed by a quarter or more, closes the stream and opens the next on a new tapped
-//! channel ([`preview::Stream::at_fps`], [`preview::Stream::at_stage`]).
+//! its box as the canvas's own stream is ([`preview::stage`]), so the desktop app's own
+//! engine gives the sharpest picture and any other engine only what the box shows. A new
+//! base rate, or a box that changed by a quarter or more once the newest resize has
+//! settled, closes the stream and opens the next on a new tapped channel
+//! ([`preview::Stream::at_fps`], [`preview::Stream::at_stage`]).
 //!
 //! Docs: crates/jstream-ui/README.md#canvas
 
@@ -90,13 +91,18 @@ pub fn ProgramMonitor() -> impl IntoView {
         });
     }
     let reporting = StoredValue::new_local(None::<IntervalHandle>);
+    // Whether the session is the desktop app's own engine, whose pictures cross no
+    // network: the stream is then always the full picture, as the canvas's is.
+    let connected = use_context::<crate::host::ConnectedEngine>();
+    // The newest resize's timeout: only it restages, so a long drag opens one stream.
+    let resizes = StoredValue::new(0_u64);
     let measured = move || {
         let (width, height) = frame.get_untracked().map_or((640.0, 360.0), |frame| {
             (frame.client_width() as f32, frame.client_height() as f32)
         });
         preview::stage(
             (width, height, window().device_pixel_ratio() as f32),
-            crate::host::desktop_host().is_some(),
+            crate::host::own_engine(connected),
         )
     };
 
@@ -206,8 +212,21 @@ pub fn ProgramMonitor() -> impl IntoView {
     let resized = {
         let restage = restage.clone();
         window_event_listener(leptos::ev::resize, move |_| {
+            let Some(generation) = resizes.try_update_value(|n| {
+                *n = n.wrapping_add(1);
+                *n
+            }) else {
+                return;
+            };
             let restage = restage.clone();
-            set_timeout(restage, preview::SETTLE);
+            set_timeout(
+                move || {
+                    if resizes.try_get_value() == Some(generation) {
+                        restage();
+                    }
+                },
+                preview::SETTLE,
+            );
         })
     };
 
