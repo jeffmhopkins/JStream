@@ -31,6 +31,11 @@ pub const UI_SETTINGS_FILE: &str = "ui-settings.json";
 /// so both keep the same number.
 pub const WARM_SCENES_FILE: &str = "warm-scenes.json";
 
+/// The file in the data folder that keeps the 3D rendering switches
+/// (`studio.set_rendering`, ADR-0170 decision 1). The desktop app and the daemon both
+/// keep it there, so both draw the same effects.
+pub const RENDERING_FILE: &str = "rendering.json";
+
 /// The file in the data folder that keeps the projects opened most recently (ADR-0121
 /// §6). Only the desktop app keeps one; the daemon opens the file it is given.
 pub const RECENT_COLLECTIONS_FILE: &str = "recent-collections.json";

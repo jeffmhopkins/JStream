@@ -246,8 +246,8 @@ Contents ([Design](#design) explains the choices):
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
-  Settings… and Plugins… open, with its pages (`SettingsPage`: General, Plugins, Audio
-  plugins, Devices)
+  Settings… and Plugins… open, with its pages (`SettingsPage`: General, 3D rendering,
+  Plugins, Audio plugins, Devices)
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
 - **Warm scenes** (`warm.rs`, ADR-0117 §7): `WarmScenesSetting`, the General page's
   "Warm scenes" choice, from "Only the Preview scene" to `MAX_WARM_SCENES` scenes. It
@@ -260,6 +260,14 @@ Contents ([Design](#design) explains the choices):
   0.117, which reports no `warm_gpu_mib`. Setting the count alone leaves `gpu_mib` out,
   so the limit holds. `budget`, `read`, `set_budget`, `choice_label` and `gpu_label`
   are tested natively.
+- **3D rendering** (`rendering.rs`,
+  [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 1): `RenderingSettings`, the 3D rendering page, one checkbox per `Switch`
+  (Shadows, Ambient occlusion, Volumetric fog, Floor reflections). It reads the switches
+  with `studio.get` each time the page opens and sends `studio.set_rendering` naming only
+  the switch changed, putting the old value back with an error if the engine refuses; an
+  engine that reports no `rendering` (older than 0.129) gets a line saying it has none.
+  `read`, `set` and each `Switch`'s change are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
   plugins page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with

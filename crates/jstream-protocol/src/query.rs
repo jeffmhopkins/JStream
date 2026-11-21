@@ -690,6 +690,10 @@ pub enum QueryResult {
         /// `studio.set_warm` sets (ADR-0150, since 0.117). Omitted by an older server.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         warm_gpu_mib: Option<u32>,
+        /// The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170
+        /// decision 1, since 0.129). Omitted by an older server, which draws every effect.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        rendering: Option<crate::RenderFeatures>,
     },
     /// The result of the deprecated `privacy.get` (ADR-0080): always `on: false`.
     #[serde(rename = "privacy.get")]

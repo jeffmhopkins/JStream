@@ -729,6 +729,9 @@ pub(crate) struct Shot {
     /// ([`FilterClock::beat`](jstream_render::FilterClock), ADR-0148); `None` in a
     /// shot planned without them, which is always at the start of the song.
     tempo: Option<crate::tempo::Tempo>,
+    /// The 3D rendering switches it was planned with (ADR-0170 decision 1): with
+    /// `shadows` off, no light casts a shadow.
+    features: jstream_protocol::RenderFeatures,
     /// Its items' audio modifiers (ADR-0100), with the level the render thread's
     /// follower stores for each tick ([`crate::reactive`]).
     audio: crate::reactive::Bindings,
@@ -982,6 +985,7 @@ impl Default for Shot {
             shown: BTreeMap::new(),
             driven: BTreeMap::new(),
             tempo: None,
+            features: jstream_protocol::RenderFeatures::ALL,
             audio: crate::reactive::Bindings::default(),
             fired: motion::Fired::default(),
         }
@@ -1546,6 +1550,7 @@ impl PartialEq for Shot {
             // An edit to an effect modifier alone changes only this (ADR-0138).
             && self.driven == other.driven
             && self.tempo == other.tempo
+            && self.features == other.features
     }
 }
 
@@ -1756,6 +1761,7 @@ fn plan_inner(
         blending: state.blending(),
         program: program.clone(),
         tempo: assets.tempo().cloned(),
+        features: assets.features(),
         ..Shot::default()
     };
     let mut planner = Planner {
@@ -6595,8 +6601,12 @@ fn scene_lights(
             cone_deg: light.cone_deg,
             softness: light.softness,
         });
-        // A spot or directional light may cast shadows (ADR-0151 decision 3).
-        if light.shadows && matches!(light.kind, LightType::Spot | LightType::Directional) {
+        // A spot or directional light may cast shadows (ADR-0151 decision 3), unless the
+        // shadows switch is off (ADR-0170 decision 1).
+        if light.shadows
+            && shot.features.shadows
+            && matches!(light.kind, LightType::Spot | LightType::Directional)
+        {
             shadowed.push((lights.len() - 1, light.shadow_softness));
         }
     }

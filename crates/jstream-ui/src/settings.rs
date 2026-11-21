@@ -4,6 +4,8 @@
 //!
 //! - **General** holds "Check for updates at launch" (`updates.rs`), whether to ask
 //!   before a new agent connects (`agents.rs`) and "Warm scenes" (`warm.rs`).
+//! - **3D rendering** holds one switch per costly 3D effect, for every scene at once
+//!   (`rendering.rs`, ADR-0170 decision 1).
 //! - **Plugins** is the WASM automation plugins' list, install and permissions
 //!   (`plugins.rs`).
 //! - **Audio plugins** is where the engine looks for CLAP audio effects, what it found
@@ -37,12 +39,15 @@ pub enum SettingsPage {
     AudioPlugins,
     /// Pairing remote browsers, and the paired devices.
     Devices,
+    /// The 3D rendering switches (ADR-0170 decision 1).
+    Rendering,
 }
 
 impl SettingsPage {
     /// Every page, in the order the dialog lists them.
-    pub const ALL: [SettingsPage; 4] = [
+    pub const ALL: [SettingsPage; 5] = [
         SettingsPage::General,
+        SettingsPage::Rendering,
         SettingsPage::Plugins,
         SettingsPage::AudioPlugins,
         SettingsPage::Devices,
@@ -55,6 +60,7 @@ impl SettingsPage {
             SettingsPage::Plugins => "Plugins",
             SettingsPage::AudioPlugins => "Audio plugins",
             SettingsPage::Devices => "Devices",
+            SettingsPage::Rendering => "3D rendering",
         }
     }
 
@@ -65,6 +71,7 @@ impl SettingsPage {
             SettingsPage::Plugins => "plugins",
             SettingsPage::AudioPlugins => "audio-plugins",
             SettingsPage::Devices => "devices",
+            SettingsPage::Rendering => "rendering",
         }
     }
 
@@ -184,6 +191,9 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                             <crate::agents::AskAgentsSetting />
                             <crate::warm::WarmScenesSetting />
                         }.into_any(),
+                        SettingsPage::Rendering => view! {
+                            <crate::rendering::RenderingSettings />
+                        }.into_any(),
                         SettingsPage::Plugins => view! { <Plugins /> }.into_any(),
                         SettingsPage::AudioPlugins => view! { <ClapPlugins /> }.into_any(),
                         SettingsPage::Devices => view! {
@@ -220,11 +230,12 @@ mod tests {
 
     #[test]
     fn the_pages_step_in_order_and_wrap() {
-        assert_eq!(SettingsPage::General.step(true), SettingsPage::Plugins);
+        assert_eq!(SettingsPage::General.step(true), SettingsPage::Rendering);
+        assert_eq!(SettingsPage::Rendering.step(true), SettingsPage::Plugins);
         assert_eq!(SettingsPage::Plugins.step(true), SettingsPage::AudioPlugins);
         assert_eq!(SettingsPage::Devices.step(true), SettingsPage::General);
         assert_eq!(SettingsPage::General.step(false), SettingsPage::Devices);
-        assert_eq!(SettingsPage::Plugins.step(false), SettingsPage::General);
+        assert_eq!(SettingsPage::Plugins.step(false), SettingsPage::Rendering);
     }
 
     #[test]

@@ -251,6 +251,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("studio.set_preview", Class(E)),
     // An application setting a person changes in Settings.
     ("studio.set_warm", N),
+    ("studio.set_rendering", N),
     // An item's visibility, as `item.set_visible` changes it (ADR-0101).
     ("item.show", Class(E)),
     ("item.hide", Class(E)),

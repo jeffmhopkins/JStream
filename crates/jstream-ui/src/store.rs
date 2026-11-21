@@ -1350,6 +1350,7 @@ mod tests {
             keyframes: Vec::new(),
             warm_scenes: None,
             warm_gpu_mib: None,
+            rendering: None,
         };
         assert_eq!(Collection::from_result(other), None);
     }

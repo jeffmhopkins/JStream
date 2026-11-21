@@ -42,6 +42,7 @@ mod profile;
 mod ptz;
 mod quality;
 mod query;
+mod rendering;
 mod schema;
 mod settings;
 mod timeline;
@@ -169,6 +170,7 @@ pub use query::{
     DeviceInfo, FontInfo, ItemInfo, MasterInfo, PixelSize, Query, QueryResult, SceneInfo,
     SceneOptions, SceneSummary, SourceInfo, SourceSize,
 };
+pub use rendering::{RenderFeatures, RenderFeaturesChange};
 pub use schema::json_schema;
 pub use settings::{AssetRoot, Reference, Settings};
 pub use timeline::{
