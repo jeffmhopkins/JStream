@@ -7,7 +7,9 @@
 //! `video.snapshot` at the same moment, draws the same thing.
 //!
 //! - A **pair** interpolates position, size, crop, opacity, rotation, tilt and turn,
-//!   depth and perspective. Angles take the shortest way round; the rest are linear.
+//!   depth and perspective. Angles take the shortest way round: one angle that changes
+//!   on its own, and more than one as one rotation along the shortest arc between the
+//!   two orientations (ADR-0166 decision 1). The rest are linear.
 //! - An item **without a partner** appears or disappears with its effect: `fade`
 //!   (opacity only), `scale` (toward 65% about its centre while fading), `slide` (toward
 //!   the nearest canvas edge until it is off the canvas, while fading) or `none` (at
@@ -433,7 +435,7 @@ fn finite(v: f32) -> Finite32 {
 
 fn lerp_geometry(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> ItemGeometry {
     let num = |x: Finite32, y: Finite32| finite(lerp(x.get(), y.get(), k));
-    let angle = |x: Finite32, y: Finite32| finite(lerp_angle(x.get(), y.get(), k));
+    let [rotation_deg, turn_deg, tilt_deg] = lerp_orientation(a, b, k).map(finite);
     // The discrete parts switch halfway; a perspective present at both ends moves.
     let later = k >= 0.5;
     let perspective_px = match (a.perspective_px, b.perspective_px) {
@@ -460,12 +462,36 @@ fn lerp_geometry(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> ItemGeometry {
         flip_v: if later { b.flip_v } else { a.flip_v },
         billboard: if later { b.billboard } else { a.billboard },
         surface: lerp_surface(a.surface, b.surface, k, later),
-        rotation_deg: angle(a.rotation_deg, b.rotation_deg),
-        tilt_deg: angle(a.tilt_deg, b.tilt_deg),
-        turn_deg: angle(a.turn_deg, b.turn_deg),
+        rotation_deg,
+        tilt_deg,
+        turn_deg,
         depth_px: num(a.depth_px, b.depth_px),
         perspective_px,
     }
+}
+
+/// The angles `[rotation, turn, tilt]` `k` of the way from `a`'s to `b`'s
+/// ([ADR-0166](../../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+/// decision 1): the shortest way on the one angle that changes, or, when more than one
+/// does, one rotation along the shortest arc between the two orientations. A billboard
+/// at either end keeps the per-axis way.
+fn lerp_orientation(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> [f32; 3] {
+    let from = [a.rotation_deg, a.turn_deg, a.tilt_deg].map(Finite32::get);
+    let to = [b.rotation_deg, b.turn_deg, b.tilt_deg].map(Finite32::get);
+    let mut per_axis = [0.0; 3];
+    let mut changed = 0;
+    for i in 0..3 {
+        per_axis[i] = lerp_angle(from[i], to[i], k);
+        if lerp_angle(from[i], to[i], 1.0) != from[i] {
+            changed += 1;
+        }
+    }
+    // A billboard draws only its rotation: its turn and tilt face the camera
+    // (ADR-0151 decision 2), so one rotation split over all three would roll it.
+    if changed <= 1 || a.billboard || b.billboard {
+        return per_axis;
+    }
+    crate::turn::slerp_angles(from, to, k, per_axis)
 }
 
 /// A card's surface between `a` and `b` (ADR-0151 decision 10): its numbers glide, an
@@ -781,6 +807,67 @@ mod tests {
         assert_eq!(lerp_angle(10.0, 350.0, 0.5), 0.0);
         assert_eq!(lerp_angle(0.0, 90.0, 0.5), 45.0);
         assert_eq!(lerp_angle(-170.0, 170.0, 0.5), -180.0);
+    }
+
+    /// ADR-0166 decision 1: a pair that turns and tilts at once moves as one rotation,
+    /// so halfway it is the direct turn's halfway, not each angle's.
+    #[test]
+    fn a_pair_turning_on_two_axes_turns_as_one_rotation() {
+        let from = at(500.0, 500.0, 100.0, 100.0);
+        let mut to = from;
+        to.geometry.turn_deg = Finite32::new(90.0).expect("finite");
+        to.geometry.tilt_deg = Finite32::new(90.0).expect("finite");
+        let track = Track::Pair {
+            from,
+            to,
+            timing: linear(0.0),
+            source: None,
+        };
+        let half = track.sample(500.0, CANVAS).expect("drawn").geometry;
+        // Per axis it would be (0, 45, 45); one rotation takes another triple. Both
+        // reach the end exactly.
+        let angles = [half.rotation_deg, half.turn_deg, half.tilt_deg].map(Finite32::get);
+        assert!((angles[1] - 45.0).abs() > 1.0, "{angles:?}");
+        let end = track.sample(1000.0, CANVAS).expect("drawn").geometry;
+        assert_eq!(end.turn_deg.get(), 90.0);
+        assert_eq!(end.tilt_deg.get(), 90.0);
+        assert_eq!(end.rotation_deg.get(), 0.0);
+
+        // One angle alone moves exactly as before.
+        let mut turned = from;
+        turned.geometry.turn_deg = Finite32::new(60.0).expect("finite");
+        let one = Track::Pair {
+            from,
+            to: turned,
+            timing: linear(0.0),
+            source: None,
+        };
+        let half = one.sample(500.0, CANVAS).expect("drawn").geometry;
+        assert_eq!(half.turn_deg.get(), 30.0);
+        assert_eq!(half.tilt_deg.get(), 0.0);
+        assert_eq!(half.rotation_deg.get(), 0.0);
+    }
+
+    /// A billboard draws only its rotation, facing the camera with the rest
+    /// (ADR-0151 decision 2), so a Move that changes its turn and tilt keeps the
+    /// per-axis way and never rolls it (#1583 review B1).
+    #[test]
+    fn a_billboard_keeps_the_per_axis_way_and_never_rolls() {
+        let mut from = at(500.0, 500.0, 100.0, 100.0);
+        from.geometry.billboard = true;
+        let mut to = from;
+        to.geometry.turn_deg = Finite32::new(170.0).expect("finite");
+        to.geometry.tilt_deg = Finite32::new(170.0).expect("finite");
+        let track = Track::Pair {
+            from,
+            to,
+            timing: linear(0.0),
+            source: None,
+        };
+        for ms in [250.0, 500.0, 520.0, 521.0, 750.0] {
+            let g = track.sample(ms, CANVAS).expect("drawn").geometry;
+            assert_eq!(g.rotation_deg.get(), 0.0, "{ms}");
+        }
     }
 
     #[test]

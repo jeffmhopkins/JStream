@@ -1449,7 +1449,10 @@ or a stinger item's pass through, each with its delay, duration and easing); the
 samples each track at the frame's media time. A switch mid-transition starts from what
 is on screen: the control thread samples the running plan at the switch time with the
 same function, so both threads agree on it without the render thread keeping any
-state. Rotation, tilt and turn take the shortest way round. The easing curves are one
+state. Rotation, tilt and turn take the shortest way round, and when more than one of
+them changes, the item turns as one rotation along the shortest arc between its two
+orientations ([ADR-0166](adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+decision 1). The easing curves are one
 shared function (`jstream_protocol::Easing`) with golden tests. After easing, values
 are clamped to a hard range: opacity to `[0, 4]`, crop to `[0, source size]`, size to
 `≥ 0` and perspective to `≥ 1`; the spring may overshoot everything else.
