@@ -1342,7 +1342,7 @@ browser, and `mod.rs` is the component.
   `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at the
   collection's base rate (30 or 60, `live_fps`; 30 until the collection is read, and a
   new stream of the same picture when the rate changes) and as
-  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends); when the stage settles at a size whose picture differs by a quarter or more, as when the window is maximized or the dock resized, the canvas opens a stream at the new size on a new channel).
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends); when the stage settles at a size whose picture differs by a quarter or more, as when the window is maximized or the dock resized, the canvas opens a stream at the new size on a new channel. In the desktop app (`host::desktop_host()`), where the engine is local and pictures cost no network, `preview::stage` always asks for the largest picture, so the docked canvas is full resolution at any size and a resize never restarts it).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the

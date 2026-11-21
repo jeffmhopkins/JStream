@@ -327,7 +327,10 @@ pub fn Canvas() -> impl IntoView {
             });
             let ratio = window().device_pixel_ratio() as f32;
             let mut first = preview::Stream::first(
-                (width, height, ratio),
+                preview::stage(
+                    (width, height, ratio),
+                    crate::host::desktop_host().is_some(),
+                ),
                 screen::Screen::supports_h264(),
                 live_fps.get_untracked(),
             );
@@ -429,10 +432,13 @@ pub fn Canvas() -> impl IntoView {
         ) else {
             return;
         };
-        let size = (
-            element.client_width() as f32,
-            element.client_height() as f32,
-            window().device_pixel_ratio() as f32,
+        let size = preview::stage(
+            (
+                element.client_width() as f32,
+                element.client_height() as f32,
+                window().device_pixel_ratio() as f32,
+            ),
+            crate::host::desktop_host().is_some(),
         );
         if let Some(next) = current.at_stage(size) {
             switch(current, next);

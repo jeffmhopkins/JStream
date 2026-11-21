@@ -70,6 +70,22 @@ pub fn subscribe(width: f32, height: f32, pixel_ratio: f32, h264: bool, fps: u32
     }
 }
 
+/// The stage to size the canvas's stream for: in the desktop app (`local`), where the
+/// engine is on the same machine and its pictures cost no network, always the largest
+/// the engine sends, so the canvas is as sharp as it can be at any dock size; in a
+/// browser, the `measured` stage, so a tablet over Wi-Fi gets only what it shows.
+pub fn stage(measured: (f32, f32, f32), local: bool) -> (f32, f32, f32) {
+    if local {
+        (
+            *PreviewSettings::WIDTH.end() as f32,
+            *PreviewSettings::HEIGHT.end() as f32,
+            1.0,
+        )
+    } else {
+        measured
+    }
+}
+
 /// The scene the canvas's stream shows: `None`, the program mix, while the canvas shows
 /// the program scene (whose picture then has its transitions) or no scene, else the
 /// scene it shows.
@@ -528,6 +544,24 @@ mod tests {
         assert_ne!(next.channel, program.channel);
         // B shown already: a second settle of the same change does nothing.
         assert_eq!(settled_switch(&next, &b, &b), None);
+    }
+
+    #[test]
+    fn the_desktop_app_always_asks_for_the_full_picture() {
+        let small = (400.0, 225.0, 1.0);
+        let big = (1700.0, 956.0, 1.0);
+        assert_eq!(stage(small, false), small);
+        let local = Stream::first(stage(small, true), true, FPS);
+        assert!(matches!(
+            local.subscribe(),
+            Action::PreviewSubscribe {
+                max_width: Some(1920),
+                max_height: Some(1080),
+                ..
+            }
+        ));
+        // A resized dock never restarts the desktop's stream.
+        assert_eq!(local.at_stage(stage(big, true)), None);
     }
 
     #[test]
