@@ -1078,6 +1078,16 @@ fn serve_staged(
         // The old session (or the hub's own) closes first.
         work.staged = None;
         work.h264 = None;
+        // Which stream the stage draws, and how, so a canvas that shows the wrong
+        // picture can be matched to its stream in the log (#1562).
+        tracing::info!(
+            channel = stream.channel,
+            scene = ?stream.scene,
+            codec = ?work.codec,
+            width,
+            height,
+            "the program stage draws a preview stream"
+        );
         work.staged = Some(if work.codec == PreviewCodec::H264 {
             let codecs = stream
                 .codecs
