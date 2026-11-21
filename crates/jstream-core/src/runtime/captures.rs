@@ -11,7 +11,10 @@
 //! showing the same device share its one capture, since a device opens once.
 //!
 //! The render thread reads each capture's mailbox every tick and keeps its latest frame,
-//! a texture on the compositor's device or CPU RGBA8. Starting and stopping a capture
+//! a texture on the compositor's device or CPU RGBA8. A capture faster than the canvas replaces
+//! frames between ticks that the canvas could never show; only a replaced frame beside a
+//! tick with no new frame counts as a dropped capture frame ([`Pace`]), and a device's
+//! once however many of its captures saw it (#1555). Starting and stopping a capture
 //! are OS calls that can block, so they run on the pipeline's `jstream-capture` thread.
 //! The render thread asks it to start what a new snapshot captures and hands it the
 //! streams it no longer reads, through channels it never waits on (R-RT-002,
@@ -37,9 +40,8 @@ use jstream_media::{
     VideoFrame,
 };
 use jstream_platform::{
-    Capture, CaptureEncoding, CaptureOptions, CaptureStats, CaptureStream, CaptureTarget, Codecs,
-    CursorCapture, DeviceId, GpuFrame, PlatformError, VideoDeviceFormat, VideoDevices,
-    VideoSurface,
+    Capture, CaptureEncoding, CaptureOptions, CaptureStream, CaptureTarget, Codecs, CursorCapture,
+    DeviceId, GpuFrame, PlatformError, VideoDeviceFormat, VideoDevices, VideoSurface,
 };
 use jstream_sources::{CaptureSpec, DeviceFormatWant, fps_centi};
 
@@ -116,7 +118,7 @@ pub(crate) fn spawn(
         on_gpu: false,
         left_gpu: false,
         retry,
-        ended: CaptureStats::default(),
+        dropped: 0,
         versions: 0,
         gpu_captures: 0,
         epoch: 0,
@@ -464,8 +466,8 @@ pub(crate) struct RenderCaptures {
     left_gpu: bool,
     /// [`RETRY_MS`] on the media clock.
     retry: MediaTime,
-    /// The counters of the streams that have stopped.
-    ended: CaptureStats,
+    /// The capture frames dropped so far ([`Pace`]), each device's counted once.
+    dropped: u64,
     /// Numbers every new frame, across captures.
     versions: u64,
     gpu_captures: u64,
@@ -500,6 +502,8 @@ struct Slot {
     /// The size last sent for it, [`SizeChange`]. Kept when the render thread leaves the
     /// GPU path, so a capture restarting there sends nothing until its size changes.
     reported: Option<FrameSize>,
+    /// Which of its replaced frames are drops; afresh for each stream.
+    pace: Pace,
 }
 
 enum State {
@@ -564,7 +568,6 @@ impl RenderCaptures {
             slot.frame = None;
             match std::mem::replace(&mut slot.state, State::Starting) {
                 State::Running { stream, .. } => {
-                    add(&mut self.ended, stream.stats());
                     let _ = requests.send(Request::Stop(stream));
                     self.request_start(spec, slot);
                 }
@@ -594,7 +597,6 @@ impl RenderCaptures {
         let Some(requests) = &self.requests else {
             return;
         };
-        let ended = &mut self.ended;
         let sizes = &self.sizes;
         self.slots.retain(|spec, slot| {
             let keep = wanted.contains(spec);
@@ -602,7 +604,6 @@ impl RenderCaptures {
                 if let State::Running { stream, .. } =
                     std::mem::replace(&mut slot.state, State::Starting)
                 {
-                    add(ended, stream.stats());
                     let _ = requests.send(Request::Stop(stream));
                 }
                 if slot.reported.is_some() {
@@ -651,6 +652,7 @@ impl RenderCaptures {
                     slot.epoch = self.epoch;
                 }
                 (Some(slot), Some(opened)) if matches!(slot.state, State::Starting) => {
+                    slot.pace = Pace::default();
                     slot.state = State::Running {
                         stream: opened.stream,
                         failing: false,
@@ -668,13 +670,17 @@ impl RenderCaptures {
             }
         }
         for (spec, slot) in &mut self.slots {
+            slot.pace.found = 0;
             let State::Running {
                 stream, failing, ..
             } = &mut slot.state
             else {
                 continue;
             };
-            match stream.latest() {
+            let latest = stream.latest();
+            let fresh = matches!(latest, Ok(Some(_)));
+            slot.pace.read(fresh, stream.stats().frames_skipped);
+            match latest {
                 Ok(Some(VideoSurface::Gpu(frame)))
                     if self.on_gpu
                         && matches!(
@@ -714,12 +720,16 @@ impl RenderCaptures {
                         && let State::Running { stream, .. } =
                             std::mem::replace(&mut slot.state, State::Failed { at: now })
                     {
-                        add(&mut self.ended, stream.stats());
                         let _ = requests.send(Request::Stop(stream));
                     }
                 }
             }
         }
+        self.dropped = self.dropped.saturating_add(once_per_device(
+            self.slots
+                .iter()
+                .map(|(spec, slot)| (spec, slot.pace.found)),
+        ));
         self.report_sizes();
     }
 
@@ -739,15 +749,11 @@ impl RenderCaptures {
         }
     }
 
-    /// The counters of every capture this pipeline ran, added up.
-    pub(crate) fn stats(&self) -> CaptureStats {
-        let mut total = self.ended;
-        for slot in self.slots.values() {
-            if let State::Running { stream, .. } = &slot.state {
-                add(&mut total, stream.stats());
-            }
-        }
-        total
+    /// The capture frames this pipeline dropped ([`Pace`]): frames a capture replaced
+    /// that its canvas could have shown, each device's counted once however many
+    /// captures read it (#1555).
+    pub(crate) fn dropped(&self) -> u64 {
+        self.dropped
     }
 
     /// GPU frames taken, for [`OutputStats::gpu_captures`](super::OutputStats).
@@ -827,6 +833,7 @@ impl Slot {
             warned_format: false,
             epoch: 0,
             reported: None,
+            pace: Pace::default(),
         }
     }
 }
@@ -842,9 +849,79 @@ fn send_size(sizes: &Option<Sender<SizeChange>>, key: &CaptureKey, size: Option<
     }
 }
 
-fn add(total: &mut CaptureStats, stats: CaptureStats) {
-    total.frames_captured = total.frames_captured.saturating_add(stats.frames_captured);
-    total.frames_skipped = total.frames_skipped.saturating_add(stats.frames_skipped);
+/// Tells which of a capture's replaced frames are drops (#1555).
+///
+/// The render thread takes a capture's newest frame once a tick, so a capture faster
+/// than the canvas replaces frames between ticks: a 60 fps webcam on a 30 fps canvas
+/// replaces about every other one. Those frames could never have been shown, and are not
+/// drops. A replaced frame is a drop when the canvas went without a new frame of the
+/// capture beside it, in the same tick or the one before or after: one of the frames it
+/// replaced could have filled the repeat. Each repeat pairs with one replacement, so a
+/// drop is one frame however many were replaced. A capture that keeps pace with the
+/// canvas drops only on jitter (two frames in one tick, none in the next); one that runs
+/// faster drops only when it stalls for a tick.
+#[derive(Debug, Default)]
+struct Pace {
+    /// The stream's `frames_skipped` as of the last read.
+    skipped: u64,
+    /// What the last read left unpaired.
+    pending: Pending,
+    /// The drops this tick's read found: 0 or 1.
+    found: u64,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+enum Pending {
+    #[default]
+    Nothing,
+    /// The last read had a new frame and frames had been replaced before it.
+    Replaced,
+    /// The last read had no new frame: the canvas repeated the capture's frame.
+    Repeated,
+}
+
+impl Pace {
+    /// One tick's read: whether it took a new frame, and the stream's `frames_skipped`
+    /// now. Sets [`found`](Self::found).
+    fn read(&mut self, fresh: bool, skipped: u64) {
+        let replaced = skipped > self.skipped;
+        self.skipped = skipped;
+        let (found, pending) = match (fresh, replaced, self.pending) {
+            // A repeat with a replacement beside it.
+            (false, true, _)
+            | (false, false, Pending::Replaced)
+            | (true, true, Pending::Repeated) => (1, Pending::Nothing),
+            (false, false, _) => (0, Pending::Repeated),
+            (true, true, _) => (0, Pending::Replaced),
+            (true, false, _) => (0, Pending::Nothing),
+        };
+        self.found = found;
+        self.pending = pending;
+    }
+}
+
+/// The drops one tick found, from each capture's: a device's captures (one per format a
+/// source asks of it) read the same frames, so a drop of the device counts once, not once
+/// per capture. Keys order by what they capture first, so a device's captures are
+/// adjacent.
+fn once_per_device<'a>(found: impl Iterator<Item = (&'a CaptureKey, u64)>) -> u64 {
+    let mut total = 0u64;
+    let mut device: Option<(&Option<String>, u64)> = None;
+    for (key, drops) in found {
+        match &key.spec {
+            CaptureSpec::Device(target, _) => match &mut device {
+                Some((open, most)) if *open == target => *most = (*most).max(drops),
+                _ => {
+                    total = total.saturating_add(device.map_or(0, |(_, most)| most));
+                    device = Some((target, drops));
+                }
+            },
+            CaptureSpec::Display(_) | CaptureSpec::Window(_) => {
+                total = total.saturating_add(drops);
+            }
+        }
+    }
+    total.saturating_add(device.map_or(0, |(_, most)| most))
 }
 
 /// `surface` when it is a CPU frame the compositor converts (packed RGBA8 or BGRA8, or
@@ -1513,5 +1590,90 @@ mod tests {
             captures.stop();
             assert_eq!(devices.open_streams(), 0);
         }
+    }
+
+    /// One drop count per tick, for a capture read with `reads`: whether each read
+    /// took a new frame, and how many frames were replaced before it.
+    fn drops(reads: &[(bool, u64)]) -> u64 {
+        let mut pace = super::Pace::default();
+        let mut skipped = 0;
+        reads
+            .iter()
+            .map(|&(fresh, replaced)| {
+                skipped += replaced;
+                pace.read(fresh, skipped);
+                pace.found
+            })
+            .sum()
+    }
+
+    /// #1555 and #1552: a 60 fps webcam on a 30 fps canvas replaces every other frame,
+    /// and none of them could have been shown, so none is a drop, jitter and all.
+    #[test]
+    fn a_capture_faster_than_the_canvas_drops_nothing() {
+        let steady = [(true, 1); 300];
+        assert_eq!(drops(&steady), 0);
+        // Two frames land in one tick and three in the next, or the other way round.
+        let jittery: Vec<_> = (0..300)
+            .map(|tick| (true, [1, 0, 2, 1, 1, 2, 0][tick % 7]))
+            .collect();
+        assert_eq!(drops(&jittery), 0);
+    }
+
+    /// A drop is a replaced frame beside a repeat: the canvas could have shown it.
+    #[test]
+    fn a_replacement_beside_a_repeat_is_one_drop() {
+        // Matching rates with jitter: two frames in one tick, none in the next.
+        assert_eq!(drops(&[(true, 0), (true, 1), (false, 0), (true, 0)]), 1);
+        // The repeat first, then a tick that replaced two: still one frame could fill it.
+        assert_eq!(drops(&[(true, 0), (false, 0), (true, 2), (true, 0)]), 1);
+        // A tick with no new frame that saw frames replaced.
+        assert_eq!(drops(&[(true, 0), (false, 1), (true, 0)]), 1);
+        // A 30 fps capture on a 60 fps canvas repeats every other tick, and drops nothing.
+        let half: Vec<_> = (0..300).map(|tick| (tick % 2 == 0, 0)).collect();
+        assert_eq!(drops(&half), 0);
+        // A fast capture that stalls a tick drops one frame per stall.
+        let stalls: Vec<_> = (0..300)
+            .map(|tick| {
+                if tick % 30 == 0 {
+                    (false, 0)
+                } else {
+                    (true, 1)
+                }
+            })
+            .collect();
+        assert_eq!(drops(&stalls), 10);
+    }
+
+    /// Captures of one device in different formats read the same frames: a drop of the
+    /// device counts once. Other captures count each.
+    #[test]
+    fn a_devices_drops_count_once_across_its_captures() {
+        let source = jstream_protocol::SourceId::new("s");
+        let device = |target: Option<&str>, fps: Option<u32>| {
+            CaptureKey::for_source(
+                CaptureSpec::Device(
+                    target.map(str::to_owned),
+                    DeviceFormatWant {
+                        fps_centi: fps,
+                        ..DeviceFormatWant::default()
+                    },
+                ),
+                source.clone(),
+            )
+        };
+        let display = CaptureKey::for_source(CaptureSpec::Display(None), source.clone());
+        let window = CaptureKey::for_source(CaptureSpec::Window(Some("w".into())), source.clone());
+        let keys = BTreeSet::from([
+            (device(Some("cam"), None), 1),
+            (device(Some("cam"), Some(3000)), 1),
+            (device(Some("other"), None), 0),
+            (device(Some("other"), Some(6000)), 1),
+            (device(None, None), 1),
+            (display, 1),
+            (window, 1),
+        ]);
+        let found = keys.iter().map(|(key, drops)| (key, *drops));
+        assert_eq!(super::once_per_device(found), 5);
     }
 }

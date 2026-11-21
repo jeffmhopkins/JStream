@@ -3718,7 +3718,7 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "capture_frames": {
           "default": 0,
-          "description": "Video frames a capture mailbox replaced before the reader took them.",
+          "description": "Video frames a capture replaced that the canvas could have shown: it repeated the\ncapture's last frame beside them. A capture faster than the canvas replaces frames\nthe canvas could never show, and those are not counted.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
