@@ -107,17 +107,17 @@ shadows into it. The group item and the group scene have no layer, so:
 **4. Moving a 3D group.** The group item's pose is read the way any item's is, each frame,
 and its children are placed through it then: its live values ([ADR-0032](0032-live-edits-and-undo.md)),
 its motion modifiers and audio bindings ([ADR-0099](0099-native-motion-modifiers-and-timelines.md)),
-and a Move that glides it. So one live drag, one modifier or one keyframe moves the whole
+and a keyframe that sets it. So one live drag, one modifier or one keyframe moves the whole
 rig, with each child's own live values, modifiers and keyframes on top.
-- In a Move within a family ([ADR-0049](0049-keyframe-scene-model-and-evaluation.md) §3),
-  the group item and each child glide on their own tracks, and each frame places the
-  child's gliding pose through the group's. A rig that turns sweeps its parts round on
-  arcs rather than cutting across on straight lines.
-- A child pairs, between the two sides of a transition, with the same child placed through
-  the same group item on the other side. One on only one side appears or disappears as an
-  unpaired item does.
-- A group whose `share_space` differs between the two sides of a Move draws each side as
-  that side has it, and the Move runs as a `Fade` of the same duration.
+- In a transition, each child is a track of its own, at the geometry it is placed at on
+  each side, so a Move within a family ([ADR-0049](0049-keyframe-scene-model-and-evaluation.md)
+  §3) or between scenes glides each child from where it is placed on one side to where it
+  is placed on the other, as ADR-0094 decision 7 glides any item. A child pairs with the
+  same child on the other side; one on only one side appears or disappears as an unpaired
+  item does.
+- Where one side draws the group flat (a 2D side of a Move, ADR-0128), its card there and
+  its children on the other side pair with nothing: the card disappears as the children
+  appear, or the other way round.
 
 **5. A camera may ride with a 3D group.** `SceneInfo` gains `camera_anchor`, an optional
 item ID, set by a new edit `scene.set_camera_anchor { scene_id, anchor? }`. It is beside
@@ -138,10 +138,8 @@ space, so it scales by `s` with it.
   up falls back as ADR-0094 decision 3's does.
 - **The family's.** The anchor belongs to a keyframe family: its keyframe scenes ride with
   the parent's anchor, each with its own camera override, and `scene.set_camera_anchor` on
-  a keyframe scene is `invalid_argument`. So a Move within a family glides the camera's
-  numbers in the group's space and places them through the gliding group each frame.
-  Between two scenes with different anchors, or an anchor and none, a Move glides between
-  the two placed cameras in the scene's space.
+  a keyframe scene is `invalid_argument`. A Move glides between the two ends' cameras as
+  they are placed, in the scene's space, as decision 7 of ADR-0094 glides any two.
 - **Editing.** The edit is a state edit, batchable, one undo step; its inverse is itself
   with the previous value, and it bumps `rev`. An anchor that names no item of the scene
   whose source is a group is `invalid_argument`, and so is one on a scene without a camera.
@@ -177,6 +175,9 @@ any group.
     parts of a rig too.
 - **Not decided here:**
   - non-uniform scale and mirroring of a 3D group (shear can't be one geometry);
+  - a Move that sweeps a turning rig's parts round on arcs, by gliding the group's pose and
+    each child's own and placing one through the other each frame, rather than gliding
+    each child's placed geometry on a straight line;
   - a nested *scene*, rather than a group, sharing its parent's space: it has its own
     camera and options, so it stays a card;
   - anchoring a light, or any item other than a camera, to an item that isn't its group.
@@ -186,7 +187,8 @@ any group.
     through a group's pose beside the placement math, with unit tests that a neutral group places its children where their
     own geometry would; the graph's validation, the mock engine and collection files;
   - `jstream-core`: a 3D scene's 3D groups planned into its own pass, children placed each
-    frame through the group's live, moved and gliding pose, their lights, models and boxes
-    as the scene's; anchored cameras resolved in the pass and in transitions; tests;
+    frame through the group's live and moved pose, their lights, models and boxes as the
+    scene's, and as tracks of their own in a transition; anchored cameras resolved in the
+    pass and at a transition's ends; tests;
   - `jstream-ui`: the two Properties controls, the outline and drag of a 3D group;
   - `jstream-mcp` design notes, and ARCH › Data model and GPU pipeline.
