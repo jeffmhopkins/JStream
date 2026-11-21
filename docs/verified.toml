@@ -207,7 +207,7 @@ stamp = { hash = "b3:64dbb25a25fcaabd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:c9504616852b2492", by = "agent:claude-glow", note = "Re-read against the distance-based glow: a glow over a bounded layer still shades only that box grown by its reach and keeps the box, as the content tests check; nothing else here names glow internals." }
+stamp = { hash = "b3:586b63df60246b4a", by = "agent:claude", note = "Added how a model's texture (whole-image mip chain, rebuilt on change) and reflection (panorama in place of studio gradient or sky) are planned and scheduled; rest of the model paragraph holds | merge: main's #1572 changed the render README's filters text (glow from a jump-flood distance field); the GPU pipeline section's model and filter-chain account still holds | kept from the merged side: Re-read against the distance-based glow: a glow over a bounded layer still shades only that box grown by its reach and keeps the box, as the content tests check; nothing else here names glow internals." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:b2176ed177fdfc68", by = "agent:claude", note = "Added how a model's texture (whole-image mip chain, rebuilt on change) and reflection (panorama in place of studio gradient or sky) are planned and scheduled; rest of the model paragraph holds" }
