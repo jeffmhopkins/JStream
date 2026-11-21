@@ -6057,7 +6057,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:9a982da082641533", by = "agent:claude", note = "The display/window bullet now says a Windows window ID is the handle, ';' and a key that finds the window again after its program or Windows restarts; the rest of the section (target setting, empty targets, capture.targets) holds" }
+stamp = { hash = "b3:4d3c523e82b4b2c1", by = "agent:sky-backdrop", note = "Re-read the light entry against light.rs: sky_seed now described as picking the nebula kind, warp as Doppler shifted with nebulae fading; ranges and defaults unchanged. | merge: Main's #1586 changed the display/window target wording (a key to find a window again); re-read it and the light entry, both accurate together. | kept from the merged side: The display/window bullet now says a Windows window ID is the handle, ';' and a key that finds the window again after its program or Windows restarts; the rest of the section (target setting, empty targets, capture.targets) holds" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }
