@@ -6030,7 +6030,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:9a982da082641533", by = "agent:claude", note = "The display/window bullet now says a Windows window ID is the handle, ';' and a key that finds the window again after its program or Windows restarts; the rest of the section (target setting, empty targets, capture.targets) holds" }
+stamp = { hash = "b3:7159a54e3071a867", by = "agent:claude", note = "ShownModel line now names texture, texture_material and reflection; the light kind's image also accepts a source reference, which the section's light description already covers | merge: main's #1586 changed the window capture text (a window found again after a restart); the ShownModel and light lines this PR changed still hold | kept from the merged side: The display/window bullet now says a Windows window ID is the handle, ';' and a key that finds the window again after its program or Windows restarts; the rest of the section (target setting, empty targets, capture.targets) holds" }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }
