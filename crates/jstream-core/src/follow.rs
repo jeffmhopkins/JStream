@@ -19,6 +19,11 @@
 //! 7. if the pointer would still be past the safe margin, the look point slides toward it
 //!    just far enough to put it back on the margin (#1216), whatever the smoothing.
 //!
+//! With `hold_zoom` (ADR-0161, the default) steps 2, 3 and 6 change: the distance is the
+//! zoom's and glides only when the zoom changes, so the camera never pulls back or moves
+//! in; at the box's edges only the look point is held, so the frame stops at the edge; and
+//! the lean is scaled back where it would show past the box from that distance.
+//!
 //! # Behaviour
 //!
 //! **Camera moves** (`follow.rs`,
@@ -492,6 +497,32 @@ impl Tuning {
         aim
     }
 
+    /// `leaned`, a yaw and pitch, brought back toward the resting angle just far enough
+    /// that the frame from `dist`, aimed at the box's centre, still fits on the box.
+    fn held_lean(&self, leaned: (f32, f32), dist: f32) -> (f32, f32) {
+        let at = |k: f32| {
+            (
+                self.yaw + (leaned.0 - self.yaw) * k,
+                self.pitch + (leaned.1 - self.pitch) * k,
+            )
+        };
+        let fits =
+            |(yaw, pitch): (f32, f32)| self.covers(self.camera(self.bx.middle(), yaw, pitch, dist));
+        if fits(leaned) || !fits(at(0.0)) {
+            return leaned;
+        }
+        let (mut lo, mut hi) = (0.0_f32, 1.0_f32);
+        for _ in 0..12 {
+            let m = 0.5 * (lo + hi);
+            if fits(at(m)) {
+                lo = m;
+            } else {
+                hi = m;
+            }
+        }
+        at(lo)
+    }
+
     /// Whether `p`, in the box's pixels, is inside the safe margin of `camera`'s view.
     fn within(&self, camera: SceneCamera, p: (f32, f32)) -> bool {
         let (u, v) = self.seen(camera, p);
@@ -661,9 +692,12 @@ impl Follow {
         } else {
             aim_now
         };
-        // 2. A fast pointer pulls the camera back for a moment.
         let raw = (pointer.0 - self.last.0).hypot(pointer.1 - self.last.1) / dt;
         self.last = pointer;
+        if self.follow.hold_zoom {
+            return self.step_held(&t, follow, pointer, (r, zone), dt);
+        }
+        // 2. A fast pointer pulls the camera back for a moment.
         let speed = self.speed.step(raw, 0.12, dt).max(0.0);
         let pull = 1.0 + (speed / t.fast).clamp(0.0, 1.0);
         let centre = bx.middle();
@@ -685,16 +719,7 @@ impl Follow {
             want = t.inside(follow, yaw, pitch, want_dist);
         }
         // 4. Glide there through two springs, faster the nearer the pointer is to leaving.
-        let urgency = ((r - zone) / (0.85 - zone)).clamp(0.0, 1.0);
-        let time = 0.5 * t.follow_time * (1.0 - 0.5 * urgency) * if r > 1.0 { 0.6 } else { 1.0 };
-        let a1 = (
-            self.aim[0].step(want.0, time, dt),
-            self.aim[2].step(want.1, time, dt),
-        );
-        let aim = (
-            self.aim[1].step(a1.0, time, dt),
-            self.aim[3].step(a1.1, time, dt),
-        );
+        let aim = self.glide(want, t.follow_time, (r, zone), dt);
         // 5. Lean with the look point's speed, settling back to the resting angle.
         let (vx, vy) = (self.aim[1].v, self.aim[3].v);
         let lean = |v: f32| (v * t.lean_per_speed).clamp(-t.lean_max, t.lean_max);
@@ -714,6 +739,80 @@ impl Follow {
         // 7. The safe margin (#1216): if the springs left the pointer past it, slide the
         //    look point toward the pointer just far enough to put it back on the margin,
         //    and carry the springs along so they don't pull it out again.
+        let aim = t.keep_in_margin(aim, yaw, pitch, dist, pointer);
+        self.aim[0].x = aim.0;
+        self.aim[1].x = aim.0;
+        self.aim[2].x = aim.1;
+        self.aim[3].x = aim.1;
+        t.camera(aim, yaw, pitch, dist)
+    }
+
+    /// The glide of the look point toward `want` through its two springs, faster the
+    /// nearer the pointer, at `r` in the view, is to leaving.
+    fn glide(
+        &mut self,
+        want: (f32, f32),
+        follow_time: f32,
+        (r, zone): (f32, f32),
+        dt: f32,
+    ) -> (f32, f32) {
+        let urgency = ((r - zone) / (0.85 - zone)).clamp(0.0, 1.0);
+        let time = 0.5 * follow_time * (1.0 - 0.5 * urgency) * if r > 1.0 { 0.6 } else { 1.0 };
+        let a1 = (
+            self.aim[0].step(want.0, time, dt),
+            self.aim[2].step(want.1, time, dt),
+        );
+        (
+            self.aim[1].step(a1.0, time, dt),
+            self.aim[3].step(a1.1, time, dt),
+        )
+    }
+
+    /// Steps 2 to 7 with the zoom held (ADR-0161): the distance is the zoom's, gliding
+    /// only when the zoom changes, and never pulled back or moved in. At the box's edges
+    /// the look point is held so the frame stops at the edge, and the lean is limited to
+    /// what keeps the frame on the box from that distance.
+    fn step_held(
+        &mut self,
+        t: &Tuning,
+        follow: (f32, f32),
+        pointer: (f32, f32),
+        (r, zone): (f32, f32),
+        dt: f32,
+    ) -> SceneCamera {
+        let centre = t.bx.middle();
+        // The distance: the zoom's, or the farthest the box fills the frame at rest.
+        let goal = (t.dist / self.zoom)
+            .min(0.97 * t.max_dist(centre, t.yaw, t.pitch))
+            .max(1.0);
+        let mut dist = self.log_dist.step(goal.ln(), t.zoom_time, dt).exp();
+        // A box that shrank leaves the glide past what fills the frame: hold it there.
+        let limit = t.max_dist(centre, t.yaw, t.pitch);
+        if limit > 0.0 && dist > limit {
+            dist = limit;
+            self.log_dist = Smooth {
+                x: limit.ln(),
+                v: self.log_dist.v.min(0.0),
+            };
+        }
+        // 3. Slide the look point back by any overshoot past the box; never move in.
+        let (yaw_now, pitch_now) = (self.yaw.x, self.pitch.x);
+        let want = t.inside(follow, yaw_now, pitch_now, dist);
+        // 4. Glide there through two springs.
+        let aim = self.glide(want, t.follow_time, (r, zone), dt);
+        // 5. Lean with the look point's speed, but only as far as keeps the frame on the
+        //    box from this distance: a lean that would show past it is scaled back.
+        let (vx, vy) = (self.aim[1].v, self.aim[3].v);
+        let lean = |v: f32| (v * t.lean_per_speed).clamp(-t.lean_max, t.lean_max);
+        let leaned = (
+            self.yaw.step(t.yaw + lean(vx), t.lean_time, dt),
+            self.pitch.step(t.pitch - lean(vy), t.lean_time, dt),
+        );
+        let (yaw, pitch) = t.held_lean(leaned, dist);
+        self.yaw.x = yaw;
+        self.pitch.x = pitch;
+        // 6 and 7. Hold the frame on the box, then keep the pointer inside the safe margin.
+        let aim = t.inside(aim, yaw, pitch, dist);
         let aim = t.keep_in_margin(aim, yaw, pitch, dist, pointer);
         self.aim[0].x = aim.0;
         self.aim[1].x = aim.0;
@@ -918,6 +1017,102 @@ mod tests {
                 worst <= 0.801,
                 "zoom {zoom}, {smooth_ms} ms: reached {worst}"
             );
+        }
+    }
+
+    /// ADR-0161: with the zoom held, a pointer sweeping fast along the screen's edges
+    /// and into its corners never changes the camera's distance, and the frame stays
+    /// on the screen: at an edge the camera only pans. Off, the same path zooms.
+    #[test]
+    fn a_held_zoom_only_pans_at_the_edges() {
+        let path = |i: i64| -> (f32, f32) {
+            // Round the screen's border, 20 px in, once every 90 frames, then corners.
+            let s = (i % 90) as f32 / 90.0 * 4.0;
+            let (x0, x1, y0, y1) = (20.0, 1420.0, 20.0, 880.0);
+            match s as u32 {
+                0 => (x0 + (x1 - x0) * s.fract(), y0),
+                1 => (x1, y0 + (y1 - y0) * s.fract()),
+                2 => (x1 - (x1 - x0) * s.fract(), y1),
+                _ => (x0, y1 - (y1 - y0) * s.fract()),
+            }
+        };
+        let spread = |hold_zoom: bool, zoom: f32| {
+            let follow = CameraFollow {
+                zoom: Finite32::new(zoom).expect("finite"),
+                lean_deg: Finite32::new(30.0).expect("finite"),
+                hold_zoom,
+                ..follow()
+            };
+            let mut cameras = Cameras::default();
+            let family = SceneId::new("a");
+            let (mut near, mut far) = (f32::MAX, f32::MIN);
+            for i in 0..270 {
+                let camera = cameras.follow(
+                    &family,
+                    &follow,
+                    base(),
+                    CANVAS,
+                    SCREEN,
+                    Some(path(i)),
+                    (ms(i * 16), 0),
+                );
+                let fp = on_box(camera).expect("the frame meets the screen");
+                assert!(
+                    fp.iter()
+                        .all(|p| (-2.0..1442.0).contains(&p.0) && (-2.0..902.0).contains(&p.1)),
+                    "hold {hold_zoom}, zoom {zoom}, frame {i} shows past the screen"
+                );
+                // A second call for the same time gives the same camera.
+                let again = cameras.follow(
+                    &family,
+                    &follow,
+                    base(),
+                    CANVAS,
+                    SCREEN,
+                    Some(path(i)),
+                    (ms(i * 16), 0),
+                );
+                let gap = (again.position.x.get() - camera.position.x.get())
+                    .hypot(again.position.y.get() - camera.position.y.get())
+                    .hypot(again.position.z.get() - camera.position.z.get());
+                assert!(gap < 0.01, "frame {i} moved {gap} on a second call");
+                let d = camera.target_distance();
+                near = near.min(d);
+                far = far.max(d);
+            }
+            far / near
+        };
+        for zoom in [1.0, 2.0, 4.0] {
+            let held = spread(true, zoom);
+            assert!(held < 1.001, "zoom {zoom}: the distance changed by {held}");
+        }
+        assert!(spread(false, 2.0) > 1.05, "without it the edges zoom");
+    }
+
+    /// ADR-0161: with the zoom held, a box that shrinks while it is followed (a resized
+    /// window, an edited item) never leaves the frame showing past it.
+    #[test]
+    fn a_held_zoom_stays_on_a_box_that_shrinks() {
+        let mut cameras = Cameras::default();
+        let family = SceneId::new("a");
+        let small = FollowBox {
+            size: [720.0, 450.0],
+            ..SCREEN
+        };
+        for i in 0..120 {
+            let bx = if i < 30 { SCREEN } else { small };
+            let pointer = (bx.size[0] * 0.5, bx.size[1] * 0.5);
+            let camera = cameras.follow(
+                &family,
+                &follow(),
+                base(),
+                CANVAS,
+                bx,
+                Some(pointer),
+                (ms(i * 16), 0),
+            );
+            let t = Tuning::new(&follow(), base(), CANVAS, bx);
+            assert!(t.covers(camera), "frame {i} shows past the box");
         }
     }
 
