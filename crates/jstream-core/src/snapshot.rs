@@ -946,8 +946,9 @@ impl TrackCameras {
             return if leaving { from } else { to };
         }
         match (from, to) {
-            (Some(from), Some(to)) if from != to => {
-                Some(lerp_camera(&from, &to, self.timing.progress(elapsed_ms)))
+            (Some(from), Some(to)) if from != to || self.via.iter().any(|c| c != to) => {
+                let k = self.timing.progress(elapsed_ms);
+                Some(move_camera(&from, &self.via, &to, k, self.orbit))
             }
             _ => to,
         }

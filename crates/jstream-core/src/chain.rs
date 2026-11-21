@@ -3366,9 +3366,11 @@ mod tests {
                 unmatched: jstream_protocol::TransitionEffect::None,
                 stagger_ms: 0,
                 stinger: None,
+                orbit: false,
             },
             by_item: true,
             from_camera: crate::transition::camera_of(&graph, &main),
+            via: Vec::new(),
         };
         let switching = draw(&graph, sky(true), Some(&running)).expect("an adapter");
         assert_eq!(
