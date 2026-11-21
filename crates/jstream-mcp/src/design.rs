@@ -10,7 +10,8 @@
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
 //! light by role, use the light and framing filters (bloom, glow, vignette, scanlines) and
 //! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
-//! set with a scene camera (ADR-0094) and its depth of field (ADR-0108), which
+//! set with a scene camera (ADR-0094), its depth of field (ADR-0108) and a sky backdrop
+//! (ADR-0167), which
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
@@ -230,6 +231,30 @@ To reframe a 3D scene live without an edit, `scene.aim_camera` pans and tilts it
 camera in degrees from the stored view and zooms it (1-8), gliding there; the aim \
 `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera, and `scene.camera_aim` \
 reads it. \
+A sky all around a 3D set (open sky, a city, space) is a `light` source of `type` \
+`environment` placed in the scene with `backdrop` on: it fills everything behind the \
+items, infinitely far away, so it turns as the camera looks around and never shifts \
+as the camera moves, and its `image` takes an equirectangular panorama (2:1, centre \
+straight ahead) or any live source in its place. `stars` (0-1, about 0.3-0.6 for a \
+clear night or deep space, on dark sky colours) scatters fixed points of light over \
+it, `star_brightness` sets how bright, the item's `turn_deg` spins the sky, and the \
+same sky lights scene-lit models. For deep space add `nebula` (0.4-0.8) in two colours \
+(`nebula_color`, `nebula_color_2`; keep them deep and saturated, the clouds glow over \
+black) and a `galaxy` band (0.3-0.7); `sky_seed` picks another layout and another kind \
+of nebula (large or small clouds, sparse wisps or a full cloudscape, calm or churning, \
+threaded, dusty, gathered or spread), so try a few seeds. Settings aren't keyframed: \
+for a sky that changes between keyframe scenes, give each scene its own environment \
+light source (another seed or colours), and a transition cross-fades the skies. `warp` \
+(0-1) streams the sky past toward its centre ahead: stars stretch into streaks that \
+burst out ahead, slide past at the sides and converge behind, right from any camera \
+angle; they crowd ahead in bluer, brighter light and thin behind in redder, dimmer \
+light over a blue glow ahead, and the nebulae and band fade out as it builds and zoom \
+back out from straight ahead as it drops. \
+One `source.set_settings` of `warp` jumps: the sky accelerates to it over \
+`warp_ramp_s` (default 1.5 s) by itself, and setting 0 slows back out; 0.6-1 is a \
+jump, about 0.05-0.15 a slow cruise. Add a brief white flash card or `bloom` at the \
+jump for punch. A flat photo stretched as a panorama smears toward \
+the top and bottom, so prefer a real panorama or the procedural sky. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \

@@ -628,6 +628,65 @@ struct Running {
     warned: bool,
 }
 
+/// A scene's sky backdrop from frame to frame (ADR-0167).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct SkyState {
+    /// The cache frame that last drew it.
+    pub(crate) drawn: Option<u64>,
+    /// The cache frame its travel last advanced in, and the media time then.
+    pub(crate) stepped: Option<(u64, f64)>,
+    /// The warp it streams at now, moving toward its setting at its ramp's pace.
+    pub(crate) warp: f32,
+    /// How far its stars have moved away from the direction of travel
+    /// ([`jstream_render::SkyDraw::travel`]).
+    pub(crate) travel: f64,
+    /// Whether its warp is heading down toward a lower setting.
+    pub(crate) dropping: f32,
+}
+
+impl SkyState {
+    /// Advances the sky to `at_s` seconds, once per cache `frame`: its warp moves toward
+    /// `target` by one over `ramp_s` seconds (at once for a ramp of 0), and its travel by
+    /// [`jstream_render::SkyDraw::travel_rate`] of that warp. The first step starts at
+    /// `target`; a step back in time or of over a second, as a seek makes, takes the
+    /// warp to `target` and moves nothing, and a step of no time, a held or paused clock
+    /// still drawing, keeps it as it is. It is dropping while its warp is still above
+    /// `target`, easing out as it nears a `target` above 0.
+    pub(crate) fn step(&mut self, frame: u64, at_s: f64, (target, ramp_s): (f32, f32)) {
+        match self.stepped {
+            Some((stepped, _)) if stepped == frame => return,
+            // A step of no time (a held or paused clock still drawing) moves nothing and
+            // keeps the warp, rather than jumping it to the setting.
+            Some((_, last)) if at_s >= last && at_s - last <= 1.0 => {
+                let dt = (at_s - last) as f32;
+                let before = self.warp;
+                self.warp = if ramp_s > 0.0 {
+                    let most = dt / ramp_s;
+                    before + (target - before).clamp(-most, most)
+                } else {
+                    target
+                };
+                // The mean of the two speeds over the step.
+                let rate = (jstream_render::SkyDraw::travel_rate(before)
+                    + jstream_render::SkyDraw::travel_rate(self.warp))
+                    * 0.5;
+                self.travel += rate * f64::from(dt);
+            }
+            _ => self.warp = target,
+        }
+        // Dropping in full while above the setting, easing out over the last 0.15 toward
+        // a setting above 0 (a drop to 0 ends continuous, with nothing to ease).
+        self.dropping = if target >= self.warp {
+            0.0
+        } else if target <= 0.0 {
+            1.0
+        } else {
+            ((self.warp - target) / 0.15).min(1.0)
+        };
+        self.stepped = Some((frame, at_s));
+    }
+}
+
 /// The filters one compositor runs, by owner, kept from frame to frame.
 #[derive(Default)]
 pub(crate) struct Chains {
@@ -667,6 +726,10 @@ pub(crate) struct Chains {
     /// The scenes whose extra environment lights were logged, once each (ADR-0151
     /// decision 9).
     pub(crate) environments_warned: BTreeSet<jstream_protocol::SceneId>,
+    /// Each 3D scene's sky backdrop (ADR-0167): the frame it was last drawn in, as a
+    /// scene places its [`GpuKey::Sky`] layer only in the frame that drew it, and how
+    /// far its stars have travelled at warp.
+    pub(crate) skies: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, SkyState>>,
     /// Each 3D scene's view depth (ADR-0143 decision 4), as its composite last drew it,
     /// with the frame of the chains' run that drew it: a scene's depth-reading filters
     /// read it only in that run. Kept, like a scene layer a filter reads, to tell when
@@ -1048,13 +1111,19 @@ impl Chains {
     /// Whether the chains' passes drew scene layer `key` this frame, so a mix's pass
     /// for it reads that layer as it is instead of drawing it again.
     pub(crate) fn reuse(&self, key: &GpuKey) -> bool {
-        let drawn = self.drawn.contains(key);
+        let drawn = self.holds_layer(key);
         #[cfg(test)]
         if drawn {
             self.reused
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         drawn
+    }
+
+    /// [`Self::reuse`] without counting a read: whether the chains' passes drew scene
+    /// layer `key` this frame.
+    pub(crate) fn holds_layer(&self, key: &GpuKey) -> bool {
+        self.drawn.contains(key)
     }
 
     pub(crate) fn drew_box(&mut self, owner: &ChainOwner) {
@@ -3074,6 +3143,15 @@ mod tests {
                 horizon: blue,
                 ground: blue,
                 image: image.map(SourceId::new),
+                backdrop: false,
+                stars: 0.0,
+                star_brightness: 1.0,
+                nebula: 0.0,
+                nebula_colors: [[0.0; 3]; 2],
+                galaxy: 0.0,
+                sky_seed: 0,
+                warp: 0.0,
+                warp_ramp_s: 0.0,
             }),
         };
         let Some(tinted) = lit_centre(&graph, sky(None)) else {
@@ -3136,6 +3214,193 @@ mod tests {
             pixel[0] > 60 && pixel[0] > pixel[2] + 40,
             "the picture lights the plane red: {pixel:?}"
         );
+    }
+
+    /// ADR-0167: a backdrop's travel advances by its rate times the media time between
+    /// frames, once per cache frame, and a seek or a long pause moves nothing.
+    #[test]
+    fn a_sky_travels_at_its_rate_once_a_frame() {
+        let rate = jstream_render::SkyDraw::travel_rate;
+        let mut sky = crate::chain::SkyState::default();
+        sky.step(1, 10.0, (1.0, 0.0));
+        assert_eq!(
+            (sky.travel, sky.warp),
+            (0.0, 1.0),
+            "the first frame starts at its warp"
+        );
+        sky.step(2, 10.5, (1.0, 0.0));
+        assert!((sky.travel - rate(1.0) * 0.5).abs() < 1e-9);
+        sky.step(2, 10.9, (1.0, 0.0));
+        assert!(
+            (sky.travel - rate(1.0) * 0.5).abs() < 1e-9,
+            "once per frame"
+        );
+        let before = sky.travel;
+        sky.step(3, 30.0, (0.0, 2.0));
+        assert_eq!(
+            (sky.travel, sky.warp),
+            (before, 0.0),
+            "a jump moves nothing"
+        );
+        // Ramping from 0 toward 1 over 2 s: half a second in, the warp is a quarter.
+        sky.step(4, 30.5, (1.0, 2.0));
+        assert!((sky.warp - 0.25).abs() < 1e-6, "{}", sky.warp);
+        let ramped = before + (rate(0.0) + rate(0.25)) * 0.5 * 0.5;
+        assert!((sky.travel - ramped).abs() < 1e-6);
+        sky.step(5, 29.0, (1.0, 2.0));
+        assert!(
+            (sky.travel - ramped).abs() < 1e-6,
+            "back in time moves nothing"
+        );
+        // A held clock: frames at one time keep the warp where it is.
+        sky.step(50, 40.0, (0.0, 0.0));
+        sky.step(51, 40.0, (1.0, 2.0));
+        sky.step(52, 40.0, (1.0, 2.0));
+        assert_eq!(sky.warp, 0.0, "no time, no ramp and no jump");
+        sky.step(53, 40.5, (1.0, 2.0));
+        assert!((sky.warp - 0.25).abs() < 1e-6, "{}", sky.warp);
+        sky.step(5, 29.0, (1.0, 2.0));
+        assert_eq!(sky.dropping, 0.0, "at its setting, it isn't dropping");
+        // Setting it lower: dropping until the warp gets there.
+        sky.step(6, 29.5, (0.0, 2.0));
+        assert!(
+            sky.dropping == 1.0 && (sky.warp - 0.75).abs() < 1e-6,
+            "{}",
+            sky.warp
+        );
+        sky.step(7, 30.5, (0.0, 2.0));
+        assert!((sky.warp - 0.25).abs() < 1e-6 && sky.dropping == 1.0);
+        sky.step(8, 31.0, (0.0, 2.0));
+        assert!(sky.warp == 0.0 && sky.dropping == 0.0, "it arrives");
+        // Toward a cruise above 0 it eases out over the last 0.15.
+        sky.step(9, 31.5, (1.0, 0.0));
+        sky.step(10, 32.0, (0.1, 4.0));
+        assert!((sky.dropping - 1.0).abs() < 1e-6);
+        sky.step(11, 33.0, (0.1, 4.0));
+        sky.step(12, 34.0, (0.1, 4.0));
+        sky.step(13, 34.9, (0.1, 4.0));
+        assert!(
+            (sky.warp - 0.15).abs() < 1e-5 && (sky.dropping - 1.0 / 3.0).abs() < 1e-4,
+            "{}",
+            sky.dropping
+        );
+    }
+
+    /// ADR-0167: an environment light drawn as a backdrop fills a 3D scene's background
+    /// with its sky, under its cards; turned off, or in a scene without a camera, the
+    /// background shows; and it stays while a transition runs.
+    #[test]
+    fn an_environment_backdrop_draws_the_sky_behind_a_3d_scene() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (16.0, 8.0), 0.0)]);
+        let main = SceneId::new("main");
+        let camera = Edit::SceneSetCamera {
+            scene_id: main.clone(),
+            camera: Some(jstream_protocol::SceneCamera::framing(
+                jstream_protocol::Canvas {
+                    width: CANVAS.0,
+                    height: CANVAS.1,
+                },
+            )),
+        };
+        let blue = [0.0, 0.0, 1.0];
+        let sky = |backdrop: bool| jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Environment,
+            color: [1.0; 3],
+            intensity: 1.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.3,
+            environment: Some(jstream_sources::ShownEnvironment {
+                sky: blue,
+                horizon: blue,
+                ground: blue,
+                image: None,
+                backdrop,
+                stars: 0.0,
+                star_brightness: 1.0,
+                nebula: 0.0,
+                nebula_colors: [[0.0; 3]; 2],
+                galaxy: 0.0,
+                sky_seed: 0,
+                warp: 0.0,
+                warp_ramp_s: 0.0,
+            }),
+        };
+        let white = Frame::new(4, 4, &[255; 4 * 4 * 4], 2).expect("invariant: 4x4 RGBA8");
+        let draw = |graph: &Graph,
+                    light: jstream_sources::ShownLight,
+                    running: Option<&crate::transition::Running>| {
+            let lamp = Frame::new(1, 1, &[0; 4], 3)
+                .expect("invariant: 1x1 RGBA8")
+                .with_light(Some(light));
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&main),
+                running.map(|running| (running, running.start)),
+                &mut |id| {
+                    Some(Look::frame(
+                        if id.as_str() == "cam" {
+                            white.clone()
+                        } else {
+                            lamp.clone()
+                        },
+                        None,
+                    ))
+                },
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            Some(draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &LiveParams::default()),
+                &[(2, 2), (32, 18)],
+            ))
+        };
+        // Without a camera there is no backdrop.
+        let Some(flat) = draw(&graph, sky(true), None) else {
+            return;
+        };
+        assert_eq!(flat[0][..3], [0, 0, 0], "a 2D scene: {flat:?}");
+        apply(&mut graph, vec![camera]);
+        let shown = draw(&graph, sky(true), None).expect("an adapter");
+        assert_eq!(shown[0], [0, 0, 255, 255], "the sky behind: {shown:?}");
+        assert_eq!(
+            shown[1],
+            [255, 255, 255, 255],
+            "the card over it: {shown:?}"
+        );
+        let off = draw(&graph, sky(false), None).expect("an adapter");
+        assert_eq!(off[0][..3], [0, 0, 0], "no backdrop: {off:?}");
+        let running = crate::transition::Running {
+            from: crate::transition::From::Scene(main.clone()),
+            to: main.clone(),
+            start: MediaTime::zero(Timebase::MILLIS),
+            run: crate::transition::Run {
+                preset_id: jstream_protocol::TransitionPresetId::new("move"),
+                pairs: true,
+                duration_ms: 500,
+                easing: jstream_protocol::Easing::Linear,
+                unmatched: jstream_protocol::TransitionEffect::None,
+                stagger_ms: 0,
+                stinger: None,
+            },
+            by_item: true,
+            from_camera: crate::transition::camera_of(&graph, &main),
+        };
+        let switching = draw(&graph, sky(true), Some(&running)).expect("an adapter");
+        assert_eq!(
+            switching[0],
+            [0, 0, 255, 255],
+            "while switching: {switching:?}"
+        );
+        assert_eq!(switching[1], [255, 255, 255, 255], "{switching:?}");
     }
 
     /// ADR-0143 decisions 2 and 3: a `scene`-lit model in a 3D scene is lit by the light
