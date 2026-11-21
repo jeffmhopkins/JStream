@@ -1918,6 +1918,14 @@ impl Engine {
         self
     }
 
+    /// How many handles on this engine there are, this one included: every clone and
+    /// every open session holds one. The engine stops when the last one goes, so a host
+    /// shutting down logs this to say whether its own drop will stop it (#1564).
+    #[must_use]
+    pub fn handles(&self) -> usize {
+        Arc::strong_count(&self.shared)
+    }
+
     /// Opens a new client session. It must send `hello` before any call.
     pub fn connect(&self) -> InProcessControl {
         InProcessControl::new(self.clone())

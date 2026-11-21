@@ -17,8 +17,9 @@
 //!   ([`crate::network`]), and no other. The UI calls them through the bootstrap
 //!   global's `browse` and `allowNetwork`, and talks to the engine only over the
 //!   WebSocket API. The scheme's one other answer is the update check.
-//! - When the app exits, the host stops: the server closes its connections and the
-//!   engine stops.
+//! - Closing the main window quits the app, closing any projector with it. When the app
+//!   exits, the host stops: the server closes its connections and the engine stops, each
+//!   step against a deadline and logged with how long it took (`Host::stop`).
 //!
 //! Docs: apps/jstream-desktop/README.md#design
 
@@ -31,7 +32,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use tauri::http::{Response, StatusCode};
 use tauri::webview::{NewWindowFeatures, NewWindowResponse};
-use tauri::{AppHandle, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, Wry};
+use tauri::{AppHandle, RunEvent, Url, WebviewUrl, WebviewWindowBuilder, WindowEvent, Wry};
 
 /// The window's label.
 const MAIN: &str = "main";
@@ -250,14 +251,41 @@ pub fn run(
         })?;
     let mut host = host;
     let mut ptz_controllers = ptz_controllers;
-    app.run(move |_app, event| {
-        if let RunEvent::Exit = event {
+    app.run(move |app, event| match event {
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::CloseRequested { .. },
+            ..
+        } => tracing::info!(window = %label, "shutdown: a window was asked to close"),
+        RunEvent::WindowEvent {
+            label,
+            event: WindowEvent::Destroyed,
+            ..
+        } => {
+            tracing::info!(window = %label, "a window closed");
+            // Closing the main window quits the app, projectors and all: a projector
+            // left open would otherwise keep it running with no way back to the
+            // controls (#1564).
+            if label == MAIN {
+                app.exit(0);
+            }
+        }
+        RunEvent::ExitRequested { .. } => tracing::info!("shutdown: the app is exiting"),
+        RunEvent::Exit => {
+            let started = std::time::Instant::now();
             // The endpoints close first, ending their sessions and so their drives.
-            drop(ptz_controllers.take());
+            if ptz_controllers.take().is_some() {
+                tracing::info!(
+                    ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                    "shutdown: the PTZ controller endpoints closed"
+                );
+            }
             if let Some(host) = host.take() {
                 host.stop();
             }
+            tracing::info!("shutdown: done; the process ends");
         }
+        _ => {}
     });
     Ok(())
 }

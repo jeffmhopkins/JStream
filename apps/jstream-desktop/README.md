@@ -387,7 +387,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   does ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)), each file in a
   `jstream-plugin-host.exe` started from beside the app, so they show in Settings ›
   Audio plugins and Add filter; elsewhere the engine says CLAP is hosted on Windows only.
-  When the app exits, the server closes its connections and the engine stops.
+  When the app exits, the server closes its connections and the engine stops, each
+  step against a deadline (`Host::stop`): the server gets 3 s, its runtime's last tasks
+  1 s, and the engine 5 s, let go of on a thread of its own so the wait can end. A step
+  past its deadline is logged and left behind, and the app exits anyway; on Windows the
+  browser helper's job ends its processes with the app's. Every step logs a `shutdown:`
+  line with how long it took (as do the window's close and the PTZ endpoints), the
+  browser helper logs when it is asked to exit and when it has, and a pipeline thread
+  that takes 250 ms or more to stop is logged by name, so the log's last lines name what
+  an exit waited on (#1564).
 - **Network access** (`network.rs`, [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)
   decision 1). The setting is `{"allow": true}` in the data folder's `network.json`,
   written user-only and replaced whole; a missing, unreadable or malformed file is off.
@@ -544,7 +552,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   window opens only for one of the UI's projector pages (`?projector=`, the UI's
   `projector.rs`): another window of the app with the same rules and script, starting
   on `about:blank` as a window handed back to `window.open` must, placed and sized as
-  the page asked, and full screen when it asked for that (`&full=1`). A link to one of
+  the page asked, and full screen when it asked for that (`&full=1`). Closing the main
+  window quits the app and closes every projector with it, so a projector left open
+  can't keep the app running with no way back to its controls. A link to one of
   the project's own pages on GitHub (`links.rs`: the repository's URL from the
   workspace's `repository`, or a path, query or fragment under it written only with
   ASCII letters, digits and `/ # ? . _ = & -`, as the UI's Help menu, Check for updates

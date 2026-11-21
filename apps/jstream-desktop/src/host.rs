@@ -22,7 +22,7 @@ use std::fmt::Write as _;
 use std::net::{Ipv4Addr, SocketAddr};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 use tokio::runtime::Runtime;
 use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
@@ -40,7 +40,16 @@ use {
 };
 
 /// How long [`Host::stop`] waits for the server to close its connections.
-const STOP_TIMEOUT: Duration = Duration::from_secs(5);
+const SERVER_STOP: Duration = Duration::from_secs(3);
+
+/// How long [`Host::stop`] then waits for the runtime's other tasks: once the server has
+/// stopped, only its sessions' last drops are left.
+const RUNTIME_STOP: Duration = Duration::from_secs(1);
+
+/// How long [`Host::stop`] then waits for the engine itself to stop: its pipeline
+/// threads, captures and browser helper. Past it the app exits anyway, and the browser
+/// helper's job ends its processes with the app's (#1186, #1564).
+const ENGINE_STOP: Duration = Duration::from_secs(5);
 
 /// The port `--mcp` listens on when `--port` names none: the one the docs' examples use,
 /// so an MCP client's configuration can be copied as it is.
@@ -85,6 +94,10 @@ pub struct Host {
     hotkeys: Option<JoinHandle<()>>,
     /// Whether that listener hears wheel chords while another app has the focus.
     global_wheel: bool,
+    /// The host's own handle on the engine, let go last in [`Host::stop`], on a thread
+    /// it waits for at most [`ENGINE_STOP`], so the engine stops there and not in a
+    /// runtime task the runtime's shutdown would abandon.
+    engine: Option<Arc<Engine>>,
 }
 
 impl Host {
@@ -106,6 +119,7 @@ impl Host {
         agents: Option<&Agents>,
         network: Option<&Network>,
     ) -> anyhow::Result<Host> {
+        let held = Arc::clone(&engine);
         let runtime = tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .thread_name("jstream-host")
@@ -212,6 +226,7 @@ impl Host {
             network,
             hotkeys,
             global_wheel,
+            engine: Some(held),
         })
     }
 
@@ -255,9 +270,15 @@ impl Host {
         self.global_wheel
     }
 
-    /// Stops the server, closing every connection, and waits for it (at most
-    /// 5 s). The engine stops when its last session goes.
+    /// Stops the server, closing every connection, then the engine, each step against
+    /// its own deadline: at most 3 s, 1 s and 5 s (`SERVER_STOP`, `RUNTIME_STOP`,
+    /// `ENGINE_STOP`).
+    /// A step past its deadline is logged and left behind, so the app still exits. Each
+    /// step logs as it ends, so the log's last `shutdown:` line names the one an exit
+    /// waited on (#1564).
     pub fn stop(mut self) {
+        let started = Instant::now();
+        tracing::info!("shutdown: stopping the engine's server");
         // Lets every global hotkey go first.
         if let Some(hotkeys) = self.hotkeys.take() {
             hotkeys.abort();
@@ -266,18 +287,119 @@ impl Host {
             let _ = stop.send(());
         }
         if let Some(serving) = self.serving.take() {
-            match self
+            let step = Instant::now();
+            let stopped = self
                 .runtime
-                .block_on(async { tokio::time::timeout(STOP_TIMEOUT, serving).await })
-            {
-                Ok(Ok(Ok(()))) => tracing::info!("engine server stopped"),
-                Ok(Ok(Err(error))) => tracing::warn!(%error, "engine server failed"),
-                Ok(Err(error)) => tracing::warn!(%error, "engine server task failed"),
-                Err(_) => tracing::warn!("engine server did not stop in time"),
+                .block_on(async { tokio::time::timeout(SERVER_STOP, serving).await });
+            let ms = millis(step);
+            match stopped {
+                Ok(Ok(Ok(()))) => tracing::info!(ms, "shutdown: the engine's server stopped"),
+                Ok(Ok(Err(error))) => {
+                    tracing::warn!(ms, %error, "shutdown: the engine's server failed");
+                }
+                Ok(Err(error)) => {
+                    tracing::warn!(ms, %error, "shutdown: the engine's server task failed");
+                }
+                Err(_) => tracing::warn!(
+                    ms,
+                    "shutdown: the engine's server did not stop in time; its connections \
+                     are dropped with the runtime"
+                ),
             }
         }
-        self.runtime.shutdown_timeout(STOP_TIMEOUT);
+        let step = Instant::now();
+        self.runtime.shutdown_timeout(RUNTIME_STOP);
+        let ms = millis(step);
+        if step.elapsed() >= RUNTIME_STOP {
+            tracing::warn!(
+                ms,
+                "shutdown: the server's runtime still had work when its time was up; \
+                 going on without it"
+            );
+        } else {
+            tracing::info!(ms, "shutdown: the server's runtime stopped");
+        }
+        if let Some(engine) = self.engine.take() {
+            stop_engine(engine, ENGINE_STOP);
+        }
+        tracing::info!(ms = millis(started), "shutdown: the host stopped");
     }
+}
+
+/// Lets go of the host's handle on `engine` on a thread of its own, and waits at most
+/// `deadline` for it. The last handle's drop stops the engine: its pipeline joins its
+/// threads, its captures close their devices and its browser backend waits for its
+/// helper. Another handle still held (a session the runtime abandoned) keeps it running
+/// until that one goes, which is logged.
+fn stop_engine(engine: Arc<Engine>, deadline: Duration) {
+    let others = (Arc::strong_count(&engine) - 1) + (engine.handles() - 1);
+    if others > 0 {
+        tracing::warn!(
+            others,
+            "shutdown: the engine is still held elsewhere; it stops when the last handle goes"
+        );
+    } else {
+        tracing::info!("shutdown: stopping the engine");
+    }
+    match finish_within("jstream-engine-stop", deadline, move || drop(engine)) {
+        Some(took) => tracing::info!(
+            ms = u64::try_from(took.as_millis()).unwrap_or(u64::MAX),
+            "shutdown: the engine stopped"
+        ),
+        None => tracing::warn!(
+            ms = u64::try_from(deadline.as_millis()).unwrap_or(u64::MAX),
+            "shutdown: the engine did not stop in time; the app exits without waiting for \
+             it (the engine's last lines above say what it was waiting for)"
+        ),
+    }
+}
+
+/// Runs `work` on a new thread named `name` and waits at most `deadline` for it:
+/// how long it took, or `None` when it is still running at the deadline (it is left to
+/// run) or panicked. With no thread to be had, it runs here, without the deadline.
+fn finish_within(
+    name: &str,
+    deadline: Duration,
+    work: impl FnOnce() + Send + 'static,
+) -> Option<Duration> {
+    let started = Instant::now();
+    let (done, finished) = std::sync::mpsc::channel();
+    let work = std::sync::Arc::new(std::sync::Mutex::new(Some(work)));
+    let theirs = std::sync::Arc::clone(&work);
+    let spawned = std::thread::Builder::new()
+        .name(name.to_owned())
+        .spawn(move || {
+            let taken = theirs
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(work) = taken {
+                work();
+            }
+            let _ = done.send(());
+        });
+    match spawned {
+        Ok(_) => finished
+            .recv_timeout(deadline)
+            .ok()
+            .map(|()| started.elapsed()),
+        Err(error) => {
+            tracing::warn!(%error, thread = name, "shutdown: no thread to stop on; stopping here");
+            let taken = work
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .take();
+            if let Some(work) = taken {
+                work();
+            }
+            Some(started.elapsed())
+        }
+    }
+}
+
+/// Milliseconds since `start`, for the shutdown log.
+fn millis(start: Instant) -> u64 {
+    u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX)
 }
 
 /// Starts the global hotkeys (ADR-0112 §5 and §6, `crate::hotkeys`) on `runtime`: the
@@ -1045,7 +1167,8 @@ fn opener(engine: Arc<OnceLock<Weak<Engine>>>, keys: Arc<dyn StreamKeyStore>) ->
 #[cfg(test)]
 mod tests {
     use super::{
-        Agents, Host, Network, VcamStatus, engine, new_token, startup_project_with, vcam_status,
+        Agents, Host, Network, VcamStatus, engine, finish_within, new_token, startup_project_with,
+        vcam_status,
     };
     use crate::ui::ORIGIN;
     use jstream_control::protocol::{Hello, PROTOCOL_VERSION};
@@ -1055,6 +1178,59 @@ mod tests {
     use std::io::{Read, Write};
     use std::net::TcpStream;
     use std::sync::Arc;
+
+    /// A shutdown step past its deadline is left behind, so stopping returns at the
+    /// deadline and not when the step ends (#1564); one that ends in time says how long
+    /// it took.
+    #[test]
+    fn a_shutdown_step_past_its_deadline_is_left_behind() {
+        use std::time::{Duration, Instant};
+        let (release, held) = std::sync::mpsc::channel::<()>();
+        let started = Instant::now();
+        let finished = finish_within("test-stuck-step", Duration::from_millis(100), move || {
+            let _ = held.recv_timeout(Duration::from_secs(30));
+        });
+        assert_eq!(finished, None);
+        assert!(started.elapsed() < Duration::from_secs(10));
+        drop(release);
+        let quick = finish_within("test-quick-step", Duration::from_secs(10), || {});
+        assert!(quick.is_some_and(|took| took < Duration::from_secs(10)));
+        // A step that panics hasn't finished.
+        let panicked = finish_within("test-panicking-step", Duration::from_secs(10), || {
+            panic!("the step failed");
+        });
+        assert_eq!(panicked, None);
+    }
+
+    /// Stopping the host stops the engine: its own handle is the last one once the
+    /// server has closed every session, and it returns well inside its deadlines.
+    #[test]
+    fn stopping_the_host_lets_the_engine_go() {
+        use std::time::{Duration, Instant};
+        // A data folder of its own: one shared with another test shares its list of
+        // recent projects, and so the collection that test's engine opens.
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-stop-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
+        let engine = engine(
+            &scratch.join("collection.json"),
+            &scratch,
+            Arc::new(AuditMemory::new()),
+            false,
+            &Secrets::new(),
+        )
+        .unwrap_or_else(|e| panic!("an engine: {e:#}"));
+        let weak = Arc::downgrade(&engine);
+        let host = Host::start(engine, ORIGIN, &Secrets::new(), None, None, None)
+            .unwrap_or_else(|e| panic!("a host: {e:#}"));
+        assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
+        let started = Instant::now();
+        host.stop();
+        assert!(started.elapsed() < Duration::from_secs(9));
+        assert!(weak.upgrade().is_none(), "the engine outlived the host");
+        let _ = std::fs::remove_dir_all(&scratch);
+    }
 
     /// `--no-vcam` is off whatever the registry says; the UI reads these exact values.
     #[test]
@@ -1098,15 +1274,17 @@ mod tests {
     /// The host serves its engine on localhost behind its token until it stops.
     #[test]
     fn serves_the_engine_behind_its_token_until_stopped() {
-        let collection = std::env::temp_dir().join(format!(
-            "jstream-desktop-collection-{}.json",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_file(&collection);
+        // A data folder of its own: one shared with another test shares its list of
+        // recent projects, and so the collection that test's engine opens.
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-collection-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
+        let collection = scratch.join("collection.json");
         let secrets = Secrets::new();
         let engine = engine(
             &collection,
-            &std::env::temp_dir(),
+            &scratch,
             Arc::new(AuditMemory::new()),
             true,
             &secrets,
@@ -1160,7 +1338,7 @@ mod tests {
         let again = client.block_on(WsControl::connect(WsConfig::new(&url, &token)));
         assert!(again.is_err(), "stopped");
         assert!(collection.is_file(), "the collection file was created");
-        let _ = std::fs::remove_file(&collection);
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 
     /// The status line of a WebSocket upgrade to `host`'s server with its token and
@@ -1188,14 +1366,16 @@ mod tests {
     /// The webview's origin is let in; another page's is refused, token or not.
     #[test]
     fn only_the_webview_origin_is_accepted() {
-        let collection = std::env::temp_dir().join(format!(
-            "jstream-desktop-origin-{}.json",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_file(&collection);
+        // A data folder of its own: one shared with another test shares its list of
+        // recent projects, and so the collection that test's engine opens.
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-origin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
+        let collection = scratch.join("collection.json");
         let engine = engine(
             &collection,
-            &std::env::temp_dir(),
+            &scratch,
             Arc::new(AuditMemory::new()),
             false,
             &Secrets::new(),
@@ -1206,7 +1386,7 @@ mod tests {
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
         assert_eq!(upgrade_status(&host, "http://evil.example"), "HTTP/1.1 403");
         host.stop();
-        let _ = std::fs::remove_file(&collection);
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 
     /// `--mcp`: the host listens on its port, takes its token from the token file (made
