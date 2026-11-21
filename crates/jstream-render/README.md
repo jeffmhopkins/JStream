@@ -673,7 +673,7 @@ its layer is drawn instead.
 When a `ModelDraw`'s camera has a focus, `draw_model` draws the model and its view depth
 (`1 / w`, as `draw_model_depth` draws it over a cleared layer) into two layers the
 compositor keeps, then runs `model::focus::ModelFocus` from them into the target through
-the filter runtime, as an internal filter no chain can hold. Its four passes, sharing
+the filter runtime, as an internal filter no chain can hold. Its five passes, sharing
 `focus/common.wgsl`'s `coc`, the card's circle of confusion: `tiles.wgsl` takes the
 largest radius in each 8 × 8 block, `reach.wgsl` the largest of the tiles whose radius
 reaches each tile, `pack.wgsl` puts each pixel's `1 / w` beside its tile's reach `R`, and
@@ -683,7 +683,10 @@ the pixel, a tap farther than the pixel reaching no farther than the pixel's own
 so a soft near part spreads over a sharp far one and never the reverse. Taps narrower
 than the spacing `R / √48` add nothing, and the pixel's own colour goes under what
 spread over it; taps on a sharp nearer part scale a soft farther pixel's sum up by the
-share left. Empty pixels are infinitely far, so a silhouette softens outward. Where `R`
+share left. Empty pixels are infinitely far, so a silhouette softens outward. Last,
+`smooth.wgsl` replaces each pixel whose own radius is 1.5 px or more by the mean of its
+5 × 5 neighbours weighted by their own softness, which evens out the gather's grain.
+Where `R`
 is under half a pixel the pixel is copied, so a model in focus draws exactly as without
 depth of field, and a camera without one skips all of it.
 

@@ -63,7 +63,7 @@ before, with no extra pass.
 
 **2. Drawn as a gather that acts like a scatter.** `Compositor::draw_model` draws the model
 into a scratch layer and its view depth into another, then fills the item's layer from
-them in four fullscreen passes:
+them in five fullscreen passes:
 1. **Tiles.** For each 8 × 8 block of pixels, the largest `r` in it.
 2. **Reach.** For each tile, the largest `r` of the tiles whose blur reaches it, so a
    pixel knows how far it must look.
@@ -84,6 +84,10 @@ them in four fullscreen passes:
 
    Where `R` is under half a pixel the pass copies the pixel, so an in-focus model draws as
    it would without depth of field.
+5. **Smooth.** Each pixel whose own radius is 1.5 px or more becomes the mean of the 5 × 5
+   pixels around it, each weighted by how soft it is itself, which evens out the
+   gather's grain without spreading a sharp neighbour into the blur. Sharper pixels are
+   copied.
 
 **3. Order.** The blur happens as the model's layer is drawn, before its source's filters
 and its item's effects run over that layer (ADR-0107 decision 6). A card's filters run
@@ -106,12 +110,12 @@ blur as it does a card's.
   - **Quality.** Like ADR-0108's disc, this is an approximation. A layer holds only the
     model's nearest surface, so the background a soft near part hides is guessed from what
     is around it. Large radii show the 48 taps as fine grain, which the per-pixel turn
-    spreads into noise rather than pattern. Golden tests bound it by its effect: an
-    in-focus model draws as without depth of field, a defocused one keeps its mean light
-    while its edges ramp, its silhouette softens outward, and a sharp near part keeps its
-    edge over a soft far part.
-  - **Cost.** Four passes per model with depth of field, the gather at 48 taps a pixel
-    over the canvas; nothing for a model drawn without it.
+    spreads into noise rather than pattern and the smoothing pass evens out. Golden tests
+    bound it by its effect: an in-focus model draws as without depth of field, a defocused
+    one keeps its mean light while its edges ramp, its silhouette softens outward, and a
+    sharp near part keeps its edge over a soft far part.
+  - **Cost.** Five passes per model with depth of field, the gather at 48 taps and the
+    smoothing at 25 a pixel over the canvas; nothing for a model drawn without it.
 - **Not decided here:**
   - **Between items.** A soft model in front of a sharp card or another model still
     spreads only within its own layer's coverage, as ADR-0108 says of cards. A

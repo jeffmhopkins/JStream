@@ -1,5 +1,5 @@
 //! Depth of field on a model's layer (ADR-0165): the layer blurred by the depth of the
-//! surface each pixel shows, in four fullscreen passes over the model's colour and view
+//! surface each pixel shows, in five fullscreen passes over the model's colour and view
 //! depth. [`crate::Compositor::draw_model`] runs it when the model's camera has depth of
 //! field; otherwise the model draws with no pass.
 
@@ -34,6 +34,15 @@ const PACK: Shader = Shader {
     source: concat!(
         include_str!("focus/common.wgsl"),
         include_str!("focus/pack.wgsl")
+    ),
+    blend: Blend::Replace,
+};
+
+const SMOOTH: Shader = Shader {
+    label: "model-focus-smooth",
+    source: concat!(
+        include_str!("focus/common.wgsl"),
+        include_str!("focus/smooth.wgsl")
     ),
     blend: Blend::Replace,
 };
@@ -111,9 +120,17 @@ impl Pass for ModelFocus {
             params: &params,
             target: &packed,
         })?;
+        let gathered = ctx.scratch(width, height)?;
         ctx.draw(&Draw {
             shader: GATHER,
             input,
+            aux: Some(&packed),
+            params: &params,
+            target: &gathered,
+        })?;
+        ctx.draw(&Draw {
+            shader: SMOOTH,
+            input: &gathered,
             aux: Some(&packed),
             params: &params,
             target: output,
