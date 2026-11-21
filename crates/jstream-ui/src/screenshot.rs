@@ -3,8 +3,10 @@
 //!
 //! A screenshot opens a preview stream asking for `png` only, at the canvas's size
 //! within the largest a preview may be, on a channel from the canvas's taps
-//! ([`Taps`](crate::canvas::taps::Taps)). Its first picture is saved through a
-//! download link, and the stream is closed. Captures show in it, as in any preview. If
+//! ([`Taps`](crate::canvas::taps::Taps)). Its first picture is saved and the stream is
+//! closed. In the desktop app the app saves it in Downloads itself, and the toast says
+//! where, with Open and Show in folder (ADR-0162 §3, #1559); in a browser it is saved
+//! through a download link. Captures show in it, as in any preview. If
 //! the engine refuses the stream (too many streams, a scene or source gone), a toast
 //! gives its reason. Native builds (tests, clippy) get a stand-in that only says so.
 //!
@@ -124,6 +126,35 @@ fn name_of(studio: Studio, shot: &Shot) -> String {
         .unwrap_or_default()
 }
 
+/// The end of `path` the toast names: its folder and its file (`Downloads\Main
+/// 2026-11-20 19-07-50.png`), with the separator the path uses, or the whole path when
+/// it has no folder.
+pub fn short_path(path: &str) -> String {
+    let separator = if path.contains('\\') { '\\' } else { '/' };
+    let mut parts = path.rsplit(separator).filter(|part| !part.is_empty());
+    match (parts.next(), parts.next()) {
+        (Some(file), Some(folder)) => format!("{folder}{separator}{file}"),
+        _ => path.to_owned(),
+    }
+}
+
+/// The toast once the desktop app saved the screenshot at `path`.
+pub fn saved_note(path: &str) -> String {
+    format!("Saved to {}", short_path(path))
+}
+
+/// The toast's buttons for a screenshot the desktop app saved at `path`: Open, in the
+/// app the system picks, and Show in folder.
+pub fn saved_actions(path: &str) -> Vec<crate::store::ToastAction> {
+    let (open, show) = (path.to_owned(), path.to_owned());
+    vec![
+        crate::store::ToastAction::new("Open", move || crate::host::open_saved(&open, false)),
+        crate::store::ToastAction::new("Show in folder", move || {
+            crate::host::open_saved(&show, true);
+        }),
+    ]
+}
+
 /// The toast when the engine refuses the stream, with the engine's reason: too many
 /// streams, a scene or source deleted meanwhile. (An engine without the `png` codec
 /// can't get here: the handshake refuses a client newer than the engine.)
@@ -152,7 +183,7 @@ mod native {
 
 #[cfg(target_arch = "wasm32")]
 mod web {
-    use super::{Shot, file_name, name_of, outcome, refused, subscribe};
+    use super::{Shot, file_name, name_of, outcome, refused, saved_actions, saved_note, subscribe};
     use crate::app::SessionContext;
     use crate::canvas::taps::{Handler, PreviewTaps};
     use crate::store::Studio;
@@ -254,9 +285,23 @@ mod web {
                 if done.replace(true) {
                     return;
                 }
-                let saved = outcome(frame).and_then(|png| save(&png, &file_name(&name, stamp())));
-                match saved {
-                    Ok(()) => studio.notify(format!("Saved a screenshot of {name}.")),
+                let file = file_name(&name, stamp());
+                match outcome(frame) {
+                    // The desktop app saves it in Downloads and says where.
+                    Ok(png) if crate::host::saves_screenshots() => spawn_local(async move {
+                        match crate::host::save_screenshot(&png, &file).await {
+                            Ok(path) => studio.notify_with(saved_note(&path), saved_actions(&path)),
+                            Err(reason) => {
+                                studio.notify(format!("Couldn't save the screenshot: {reason}."))
+                            }
+                        }
+                    }),
+                    Ok(png) => match save(&png, &file) {
+                        Ok(()) => studio.notify(format!("Saved a screenshot of {name}.")),
+                        Err(reason) => {
+                            studio.notify(format!("Couldn't take the screenshot: {reason}."))
+                        }
+                    },
                     Err(reason) => {
                         studio.notify(format!("Couldn't take the screenshot: {reason}."))
                     }
@@ -379,5 +424,25 @@ mod tests {
             file_name("", [2026, 1, 2, 3, 4, 5]),
             "Screenshot 2026-01-02 03-04-05.png"
         );
+    }
+
+    /// #1559: the desktop app's toast names the folder and the file it saved, and offers
+    /// Open and Show in folder.
+    #[test]
+    fn the_saved_toast_says_where() {
+        assert_eq!(
+            saved_note(r"C:\Users\me\Downloads\M1 Busy 2026-11-20 19-07-50.png"),
+            r"Saved to Downloads\M1 Busy 2026-11-20 19-07-50.png"
+        );
+        assert_eq!(
+            saved_note("/home/me/Downloads/Main 2026-11-20 19-07-50.png"),
+            "Saved to Downloads/Main 2026-11-20 19-07-50.png"
+        );
+        assert_eq!(short_path("Main.png"), "Main.png");
+        let labels: Vec<String> = saved_actions("/x/Main.png")
+            .into_iter()
+            .map(|action| action.label)
+            .collect();
+        assert_eq!(labels, ["Open", "Show in folder"]);
     }
 }

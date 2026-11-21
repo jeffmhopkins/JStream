@@ -46,6 +46,7 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | `check_media_foundation` | | `n_edition.rs` | whether Media Foundation is present, and the advice for N editions |
 | `PluginBlock`, `ProAudioThread`, `WindowsPluginHosts` | `PluginHosts` | `plugin_block.rs`, `plugin_hosts.rs` | CLAP filters hosted out of process: the shared block, the audio thread and the host processes ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) |
 | `pick_path` | | `dialog.rs` | the desktop app's Browse dialogs: a file, a save or a folder |
+| `user_folder` | | `folders.rs` | the known Documents and Downloads folders, where the desktop app keeps its default project and saves screenshots ([ADR-0162](../../docs/adr/0162-projects-and-screenshots-in-the-persons-folders.md)) |
 
 Not here yet: packet-level decoders for HEVC and AV1 (`MfCodecs` decodes H.264 only;
 media files decode through `MfMediaDecoders`), the virtual camera taking

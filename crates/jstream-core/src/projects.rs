@@ -90,6 +90,42 @@ pub fn recent_collections(path: &Path) -> Vec<PathBuf> {
         .collect()
 }
 
+/// What [`Engine::move_collection_file`](crate::Engine::move_collection_file) appends
+/// to the name of the file it moved away from (ADR-0162 §2): `collection.json` becomes
+/// `collection.json.moved`, so a host that looks for the old file finds none, and the
+/// person still has the old copy.
+pub const MOVED_SUFFIX: &str = ".moved";
+
+/// Names `to` in place of `from` in the recent list kept at `path` (ADR-0162 §2), where
+/// `from` stood, so a moved project keeps its place and the order of the others holds. A
+/// list without `from` gets `to` last, unless it holds it already. A list that can't be
+/// read is read as empty, as [`recent_collections`] reads it, and a failed save is
+/// logged.
+pub fn rename_recent_collection(path: &Path, from: &Path, to: &Path) {
+    let from = path_text(&absolute(from));
+    let to = path_text(&absolute(to));
+    let mut recent = Recent::load(path.to_path_buf());
+    let mut list: Vec<String> = Vec::with_capacity(recent.list.len() + 1);
+    let mut placed = false;
+    for project in recent.list.drain(..) {
+        let project = if project == from {
+            placed = true;
+            to.clone()
+        } else {
+            project
+        };
+        if !list.contains(&project) {
+            list.push(project);
+        }
+    }
+    if !placed && !list.contains(&to) {
+        list.push(to);
+    }
+    list.truncate(MAX_RECENT);
+    recent.list = list;
+    recent.save();
+}
+
 /// The projects opened most recently, kept in the file the host names
 /// (`recent-collections.json` in the data folder).
 pub(crate) struct Recent {
@@ -136,6 +172,11 @@ impl Recent {
         self.list.retain(|p| *p != project);
         self.list.insert(0, project);
         self.list.truncate(MAX_RECENT);
+        self.save();
+    }
+
+    /// Saves the list. A failed save is logged: the list is still kept in memory.
+    fn save(&self) {
         let file = RecentFile {
             version: 1,
             recent: self.list.clone(),

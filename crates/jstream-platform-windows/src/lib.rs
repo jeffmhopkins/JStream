@@ -101,6 +101,8 @@ mod decode;
 #[cfg(any(windows, test))]
 mod dialog;
 #[cfg(windows)]
+mod folders;
+#[cfg(windows)]
 mod gpu;
 // Its key tables are tested on every platform; the listener is Windows.
 mod hotkeys;
@@ -140,6 +142,8 @@ pub use credential::WindowsCredentials;
 pub use decode::MfMediaDecoders;
 #[cfg(windows)]
 pub use dialog::{Pick, PickKind, pick_path};
+#[cfg(windows)]
+pub use folders::user_folder;
 #[cfg(windows)]
 pub use gpu::WindowsGpu;
 #[cfg(windows)]

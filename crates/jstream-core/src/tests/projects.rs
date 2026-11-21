@@ -505,3 +505,118 @@ fn a_project_with_no_scene_still_reports_studio() {
     )));
     let _ = fs::remove_dir_all(dir);
 }
+
+/// ADR-0162 §2: a host moving its default project takes the keys, the assets and the
+/// recent list's place along, and leaves the old file renamed.
+#[test]
+fn moving_the_collection_file_takes_its_keys_assets_and_place() {
+    let dir = temp_dir("move");
+    let data = dir.join("data");
+    fs::create_dir_all(data.join("img")).expect("dir");
+    let old = data.join("collection.json");
+    {
+        let engine = Engine::new()
+            .with_collection_file(&old)
+            .expect("collection");
+        let control = connected(&engine);
+        batch(
+            &control,
+            edits(vec![
+                create("a"),
+                image("img/logo.png"),
+                add("a", "i1", "pic"),
+                Edit::OutputCreate {
+                    output_id: OutputId::new("yt"),
+                    kind: rtmp_output("rtmp://a.example/live"),
+                },
+            ]),
+        )
+        .expect("created");
+    }
+    let store = Arc::new(MemoryKeyStore::new());
+    let yt = OutputId::new("yt");
+    let engine = Engine::new()
+        .with_collection_file(&old)
+        .expect("collection")
+        .with_key_store(store.clone());
+    let old_key = engine.stream_key_name(&yt);
+    store.set(&old_key, &Secret::new("key-a")).expect("set");
+    let documents = dir.join("Documents").join("JStream");
+    fs::create_dir_all(&documents).expect("dir");
+    let new = documents.join("My project.json");
+    // Nothing at the new path is replaced.
+    fs::write(&new, "mine").expect("written");
+    assert!(matches!(
+        engine.move_collection_file(&new),
+        Err(ProtocolError::AlreadyExists { .. })
+    ));
+    assert!(old.is_file(), "a refused move leaves the old file");
+    fs::remove_file(&new).expect("removed");
+    let renamed = engine.move_collection_file(&new).expect("moved");
+    let backup = data.join(format!("collection.json{}", crate::MOVED_SUFFIX));
+    assert_eq!(renamed.as_deref(), Some(backup.as_path()));
+    assert!(!old.exists() && backup.is_file());
+    let control = connected(&engine);
+    assert_eq!(info(&control).0, text(&new));
+    let logo = text(&data.join("img").join("logo.png"));
+    assert_eq!(
+        file_setting(&control),
+        serde_json::json!({"type": "asset", "root": "absolute", "path": logo})
+    );
+    let new_key = engine.stream_key_name(&yt);
+    assert_ne!(new_key, old_key);
+    assert_eq!(key(&store, &new_key).as_deref(), Some("key-a"));
+    assert_eq!(key(&store, &old_key), None, "the old path's key is removed");
+    // A later start on the new file finds the key.
+    drop(control);
+    drop(engine);
+    let again = Engine::new()
+        .with_collection_file(&new)
+        .expect("collection")
+        .with_key_store(store.clone());
+    assert_eq!(again.stream_key_name(&yt), new_key);
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn a_moved_project_keeps_its_place_in_the_recent_list() {
+    let dir = temp_dir("move-recent");
+    let recent = dir.join("recent.json");
+    let (a, old, b, new) = (
+        dir.join("a.json"),
+        dir.join("collection.json"),
+        dir.join("b.json"),
+        dir.join("new.json"),
+    );
+    for project in [&b, &old, &a] {
+        write_project(project, "s");
+        drop(
+            Engine::new()
+                .with_collection_file(project)
+                .expect("collection")
+                .with_recent_collections(&recent),
+        );
+    }
+    assert_eq!(
+        crate::recent_collections(&recent),
+        [a.clone(), old.clone(), b.clone()]
+    );
+    crate::rename_recent_collection(&recent, &old, &new);
+    assert_eq!(
+        crate::recent_collections(&recent),
+        [a.clone(), new.clone(), b.clone()]
+    );
+    // A list that never held the old file gets the new one last, once.
+    crate::rename_recent_collection(&recent, &dir.join("gone.json"), &new);
+    assert_eq!(
+        crate::recent_collections(&recent),
+        [a.clone(), new.clone(), b.clone()]
+    );
+    let empty = dir.join("empty.json");
+    crate::rename_recent_collection(&empty, &old, &new);
+    assert_eq!(
+        crate::recent_collections(&empty),
+        std::slice::from_ref(&new)
+    );
+    let _ = fs::remove_dir_all(dir);
+}

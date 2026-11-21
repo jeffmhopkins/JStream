@@ -3,10 +3,11 @@
 //!
 //! It defines `window.__JSTREAM_DESKTOP__` as a frozen `{ url, token, vcam, collection,
 //! network, networkOpen, wheelFocusOnly, browse, allowNetwork, jtunnel, setJtunnel, ptz,
-//! setPtz }` that can't be reassigned, and only on a page from the
+//! setPtz, saveScreenshot, openSaved, showSaved }` that can't be reassigned, and only on a page from the
 //! app's own origin: the webview also refuses to navigate anywhere else (see `shell.rs`),
-//! so no other page ever sees the token. `collection` is the data folder, which
-//! `collection` asset paths are relative to. `browse` asks the app's `pick_path` command
+//! so no other page ever sees the token. `collection` is the default project's folder
+//! (ADR-0162), which `collection` asset paths are relative to until the engine names
+//! the open project. `browse` asks the app's `pick_path` command
 //! to open a native dialog and resolves to the path the person picked, or null.
 //! `wheelFocusOnly` is whether, at the start, wheel chords were heard only while JStream
 //! had the focus, because the app lacked macOS's Accessibility permission.
@@ -20,6 +21,11 @@
 //! reason it wasn't; it too applies at the next start. `ptz` and `setPtz(setting)` are
 //! "Accept a PTZ controller" the same way (`{on, endpoints: [{address, transport, visca,
 //! target}], allow: [ip]}`, `ptz.rs`), through the `set_ptz_controllers` command.
+//! `saveScreenshot(png, name)` sends a screenshot's bytes to the `save_screenshot`
+//! command, its name percent-encoded in a header, and resolves to the path it saved in
+//! Downloads, or rejects with why not; `openSaved(path)` and `showSaved(path)` ask
+//! `open_saved` and `show_saved` to open such a file or show it in its folder
+//! (`screenshots.rs`).
 //! `jstream-ui`'s host hook (`host.rs`) reads it and connects without the connect form.
 //! The token is the in-memory one the app made at startup, or with `--mcp` the data
 //! folder's user-only token file's; it is never written to a log (R-SEC-001).
@@ -36,7 +42,7 @@ pub const GLOBAL: &str = "__JSTREAM_DESKTOP__";
 pub struct Page<'a> {
     /// The virtual camera's status ([`crate::host::VcamStatus::as_str`]).
     pub vcam: &'a str,
-    /// The data folder, which `collection` asset paths are relative to.
+    /// The default project's folder, which `collection` asset paths are relative to.
     pub collection: &'a str,
     /// The "Allow devices on my network" setting.
     pub network: bool,
@@ -53,7 +59,7 @@ pub struct Page<'a> {
 
 /// The script, for a page from `origin`, connecting to `url` with `token`. `vcam` is
 /// the virtual camera's status ([`crate::host::VcamStatus::as_str`]). `collection` is
-/// the data folder. `network` is the "Allow devices on my network" setting, and
+/// the default project's folder. `network` is the "Allow devices on my network" setting, and
 /// `network_open` whether the network listener opened. `jtunnel` is the JTunnel
 /// setting as the app read it, and `ptz` the PTZ controller one.
 pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
@@ -100,6 +106,22 @@ pub fn script(origin: &str, url: &str, token: &str, page: &Page<'_>) -> String {
          return internals.invoke(\"set_ptz_controllers\", {{ setting: setting }})\
          .then(function (problem) {{ return problem === null ? null : String(problem); }},\
          function (error) {{ return String(error); }});\
+         }},\
+         saveScreenshot: function (png, name) {{\
+         var internals = window.__TAURI_INTERNALS__;\
+         if (!internals || typeof internals.invoke !== \"function\") return Promise.reject(\"the app can't save files here\");\
+         return internals.invoke(\"save_screenshot\", png, {{ headers: {{ \"x-jstream-name\": encodeURIComponent(String(name)) }} }})\
+         .then(function (path) {{ return String(path); }}, function (error) {{ return Promise.reject(String(error)); }});\
+         }},\
+         openSaved: function (path) {{\
+         var internals = window.__TAURI_INTERNALS__;\
+         if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(false);\
+         return internals.invoke(\"open_saved\", {{ path: String(path) }}).then(function (opened) {{ return opened === true; }}, function () {{ return false; }});\
+         }},\
+         showSaved: function (path) {{\
+         var internals = window.__TAURI_INTERNALS__;\
+         if (!internals || typeof internals.invoke !== \"function\") return Promise.resolve(false);\
+         return internals.invoke(\"show_saved\", {{ path: String(path) }}).then(function (shown) {{ return shown === true; }}, function () {{ return false; }});\
          }} }}),\
          writable: false, configurable: false, enumerable: false }});\
          }}",
