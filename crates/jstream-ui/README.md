@@ -59,7 +59,7 @@ Contents ([Design](#design) explains the choices):
   `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
   undo step. A new size also rescales every scene unless Scale scenes to the new
   resolution is unchecked: `rescale` adds the placement and camera edits that keep each
-  scene looking as it did, centred when the canvas changes shape. Each
+  scene looking as it did, centred when the canvas changes shape, with the crops of boxes showing a scene mapped too; it is sent at the snapshot's revision, so a change from elsewhere since refuses it. Each
   output's video mix scales from that picture. Tested natively, the rescale through the
   mock engine with its undo.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was

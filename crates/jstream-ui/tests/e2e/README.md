@@ -545,7 +545,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   nothing changed sends nothing; and one Undo takes back all three. Scale scenes to the
   new resolution starts ticked: 1280×720 then sends, in the batch with
   `canvas.set_size`, the seed's box a third smaller and still centred, and one Undo
-  takes both back; unticked, 3840×2160 sends the size alone.
+  takes both back; unticked, 3840×2160 sends the size alone. 1080×1080 scales the box by
+  9/16 and keeps it at the centre.
 
 <a id="running"></a>
 ## Running them

@@ -17,10 +17,12 @@
 use crate::app::SessionContext;
 use crate::dialog::Modal;
 use crate::store::Studio;
+use jstream_control::ControlError;
+use jstream_control::protocol::ProtocolError;
 use jstream_control::protocol::{
-    Batch, Blending, Call, Canvas, DEFAULT_BASE_FPS, Edit, FAST_BASE_FPS, Finite32, ItemGeometry,
-    ItemInfo, ItemTransform, MAX_FOV_DEG, MIN_FOV_DEG, PlacementForm, SceneCamera, SceneId,
-    SceneInfo, Size, SourceInfo, SourceKind, Vec2, Vec3,
+    Batch, Blending, Call, Canvas, Crop, DEFAULT_BASE_FPS, Edit, FAST_BASE_FPS, Finite32,
+    ItemGeometry, ItemInfo, ItemTransform, MAX_FOV_DEG, MIN_FOV_DEG, PlacementForm, SceneCamera,
+    SceneId, SceneInfo, Size, SourceInfo, SourceKind, Vec2, Vec3,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -136,25 +138,18 @@ impl Rescale {
         (s * x + ox, s * y + oy)
     }
 
-    /// A box's geometry on the new canvas. A `scene` source's native size is the canvas
-    /// (ADR-0022), so a box showing one takes the canvas's own change in each direction:
-    /// the scene it shows is rescaled too, and its content then lands where it did.
-    pub fn geometry(self, geometry: ItemGeometry, shows_canvas: bool) -> ItemGeometry {
+    /// A box's geometry on the new canvas: its centre moves as a point and its size,
+    /// depth and perspective scale. A box showing a `scene` source scales the same way:
+    /// that source's crop ([`Self::crop`]) keeps the same part of the rescaled scene, so
+    /// the cropped picture grows exactly as the box does.
+    pub fn geometry(self, geometry: ItemGeometry) -> ItemGeometry {
         let s = self.scale();
         let (x, y) = self.point(geometry.center.x.get(), geometry.center.y.get());
-        let (sw, sh) = if shows_canvas {
-            (
-                self.to.width as f32 / self.from.width.max(1) as f32,
-                self.to.height as f32 / self.from.height.max(1) as f32,
-            )
-        } else {
-            (s, s)
-        };
         ItemGeometry {
             center: vec2(x, y, geometry.center),
             size: Size {
-                width: finite(geometry.size.width.get() * sw, geometry.size.width),
-                height: finite(geometry.size.height.get() * sh, geometry.size.height),
+                width: finite(geometry.size.width.get() * s, geometry.size.width),
+                height: finite(geometry.size.height.get() * s, geometry.size.height),
             },
             depth_px: finite(geometry.depth_px.get() * s, geometry.depth_px),
             perspective_px: geometry.perspective_px.map(|p| finite(p.get() * s, p)),
@@ -162,33 +157,39 @@ impl Rescale {
         }
     }
 
-    /// A legacy placement on the new canvas: its corner moves and, for a source of its
-    /// own size, its scale grows with the canvas. A `scene` source grows by itself, since
-    /// its native size is the canvas, so only its corner moves, by what keeps the shown
-    /// scene's content where it was.
+    /// A legacy placement on the new canvas: its corner moves as a point and, for a
+    /// source of its own size, its scale grows with the canvas. A `scene` source's
+    /// native size is the canvas (ADR-0022), so its cropped picture grows by itself
+    /// ([`Self::crop`]) and its scale stays.
     pub fn transform(self, transform: ItemTransform, shows_canvas: bool) -> ItemTransform {
+        let s = if shows_canvas { 1.0 } else { self.scale() };
+        let (x, y) = self.point(transform.position.x.get(), transform.position.y.get());
+        ItemTransform {
+            position: vec2(x, y, transform.position),
+            scale: vec2(
+                transform.scale.x.get() * s,
+                transform.scale.y.get() * s,
+                transform.scale,
+            ),
+            ..transform
+        }
+    }
+
+    /// The crop of a box showing a `scene` source, whose pixels are the canvas: each edge
+    /// maps through the same scale and offset as the scene it shows, so the crop keeps
+    /// the same part of it. On a canvas of another shape that also crops away the
+    /// margins the centring adds, so the box shows what it showed. Whole pixels, so an
+    /// edge may land half a pixel off. A crop of a source of its own size is in that
+    /// source's pixels and stays.
+    pub fn crop(self, crop: Crop) -> Crop {
         let s = self.scale();
-        let (mut x, mut y) = self.point(transform.position.x.get(), transform.position.y.get());
-        if shows_canvas {
-            let (ox, oy) = self.offset();
-            let (kx, ky) = (transform.scale.x.get() * ox, transform.scale.y.get() * oy);
-            let (sin, cos) = transform.rotation_deg.get().to_radians().sin_cos();
-            x -= cos * kx - sin * ky;
-            y -= sin * kx + cos * ky;
-            ItemTransform {
-                position: vec2(x, y, transform.position),
-                ..transform
-            }
-        } else {
-            ItemTransform {
-                position: vec2(x, y, transform.position),
-                scale: vec2(
-                    transform.scale.x.get() * s,
-                    transform.scale.y.get() * s,
-                    transform.scale,
-                ),
-                ..transform
-            }
+        let (ox, oy) = self.offset();
+        let edge = |px: u32, offset: f32| (px as f32 * s + offset).round().max(0.0) as u32;
+        Crop {
+            left: edge(crop.left, ox),
+            top: edge(crop.top, oy),
+            right: edge(crop.right, ox),
+            bottom: edge(crop.bottom, oy),
         }
     }
 
@@ -233,8 +234,9 @@ fn vec2(x: f32, y: f32, otherwise: Vec2) -> Vec2 {
 /// The edits that keep every scene looking as it did when the canvas goes from `from`
 /// to `to`, to send in the batch with `canvas.set_size`: each item's placement in every
 /// scene and group, each keyframe scene's overridden placement, and each scene camera
-/// with each keyframe's camera override. Crops are in source pixels, so they stay.
-/// Nothing when the size doesn't change.
+/// with each keyframe's camera override, and the crop of each box showing a `scene`
+/// source, its own or a keyframe's override ([`Rescale::crop`]). Other crops are in
+/// their source's own pixels, so they stay. Nothing when the size doesn't change.
 ///
 /// `scenes` is `state.get`'s, a keyframe scene's `overrides` among them; a keyframe
 /// scene's `items` are ignored, since it has none of its own.
@@ -259,27 +261,38 @@ pub fn rescale(
             .find(|source| source.source_id == item.source_id)
             .is_some_and(|source| matches!(source.kind, SourceKind::Scene { .. }))
     };
-    let placement = |item: &ItemInfo,
+    let mut edits = Vec::new();
+    let mut place = |item: &ItemInfo,
                      scene_id: Option<&SceneId>,
                      geometry: Option<ItemGeometry>,
-                     transform: Option<ItemTransform>| {
+                     transform: Option<ItemTransform>,
+                     crop: Option<Crop>| {
         let canvas = shows_canvas(item);
-        let scene_id = scene_id.cloned();
-        match (geometry, transform) {
-            (Some(geometry), _) => Some(Edit::ItemSetGeometry {
+        if let Some(geometry) = geometry {
+            edits.push(Edit::ItemSetGeometry {
                 item_id: item.item_id.clone(),
-                scene_id,
-                geometry: map.geometry(geometry, canvas),
-            }),
-            (None, Some(transform)) => Some(Edit::ItemSetTransform {
+                scene_id: scene_id.cloned(),
+                geometry: map.geometry(geometry),
+            });
+        } else if let Some(transform) = transform {
+            edits.push(Edit::ItemSetTransform {
                 item_id: item.item_id.clone(),
-                scene_id,
+                scene_id: scene_id.cloned(),
                 transform: map.transform(transform, canvas),
-            }),
-            (None, None) => None,
+            });
+        }
+        if let Some(crop) = crop.filter(|_| canvas) {
+            let mapped = map.crop(crop);
+            if mapped != crop {
+                edits.push(Edit::ItemSetCrop {
+                    item_id: item.item_id.clone(),
+                    scene_id: scene_id.cloned(),
+                    crop: mapped,
+                });
+            }
         }
     };
-    let mut edits = Vec::new();
+    let mut cameras = Vec::new();
     for scene in scenes {
         if scene.variant_of.is_none() {
             for item in &scene.items {
@@ -287,29 +300,41 @@ pub fn rescale(
                     PlacementForm::Geometry => (item.geometry, None),
                     _ => (None, Some(item.transform)),
                 };
-                edits.extend(placement(item, None, geometry, transform));
+                place(item, None, geometry, transform, Some(item.crop));
             }
         } else {
             for over in &scene.overrides {
                 let Some(item) = owners.iter().find(|item| item.item_id == over.item_id) else {
                     continue;
                 };
-                edits.extend(placement(
+                place(
                     item,
                     Some(&scene.scene_id),
                     over.geometry,
                     over.transform,
-                ));
+                    over.crop,
+                );
             }
         }
         if let Some(camera) = scene.camera {
-            edits.push(Edit::SceneSetCamera {
+            cameras.push(Edit::SceneSetCamera {
                 scene_id: scene.scene_id.clone(),
                 camera: Some(map.camera(camera)),
             });
         }
     }
+    edits.extend(cameras);
     edits
+}
+
+/// What the dialog says when Apply is refused. A revision conflict means the project
+/// changed after the scenes were read for the rescale, so Apply again reads them anew.
+pub fn refusal(err: &ControlError) -> String {
+    if matches!(err.protocol(), Some(ProtocolError::RevConflict { .. })) {
+        "The project changed while this was open, so nothing was applied. Apply again to scale the scenes as they are now.".into()
+    } else {
+        err.to_string()
+    }
 }
 
 /// How a preset or a size reads in the picker: `1920 × 1080 (16:9)`.
@@ -372,10 +397,18 @@ pub fn VideoSettingsDialog(
         };
         let now = read();
         let mut edits = edits(now, wanted);
+        // The rescale writes every placement from this snapshot, so it applies only to
+        // the revision it was read at: a change from elsewhere since is a conflict, not
+        // something it overwrites.
+        let mut expected_rev = None;
         if scale_scenes.get_untracked() {
             studio.collection.with_untracked(|c| {
                 if let Some(c) = c {
-                    edits.extend(rescale(&c.scenes, &c.sources, now.canvas, wanted.canvas));
+                    let scaled = rescale(&c.scenes, &c.sources, now.canvas, wanted.canvas);
+                    if !scaled.is_empty() {
+                        expected_rev = Some(c.rev);
+                        edits.extend(scaled);
+                    }
                 }
             });
         }
@@ -391,7 +424,7 @@ pub fn VideoSettingsDialog(
         spawn_local(async move {
             let call = Call::Batch(Batch {
                 edits,
-                expected_rev: None,
+                expected_rev,
                 idempotency_key: None,
                 ends_gesture: None,
             });
@@ -399,7 +432,7 @@ pub fn VideoSettingsDialog(
             busy.set(false);
             match sent {
                 Ok(_) => close(),
-                Err(err) => error.set(Some(err.to_string())),
+                Err(err) => error.set(Some(refusal(&err))),
             }
         });
     };
@@ -644,7 +677,7 @@ mod tests {
         };
         let s = 2.0 / 3.0;
         assert!(close(map.scale(), s));
-        let g = map.geometry(boxed(960.0, 540.0, 300.0, 150.0), false);
+        let g = map.geometry(boxed(960.0, 540.0, 300.0, 150.0));
         assert!(close(g.center.x.get(), 640.0) && close(g.center.y.get(), 360.0));
         assert!(close(g.size.width.get(), 200.0) && close(g.size.height.get(), 100.0));
         assert!(close(g.depth_px.get(), 100.0 * s));
@@ -656,11 +689,8 @@ mod tests {
             (g.rotation_deg, g.tilt_deg, g.flip_h),
             (f(30.0), f(10.0), true)
         );
-        // A box showing a scene grows as the canvas does, which is the same here.
-        assert_eq!(
-            map.geometry(boxed(10.0, 20.0, 30.0, 40.0), true),
-            map.geometry(boxed(10.0, 20.0, 30.0, 40.0), false)
-        );
+        // An uncropped box showing a scene keeps its crop of none.
+        assert_eq!(map.crop(Crop::NONE), Crop::NONE);
     }
 
     #[test]
@@ -672,18 +702,86 @@ mod tests {
         };
         let s = 1080.0 / 1920.0;
         assert!(close(map.scale(), s));
-        let g = map.geometry(boxed(0.0, 0.0, 1920.0, 1080.0), false);
+        let g = map.geometry(boxed(0.0, 0.0, 1920.0, 1080.0));
         let top = (1080.0 - 1080.0 * s) / 2.0;
         assert!(close(g.center.x.get(), 0.0) && close(g.center.y.get(), top));
         assert!(close(g.size.width.get(), 1080.0) && close(g.size.height.get(), 1080.0 * s));
         // The canvas centre stays the centre.
-        let mid = map.geometry(boxed(960.0, 540.0, 10.0, 10.0), false);
+        let mid = map.geometry(boxed(960.0, 540.0, 10.0, 10.0));
         assert!(close(mid.center.x.get(), 540.0) && close(mid.center.y.get(), 540.0));
-        // A full-canvas box showing a scene covers the new canvas, whose own content
-        // the same rescale centres, so that content lands where the box's did.
-        let nest = map.geometry(boxed(960.0, 540.0, 1920.0, 1080.0), true);
-        assert!(close(nest.size.width.get(), 1080.0) && close(nest.size.height.get(), 1080.0));
-        assert!(close(nest.center.x.get(), 540.0) && close(nest.center.y.get(), 540.0));
+        // A box showing a scene crops away the margins the centring adds to that scene.
+        let margin = ((1080.0 - 1080.0 * s) / 2.0_f32).round() as u32;
+        assert_eq!(
+            map.crop(Crop::NONE),
+            Crop {
+                left: 0,
+                top: margin,
+                right: 0,
+                bottom: margin
+            }
+        );
+    }
+
+    /// Where a box showing a scene, fitted and unrotated, draws the shown scene's point
+    /// (`x`, `y`): through its crop of the canvas-sized source, then its box.
+    fn drawn(canvas: Canvas, g: ItemGeometry, crop: Crop, x: f32, y: f32) -> (f32, f32) {
+        let (l, t) = (crop.left as f32, crop.top as f32);
+        let cw = canvas.width as f32 - l - crop.right as f32;
+        let ch = canvas.height as f32 - t - crop.bottom as f32;
+        let k = (g.size.width.get() / cw).min(g.size.height.get() / ch);
+        (
+            g.center.x.get() + k * (x - l - cw / 2.0),
+            g.center.y.get() + k * (y - t - ch / 2.0),
+        )
+    }
+
+    #[test]
+    fn a_cropped_box_showing_a_scene_shows_the_same_part_of_it() {
+        let from = canvas(1920, 1080);
+        let flat = |mut g: ItemGeometry| {
+            g.rotation_deg = Finite32::ZERO;
+            g.tilt_deg = Finite32::ZERO;
+            g
+        };
+        let crops = [
+            Crop::NONE,
+            Crop {
+                left: 480,
+                top: 0,
+                right: 0,
+                bottom: 0,
+            },
+            Crop {
+                left: 100,
+                top: 60,
+                right: 300,
+                bottom: 200,
+            },
+        ];
+        for to in [
+            canvas(1280, 720),
+            canvas(1080, 1080),
+            canvas(1080, 1920),
+            canvas(3840, 1080),
+        ] {
+            let map = Rescale { from, to };
+            let s = map.scale();
+            let (ox, oy) = map.offset();
+            for crop in crops {
+                let old = flat(boxed(960.0, 540.0, 960.0, 540.0));
+                let (new, new_crop) = (map.geometry(old), map.crop(crop));
+                // The scene it shows is rescaled too: its point p is now at s·p + o.
+                for (x, y) in [(600.0, 300.0), (1500.0, 800.0), (1000.0, 500.0)] {
+                    let (bx, by) = drawn(from, old, crop, x, y);
+                    let want = (s * bx + ox, s * by + oy);
+                    let got = drawn(to, new, new_crop, s * x + ox, s * y + oy);
+                    assert!(
+                        (got.0 - want.0).abs() < 1.0 && (got.1 - want.1).abs() < 1.0,
+                        "{to:?} {crop:?} ({x}, {y}): {got:?} != {want:?}"
+                    );
+                }
+            }
+        }
     }
 
     #[test]
@@ -711,6 +809,21 @@ mod tests {
         let nest = map.transform(t, true);
         assert!(close(nest.position.x.get(), 150.0) && close(nest.position.y.get(), 75.0));
         assert_eq!(nest.scale, t.scale);
+        // On another shape the corner moves as a point too, and the crop takes the
+        // margins: 1280×720 to 720×720 scales by 9/16 and centres vertically.
+        let square = Rescale {
+            from: canvas(1280, 720),
+            to: canvas(720, 720),
+        };
+        let s = 720.0 / 1280.0;
+        let oy = (720.0 - 720.0 * s) / 2.0;
+        let own = square.transform(t, false);
+        assert!(close(own.position.x.get(), 100.0 * s));
+        assert!(close(own.position.y.get(), 50.0 * s + oy));
+        assert!(close(own.scale.x.get(), 0.5 * s) && close(own.scale.y.get(), 2.0 * s));
+        let nest = square.transform(t, true);
+        assert_eq!((nest.position, nest.scale), (own.position, t.scale));
+        assert_eq!(square.crop(Crop::NONE).top, oy.round() as u32);
     }
 
     #[test]
@@ -837,6 +950,29 @@ mod tests {
                     scene_id: "main".into(),
                     camera: Some(SceneCamera::framing(canvas(1920, 1080))),
                 },
+                Edit::ItemSetCrop {
+                    item_id: "nest".into(),
+                    scene_id: None,
+                    crop: Crop {
+                        left: 480,
+                        ..Crop::NONE
+                    },
+                },
+                Edit::ItemSetTransform {
+                    item_id: "nest".into(),
+                    scene_id: Some("wide".into()),
+                    transform: ItemTransform {
+                        position: Vec2 {
+                            x: f(300.0),
+                            y: f(150.0),
+                        },
+                        scale: Vec2 {
+                            x: f(0.5),
+                            y: f(0.5),
+                        },
+                        rotation_deg: Finite32::ZERO,
+                    },
+                },
             ],
         );
         let before = state(&session);
@@ -872,6 +1008,19 @@ mod tests {
             100.0 * 2.0 / 3.0
         ));
         assert_eq!(geometry(&after, "wide", "box").center.x, f(320.0));
+        let item = |c: &Collection, scene: &str, item: &str| {
+            c.scene(&SceneId::new(scene))
+                .and_then(|s| s.items.iter().find(|i| i.item_id.as_str() == item))
+                .cloned()
+                .unwrap_or_else(|| panic!("no {item} in {scene}"))
+        };
+        // The group's crop keeps the same part of the rescaled group.
+        assert_eq!(item(&after, "main", "nest").crop.left, 320);
+        // A keyframe's legacy override of a box showing a scene: its corner moves, and
+        // its scale stays since the scene it shows grew.
+        let wide = item(&after, "wide", "nest").transform;
+        assert!(close(wide.position.x.get(), 200.0) && close(wide.position.y.get(), 100.0));
+        assert_eq!(wide.scale.x, f(0.5));
         let camera = after
             .scene(&SceneId::new("main"))
             .and_then(|s| s.camera)
@@ -886,6 +1035,17 @@ mod tests {
             undone.scenes, before.scenes,
             "one undo restores every scene"
         );
+    }
+
+    #[test]
+    fn a_conflict_says_to_apply_again() {
+        let conflict = ControlError::from(ProtocolError::RevConflict {
+            expected: jstream_control::protocol::Rev(4),
+            current: jstream_control::protocol::Rev(5),
+        });
+        assert!(refusal(&conflict).starts_with("The project changed"));
+        let other = ControlError::from(ProtocolError::EmptyBatch);
+        assert_eq!(refusal(&other), other.to_string());
     }
 
     #[test]

@@ -94,3 +94,21 @@ test('a new resolution scales the scenes with it, in the same undo step, unless 
   expect(calls.sent('canvas.set_size').length).toBe(2);
   expect(calls.sent('item.set_geometry').length).toBe(sent);
 });
+
+test('a canvas of another shape keeps the scenes in proportion and centred', async ({ page, daemon }) => {
+  const calls = await recordCalls(page);
+  await connect(page, daemon);
+  const dialog = await openVideoSettings(page);
+  await dialog.getByRole('combobox', { name: 'Base resolution' }).selectOption({ label: '1080 × 1080 (1:1)' });
+  const before = await rev(page);
+  await dialog.getByRole('button', { name: 'Apply' }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  // 16:9 to 1:1 scales by the width, 9/16, and centres the scene vertically: the seed's
+  // centred box stays at the centre.
+  const moved = calls.sent('item.set_geometry').find((e) => e.item_id === 'box');
+  expect(moved.geometry.center.x).toBeCloseTo(540, 3);
+  expect(moved.geometry.center.y).toBeCloseTo(540, 3);
+  expect(moved.geometry.size.width).toBeCloseTo(360, 3);
+  expect(moved.geometry.size.height).toBeCloseTo(202.5, 3);
+});
