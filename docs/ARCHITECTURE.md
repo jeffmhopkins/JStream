@@ -774,6 +774,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   to the family's scene; the action `scene.zoom_camera` steps a follow camera's live
   zoom, with no `rev` change
   ([ADR-0113](adr/0113-camera-motion-and-follow-pointer.md), protocol 0.85).
+  A follow camera holds that zoom and only pans at the item's edges unless its
+  `hold_zoom` is off ([ADR-0161](adr/0161-follow-camera-holds-its-zoom.md), protocol
+  0.124).
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
