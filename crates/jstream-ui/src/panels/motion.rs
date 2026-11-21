@@ -860,9 +860,11 @@ pub fn MotionSection(
 
     view! {
         <Fold title="Motion" open=true hint=hint_text>
-            <p class="note">
-                "Motion the engine draws each frame, on top of the item's values: continuous, or a shake each time it is fired."
-            </p>
+            <Show when=move || list.with(Vec::is_empty)>
+                <p class="note" title="Motion the engine draws each frame, on top of the item's values: continuous, or a shake each time it is fired.">
+                    "No motion yet."
+                </p>
+            </Show>
             {move || (0..list.with(Vec::len)).map(row).collect_view()}
             <button
                 class="motion-button"

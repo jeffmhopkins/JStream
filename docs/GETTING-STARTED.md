@@ -92,7 +92,7 @@ on **program**, drawn on the canvas in the middle.
 The canvas starts at 1920×1080 and 30 fps. **File › Video settings…** changes its
 resolution (a preset such as 1280×720 or 3840×2160, a vertical 1080×1920, or any size
 you type) and its frame rate, 30 or 60 fps. A new resolution scales every scene with it,
-so they look as they did, unless you uncheck **Scale scenes to the new resolution**.
+so they look as they did, unless you uncheck **Scale existing scenes to fit**.
 Each output scales from that picture.
 **Blending** there sets how semi-transparent items and blend modes mix: Browser-style,
 the default, matches a web page or a design tool, and Linear light mixes light as it

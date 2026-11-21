@@ -81,6 +81,8 @@ pub fn path(name: &str) -> &'static str {
         "sliders" => "M4 6h9 M17 6h3 M4 12h3 M11 12h9 M4 18h11 M19 18h1 M15 4v4 M9 10v4 M17 16v4",
         "up" => "M6 15l6-6 6 6",
         "down" => "M6 9l6 6 6-6",
+        // A dialog's one-line note (UI-DESIGN › Copy).
+        "info" => "M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18z M12 11v6 M12 7.5v.01",
         _ => "M3 5h18v14H3z M3 16l5-5 4 4 3-3 6 6 M15.5 7.5a1.5 1.5 0 1 0 0.01 0z",
     }
 }
@@ -94,9 +96,9 @@ const NAMES: &[&str] = &[
     "image", "cube",
 ];
 
-/// The tool bars' icons, which aren't offered as a scene's icon.
+/// The tool bars' icons and the info mark, which aren't offered as a scene's icon.
 #[cfg(test)]
-const TOOLS: &[&str] = &["plus", "trash", "gear", "sliders", "up", "down"];
+const TOOLS: &[&str] = &["plus", "trash", "gear", "sliders", "up", "down", "info"];
 
 /// The icon of this name as a `'static` name, for a name read at run time (a scene's
 /// icon); one this set doesn't have is `fallback`.

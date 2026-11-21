@@ -218,7 +218,7 @@ folder, and its log `logs\cef.log`.
   the data folder, the file the daemon keeps it in too, so the window and a browser of
   the daemon show the same layout
   ([ADR-0084](../../docs/adr/0084-ui-settings-kept-by-the-server.md)).
-- **The warm scenes** budget (Settings › General › Warm scenes, `studio.set_warm`,
+- **The warm scenes** budget (Settings › General › Keep ready, `studio.set_warm`,
   ADR-0117 §7) is kept by the engine in `warm-scenes.json` in the data folder
   (`Engine::with_warm_file`, in `startup_collection`), the file the daemon names too, so
   it holds whatever project opens.
@@ -330,7 +330,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   not use that file's token: it gets a second token, made at each start and kept only in
   memory (`ServerConfig::ui_token`), so the server can tell the person's window from an
   agent. The server asks before a new agent connects (`ServerConfig::ask_agents`, the
-  General page's "Ask before a new agent connects", on unless turned off): an agent's
+  General page's "Ask before connecting" toggle, on unless turned off): an agent's
   first hello waits until the window's prompt is answered, and the agents the person
   always allows are kept in a user-only file beside the token file
   (`jstream_server::token_file::approvals_file`), listed and removed on the Settings
