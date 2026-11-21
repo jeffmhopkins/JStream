@@ -1,7 +1,7 @@
 // The Settings dialog's Plugins page (WA1): the installed WASM automation plugins,
 // the install dialog, and the grant dialog that offers what a manifest asks for. The mock
 // engine runs no plugins, so the page's WebSocket is routed: `plugin.list`,
-// `plugin.install`, `plugin.grant` and `plugin.enable` are answered here from a list the
+// `plugin.install`, `plugin.grant`, `plugin.enable` and `plugin.uninstall` are answered here from a list the
 // test keeps, and every other message goes on to the mock daemon.
 import { test, expect, connect, showPanel } from '../fixtures.js';
 
@@ -65,6 +65,13 @@ async function fakePlugins(page, plugins, manifests) {
         delete plugin.reason;
         ws.send(answer(parsed.id, { kind: 'action' }));
         changed(plugin);
+      } else if (action.type === 'plugin.uninstall') {
+        plugins.splice(plugins.findIndex((p) => p.plugin_id === action.plugin_id), 1);
+        ws.send(answer(parsed.id, { kind: 'action' }));
+        ws.send(JSON.stringify({
+          type: 'event',
+          event: { type: 'plugin.uninstalled', plugin_id: action.plugin_id },
+        }));
       }
     });
     server.onMessage((message) => ws.send(message));
@@ -159,6 +166,39 @@ test('a plugin whose update needs a grant is granted and turned on in one step',
     { type: 'plugin.enable', plugin_id: 'plg_timer' },
   ]);
   await expect(row.locator('.plugin-state')).toHaveText('On');
+});
+
+test('a plugin is removed only after the remove dialog is confirmed', async ({ page, daemon }) => {
+  const plugins = [
+    {
+      plugin_id: 'plg_timer',
+      state: 'enabled',
+      remote_name: 'Scene timer',
+      path: '/home/me/plugins/timer',
+      request: {},
+      grant: {},
+    },
+  ];
+  const { sent } = await fakePlugins(page, plugins, {});
+  await connect(page, daemon);
+  await openPlugins(page);
+  const row = section(page).locator('li.plugin');
+  await expect(row.locator('.plugin-name')).toHaveText('Scene timer');
+
+  // Cancel sends nothing.
+  await row.getByRole('button', { name: 'Remove…' }).click();
+  const remove = page.getByRole('dialog', { name: 'Remove plugin' });
+  await expect(remove).toContainText('“Scene timer” · plg_timer · /home/me/plugins/timer');
+  await expect(remove).toContainText('Its folder stays on disk');
+  await remove.getByRole('button', { name: 'Cancel' }).click();
+  await expect(remove).toBeHidden();
+  expect(sent).toEqual([]);
+
+  await row.getByRole('button', { name: 'Remove…' }).click();
+  await remove.getByRole('button', { name: 'Remove', exact: true }).click();
+  await expect(remove).toBeHidden();
+  expect(sent).toEqual([{ type: 'plugin.uninstall', plugin_id: 'plg_timer' }]);
+  await expect(section(page).getByText('No plugins installed.')).toBeVisible();
 });
 
 test('plugins and devices live in the Settings dialog, not the Inspector', async ({ page, daemon }) => {
