@@ -184,7 +184,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
 │                  SourceAudio { enabled, follow: Always | WhenShown, gain_db, muted }
 ├── scenes         Scene { id, name, role: scene | group, variant_of?, overrides, folder?, background?,
 │                          labels, icon, color, favourite, show_in_multiview, transition_in?, transition_out?,
-│                          camera?, camera_motion[], camera_follow?, ptz_shots[], timelines[], filters { video[] }, items[] }   flat display order
+│                          camera?, camera_anchor?, camera_motion[], camera_follow?, ptz_shots[], timelines[], filters { video[] }, items[] }   flat display order
 │                  SceneItem { id, source_id, geometry: ItemGeometry, crop, visible, opacity, blend,
 │                              effects[] (video filters), transition, locked, motion[] }
 ├── folders        Folder { id, name, parent? }   ordered; a tree; organising only
@@ -777,6 +777,12 @@ The wire format, versioning, error codes and compatibility policy are designed i
   A follow camera holds that zoom and only pans at the item's edges unless its
   `hold_zoom` is off ([ADR-0161](adr/0161-follow-camera-holds-its-zoom.md), protocol
   0.124).
+- **3D groups** ([ADR-0164](adr/0164-3d-groups-share-their-scenes-space.md), protocol
+  0.127): a group with `share_space` in its `scene.set_options`, placed in a 3D scene,
+  draws its children in that scene's space through the group item's pose, each sorted,
+  focused and lit as an item of the scene, so the group item's live values, motion and
+  keyframes move them all. `scene.set_camera_anchor` names such a group item for the
+  family's camera to ride with: its position and target are then in the group's space.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol
   0.111): the actions `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store` and `ptz.focus` move the physical heads the host lists by name, and the
@@ -1295,7 +1301,14 @@ spot, directional and ambient, up to 8 shading lights, placed in the camera's fr
 soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
 studio gradient); the layer is then placed flat
-(`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
+(`Placement::Layer`) and sorts with the scene's cards at the model's centre. That
+environment can also be the scene's backdrop
+([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
+each pixel's ray from the camera, ignoring its position, into the gradient or panorama,
+with procedural nebulae, a galaxy band and stars laid out about the direction of travel,
+which at warp streak away from it as the render thread's per-scene travel advances, and
+its layer is placed under every item, through no camera, so it sorts with nothing and
+has no view depth. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
 ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)
@@ -1604,7 +1617,8 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   its scenes keep their look. Version 13 (ADR-0138) adds motion modifiers that drive an
   effect's setting (`property` `effect` with its `effect` target), with a migration that
   refuses one in an older file. Version 14 (ADR-0146) adds a scene's PTZ `ptz_shots`,
-  with a migration that refuses them in an older file. `jstream-core`
+  with a migration that refuses them in an older file. Version 16 (ADR-0164) adds a
+  group's `share_space` and a scene's `camera_anchor`, refused the same way. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

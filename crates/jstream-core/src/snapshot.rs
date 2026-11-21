@@ -40,7 +40,7 @@ use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
 };
-use jstream_sources::{CaptureSpec, LightType, ShownLight, ShownModel};
+use jstream_sources::{CaptureSpec, LightType, ShownEnvironment, ShownLight, ShownModel};
 
 use crate::chain::{Chain, ChainOwner, Chains};
 use crate::filter_assets::FilterAssets;
@@ -52,6 +52,11 @@ use crate::preview::PreviewCapture;
 use crate::profile::{DrawMeter, Phase};
 use crate::runtime::{RenderCaptures, RenderSnapshot, SharedGpu};
 use crate::transition::{self, From, Planned, Running, Seen, Visual};
+
+mod groups;
+
+pub(crate) use groups::placed_camera;
+use groups::{GroupLink, Groups};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;
@@ -393,6 +398,9 @@ struct Lit {
     crop: Crop,
     opacity: f32,
     motion: TrackMotion,
+    /// The 3D groups it is placed through, outermost first (ADR-0164), or `None` for a
+    /// light of the scene itself.
+    groups: Groups,
 }
 
 #[derive(Debug, PartialEq)]
@@ -418,6 +426,10 @@ struct Placed {
     /// Its motion modifiers (ADR-0099), evaluated as each frame is drawn: both sides'
     /// for a moving child, its own on both sides otherwise.
     motion: TrackMotion,
+    /// The 3D groups it is placed through, outermost first (ADR-0164): a child of a
+    /// group that shares its scene's space, planned into that scene's pass. `None` for
+    /// the scene's own items.
+    groups: Groups,
 }
 
 /// A layer's track inside a group a transition moves, and when the transition started.
@@ -657,6 +669,8 @@ struct ItemBox {
     /// of the scene it is in, which the model is drawn through or the card is lit from,
     /// as a pass resolves its own; `None` in a 2D scene.
     camera: Option<PassCamera>,
+    /// The 3D groups it is placed through (ADR-0164), as [`Placed::groups`].
+    groups: Groups,
 }
 
 /// The program mix and every video mix, copied out of the collection so they can be
@@ -757,6 +771,9 @@ struct Transitioning {
     /// turn their cameras as it runs (ADR-0152); `None` for what was on screen when a
     /// transition was cut short.
     families: (Option<SceneId>, Option<SceneId>),
+    /// The scenes it leaves and shows, whose sky backdrops it draws under its tracks
+    /// (ADR-0167); `None` for what was on screen when a transition was cut short.
+    skies: (Option<SceneId>, Option<SceneId>),
     /// The item chains whose settings a Move blends between two looks (ADR-0127).
     blends: Vec<EffectBlend>,
     end_ms: f32,
@@ -928,6 +945,23 @@ impl TrackCameras {
 }
 
 impl TrackCameras {
+    /// The camera the sky backdrop of one end of the transition is seen through
+    /// `elapsed_ms` into it (ADR-0167): a Move's one moving camera for either end, as its
+    /// tracks share it; a Fade's own camera of that end, the scene it leaves's when
+    /// `leaving`.
+    fn sky_camera(&self, leaving: bool, elapsed_ms: f32) -> Option<SceneCamera> {
+        let (from, to) = self.ends;
+        if !self.pairs {
+            return if leaving { from } else { to };
+        }
+        match (from, to) {
+            (Some(from), Some(to)) if from != to => {
+                Some(lerp_camera(&from, &to, self.timing.progress(elapsed_ms)))
+            }
+            _ => to,
+        }
+    }
+
     /// The depth run `track` sorts in (ADR-0094 decision 4): a stinger's items one of
     /// their own (`overlay_run`), kept when a switch takes them from the screen, so they
     /// stay over the scenes under them through an equal camera; everything else `0`.
@@ -1167,7 +1201,15 @@ impl Shot {
             .iter()
             .chain(self.mix_passes.values().flatten())
             .flat_map(|pass| &pass.layers)
-            .map(|layer| &layer.item);
+            // A 3D group's item is drawn through its children (ADR-0164).
+            .flat_map(|layer| {
+                std::iter::once(&layer.item).chain(
+                    layer
+                        .groups
+                        .iter()
+                        .flat_map(|links| links.iter().map(|link| &link.item)),
+                )
+            });
         let tracks = self
             .transition
             .iter()
@@ -1817,6 +1859,13 @@ fn plan_inner(
                 cameras: planner.track_cameras(running, pairs),
                 moves,
                 families,
+                skies: (
+                    match &running.from {
+                        transition::From::Scene(from) => Some(from.clone()),
+                        transition::From::OnScreen(_) => None,
+                    },
+                    Some(running.to.clone()),
+                ),
                 blends,
                 end_ms: planned.end_ms,
             });
@@ -2215,6 +2264,7 @@ impl<'a> Planner<'a, '_> {
             supplied,
             moves: None,
             family,
+            anchor: groups::anchor_of(self.state, scene),
         })
     }
 
@@ -2278,7 +2328,8 @@ impl<'a> Planner<'a, '_> {
     /// ([`Self::transition`]'s answer): a Move between a 2D side and a 3D one sees the 2D
     /// side through the framing camera, which draws it as 2D does (ADR-0128).
     fn track_cameras(&self, running: &Running, pairs: bool) -> TrackCameras {
-        let committed = |id: &SceneId| self.camera(id).and_then(|camera| camera.committed());
+        let canvas = self.state.canvas();
+        let committed = |id: &SceneId| self.camera(id).and_then(|camera| camera.placed(canvas));
         let ends = self.move_ends(running);
         let ends = match ends {
             (None, Some(_)) | (Some(_), None) if pairs => {
@@ -2346,7 +2397,7 @@ impl<'a> Planner<'a, '_> {
     fn move_ends(&self, running: &Running) -> (Option<SceneCamera>, Option<SceneCamera>) {
         let committed = self
             .camera(&running.to)
-            .and_then(|camera| camera.committed());
+            .and_then(|camera| camera.placed(self.state.canvas()));
         (running.from_camera, committed)
     }
 
@@ -2578,6 +2629,7 @@ impl<'a> Planner<'a, '_> {
                 effects: None,
                 moving: Some((start, *track)),
                 motion: child.motion.clone(),
+                groups: None,
             });
             tracks.push((child, *track));
         }
@@ -2865,6 +2917,7 @@ impl<'a> Planner<'a, '_> {
                 boxed,
                 motion: motion::of(item),
                 camera,
+                groups: None,
             },
         );
         out.audio
@@ -2883,21 +2936,35 @@ impl<'a> Planner<'a, '_> {
     fn visuals(&mut self, id: &SceneId, flatten: bool, out: &mut Shot) -> Vec<Visual> {
         let mut visuals = Vec::new();
         let mut path = BTreeSet::new();
-        self.visuals_into(id, flatten, 0, &mut path, out, &mut visuals);
+        self.visuals_into((id, None), flatten, 0, (&mut path, out), &mut visuals);
         visuals
     }
 
+    /// [`Self::visuals`] of `id`, or, with `within`, of a 3D group's children: the 3D
+    /// scene they are placed in and the group items they are placed through, each child
+    /// a visual of its own at the geometry its groups place it at as planned (ADR-0164
+    /// §4).
     fn visuals_into(
         &mut self,
-        id: &SceneId,
+        (id, within): (&SceneId, Option<(&SceneId, &[GroupLink])>),
         flatten: bool,
         depth: usize,
-        path: &mut BTreeSet<SceneId>,
-        out: &mut Shot,
+        (path, out): (&mut BTreeSet<SceneId>, &mut Shot),
         visuals: &mut Vec<Visual>,
     ) {
         let state = self.state;
         if self.drawn(id).is_none() || !path.insert(id.clone()) {
+            return;
+        }
+        // The scene a child's box, light and camera are the 3D scene's.
+        let (scene, links) = within.unwrap_or((id, &[]));
+        let three_d = self.camera(scene).is_some();
+        let groups: Groups = (!links.is_empty()).then(|| Arc::from(links));
+        let pose = groups
+            .as_deref()
+            .and_then(|links| groups::pose_committed(links, state.canvas()));
+        if groups.is_some() && pose.is_none() {
+            path.remove(id);
             return;
         }
         let keyframe = self.keyframe_of(id);
@@ -2910,6 +2977,28 @@ impl<'a> Planner<'a, '_> {
             let Some(source) = state.source(item.source_id()) else {
                 continue;
             };
+            // A 3D group's children are visuals of the 3D scene (ADR-0164 §4).
+            if three_d
+                && depth + 1 < MAX_NESTING
+                && let Some((group, link)) = GroupLink::of(
+                    state,
+                    item,
+                    keyframe.and_then(|keyframe| Through::of(keyframe, item.id())),
+                )
+                && !path.contains(&group)
+            {
+                let nested = self.nested(keyframe, &group);
+                let mut inner = links.to_vec();
+                inner.push(link);
+                self.visuals_into(
+                    (&nested, Some((scene, &inner))),
+                    flatten,
+                    depth + 1,
+                    (path, out),
+                    visuals,
+                );
+                continue;
+            }
             let (image, size) = match source.kind() {
                 SourceKind::Scene { scene_id } => {
                     // A group's children a keyframe overrides are drawn, and paired,
@@ -2937,7 +3026,13 @@ impl<'a> Planner<'a, '_> {
                         // A group that moves on its own is one picture (ADR-0099).
                         && item.motion().is_empty()
                     {
-                        self.visuals_into(scene_id, flatten, depth + 1, path, out, visuals);
+                        self.visuals_into(
+                            (scene_id, within),
+                            flatten,
+                            depth + 1,
+                            (path, out),
+                            visuals,
+                        );
                         continue;
                     }
                     match self.scened(source, scene_id.clone(), out, &mut BTreeSet::new()) {
@@ -2965,13 +3060,21 @@ impl<'a> Planner<'a, '_> {
                 },
             };
             let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
-            note_light(out, id, item, through.as_ref(), &image);
+            note_light(out, scene, item, through.as_ref(), &image, &groups);
             self.look_sky(&image, out);
             let Some(geometry) = endpoint_geometry(item, size, canvas) else {
                 continue;
             };
             // An item with effects is its effects' layer over its grown box, uncropped.
-            let boxed = self.boxed(id, item, &image, out);
+            let boxed = self.boxed(scene, item, &image, out);
+            if groups.is_some()
+                && let Some(planned) = out
+                    .boxes
+                    .get_mut(&ChainOwner::Item(scene.clone(), item.id().clone()))
+            {
+                planned.through.clone_from(&through);
+                planned.groups.clone_from(&groups);
+            }
             // An item whose effects run over the canvas covers the canvas on both sides
             // of a switch, so it can't glide (ADR-0106): it disappears and appears.
             let mut settings = *item.transition();
@@ -2980,13 +3083,13 @@ impl<'a> Planner<'a, '_> {
             }
             let (image, geometry, cut, size, effects) = match boxed {
                 Some(boxed) => {
-                    let owner = ChainOwner::Item(id.clone(), item.id().clone());
+                    let owner = ChainOwner::Item(scene.clone(), item.id().clone());
                     let look = out.chains.get(&owner).map(Chain::look).unwrap_or_default();
                     let Some(around) = boxed.around(&geometry) else {
                         continue;
                     };
                     (
-                        SourceRef::Boxed(id.clone(), item.id().clone()),
+                        SourceRef::Boxed(scene.clone(), item.id().clone()),
                         around,
                         Crop::NONE,
                         Some(boxed.layer),
@@ -2995,6 +3098,14 @@ impl<'a> Planner<'a, '_> {
                 }
                 None => (image, geometry, crop(item.crop()), size, Vec::new()),
             };
+            // A 3D group's child, where its groups place it (ADR-0164 §4).
+            let (geometry, opacity) = match &pose {
+                Some((pose, theirs)) => match pose.place(geometry) {
+                    Ok(placed) => (placed, item.opacity().get() * theirs),
+                    Err(_) => continue,
+                },
+                None => (geometry, item.opacity().get()),
+            };
             visuals.push(Visual {
                 image,
                 item_id: item.id().clone(),
@@ -3002,7 +3113,7 @@ impl<'a> Planner<'a, '_> {
                 at: Endpoint {
                     geometry,
                     crop: cut,
-                    opacity: item.opacity().get(),
+                    opacity,
                     blend: item.blend(),
                 },
                 size,
@@ -3023,49 +3134,15 @@ impl<'a> Planner<'a, '_> {
         if out.scenes.contains_key(id) || !path.insert(id.clone()) {
             return;
         }
-        let state = self.state;
         let mut placed = Vec::new();
         if self.drawn(id).is_some() {
-            // A keyframe scene draws its parent's items at their effective values, and
-            // a group's view its children at theirs.
-            let keyframe = self.keyframe_of(id);
-            for item in self.items_of(id) {
-                let item = item.as_ref();
-                if !item.visible() {
-                    continue;
-                }
-                let Some(source) = state.source(item.source_id()) else {
-                    continue;
-                };
-                let source = match source.kind() {
-                    SourceKind::Scene { scene_id } => {
-                        let nested = self.nested(keyframe, scene_id);
-                        self.scened(source, nested, out, path)
-                    }
-                    _ => match self.shown(source, out) {
-                        Some(source) => source,
-                        None => continue,
-                    },
-                };
-                let effects = self.boxed(id, item, &source, out);
-                let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
-                note_light(out, id, item, through.as_ref(), &source);
-                self.look_sky(&source, out);
-                placed.push(Placed {
-                    item: item.id().clone(),
-                    through,
-                    source,
-                    placement: placement(item.placement()),
-                    crop: crop(item.crop()),
-                    opacity: item.opacity().get(),
-                    blend: item.blend(),
-                    effects,
-                    moving: None,
-                    motion: TrackMotion::same(item.id().clone(), motion::of(item)),
-                });
-                out.audio
-                    .record(item.id(), item.motion(), self.assets.motion_heard());
-            }
+            self.place_items(
+                (id, id),
+                &[],
+                (out, path),
+                &mut placed,
+                &mut BTreeSet::new(),
+            );
         }
         out.scenes.insert(id.clone(), placed);
         if let Some(background) = self.background(id) {
@@ -3079,6 +3156,90 @@ impl<'a> Planner<'a, '_> {
             self.add_chain(ChainOwner::Scene(id.clone()), chain, out);
         }
         path.remove(id);
+    }
+
+    /// Plans the items of `from` into `placed`, the items of scene `scene`'s pass: `from`
+    /// is `scene` itself, or a 3D group it places, through `links` (ADR-0164). A keyframe
+    /// scene draws its parent's items at their effective values, and a group's view its
+    /// children at theirs. In a 3D scene, an item that places a group sharing its space
+    /// is replaced by the group's children, each placed through it; a group shares it
+    /// once per scene, nested to [`MAX_NESTING`], and draws flat past either.
+    fn place_items(
+        &mut self,
+        (scene, from): (&SceneId, &SceneId),
+        links: &[GroupLink],
+        (out, path): (&mut Shot, &mut BTreeSet<SceneId>),
+        placed: &mut Vec<Placed>,
+        shared: &mut BTreeSet<SceneId>,
+    ) {
+        let state = self.state;
+        let keyframe = self.keyframe_of(from);
+        let three_d = self.camera(scene).is_some();
+        let groups: Groups = (!links.is_empty()).then(|| Arc::from(links));
+        for item in self.items_of(from) {
+            let item = item.as_ref();
+            if !item.visible() {
+                continue;
+            }
+            let Some(source) = state.source(item.source_id()) else {
+                continue;
+            };
+            let through = keyframe.and_then(|keyframe| Through::of(keyframe, item.id()));
+            if three_d
+                && links.len() + 1 < MAX_NESTING
+                && let Some((group, link)) = GroupLink::of(state, item, through.clone())
+                && !path.contains(&group)
+                && shared.insert(group.clone())
+            {
+                let nested = self.nested(keyframe, &group);
+                let mut inner = links.to_vec();
+                inner.push(link);
+                out.audio
+                    .record(item.id(), item.motion(), self.assets.motion_heard());
+                path.insert(group.clone());
+                self.place_items((scene, &nested), &inner, (out, path), placed, shared);
+                path.remove(&group);
+                continue;
+            }
+            let source = match source.kind() {
+                SourceKind::Scene { scene_id } => {
+                    let nested = self.nested(keyframe, scene_id);
+                    self.scened(source, nested, out, path)
+                }
+                _ => match self.shown(source, out) {
+                    Some(source) => source,
+                    None => continue,
+                },
+            };
+            let effects = self.boxed(scene, item, &source, out);
+            // A child's box is the scene's, keyed by the scene, but its live values are
+            // the group's view's, and it is placed through its groups.
+            if groups.is_some()
+                && let Some(boxed) = out
+                    .boxes
+                    .get_mut(&ChainOwner::Item(scene.clone(), item.id().clone()))
+            {
+                boxed.through.clone_from(&through);
+                boxed.groups.clone_from(&groups);
+            }
+            note_light(out, scene, item, through.as_ref(), &source, &groups);
+            self.look_sky(&source, out);
+            placed.push(Placed {
+                item: item.id().clone(),
+                through,
+                source,
+                placement: placement(item.placement()),
+                crop: crop(item.crop()),
+                opacity: item.opacity().get(),
+                blend: item.blend(),
+                effects,
+                moving: None,
+                motion: TrackMotion::same(item.id().clone(), motion::of(item)),
+                groups: groups.clone(),
+            });
+            out.audio
+                .record(item.id(), item.motion(), self.assets.motion_heard());
+        }
     }
 
     /// The picture of `source`'s sky when it is an environment light with one (ADR-0151
@@ -3220,6 +3381,9 @@ pub(crate) enum GpuKey {
     /// A lit card's picture flat in its box, before it is lit into its
     /// [`GpuKey::ItemBox`] (ADR-0151 decision 10).
     UnlitBox(SceneId, ItemId),
+    /// A 3D scene's sky backdrop (ADR-0167), drawn through its camera each frame it is
+    /// drawn, at the canvas size, and placed under its items.
+    Sky(SceneId),
 }
 
 /// A shadow map drawn for a scene in this run of the chains (ADR-0151 decision 3).
@@ -3370,6 +3534,10 @@ struct PassCamera {
     moves: Option<Arc<CameraMoves>>,
     /// Its scene family: whose live aim turns it (ADR-0152).
     family: SceneId,
+    /// The 3D group its family's camera rides with (ADR-0164 §5): its numbers are in
+    /// that group's space, placed through the group item as each frame is drawn.
+    /// `None` for a camera in the scene's own space.
+    anchor: Groups,
 }
 
 impl PassCamera {
@@ -3406,6 +3574,16 @@ impl PassCamera {
         }
         .or(self.supplied)
     }
+
+    /// [`Self::committed`], placed through the group it rides with as planned
+    /// (ADR-0164 §5): a transition's end.
+    fn placed(&self, canvas: Canvas) -> Option<SceneCamera> {
+        let camera = self.committed()?;
+        Some(match self.anchor.as_deref() {
+            Some(anchor) => groups::place_camera_committed(anchor, camera, canvas),
+            None => camera,
+        })
+    }
 }
 
 /// One item of a [`Pass`].
@@ -3429,6 +3607,8 @@ struct Layer {
     moving: Option<Moving>,
     /// Its motion modifiers (ADR-0099): the moving child's both sides, else its own.
     motion: TrackMotion,
+    /// The 3D groups it is placed through (ADR-0164), as [`Placed::groups`].
+    groups: Groups,
 }
 
 impl Shot {
@@ -3623,6 +3803,7 @@ fn schedule(shot: &Shot, program: &SceneId) -> Vec<Pass> {
                 boxed: None,
                 moving: None,
                 motion: TrackMotion::same(ItemId::new(""), Arc::from([])),
+                groups: None,
             })
             .into_iter()
             .collect();
@@ -3895,6 +4076,7 @@ fn visit_into(
             boxed: placed.effects,
             moving: placed.moving,
             motion: placed.motion.clone(),
+            groups: placed.groups.clone(),
         });
     }
     path.remove(id);
@@ -5383,6 +5565,32 @@ pub(crate) fn compose_metered(
     };
     let direct = target == canvas;
     claim_layers(compositor, (&mut *cache, &mut *chains), shot, view, output)?;
+    // The sky backdrops of the 3D scenes this frame draws (ADR-0167), before their
+    // items borrow the cache.
+    let root_pass = match (root, tracks) {
+        (Some(root), None) => Some(root),
+        _ => None,
+    };
+    for pass in nested.iter().chain(root_pass) {
+        if !chains.holds_layer(&pass.key) {
+            draw_sky(
+                compositor,
+                (&mut *cache, &*chains),
+                (shot, pass),
+                (at, canvas),
+                (live, captures),
+            )?;
+        }
+    }
+    if let Some(transition) = tracks {
+        draw_transition_skies(
+            compositor,
+            (&mut *cache, &*chains),
+            (shot, transition),
+            (at, canvas),
+            (live, captures),
+        )?;
+    }
     {
         let cache = &*cache;
         let chains = &*chains;
@@ -5401,13 +5609,14 @@ pub(crate) fn compose_metered(
                 continue;
             }
             let started = Instant::now();
-            fill_items(
+            let camera = fill_items(
                 &mut items,
                 (cache, chains),
                 (shot, pass),
                 (at, canvas),
                 (live, captures),
             );
+            under_sky(&mut items, (cache, chains), pass, canvas, camera);
             compositor.render_into(&scene(canvas, pass.background, &items), image(&pass.key)?)?;
             let took = meter.phase_since(Phase::Passes, started);
             meter.pass(&pass.scene, took);
@@ -5427,13 +5636,14 @@ pub(crate) fn compose_metered(
                 transition.background(at, shot.blending)
             }
             (Some(root), None) => {
-                fill_items(
+                let camera = fill_items(
                     &mut items,
                     (cache, chains),
                     (shot, root),
                     (at, canvas),
                     (live, captures),
                 );
+                under_sky(&mut items, (cache, chains), root, canvas, camera);
                 root.background
             }
             (None, None) => {
@@ -5612,6 +5822,13 @@ fn run_chains(
                 if let Some(depth) = &pass.view_depth {
                     cache.layer(compositor, depth, canvas.width(), canvas.height())?;
                 }
+                draw_sky(
+                    compositor,
+                    (&mut *cache, &*chains),
+                    (shot, pass),
+                    (at, canvas),
+                    (live, captures),
+                )?;
                 let mut items = Vec::new();
                 let camera = fill_items(
                     &mut items,
@@ -5620,6 +5837,7 @@ fn run_chains(
                     (at, canvas),
                     (live, captures),
                 );
+                under_sky(&mut items, (&*cache, &*chains), pass, canvas, camera);
                 let Some(layer) = cache.get(&pass.key) else {
                     continue;
                 };
@@ -5766,7 +5984,12 @@ fn draw_box(
         .boxed
         .lit
         .then(|| motion::apply(&by, placement, crop, OPAQUE))
-        .and_then(|(placement, crop, _)| boxed.boxed.geometry_of(placement, crop));
+        .and_then(|(placement, crop, _)| boxed.boxed.geometry_of(placement, crop))
+        .and_then(|geometry| match boxed.groups.as_deref() {
+            Some(groups) => groups::place_at(groups, (geometry, OPAQUE), shot, at, live)
+                .map(|(geometry, _)| geometry),
+            None => Some(geometry),
+        });
     let (placement, crop) = boxed.boxed.moved_inside(&by, placement, crop);
     let inside = boxed
         .boxed
@@ -5966,7 +6189,15 @@ fn draw_model(
     );
     let by = shot.motion_at(&boxed.item, &boxed.motion, at);
     let (placement, _) = boxed.boxed.moved_inside(&by, placement, crop);
-    let (Some((source, shown)), Placement::Geometry(geometry)) = (shown, placement) else {
+    // A model in a 3D group is posed where the group places it (ADR-0164).
+    let placed = match (boxed.groups.as_deref(), placement) {
+        (Some(groups), Placement::Geometry(geometry)) => {
+            groups::place_at(groups, (geometry, OPAQUE), shot, at, live)
+                .map(|(geometry, _)| Placement::Geometry(geometry))
+        }
+        (_, placement) => Some(placement),
+    };
+    let (Some((source, shown)), Some(Placement::Geometry(geometry))) = (shown, placed) else {
         chains.fail(owner);
         return Ok(());
     };
@@ -6147,6 +6378,7 @@ fn note_light(
     item: &GraphItem,
     through: Option<&Through>,
     source: &SourceRef,
+    groups: &Groups,
 ) {
     let SourceRef::Frame(source) = source else {
         return;
@@ -6171,6 +6403,7 @@ fn note_light(
         crop: crop(item.crop()),
         opacity: item.opacity().get(),
         motion: TrackMotion::same(item.id().clone(), motion::of(item)),
+        groups: groups.clone(),
     });
 }
 
@@ -6575,7 +6808,11 @@ fn scene_lights(
         let (item, modifiers) = &placed.motion.to;
         let by = shot.motion_at(item, modifiers, at);
         let (placement, _, opacity) = motion::apply(&by, placement, crop, placed.opacity);
-        let Placement::Geometry(geometry) = placement else {
+        // A light in a 3D group lights the whole scene from where it is placed
+        // (ADR-0164 §3).
+        let Some((Placement::Geometry(geometry), opacity)) =
+            groups::place_placement(&placed.groups, (placement, opacity), shot, at, live)
+        else {
             continue;
         };
         let (position, aim) = geometry.light_pose_seen(view);
@@ -6612,13 +6849,33 @@ fn scene_environment<'c>(
     at: MediaTime,
     live: &LiveParams,
 ) -> (Option<jstream_render::Environment<'c>>, usize) {
+    let (first, count) = first_environment(shot, id);
+    let found = first.map(|(placed, light, sky)| {
+        let (environment, opacity) = environment_at((shot, cache), (placed, light, sky), at, live);
+        jstream_render::Environment {
+            intensity: environment.intensity * opacity,
+            ..environment
+        }
+    });
+    (found, count)
+}
+
+/// The first environment light scene `id` places, in stacking order, with its source's
+/// light and sky, and how many environment lights the scene places.
+fn first_environment<'s>(
+    shot: &'s Shot,
+    id: &SceneId,
+) -> (
+    Option<(&'s Lit, &'s ShownLight, &'s ShownEnvironment)>,
+    usize,
+) {
     let Some(placed) = shot.lights.get(id) else {
         return (None, 0);
     };
     let mut found = None;
     let mut count = 0;
     for placed in placed {
-        let Some(sky) = shot
+        let Some((light, sky)) = shot
             .frames
             .get(&placed.source)
             .and_then(|frame| frame.light.as_ref())
@@ -6627,37 +6884,152 @@ fn scene_environment<'c>(
             continue;
         };
         count += 1;
-        if found.is_some() {
-            continue;
+        if found.is_none() {
+            found = Some((placed, light, sky));
         }
-        let (light, sky) = sky;
-        let (placement, crop) = live.apply_to(
-            &placed.item,
-            placed.through.as_ref(),
-            placed.placement,
-            placed.crop,
-        );
-        let (item, modifiers) = &placed.motion.to;
-        let by = shot.motion_at(item, modifiers, at);
-        let (placement, _, opacity) = motion::apply(&by, placement, crop, placed.opacity);
-        let turn_deg = match placement {
-            Placement::Geometry(geometry) => geometry.turn_deg.get(),
-            _ => 0.0,
-        };
-        let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
-        found = Some(jstream_render::Environment {
-            sky: colour(sky.sky),
-            horizon: colour(sky.horizon),
-            ground: colour(sky.ground),
-            intensity: light.intensity * opacity,
-            turn_deg,
-            image: sky
-                .image
-                .as_ref()
-                .and_then(|image| cache.get(&GpuKey::Frame(image.clone()))),
-        });
     }
     (found, count)
+}
+
+/// An environment light's sky at `at`, at the light's own intensity, spun by its item's
+/// turn, with its picture when that source's frame was uploaded this frame, and its
+/// item's opacity.
+fn environment_at<'c>(
+    (shot, cache): (&Shot, &'c ResourceCache<GpuKey>),
+    (placed, light, sky): (&Lit, &ShownLight, &ShownEnvironment),
+    at: MediaTime,
+    live: &LiveParams,
+) -> (jstream_render::Environment<'c>, f32) {
+    let (placement, crop) = live.apply_to(
+        &placed.item,
+        placed.through.as_ref(),
+        placed.placement,
+        placed.crop,
+    );
+    let (item, modifiers) = &placed.motion.to;
+    let by = shot.motion_at(item, modifiers, at);
+    let (placement, _, opacity) = motion::apply(&by, placement, crop, placed.opacity);
+    // A light in a 3D group is placed through it (ADR-0164); one that can't be draws
+    // nothing.
+    let (placement, opacity) =
+        groups::place_placement(&placed.groups, (placement, opacity), shot, at, live)
+            .unwrap_or((placement, 0.0));
+    let turn_deg = match placement {
+        Placement::Geometry(geometry) => geometry.turn_deg.get(),
+        _ => 0.0,
+    };
+    let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
+    let environment = jstream_render::Environment {
+        sky: colour(sky.sky),
+        horizon: colour(sky.horizon),
+        ground: colour(sky.ground),
+        intensity: light.intensity,
+        turn_deg,
+        image: sky
+            .image
+            .as_ref()
+            .and_then(|image| cache.get(&GpuKey::Frame(image.clone()))),
+    };
+    (environment, opacity)
+}
+
+/// Draws the sky backdrop of `pass` at `at` into its [`GpuKey::Sky`] layer (ADR-0167),
+/// when it is a 3D scene whose first environment light is drawn as a backdrop: the sky
+/// through the camera its items are seen through, which [`under_sky`] then places under
+/// them.
+///
+/// # Errors
+/// What the compositor reports for the layer or the draw.
+fn draw_sky(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &Chains),
+    (shot, pass): (&Shot, &Pass),
+    (at, canvas): (MediaTime, FrameSize),
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> Result<(), RenderError> {
+    // Only a scene with a backdrop works out its camera for one.
+    let backdrop = first_environment(shot, &pass.scene)
+        .0
+        .is_some_and(|(_, _, sky)| sky.backdrop);
+    if !backdrop {
+        return Ok(());
+    }
+    let camera = moved_camera(
+        live.camera(pass),
+        pass.camera.as_ref(),
+        (shot, at, shot.pass_shown(pass)),
+        (live, captures),
+        chains,
+    );
+    draw_sky_of(
+        compositor,
+        (cache, chains),
+        (shot, &pass.scene),
+        camera,
+        (at, canvas, 1.0),
+        live,
+    )
+}
+
+/// Draws scene `scene`'s sky backdrop at `at` through `camera` into its [`GpuKey::Sky`]
+/// layer, at its item's opacity times `fade`, and records that it drew it this frame;
+/// nothing for a scene whose first environment light isn't a backdrop, or without a
+/// camera.
+///
+/// # Errors
+/// What the compositor reports for the layer or the draw.
+fn draw_sky_of(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &Chains),
+    (shot, scene): (&Shot, &SceneId),
+    camera: Option<SceneCamera>,
+    (at, canvas, fade): (MediaTime, FrameSize, f32),
+    live: &LiveParams,
+) -> Result<(), RenderError> {
+    let (Some((placed, light, sky)), _) = first_environment(shot, scene) else {
+        return Ok(());
+    };
+    let (true, Some(camera)) = (sky.backdrop, camera) else {
+        return Ok(());
+    };
+    let key = GpuKey::Sky(scene.clone());
+    cache.layer(compositor, &key, canvas.width(), canvas.height())?;
+    let cache = &*cache;
+    let Some(target) = cache.get(&key) else {
+        return Ok(());
+    };
+    let (environment, opacity) = environment_at((shot, cache), (placed, light, sky), at, live);
+    let travel = {
+        let mut skies = chains.skies.borrow_mut();
+        let state = skies.entry(scene.clone()).or_default();
+        state.step(cache.frame(), at.as_secs_f64(), (sky.warp, sky.warp_ramp_s));
+        (state.warp, state.travel, state.dropping)
+    };
+    let (warp, travel, dropping) = travel;
+    let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
+    compositor.draw_sky(
+        &jstream_render::SkyDraw {
+            environment,
+            camera,
+            stars: sky.stars,
+            star_brightness: sky.star_brightness,
+            opacity: opacity * fade,
+            deep: jstream_render::DeepSky {
+                nebula: sky.nebula,
+                nebula_colors: sky.nebula_colors.map(colour),
+                galaxy: sky.galaxy,
+                seed: sky.sky_seed,
+            },
+            warp,
+            travel,
+            dropping,
+        },
+        target,
+    )?;
+    if let Some(state) = chains.skies.borrow_mut().get_mut(scene) {
+        state.drawn = Some(cache.frame());
+    }
+    Ok(())
 }
 
 /// Marks the layers [`compose`] draws `view` at `output` through as used in the cache's
@@ -6764,6 +7136,46 @@ fn fill_items<'a>(
     camera
 }
 
+/// Puts `pass`'s sky backdrop under `items` (ADR-0167) when [`draw_sky`] drew it this
+/// frame and the pass is seen through `camera`: flat over the canvas and seen through no
+/// camera, so it sorts with nothing, has no depth and casts no shadow. Only a scene's
+/// colour passes place it; its view depth, shadow maps and reflection leave it out.
+fn under_sky<'a>(
+    items: &mut Vec<Item<'a>>,
+    (cache, chains): (&'a ResourceCache<GpuKey>, &Chains),
+    pass: &Pass,
+    canvas: FrameSize,
+    camera: Option<SceneCamera>,
+) {
+    let drawn = chains
+        .skies
+        .borrow()
+        .get(&pass.scene)
+        .and_then(|sky| sky.drawn);
+    if camera.is_none() || drawn != Some(cache.frame()) {
+        return;
+    }
+    let Some(image) = cache.get(&GpuKey::Sky(pass.scene.clone())) else {
+        return;
+    };
+    if (image.width(), image.height()) != (canvas.width(), canvas.height()) {
+        return;
+    }
+    items.insert(
+        0,
+        Item {
+            image,
+            placement: Placement::Legacy(LegacyTransform::IDENTITY),
+            crop: Crop::NONE,
+            opacity: OPAQUE,
+            blend: BlendMode::Normal,
+            visible: true,
+            camera: None,
+            depth_run: 0,
+        },
+    );
+}
+
 /// The item `layer` of a pass draws at `at`, through `camera`, as [`fill_items`] says.
 fn layer_item<'a>(
     layer: &Layer,
@@ -6815,6 +7227,9 @@ fn layer_item<'a>(
             }
             None => (placement, crop),
         };
+        // A 3D group's child is placed through its groups as they are now (ADR-0164).
+        let (placement, opacity) =
+            groups::place_placement(&layer.groups, (placement, opacity), shot, at, live)?;
         Some(Item {
             image: cache.get(&layer.image)?,
             placement,
@@ -6942,10 +7357,18 @@ fn moved_camera(
         ),
         None => base,
     };
-    Some(match planned {
+    let aimed = match planned {
         Some(planned) => live.aimed(&planned.family, moved, at),
         None => moved,
-    })
+    };
+    // A camera that rides with a 3D group is turned and moved inside it, then placed
+    // through the group as it is now (ADR-0164 §5).
+    Some(
+        match planned.and_then(|planned| planned.anchor.as_deref()) {
+            Some(anchor) => groups::place_camera_at(anchor, aimed, shot, at, live),
+            None => aimed,
+        },
+    )
 }
 
 /// Where a transition track of `image` is placed at `geometry`: a model's layer
@@ -6984,7 +7407,137 @@ fn fill_tracks<'a>(
 ) {
     let elapsed = transition::elapsed_ms(transition.start, at);
     let size = [canvas.width() as f32, canvas.height() as f32];
-    // Each end's camera as it moves this frame, a follow camera's included.
+    let cameras = moving_cameras((shot, transition), chains, at, (live, captures));
+    items.clear();
+    items.extend(
+        transition
+            .tracks
+            .iter()
+            .filter_map(|(key, track, seen, moved)| {
+                if chains.failed(key) {
+                    return None;
+                }
+                let by = moved.offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
+                let sampled =
+                    moved_track(shot.is_canvas_box(key), &by, track.sample(elapsed, size)?);
+                Some(Item {
+                    image: cache.get(key)?,
+                    placement: track_placement(shot, key, sampled.geometry),
+                    crop: sampled.crop,
+                    opacity: sampled.opacity,
+                    blend: sampled.blend,
+                    visible: true,
+                    camera: cameras.camera(track, *seen, elapsed),
+                    // A stinger's items sort on their own, over the scenes under them.
+                    depth_run: transition.cameras.depth_run(track, *seen),
+                })
+            }),
+    );
+    // The sky backdrops of its ends (ADR-0167) under every track, the one it leaves
+    // first, as [`draw_transition_skies`] drew them this frame.
+    let (from, to) = &transition.skies;
+    let skies = [
+        from.as_ref().filter(|from| Some(*from) != to.as_ref()),
+        to.as_ref(),
+    ];
+    let drawn = chains.skies.borrow();
+    let mut under = 0;
+    for scene in skies.into_iter().flatten() {
+        if drawn.get(scene).and_then(|sky| sky.drawn) != Some(cache.frame()) {
+            continue;
+        }
+        let Some(image) = cache.get(&GpuKey::Sky(scene.clone())) else {
+            continue;
+        };
+        if (image.width(), image.height()) != (canvas.width(), canvas.height()) {
+            continue;
+        }
+        items.insert(
+            under,
+            Item {
+                image,
+                placement: Placement::Legacy(LegacyTransform::IDENTITY),
+                crop: Crop::NONE,
+                opacity: OPAQUE,
+                blend: BlendMode::Normal,
+                visible: true,
+                camera: None,
+                depth_run: 0,
+            },
+        );
+        under += 1;
+    }
+}
+
+/// Draws the sky backdrops of `transition`'s ends at `at` (ADR-0167), for
+/// [`fill_tracks`] to place under its tracks: each through the camera its end's tracks
+/// are seen through, the one it shows fading in over the transition's time and the one
+/// it leaves fading out, or staying whole under the one it shows when that has a sky
+/// too, so a Move between two scenes with the same sky shows it throughout.
+///
+/// # Errors
+/// What the compositor reports for a layer or a draw.
+fn draw_transition_skies(
+    compositor: &mut Compositor,
+    (cache, chains): (&mut ResourceCache<GpuKey>, &Chains),
+    (shot, transition): (&Shot, &Transitioning),
+    (at, canvas): (MediaTime, FrameSize),
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> Result<(), RenderError> {
+    let (from, to) = &transition.skies;
+    let from = from.as_ref().filter(|from| Some(*from) != to.as_ref());
+    let backdrop = |scene: Option<&SceneId>| {
+        scene.is_some_and(|scene| {
+            first_environment(shot, scene)
+                .0
+                .is_some_and(|(_, _, sky)| sky.backdrop)
+        })
+    };
+    if !backdrop(from) && !backdrop(to.as_ref()) {
+        return Ok(());
+    }
+    let elapsed = transition::elapsed_ms(transition.start, at);
+    let cameras = moving_cameras((shot, transition), chains, at, (live, captures));
+    // The fade follows the preset's easing, as the moving camera and the tracks do.
+    let progress = if transition.end_ms > 0.0 {
+        cameras.timing.progress(elapsed).clamp(0.0, 1.0)
+    } else {
+        1.0
+    };
+    let shows = backdrop(to.as_ref());
+    if let Some(from) = from {
+        let fade = if shows { 1.0 } else { 1.0 - progress };
+        draw_sky_of(
+            compositor,
+            (&mut *cache, chains),
+            (shot, from),
+            cameras.sky_camera(true, elapsed),
+            (at, canvas, fade),
+            live,
+        )?;
+    }
+    if let Some(to) = to {
+        draw_sky_of(
+            compositor,
+            (&mut *cache, chains),
+            (shot, to),
+            cameras.sky_camera(false, elapsed),
+            // Into the scene it leaves, or from what was on screen, it is whole.
+            (at, canvas, if from.is_some() { progress } else { 1.0 }),
+            live,
+        )?;
+    }
+    Ok(())
+}
+
+/// The cameras `transition`'s tracks are seen through at `at`: each end's camera as it
+/// moves this frame, a follow camera's included.
+fn moving_cameras(
+    (shot, transition): (&Shot, &Transitioning),
+    chains: &Chains,
+    at: MediaTime,
+    (live, captures): (&LiveParams, &dyn Captures),
+) -> TrackCameras {
     let mut cameras = transition.cameras;
     let moved = |moves: &Option<Arc<CameraMoves>>,
                  family: &Option<SceneId>,
@@ -7021,31 +7574,7 @@ fn fill_tracks<'a>(
             Some(transition.start),
         ),
     );
-    items.clear();
-    items.extend(
-        transition
-            .tracks
-            .iter()
-            .filter_map(|(key, track, seen, moved)| {
-                if chains.failed(key) {
-                    return None;
-                }
-                let by = moved.offsets(track, elapsed, |item, m| shot.motion_at(item, m, at));
-                let sampled =
-                    moved_track(shot.is_canvas_box(key), &by, track.sample(elapsed, size)?);
-                Some(Item {
-                    image: cache.get(key)?,
-                    placement: track_placement(shot, key, sampled.geometry),
-                    crop: sampled.crop,
-                    opacity: sampled.opacity,
-                    blend: sampled.blend,
-                    visible: true,
-                    camera: cameras.camera(track, *seen, elapsed),
-                    // A stinger's items sort on their own, over the scenes under them.
-                    depth_run: transition.cameras.depth_run(track, *seen),
-                })
-            }),
-    );
+    cameras
 }
 
 /// `image`, of size `from`, fitted inside `into`: scaled by the same factor both ways
@@ -7525,6 +8054,7 @@ pub(crate) mod tests {
             effects: None,
             moving: None,
             motion: crate::motion::TrackMotion::same(ItemId::new("itm"), std::sync::Arc::from([])),
+            groups: None,
         }
     }
 
@@ -7981,6 +8511,7 @@ pub(crate) mod tests {
             },
             moves: (None, None),
             families: (None, None),
+            skies: (None, None),
             blends: Vec::new(),
             end_ms: 1000.0,
         };

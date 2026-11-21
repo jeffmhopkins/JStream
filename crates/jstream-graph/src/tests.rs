@@ -1331,7 +1331,7 @@ mod property {
         let owner = |source: String| jstream_protocol::FilterOwner::Source {
             source_id: SourceId::new(source),
         };
-        match rng.below(70) {
+        match rng.below(71) {
             0 => scene_create(&pool(rng, "s")),
             1 => Edit::SceneRename {
                 scene_id: SceneId::new(scene(rng)),
@@ -1778,6 +1778,7 @@ mod property {
                         _ => Some("none".into()),
                     },
                     keep_warm: false,
+                    share_space: rng.below(2) == 0,
                 },
             },
             65 => Edit::SourceSetMeta {
@@ -1812,6 +1813,12 @@ mod property {
                         Some(at)
                     }
                 },
+            },
+            // Often an item that places no group, or a scene with no camera, which are
+            // refused.
+            69 => Edit::SceneSetCameraAnchor {
+                scene_id: SceneId::new(scene(rng)),
+                anchor: (rng.below(3) != 0).then(|| ItemId::new(item(rng))),
             },
             _ => Edit::CanvasSetSize {
                 width: u32::try_from(rng.below(3000)).expect("fits"),
@@ -1942,6 +1949,7 @@ mod property {
             "scene.set_meta",
             "scene.set_options",
             "scene.set_camera",
+            "scene.set_camera_anchor",
             "label.create",
             "label.update",
             "label.reorder",
