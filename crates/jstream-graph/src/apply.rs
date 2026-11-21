@@ -470,6 +470,7 @@ fn apply_edit(
                 meta: SceneMeta::default(),
                 options: SceneOptions::default(),
                 camera: None,
+                camera_anchor: None,
                 camera_motion: Vec::new(),
                 ptz_shots: Vec::new(),
                 timelines: BTreeMap::new(),

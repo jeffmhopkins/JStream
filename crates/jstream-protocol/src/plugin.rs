@@ -129,6 +129,7 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.set_options", Class(E)),
     ("scene.set_camera", Class(E)),
     ("scene.set_camera_motion", Class(E)),
+    ("scene.set_camera_anchor", Class(E)),
     ("scene.set_ptz_shots", Class(E)),
     ("scene.set_camera_follow", Class(E)),
     ("scene.set_transitions", Class(E)),

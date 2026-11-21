@@ -778,8 +778,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
   on the position's x. The list is a draft field, which OK sends as
   `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
-  A keyframe scene shows neither, since it draws its parent's.
-  Duplicate scene copies the scene's options and camera with it, and its camera motion;
+  A keyframe scene shows neither, since it draws its parent's. A group's dialog has a
+  Share the 3D space check, sent in `scene.set_options`, and a scene's own camera, when
+  the scene places a group, a Moves with picker under Roll (`anchor_choices`: Nothing,
+  or each item placing a group, "(flat)" while it doesn't share the space), sent after
+  the camera as `scene.set_camera_anchor`
+  ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)); its note
+  says it is ignored while the camera follows the pointer or the group is flat, and a
+  stored anchor naming no group placed in the scene is listed as "(ignored)", kept but
+  ignored.
+  Duplicate scene copies the scene's options and camera with it, and its camera motion
+  and the group item its camera rides with (ADR-0164), as the copy of that item;
   the follow camera, a filter on the item it follows, goes with the copy of that item. As in the source Properties dialog
   (`PropertiesAndFilters`), the left side lists a Properties entry, then the scene's
   video chain (a keyframe shows its parent's), whose rows pick a filter whose settings
