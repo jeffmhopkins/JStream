@@ -3625,8 +3625,10 @@ The engine runs WASM automation plugins on `jstream-plugin-wasm`'s host, in proc
   install does, answering `action_failed` if that fails, which leaves it disabled; for a
   running plugin it succeeds and changes nothing. `plugin.grant` and `plugin.enable` fail
   with `not_found` for a plugin that isn't installed.
-- **Removing.** `plugin.uninstall` takes the plugin's entry out of the registry, closes a
-  running one's subscription and drops its handles, saves `plugins.json` without it,
+- **Removing.** `plugin.uninstall` takes the plugin's entry out of the registry, cuts its
+  grant to `read` at once (its session shares the grant, so a call it is still making
+  can't edit), closes a running one's subscription and drops its handles, saves
+  `plugins.json` without it,
   and then sends `plugin.uninstalled`, saving first as a disable does. Its thread ends
   once the invocation it is in returns, and its session with it; a fault after that
   finds no entry to disable, and a run under the same ID installed again has another

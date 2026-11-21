@@ -2421,8 +2421,9 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
 - **`plugin.uninstall {plugin_id}`** (0.125) removes an installed plugin, for a person
-  like the other plugin actions. A running plugin stops once the call it is in the
-  middle of returns, and the engine forgets it and its grant: `plugin.list` no longer
+  like the other plugin actions. A running plugin stops once the invocation it is in
+  returns, holding only `read` from the moment it is removed, and the engine forgets it
+  and its grant: `plugin.list` no longer
   lists it and it isn't saved, so it doesn't come back on a restart. Its package folder
   stays on disk, since it is the person's. An unknown plugin is `not_found`; one an
   install or `plugin.enable` is still loading is `action_failed`, and can be removed

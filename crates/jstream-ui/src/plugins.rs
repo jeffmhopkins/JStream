@@ -813,7 +813,7 @@ fn RemoveDialog(section: Section, plugin: PluginInfo) -> impl IntoView {
                 <button type="button" class="secondary" on:click=move |_| close()>
                     "Cancel"
                 </button>
-                <button type="button" class="danger" data-primary on:click=move |_| section.remove(id.get_value())>
+                <button type="button" class="danger" on:click=move |_| section.remove(id.get_value())>
                     "Remove"
                 </button>
             </div>

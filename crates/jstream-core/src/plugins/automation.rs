@@ -391,8 +391,9 @@ fn enable(engine: &Engine, plugin_id: &PluginId) -> Result<(), ProtocolError> {
 
 /// Removes `plugin_id`: the engine forgets it and its grant, saves the plugins file
 /// without it, and then reports it with `plugin.uninstalled`, as [`Instance::disable`]
-/// saves before it reports (#1123). A running plugin's events stop and its handles drop,
-/// so its threads end once the call it is in returns; a fault after that finds no entry
+/// saves before it reports (#1123). A running plugin's events stop, its grant is cut to
+/// `read` at once so a call it is still making can't edit, and its handles drop, so its
+/// threads end once the invocation it is in returns; a fault after that finds no entry
 /// to disable, and a later run under the same ID has another run number. One that is
 /// still `Starting` is refused, since the install or enable loading it would otherwise
 /// find its entry gone, or a new one under the same ID. Its package is left on disk.
@@ -409,8 +410,14 @@ fn uninstall(engine: &Engine, plugin_id: &PluginId) -> Result<(), ProtocolError>
                 reason: "it is still loading: remove it once its install or enable answers".into(),
             });
         }
-        match plugins.remove(plugin_id).map(|entry| entry.state) {
-            Some(Run::Running(running)) => running.events,
+        let Some(entry) = plugins.remove(plugin_id) else {
+            return Err(not_found(plugin_id));
+        };
+        // A call in flight keeps only `read` from here, as its session shares this grant
+        // (#1574 review N2).
+        *lock(&entry.grant) = PluginGrant::default();
+        match entry.state {
+            Run::Running(running) => running.events,
             _ => None,
         }
     };

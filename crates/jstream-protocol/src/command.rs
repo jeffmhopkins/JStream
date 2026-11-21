@@ -2077,9 +2077,10 @@ pub enum Action {
         /// The plugin.
         plugin_id: PluginId,
     },
-    /// Removes an installed plugin (0.125): a running one stops, the call it is in the
-    /// middle of finishing first, and the engine forgets it and its grant, so it is no
-    /// longer listed or started again with the saved plugins. Its package is left on
+    /// Removes an installed plugin (0.125): a running one stops once the invocation it is
+    /// in returns, holding only `read` from the moment it is removed, and the engine
+    /// forgets it and its grant, so it is no longer listed or started again with the
+    /// saved plugins. Its package is left on
     /// disk: it is the person's folder. `plugin.uninstalled` reports it. For a person
     /// only, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin
     /// that isn't installed, and `action_failed` for one that an install or a
