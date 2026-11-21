@@ -54,7 +54,9 @@ What exists to build on:
   behaviour, set by `scene.set_options`, and a group is a scene with the `group` role
   ([ADR-0040](0040-scene-structure-overrides-shared-groups-and-hotkey-targets.md)).
 
-This extends ADR-0094 decision 5 for groups that ask for it. A group that doesn't is drawn
+This extends ADR-0094 decision 5 for groups that ask for it, and with it ADR-0143
+decisions 3 and 4 (a group lit by its own lights, and written as a card in the depth pass)
+and ADR-0108 decision 5 (a group blurred as one), which follow from a group being a card. A group that doesn't is drawn
 exactly as today, so it contradicts nothing accepted. It is agent tier
 ([R-GOV-005](../RULES.md#R-GOV-005)): it changes no licence, security or privacy posture,
 compatibility promise or spending, and the protocol gains two optional fields and an edit.
@@ -97,7 +99,10 @@ and a move:
 place in the scene's far-to-near sort (decision 4 of ADR-0094, so children interleave with
 items outside the group), its blend mode, effects, crop, depth of field, lighting, shadows
 and depth. Lights among the children light the whole scene, and models among them cast
-shadows into it. The group item and the group scene have no layer, so:
+shadows into it. Where the scene's stacking order decides (a tie in the sort, and which
+of a scene's lights apply under the cap of ADR-0143 decision 3), the children stand in the
+group item's place, in their own order, nested groups in turn. The group item and the
+group scene have no layer, so:
 - the item's `opacity` multiplies each child's, nested groups multiplying in turn, and a
   hidden item hides them all;
 - the item's crop, flips, `billboard`, `surface`, blend mode and effects, the `scene`
@@ -128,10 +133,14 @@ is placed through the group item's pose each frame as a child is: both points mo
 the group, the picture's up is the group's up (its `−y` placed), and `roll_deg` rolls the
 picture from there. `fov_deg` doesn't change, and `focus_px` is a distance in the group's
 space, so it scales by `s` with it.
-- **Inside the rig.** Camera motion and the follow camera
+- **Inside the rig.** Camera motion
   ([ADR-0113](0113-camera-motion-and-follow-pointer.md)) and the live aim (ADR-0152) apply
   in the group's space, before the camera is placed: an operator turns the view about the
   camera's place in the rig while the rig moves.
+- **Not with the follow camera.** The follow camera (ADR-0113 decision 2) frames an item
+  of the scene in the scene's space, so while the family has `camera_follow` set the anchor
+  is kept and ignored: the follow camera is computed and drawn in the scene's space, with
+  camera motion and the aim after it, as without an anchor. The camera's Properties say so.
 - **Resolved each frame.** The placed camera is an ordinary camera in the scene's space,
   with its roll worked out from the group's up, so every consumer of a scene's camera
   takes it unchanged. When the camera looks within 0.01° of the group's up or down, the
