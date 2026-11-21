@@ -14,7 +14,6 @@ use crate::lock;
 use crate::profile::InputTotals;
 use jstream_audio::{BusControl, BusStats, InputControl, InputStats};
 use jstream_encode::{AudioSession, SessionStats, VideoSession};
-use jstream_platform::CaptureStats;
 use jstream_protocol::DropCounts;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU64, Ordering};
@@ -171,11 +170,13 @@ impl DropSource for DropSnapshot {
     }
 }
 
-/// Video frames a capture mailbox replaced before the reader took them.
+/// Capture frames dropped: frames a capture replaced that the canvas could have shown,
+/// because it repeated the capture's last frame beside them. A capture faster than the
+/// canvas replaces frames the canvas could never show; those are not drops (#1555).
 #[must_use]
-pub fn capture_drops(stats: CaptureStats) -> DropCounts {
+pub fn capture_drops(frames: u64) -> DropCounts {
     DropCounts {
-        capture_frames: stats.frames_skipped,
+        capture_frames: frames,
         ..DropCounts::default()
     }
 }
@@ -387,16 +388,11 @@ mod tests {
         video_encode_drops,
     };
     use jstream_encode::SessionStats;
-    use jstream_platform::CaptureStats;
     use jstream_protocol::DropCounts;
 
     #[test]
     fn stage_counters_map_onto_distinct_fields() {
-        let capture = capture_drops(CaptureStats {
-            frames_captured: 10,
-            frames_skipped: 4,
-            frames_undecodable: 0,
-        });
+        let capture = capture_drops(4);
         let video = video_encode_drops(SessionStats {
             dropped_queue_full: 2,
             dropped_encoder_busy: 3,

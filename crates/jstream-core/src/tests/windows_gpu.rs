@@ -76,7 +76,7 @@ fn an_output_composites_wgc_frames_on_the_gpu() {
         std::io::stderr(),
         "windows_gpu: {:?} display over {:.1} s: gpu_captures {}, readbacks {}, \
          stats.tick drops capture_frames {capture_frames} render_ticks {render_ticks}, \
-         so about {:.0} capture frames per second",
+         so about {:.0} capture frames taken or dropped per second",
         primary.size,
         ran.as_secs_f64(),
         stats.gpu_captures,
