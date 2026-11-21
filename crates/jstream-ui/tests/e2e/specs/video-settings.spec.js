@@ -70,8 +70,7 @@ test('a new resolution scales the scenes with it, in the same undo step, unless 
 
   // The seed's 640×360 box at the centre of 1920×1080 is now a third smaller, still
   // centred, sent in the batch with the size.
-  const batch = calls.sent('canvas.set_size').length;
-  expect(batch).toBe(1);
+  expect(calls.sent('canvas.set_size').length).toBe(1);
   const moved = calls.sent('item.set_geometry').find((e) => e.item_id === 'box');
   expect(moved.geometry.center.x).toBeCloseTo(640, 3);
   expect(moved.geometry.center.y).toBeCloseTo(360, 3);

@@ -542,7 +542,10 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   1920×1080 at 30 fps with Browser-style blending; a preset fills both sides, a typed
   side of 0 turns the preset to Custom and is refused in the dialog; 1280×720 at 60 fps
   in Linear light applies as one revision and reopens with those values; Apply with
-  nothing changed sends nothing; and one Undo takes back all three.
+  nothing changed sends nothing; and one Undo takes back all three. Scale scenes to the
+  new resolution starts ticked: 1280×720 then sends, in the batch with
+  `canvas.set_size`, the seed's box a third smaller and still centred, and one Undo
+  takes both back; unticked, 3840×2160 sends the size alone.
 
 <a id="running"></a>
 ## Running them
