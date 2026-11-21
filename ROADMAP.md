@@ -335,10 +335,11 @@ maintainer orders it when the beta is gathered.
 
 **Wanted for beta.1, but it doesn't wait for them:** a virtual camera on macOS (through
 OBS Studio's camera extension, [below](#macos-vcam-source)) and video files in Linux's
-media-file sources ([ADR-0072](docs/adr/0072-linux-media-file-decoding.md); audio files
-play, #1523). Each
-ships in beta.1 if it is done and passes its platform's pass; otherwise it goes to the
-release after. Until then the macOS and Linux notes say what the build lacks. Browser
+media-file sources ([ADR-0072](docs/adr/0072-linux-media-file-decoding.md)). Audio files
+play (#1523), and H.264 in MP4, MOV and Matroska through VA-API is built (#1529, #1532)
+but hasn't decoded on a real GPU yet; the Linux pass (#1357) is its first run. Each ships
+in beta.1 if it is done and passes its platform's pass; otherwise it goes to the release
+after. Until then the macOS and Linux notes say what the build lacks. Browser
 sources on macOS through CEF and the Linux virtual camera through v4l2loopback were on
 this list and are built, so the release's packages carry them.
 

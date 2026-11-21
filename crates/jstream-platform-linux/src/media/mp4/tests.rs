@@ -1,7 +1,8 @@
 use std::fs::File;
 use std::path::{Path, PathBuf};
 
-use super::{Codec, Mp4};
+use super::super::demux::Demuxed;
+use super::Codec;
 
 fn testdata(name: &str) -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -9,8 +10,8 @@ fn testdata(name: &str) -> PathBuf {
         .join(name)
 }
 
-pub(crate) fn open(name: &str) -> Mp4 {
-    Mp4::open(File::open(testdata(name)).expect("opens"))
+pub(crate) fn open(name: &str) -> Demuxed {
+    super::open(File::open(testdata(name)).expect("opens"))
         .expect("parses")
         .expect("is an MP4 file")
 }
@@ -76,7 +77,7 @@ fn reads_a_quicktime_movie() {
 #[test]
 fn other_files_are_not_mp4() {
     let file = File::open(testdata("tone.flac")).expect("opens");
-    assert!(Mp4::open(file).expect("reads").is_none());
+    assert!(super::open(file).expect("reads").is_none());
 }
 
 #[test]
@@ -89,5 +90,50 @@ fn a_box_claiming_the_largest_size_doesnt_overflow() {
     std::fs::write(&path, &bytes).expect("writes");
     let file = File::open(&path).expect("opens");
     let _ = std::fs::remove_file(&path);
-    assert!(super::Mp4::open(file).is_err());
+    assert!(super::open(file).is_err());
+}
+
+#[test]
+fn a_track_lists_no_more_samples_than_the_file_can_hold() {
+    // `stsz` with one size for every sample: version and flags, the size, the count.
+    let stsz = |size: u32, count: u32| {
+        let mut b = vec![0; 4];
+        b.extend_from_slice(&size.to_be_bytes());
+        b.extend_from_slice(&count.to_be_bytes());
+        b
+    };
+    let table = |stsz: &[u8]| {
+        // One chunk at 0 holding every sample, and one time step.
+        let stco = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0];
+        let stsc = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 1];
+        let stts = [0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 10, 0, 0, 0, 1];
+        super::sample_table(
+            &[
+                (*b"stsz", stsz),
+                (*b"stco", &stco),
+                (*b"stsc", &stsc),
+                (*b"stts", &stts),
+            ],
+            0,
+            1_000,
+        )
+    };
+    assert_eq!(table(&stsz(10, 10)).expect("fits").len(), 10);
+    // A million one-byte samples in a thousand-byte file, or ten of a kilobyte each.
+    assert!(table(&stsz(1, 1_000_000)).is_err());
+    assert!(table(&stsz(1_000, 10)).is_err());
+}
+
+#[test]
+fn reads_an_av1_mp4s_configuration_obus() {
+    let mp4 = open("av1-aom.mp4");
+    let video = mp4.video.as_ref().expect("video");
+    let Codec::Av1(obus) = &video.codec else {
+        panic!("{:?}", video.codec);
+    };
+    assert_eq!(video.size, (208, 120));
+    let mut parser = crate::media::av1::Parser::new();
+    assert!(parser.parse(obus).expect("parses").is_empty());
+    let seq = parser.sequence().expect("av1C holds the sequence header");
+    assert_eq!((seq.max_frame_width, seq.max_frame_height), (208, 120));
 }

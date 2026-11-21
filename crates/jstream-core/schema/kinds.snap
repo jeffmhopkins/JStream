@@ -1968,6 +1968,14 @@ source: crates/jstream-core/src/kinds.rs
         "label": "Safe margin",
         "description": "How far in from each edge of the frame the pointer always stays.",
         "live": true
+      },
+      {
+        "id": "hold_zoom",
+        "type": "bool",
+        "default": true,
+        "label": "Hold zoom",
+        "description": "Keep the zoom steady: near the capture's edges the camera only pans.",
+        "live": true
       }
     ]
   },

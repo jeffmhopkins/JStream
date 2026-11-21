@@ -420,7 +420,10 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    blending off. It samples the FP16 texel at its centre with a nearest sampler (the
    value a `textureLoad` gives, at about half the cost on llvmpipe, #1449),
    un-premultiplies (zero RGB where alpha is 0) and writes straight linear RGB. The sRGB format encodes RGB on store;
-   alpha is stored as-is. The output usage is `RENDER_ATTACHMENT | COPY_SRC |
+   alpha is stored as-is. The triangle writes every texel, so a GPU starts the pass
+   cleared (cheap there, and a tiled GPU then reads nothing in), and a software
+   adapter starts it loaded, sparing a clear that costs about 0.5 ms a 1080p frame on
+   llvmpipe (#1449). The output usage is `RENDER_ATTACHMENT | COPY_SRC |
    TEXTURE_BINDING`, so a snapshot or a later consumer can use it.
 
    **`render_image`** (a nested scene) stops after step 3. It composites into a new
@@ -1114,9 +1117,14 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
   of the frame). A separable gaussian (sigma radius / 3). Its cost is bounded for every
   radius: it runs at the smallest working scale of 1, 2, 4, 8 or 16 that keeps radius /
   scale at 8 or less, so a box downsample reads at most 64 texels a texel and each
-  blur pass at most 17. The bound is low for software rasterizers, which pay for every
+  blur pass at most 17 (9 where it can read them in pairs, below). The bound is low for software rasterizers, which pay for every
   load: a radius of 12 runs at half scale, about a sixth of the loads at full scale
-  (#1070). It uses three scratch layers. The frame's edges clamp, so they
+  (#1070). The weights are made once on the CPU, and on every adapter a premultiplied
+  linear input (a layer, an upload) is read in pairs: one bilinear sample between two texels,
+  placed by their weights, so a pass makes at most 9 reads. A transparent edge is read
+  in pairs only where the whole span lies inside the input, since the sampler clamps;
+  other inputs are read a texel at a time. On llvmpipe a radius of 8 costs about a
+  third less (#1449). It uses three scratch layers. The frame's edges clamp, so they
   don't darken. The area's edge is hard (no feather), and the blur inside it still
   reads pixels just outside it.
 - `pixelate`: `block_size` (1 to 256 px, default 16) and the same area. Blocks are

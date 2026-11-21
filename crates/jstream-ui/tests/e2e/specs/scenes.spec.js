@@ -4,7 +4,7 @@
 // Add source dialog and removing it with Del, and a second client seeing the changes.
 // The mock engine lists no kinds and makes no delete plans, so creating a source of a new
 // kind and deleting are covered natively.
-import { test, expect, connect, openAddSource, showPanel } from '../fixtures.js';
+import { test, expect, connect, openAddSource } from '../fixtures.js';
 
 /** The row of scene `name` in the scene list. */
 function scene(page, name) {
@@ -66,8 +66,7 @@ test('in studio mode a click puts a scene on preview, and its hover button on pr
   await scene(page, 'Intro').locator('.row-main').click();
   await expect(scene(page, 'Intro')).toHaveClass(/selected/);
   await expect(scene(page, 'Main')).toHaveAttribute('aria-current', 'true');
-  await showPanel(page, 'Transitions');
-  await expect(page.getByLabel('Scene on preview')).toHaveValue('intro');
+  await expect(page.locator('.stage-label.cued')).toHaveText('Preview · Intro');
 
   await scene(page, 'Intro').hover();
   await scene(page, 'Intro').getByRole('button', { name: 'Program' }).click();
@@ -98,9 +97,11 @@ test('F2 renames a scene, and a drag reorders it', async ({ page, context, daemo
   await dragRow(page, scene(page, 'Main'), scene(page, 'Opening'), 'before');
   await expect(sceneNames(page)).toHaveText(['Main', 'Opening']);
   await expect(sceneNames(other)).toHaveText(['Main', 'Opening']);
-  // The drag didn't click the dragged row: Opening stays selected.
-  await expect(scene(page, 'Opening')).toHaveClass(/selected/);
-  await expect(scene(page, 'Main')).not.toHaveClass(/selected/);
+  // A mouse picks a scene on the press, as OBS does, so the drag's press picked the
+  // dragged row, and its release didn't pick again.
+  await expect(scene(page, 'Main')).toHaveClass(/selected/);
+  await expect(scene(page, 'Main')).toHaveAttribute('aria-current', 'true');
+  await expect(scene(page, 'Opening')).not.toHaveClass(/selected/);
 });
 
 test('the search box and the favourites filter narrow the rows', async ({ page, daemon }) => {

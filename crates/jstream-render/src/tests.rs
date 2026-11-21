@@ -858,6 +858,17 @@ pub(crate) fn srgb_texture(
     height: u32,
     rgba: [u8; 4],
 ) -> wgpu::Texture {
+    let pixels: Vec<[u8; 4]> = std::iter::repeat_n(rgba, (width * height) as usize).collect();
+    srgb_texture_of(compositor, width, &pixels)
+}
+
+/// A `Rgba8UnormSrgb` texture `width` wide holding `pixels`, row by row.
+pub(crate) fn srgb_texture_of(
+    compositor: &Compositor,
+    width: u32,
+    pixels: &[[u8; 4]],
+) -> wgpu::Texture {
+    let height = u32::try_from(pixels.len()).expect("small") / width;
     let size = wgpu::Extent3d {
         width,
         height,
@@ -875,9 +886,7 @@ pub(crate) fn srgb_texture(
             usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
             view_formats: &[],
         });
-    let pixels: Vec<u8> = std::iter::repeat_n(rgba, (width * height) as usize)
-        .flatten()
-        .collect();
+    let pixels: Vec<u8> = pixels.iter().flatten().copied().collect();
     compositor.queue().write_texture(
         wgpu::TexelCopyTextureInfo {
             texture: &texture,

@@ -48,20 +48,26 @@ fn read_all(decoder: &mut dyn MediaDecoder) -> (usize, f64, f32) {
 }
 
 fn plays(name: &str, layout: ChannelLayout) {
+    plays_at(name, layout, 44_100);
+}
+
+/// As [`plays`], for a file whose audio decodes at `rate`.
+fn plays_at(name: &str, layout: ChannelLayout, rate: u32) {
     let mut decoder = LinuxMediaDecoders
         .open(&testdata(name), &config(true))
         .unwrap_or_else(|err| panic!("{name}: {err}"));
     let info = *decoder.info();
     assert_eq!(info.video, None, "{name}");
     let audio = info.audio.expect("audio");
-    assert_eq!(audio.format.sample_rate(), 44_100, "{name}");
+    assert_eq!(audio.format.sample_rate(), rate, "{name}");
     assert_eq!(audio.format.layout(), layout, "{name}");
     assert!(decoder.next_video().expect("no video").is_none());
 
     let (frames, first, peak) = read_all(decoder.as_mut());
     // Half a second, give or take a codec frame of padding the stream doesn't declare.
+    let half = usize::try_from(rate / 2).expect("fits");
     assert!(
-        (22_050..=22_050 + 2_048).contains(&frames),
+        (half..=half + 2_048).contains(&frames),
         "{name}: {frames} frames"
     );
     assert!(first.abs() < 1e-9, "{name}: starts at {first}");
@@ -103,6 +109,59 @@ fn plays_ogg_vorbis() {
     plays("tone.ogg", ChannelLayout::Mono);
 }
 
+#[test]
+fn plays_ogg_opus() {
+    plays_at("tone.opus", ChannelLayout::Mono, 48_000);
+}
+
+// AAC-LC (ADR-0160): an ADTS stream through symphonia's reader. ADTS declares no
+// encoder delay, so its first 1 024 frames are the encoder's priming, within `plays`'s
+// allowance.
+#[test]
+fn plays_adts_aac() {
+    plays("tone.aac", ChannelLayout::Stereo);
+}
+
+// Its pre-skip (312 frames) is cut, from the start and after a seek back to it: the
+// file's final granule position is 24 312, so exactly 24 000 frames play, from 0.
+#[test]
+fn an_ogg_opus_file_plays_without_its_pre_skip() {
+    let mut decoder = LinuxMediaDecoders
+        .open(&testdata("tone.opus"), &config(true))
+        .expect("opens");
+    for _ in 0..2 {
+        let first = decoder.next_audio().expect("decodes").expect("a block");
+        assert_eq!(first.pts().ticks(), 0);
+        let mut frames = first.frames();
+        while let Some(block) = decoder.next_audio().expect("decodes") {
+            frames += block.frames();
+        }
+        assert_eq!(frames, 24_000);
+        decoder
+            .seek(MediaTime::zero(Timebase::MICROS))
+            .expect("seeks");
+    }
+}
+
+// A WebM file goes through the crate's own demuxer and the movie decoder, built on
+// Linux only. Its audio needs no GPU.
+#[cfg(target_os = "linux")]
+#[test]
+fn plays_webm_opus_and_mixes_five_one_to_stereo() {
+    plays_at("tone-5.1.webm", ChannelLayout::Stereo, 48_000);
+}
+
+// AAC-LC in MP4, MOV and Matroska, through the crate's demuxers: the MP4's edit list cuts
+// the encoder's priming.
+#[cfg(target_os = "linux")]
+#[test]
+fn plays_aac_in_mp4_and_matroska() {
+    plays("tone-aac.m4a", ChannelLayout::Stereo);
+    plays("tone-aac.mkv", ChannelLayout::Stereo);
+    // QuickTime's version 1 sound description: its `esds` is inside a `wave` box.
+    plays("tone-aac.mov", ChannelLayout::Stereo);
+}
+
 /// A 16-bit PCM WAV of `channels` at 48 kHz, `frames` long, every sample `value`.
 fn wav(channels: u16, frames: u32, value: i16) -> Vec<u8> {
     let data_len = frames * u32::from(channels) * 2;
@@ -141,6 +200,69 @@ impl TempFile {
 impl Drop for TempFile {
     fn drop(&mut self) {
         let _ = std::fs::remove_file(&self.0);
+    }
+}
+
+// An ADTS stream whose header says AAC Main: symphonia would decode it with the LC
+// tools, so it is refused by name instead.
+#[test]
+fn adts_beyond_aac_lc_is_unsupported() {
+    let mut bytes = std::fs::read(testdata("tone.aac")).expect("reads");
+    // The first frame's profile bits: LC (1) to Main (0).
+    assert_eq!(&bytes[..3], &[0xFF, 0xF1, 0x50]);
+    bytes[2] = 0x10;
+    let file = TempFile::new("main.aac", &bytes);
+    match LinuxMediaDecoders.open(&file.0, &config(true)) {
+        Err(PlatformError::Unsupported { what }) => {
+            assert!(what.contains("object type 1"), "{what}");
+        }
+        Err(err) => panic!("{err}"),
+        Ok(_) => panic!("AAC Main doesn't decode"),
+    }
+}
+
+// An ID3v2 tag ahead of the ADTS stream, whose data looks like an AAC Main header: the
+// check skips the tag, as symphonia's reader does, and the file still plays.
+#[test]
+fn a_tagged_adts_file_still_plays() {
+    let frame = [
+        &b"PRIV"[..],
+        &[0, 0, 0, 8, 0, 0],
+        &[0xFF, 0xF1, 0x10, 0x80, 0, 0, 0, 0],
+    ]
+    .concat();
+    let mut bytes = b"ID3\x04\x00\x00\x00\x00\x00".to_vec();
+    bytes.push(u8::try_from(frame.len()).expect("small"));
+    bytes.extend_from_slice(&frame);
+    bytes.extend_from_slice(&std::fs::read(testdata("tone.aac")).expect("reads"));
+    let file = TempFile::new("tagged.aac", &bytes);
+    let mut decoder = LinuxMediaDecoders
+        .open(&file.0, &config(true))
+        .unwrap_or_else(|err| panic!("{err}"));
+    let (frames, _, _) = read_all(decoder.as_mut());
+    assert!(frames >= 22_050, "{frames} frames");
+}
+
+// The same MP4 with its AudioSpecificConfig's backward-compatible extension saying SBR
+// is present: explicit HE-AAC, refused by name rather than played as its LC core.
+#[cfg(target_os = "linux")]
+#[test]
+fn explicit_he_aac_is_unsupported() {
+    let mut bytes = std::fs::read(testdata("tone-aac.m4a")).expect("reads");
+    // DecoderSpecificInfo: AAC-LC, 44.1 kHz, stereo, then 0x2B7, SBR, absent.
+    let asc = [0x12, 0x10, 0x56, 0xE5, 0x00];
+    let at = bytes
+        .windows(asc.len())
+        .position(|w| w == asc)
+        .expect("the config");
+    bytes[at + 4] = 0x98;
+    let file = TempFile::new("he-aac.m4a", &bytes);
+    match LinuxMediaDecoders.open(&file.0, &config(true)) {
+        Err(PlatformError::Unsupported { what }) => {
+            assert!(what.contains("HE-AAC"), "{what}");
+        }
+        Err(err) => panic!("{err}"),
+        Ok(_) => panic!("explicit HE-AAC doesn't decode"),
     }
 }
 
@@ -197,18 +319,85 @@ fn an_unknown_container_is_unsupported() {
 #[test]
 fn a_movie_opens_or_names_the_missing_decoder() {
     // On a machine with a VA-API H.264 decoder it opens; elsewhere (CI) it names what
-    // to install.
-    match LinuxMediaDecoders.open(&testdata("h264-high.mp4"), &config(true)) {
+    // to install. MP3 audio in the MP4, Vorbis in the Matroska file.
+    for name in ["h264-high.mp4", "h264-vorbis.mkv"] {
+        match LinuxMediaDecoders.open(&testdata(name), &config(true)) {
+            Ok(decoder) => {
+                let info = decoder.info();
+                let video = info.video.expect("video");
+                assert_eq!((video.size.width(), video.size.height()), (120, 90));
+                assert!(info.audio.is_some(), "{name}: audio");
+            }
+            Err(PlatformError::MissingComponent { component, remedy }) => {
+                assert!(component.contains("VA-API"), "{component}");
+                assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
+            }
+            Err(err) => panic!("{name}: {err}"),
+        }
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_vp9_webm_opens_or_names_the_missing_decoder() {
+    // Profile 0, with a hidden alternate reference: on a machine with a VA-API VP9
+    // decoder it opens; elsewhere (CI) it names what to install.
+    match LinuxMediaDecoders.open(&testdata("vp9-altref.webm"), &config(true)) {
         Ok(decoder) => {
-            let info = decoder.info();
-            let video = info.video.expect("video");
-            assert_eq!((video.size.width(), video.size.height()), (120, 90));
-            assert!(info.audio.is_some(), "MP3 audio");
+            let video = decoder.info().video.expect("video");
+            assert_eq!((video.size.width(), video.size.height()), (96, 64));
         }
         Err(PlatformError::MissingComponent { component, remedy }) => {
-            assert!(component.contains("VA-API"), "{component}");
+            assert!(component.contains("VP9"), "{component}");
             assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
         }
         Err(err) => panic!("{err}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn a_vp8_webm_opens_or_names_the_missing_decoder() {
+    // An odd-sized stream with token partitions: on a machine with a VA-API VP8
+    // decoder it opens; elsewhere (CI) it names what to install.
+    match LinuxMediaDecoders.open(&testdata("vp8-parts.webm"), &config(true)) {
+        Ok(decoder) => {
+            let video = decoder.info().video.expect("video");
+            assert_eq!((video.size.width(), video.size.height()), (126, 70));
+        }
+        Err(PlatformError::MissingComponent { component, remedy }) => {
+            assert!(component.contains("VP8"), "{component}");
+            assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
+        }
+        Err(err) => panic!("{err}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn an_av1_webm_opens_or_names_the_missing_decoder() {
+    // Film grain on every frame: on a machine with a VA-API AV1 decoder it opens;
+    // elsewhere (CI) it names what to install.
+    match LinuxMediaDecoders.open(&testdata("av1-grain.webm"), &config(true)) {
+        Ok(decoder) => {
+            let video = decoder.info().video.expect("video");
+            assert_eq!((video.size.width(), video.size.height()), (176, 96));
+        }
+        Err(PlatformError::MissingComponent { component, remedy }) => {
+            assert!(component.contains("AV1"), "{component}");
+            assert!(remedy.contains("mesa-va-drivers"), "{remedy}");
+        }
+        Err(err) => panic!("{err}"),
+    }
+}
+
+#[cfg(target_os = "linux")]
+#[test]
+fn vp9_beyond_profile_0_is_unsupported() {
+    // An RGB (4:4:4, profile 1) VP9 stream, refused before any GPU is looked for.
+    match LinuxMediaDecoders.open(&testdata("vp9-opus.webm"), &config(true)) {
+        Err(PlatformError::Unsupported { what }) => assert!(what.contains("profile 1"), "{what}"),
+        Err(err) => panic!("{err}"),
+        Ok(_) => panic!("profile 1 doesn't decode"),
     }
 }

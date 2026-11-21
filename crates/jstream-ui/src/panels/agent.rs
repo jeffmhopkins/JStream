@@ -2,8 +2,8 @@
 //! newest first, as the engine's activity log (`activity.list`) says. Each row is the
 //! client's name and how long ago, in mono, over the engine's sentence for the call.
 //!
-//! Calls from JStream's own UIs (this one, and paired browsers) are left out: they are
-//! the user's own. The panel asks for new entries when it opens, after each event that
+//! Calls from JStream's own UIs (this one, paired browsers, and the desktop app's global
+//! hotkeys) are left out: they are the user's own. The panel asks for new entries when it opens, after each event that
 //! most calls send, and every 5 seconds (`POLL`), which catches failed calls and quiet
 //! actions.
 //!
@@ -18,7 +18,9 @@ use crate::app::SessionContext;
 use crate::session::CLIENT_NAME;
 use crate::store::query;
 use futures_util::StreamExt;
-use jstream_protocol::{ActivityEntry, Event, MAX_ACTIVITY_ENTRIES, Query, QueryResult};
+use jstream_protocol::{
+    ActivityEntry, Event, HOTKEYS_CLIENT_NAME, MAX_ACTIVITY_ENTRIES, Query, QueryResult,
+};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
 use std::time::Duration;
@@ -29,9 +31,11 @@ const POLL: Duration = Duration::from_secs(5);
 /// The prefix a paired browser's calls carry in the log (ADR-0044).
 const DEVICE_PREFIX: &str = "device:";
 
-/// Whether `client_name` is an agent's, not one of JStream's own UIs.
+/// Whether `client_name` is an agent's, not one of JStream's own UIs or its global hotkeys.
 pub fn is_agent(client_name: &str) -> bool {
-    client_name != CLIENT_NAME && !client_name.starts_with(DEVICE_PREFIX)
+    client_name != CLIENT_NAME
+        && client_name != HOTKEYS_CLIENT_NAME
+        && !client_name.starts_with(DEVICE_PREFIX)
 }
 
 /// How long before `now_ms` the entry at `time_ms` was, as the prototype says it
@@ -295,6 +299,7 @@ mod tests {
         assert!(is_agent("jstream-mcp"));
         assert!(!is_agent("jstream-ui"));
         assert!(!is_agent("device:Tablet"));
+        assert!(!is_agent("jstream-desktop hotkeys"));
     }
 
     #[test]

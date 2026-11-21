@@ -1,9 +1,12 @@
 //! VA-API decoding on a real GPU (`hw-tests`, run by hand):
 //! `cargo test -p jstream-platform-linux --features hw-tests -- --ignored decodes_`.
 //!
-//! H.264 decoding is exact, so each frame must match FFmpeg's software decode of the
-//! same file bit for bit: the hashes below are FNV-1a over each frame's NV12 bytes from
-//! `ffmpeg -i <file> -f rawvideo -pix_fmt nv12 -`.
+//! H.264, VP8, VP9 and AV1 decoding are exact, so each frame must match FFmpeg's software
+//! decode of the same file bit for bit: the hashes below are FNV-1a over each frame's
+//! NV12 bytes from `ffmpeg -i <file> -f rawvideo -pix_fmt nv12 -` (AV1's with `-c:v
+//! libdav1d`). AV1's film grain is specified to the bit too, but conformance doesn't
+//! require a decoder to add it exactly; dav1d and libaom do, and a GPU that doesn't fails
+//! `decodes_av1_film_grain_bit_exact` alone.
 
 use std::path::Path;
 
@@ -157,6 +160,233 @@ const OPEN_GOP: [u64; 90] = [
     0x4f30_7889_dadf_e9ee,
 ];
 
+/// `vp9-altref.webm`, decoded by libvpx and by FFmpeg's own VP9 decoder alike.
+const VP9_ALTREF: [u64; 30] = [
+    0xfd4c_44ee_35d7_5808,
+    0xd9ac_f466_76e6_2f05,
+    0xddd5_08f9_7e9b_a312,
+    0x6177_22e4_f086_dc81,
+    0xb5cc_78a9_aceb_5ace,
+    0x5106_f336_50a7_fdfa,
+    0xd184_83b5_f258_6784,
+    0x76c8_e0bf_beff_5ae9,
+    0x8507_3d02_f956_bb1f,
+    0x1e84_f60c_afac_9893,
+    0x2f1f_2f2d_f03f_df55,
+    0x14ae_d6c9_ec8c_5165,
+    0x9d93_5bdc_dc6d_34d9,
+    0xdbd2_f908_bb44_f543,
+    0x3624_8ab2_7dcf_db51,
+    0xd19f_ce61_2f1b_e4da,
+    0x8535_072b_d786_967a,
+    0x0f38_54d2_2948_33d3,
+    0xaddb_4211_43ae_c54a,
+    0x9f40_cf6f_fbe3_f774,
+    0xdbe9_922c_11d7_db5a,
+    0xa3e5_baed_39fa_3c6e,
+    0x5457_cb4d_2a81_711f,
+    0x0406_c87e_12aa_7757,
+    0x784f_5fb2_d632_4026,
+    0xc6ea_8fa1_6076_1580,
+    0xcfb2_5ddd_b06d_e4b8,
+    0x2920_3d58_cb8e_6847,
+    0xbd2f_5b2d_bc30_332e,
+    0x5011_f65b_1385_8cf1,
+];
+
+/// `vp9-seg-tiles.webm`, decoded by libvpx and by FFmpeg's own VP9 decoder alike.
+const VP9_SEG_TILES: [u64; 9] = [
+    0x9194_39ee_7986_3962,
+    0x225d_cec9_a92c_6041,
+    0xb106_505c_ec3f_b409,
+    0xdcd3_e772_1c83_7a67,
+    0x093d_b25b_c32c_e3de,
+    0x5ae8_04dc_caae_98c3,
+    0x0638_8e4d_e8e5_6e77,
+    0x4d61_a502_f6d0_36f8,
+    0x34e6_09c6_36b5_d4ee,
+];
+
+/// `vp9-er.webm`, decoded by libvpx and by FFmpeg's own VP9 decoder alike.
+const VP9_ER: [u64; 9] = [
+    0x420f_3de5_7ed5_97c8,
+    0x3171_9138_8209_27e1,
+    0x1cfd_d1cc_617d_421b,
+    0x30d3_eacf_d97f_4921,
+    0x1503_d635_d807_51ac,
+    0x1526_adb5_884e_b609,
+    0x79c0_19eb_3a3b_195c,
+    0x16d0_1c21_5351_30e8,
+    0xf3ed_7696_ac34_f91f,
+];
+
+/// `vp8-altref.webm`, decoded by libvpx and by FFmpeg's own VP8 decoder alike.
+const VP8_ALTREF: [u64; 30] = [
+    0x0d49_b89b_e8b0_2bde,
+    0xeb06_759b_d68d_149e,
+    0xe372_58ca_4de5_a45f,
+    0xa4be_77f3_03f6_8579,
+    0xb10c_56bc_e819_85b9,
+    0x4cc5_e851_f77c_be6e,
+    0x2a12_4213_1906_3866,
+    0x883b_98ec_a436_f5dc,
+    0x503c_f4ee_3bfd_652a,
+    0x1ab6_a84e_4f15_9acc,
+    0xa0f0_6873_5d91_4e4d,
+    0x6cc6_b1da_6c09_e057,
+    0x10ef_19be_8fa3_0c41,
+    0x3db5_e753_f8cd_370d,
+    0xd11d_654b_c9f8_397f,
+    0x71f7_dcc4_106f_a295,
+    0x69fc_80e5_c0e9_811c,
+    0x3361_9127_dae9_85a0,
+    0xc140_6bff_bd3e_dd74,
+    0x5ea3_bf2e_d552_9a1b,
+    0xd830_0d12_9d8d_8d9a,
+    0xe8b6_f45d_d1da_52f3,
+    0x9d31_6d3f_7092_f342,
+    0x5e95_6770_f678_25e2,
+    0xc35f_a0a6_6c53_a11e,
+    0xf263_0eee_b7b8_d43b,
+    0xc1a2_b834_00ca_c13a,
+    0xfb6c_589f_5df9_74ed,
+    0x5c8b_36d5_a3cb_3cdb,
+    0x086e_d36f_ed79_27ad,
+];
+
+/// `vp8-parts.webm`, decoded by libvpx and by FFmpeg's own VP8 decoder alike.
+const VP8_PARTS: [u64; 30] = [
+    0xea38_30f9_8aff_3d61,
+    0xf203_36b4_75d1_3ff0,
+    0xc1a0_8546_ffa8_8ad4,
+    0xbe8f_c9c4_e927_3744,
+    0xf889_d635_3bc7_4eb2,
+    0xbb8e_f477_e4cb_8f6e,
+    0xf4d4_cfed_a20a_abde,
+    0x6845_6d54_2cb3_af14,
+    0x2da3_2c99_ce68_db18,
+    0xd151_dd30_eabb_eecf,
+    0xc8ef_801d_b047_0418,
+    0x3b07_f5f0_1fef_900b,
+    0xe7e4_839d_64c0_564d,
+    0xef6b_947b_9eb3_127f,
+    0xafb0_20d2_579b_ee05,
+    0x53c2_6a4d_897d_a0fd,
+    0x50b9_468f_8fa7_39eb,
+    0x953c_fedc_5c6d_b80e,
+    0x2a11_3f08_a0f1_dcb6,
+    0x97d8_62fe_afef_19ac,
+    0x6e0e_6b18_1344_d1f8,
+    0xc797_f4ef_5cab_3c63,
+    0x756e_650c_967c_4752,
+    0x7d5c_620f_853a_7a23,
+    0x74cf_2881_9a8d_7af5,
+    0x1d28_d967_06e6_9476,
+    0x7dd4_b948_7570_da35,
+    0xf63f_9e6d_2753_1bf7,
+    0x93c1_a827_b3e4_9554,
+    0x6700_28e3_a893_3b63,
+];
+
+/// `av1-aom.webm` (libaom: 2x2 tiles, hidden frames shown later), decoded by dav1d and
+/// by libaom alike.
+const AV1_AOM: [u64; 30] = [
+    0xf8da_d663_b8b0_21b1,
+    0x9d6d_c689_416e_e405,
+    0xf0d0_9a8b_a8b1_0a4e,
+    0x4b0c_e1a7_eed2_7cbf,
+    0x30ff_d9e1_9e46_9841,
+    0x6eb2_f6c1_4fe5_fa1b,
+    0x5dd3_fd22_d95e_c889,
+    0x6b53_fe4f_3661_ee7a,
+    0xaffd_4a6f_f64a_bf70,
+    0x169c_4ccb_4ec1_bd25,
+    0x2fbc_24d3_25a6_b620,
+    0x8851_20de_254d_e459,
+    0xde60_905a_5bed_154d,
+    0x7383_2d29_d3be_2187,
+    0xd08d_2edf_dab1_508f,
+    0xaa8f_c4f1_2d00_113b,
+    0x0e02_580b_4492_d66f,
+    0x0f27_346a_4ea8_668b,
+    0xf3c8_d7e7_c545_1cf5,
+    0xf835_cdc0_7511_f43d,
+    0x0a51_42a0_510e_067b,
+    0x6606_1c2c_9354_b3ab,
+    0x6a92_185c_cd29_0c40,
+    0xdaa0_e375_aafb_d074,
+    0x65b4_8f8b_168c_8c9d,
+    0x8dd2_bdb2_3182_ef8e,
+    0xcf98_46c8_39a4_3e16,
+    0x339a_f5d4_320a_8d75,
+    0x309c_3172_f4fb_3cb8,
+    0x6a55_6515_1040_f59f,
+];
+
+/// `av1-gm.webm` (libaom: global motion, loop restoration, segmentation, delta q),
+/// decoded by dav1d and by libaom alike.
+const AV1_GM: [u64; 24] = [
+    0xb382_6ea4_7b5a_8251,
+    0xc4f0_0716_f3a0_b782,
+    0xf11c_7eaa_2e91_0648,
+    0x8a5d_d7f4_91a3_5349,
+    0xb6db_91bf_10e1_64ec,
+    0xaf2e_9163_92c8_d76a,
+    0xae6e_a05b_18c5_c709,
+    0x264e_e412_3631_5674,
+    0xed82_f59f_ae29_b1e2,
+    0x7d18_10b6_97ff_1644,
+    0xf35e_257b_d3fd_ae57,
+    0x160c_e0f0_47be_2f96,
+    0xa2fb_0b4d_62eb_1dbd,
+    0xbe2b_a4dc_8b55_be27,
+    0x8e1b_d557_7865_65f8,
+    0x7d58_a431_ee0a_e51b,
+    0x2081_d7a6_0173_df79,
+    0x2733_51c9_befa_5b51,
+    0xebdc_fec5_464d_5f01,
+    0xd4e9_f4c4_1f38_46bb,
+    0x58fa_c5f3_fea3_2d47,
+    0xcf64_dc0c_5f8c_2091,
+    0x75a0_cd99_3fc9_dfb9,
+    0x922a_76b0_bc25_b69d,
+];
+
+/// `av1-grain.webm` (SVT-AV1, film grain on every frame), decoded with its grain by dav1d
+/// and by libaom alike.
+const AV1_GRAIN: [u64; 30] = [
+    0xc686_3207_e815_70ba,
+    0xb99b_daa7_a65f_570e,
+    0xf88a_bb86_c40b_0d1e,
+    0xd86f_3950_e089_c2b2,
+    0x0786_4252_9124_58ab,
+    0x1fa0_48f0_8d9c_975e,
+    0xf4e7_4ecb_5998_6918,
+    0xb4e0_80ef_dc6d_a04f,
+    0xc10e_d7d9_e4f1_12e7,
+    0x2842_fecb_5231_d518,
+    0x8481_cae2_2d28_9b25,
+    0x0985_87c0_9910_8f12,
+    0xf05b_75b4_3b54_8e91,
+    0xa202_492d_767b_3c72,
+    0x2884_b321_7c5d_64a0,
+    0x4769_eeee_e8cb_6fc7,
+    0xd119_d5fe_22fa_3810,
+    0x7790_668e_b493_6756,
+    0x803d_3adf_acf4_ba9f,
+    0xddb3_91b1_5db1_6dc3,
+    0xd5c8_3b0a_820c_c015,
+    0x6b22_6c83_5a27_2092,
+    0xc00c_c60a_6f16_238b,
+    0x2cdb_df1f_baa3_d52d,
+    0x1b5f_1a3f_b5cf_0278,
+    0x085c_48ea_0ead_b158,
+    0x70af_b581_f016_e1e1,
+    0x42d3_0bcb_5cbc_1c04,
+    0xf723_a732_3f02_5fa9,
+    0x0844_9342_de6f_0d35,
+];
+
 fn fnv(planes: &[&[u8]]) -> u64 {
     let mut x: u64 = 0xcbf2_9ce4_8422_2325;
     for plane in planes {
@@ -243,4 +473,130 @@ fn decodes_an_open_gop_stream_and_seeks_to_its_recovery_point() {
         hashes.push(fnv(&planes));
     }
     assert_eq!(hashes, OPEN_GOP[30..]);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API H.264 decoder"]
+fn decodes_the_same_stream_from_matroska_bit_exact() {
+    // The MP4's video remuxed into Matroska with `-c:v copy`: the same frames.
+    decodes("h264-vorbis.mkv", &HIGH);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP9 decoder"]
+fn decodes_vp9_with_a_hidden_alternate_reference_bit_exact() {
+    decodes("vp9-altref.webm", &VP9_ALTREF);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP9 decoder"]
+fn decodes_vp9_segmentation_and_tiles_bit_exact() {
+    decodes("vp9-seg-tiles.webm", &VP9_SEG_TILES);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP9 decoder"]
+fn decodes_error_resilient_vp9_bit_exact() {
+    decodes("vp9-er.webm", &VP9_ER);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP9 decoder"]
+fn a_vp9_seek_starts_at_the_key_frame_before() {
+    // The alternate-reference stream's one key frame is its first, so a seek to 0.5 s
+    // decodes from 0 and shows the frames from 0.5 s on, bit for bit.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/media/testdata/vp9-altref.webm");
+    let config = MediaDecoderConfig {
+        video_format: PixelFormat::Nv12,
+        hardware: HardwarePreference::Require,
+        audio: false,
+    };
+    let mut decoder = LinuxMediaDecoders.open(&path, &config).expect("opens");
+    decoder
+        .seek(MediaTime::new(500_000, Timebase::MICROS))
+        .expect("seeks");
+    let mut hashes = Vec::new();
+    while let Some(frame) = decoder.next_video().expect("decodes") {
+        let planes: Vec<&[u8]> = frame.planes().iter().map(|p| p.data()).collect();
+        hashes.push(fnv(&planes));
+    }
+    assert_eq!(hashes, VP9_ALTREF[15..]);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP8 decoder"]
+fn decodes_vp8_with_a_hidden_alternate_reference_bit_exact() {
+    decodes("vp8-altref.webm", &VP8_ALTREF);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP8 decoder"]
+fn decodes_vp8_segmentation_and_token_partitions_bit_exact() {
+    // Version 1 (the simple loop filter), error resilient, a key frame every 10 frames,
+    // and a size that isn't a whole number of macroblocks.
+    decodes("vp8-parts.webm", &VP8_PARTS);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API VP8 decoder"]
+fn a_vp8_seek_starts_at_the_key_frame_before() {
+    // The partitioned stream has a key frame every 10 frames, so a seek to 0.5 s
+    // decodes from the one at 0.33 s and shows the frames from 0.5 s on, bit for bit.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/media/testdata/vp8-parts.webm");
+    let config = MediaDecoderConfig {
+        video_format: PixelFormat::Nv12,
+        hardware: HardwarePreference::Require,
+        audio: false,
+    };
+    let mut decoder = LinuxMediaDecoders.open(&path, &config).expect("opens");
+    decoder
+        .seek(MediaTime::new(500_000, Timebase::MICROS))
+        .expect("seeks");
+    let mut hashes = Vec::new();
+    while let Some(frame) = decoder.next_video().expect("decodes") {
+        let planes: Vec<&[u8]> = frame.planes().iter().map(|p| p.data()).collect();
+        hashes.push(fnv(&planes));
+    }
+    assert_eq!(hashes, VP8_PARTS[15..]);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API AV1 decoder"]
+fn decodes_av1_tiles_and_hidden_frames_bit_exact() {
+    decodes("av1-aom.webm", &AV1_AOM);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API AV1 decoder"]
+fn decodes_av1_global_motion_and_restoration_bit_exact() {
+    decodes("av1-gm.webm", &AV1_GM);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API AV1 decoder"]
+fn decodes_av1_film_grain_bit_exact() {
+    decodes("av1-grain.webm", &AV1_GRAIN);
+}
+
+#[test]
+#[ignore = "needs a GPU with a VA-API AV1 decoder"]
+fn an_av1_seek_starts_at_the_key_frame_before() {
+    // The grain stream has key frames at 0 and 0.5 s, so a seek to 0.6 s decodes from
+    // the second and shows the frames from 0.6 s on, bit for bit.
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("src/media/testdata/av1-grain.webm");
+    let config = MediaDecoderConfig {
+        video_format: PixelFormat::Nv12,
+        hardware: HardwarePreference::Require,
+        audio: false,
+    };
+    let mut decoder = LinuxMediaDecoders.open(&path, &config).expect("opens");
+    decoder
+        .seek(MediaTime::new(600_000, Timebase::MICROS))
+        .expect("seeks");
+    let mut hashes = Vec::new();
+    while let Some(frame) = decoder.next_video().expect("decodes") {
+        let planes: Vec<&[u8]> = frame.planes().iter().map(|p| p.data()).collect();
+        hashes.push(fnv(&planes));
+    }
+    assert_eq!(hashes, AV1_GRAIN[18..]);
 }

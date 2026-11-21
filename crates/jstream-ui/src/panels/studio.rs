@@ -1,15 +1,19 @@
-//! The Transitions panel: in studio mode the scene on preview, the scene on program and
-//! the transition that takes preview to program; then the collection's transition
-//! presets, in a picker with the picked one's editor, and each scene's overrides
+//! Studio mode and the Transitions panel. In studio mode the canvas shows the preview
+//! scene and the program monitor sits beside it (`workspace.rs`), with
+//! [`StudioControls`] between them: Transition, which takes preview to program with the
+//! chosen preset, Cut, the preset picker and Swap; [`StageLabel`] names each side. The
+//! Transitions panel ([`StudioMode`]) holds the collection's transition presets, in a
+//! picker with the picked one's editor, and each scene's overrides
 //! ([ADR-0029](../../../../docs/adr/0029-transitions.md)). Also the scene menus'
 //! Transition in and out submenus ([`override_submenu`]).
 //!
 //! The engine has no studio-mode switch: preview is always there (`studio.set_preview`)
 //! and `scene.switch` puts a scene on program with a transition; studio mode is the
-//! page's (`Studio::studio_mode`), and only shows or hides the bar. The panel shows which
-//! preset a switch will use, following the engine's order (the one the switch names, the
-//! new scene's `transition_in`, the old scene's `transition_out`, the default), so the
-//! label under the button matches what the engine does.
+//! page's (`Studio::studio_mode`), and only changes the layout and what a scene click
+//! does. The controls and the panel share one state ([`provide_transitions`]). The
+//! controls show which preset a switch will use, following the engine's order (the one
+//! the switch names, the new scene's `transition_in`, the old scene's `transition_out`,
+//! the default), so the line under the buttons matches what the engine does.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#transitions
 
@@ -793,7 +797,7 @@ pub fn keep_newer_studio(answer: &mut Snapshot, changed: bool, last: Option<Stud
 
 /// The panel's state, shared by its parts. Every field is `Copy`.
 #[derive(Clone, Copy)]
-struct Panel {
+pub(crate) struct Panel {
     /// The open session.
     session: SessionContext,
     /// The scenes, presets and studio state, once loaded.
@@ -980,74 +984,80 @@ impl Panel {
     }
 }
 
-/// The studio-mode panel: preview, program, the transition between them, and the
-/// transition presets. Reads the open session from [`SessionContext`] context.
-#[component]
-pub fn StudioMode() -> impl IntoView {
-    let Some(session) = use_context::<SessionContext>() else {
-        return view! { <p class="placeholder">"Not connected."</p> }.into_any();
-    };
-    let panel = Panel {
-        session,
-        snapshot: RwSignal::new(None),
-        kinds: RwSignal::new(builtin_transition_kinds()),
-        chosen: RwSignal::new(None),
-        swap: RwSignal::new(true),
-        running: RwSignal::new(None),
-        problem: RwSignal::new(None),
-        loads: StoredValue::new(0),
-        changes: StoredValue::new(0),
-        studio: StoredValue::new(None),
-        transitions: StoredValue::new(0),
-    };
-
-    // Follow the engine: re-read on a collection change (or lost events), and take
-    // studio changes as they come. The loop holds only the event stream, which ends
-    // when the session closes.
-    if let Some(open) = session.get() {
-        let mut events = open.control.events();
-        drop(open);
-        panel.reload();
-        panel.load_kinds();
-        spawn_local(async move {
-            while let Some(event) = events.next().await {
-                match event {
-                    Event::StateChanged { .. } | Event::EventsDropped { .. } => panel.reload(),
-                    Event::StudioChanged {
-                        program_scene,
-                        preview_scene,
-                        transition,
-                        ..
-                    } => panel.studio_changed(
-                        program_scene,
-                        preview_scene,
-                        transition.map(|t| t.duration_ms),
-                    ),
-                    _ => {}
+impl Panel {
+    /// The panel's state for `session`, following the engine: it re-reads on a
+    /// collection change (or lost events), and takes studio changes as they come. The
+    /// loop holds only the event stream, which ends when the session closes.
+    fn start(session: SessionContext) -> Panel {
+        let panel = Panel {
+            session,
+            snapshot: RwSignal::new(None),
+            kinds: RwSignal::new(builtin_transition_kinds()),
+            chosen: RwSignal::new(None),
+            swap: RwSignal::new(true),
+            running: RwSignal::new(None),
+            problem: RwSignal::new(None),
+            loads: StoredValue::new(0),
+            changes: StoredValue::new(0),
+            studio: StoredValue::new(None),
+            transitions: StoredValue::new(0),
+        };
+        if let Some(open) = session.get() {
+            let mut events = open.control.events();
+            drop(open);
+            panel.reload();
+            panel.load_kinds();
+            spawn_local(async move {
+                while let Some(event) = events.next().await {
+                    match event {
+                        Event::StateChanged { .. } | Event::EventsDropped { .. } => {
+                            panel.reload();
+                        }
+                        Event::StudioChanged {
+                            program_scene,
+                            preview_scene,
+                            transition,
+                            ..
+                        } => panel.studio_changed(
+                            program_scene,
+                            preview_scene,
+                            transition.map(|t| t.duration_ms),
+                        ),
+                        _ => {}
+                    }
                 }
-            }
-        });
+            });
+        }
+        panel
     }
 
-    let scenes = move || {
-        panel.snapshot.with(|snapshot| {
-            snapshot
-                .as_ref()
-                .map(|snapshot| snapshot.scenes.clone())
-                .unwrap_or_default()
-        })
+    /// The page's panel state: the one the shell provides, so the studio controls over
+    /// the canvas and the Transitions panel share the chosen preset, the swap and the
+    /// running transition; else one of its own.
+    fn shared(session: SessionContext) -> Panel {
+        use_context::<Panel>().unwrap_or_else(|| Panel::start(session))
+    }
+}
+
+/// Provides the transitions state the studio controls and the Transitions panel share,
+/// once per session (the shell calls it). Does nothing without a session.
+pub fn provide_transitions() {
+    if let Some(session) = use_context::<SessionContext>() {
+        provide_context(Panel::start(session));
+    }
+}
+
+/// Studio mode's controls, between preview and program over the canvas: Transition,
+/// which takes the preview scene to program with the chosen preset (or the one the
+/// engine resolves), Cut, the preset picker with the line naming the preset the next
+/// switch uses, Swap, and the running transition. Reads the open session from
+/// [`SessionContext`] context.
+#[component]
+pub fn StudioControls() -> impl IntoView {
+    let Some(session) = use_context::<SessionContext>() else {
+        return ().into_any();
     };
-    let preview = move || {
-        panel
-            .snapshot
-            .with(|s| s.as_ref().and_then(|s| s.preview.clone()))
-    };
-    let program_name = move || {
-        panel.snapshot.with(|snapshot| {
-            let snapshot = snapshot.as_ref()?;
-            Some(snapshot.scene_name(snapshot.program.as_ref()?))
-        })
-    };
+    let panel = Panel::shared(session);
     let blocker = move || {
         panel.snapshot.with(|snapshot| match snapshot {
             Some(snapshot) => switch_blocker(snapshot),
@@ -1074,109 +1084,61 @@ pub fn StudioMode() -> impl IntoView {
                 .map(|snapshot| expected_label(snapshot, panel.chosen.get().as_ref()))
         })
     };
-    let set_preview = move |event: leptos::ev::Event| {
-        let scene_id = SceneId::new(event_target_value(&event));
-        panel.run(move |session| async move {
-            action(&*session.control, Action::StudioSetPreview { scene_id }).await
-        });
-    };
-    let shared = use_context::<crate::store::Studio>();
-    let studio_mode = move || shared.is_none_or(|s| s.studio_mode.get());
     let choose = move |event: leptos::ev::Event| {
         let value = event_target_value(&event);
         panel
             .chosen
             .set((!value.is_empty()).then(|| TransitionPresetId::new(value)));
     };
-
     view! {
-        <section class="studio" aria-label="Transitions">
-            <Show
-                when=studio_mode
-                fallback=|| view! {
-                    <p class="hint studio-off">
-                        "Studio mode is off: clicking a scene puts it on program. Turn it on in \
-                         the header to set a scene up on preview first."
-                    </p>
-                }
+        <section class="studio-controls" aria-label="Studio controls">
+            <button
+                class="primary take"
+                disabled=move || blocker().is_some()
+                title=move || blocker().unwrap_or("Takes the preview scene to program")
+                on:click=move |_| panel.switch(panel.chosen.get_untracked())
             >
-            <div class="studio-bar">
-                <label class="slot">
-                    <span class="slot-name">"Preview"</span>
-                    <select on:change=set_preview aria-label="Scene on preview">
-                        <option
-                            value=""
-                            disabled=true
-                            prop:selected=move || {
-                                let preview = preview();
-                                !scenes().iter().any(|scene| Some(&scene.scene_id) == preview.as_ref())
+                "Transition"
+            </button>
+            <button
+                class="take"
+                disabled=move || blocker().is_some() || cut().is_none()
+                title=move || {
+                    if cut().is_none() {
+                        "No cut preset: add one in the Transitions panel"
+                    } else {
+                        "Puts the preview scene on program at once"
+                    }
+                }
+                on:click=move |_| panel.switch(cut())
+            >
+                "Cut"
+            </button>
+            <label class="studio-field">
+                <span class="slot-name">"Preset"</span>
+                <select on:change=choose aria-label="Transition preset">
+                    <option value="" prop:selected=move || panel.chosen.get().is_none()>
+                        "Scene or default"
+                    </option>
+                    <For each=presets key=|preset| (preset.preset_id.clone(), preset.name.clone()) let:preset>
+                        {
+                            let preset_id = preset.preset_id.clone();
+                            view! {
+                                <option
+                                    value=preset.preset_id.to_string()
+                                    prop:selected=move || panel.chosen.get().as_ref() == Some(&preset_id)
+                                >
+                                    {preset.name}
+                                </option>
                             }
-                        >
-                            "Choose a scene"
-                        </option>
-                        <For each=scenes key=|scene| (scene.scene_id.clone(), scene.name.clone()) let:scene>
-                            {
-                                let scene_id = scene.scene_id.clone();
-                                view! {
-                                    <option
-                                        value=scene.scene_id.to_string()
-                                        prop:selected=move || preview().as_ref() == Some(&scene_id)
-                                    >
-                                        {scene.name}
-                                    </option>
-                                }
-                            }
-                        </For>
-                    </select>
-                </label>
-                <div class="studio-actions">
-                    <select on:change=choose aria-label="Transition preset">
-                        <option value="" prop:selected=move || panel.chosen.get().is_none()>
-                            "Scene or default preset"
-                        </option>
-                        <For each=presets key=|preset| (preset.preset_id.clone(), preset.name.clone()) let:preset>
-                            {
-                                let preset_id = preset.preset_id.clone();
-                                view! {
-                                    <option
-                                        value=preset.preset_id.to_string()
-                                        prop:selected=move || panel.chosen.get().as_ref() == Some(&preset_id)
-                                    >
-                                        {preset.name}
-                                    </option>
-                                }
-                            }
-                        </For>
-                    </select>
-                    <button
-                        class="primary"
-                        disabled=move || blocker().is_some()
-                        title=move || blocker().unwrap_or("Puts the preview scene on program")
-                        on:click=move |_| panel.switch(panel.chosen.get_untracked())
-                    >
-                        "Transition"
-                    </button>
-                    <button
-                        disabled=move || blocker().is_some() || cut().is_none()
-                        title=move || {
-                            if cut().is_none() { "No cut preset: add one below" } else { "Switches at once" }
                         }
-                        on:click=move |_| panel.switch(cut())
-                    >
-                        "Cut"
-                    </button>
-                    <label class="inline-label">
-                        <input type="checkbox" class="inline-check" bind:checked=panel.swap />
-                        "Swap"
-                    </label>
-                </div>
-                <div class="slot">
-                    <span class="slot-name">"Program"</span>
-                    <strong class="program-name">
-                        {move || program_name().unwrap_or_else(|| "None".into())}
-                    </strong>
-                </div>
-            </div>
+                    </For>
+                </select>
+            </label>
+            <label class="inline-label" title="After a switch, the scene that was on program goes on preview">
+                <input type="checkbox" class="inline-check" bind:checked=panel.swap />
+                "Swap"
+            </label>
             <p class="hint" role="status">
                 {move || match panel.running.get() {
                     Some(running) => {
@@ -1186,14 +1148,135 @@ pub fn StudioMode() -> impl IntoView {
                             .unwrap_or_default();
                         view! {
                             <progress aria-label="Transition running"></progress>
-                            " Transitioning to " {to} " (" {running.duration_ms} " ms)"
+                            " To " {to} " (" {running.duration_ms} " ms)"
                         }
                             .into_any()
                     }
-                    None => label().unwrap_or_default().into_any(),
+                    None => match blocker() {
+                        Some(why) if panel.snapshot.with(Option::is_some) => why.into_any(),
+                        _ => label().unwrap_or_default().into_any(),
+                    },
                 }}
             </p>
-            </Show>
+            {move || {
+                panel.problem.get().map(|problem| {
+                    view! {
+                        <p class="problem" role="alert">
+                            {problem}
+                            " "
+                            <button class="link" on:click=move |_| panel.problem.set(None)>
+                                "Dismiss"
+                            </button>
+                        </p>
+                    }
+                })
+            }}
+        </section>
+    }
+    .into_any()
+}
+
+/// Which side of studio mode a [`StageLabel`] names.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Side {
+    /// The canvas, which shows the preview scene.
+    Preview,
+    /// The program monitor.
+    Program,
+}
+
+/// The text over one side of studio mode: "Preview · Intro", "Program · Main". The
+/// canvas shows the selected scene, which in studio mode is the preview scene once a
+/// scene is clicked; while another is shown (picked some other way), the label says so.
+pub fn stage_label(
+    side: Side,
+    name: impl Fn(&SceneId) -> String,
+    program: Option<&SceneId>,
+    preview: Option<&SceneId>,
+    shown: Option<&SceneId>,
+) -> String {
+    match side {
+        Side::Program => match program {
+            Some(id) => format!("Program · {}", name(id)),
+            None => "Program · none".into(),
+        },
+        Side::Preview => match (preview, shown) {
+            (Some(preview), Some(shown)) if preview != shown => {
+                format!("Editing {} · not on preview", name(shown))
+            }
+            (Some(preview), _) => format!("Preview · {}", name(preview)),
+            (None, Some(shown)) => format!("Editing {} · not on preview", name(shown)),
+            (None, None) => "Preview · none".into(),
+        },
+    }
+}
+
+/// The label over one side of studio mode ([`stage_label`]), green over preview and red
+/// over program, as the multiview frames them.
+#[component]
+pub fn StageLabel(
+    /// The side it names.
+    side: Side,
+) -> impl IntoView {
+    let studio = expect_context::<crate::store::Studio>();
+    let text = move || {
+        let name = |id: &SceneId| {
+            studio.collection.with(|c| {
+                c.as_ref()
+                    .and_then(|c| c.scene(id))
+                    .map_or_else(|| id.to_string(), |s| s.name.clone())
+            })
+        };
+        let program = studio.program.get();
+        let preview = studio.preview.get();
+        let shown = studio.selection.with(|s| s.scene.clone());
+        stage_label(
+            side,
+            name,
+            program.as_ref(),
+            preview.as_ref(),
+            shown.as_ref(),
+        )
+    };
+    let cued = move || {
+        side == Side::Preview && {
+            let preview = studio.preview.get();
+            preview.is_some() && studio.selection.with(|s| s.scene == preview)
+        }
+    };
+    view! {
+        <div
+            class="stage-label"
+            class:program=move || side == Side::Program
+            class:cued=cued
+        >
+            {text}
+        </div>
+    }
+}
+
+/// The Transitions panel: the transition presets, with each scene's overrides. Studio
+/// mode's own controls are over the canvas ([`StudioControls`]). Reads the open session
+/// from [`SessionContext`] context.
+#[component]
+pub fn StudioMode() -> impl IntoView {
+    let Some(session) = use_context::<SessionContext>() else {
+        return view! { <p class="placeholder">"Not connected."</p> }.into_any();
+    };
+    let panel = Panel::shared(session);
+    let shared = use_context::<crate::store::Studio>();
+    let studio_mode = move || shared.is_none_or(|s| s.studio_mode.get());
+    view! {
+        <section class="studio" aria-label="Transitions">
+            <p class="hint studio-off">
+                {move || if studio_mode() {
+                    "Studio mode is on: Transition and Cut are between preview and program, \
+                     over the canvas."
+                } else {
+                    "Studio mode is off: clicking a scene puts it on program. Turn it on in \
+                     the header to set a scene up on preview first."
+                }}
+            </p>
             {move || {
                 panel.problem.get().map(|problem| {
                     view! {
@@ -1723,11 +1806,11 @@ fn OverrideRow(panel: Panel, scene: SceneRow) -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::{
-        Draft, Reason, SceneRow, Snapshot, cut_preset, default_settings, expected_label,
+        Draft, Reason, SceneRow, Side, Snapshot, cut_preset, default_settings, expected_label,
         expected_preset, initial_pick, keep_newer_studio, load, new_preset_edit, next_preset_id,
         override_counts, override_lines, override_note, param_value, parse_duration, parse_easing,
-        picker_label, preset_hint, swap_action, switch_action, switch_blocker, transition_kinds,
-        update_edit,
+        picker_label, preset_hint, stage_label, swap_action, switch_action, switch_blocker,
+        transition_kinds, update_edit,
     };
     use jstream_control::protocol::{
         Action, Easing, Edit, FADE, Hello, MOVE, PROTOCOL_VERSION, Rev, SceneId, Settings,
@@ -1957,6 +2040,28 @@ mod tests {
         assert_eq!(
             switch_blocker(&snapshot),
             Some("Put a scene on preview first.")
+        );
+    }
+
+    /// Each side of studio mode names its scene; the preview side says when the canvas
+    /// shows another scene than the one on preview.
+    #[test]
+    fn the_stage_labels_name_preview_and_program() {
+        let (a, b) = (SceneId::new("a"), SceneId::new("b"));
+        let name = |id: &SceneId| id.as_str().to_uppercase();
+        let label =
+            |side, shown: Option<&SceneId>| stage_label(side, name, Some(&a), Some(&b), shown);
+        assert_eq!(label(Side::Program, Some(&b)), "Program · A");
+        assert_eq!(label(Side::Preview, Some(&b)), "Preview · B");
+        assert_eq!(label(Side::Preview, None), "Preview · B");
+        assert_eq!(label(Side::Preview, Some(&a)), "Editing A · not on preview");
+        assert_eq!(
+            stage_label(Side::Preview, name, None, None, None),
+            "Preview · none"
+        );
+        assert_eq!(
+            stage_label(Side::Program, name, None, None, None),
+            "Program · none"
         );
     }
 

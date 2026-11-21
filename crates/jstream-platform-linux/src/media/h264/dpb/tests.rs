@@ -20,7 +20,7 @@ fn plan(name: &str) -> (Vec<Output>, Vec<(char, usize, usize)>) {
     let mut outputs = Vec::new();
     let mut pictures = Vec::new();
     for sample in &video.samples {
-        let data = mp4.read(sample).expect("reads");
+        let data = mp4.read(&video, sample).expect("reads");
         let nals = split_length_prefixed(&data, config.length_size);
         let (before, picture) = planner.submit(&nals, sample.pts).expect("plans");
         outputs.extend(before);
@@ -117,7 +117,7 @@ fn a_reset_skips_to_the_next_intra_picture() {
     // Starting mid-GOP: nothing decodes until the IDR at sample 15, the next picture
     // that is all intra.
     for (i, sample) in video.samples.iter().enumerate().skip(3) {
-        let data = mp4.read(sample).expect("reads");
+        let data = mp4.read(&video, sample).expect("reads");
         let nals = split_length_prefixed(&data, config.length_size);
         let (_, picture) = planner.submit(&nals, sample.pts).expect("plans");
         assert_eq!(picture.is_some(), i >= 15, "sample {i}");
@@ -147,7 +147,7 @@ fn a_seek_starts_at_an_open_gops_recovery_point() {
     planner.reset();
     let mut outputs = Vec::new();
     for sample in &video.samples[28..] {
-        let data = mp4.read(sample).expect("reads");
+        let data = mp4.read(&video, sample).expect("reads");
         let nals = split_length_prefixed(&data, config.length_size);
         let (before, picture) = planner.submit(&nals, sample.pts).expect("plans");
         outputs.extend(before);

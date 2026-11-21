@@ -1,5 +1,5 @@
-//! libva's H.264 and HEVC encode structs, its H.264 decode structs (ADR-0072), and their
-//! constants, hand-written (ADR-0060 §8).
+//! libva's H.264 and HEVC encode structs, its H.264, VP8, VP9 and AV1 decode structs
+//! (ADR-0072), and their constants, hand-written (ADR-0060 §8).
 //!
 //! Each struct mirrors its C declaration field for field, `#[repr(C)]`, with C bitfield
 //! unions as one `u32` (or `u16`) that `h264` and `hevc` pack. They were checked against
@@ -15,14 +15,20 @@
 //!
 //! The H.264 decode structs (`va/va.h`'s `VAPictureParameterBufferH264`,
 //! `VAIQMatrixBufferH264` and `VASliceParameterBufferH264`) were checked the same way,
-//! against the same release, and their sizes and offsets are asserted below.
+//! against the same release, and their sizes and offsets are asserted below. So were
+//! the VP9 decode structs (`va/va_dec_vp9.h`), with the bit of each `pic_fields` and
+//! `segment_flags` field printed one at a time, and the VP8 ones (`va/va_dec_vp8.h`,
+//! and `VAIQMatrixBufferVP8` and `VAProbabilityDataBufferVP8` from `va/va.h`), with
+//! the bit of each `pic_fields` field printed the same way. So were the AV1 ones
+//! (`va/va_dec_av1.h`), with a bit of each bitfield union printed the same way.
 //!
 //! The surface attributes and the DRM PRIME descriptor that import an encode target
 //! (`va/va.h`, `va/va_drmcommon.h`) were checked the same way, against the same
 //! release.
 //!
 //! Plain data with no pointers (apart from [`CodedBufferSegment`], which only libva
-//! writes, and [`GenericValue`], which carries the descriptor's address), so it builds
+//! writes, [`GenericValue`], which carries the descriptor's address, and
+//! [`DecPicParamAv1`]'s `anchor_frames_list`, which is always null), so it builds
 //! on every platform and the parameter builders are tested everywhere.
 
 /// `VAEntrypointVLD`: decoding.
@@ -40,6 +46,8 @@ pub(crate) mod dec_buffer {
     pub(crate) const SLICE_PARAMETER: i32 = 4;
     /// `VASliceDataBufferType`.
     pub(crate) const SLICE_DATA: i32 = 5;
+    /// `VAProbabilityBufferType`: VP8's coefficient probabilities.
+    pub(crate) const PROBABILITY: i32 = 13;
 }
 
 /// `VAPictureParameterBufferH264`: one picture to decode.
@@ -120,6 +128,288 @@ pub(crate) struct DecSliceParamH264 {
     pub(crate) chroma_weight_l1_flag: u8,
     pub(crate) chroma_weight_l1: [[i16; 2]; 32],
     pub(crate) chroma_offset_l1: [[i16; 2]; 32],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VADecPictureParameterBufferVP9`: one VP9 frame to decode.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecPicParamVp9 {
+    pub(crate) frame_width: u16,
+    pub(crate) frame_height: u16,
+    pub(crate) reference_frames: [Id; 8],
+    /// `pic_fields`: `subsampling_x` (bit 0), `subsampling_y` (1), `frame_type` (2),
+    /// `show_frame` (3), `error_resilient_mode` (4), `intra_only` (5),
+    /// `allow_high_precision_mv` (6), `mcomp_filter_type` (7-9),
+    /// `frame_parallel_decoding_mode` (10), `reset_frame_context` (11-12),
+    /// `refresh_frame_context` (13), `frame_context_idx` (14-15),
+    /// `segmentation_enabled` (16), `segmentation_temporal_update` (17),
+    /// `segmentation_update_map` (18), `last_ref_frame` (19-21),
+    /// `last_ref_frame_sign_bias` (22), `golden_ref_frame` (23-25),
+    /// `golden_ref_frame_sign_bias` (26), `alt_ref_frame` (27-29),
+    /// `alt_ref_frame_sign_bias` (30), `lossless_flag` (31).
+    pub(crate) pic_fields: u32,
+    pub(crate) filter_level: u8,
+    pub(crate) sharpness_level: u8,
+    pub(crate) log2_tile_rows: u8,
+    pub(crate) log2_tile_columns: u8,
+    pub(crate) frame_header_length_in_bytes: u8,
+    pub(crate) first_partition_size: u16,
+    pub(crate) mb_segment_tree_probs: [u8; 7],
+    pub(crate) segment_pred_probs: [u8; 3],
+    pub(crate) profile: u8,
+    pub(crate) bit_depth: u8,
+    pub(crate) va_reserved: [u32; 8],
+}
+
+/// `VASegmentParameterVP9`: one segment's parameters.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SegmentParamVp9 {
+    /// `segment_reference_enabled` (bit 0), `segment_reference` (1-2),
+    /// `segment_reference_skipped` (3).
+    pub(crate) segment_flags: u16,
+    pub(crate) filter_level: [[u8; 2]; 4],
+    pub(crate) luma_ac_quant_scale: i16,
+    pub(crate) luma_dc_quant_scale: i16,
+    pub(crate) chroma_ac_quant_scale: i16,
+    pub(crate) chroma_dc_quant_scale: i16,
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VASliceParameterBufferVP9`: the whole frame, as one slice.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecSliceParamVp9 {
+    pub(crate) slice_data_size: u32,
+    pub(crate) slice_data_offset: u32,
+    pub(crate) slice_data_flag: u32,
+    pub(crate) seg_param: [SegmentParamVp9; 8],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VABoolCoderContextVPX`: the boolean decoder's state where the frame header ends.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct BoolCoderContextVpx {
+    pub(crate) range: u8,
+    pub(crate) value: u8,
+    pub(crate) count: u8,
+}
+
+/// `VAPictureParameterBufferVP8`: one VP8 frame to decode.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecPicParamVp8 {
+    pub(crate) frame_width: u32,
+    pub(crate) frame_height: u32,
+    pub(crate) last_ref_frame: Id,
+    pub(crate) golden_ref_frame: Id,
+    pub(crate) alt_ref_frame: Id,
+    pub(crate) out_of_loop_frame: Id,
+    /// `pic_fields`: `key_frame` (bit 0, set for an inter frame), `version` (1-3),
+    /// `segmentation_enabled` (4), `update_mb_segmentation_map` (5),
+    /// `update_segment_feature_data` (6), `filter_type` (7), `sharpness_level` (8-10),
+    /// `loop_filter_adj_enable` (11), `mode_ref_lf_delta_update` (12),
+    /// `sign_bias_golden` (13), `sign_bias_alternate` (14), `mb_no_coeff_skip` (15),
+    /// `loop_filter_disable` (16).
+    pub(crate) pic_fields: u32,
+    pub(crate) mb_segment_tree_probs: [u8; 3],
+    pub(crate) loop_filter_level: [u8; 4],
+    pub(crate) loop_filter_deltas_ref_frame: [i8; 4],
+    pub(crate) loop_filter_deltas_mode: [i8; 4],
+    pub(crate) prob_skip_false: u8,
+    pub(crate) prob_intra: u8,
+    pub(crate) prob_last: u8,
+    pub(crate) prob_gf: u8,
+    pub(crate) y_mode_probs: [u8; 4],
+    pub(crate) uv_mode_probs: [u8; 3],
+    pub(crate) mv_probs: [[u8; 19]; 2],
+    pub(crate) bool_coder_ctx: BoolCoderContextVpx,
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VASliceParameterBufferVP8`: the frame's partitions, as one slice.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecSliceParamVp8 {
+    pub(crate) slice_data_size: u32,
+    pub(crate) slice_data_offset: u32,
+    pub(crate) slice_data_flag: u32,
+    pub(crate) macroblock_offset: u32,
+    pub(crate) num_of_partitions: u8,
+    pub(crate) partition_size: [u32; 9],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VAProbabilityDataBufferVP8`: the coefficient probabilities, by coefficient band.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct ProbabilityDataVp8 {
+    pub(crate) dct_coeff_probs: [[[[u8; 11]; 3]; 8]; 4],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VAIQMatrixBufferVP8`: each segment's quantizer indices (Y AC, Y DC, Y2 DC, Y2 AC,
+/// UV DC, UV AC).
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct IqMatrixVp8 {
+    pub(crate) quantization_index: [[u16; 6]; 4],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VASegmentationStructAV1`: the segmentation features.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct SegmentationAv1 {
+    /// `segment_info_fields`: `enabled` (bit 0), `update_map` (1), `temporal_update`
+    /// (2), `update_data` (3).
+    pub(crate) segment_info_fields: u32,
+    pub(crate) feature_data: [[i16; 8]; 8],
+    /// Each segment's enabled features, a bit each.
+    pub(crate) feature_mask: [u8; 8],
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VAFilmGrainStructAV1`: the film grain to apply to the shown frame.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct FilmGrainAv1 {
+    /// `film_grain_info_fields`: `apply_grain` (bit 0), `chroma_scaling_from_luma`
+    /// (1), `grain_scaling_minus_8` (2-3), `ar_coeff_lag` (4-5), `ar_coeff_shift_minus_6`
+    /// (6-7), `grain_scale_shift` (8-9), `overlap_flag` (10), `clip_to_restricted_range`
+    /// (11).
+    pub(crate) film_grain_info_fields: u32,
+    pub(crate) grain_seed: u16,
+    pub(crate) num_y_points: u8,
+    pub(crate) point_y_value: [u8; 14],
+    pub(crate) point_y_scaling: [u8; 14],
+    pub(crate) num_cb_points: u8,
+    pub(crate) point_cb_value: [u8; 10],
+    pub(crate) point_cb_scaling: [u8; 10],
+    pub(crate) num_cr_points: u8,
+    pub(crate) point_cr_value: [u8; 10],
+    pub(crate) point_cr_scaling: [u8; 10],
+    pub(crate) ar_coeffs_y: [i8; 24],
+    pub(crate) ar_coeffs_cb: [i8; 25],
+    pub(crate) ar_coeffs_cr: [i8; 25],
+    pub(crate) cb_mult: u8,
+    pub(crate) cb_luma_mult: u8,
+    pub(crate) cb_offset: u16,
+    pub(crate) cr_mult: u8,
+    pub(crate) cr_luma_mult: u8,
+    pub(crate) cr_offset: u16,
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VAWarpedMotionParamsAV1`: one reference's global motion.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default)]
+pub(crate) struct WarpedMotionAv1 {
+    /// `VAAV1TransformationType`: identity, translation, rotzoom, affine.
+    pub(crate) wmtype: u32,
+    pub(crate) wmmat: [i32; 8],
+    pub(crate) invalid: u8,
+    pub(crate) va_reserved: [u32; 4],
+}
+
+/// `VADecPictureParameterBufferAV1`: one AV1 frame to decode.
+#[repr(C)]
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct DecPicParamAv1 {
+    pub(crate) profile: u8,
+    pub(crate) order_hint_bits_minus_1: u8,
+    pub(crate) bit_depth_idx: u8,
+    pub(crate) matrix_coefficients: u8,
+    /// `seq_info_fields`: `still_picture` (bit 0), `use_128x128_superblock` (1),
+    /// `enable_filter_intra` (2), `enable_intra_edge_filter` (3),
+    /// `enable_interintra_compound` (4), `enable_masked_compound` (5),
+    /// `enable_dual_filter` (6), `enable_order_hint` (7), `enable_jnt_comp` (8),
+    /// `enable_cdef` (9), `mono_chrome` (10), `color_range` (11), `subsampling_x` (12),
+    /// `subsampling_y` (13), `chroma_sample_position` (14), `film_grain_params_present`
+    /// (15).
+    pub(crate) seq_info_fields: u32,
+    pub(crate) current_frame: Id,
+    pub(crate) current_display_picture: Id,
+    pub(crate) anchor_frames_num: u8,
+    /// `VASurfaceID *anchor_frames_list`: large-scale tiles only, so always null here.
+    /// A `usize` keeps the struct plain data; it is a pointer's size and alignment on
+    /// every Linux ABI JStream supports.
+    pub(crate) anchor_frames_list: usize,
+    pub(crate) frame_width_minus1: u16,
+    pub(crate) frame_height_minus1: u16,
+    pub(crate) output_frame_width_in_tiles_minus_1: u16,
+    pub(crate) output_frame_height_in_tiles_minus_1: u16,
+    pub(crate) ref_frame_map: [Id; 8],
+    pub(crate) ref_frame_idx: [u8; 7],
+    pub(crate) primary_ref_frame: u8,
+    pub(crate) order_hint: u8,
+    pub(crate) seg_info: SegmentationAv1,
+    pub(crate) film_grain_info: FilmGrainAv1,
+    pub(crate) tile_cols: u8,
+    pub(crate) tile_rows: u8,
+    pub(crate) width_in_sbs_minus_1: [u16; 63],
+    pub(crate) height_in_sbs_minus_1: [u16; 63],
+    pub(crate) tile_count_minus_1: u16,
+    pub(crate) context_update_tile_id: u16,
+    /// `pic_info_fields`: `frame_type` (bits 0-1), `show_frame` (2), `showable_frame`
+    /// (3), `error_resilient_mode` (4), `disable_cdf_update` (5),
+    /// `allow_screen_content_tools` (6), `force_integer_mv` (7), `allow_intrabc` (8),
+    /// `use_superres` (9), `allow_high_precision_mv` (10), `is_motion_mode_switchable`
+    /// (11), `use_ref_frame_mvs` (12), `disable_frame_end_update_cdf` (13),
+    /// `uniform_tile_spacing_flag` (14), `allow_warped_motion` (15), `large_scale_tile`
+    /// (16).
+    pub(crate) pic_info_fields: u32,
+    pub(crate) superres_scale_denominator: u8,
+    pub(crate) interp_filter: u8,
+    pub(crate) filter_level: [u8; 2],
+    pub(crate) filter_level_u: u8,
+    pub(crate) filter_level_v: u8,
+    /// `loop_filter_info_fields`: `sharpness_level` (bits 0-2), `mode_ref_delta_enabled`
+    /// (3), `mode_ref_delta_update` (4).
+    pub(crate) loop_filter_info_fields: u8,
+    pub(crate) ref_deltas: [i8; 8],
+    pub(crate) mode_deltas: [i8; 2],
+    pub(crate) base_qindex: u8,
+    pub(crate) y_dc_delta_q: i8,
+    pub(crate) u_dc_delta_q: i8,
+    pub(crate) u_ac_delta_q: i8,
+    pub(crate) v_dc_delta_q: i8,
+    pub(crate) v_ac_delta_q: i8,
+    /// `qmatrix_fields`: `using_qmatrix` (bit 0), `qm_y` (1-4), `qm_u` (5-8), `qm_v`
+    /// (9-12).
+    pub(crate) qmatrix_fields: u16,
+    /// `mode_control_fields`: `delta_q_present_flag` (bit 0), `log2_delta_q_res` (1-2),
+    /// `delta_lf_present_flag` (3), `log2_delta_lf_res` (4-5), `delta_lf_multi` (6),
+    /// `tx_mode` (7-8), `reference_select` (9), `reduced_tx_set_used` (10),
+    /// `skip_mode_present` (11).
+    pub(crate) mode_control_fields: u32,
+    pub(crate) cdef_damping_minus_3: u8,
+    pub(crate) cdef_bits: u8,
+    pub(crate) cdef_y_strengths: [u8; 8],
+    pub(crate) cdef_uv_strengths: [u8; 8],
+    /// `loop_restoration_fields`: `yframe_restoration_type` (bits 0-1),
+    /// `cbframe_restoration_type` (2-3), `crframe_restoration_type` (4-5),
+    /// `lr_unit_shift` (6-7), `lr_uv_shift` (8).
+    pub(crate) loop_restoration_fields: u16,
+    pub(crate) wm: [WarpedMotionAv1; 7],
+    pub(crate) va_reserved: [u32; 8],
+}
+
+/// `VASliceParameterBufferAV1`: one tile.
+#[repr(C)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct DecSliceParamAv1 {
+    pub(crate) slice_data_size: u32,
+    pub(crate) slice_data_offset: u32,
+    pub(crate) slice_data_flag: u32,
+    pub(crate) tile_row: u16,
+    pub(crate) tile_column: u16,
+    pub(crate) tg_start: u16,
+    pub(crate) tg_end: u16,
+    pub(crate) anchor_frame_idx: u8,
+    pub(crate) tile_idx_in_tile_list: u16,
     pub(crate) va_reserved: [u32; 4],
 }
 
@@ -790,6 +1080,107 @@ const _: () = {
     assert!(offset_of!(DecPicParamH264, pic_fields) == 632);
     assert!(offset_of!(DecPicParamH264, frame_num) == 636);
     assert!(offset_of!(DecPicParamH264, va_reserved) == 640);
+    assert!(size_of::<DecPicParamVp8>() == 112);
+    assert!(offset_of!(DecPicParamVp8, pic_fields) == 24);
+    assert!(offset_of!(DecPicParamVp8, mb_segment_tree_probs) == 28);
+    assert!(offset_of!(DecPicParamVp8, loop_filter_level) == 31);
+    assert!(offset_of!(DecPicParamVp8, loop_filter_deltas_ref_frame) == 35);
+    assert!(offset_of!(DecPicParamVp8, prob_skip_false) == 43);
+    assert!(offset_of!(DecPicParamVp8, y_mode_probs) == 47);
+    assert!(offset_of!(DecPicParamVp8, mv_probs) == 54);
+    assert!(offset_of!(DecPicParamVp8, bool_coder_ctx) == 92);
+    assert!(offset_of!(DecPicParamVp8, va_reserved) == 96);
+    assert!(size_of::<DecSliceParamVp8>() == 72);
+    assert!(offset_of!(DecSliceParamVp8, macroblock_offset) == 12);
+    assert!(offset_of!(DecSliceParamVp8, num_of_partitions) == 16);
+    assert!(offset_of!(DecSliceParamVp8, partition_size) == 20);
+    assert!(offset_of!(DecSliceParamVp8, va_reserved) == 56);
+    assert!(size_of::<ProbabilityDataVp8>() == 1072);
+    assert!(offset_of!(ProbabilityDataVp8, va_reserved) == 1056);
+    assert!(size_of::<IqMatrixVp8>() == 64);
+    assert!(offset_of!(IqMatrixVp8, va_reserved) == 48);
+    assert!(size_of::<SegmentationAv1>() == 156);
+    assert!(offset_of!(SegmentationAv1, feature_data) == 4);
+    assert!(offset_of!(SegmentationAv1, feature_mask) == 132);
+    assert!(offset_of!(SegmentationAv1, va_reserved) == 140);
+    assert!(size_of::<FilmGrainAv1>() == 176);
+    assert!(offset_of!(FilmGrainAv1, grain_seed) == 4);
+    assert!(offset_of!(FilmGrainAv1, point_y_scaling) == 21);
+    assert!(offset_of!(FilmGrainAv1, num_cr_points) == 56);
+    assert!(offset_of!(FilmGrainAv1, ar_coeffs_y) == 77);
+    assert!(offset_of!(FilmGrainAv1, ar_coeffs_cr) == 126);
+    assert!(offset_of!(FilmGrainAv1, cb_mult) == 151);
+    assert!(offset_of!(FilmGrainAv1, cb_offset) == 154);
+    assert!(offset_of!(FilmGrainAv1, cr_offset) == 158);
+    assert!(offset_of!(FilmGrainAv1, va_reserved) == 160);
+    assert!(size_of::<WarpedMotionAv1>() == 56);
+    assert!(offset_of!(WarpedMotionAv1, wmmat) == 4);
+    assert!(offset_of!(WarpedMotionAv1, invalid) == 36);
+    assert!(offset_of!(WarpedMotionAv1, va_reserved) == 40);
+    // `anchor_frames_list` is a pointer: these hold on 64-bit ABIs.
+    #[cfg(target_pointer_width = "64")]
+    {
+        assert!(size_of::<DecPicParamAv1>() == 1160);
+        assert!(offset_of!(DecPicParamAv1, seq_info_fields) == 4);
+        assert!(offset_of!(DecPicParamAv1, current_display_picture) == 12);
+        assert!(offset_of!(DecPicParamAv1, anchor_frames_num) == 16);
+        assert!(offset_of!(DecPicParamAv1, anchor_frames_list) == 24);
+        assert!(offset_of!(DecPicParamAv1, frame_width_minus1) == 32);
+        assert!(offset_of!(DecPicParamAv1, output_frame_width_in_tiles_minus_1) == 36);
+        assert!(offset_of!(DecPicParamAv1, ref_frame_map) == 40);
+        assert!(offset_of!(DecPicParamAv1, ref_frame_idx) == 72);
+        assert!(offset_of!(DecPicParamAv1, primary_ref_frame) == 79);
+        assert!(offset_of!(DecPicParamAv1, order_hint) == 80);
+        assert!(offset_of!(DecPicParamAv1, seg_info) == 84);
+        assert!(offset_of!(DecPicParamAv1, film_grain_info) == 240);
+        assert!(offset_of!(DecPicParamAv1, tile_cols) == 416);
+        assert!(offset_of!(DecPicParamAv1, width_in_sbs_minus_1) == 418);
+        assert!(offset_of!(DecPicParamAv1, height_in_sbs_minus_1) == 544);
+        assert!(offset_of!(DecPicParamAv1, tile_count_minus_1) == 670);
+        assert!(offset_of!(DecPicParamAv1, context_update_tile_id) == 672);
+        assert!(offset_of!(DecPicParamAv1, pic_info_fields) == 676);
+        assert!(offset_of!(DecPicParamAv1, superres_scale_denominator) == 680);
+        assert!(offset_of!(DecPicParamAv1, filter_level) == 682);
+        assert!(offset_of!(DecPicParamAv1, loop_filter_info_fields) == 686);
+        assert!(offset_of!(DecPicParamAv1, ref_deltas) == 687);
+        assert!(offset_of!(DecPicParamAv1, mode_deltas) == 695);
+        assert!(offset_of!(DecPicParamAv1, base_qindex) == 697);
+        assert!(offset_of!(DecPicParamAv1, y_dc_delta_q) == 698);
+        assert!(offset_of!(DecPicParamAv1, qmatrix_fields) == 704);
+        assert!(offset_of!(DecPicParamAv1, mode_control_fields) == 708);
+        assert!(offset_of!(DecPicParamAv1, cdef_damping_minus_3) == 712);
+        assert!(offset_of!(DecPicParamAv1, cdef_y_strengths) == 714);
+        assert!(offset_of!(DecPicParamAv1, cdef_uv_strengths) == 722);
+        assert!(offset_of!(DecPicParamAv1, loop_restoration_fields) == 730);
+        assert!(offset_of!(DecPicParamAv1, wm) == 732);
+        assert!(offset_of!(DecPicParamAv1, va_reserved) == 1124);
+    }
+    assert!(size_of::<DecSliceParamAv1>() == 40);
+    assert!(offset_of!(DecSliceParamAv1, tile_row) == 12);
+    assert!(offset_of!(DecSliceParamAv1, tile_column) == 14);
+    assert!(offset_of!(DecSliceParamAv1, tg_start) == 16);
+    assert!(offset_of!(DecSliceParamAv1, tg_end) == 18);
+    assert!(offset_of!(DecSliceParamAv1, anchor_frame_idx) == 20);
+    assert!(offset_of!(DecSliceParamAv1, tile_idx_in_tile_list) == 22);
+    assert!(offset_of!(DecSliceParamAv1, va_reserved) == 24);
+    assert!(size_of::<DecPicParamVp9>() == 92);
+    assert!(offset_of!(DecPicParamVp9, reference_frames) == 4);
+    assert!(offset_of!(DecPicParamVp9, pic_fields) == 36);
+    assert!(offset_of!(DecPicParamVp9, filter_level) == 40);
+    assert!(offset_of!(DecPicParamVp9, frame_header_length_in_bytes) == 44);
+    assert!(offset_of!(DecPicParamVp9, first_partition_size) == 46);
+    assert!(offset_of!(DecPicParamVp9, mb_segment_tree_probs) == 48);
+    assert!(offset_of!(DecPicParamVp9, segment_pred_probs) == 55);
+    assert!(offset_of!(DecPicParamVp9, profile) == 58);
+    assert!(offset_of!(DecPicParamVp9, bit_depth) == 59);
+    assert!(offset_of!(DecPicParamVp9, va_reserved) == 60);
+    assert!(size_of::<SegmentParamVp9>() == 36);
+    assert!(offset_of!(SegmentParamVp9, filter_level) == 2);
+    assert!(offset_of!(SegmentParamVp9, luma_ac_quant_scale) == 10);
+    assert!(offset_of!(SegmentParamVp9, va_reserved) == 20);
+    assert!(size_of::<DecSliceParamVp9>() == 316);
+    assert!(offset_of!(DecSliceParamVp9, seg_param) == 12);
+    assert!(offset_of!(DecSliceParamVp9, va_reserved) == 300);
     assert!(size_of::<IqMatrixH264>() == 240);
     assert!(offset_of!(IqMatrixH264, scaling_list_8x8) == 96);
     assert!(size_of::<DecSliceParamH264>() == 3128);

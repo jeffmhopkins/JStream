@@ -44,7 +44,8 @@ covers = ["crates/jstream-ui/tests/e2e/mock-daemon/**", "crates/jstream-ui/tests
   and connects; `disconnect` disconnects through the header's File menu;
   `openAddSource` opens the Add source dialog from the Sources panel's menu, by a
   right-click just under its last row (or under the empty scene's hint, since the tool
-  bar at the panel's foot opens no menu), and
+  bar at the panel's foot opens no menu), once the panel shows a scene (before the
+  first snapshot picks one, a right-click opens no menu), and
   `nestScene` nests a scene through it; `outputRow` finds an output's row in the
   Outputs panel, `addOutput` adds one through its "+ Add output" dialog,
   `openOutputSettings` opens an output's settings dialog from its row's ⋯ menu, and
@@ -114,7 +115,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   studio mode on preview, with the hover button putting it on program and the mode
   kept over a reload; F2 renaming a
   scene in place (Del inside the field deletes a character, not the scene) and a drag reordering the scenes, which a second client follows and
-  which doesn't select the dragged row; the search boxes and the favourites filter
+  whose press picks the dragged row, as a mouse press does; the search boxes and the favourites filter
   with its count, Favorites only and Clear; hiding and showing an item with its eye,
   placing an existing source again through the Add source dialog, a drag restacking the
   two items, F2 renaming one of the two placements of a source (Del there edits the
@@ -187,7 +188,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
   answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter
   on the program output's chain shows Plugins with "No CLAP audio plugins found." (gone
-  while a search is typed), whose link opens Settings on Audio plugins: the install
+  while a search is typed, the dialog keeping its height), whose link opens Settings on Audio plugins: the install
   folder, each folder searched or missing, the summary and the file that failed. Rescan
   sends one `plugin.clap_rescan`, then lists the plugin it found, Escape still closes
   the dialog, and Add filter offers the plugin under Plugins. Against the mock engine
@@ -246,7 +247,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   down and right, selected (the mock lists no kinds, so Color can't create); a scene nests once and isn't offered again, and the backdrop
   cancels the dialog. Its search box narrows the types by name ("COLOR" leaves Color,
   picked) or description ("nest" leaves Scene), shows "No source type matches." with
-  Add disabled when none match, and an empty search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
+  Add disabled when none match, the dialog keeping its height throughout, and an empty
+  search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
   restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
   with its check following, Screenshot (source) shows a toast (the mock engine streams
@@ -484,10 +486,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the Backdrop's Timing into this keyframe shows an unset Delay blank, a typed delay
   sends `item.set_timing` naming the item, and Clear timing sends `item.clear_override`
   of `timing` and blanks the field again.
-- **Studio mode** (`studio.spec.js`, on the Transitions tab): in studio mode a scene
-  picked for preview goes to program with Transition, and the old program scene comes
-  back on preview; Transition and Cut are off while preview is the program scene; the
-  studio bar shows only in studio mode; the preset picker lists the default with its
+- **Studio mode** (`studio.spec.js`): turning studio mode on puts the canvas, the
+  studio controls and the program monitor side by side, labelled "Preview · Main" and
+  "Program · Main", and turning it off takes the controls and the monitor away;
+  Transition and Cut are off while preview is the program scene; a scene clicked onto
+  preview goes to program with Transition, and the old program scene comes back on
+  preview, where the canvas shows it; with Swap off, Cut takes the preview scene and it
+  stays on preview; the Transitions panel says whether studio mode is on and has no
+  preset switch picker; the preset picker lists the default with its
   kind and "+ New preset…", the default's editor has no duration, Delete or Make
   default and counts its overrides, and choosing Fade and "+ New preset…" send their
   `transition.update` and `transition.create`; a Fade's Custom curve easing shows the
@@ -541,7 +547,11 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   1920×1080 at 30 fps with Browser-style blending; a preset fills both sides, a typed
   side of 0 turns the preset to Custom and is refused in the dialog; 1280×720 at 60 fps
   in Linear light applies as one revision and reopens with those values; Apply with
-  nothing changed sends nothing; and one Undo takes back all three.
+  nothing changed sends nothing; and one Undo takes back all three. Scale scenes to the
+  new resolution starts ticked: 1280×720 then sends, in the batch with
+  `canvas.set_size`, the seed's box a third smaller and still centred, and one Undo
+  takes both back; unticked, 3840×2160 sends the size alone. 1080×1080 scales the box by
+  9/16 and keeps it at the centre.
 
 <a id="running"></a>
 ## Running them

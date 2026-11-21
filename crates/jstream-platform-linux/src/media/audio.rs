@@ -1,8 +1,10 @@
-//! Audio decoding through symphonia (ADR-0072 (c)): the royalty-free codecs only, PCM,
-//! FLAC, Vorbis and MP3. AAC isn't built in: symphonia's `aac` feature stays off until
-//! ADR-0072 (g)'s decoder patent check says yes.
+//! Audio decoding (ADR-0072 (c)): PCM, FLAC, Vorbis and MP3 through symphonia, Opus
+//! through `rusty-opus` ([`super::opus`], ADR-0159), and AAC-LC through symphonia within
+//! ADR-0160's limits: never SBR or parametric stereo ([`super::aac`] refuses a stream
+//! that signals them).
 //!
-//! [`AudioFile`] reads a file symphonia's own readers open (WAV, FLAC, Ogg and MP3) and
+//! [`AudioFile`] reads a file symphonia's own readers open (WAV, FLAC, Ogg, MP3 and ADTS
+//! AAC) and
 //! decodes its first audio track. [`AudioStream`] is the decoding half on its own, for
 //! the packets of a container this crate demuxes itself.
 //!
@@ -18,15 +20,18 @@ use jstream_platform::media::{
     AudioBuffer, AudioFormat, ChannelLayout, MediaTime, Rounding, SampleFormat, Timebase,
 };
 use jstream_platform::{MediaAudioInfo, PlatformError};
+
+use super::opus::{self, OpusStream};
 use symphonia::core::audio::{Channels, Position};
 use symphonia::core::codecs::CodecParameters;
+use symphonia::core::codecs::audio::well_known::{CODEC_ID_AAC, CODEC_ID_OPUS};
 use symphonia::core::codecs::audio::{AudioCodecParameters, AudioDecoder, AudioDecoderOptions};
 use symphonia::core::errors::{Error, SeekErrorKind};
 use symphonia::core::formats::probe::Hint;
 use symphonia::core::formats::{FormatOptions, FormatReader, SeekMode, SeekTo, TrackType};
 use symphonia::core::io::{MediaSourceStream, MediaSourceStreamOptions};
 use symphonia::core::meta::MetadataOptions;
-use symphonia::core::units::{Time, TimeBase};
+use symphonia::core::units::{Time, TimeBase, Timestamp};
 
 /// The `call` an `Os` error names.
 const CALL: &str = "symphonia";
@@ -70,7 +75,21 @@ const MINUS_3DB: f32 = std::f32::consts::FRAC_1_SQRT_2;
 impl Downmix {
     /// The mix for a stream with `channels`: `None` when it has none.
     pub(crate) fn new(channels: &Channels) -> Option<Self> {
-        let count = channels.count();
+        match channels {
+            // A positioned layout stores its channels in the order of their bits,
+            // lowest first.
+            Channels::Positioned(positions) => Self::ordered(
+                channels.count(),
+                Some(&positions.iter().collect::<Vec<_>>()),
+            ),
+            // Discrete channels have no positions.
+            _ => Self::ordered(channels.count(), None),
+        }
+    }
+
+    /// The mix for `count` channels in the order `positions` lists them, when they have
+    /// positions: `None` when there are none.
+    pub(crate) fn ordered(count: usize, positions: Option<&[Position]>) -> Option<Self> {
         match count {
             0 => None,
             1 => Some(Self {
@@ -86,19 +105,17 @@ impl Downmix {
             _ => {
                 let mut left = vec![0.0; count];
                 let mut right = vec![0.0; count];
-                match channels {
-                    Channels::Positioned(positions) => {
-                        // A positioned layout stores its channels in the order of their
-                        // bits, lowest first.
+                match positions.filter(|p| p.len() == count) {
+                    Some(positions) => {
                         for (index, position) in positions.iter().enumerate() {
-                            let (l, r) = position_weights(position);
+                            let (l, r) = position_weights(*position);
                             left[index] = l;
                             right[index] = r;
                         }
                     }
-                    _ => {
-                        // Discrete channels have no positions: the first two are left
-                        // and right, and the rest are left out.
+                    None => {
+                        // Without positions, the first two are left and right, and the
+                        // rest are left out.
                         left[0] = 1.0;
                         right[1] = 1.0;
                     }
@@ -193,42 +210,109 @@ fn timebase(tb: TimeBase) -> Result<Timebase, PlatformError> {
     Ok(Timebase::new(tb.numer.get(), tb.denom.get())?)
 }
 
-/// Decodes one audio stream's packets: symphonia's decoder for the codec, and the mix
-/// to the output layout.
+/// The decoder behind an [`AudioStream`].
+enum Decoder {
+    /// symphonia's, for PCM, FLAC, Vorbis and MP3.
+    Symphonia(Box<dyn AudioDecoder>),
+    /// Opus, through `rusty-opus` (ADR-0159).
+    Opus(Box<OpusStream>),
+}
+
+/// What decoding one packet gave.
+enum Decoded {
+    /// Interleaved samples of the stream's channels, and how many frames the block
+    /// starts after the packet.
+    Samples(Vec<f32>, u64),
+    /// A damaged packet, and why.
+    Bad(String),
+}
+
+/// Decodes one audio stream's packets: the codec's decoder, and the mix to the output
+/// layout.
 pub(crate) struct AudioStream {
-    decoder: Box<dyn AudioDecoder>,
+    decoder: Decoder,
     downmix: Downmix,
     format: AudioFormat,
     /// The time base of the packets' timestamps.
     timebase: Timebase,
     bad_packets: u32,
+    /// Where the next block starts if it follows on from the last, at the stream's
+    /// rate: `None` after a reset.
+    expected: Option<MediaTime>,
 }
 
 impl AudioStream {
     /// A decoder for `params`, whose packets are timed in `timebase`.
     ///
     /// # Errors
-    /// [`PlatformError::Unsupported`] for a codec that isn't built in (AAC among them)
-    /// or a stream that doesn't say its rate or channels.
+    /// [`PlatformError::Unsupported`] for a codec that isn't built in, AAC beyond
+    /// AAC-LC, or a stream that doesn't say its rate or channels.
     pub(crate) fn new(
         params: &AudioCodecParameters,
         timebase: Timebase,
     ) -> Result<Self, PlatformError> {
+        if params.codec == CODEC_ID_OPUS {
+            return Self::opus(params, timebase);
+        }
+        if params.codec == CODEC_ID_AAC {
+            super::aac::check(params.extra_data.as_deref().unwrap_or_default())?;
+        }
         let decoder = symphonia::default::get_codecs()
             .make_audio_decoder(params, &AudioDecoderOptions::default())
             .map_err(|err| platform_error(&err))?;
-        let rate = params
+        // The decoder's own rate: an AAC stream's config can say another than its
+        // container (implicit HE-AAC's LC core runs at half the rate).
+        let rate = decoder
+            .codec_params()
             .sample_rate
+            .or(params.sample_rate)
             .ok_or_else(|| PlatformError::Unsupported {
                 what: "an audio stream without a sample rate".into(),
             })?;
-        let downmix = params
+        let downmix = decoder
+            .codec_params()
             .channels
             .as_ref()
+            .or(params.channels.as_ref())
             .and_then(Downmix::new)
             .ok_or_else(|| PlatformError::Unsupported {
                 what: "an audio stream without channels".into(),
             })?;
+        Self::with(Decoder::Symphonia(decoder), downmix, rate, timebase)
+    }
+
+    /// An Opus stream: its identification header is `params`' extra data.
+    fn opus(params: &AudioCodecParameters, timebase: Timebase) -> Result<Self, PlatformError> {
+        let head = params
+            .extra_data
+            .as_deref()
+            .and_then(opus::Head::parse)
+            .ok_or_else(|| PlatformError::Unsupported {
+                what: "an Opus stream without a header this decodes".into(),
+            })?;
+        let stream = OpusStream::new(&head).map_err(|err| PlatformError::Unsupported {
+            what: format!("this Opus stream's layout ({err})"),
+        })?;
+        let downmix =
+            Downmix::ordered(stream.channels(), head.positions().as_deref()).ok_or_else(|| {
+                PlatformError::Unsupported {
+                    what: "an audio stream without channels".into(),
+                }
+            })?;
+        Self::with(
+            Decoder::Opus(Box::new(stream)),
+            downmix,
+            opus::RATE,
+            timebase,
+        )
+    }
+
+    fn with(
+        decoder: Decoder,
+        downmix: Downmix,
+        rate: u32,
+        timebase: Timebase,
+    ) -> Result<Self, PlatformError> {
         let format = AudioFormat::new(rate, downmix.layout(), SampleFormat::F32Interleaved)?;
         Ok(Self {
             decoder,
@@ -236,6 +320,7 @@ impl AudioStream {
             format,
             timebase,
             bad_packets: 0,
+            expected: None,
         })
     }
 
@@ -255,35 +340,98 @@ impl AudioStream {
         &mut self,
         packet: &symphonia::core::packet::Packet,
     ) -> Result<Option<AudioBuffer>, PlatformError> {
-        let decoded = match self.decoder.decode(packet) {
-            Ok(decoded) => decoded,
-            Err(Error::DecodeError(why)) => {
+        let decoded = match &mut self.decoder {
+            Decoder::Symphonia(decoder) => match decoder.decode(packet) {
+                Ok(decoded) => {
+                    let mut samples = Vec::new();
+                    decoded.copy_to_vec_interleaved::<f32>(&mut samples);
+                    // Gapless decoding drops the packet's first `trim_start` frames (an
+                    // MP3's encoder delay), so the block starts that much after the
+                    // packet.
+                    Decoded::Samples(samples, packet.trim_start.get())
+                }
+                Err(Error::DecodeError(why)) => Decoded::Bad(why.to_string()),
+                Err(err) => return Err(platform_error(&err)),
+            },
+            Decoder::Opus(stream) => match stream.decode(&packet.data) {
+                Ok(samples) => {
+                    // Opus trims here what a packet says to (Ogg's end padding):
+                    // symphonia's decoders do it themselves. The pre-skip is cut by
+                    // whoever reads the container ([`AudioFile`], or Matroska's
+                    // `CodecDelay`), which times the stream from after it.
+                    let channels = stream.channels();
+                    let frames = samples.len() / channels;
+                    let start = usize::try_from(packet.trim_start.get())
+                        .unwrap_or(usize::MAX)
+                        .min(frames);
+                    let end = usize::try_from(packet.trim_end.get())
+                        .unwrap_or(usize::MAX)
+                        .min(frames - start);
+                    let kept = samples[start * channels..(frames - end) * channels].to_vec();
+                    Decoded::Samples(kept, packet.trim_start.get())
+                }
+                Err(err) => Decoded::Bad(err.to_string()),
+            },
+        };
+        let (samples, trim) = match decoded {
+            Decoded::Samples(samples, trim) => (samples, trim),
+            Decoded::Bad(why) => {
                 self.bad_packets += 1;
                 if self.bad_packets > MAX_BAD_PACKETS {
-                    return Err(platform_error(&Error::DecodeError(why)));
+                    return Err(PlatformError::Os {
+                        call: CALL,
+                        code: None,
+                        message: format!("the audio stops decoding: {why}"),
+                    });
                 }
                 tracing::debug!(why, "skipping an audio packet that didn't decode");
                 return Ok(None);
             }
-            Err(err) => return Err(platform_error(&err)),
         };
         self.bad_packets = 0;
-        if decoded.frames() == 0 {
+        if samples.is_empty() {
             return Ok(None);
         }
-        let mut samples = Vec::new();
-        decoded.copy_to_vec_interleaved::<f32>(&mut samples);
         let samples = self.downmix.apply(samples);
-        // Gapless decoding drops the packet's first `trim_start` frames (an MP3's encoder
-        // delay), so the block starts that much after the packet.
-        let trim = i64::try_from(packet.trim_start.get()).unwrap_or(0);
+        let trim = i64::try_from(trim).unwrap_or(0);
         let pts = MediaTime::new(packet.pts.get().saturating_add(trim), self.timebase);
+        let pts = self.follow_on(pts, samples.len() / self.format.channels())?;
         Ok(Some(AudioBuffer::new(self.format, pts, samples)?))
+    }
+
+    /// The time a block of `frames` decoded from a packet at `pts` starts at. A
+    /// container that times packets coarsely (Matroska in milliseconds) puts a block
+    /// up to a tick off from where the last one ended; within a tick, the block
+    /// follows on exactly, so the audio has no gaps or overlaps.
+    fn follow_on(&mut self, pts: MediaTime, frames: usize) -> Result<MediaTime, PlatformError> {
+        let rate = self.format.sample_rate();
+        let samples = Timebase::per_second(rate)?;
+        let at = pts.rescale(samples, Rounding::Nearest)?;
+        // One packet tick, in samples, rounded up.
+        let tick = (u64::from(rate) * u64::from(self.timebase.num()))
+            .div_ceil(u64::from(self.timebase.den()));
+        let tick = i64::try_from(tick).unwrap_or(i64::MAX);
+        let start = match self.expected {
+            Some(expected) if at.ticks().abs_diff(expected.ticks()) <= tick.unsigned_abs() => {
+                expected
+            }
+            _ => at,
+        };
+        let frames = i64::try_from(frames).unwrap_or(i64::MAX);
+        self.expected = Some(MediaTime::new(
+            start.ticks().saturating_add(frames),
+            samples,
+        ));
+        Ok(start)
     }
 
     /// Forgets what the decoder holds, after a seek.
     pub(crate) fn reset(&mut self) {
-        self.decoder.reset();
+        self.expected = None;
+        match &mut self.decoder {
+            Decoder::Symphonia(decoder) => decoder.reset(),
+            Decoder::Opus(stream) => stream.reset(),
+        }
     }
 }
 
@@ -300,6 +448,29 @@ pub(crate) struct AudioFile {
     at_end: bool,
     /// After a seek, the time the next block starts at: what decodes before it is cut.
     skip_until: Option<MediaTime>,
+    /// How far the reader's packet times run ahead of the file's timeline, in the
+    /// track's time base: an Ogg Opus stream's pre-skip, which symphonia leaves in its
+    /// granule clock (zero otherwise).
+    delay: MediaTime,
+    /// How far before its target a seek starts decoding, so the decoder has settled by
+    /// then: Opus's 80 ms (RFC 7845 §4.6), nothing for the others.
+    preroll: MediaTime,
+}
+
+/// How far before a seek's target an Opus stream starts decoding (RFC 7845 §4.6).
+const OPUS_PREROLL_MICROS: i64 = 80_000;
+
+/// The first 64 KiB of `path`, where an ADTS stream's first frame header is (after any
+/// ID3 tag); `None` when it can't be read.
+fn adts_head(path: &Path) -> Option<Vec<u8>> {
+    use std::io::Read;
+    let mut head = Vec::new();
+    File::open(path)
+        .ok()?
+        .take(64 * 1024)
+        .read_to_end(&mut head)
+        .ok()?;
+    Some(head)
 }
 
 /// Opens a reader on `file`, or `None` when symphonia can't read its container.
@@ -356,6 +527,28 @@ impl AudioFile {
             Some(MediaTime::new(ticks, tb))
         });
         let id = track.id;
+        let opus = params.codec == CODEC_ID_OPUS;
+        // symphonia's Ogg reader times Opus packets on the granule clock, which counts
+        // the pre-skip, and trims none of it per packet: the file's timeline starts
+        // after it.
+        let delay = MediaTime::new(
+            if opus {
+                track.delay.map_or(0, i64::from)
+            } else {
+                0
+            },
+            tb,
+        );
+        let preroll = MediaTime::new(if opus { OPUS_PREROLL_MICROS } else { 0 }, Timebase::MICROS);
+        // An ADTS stream carries no AudioSpecificConfig: its first frame header says the
+        // profile and channels, which symphonia's decoder doesn't check.
+        if audio
+            && params.codec == CODEC_ID_AAC
+            && params.extra_data.is_none()
+            && let Some(asc) = adts_head(path).as_deref().and_then(super::aac::adts_config)
+        {
+            super::aac::check(&asc)?;
+        }
         let stream = if audio {
             Some(AudioStream::new(params, tb)?)
         } else {
@@ -368,7 +561,9 @@ impl AudioFile {
             stream,
             duration,
             at_end: false,
-            skip_until: None,
+            skip_until: (delay.ticks() > 0).then_some(MediaTime::new(0, tb)),
+            delay,
+            preroll,
         }))
     }
 
@@ -391,7 +586,7 @@ impl AudioFile {
             return Ok(None);
         }
         loop {
-            let packet = match self.reader.next_packet() {
+            let mut packet = match self.reader.next_packet() {
                 Ok(Some(packet)) => packet,
                 Ok(None) => return Ok(None),
                 Err(err) if is_end(&err) => return Ok(None),
@@ -404,6 +599,7 @@ impl AudioFile {
             if packet.track_id != self.track {
                 continue;
             }
+            packet.pts = Timestamp::new(packet.pts.get().saturating_sub(self.delay.ticks()));
             let Some(block) = stream.decode(&packet)? else {
                 continue;
             };
@@ -438,17 +634,24 @@ impl AudioFile {
             stream.reset();
         }
         self.at_end = false;
-        self.skip_until = None;
         let micros = to.rescale(Timebase::MICROS, Rounding::Down)?.ticks().max(0);
-        if micros == 0 {
+        // What decodes before the target is cut, from the start of the file too (an Ogg
+        // Opus stream's pre-skip).
+        self.skip_until = Some(MediaTime::new(micros, Timebase::MICROS));
+        // The reader's own time for the target, less the pre-roll.
+        let delay = self.delay.rescale(Timebase::MICROS, Rounding::Down)?;
+        let from = micros
+            .saturating_add(delay.ticks())
+            .saturating_sub(self.preroll.ticks());
+        if micros == 0 || from <= 0 {
             return Ok(());
         }
         let seek = SeekTo::Time {
-            time: Time::from_micros(micros),
+            time: Time::from_micros(from),
             track_id: Some(self.track),
         };
         match self.reader.seek(SeekMode::Accurate, seek) {
-            Ok(_) => self.skip_until = Some(MediaTime::new(micros, Timebase::MICROS)),
+            Ok(_) => {}
             // Past the end: the next read gives the end.
             Err(Error::SeekError(SeekErrorKind::OutOfRange)) => self.at_end = true,
             Err(err) if is_end(&err) => self.at_end = true,

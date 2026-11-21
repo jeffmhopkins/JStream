@@ -9,7 +9,7 @@ publish.workspace = true
 
 [package.metadata.jstream]
 layer = 2
-summary = "ADR-0060 so far: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal and PipeWire screen capture, its DMA-BUF frames imported into the engine's Vulkan device (`LinuxGpu`), V4L2 webcams and capture cards (single- and multi-planar) paired with their microphones, PipeWire audio with ALSA as the fallback, libpipewire, libasound and libva loaded at run time with `dlopen`, the `LinuxBackends` set, VA-API H.264 encoding from CPU frames or from the Vulkan device's NV12 encode targets exported as DMA-BUFs, Cisco's OpenH264 downloaded on request as the software H.264 encoder and the decoder of the engine's own H.264 streams (ADR-0140), AAC encoding through `jstream-aac` (ADR-0140, ADR-0062), stream keys and OAuth tokens in the Secret Service with a `0600` file where none is reachable (ADR-0071), the process's and its threads' CPU time, media files as far as ADR-0072's decoders are built (WAV, FLAC, Ogg Vorbis and MP3 through symphonia, and MP4 and MOV with H.264 video through VA-API, so far), global hotkeys grabbed on X11 through libxcb (ADR-0112), and the virtual camera on a v4l2loopback device (ADR-0156)"
+summary = "ADR-0060 so far: CLOCK_MONOTONIC media clock, session and support-tier detection, ScreenCast portal and PipeWire screen capture, its DMA-BUF frames imported into the engine's Vulkan device (`LinuxGpu`), V4L2 webcams and capture cards (single- and multi-planar) paired with their microphones, PipeWire audio with ALSA as the fallback, libpipewire, libasound and libva loaded at run time with `dlopen`, the `LinuxBackends` set, VA-API H.264 encoding from CPU frames or from the Vulkan device's NV12 encode targets exported as DMA-BUFs, Cisco's OpenH264 downloaded on request as the software H.264 encoder and the decoder of the engine's own H.264 streams (ADR-0140), AAC encoding through `jstream-aac` (ADR-0140, ADR-0062), stream keys and OAuth tokens in the Secret Service with a `0600` file where none is reachable (ADR-0071), the process's and its threads' CPU time, media files as far as ADR-0072's decoders are built (WAV, FLAC, Ogg Vorbis, MP3 and AAC-LC (ADR-0160) through symphonia, Opus through `rusty-opus` (ADR-0159), H.264 video in MP4, MOV and Matroska, VP8 and VP9 in WebM and AV1 in MP4, Matroska and WebM through VA-API, so far), global hotkeys grabbed on X11 through libxcb (ADR-0112), and the virtual camera on a v4l2loopback device (ADR-0156)"
 unsafe_allowed = true
 
 # Its own table, not `workspace = true`: the workspace forbids `unsafe_code`, and this is
@@ -48,8 +48,10 @@ openh264-download = []
 jstream-aac = { workspace = true, optional = true }
 jstream-platform.workspace = true
 # Media-file audio (ADR-0072 (c), (d)): the readers and decoders of the royalty-free
-# formats only. Never `aac` until ADR-0072 (g)'s decoder patent check says yes.
-symphonia = { workspace = true, features = ["flac", "mp3", "ogg", "pcm", "vorbis", "wav"] }
+# formats, and AAC-LC with its ADTS reader (`aac`) within ADR-0160's limits.
+symphonia = { workspace = true, features = ["aac", "flac", "mp3", "ogg", "pcm", "vorbis", "wav"] }
+# Opus, which symphonia doesn't decode (ADR-0159).
+rusty-opus.workspace = true
 tracing.workspace = true
 
 [target.'cfg(target_os = "linux")'.dependencies]

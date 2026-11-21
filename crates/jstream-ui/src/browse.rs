@@ -9,7 +9,7 @@
 //!
 //! Docs: crates/jstream-ui/README.md#design
 
-use crate::host::{ConnectedEngine, desktop, has_browse, same_engine};
+use crate::host::{ConnectedEngine, has_browse, own_engine};
 use jstream_control::protocol::AssetRoot;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -131,14 +131,6 @@ fn join_folder(folder: &str, path: &str) -> String {
     format!("{folder}{sep}{path}")
 }
 
-/// Whether the open session is the desktop app's own engine.
-fn local_engine(connected: Option<ConnectedEngine>) -> bool {
-    let Some(engine) = desktop() else {
-        return false;
-    };
-    connected.is_some_and(|connected| connected.0.with(|url| same_engine(&engine.url, url)))
-}
-
 fn parent_of(path: &str) -> String {
     let path = path.trim().trim_end_matches(['/', '\\']);
     match path.rfind(['/', '\\']) {
@@ -169,7 +161,7 @@ pub fn browse_button(
     let remote = "This engine is on another machine, so Browse opens no dialog here.";
     let tip = title.clone();
     let open = move |_| {
-        if busy.get_untracked() || !local_engine(connected) {
+        if busy.get_untracked() || !own_engine(connected) {
             return;
         }
         busy.set(true);
@@ -192,9 +184,9 @@ pub fn browse_button(
             type="button"
             class="browse"
             hidden=move || !shown()
-            disabled=move || busy.get() || !local_engine(connected)
+            disabled=move || busy.get() || !own_engine(connected)
             title=move || {
-                if local_engine(connected) {
+                if own_engine(connected) {
                     tip.clone()
                 } else {
                     remote.to_owned()

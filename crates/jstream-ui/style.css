@@ -231,6 +231,78 @@ a.menuitem:focus-visible { outline: none; }
   border: 1px solid var(--line);
   border-radius: 6px;
 }
+/* The stage: the canvas alone, or in studio mode (panels/studio.rs) the canvas as
+   preview, the studio controls, and the program monitor (canvas/monitor.rs). */
+.stage-row { flex: 1 1 auto; display: flex; min-height: 0; min-width: 0; }
+.stage-pane { flex: 1 1 0; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
+.stage-label {
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--muted);
+  background: var(--canvas-bg);
+  border-top: 2px solid var(--border-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.stage-label.cued { color: var(--ok); border-top-color: var(--ok); }
+.stage-label.program { color: var(--problem); border-top-color: var(--danger); }
+.region.monitor {
+  flex: 1 1 auto;
+  min-height: 0;
+  margin: 0;
+  padding: 28px 28px 20px;
+  border-radius: 0;
+  background: var(--canvas-bg);
+  border-color: transparent;
+  overflow: hidden;
+}
+.monitor-picture {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.monitor-picture canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.monitor-note { position: absolute; margin: 0; padding: 0 12px; text-align: center; color: var(--muted); font-size: 12px; }
+.studio-controls {
+  flex: 0 0 168px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px;
+  background: var(--zone);
+  border-left: 1px solid var(--line);
+  border-right: 1px solid var(--line);
+  overflow: auto;
+}
+.studio-controls button.take { width: 100%; padding: 10px 8px; font-weight: 600; }
+.studio-controls .studio-field { display: grid; gap: 4px; }
+.studio-controls .slot-name { color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: 0.6px; }
+.studio-controls select {
+  width: 100%;
+  font: inherit;
+  padding: 0.35rem 0.4rem;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--bg);
+  color: var(--text);
+}
+.studio-controls .hint { margin: 0; color: var(--muted); font-size: 12px; }
+.studio-controls .problem { margin: 0; font-size: 12px; }
+.studio-controls progress { width: 100%; display: block; margin-bottom: 4px; }
+.studio-controls button.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; }
 .canvas {
   flex: 1 1 auto;
   min-height: 0;
@@ -864,6 +936,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
   .zone { width: auto !important; height: auto !important; }
   .splitter, .divider { display: none; }
   .canvas { min-height: 320px; }
+  .stage-row { flex-direction: column; }
+  .region.monitor { min-height: 240px; }
+  .studio-controls { flex: 0 0 auto; border: 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
 }
 
 /* The outputs panel (panels/outputs.rs, #1206): a header with the health, a compact
@@ -1327,25 +1402,13 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .plugin-choice-name { font-weight: 600; }
 .plugin-choice-what { color: var(--muted); font-size: 12px; }
 
-/* The Transitions panel (panels/studio.rs): studio mode and the presets. */
+/* The Transitions panel (panels/studio.rs): the presets. */
 .studio { display: grid; gap: 0.5rem; }
 .studio h3 { margin: 0.5rem 0 0; font-size: 0.85rem; font-weight: 600; }
-.studio-bar {
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  gap: 0.75rem;
-  align-items: end;
-}
-.studio .slot { display: grid; gap: 0.25rem; }
-.studio .slot:last-child { justify-items: end; }
-.studio .slot-name { color: var(--muted); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; }
-.studio .program-name { padding: 0.35rem 0; color: #d92d20; }
-.studio-actions { display: flex; flex-wrap: wrap; gap: 0.4rem; align-items: center; justify-content: center; }
 .inline-label { display: flex; gap: 0.3rem; align-items: center; color: var(--muted); font-size: 0.85rem; }
 .studio .hint { margin: 0; color: var(--muted); font-size: 0.85rem; }
 .studio .problem { margin: 0; }
 .studio button.link { border: none; background: none; padding: 0; color: var(--accent); text-decoration: underline; }
-.studio progress { width: 6rem; vertical-align: middle; }
 .studio select {
   font: inherit;
   padding: 0.35rem 0.4rem;
@@ -1384,11 +1447,6 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .overrides { border-collapse: collapse; width: 100%; font-size: 0.85rem; }
 .overrides th { text-align: left; color: var(--muted); font-weight: 600; }
 .overrides td, .overrides th { padding: 0.25rem 0.4rem 0.25rem 0; }
-
-@media (max-width: 800px) {
-  .studio-bar { grid-template-columns: 1fr; }
-  .studio-actions { justify-content: flex-start; }
-}
 
 /* The right-click menu (spec-workspace.md 5.1). */
 .ctx-catcher { position: fixed; inset: 0; z-index: 99; }
@@ -1461,8 +1519,9 @@ button.danger { background: var(--problem); border-color: var(--problem); color:
 .modal-footer button.primary { padding: 7px 18px; }
 .modal input[type="radio"] { width: auto; margin: 0; accent-color: var(--accent); }
 
-/* The Add source dialog (spec-workspace.md 6.5). */
-.modal.add-source { width: 720px; }
+/* The Add source dialog (spec-workspace.md 6.5). A fixed height, as Add filter's, so a
+   search that narrows the types leaves the dialog where it was; the list scrolls. */
+.modal.add-source { width: 720px; height: 520px; }
 .add-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
 .add-types { display: flex; flex-direction: column; gap: 2px; overflow: auto; padding: 8px; border-right: 1px solid var(--line); }
 .add-cat { padding: 8px 8px 4px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.8px; }

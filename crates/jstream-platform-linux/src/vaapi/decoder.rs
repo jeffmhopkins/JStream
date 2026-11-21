@@ -84,24 +84,27 @@ impl Resources {
     fn buffer<T>(&self, kind: c_int, value: &T) -> Result<Id, PlatformError> {
         // SAFETY: plain data; libva copies `size_of::<T>()` bytes from the pointer while
         // `value` is borrowed and doesn't write through it.
-        unsafe { self.raw_buffer(kind, (value as *const T).cast(), size_of::<T>()) }
+        unsafe { self.raw_buffer(kind, (value as *const T).cast(), size_of::<T>(), 1) }
     }
 
     /// # Safety
-    /// `data` points to `size` readable bytes.
+    /// `data` points to `elements` items of `size` readable bytes each.
     unsafe fn raw_buffer(
         &self,
         kind: c_int,
         data: *const c_void,
         size: usize,
+        elements: usize,
     ) -> Result<Id, PlatformError> {
-        let size = c_uint::try_from(size).map_err(|_| PlatformError::InvalidState {
+        let too_large = || PlatformError::InvalidState {
             what: "vaCreateBuffer",
             state: "the buffer is larger than 4 GiB",
-        })?;
+        };
+        let size = c_uint::try_from(size).map_err(|_| too_large())?;
+        let elements = c_uint::try_from(elements).map_err(|_| too_large())?;
         let mut id = INVALID_ID;
-        // SAFETY: the context is live; `data` holds `size` bytes (this function's
-        // contract), which libva copies; `id` is a valid out-pointer.
+        // SAFETY: the context is live; `data` holds `elements` items of `size` bytes
+        // (this function's contract), which libva copies; `id` is a valid out-pointer.
         // C: `VAStatus vaCreateBuffer(VADisplay, VAContextID, VABufferType,
         // unsigned int size, unsigned int num_elements, void *data, VABufferID *buf_id)`.
         let status = unsafe {
@@ -110,7 +113,7 @@ impl Resources {
                 self.context.unwrap_or(INVALID_ID),
                 kind,
                 size,
-                1,
+                elements,
                 data.cast_mut(),
                 &mut id,
             )
@@ -155,24 +158,47 @@ impl Drop for Resources {
     }
 }
 
-/// One H.264 stream decoded on the GPU. See the module docs.
-pub(crate) struct VaapiH264Decoder {
+/// The part of a VA-API decoder every codec shares: the display, config, context and
+/// surfaces, and reading a decoded surface back as a frame.
+pub(super) struct Core {
     res: Resources,
-    planner: Planner,
-    length_size: usize,
     /// The visible picture: its crop offset and size.
     crop: (usize, usize),
     size: FrameSize,
     coded: (u32, u32),
     colour: Colour,
     format: PixelFormat,
-    timebase: Timebase,
-    /// Decoded frames, in presentation order, not yet taken.
-    ready: std::collections::VecDeque<VideoFrame>,
     /// Whether `vaDeriveImage` has failed once, so `vaGetImage` is used from then on.
     no_derive: bool,
     /// The driver's vendor string, for the logs.
     vendor: String,
+}
+
+/// What a codec's decoder asks [`Core::open`] for.
+pub(super) struct CoreConfig<'a> {
+    /// libva's `VAProfile`s that decode the stream, best first.
+    pub(super) profiles: &'a [c_int],
+    /// What `MissingComponent` names, and what to install for it.
+    pub(super) component: &'static str,
+    pub(super) remedy: &'static str,
+    /// The surfaces' size, and how many.
+    pub(super) coded: (u32, u32),
+    pub(super) surfaces: usize,
+    /// The visible picture: its crop offset and size.
+    pub(super) crop: (usize, usize),
+    pub(super) size: FrameSize,
+    pub(super) colour: Colour,
+    pub(super) format: PixelFormat,
+}
+
+/// One H.264 stream decoded on the GPU. See the module docs.
+pub(crate) struct VaapiH264Decoder {
+    core: Core,
+    planner: Planner,
+    length_size: usize,
+    timebase: Timebase,
+    /// Decoded frames, in presentation order, not yet taken.
+    ready: std::collections::VecDeque<VideoFrame>,
 }
 
 // SAFETY: the VA display and every object on it are used only through `&mut self`, from
@@ -180,60 +206,34 @@ pub(crate) struct VaapiH264Decoder {
 // as long as calls on it don't overlap.
 unsafe impl Send for VaapiH264Decoder {}
 
-impl VaapiH264Decoder {
-    /// Opens a decoder for the stream `record` (an `avcC` record) describes, whose
-    /// sample times are in `timebase`, putting out frames in `format`.
+/// The pixel formats a decoder puts out: `Unsupported` for any other.
+pub(super) fn check_format(format: PixelFormat) -> Result<(), PlatformError> {
+    if matches!(
+        format,
+        PixelFormat::Rgba8 | PixelFormat::Bgra8 | PixelFormat::Nv12
+    ) {
+        Ok(())
+    } else {
+        Err(PlatformError::Unsupported {
+            what: format!("decoding media files to {format:?} on Linux"),
+        })
+    }
+}
+
+impl Core {
+    /// Finds a render node whose driver decodes one of `config.profiles`, and opens a
+    /// decoding context on it with its surfaces.
     ///
     /// # Errors
-    /// [`PlatformError::MissingComponent`] when libva or a driver with an H.264 decoder
-    /// for the stream's profile is missing, [`PlatformError::Unsupported`] for a stream
-    /// this doesn't decode (interlaced fields, 10-bit, 4:2:2, slice groups) or a format
-    /// it can't put out, and [`PlatformError::Os`] when the driver refuses.
-    pub(crate) fn open(
-        record: &[u8],
-        timebase: Timebase,
-        format: PixelFormat,
-    ) -> Result<Self, PlatformError> {
-        if !matches!(
-            format,
-            PixelFormat::Rgba8 | PixelFormat::Bgra8 | PixelFormat::Nv12
-        ) {
-            return Err(PlatformError::Unsupported {
-                what: format!("decoding media files to {format:?} on Linux"),
-            });
-        }
-        let config = AvcConfig::parse(record).map_err(parse_error)?;
-        let mut planner = Planner::new(0);
-        for set in &config.parameter_sets {
-            planner.parameter_set(set).map_err(parse_error)?;
-        }
-        let sps = planner
-            .first_sps()
-            .cloned()
-            .ok_or_else(|| PlatformError::Os {
-                call: "H.264 parser",
-                code: None,
-                message: "the avcC record has no SPS".into(),
-            })?;
-        if sps.chroma_format_idc != 1 || sps.bit_depth_luma_minus8 != 0 {
-            return Err(PlatformError::Unsupported {
-                what: "H.264 other than 8-bit 4:2:0 in a media file on Linux".into(),
-            });
-        }
-        let slots = Planner::slots_for(&sps);
-        planner = Planner::new(slots);
-        for set in &config.parameter_sets {
-            planner.parameter_set(set).map_err(parse_error)?;
-        }
-        let (visible_w, visible_h) = sps.visible_size();
-        let size = FrameSize::new(visible_w & !1, visible_h & !1)?;
-        let coded = sps.coded_size();
-
-        let va = Va::load().map_err(|_| PlatformError::MissingComponent {
-            component: COMPONENT,
-            remedy: REMEDY.into(),
-        })?;
-        let (display, profile) = find_decoder(&va, &profiles(&sps))?;
+    /// [`PlatformError::MissingComponent`] when libva or such a driver is missing, and
+    /// [`PlatformError::Os`] when the driver refuses.
+    pub(super) fn open(config: &CoreConfig<'_>) -> Result<Self, PlatformError> {
+        let missing = || PlatformError::MissingComponent {
+            component: config.component,
+            remedy: config.remedy.into(),
+        };
+        let va = Va::load().map_err(|_| missing())?;
+        let (display, profile) = find_decoder(&va, config.profiles).map_err(|_| missing())?;
         let vendor = display.vendor();
         let mut res = Resources {
             display,
@@ -243,6 +243,8 @@ impl VaapiH264Decoder {
             image: None,
         };
         let (va, dpy) = (res.display.va.clone(), res.display.dpy);
+        let coded = config.coded;
+        let slots = config.surfaces;
         let mut wanted = [ConfigAttrib {
             kind: attrib::RT_FORMAT,
             value: RT_FORMAT_YUV420,
@@ -305,28 +307,164 @@ impl VaapiH264Decoder {
         };
         va.check("vaCreateContext", status)?;
         res.context = Some(context);
-        tracing::debug!(%vendor, profile, ?coded, "VA-API H.264 decoder");
-
-        let [left, _, top, _] = sps.crop;
+        tracing::debug!(%vendor, profile, ?coded, "VA-API decoder");
         Ok(Self {
             res,
-            planner,
-            length_size: config.length_size,
-            crop: (left as usize, top as usize),
-            size,
+            crop: config.crop,
+            size: config.size,
             coded,
-            colour: Colour::from_vui(sps.matrix_coefficients, sps.full_range, visible_h),
-            format,
-            timebase,
-            ready: std::collections::VecDeque::new(),
+            colour: config.colour,
+            format: config.format,
             no_derive: false,
             vendor,
         })
     }
 
     /// The visible size of every frame.
-    pub(crate) fn size(&self) -> FrameSize {
+    pub(super) fn size(&self) -> FrameSize {
         self.size
+    }
+
+    /// The surfaces, by slot.
+    pub(super) fn surfaces(&self) -> &[Id] {
+        &self.res.surfaces
+    }
+
+    /// The driver's vendor string.
+    pub(super) fn vendor(&self) -> &str {
+        &self.vendor
+    }
+
+    /// A parameter buffer of `kind` holding a copy of `value`.
+    pub(super) fn buffer<T>(&self, kind: c_int, value: &T) -> Result<Id, PlatformError> {
+        self.res.buffer(kind, value)
+    }
+
+    /// Destroys buffers that won't be rendered.
+    pub(super) fn destroy_buffers(&self, buffers: &[Id]) {
+        self.res.destroy_buffers(buffers);
+    }
+
+    /// A slice data buffer holding a copy of `data`.
+    pub(super) fn data_buffer(&self, data: &[u8]) -> Result<Id, PlatformError> {
+        // SAFETY: libva copies the bytes while `data` is borrowed.
+        unsafe {
+            self.res
+                .raw_buffer(dec_buffer::SLICE_DATA, data.as_ptr().cast(), data.len(), 1)
+        }
+    }
+
+    /// A parameter buffer of `kind` holding a copy of `values`, one element each (an
+    /// AV1 tile group's slice parameters).
+    pub(super) fn buffer_array<T>(&self, kind: c_int, values: &[T]) -> Result<Id, PlatformError> {
+        // SAFETY: plain data; libva copies `values.len()` elements of `size_of::<T>()`
+        // bytes while `values` is borrowed, and doesn't write through the pointer.
+        unsafe {
+            self.res
+                .raw_buffer(kind, values.as_ptr().cast(), size_of::<T>(), values.len())
+        }
+    }
+
+    /// Decodes one picture into `target` from `buffers`, which this destroys either way.
+    ///
+    /// # Errors
+    /// [`PlatformError::Os`] when the driver refuses the picture.
+    pub(super) fn render(&self, target: Id, buffers: &[Id]) -> Result<(), PlatformError> {
+        let result = (|| -> Result<(), PlatformError> {
+            let (va, dpy) = (self.res.va(), self.res.display.dpy);
+            let context = self.res.context.unwrap_or(INVALID_ID);
+            // SAFETY: the context and the target surface are live.
+            // C: `VAStatus vaBeginPicture(VADisplay, VAContextID, VASurfaceID)`.
+            va.check("vaBeginPicture", unsafe {
+                (va.begin_picture)(dpy, context, target)
+            })?;
+            let mut all = buffers.to_vec();
+            // SAFETY: `all` holds `len` live buffers of this context, which libva reads.
+            // C: `VAStatus vaRenderPicture(VADisplay, VAContextID, VABufferID *buffers,
+            // int num_buffers)`.
+            let rendered = va.check("vaRenderPicture", unsafe {
+                (va.render_picture)(
+                    dpy,
+                    context,
+                    all.as_mut_ptr(),
+                    c_int::try_from(all.len()).unwrap_or(0),
+                )
+            });
+            // SAFETY: a picture was begun on this context.
+            // C: `VAStatus vaEndPicture(VADisplay, VAContextID)`.
+            let ended = va.check("vaEndPicture", unsafe { (va.end_picture)(dpy, context) });
+            rendered.and(ended)
+        })();
+        self.res.destroy_buffers(buffers);
+        result
+    }
+}
+
+impl VaapiH264Decoder {
+    /// Opens a decoder for the stream `record` (an `avcC` record) describes, whose
+    /// sample times are in `timebase`, putting out frames in `format`.
+    ///
+    /// # Errors
+    /// [`PlatformError::MissingComponent`] when libva or a driver with an H.264 decoder
+    /// for the stream's profile is missing, [`PlatformError::Unsupported`] for a stream
+    /// this doesn't decode (interlaced fields, 10-bit, 4:2:2, slice groups) or a format
+    /// it can't put out, and [`PlatformError::Os`] when the driver refuses.
+    pub(crate) fn open(
+        record: &[u8],
+        timebase: Timebase,
+        format: PixelFormat,
+    ) -> Result<Self, PlatformError> {
+        check_format(format)?;
+        let config = AvcConfig::parse(record).map_err(parse_error)?;
+        let mut planner = Planner::new(0);
+        for set in &config.parameter_sets {
+            planner.parameter_set(set).map_err(parse_error)?;
+        }
+        let sps = planner
+            .first_sps()
+            .cloned()
+            .ok_or_else(|| PlatformError::Os {
+                call: "H.264 parser",
+                code: None,
+                message: "the avcC record has no SPS".into(),
+            })?;
+        if sps.chroma_format_idc != 1 || sps.bit_depth_luma_minus8 != 0 {
+            return Err(PlatformError::Unsupported {
+                what: "H.264 other than 8-bit 4:2:0 in a media file on Linux".into(),
+            });
+        }
+        let slots = Planner::slots_for(&sps);
+        planner = Planner::new(slots);
+        for set in &config.parameter_sets {
+            planner.parameter_set(set).map_err(parse_error)?;
+        }
+        let (visible_w, visible_h) = sps.visible_size();
+        let size = FrameSize::new(visible_w & !1, visible_h & !1)?;
+        let coded = sps.coded_size();
+        let [left, _, top, _] = sps.crop;
+        let core = Core::open(&CoreConfig {
+            profiles: &profiles(&sps),
+            component: COMPONENT,
+            remedy: REMEDY,
+            coded,
+            surfaces: slots,
+            crop: (left as usize, top as usize),
+            size,
+            colour: Colour::from_vui(sps.matrix_coefficients, sps.full_range, visible_h),
+            format,
+        })?;
+        Ok(Self {
+            core,
+            planner,
+            length_size: config.length_size,
+            timebase,
+            ready: std::collections::VecDeque::new(),
+        })
+    }
+
+    /// The visible size of every frame.
+    pub(crate) fn size(&self) -> FrameSize {
+        self.core.size()
     }
 
     /// Decodes one sample (an access unit, its NAL units length-prefixed) shown at
@@ -344,8 +482,8 @@ impl VaapiH264Decoder {
         };
         // The surfaces were made for the SPS the decoder opened with: a stream whose
         // in-band SPS changes the picture size, or needs more buffers, is refused.
-        if plan.sps.coded_size() != self.coded
-            || Planner::slots_for(&plan.sps) > self.res.surfaces.len()
+        if plan.sps.coded_size() != self.core.coded
+            || Planner::slots_for(&plan.sps) > self.core.surfaces().len()
         {
             self.planner.reset();
             return Err(PlatformError::Unsupported {
@@ -354,63 +492,38 @@ impl VaapiH264Decoder {
                     .into(),
             });
         }
-        let slots = self.res.surfaces.clone();
+        let slots = self.core.surfaces().to_vec();
         let target = slots[plan.slot];
         let mut buffers = Vec::with_capacity(2 + 2 * plan.slices.len());
-        let result = (|| -> Result<(), PlatformError> {
-            buffers.push(self.res.buffer(
+        let made = (|| -> Result<(), PlatformError> {
+            buffers.push(self.core.buffer(
                 dec_buffer::PICTURE_PARAMETER,
                 &h264_dec::picture_params(&plan, &slots),
             )?);
             buffers.push(
-                self.res
+                self.core
                     .buffer(dec_buffer::IQ_MATRIX, &h264_dec::iq_matrix(&plan))?,
             );
-            let (va, dpy) = (self.res.va(), self.res.display.dpy);
-            let context = self.res.context.unwrap_or(INVALID_ID);
-            // SAFETY: the context and the target surface are live.
-            // C: `VAStatus vaBeginPicture(VADisplay, VAContextID, VASurfaceID)`.
-            va.check("vaBeginPicture", unsafe {
-                (va.begin_picture)(dpy, context, target)
-            })?;
-            let mut slice_buffers = Vec::with_capacity(2 * plan.slices.len());
             for slice in &plan.slices {
-                slice_buffers.push(self.res.buffer(
+                buffers.push(self.core.buffer(
                     dec_buffer::SLICE_PARAMETER,
                     &h264_dec::slice_params(&plan, slice, &slots),
                 )?);
-                // SAFETY: libva copies the slice's bytes while it is borrowed.
-                slice_buffers.push(unsafe {
-                    self.res.raw_buffer(
-                        dec_buffer::SLICE_DATA,
-                        slice.nal.as_ptr().cast(),
-                        slice.nal.len(),
-                    )
-                }?);
+                buffers.push(self.core.data_buffer(&slice.nal)?);
             }
-            buffers.extend_from_slice(&slice_buffers);
-            let mut all = buffers.clone();
-            // SAFETY: `all` holds `len` live buffers of this context, which libva reads.
-            // C: `VAStatus vaRenderPicture(VADisplay, VAContextID, VABufferID *buffers,
-            // int num_buffers)`.
-            let rendered = va.check("vaRenderPicture", unsafe {
-                (va.render_picture)(
-                    dpy,
-                    context,
-                    all.as_mut_ptr(),
-                    c_int::try_from(all.len()).unwrap_or(0),
-                )
-            });
-            // SAFETY: a picture was begun on this context.
-            // C: `VAStatus vaEndPicture(VADisplay, VAContextID)`.
-            let ended = va.check("vaEndPicture", unsafe { (va.end_picture)(dpy, context) });
-            rendered.and(ended)
+            Ok(())
         })();
-        self.res.destroy_buffers(&buffers);
+        let result = match made {
+            Ok(()) => self.core.render(target, &buffers),
+            Err(err) => {
+                self.core.destroy_buffers(&buffers);
+                Err(err)
+            }
+        };
         if let Err(err) = result {
             // The picture is lost; what references it decodes wrong, but the stream goes
             // on to its next IDR picture.
-            tracing::debug!(%err, vendor = %self.vendor, "an H.264 picture didn't decode");
+            tracing::debug!(%err, vendor = %self.core.vendor(), "an H.264 picture didn't decode");
         }
         let after = self.planner.finish();
         self.output(&after)
@@ -437,15 +550,23 @@ impl VaapiH264Decoder {
     /// Reads back each output frame and queues it.
     fn output(&mut self, outputs: &[Output]) -> Result<(), PlatformError> {
         for out in outputs {
-            let surface = self.res.surfaces[out.slot];
-            let frame = self.read_back(surface, MediaTime::new(out.pts, self.timebase))?;
+            let surface = self.core.surfaces()[out.slot];
+            let frame = self
+                .core
+                .read_back(surface, MediaTime::new(out.pts, self.timebase))?;
             self.ready.push_back(frame);
         }
         Ok(())
     }
+}
 
+impl Core {
     /// Waits for `surface` and copies it into a frame.
-    fn read_back(&mut self, surface: Id, pts: MediaTime) -> Result<VideoFrame, PlatformError> {
+    pub(super) fn read_back(
+        &mut self,
+        surface: Id,
+        pts: MediaTime,
+    ) -> Result<VideoFrame, PlatformError> {
         let va = self.res.display.va.clone();
         let dpy = self.res.display.dpy;
         // SAFETY: the surface is live.

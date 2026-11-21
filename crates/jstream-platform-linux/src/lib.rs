@@ -16,8 +16,10 @@
 //! the stream-key and OAuth-token store (`LinuxSecrets`, ADR-0071): the Secret
 //! Service, else a `0600` file, the process's CPU time (`LinuxProcessCpu`) and its threads' (`LinuxThreadCpu`), and
 //! `LinuxMediaDecoders`, the media-file backend ADR-0072 lays out (so far symphonia's
-//! readers and decoders for WAV, FLAC, Ogg Vorbis and MP3 files, and MP4 and MOV files
-//! with H.264 video decoded through VA-API), and
+//! readers and decoders for WAV, FLAC, Ogg Vorbis, MP3 and AAC-LC (ADR-0160) files, Opus in Ogg, Matroska
+//! and WebM through `rusty-opus` (ADR-0159), and H.264 video in MP4, MOV and Matroska
+//! files, VP8 and VP9 in WebM and AV1 in MP4, Matroska and WebM decoded through
+//! VA-API), and
 //! `GlobalHotkeys`, the desktop app's global hotkeys as X11 key grabs (ADR-0112), and its
 //! Browse dialogs through the FileChooser portal (`portal_pick_path`). `LinuxBackends` builds them together, choosing PipeWire or ALSA as ADR-0060 §4 says
 //! and pairing webcams with that backend's microphones (`PairedAudio`). Layer 2, and

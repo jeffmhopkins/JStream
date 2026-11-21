@@ -453,7 +453,8 @@ stage_app() {
 JStream is licensed under the MIT or Apache-2.0 licence, at your option (LICENSE-MIT,
 LICENSE-APACHE).
 
-AAC: JStream encodes AAC audio with its own AAC-LC encoder. JStream holds no AAC patent
+AAC: JStream encodes AAC audio with its own AAC-LC encoder, and decodes the AAC-LC
+audio in media files with symphonia's decoder. JStream holds no AAC patent
 licence. Via Licensing Alliance (Via LA) administers the AAC patent pool.
 
 H.264: JStream encodes H.264 with your GPU's driver through VA-API or, when you ask it

@@ -173,8 +173,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MAX_PSNR_DB`), with `QueryResult`
   and the `SceneSummary`, `SceneInfo`, `SourceInfo`, `ItemInfo`, `DeviceInfo`,
   `CaptureTargetInfo`, `FontInfo`, `SourceSize` and `ActivityEntry` shapes the reads report
-  (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES` and
-  `MAX_ACTIVITY_SUMMARY_CHARS`). `state.get` carries the `Canvas` and the `Blending` (since 0.101), and
+  (`activity.rs` holds the last, with `MAX_ACTIVITY_ENTRIES`,
+  `MAX_ACTIVITY_SUMMARY_CHARS` and `HOTKEYS_CLIENT_NAME`, the desktop hotkeys' client name
+  that Agent activity leaves out). `state.get` carries the `Canvas` and the `Blending` (since 0.101), and
   `ItemInfo`
   the item's `placement` form and its `geometry`, `SceneInfo` a scene's transition
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
@@ -217,8 +218,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   which checks a camera's list as `check_motion` checks an item's and refuses an
   `audio` modifier (`motion.N.kind`), since a camera hears nothing (ADR-0100); `CameraFollow`, a
   camera that follows the pointer over a display or window capture (its item, `zoom`,
-  `yaw_deg`, `pitch_deg`, `lean_deg`, `smooth_ms` and, since 0.91, `safe_margin_pct`
-  up to `MAX_FOLLOW_MARGIN_PCT`, each with its default) with `CameraFollow::check`, and
+  `yaw_deg`, `pitch_deg`, `lean_deg`, `smooth_ms`, since 0.91 `safe_margin_pct`
+  up to `MAX_FOLLOW_MARGIN_PCT` and, since 0.124, `hold_zoom`, each with its default) with `CameraFollow::check`, and
   `FOLLOW_ZOOM_RANGE` (1 to 4) and `FOLLOW_ZOOM_STEP` (1.25), what `scene.zoom_camera`
   steps by. Since 0.91 a follow camera is a filter (ADR-0120): `FOLLOW_POINTER_KIND`
   (`follow_pointer`), its `follow_pointer_descriptor`, and `CameraFollow::settings` and
@@ -345,7 +346,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.123 because `kind.describe` takes an optional `source_id`
+`PROTOCOL_VERSION` is 0.124 because a follow camera can hold its zoom: `CameraFollow`'s
+`hold_zoom` and the `follow_pointer` filter's Hold zoom setting
+([ADR-0161](../../docs/adr/0161-follow-camera-holds-its-zoom.md));
+0.123 because `kind.describe` takes an optional `source_id`
 whose own additions the descriptor takes, a `model`'s animation names
 ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 7, #1497);
 0.122 because a card has a surface: `ItemGeometry`'s `surface`

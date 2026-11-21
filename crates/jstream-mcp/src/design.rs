@@ -221,6 +221,9 @@ same. The scene's camera glides after the pointer at an angle (`yaw_deg`, \
 `safe_margin_pct` (default 10% a side) and, with `blur_px` above 0, focuses where it \
 looks; a 2D scene gets a camera for it. `zoom` (1-4) is its resting zoom; \
 `scene.zoom_camera` steps it live by 1.25 a step, and is what a zoom hotkey binds. \
+With `hold_zoom` (on by default) the zoom stays where it is set and near the \
+capture's edges the camera only pans; off, it pulls back on fast moves and moves in at \
+the corners. \
 Turning the filter off returns the camera to where it was. Camera motion and the \
 follow belong to the scene's family: set them on the parent, not a keyframe scene. \
 To reframe a 3D scene live without an edit, `scene.aim_camera` pans and tilts its \

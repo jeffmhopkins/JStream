@@ -68,8 +68,11 @@ menu. On other distributions, Debian included, download
 `jstream-v<version>-linux-x86_64.AppImage`, make it executable (`chmod +x`) and run it.
 Settings and scenes are in `~/.local/share/jstream`. Without a VA-API GPU encoder, JStream
 offers to download Cisco's OpenH264 for streaming. On Linux a media-file source plays
-audio files (WAV, FLAC, Ogg Vorbis and MP3) but not video files yet. The virtual camera
-needs the v4l2loopback module
+audio files (WAV, FLAC, Ogg Vorbis, Opus, MP3 and AAC), and H.264 video in MP4, MOV and
+Matroska files, VP8 and VP9 video in WebM files and AV1 video in MP4, Matroska and WebM
+files through a VA-API GPU decoder, with MP3, FLAC, Vorbis or AAC audio (and Opus in
+Matroska and WebM). AAC plays as AAC-LC: HE-AAC that the file declares doesn't play, and
+a movie with it plays without sound. The virtual camera needs the v4l2loopback module
 ([The virtual camera](#vcam)).
 
 Your scenes, sources and outputs are one project file. **File › Save project as…** saves
@@ -88,7 +91,9 @@ and Sponsor) to rename, use or delete. What the program shows (and every output 
 on **program**, drawn on the canvas in the middle.
 The canvas starts at 1920×1080 and 30 fps. **File › Video settings…** changes its
 resolution (a preset such as 1280×720 or 3840×2160, a vertical 1080×1920, or any size
-you type) and its frame rate, 30 or 60 fps. Each output scales from that picture.
+you type) and its frame rate, 30 or 60 fps. A new resolution scales every scene with it,
+so they look as they did, unless you uncheck **Scale scenes to the new resolution**.
+Each output scales from that picture.
 **Blending** there sets how semi-transparent items and blend modes mix: Browser-style,
 the default, matches a web page or a design tool, and Linear light mixes light as it
 adds, which makes soft glows and veils brighter.
@@ -119,8 +124,11 @@ adds, which makes soft glows and veils brighter.
    lower them there.
 5. To show a scene, click its row in **Scenes**: it goes on program, and the red
    "program" badge marks the one that is live. With **Studio mode** on (in the header),
-   a click puts the scene on preview instead, and the button on its row, or
-   **Transition** in the Transitions panel, takes it live.
+   the canvas becomes the preview, with the live program beside it: a click puts a
+   scene on preview, where you can arrange it, and **Transition** or **Cut** between
+   the two takes it live (the button on its row does too). The scene that was live
+   comes back on preview, unless you untick **Swap**. The Transitions panel sets up
+   the presets Transition can use, such as a fade and its length.
 
 Ctrl+C and Ctrl+V (or **Copy** and **Paste** on a source's right-click menu) copy
 sources from one scene to another, and **Duplicate scene** on a scene's right-click menu

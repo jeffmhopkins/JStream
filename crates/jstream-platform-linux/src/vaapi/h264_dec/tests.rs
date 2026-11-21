@@ -19,7 +19,7 @@ fn fills_the_parameters_of_a_b_pyramid_stream() {
     let slots: Vec<u32> = (100..118).collect();
     let mut saw_b = false;
     for (i, sample) in video.samples.iter().enumerate() {
-        let data = mp4.read(sample).expect("reads");
+        let data = mp4.read(&video, sample).expect("reads");
         let nals = split_length_prefixed(&data, config.length_size);
         let (_, plan) = planner.submit(&nals, sample.pts).expect("plans");
         let plan = plan.expect("a picture");

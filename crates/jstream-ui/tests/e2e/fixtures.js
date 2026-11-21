@@ -133,6 +133,9 @@ export async function openAddSource(page, { scene = false } = {}) {
   // Just under the last row, on the panel's own space: a right-click on a row opens the
   // item's menu instead.
   const panel = page.locator('.sources-panel');
+  // Until the studio's first snapshot selects a scene, the panel shows "Select a scene."
+  // and a right-click there opens no menu, so wait for the scene's caption first.
+  await expect(panel.locator('.tree-caption').first()).toBeVisible();
   const box = await panel.boundingBox();
   // With no rows, on the empty scene's hint: the tool bar at the bottom opens no menu.
   const rows = panel.locator('li.row');

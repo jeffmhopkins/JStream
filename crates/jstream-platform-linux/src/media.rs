@@ -6,14 +6,26 @@
 //!
 //! What plays so far:
 //! - **Audio files** through symphonia's readers and decoders ([`audio`]): WAV, FLAC,
-//!   Ogg Vorbis and MP3, with PCM, FLAC, Vorbis and MP3 audio.
+//!   Ogg, MP3 and ADTS AAC, with PCM, FLAC, Vorbis, MP3 and AAC-LC audio, and Opus
+//!   through `rusty-opus` ([`opus`], ADR-0159).
+//! - **Movie files** (MP4, MOV, Matroska and WebM) through the crate's own demuxers,
+//!   their H.264, VP8, VP9 and AV1 (profile 0) video through VA-API ([`h264`], [`vp8`],
+//!   [`vp9`], [`av1`]) and their audio as above (Linux only).
 //!
-//! A container this backend can't read, or a codec it can't decode, is
-//! [`PlatformError::Unsupported`], naming it. AAC audio stays off until ADR-0072 (g)'s
-//! decoder patent check says yes.
+//! AAC is AAC-LC only (ADR-0160): [`aac`] refuses, by name, a stream that needs more,
+//! such as HE-AAC that it declares. A container this backend can't read, or a codec it
+//! can't decode, is [`PlatformError::Unsupported`], naming it.
 //!
 //! Everything here is pure Rust and platform-independent, and tested everywhere.
 
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod aac;
 pub(crate) mod audio;
 #[cfg_attr(
     not(target_os = "linux"),
@@ -22,7 +34,31 @@ pub(crate) mod audio;
         reason = "used by the Linux movie decoder; built elsewhere for its tests"
     )
 )]
+pub(crate) mod av1;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod demux;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
 pub(crate) mod h264;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod mkv;
 #[cfg(target_os = "linux")]
 mod movie;
 #[cfg_attr(
@@ -33,6 +69,23 @@ mod movie;
     )
 )]
 pub(crate) mod mp4;
+pub(crate) mod opus;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod vp8;
+#[cfg_attr(
+    not(target_os = "linux"),
+    allow(
+        dead_code,
+        reason = "used by the Linux movie decoder; built elsewhere for its tests"
+    )
+)]
+pub(crate) mod vp9;
 #[cfg_attr(
     not(target_os = "linux"),
     allow(
@@ -67,16 +120,20 @@ impl MediaDecoders for LinuxMediaDecoders {
     ) -> Result<Box<dyn MediaDecoder>, PlatformError> {
         let file = File::open(path).map_err(|err| open_error(path, &err))?;
         let movie_file = file.try_clone().map_err(|err| open_error(path, &err))?;
-        if let Some(mp4) = mp4::Mp4::open(movie_file)? {
-            return open_movie(mp4, config);
+        if let Some(movie) = mp4::open(movie_file)? {
+            return open_movie(movie, config);
+        }
+        let movie_file = file.try_clone().map_err(|err| open_error(path, &err))?;
+        if let Some(movie) = mkv::open(movie_file)? {
+            return open_movie(movie, config);
         }
         if let Some(audio) = AudioFile::open(path, file, config.audio)? {
             return Ok(Box::new(AudioOnly::new(audio)));
         }
         Err(PlatformError::Unsupported {
             what: format!(
-                "this media file's container on Linux ({}): MP4, MOV, WAV, FLAC, Ogg and MP3 \
-                 play so far",
+                "this media file's container on Linux ({}): MP4, MOV, Matroska, WebM, WAV, \
+                 FLAC, Ogg, MP3 and ADTS AAC play so far",
                 path.extension()
                     .and_then(|e| e.to_str())
                     .unwrap_or("no extension")
@@ -88,15 +145,15 @@ impl MediaDecoders for LinuxMediaDecoders {
 /// A movie file's decoder: VA-API video, so Linux only.
 #[cfg(target_os = "linux")]
 fn open_movie(
-    mp4: mp4::Mp4,
+    movie: demux::Demuxed,
     config: &MediaDecoderConfig,
 ) -> Result<Box<dyn MediaDecoder>, PlatformError> {
-    Ok(Box::new(movie::Movie::open(mp4, config)?))
+    Ok(Box::new(movie::Movie::open(movie, config)?))
 }
 
 #[cfg(not(target_os = "linux"))]
 fn open_movie(
-    _mp4: mp4::Mp4,
+    _movie: demux::Demuxed,
     _config: &MediaDecoderConfig,
 ) -> Result<Box<dyn MediaDecoder>, PlatformError> {
     Err(PlatformError::Unsupported {

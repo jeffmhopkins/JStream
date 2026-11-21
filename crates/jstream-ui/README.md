@@ -57,8 +57,11 @@ Contents ([Design](#design) explains the choices):
   rate, 30 or 60 fps, as OBS's Video settings do, and its blending space, Browser-style
   (sRGB) or Linear light (ADR-0126). Apply sends only what changed, as one batch of
   `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
-  undo step. Each
-  output's video mix scales from that picture. Tested natively.
+  undo step. A new size also rescales every scene unless Scale scenes to the new
+  resolution is unchecked: `rescale` adds the placement and camera edits that keep each
+  scene looking as it did, centred when the canvas changes shape, with the crops of boxes showing a scene mapped too; it is sent at the snapshot's revision, so a change from elsewhere since refuses it. Each
+  output's video mix scales from that picture. Tested natively, the rescale through the
+  mock engine with its undo.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
@@ -73,7 +76,8 @@ Contents ([Design](#design) explains the choices):
   through it (`place`, `close`, `toggle`, `click_tab`, `resize_zone`, `resize_between`,
   `save_as_new`, `apply`, `reset`), and it reads and writes itself as JSON. Tested
   natively.
-- **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas,
+- **Workspace** (`workspace.rs`): `Workspace`, which draws the dock around the canvas
+  (in studio mode, the canvas beside the studio controls and the program monitor),
   with the splitters, dividers, tabs and close buttons (and the mixer's meter flip in
   its title bar), and drags a tab to dock it;
   `DockState`, the dock as context, which the header's menus change; and `restore`,
@@ -99,7 +103,8 @@ Contents ([Design](#design) explains the choices):
   JTunnel senders" as a `JtunnelSetting` (its JSON tested natively), and `desktop_ptz()`
   and `set_ptz`, which read and save its "Accept a PTZ controller" as a `PtzSetting`.
   `same_engine` says
-  whether the open session is that app's own engine.
+  whether the open session is that app's own engine, and `own_engine` asks it of the
+  session's `ConnectedEngine` (for Browse… and the canvas's full-resolution preview).
 - **Browse** (`browse.rs`): the Browse… button beside a path field, and where a picked
   file is stored (`place_asset`, tested natively): under the collection folder as a
   `collection` path, otherwise `absolute`. App assets offer no button. With no desktop
@@ -116,7 +121,8 @@ Contents ([Design](#design) explains the choices):
   count as its own, and `camera_of`, the camera a 3D scene is seen through, a
   keyframe's override or else its parent's), the program and preview
   scenes, whether studio mode is on (and `scene_click`, what a click on a scene sends
-  in either mode), the `Selection`,
+  in either mode, and `followed_preview`, the scene the canvas moves to when the preview
+  scene changes in studio mode), the `Selection`,
   each source's size (`Sizes`, from `source.sizes` and `source.size_changed`;
   `Collection::source_size` adds a nested scene's, the canvas), whether the canvas is in
   crop mode (which a switch of scene leaves), the source kinds
@@ -229,8 +235,9 @@ Contents ([Design](#design) explains the choices):
   under it with their meters, faders, dB fields, mutes and routing, the same as
   vertical strips, and the buses),
   also tested natively against `MockEngine`; and `studio.rs`:
-  `StudioMode`, the Transitions panel (preview, program, Transition and Cut in studio
-  mode, the preset picker and editor, and each scene's overrides; [Design](#design)),
+  `StudioMode`, the Transitions panel (the preset picker and editor, and each scene's
+  overrides), `StudioControls`, studio mode's Transition, Cut, preset and Swap between
+  preview and program, and `StageLabel`, the label over each side ([Design](#design)),
   and the scene's Transition in and out submenus the menus share
   (`override_submenu`); and
   `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
@@ -292,7 +299,8 @@ Contents ([Design](#design) explains the choices):
   notes each list, or fails one.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
-  redoes ([Canvas](#canvas)).
+  redoes ([Canvas](#canvas)); `ProgramMonitor` (`monitor.rs`), the live program beside
+  it in studio mode.
 - **Entry point** (`main.rs`): `start()`, which mounts `App` on the page's `<body>`;
   `index.html`, `style.css` and `Trunk.toml` are the page trunk builds around it
   ([Build](#build)), and `fonts/` holds the bundled IBM Plex files with their licence,
@@ -352,7 +360,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Selection.** `Selection` is the scene being edited (shown by the sources list) and
   the items selected in it: a primary item (shown in the Inspector) and any
   others the canvas selected with it. A new session reads the program scene
-  before the state, so it starts on the scene on program. It is fixed up after every
+  before the state, so it starts on the scene on program, or in studio mode on the
+  preview scene, which it then follows (`followed_preview`). It is fixed up after every
   change: a
   deleted scene falls back to the program scene, then the first listed scene, and an
   item that left the scene is dropped, the next selected one becoming primary. The
@@ -369,7 +378,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
   preset, so the engine resolves the transition); in studio mode it goes on preview
-  instead (`studio.set_preview`), and a hover button puts it on program. The click is
+  instead (`studio.set_preview`), and a hover button puts it on program. A mouse picks
+  on the press, as OBS does, so the switch doesn't wait for the button's release (a
+  click is about a tenth of a second), and a drag that reorders the scenes picks the
+  dragged one (program, or preview in studio mode) as it starts, as in OBS; a press with
+  Shift, Ctrl or Meta (on macOS a Ctrl+click opens the row menu), a touch and a pen pick
+  on the click, the last two since their press may start a scroll. The action is queued before the selection
+  changes, so the request leaves before the panels redraw, and a `scene.switch` shows
+  its scene on program at once (`Studio::act`), before `studio.changed` confirms it, so
+  the badge moves on the press and the canvas keeps its program stream; a refused
+  switch reads `studio.get` back. The pick is
   sent even for a scene already there, which the engine ignores, so a stale copy of
   program or preview never drops one; and outside studio mode the double click that
   opens a scene's Properties puts it on program first, as in OBS. Studio mode is the
@@ -924,7 +942,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   attribute is refused.
   Agent activity (`panels/agent.rs`) lists what agents did from the engine's
   `activity.list` ([ADR-0083](../../docs/adr/0083-activity-log-over-the-protocol.md)),
-  leaving out JStream's own UIs, and asks again after each `state.changed`,
+  leaving out JStream's own UIs and the desktop app's global hotkeys, and asks again after each `state.changed`,
   `studio.changed`, `output.state_changed`, `live.ended` and `events.dropped`, and every
   5 seconds. Its Clear button empties only the list shown: `ActivityCleared`, kept by
   the shell, marks the newest entry's `seq`, and the panel asks only after it, so the
@@ -1162,25 +1180,33 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   chain's Plugins group even with no CLAP kind, unless a search is typed: "No CLAP audio
   plugins found." with a link that opens the page (`SettingsDialog`).
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).
-  The Transitions panel (a tab beside Outputs in the Editing layout, under the canvas
-  in Live) reads the scenes (groups left out) and presets with
-  `state.get` and the studio state with `studio.get` into a copy of its own,
-  re-reads them on `state.changed` and
-  `events.dropped`, and takes `studio.changed` in place (a re-read that a
-  `studio.changed` overtook keeps the event's program and preview). The studio bar (preview,
-  program, Transition and Cut) shows only in studio mode; with it off a line says that
-  a click on a scene puts it on program. Picking a scene sends
-  `studio.set_preview`. "Transition" sends `scene.switch` for the preview scene, naming
-  the preset picked beside it, or none so the engine resolves it; a line under the
-  button names the preset the engine will use and why, in the engine's order (the
+  Studio mode is the page's (`Studio::studio_mode`, kept by the browser). On, the stage
+  under the header becomes a two-up (`workspace.rs`): the canvas on the left, which
+  edits the preview scene, the program monitor on the right (`canvas/monitor.rs`: the
+  program mix as a `preview.subscribe` with no `scene_id`, on a channel tapped from the
+  canvas's binary channel, sized for its box as the canvas's stream is and opened again
+  for a new base rate or a box changed by a quarter), each under a `StageLabel`, and the
+  studio controls between them (`StudioControls`). Turning it on sends
+  `studio.set_preview` for the scene the canvas shows, and while it is on a new preview
+  scene from `studio.changed` or `studio.get` is selected, so the canvas follows it
+  (`followed_preview`). The controls and the Transitions panel (a tab beside Outputs in
+  the Editing layout, under the canvas in Live) share one state, which the shell
+  provides (`provide_transitions`): the scenes (groups left out) and presets read with
+  `state.get` and the studio state with `studio.get`, re-read on `state.changed` and
+  `events.dropped`, with `studio.changed` taken in place (a re-read that a
+  `studio.changed` overtook keeps the event's program and preview). A click on a scene
+  sends `studio.set_preview`. "Transition" sends `scene.switch` for the preview scene,
+  naming the preset picked under it, or none so the engine resolves it; a line under
+  the buttons names the preset the engine will use and why, in the engine's order (the
   switch's, the new scene's `transition_in`, the old scene's `transition_out`, the
-  default). "Cut" names a `cut` preset (the default if it is one), and is off when the
-  collection has none. With "Swap" on (the default), the scene that was on program
-  then goes on preview with a second `studio.set_preview`, as in other studio tools;
-  the engine itself never moves preview on a switch. While a transition runs, the bar
-  shows an indeterminate progress bar for the `duration_ms` `studio.changed` reported;
-  a cut, or program moving without a transition, clears it at once. A preview scene
-  the list doesn't show (a group) reads "Choose a scene".
+  default), or why the switch is off. "Cut" names a `cut` preset (the default if it is
+  one), and is off when the collection has none. With "Swap" on (the default), the
+  scene that was on program then goes on preview with a second `studio.set_preview`,
+  as in other studio tools; the engine itself never moves preview on a switch. While a
+  transition runs, the controls show an indeterminate progress bar for the
+  `duration_ms` `studio.changed` reported; a cut, or program moving without a
+  transition, clears it at once. The Transitions panel says where the controls are, or,
+  with studio mode off, that a click on a scene puts it on program.
   The presets section is the prototype's (spec-panels.md 10): a picker listing each
   preset as "<name> — <Kind> · N ms" (a cut shows only its kind), the default marked,
   then "+ New preset…", which adds "New preset", a 500 ms ease-in-out fade (ID from its
@@ -1305,7 +1331,8 @@ selected items and the box select; `snap.rs` snaps; `model.rs` lays out the scen
 sends the edits; `preview.rs` chooses the preview stream and decides what to do with
 each H.264 frame and when each JPEG decodes. These are pure and tested natively,
 `model.rs` against `MockEngine`. `screen.rs` decodes and draws the preview in the
-browser, and `mod.rs` is the component.
+browser, and `mod.rs` is the component. `monitor.rs` is studio mode's program monitor
+beside it ([Design › Studio mode](#design)).
 
 - **What it shows.** The selected scene ([Design › Selection](#design)), laid out with
   `Layout::sized` from the shared collection and the sources' sizes, so it follows every state change the app
@@ -1339,10 +1366,10 @@ browser, and `mod.rs` is the component.
   scene's own stream (`preview.subscribe`'s `scene_id`, CV-03). The canvas opens the
   session's binary channel (`Control::binary`; a session has one, so the canvas is
   its only reader, and hands each frame of another channel to that channel's tap,
-  `taps.rs`, the Properties dialog's picture) and one `preview.subscribe` stream on it, at the
+  `taps.rs`, the Properties dialog's picture and studio mode's program monitor) and one `preview.subscribe` stream on it, at the
   collection's base rate (30 or 60, `live_fps`; 30 until the collection is read, and a
   new stream of the same picture when the rate changes) and as
-  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends).
+  sharp as the stage (its size in device pixels, kept between 320×180 and 1920×1080, the largest the engine sends); when the stage settles at a size whose picture differs by a quarter or more, as when the window is maximized or the dock resized, the canvas opens a stream at the new size on a new channel. In the desktop app on its own engine (`host::own_engine`, false when the app is connected to another engine), where pictures cost no network, `preview::stage` always asks for the largest picture, so the docked canvas is full resolution at any size and a resize never restarts it. A resize restages only from its newest timeout, so a long drag opens one stream).
   It asks for H.264 first when the browser has WebCodecs' `VideoDecoder`, then JPEG.
   H.264 frames go to a `VideoDecoder` configured from the SPS in each keyframe
   (`avc1.PPCCLL`), starting at a keyframe and skipping to the next one when the
@@ -1353,9 +1380,11 @@ browser, and `mod.rs` is the component.
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
   channel number, so a late frame of the old stream is never drawn, once the change has
-  held for 250 ms (`preview::SETTLE`). A scene switch changes the selection before the
-  program, so for that moment the canvas wants the new scene on its own; settling keeps
-  the program stream, with its transition, through the switch (#1205). Until a new
+  held for 250 ms (`preview::SETTLE`). A scene switch from this page shows its scene on
+  program as the selection changes (`Studio::act`), so the canvas never wants the new
+  scene on its own and keeps the program stream, with its transition, through the
+  switch; settling still keeps it through any other moment the selection runs ahead of
+  the program (#1205). Until a new
   stream's first frame, the last picture stays on the canvas; only a canvas that has
   shown no picture yet, or whose stream had ended, says the preview is starting. The
   canvas reports what it did with its pictures as the view `canvas`
