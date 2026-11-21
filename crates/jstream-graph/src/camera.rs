@@ -39,6 +39,9 @@ pub(crate) fn apply(
         Edit::SceneSetCameraMotion { scene_id, motion } => {
             Some(set_motion(state, scene_id, motion, at))
         }
+        Edit::SceneSetCameraAnchor { scene_id, anchor } => {
+            Some(set_anchor(state, scene_id, anchor.as_ref(), at))
+        }
         Edit::SceneSetCameraFollow { scene_id, follow } => {
             Some(set_follow(state, kinds, scene_id, follow.as_ref(), at))
         }
@@ -119,10 +122,10 @@ fn family_scene(
             format!(
                 "keyframe scene `{scene_id}` draws its parent `{parent}`'s camera {}; set it \
                  on `{parent}`",
-                if field == "motion" {
-                    "motion"
-                } else {
-                    "follow"
+                match field {
+                    "motion" => "motion",
+                    "anchor" => "anchor",
+                    _ => "follow",
                 }
             ),
         ));
@@ -161,6 +164,24 @@ fn set_motion(
     Ok(vec![Edit::SceneSetCameraMotion {
         scene_id: scene_id.clone(),
         motion: old,
+    }])
+}
+
+/// `scene.set_camera_anchor` (ADR-0164 §5): the family's scene only. Any anchor is
+/// stored: one that names no group item of the scene, or a scene without a camera, is
+/// kept and ignored where the scene is drawn, as it is when it later goes stale, so a
+/// saved or deleted scene's anchor always comes back as it was.
+fn set_anchor(
+    state: &mut State,
+    scene_id: &SceneId,
+    anchor: Option<&ItemId>,
+    at: usize,
+) -> Result<Vec<Edit>, ProtocolError> {
+    let si = family_scene(state, scene_id, at, "anchor")?;
+    let old = std::mem::replace(&mut state.scenes[si].camera_anchor, anchor.cloned());
+    Ok(vec![Edit::SceneSetCameraAnchor {
+        scene_id: scene_id.clone(),
+        anchor: old,
     }])
 }
 
@@ -292,6 +313,12 @@ fn unused_id(state: &State, item_id: &ItemId) -> FilterId {
 /// (ADR-0120).
 pub(crate) fn restore(scene: &Scene) -> Vec<Edit> {
     let mut edits = Vec::new();
+    if let Some(anchor) = &scene.camera_anchor {
+        edits.push(Edit::SceneSetCameraAnchor {
+            scene_id: scene.id.clone(),
+            anchor: Some(anchor.clone()),
+        });
+    }
     if !scene.camera_motion.is_empty() {
         edits.push(Edit::SceneSetCameraMotion {
             scene_id: scene.id.clone(),
