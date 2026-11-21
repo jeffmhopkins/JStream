@@ -1490,7 +1490,11 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
             .expect("a1 is drawn")
     };
     let rest = x(secs(1.0));
-    assert_eq!(shot.audio().level(&a1, "fader"), Some(0.0), "nothing sent yet");
+    assert_eq!(
+        shot.audio().level(&a1, "fader"),
+        Some(0.0),
+        "nothing sent yet"
+    );
 
     let midi = engine.midi_inputs();
     let cc = |value| jstream_midi::Message::parse(&[0xB0, 7, value]).expect("a CC");
@@ -1499,14 +1503,21 @@ fn a_midi_modifier_poses_an_item_from_a_controller() {
     assert!((x(secs(1.0)) - (rest + 127.0)).abs() < 0.01);
     let mut follower = crate::reactive::Follower::default();
     follower.follow(shot.audio(), secs(1.0));
-    assert!((x(secs(1.0)) - (rest + 127.0)).abs() < 0.01, "the first tick lands");
+    assert!(
+        (x(secs(1.0)) - (rest + 127.0)).abs() < 0.01,
+        "the first tick lands"
+    );
     midi.push("Faders", 1, &cc(0));
     follower.follow(shot.audio(), secs(1.1));
     // One time constant on, about 37% of the way back is left.
     let eased = x(secs(1.1)) - rest;
     assert!((eased - 127.0 * (-1f32).exp()).abs() < 0.5, "{eased}");
     // Another channel moves nothing.
-    midi.push("Faders", 2, &jstream_midi::Message::parse(&[0xB1, 7, 127]).expect("a CC"));
+    midi.push(
+        "Faders",
+        2,
+        &jstream_midi::Message::parse(&[0xB1, 7, 127]).expect("a CC"),
+    );
     follower.follow(shot.audio(), secs(2.0));
     assert!((x(secs(2.0)) - rest).abs() < 0.5, "settled at the bottom");
 }
