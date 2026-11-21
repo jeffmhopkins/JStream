@@ -6495,7 +6495,7 @@ stamp = { hash = "b3:4ea0712626a34fc7", by = "agent:claude-settings", note = "Do
 stamp = { hash = "b3:0bd567b960d30eb6", by = "agent:ptz-builder", note = """ADR-0153 §3: added desktop_ptz and set_ptz to host.rs, the ptz_controllers.rs bullet, ptz and setPtz to the global's list, and the Devices page's "Accept a PTZ controller" paragraph""" }
 
 ["CRATE-jstream-ui#purpose"."body"]
-stamp = { hash = "b3:79299b6e0cda717c", by = "agent:claude", note = "Video settings entry adds the mapped crops of boxes showing a scene and the batch sent at the snapshot's revision; matches video_settings.rs" }
+stamp = { hash = "b3:2967a34878fbb8be", by = "agent:claude", note = "#1566: full-res desktop preview now gated on host::own_engine (moved from browse.rs's local_engine), so a desktop app on a remote engine sizes to the stage; restage acts only on the newest resize timeout. Re-read against that | merge: #1560 added Video settings' rescale-scenes option to the crate; the host/canvas wording for own_engine is unchanged and holds | kept from the merged side: Video settings entry adds the mapped crops of boxes showing a scene and the batch sent at the snapshot's revision; matches video_settings.rs" }
 
 ["CRATE-jstream-ui#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-ui"]
 stamp = { hash = "b3:8b72f650cbef12f9" }
