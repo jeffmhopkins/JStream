@@ -46,7 +46,7 @@ use windows::Win32::System::WinRT::Graphics::Capture::IGraphicsCaptureItemIntero
 use windows::Win32::UI::WindowsAndMessaging::IsWindow;
 use windows::core::{IInspectable, Interface, Ref};
 
-use super::id::{monitor_id, parse_monitor, parse_window, window_id};
+use super::id::{WindowRef, find_window, monitor_id, parse_monitor, parse_window, window_id};
 use super::pointer::Target;
 use super::targets;
 use crate::clock::timebase;
@@ -112,7 +112,7 @@ impl Capture for WgcCapture {
         let windows = targets::top_level_windows()?
             .into_iter()
             .map(|w| CaptureTargetInfo {
-                target: CaptureTarget::Window(window_id(w.hwnd.0.addr())),
+                target: CaptureTarget::Window(window_id(w.hwnd.0.addr(), &w.key)),
                 name: w.title,
                 size: w.size,
                 primary: false,
@@ -219,15 +219,12 @@ fn resolve(target: &CaptureTarget) -> Result<Resolved, PlatformError> {
             })
         }
         CaptureTarget::Window(id) => {
-            // A handle, never dereferenced: it needs no provenance.
-            let hwnd = parse_window(id)
-                .map(|h| HWND(std::ptr::without_provenance_mut::<c_void>(h)))
-                // SAFETY: IsWindow accepts any value and says whether it names a window.
-                .filter(|&h| unsafe { IsWindow(Some(h)) }.as_bool())
-                .ok_or_else(|| PlatformError::NotFound {
-                    kind: "window",
-                    id: id.to_string(),
-                })?;
+            let not_found = || PlatformError::NotFound {
+                kind: "window",
+                id: id.to_string(),
+            };
+            let wanted = parse_window(id).ok_or_else(not_found)?;
+            let hwnd = find(wanted)?.ok_or_else(not_found)?;
             // SAFETY: plain call; a window destroyed meanwhile gives the nearest monitor
             // or none, and either only picks the adapter.
             let monitor = unsafe { MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST) };
@@ -243,6 +240,23 @@ fn resolve(target: &CaptureTarget) -> Result<Resolved, PlatformError> {
             what: format!("capture target {other:?}"),
         }),
     }
+}
+
+/// The window `wanted` names now (`id::find_window`): its own handle while that is still
+/// its window, else the window opened again in its place. A key-less ID only looks at
+/// its handle, so it doesn't list the windows.
+fn find(wanted: WindowRef) -> Result<Option<HWND>, PlatformError> {
+    // A handle, never dereferenced: it needs no provenance.
+    let hwnd = |h: usize| HWND(std::ptr::without_provenance_mut::<c_void>(h));
+    let at_handle = targets::key_of(hwnd(wanted.hwnd));
+    let open = match wanted.key {
+        Some(_) => targets::top_level_windows()?
+            .into_iter()
+            .map(|w| (w.hwnd.0.addr(), w.key))
+            .collect(),
+        None => Vec::new(),
+    };
+    Ok(find_window(wanted, &open, at_handle).map(hwnd))
 }
 
 /// Creates the capture item. A target that has gone since `resolve` checked it (a window
@@ -930,7 +944,7 @@ impl Drop for WgcStream {
 /// Tests that run on every Windows CI machine: they need no display or capture device.
 #[cfg(test)]
 mod tests {
-    use jstream_platform::PlatformError;
+    use jstream_platform::{CaptureTarget, PlatformError};
     use windows::Win32::Foundation::HWND;
     use windows::Win32::Graphics::Gdi::HMONITOR;
     use windows::Win32::UI::WindowsAndMessaging::{
@@ -938,6 +952,8 @@ mod tests {
     };
     use windows::core::w;
 
+    use super::super::id::{WindowKey, window_id};
+    use super::super::targets::key_of;
     use super::{Resolved, Source, cursor_captured, not_found_if_gone, target_gone};
 
     /// Only `Hidden` turns the session's cursor capture off; WGC can't send the pointer
@@ -971,6 +987,38 @@ mod tests {
             )
         }
         .expect("a message-only window")
+    }
+
+    /// A keyed ID keeps its window while the handle still names a window of the same
+    /// program and class. Once that window is destroyed, or for a key of another class,
+    /// the ID looks for the window among the listed ones, which never include this
+    /// process's own, so the start is `NotFound`, which the engine retries.
+    #[test]
+    fn a_keyed_id_keeps_its_window_and_misses_a_gone_one() {
+        let hwnd = message_window();
+        let key = key_of(hwnd).expect("a window");
+        let start =
+            |key: &WindowKey| super::resolve(&CaptureTarget::Window(window_id(hwnd.0.addr(), key)));
+        match start(&key) {
+            Ok(Resolved {
+                source: Source::Window(h),
+                ..
+            }) => assert_eq!(h, hwnd),
+            Ok(_) => panic!("a display"),
+            Err(e) => panic!("not resolved: {e}"),
+        }
+        let other = WindowKey::new(None, Some("NoSuchClass"), Some("jstream test"));
+        assert!(matches!(
+            start(&other).err(),
+            Some(PlatformError::NotFound { kind: "window", .. })
+        ));
+        // SAFETY: this thread created the window and destroys it once.
+        unsafe { DestroyWindow(hwnd) }.expect("destroyed");
+        assert_eq!(key_of(hwnd), None);
+        assert!(matches!(
+            start(&key).err(),
+            Some(PlatformError::NotFound { kind: "window", .. })
+        ));
     }
 
     pub(super) fn resolved(hwnd: HWND) -> Resolved {
@@ -1081,6 +1129,32 @@ mod device_tests {
                 .filter(|t| matches!(t.target, CaptureTarget::Window(_)))
                 .all(|t| !t.primary && !t.name.trim().is_empty())
         );
+    }
+
+    /// A listed window's ID with a handle that names no window, as a saved one has once
+    /// its window was closed and opened again, finds that window by its key.
+    #[test]
+    #[ignore = "needs a desktop with another program's window open"]
+    fn a_stale_handle_finds_the_window_by_its_key() {
+        let ids: Vec<String> = WgcCapture::new()
+            .targets()
+            .expect("targets")
+            .into_iter()
+            .filter_map(|t| match t.target {
+                CaptureTarget::Window(id) => Some(id.as_str().to_owned()),
+                _ => None,
+            })
+            .collect();
+        let first = ids.first().expect("a window open");
+        let (_, key) = first.split_once(';').expect("a keyed ID");
+        // user32 doesn't hand out 0x1 as a window handle.
+        let stale = jstream_platform::DeviceId::new(format!("hwnd:0x1;{key}"));
+        let resolved = super::resolve(&CaptureTarget::Window(stale)).expect("found again");
+        let super::Source::Window(found) = resolved.source else {
+            panic!("a display");
+        };
+        let found = format!("hwnd:0x{:x};{key}", found.0.addr());
+        assert!(ids.contains(&found), "{found} is not among {ids:?}");
     }
 
     #[test]

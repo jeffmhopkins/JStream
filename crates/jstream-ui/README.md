@@ -659,9 +659,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   target list per parameter type. A `capture_target` (a `display` or `window` source's
   `target`, or a `webcam`'s `device`) lists the targets of its kind that
   `capture.targets` reports, each by name and size, after "Primary display", "First
-  device listed" or "None" for the empty value, and a target the source names that
-  isn't listed now (a closed window, an unplugged device) as "Window not open (<ID>)" or
-  "Device not connected (<ID>)". It asks again each time the field gets focus, so a
+  device listed" or "None" for the empty value. A target the source names that isn't
+  listed as is but has a listed target's key (the part after `;`, which finds a window
+  again once it is opened again), else the same part before it (the same window, its
+  title changed), shows as that target. Any other one not listed now (a closed window,
+  an unplugged device) shows as "Window not open (<ID>)" or "Device not connected
+  (<ID>)". It asks again each time the field gets focus, so a
   window opened since shows up; until the first list arrives, or while the engine can't
   list targets, it is the ID as text, and a failed refresh keeps the last list. The
   capture fields of one form share one answer. A `capture_format` (a `webcam`'s
