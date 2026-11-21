@@ -893,6 +893,68 @@ fn a_waveform_no_mix_draws_is_not_painted() {
     );
 }
 
+/// #1556: a timer beside a source that ticks the thread every frame is painted when
+/// its text changes, not on every tick: the waveform's sound wakes the thread every few
+/// milliseconds, and the stopwatch's text changes once a second.
+#[test]
+fn a_timer_is_painted_when_its_text_changes_not_on_every_tick() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    batch(
+        &control,
+        edits(vec![
+            create("a"),
+            source(
+                "wave",
+                "waveform",
+                settings(&[
+                    ("width", json!(1)),
+                    ("height", json!(3)),
+                    ("color", json!("#ff0000")),
+                    ("background", json!("#0000ff")),
+                ]),
+            ),
+            add("a", "i1", "wave"),
+            source("t", "timer", settings(&[("mode", json!("stopwatch"))])),
+            add("a", "i2", "t"),
+        ]),
+    )
+    .expect("created");
+    assert!(engine.settle_sources(), "built");
+    let scope = engine.audio_scope();
+    let ticks = |more: u64| {
+        let before = engine.paints("wave");
+        let deadline = Instant::now() + Duration::from_secs(5);
+        while Instant::now() < deadline && engine.paints("wave") < before + more {
+            scope.push(48_000, &[1.0; 960]);
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        assert!(engine.paints("wave") >= before + more, "the thread ticks");
+    };
+    ticks(5);
+    let timer = engine.paints("t");
+    let started = Instant::now();
+    ticks(30);
+    // The stopwatch's second turns once for each second the ticks took, and once more
+    // for the second they started in; a slow machine stretches them, so the bound is
+    // counted from the time they took, not assumed (every tick painted it before).
+    let seconds = started.elapsed().as_secs() + 2;
+    let painted = engine.paints("t") - timer;
+    assert!(
+        painted <= seconds && painted < 30,
+        "painted {painted} times in 30 ticks over less than {seconds} s"
+    );
+    // Its next second comes: it is painted for it.
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline && engine.paints("t") == timer + painted {
+        ticks(1);
+    }
+    assert!(
+        engine.paints("t") > timer + painted,
+        "painted when its text changes"
+    );
+}
+
 /// Shows or hides item `i1`.
 fn visible(control: &crate::InProcessControl, visible: bool) {
     batch(

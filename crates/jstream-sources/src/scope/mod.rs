@@ -502,7 +502,8 @@ impl<S: Scope> Source for ScopeSource<S> {
         }
         let style = S::style(settings)?;
         let mut ready = lock(&self.painter.ready);
-        // The painter applies it with its next frame, which is due at the next tick.
+        // The painter applies it with its next paint: at the next tick, or within
+        // `STILL_MS` while it is settled, as a host paints it only when it is due.
         ready.restyle = Some(style);
         ready.settled = false;
         drop(ready);

@@ -35,7 +35,15 @@ pub fn live_fps(base_fps: u32) -> u32 {
 /// How many chunks may wait in the decoder before the canvas stops feeding it and
 /// waits for the next keyframe, so a slow decoder shows a late picture instead of a
 /// growing backlog.
-pub const MAX_BACKLOG: u32 = 3;
+///
+/// About a fifth of a second at 60 fps. The browser hands chunks to the decoder from
+/// the page's main thread, so the queue also grows while that thread is busy (the main
+/// window lays out its panels and draws the item boxes there), and drains as soon as
+/// it is free. A skip costs every frame up to the next keyframe, up to two seconds of
+/// them, so a limit of 3 turned each short stall into a long freeze: the main window's
+/// canvas showed 45 of the 56 frames a second it received, where a projector, whose
+/// page has little else to do, showed all of them (#1556).
+pub const MAX_BACKLOG: u32 = 12;
 
 /// The `preview.subscribe` for a stage `width` × `height` CSS pixels at
 /// `pixel_ratio` device pixels per CSS pixel: a picture as sharp as the stage, kept
