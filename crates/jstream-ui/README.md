@@ -659,9 +659,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   target list per parameter type. A `capture_target` (a `display` or `window` source's
   `target`, or a `webcam`'s `device`) lists the targets of its kind that
   `capture.targets` reports, each by name and size, after "Primary display", "First
-  device listed" or "None" for the empty value, and a target the source names that
-  isn't listed now (a closed window, an unplugged device) as "Window not open (<ID>)" or
-  "Device not connected (<ID>)". It asks again each time the field gets focus, so a
+  device listed" or "None" for the empty value. A target the source names that isn't
+  listed as is but has a listed target's key (the part after `;`, which finds a window
+  again once it is opened again), else the same part before it (the same window, its
+  title changed), shows as that target. Any other one not listed now (a closed window,
+  an unplugged device) shows as "Window not open (<ID>)" or "Device not connected
+  (<ID>)". It asks again each time the field gets focus, so a
   window opened since shows up; until the first list arrives, or while the engine can't
   list targets, it is the ID as text, and a failed refresh keeps the last list. The
   capture fields of one form share one answer. A `capture_format` (a `webcam`'s
@@ -912,7 +915,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
   `apply_noting` once a batch is applied): one at a time, bottom centre, gone after
   4.5 s, a new one replacing it. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
-  prototype's palette as CSS variables in `style.css`. The fonts are IBM Plex Sans and
+  prototype's palette as CSS variables in `style.css`. Menus, dialogs and the secondary
+  panels share one design language on top of it: colour roles, buttons, menu anatomy,
+  type and controls ([UI design language](../../docs/UI-DESIGN.md)); a menu item that
+  deletes is built with `Entry::danger` and reads red. The fonts are IBM Plex Sans and
   Mono, bundled in `fonts/` under the SIL OFL 1.1 and served from the page's own origin,
   since its policy loads fonts from nowhere else
   ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)). They show with
