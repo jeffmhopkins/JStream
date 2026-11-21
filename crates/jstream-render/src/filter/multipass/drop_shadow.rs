@@ -2,8 +2,7 @@
 //! It draws within the input's frame: a source or scene chain's output is its input's
 //! size, so the part of the shadow past the frame is cut (ADR-0065 §5). On an item, its
 //! `max_outset_px` (the largest offset plus the largest blur) gives the effects layer
-//! room past the box, so the shadow of an opaque picture shows there. The composite
-//! under the shape is shared with `glow`.
+//! room past the box, so the shadow of an opaque picture shows there.
 
 use jstream_protocol::{KindDescriptor, Settings};
 
