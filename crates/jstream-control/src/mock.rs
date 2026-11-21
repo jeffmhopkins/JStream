@@ -670,6 +670,8 @@ struct Scene {
     options: jstream_protocol::SceneOptions,
     /// Its camera (ADR-0094), or a keyframe scene's override of its parent's.
     camera: Option<jstream_protocol::SceneCamera>,
+    /// The group item its camera rides with (ADR-0164 §5); `None` for a keyframe scene.
+    camera_anchor: Option<jstream_protocol::ItemId>,
     /// Its camera motion (ADR-0113); empty for a keyframe scene.
     camera_motion: Vec<jstream_protocol::CameraMotionModifier>,
     /// Its own PTZ shots (ADR-0146), a keyframe scene's included.
@@ -1435,6 +1437,7 @@ impl State {
                         scene_id: scene.id.clone(),
                         name: scene.name.clone(),
                         role: scene.role,
+                        camera_anchor: scene.camera_anchor.clone(),
                         camera_motion: scene.camera_motion.clone(),
                         ptz_shots: scene.ptz_shots.clone(),
                         camera_follow: scene.camera_follow.clone(),
@@ -1860,6 +1863,7 @@ impl Collection {
                     meta: Default::default(),
                     options: Default::default(),
                     camera: None,
+                    camera_anchor: None,
                     camera_motion: Vec::new(),
                     ptz_shots: Vec::new(),
                     camera_follow: None,
@@ -1992,7 +1996,13 @@ impl Collection {
                     }
                 }
                 inverse.extend(keyframe::restore_overrides(&scene.id, &scene.overrides));
-                // After its items, which a follow camera names.
+                // After its items, which a follow camera and an anchor name.
+                if let Some(anchor) = &scene.camera_anchor {
+                    inverse.push(Edit::SceneSetCameraAnchor {
+                        scene_id: scene.id.clone(),
+                        anchor: Some(anchor.clone()),
+                    });
+                }
                 if !scene.camera_motion.is_empty() {
                     inverse.push(Edit::SceneSetCameraMotion {
                         scene_id: scene.id.clone(),

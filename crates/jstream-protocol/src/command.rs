@@ -878,6 +878,22 @@ pub enum Edit {
         #[serde(default)]
         shots: Vec<crate::ptz::PtzShot>,
     },
+    /// Sets or removes the 3D group a scene's camera rides with (ADR-0164 §5, since
+    /// 0.127). With an anchor, the camera's position and target are points of that
+    /// group's own space, and the camera moves with the group item's pose as it is drawn.
+    /// It belongs to the scene family: `invalid_argument` on a keyframe scene, which
+    /// rides with its parent's anchor. Any other anchor is stored (ADR-0169), and one that names no
+    /// item of the scene placing a group sharing the space, or is on a scene without a
+    /// camera, is kept and ignored. Inverse: `scene.set_camera_anchor` with the previous
+    /// anchor.
+    #[serde(rename = "scene.set_camera_anchor")]
+    SceneSetCameraAnchor {
+        /// The scene to change.
+        scene_id: SceneId,
+        /// The group item the camera rides with. Omitted removes the anchor.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        anchor: Option<ItemId>,
+    },
     /// Sets a scene's camera motion (ADR-0113, since 0.85): the whole list of modifiers that change
     /// its camera as it is drawn. It belongs to the scene family: `invalid_argument` on a
     /// keyframe scene, which draws its parent's, and for a list `check_camera_motion`
@@ -1360,6 +1376,7 @@ impl Edit {
             Edit::SceneSetOptions { .. } => "scene.set_options",
             Edit::SceneSetCamera { .. } => "scene.set_camera",
             Edit::SceneSetCameraMotion { .. } => "scene.set_camera_motion",
+            Edit::SceneSetCameraAnchor { .. } => "scene.set_camera_anchor",
             Edit::SceneSetPtzShots { .. } => "scene.set_ptz_shots",
             Edit::SceneSetCameraFollow { .. } => "scene.set_camera_follow",
             Edit::LabelCreate { .. } => "label.create",

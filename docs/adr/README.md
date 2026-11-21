@@ -178,5 +178,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0164](0164-3d-groups-share-their-scenes-space.md) | 3D groups share their scene's space, and a camera may ride with one | accepted | agent |  |
 | [ADR-0166](0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md) | Moves curve through keyframes, turn as one rotation, and may orbit the camera | accepted | agent |  |
 | [ADR-0167](0167-a-sky-backdrop-for-3d-scenes.md) | A 3D scene can draw its environment's sky behind it: stars, nebulae and warp | accepted | agent |  |
+| [ADR-0169](0169-a-camera-anchor-is-kept-whatever-it-names.md) | A camera anchor is kept whatever it names | accepted | agent |  |
 | [ADR-0170](0170-generic-reflections-and-3d-rendering-switches.md) | Generic reflections between scene surfaces, and app-wide 3D rendering switches | accepted | agent |  |
 <!-- @generated end adr-index -->
