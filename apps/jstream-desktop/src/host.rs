@@ -271,7 +271,8 @@ impl Host {
     }
 
     /// Stops the server, closing every connection, then the engine, each step against
-    /// its own deadline: at most [`SERVER_STOP`], [`RUNTIME_STOP`] and [`ENGINE_STOP`].
+    /// its own deadline: at most 3 s, 1 s and 5 s (`SERVER_STOP`, `RUNTIME_STOP`,
+    /// `ENGINE_STOP`).
     /// A step past its deadline is logged and left behind, so the app still exits. Each
     /// step logs as it ends, so the log's last `shutdown:` line names the one an exit
     /// waited on (#1564).
