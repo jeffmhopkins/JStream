@@ -6360,7 +6360,7 @@ stamp = { hash = "b3:fd9cbcf48c8db842", by = "agent:claude", note = "inspector.r
 stamp = { hash = "b3:c3d503fe8ded4eaf", by = "agent:jtunnel-accept", note = "The Devices page paragraph adds Senders on this network: read on open and each jtunnel.senders_changed, Accept… asking first, only the prompt's Accept saving; style.css only adds its layout." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:87e1732a1da94307", by = "agent:ptz-builder", note = """ADR-0153 §3: added desktop_ptz and set_ptz to host.rs, the ptz_controllers.rs bullet, ptz and setPtz to the global's list, and the Devices page's "Accept a PTZ controller" paragraph""" }
+stamp = { hash = "b3:31c35e193c54e9f6", by = "agent:ui-design", note = "lib.rs changed only its //! Docs: line, adding the five UI-DESIGN sections whose covers match the crate; the section's text holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -6585,7 +6585,7 @@ stamp = { hash = "b3:fd9cbcf48c8db842", by = "agent:claude", note = "Inspector g
 stamp = { hash = "b3:c3d503fe8ded4eaf", by = "agent:jtunnel-accept", note = "The JTunnel bullet adds heard (jtunnel.senders), accepts, and the store's jtunnel_changed for jtunnel.senders_changed." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/lib.rs"]
-stamp = { hash = "b3:87e1732a1da94307", by = "agent:ptz-builder", note = "ADR-0153 §3: the UI gains the Devices page's PTZ controller setting, which the design section covers; the purpose holds" }
+stamp = { hash = "b3:31c35e193c54e9f6", by = "agent:ui-design", note = "lib.rs changed only its //! Docs: line, adding the five UI-DESIGN sections whose covers match the crate; the section's text holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/main.rs"]
 stamp = { hash = "b3:b0fabe46ab68dffb" }
@@ -8068,6 +8068,39 @@ stamp = { hash = "b3:a6c7eb53df7a75c8", by = "agent:claude", note = "#540's Cont
 
 ["THREAT-MODEL#vcam"."file:crates/jstream-vcam-windows/src/win/session.rs"]
 stamp = { hash = "b3:74bf6ef3c1268700", by = "agent:claude", note = "merge: wave/m1-3 added the #242 Accepted paragraph (ADR-0066's Program Files copy, #561) and the gaps line naming #561; this branch's trust.rs, session.rs and frames.rs changes (#204: only the console session's block when several sessions are active) narrow which session block the DLL uses, and the controls on main, the owner check and the accepted risks still hold" }
+
+["UI-DESIGN#buttons"."body"]
+stamp = { hash = "b3:007b153ad19fdbce", by = "agent:ui-design", note = "New section. Checked against style.css: button.primary solid accent/white, base button flat #262a31 with transparent border, .danger.secondary red text, .danger solid --danger-solid, focus-visible 2px offset ring; About, Updates, Settings and libraries Close are class=secondary." }
+
+["UI-DESIGN#buttons"."file:crates/jstream-ui/style.css"]
+stamp = { hash = "b3:2e461cd2b554b4d3", by = "agent:ui-design", note = "New section. Checked against style.css: button.primary solid accent/white, base button flat #262a31 with transparent border, .danger.secondary red text, .danger solid --danger-solid, focus-visible 2px offset ring; About, Updates, Settings and libraries Close are class=secondary." }
+
+["UI-DESIGN#colour"."body"]
+stamp = { hash = "b3:e8edbb3c20746e16", by = "agent:ui-design", note = "New section. Checked each token against style.css :root: --accent, --selected, --menu-hover (#2b313a, neutral), --danger-text/--danger-solid for deletes, --danger only on live UI, --warn on .health.dropping, --ok, text greys." }
+
+["UI-DESIGN#colour"."file:crates/jstream-ui/style.css"]
+stamp = { hash = "b3:2e461cd2b554b4d3", by = "agent:ui-design", note = "New section. Checked each token against style.css :root: --accent, --selected, --menu-hover (#2b313a, neutral), --danger-text/--danger-solid for deletes, --danger only on live UI, --warn on .health.dropping, --ok, text greys." }
+
+["UI-DESIGN#controls"."body"]
+stamp = { hash = "b3:a91aa605b17e2a5f", by = "agent:ui-design", note = "New section. Checked the Shared controls block of style.css: select:not([multiple]) with SVG chevron, 14px checkbox/radio filling with --accent, .switch toggle, hover --menu-hover vs --selected, filter-name truncating after the summary." }
+
+["UI-DESIGN#controls"."file:crates/jstream-ui/style.css"]
+stamp = { hash = "b3:2e461cd2b554b4d3", by = "agent:ui-design", note = "New section. Checked the Shared controls block of style.css: select:not([multiple]) with SVG chevron, 14px checkbox/radio filling with --accent, .switch toggle, hover --menu-hover vs --selected, filter-name truncating after the summary." }
+
+["UI-DESIGN#menus"."body"]
+stamp = { hash = "b3:a7cf84af1399db7a", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
+
+["UI-DESIGN#menus"."file:crates/jstream-ui/src/menu.rs"]
+stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
+
+["UI-DESIGN#menus"."file:crates/jstream-ui/style.css"]
+stamp = { hash = "b3:2e461cd2b554b4d3", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
+
+["UI-DESIGN#type"."body"]
+stamp = { hash = "b3:a4f3dda3987a0ebb", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
+
+["UI-DESIGN#type"."file:crates/jstream-ui/style.css"]
+stamp = { hash = "b3:2e461cd2b554b4d3", by = "agent:ui-design", note = "New section. Checked style.css: settings-page-title 15px, eyebrows 11px/600/uppercase/0.06em/--dim on every listed head, activity-meta and filter-summary sans; reworded tabular figures to the in-place numbers that already use them." }
 
 ["UI-FEATURES#beyond"."body"]
 stamp = { hash = "b3:a5f7668e25c34792", by = "agent:ptz-builder", note = "ADR-0153: host.rs gained the PTZ setting's bridge; nothing listed here changes" }

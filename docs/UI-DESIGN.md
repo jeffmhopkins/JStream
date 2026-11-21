@@ -88,7 +88,7 @@ covers = ["crates/jstream-ui/style.css"]
   sentence case.
 - **Monospace** only for code, file paths and URLs shown read-only, codes a person
   types (pairing), and counters that tick. Shortcuts, summaries and log details are sans.
-- Numbers use tabular figures.
+- Numbers that change in place (stats, gains, counters) use tabular figures.
 
 <a id="controls"></a>
 ## Controls and lists
