@@ -257,7 +257,7 @@ pub fn AgentPrompt() -> impl IntoView {
     .into_any()
 }
 
-/// "Ask before a new agent connects", on the General page.
+/// "Ask before connecting" (a new agent), on the General page under Agents.
 #[component]
 pub fn AskAgentsSetting() -> impl IntoView {
     let Some(control) = control() else {
@@ -293,11 +293,12 @@ pub fn AskAgentsSetting() -> impl IntoView {
                 <h4 class="eyebrow">"Agents"</h4>
                 <div class="prop-grid">
                     <div class="prop-row">
-                        <span class="prop-label check">"Ask before connecting"</span>
+                        <label class="prop-label check" for="setting-ask-agents">"Ask before connecting"</label>
                         <div class="prop-control">
                             <input
                                 type="checkbox"
                                 class="toggle"
+                                id="setting-ask-agents"
                                 aria-label="Ask before connecting"
                                 prop:checked=move || on.get().unwrap_or(true)
                                 on:change=move |event| keep(event_target_checked(&event))

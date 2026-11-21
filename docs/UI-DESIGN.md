@@ -142,7 +142,8 @@ The property grid, as OBS's Properties lay a source's settings out:
 - The settings forms built from a kind's descriptor (`.field.prop`) get this layout by
   themselves; any other dialog form uses `.prop-grid` with `.prop-row`s.
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for
-  one that waits for OK. Both sit in the control column.
+  one that waits for OK. Both sit in the control column. A toggle's label is a `<label for>`, so a click on it
+  flips the toggle.
 - Related rows are grouped under [eyebrow](#type) headings.
 
 <a id="copy"></a>
@@ -153,8 +154,8 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
 
 - A setting has at most one helper line: 12 px `--dim`, under its control, saying what
   the person needs to decide. The rest goes behind an (i) beside the label or control
-  (the `Info` component), which shows on hover or focus and is the mark's accessible
-  name.
+  (the `Info` component), which shows on hover or focus, opens on the side with room
+  inside the body that would clip it, and is the mark's accessible name.
 - Say what it does for the person, not how the engine does it.
 - A warning or a consequence that needs reading is a one-line callout (`.callout`, with
   the info icon; `.warn` when it stops something), not a paragraph.

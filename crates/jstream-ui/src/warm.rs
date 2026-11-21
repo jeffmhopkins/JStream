@@ -1,9 +1,9 @@
-//! "Warm scenes" on the Settings dialog's General page (`settings.rs`, ADR-0117 §7):
+//! "Keep ready" (how many warm scenes) on the Settings dialog's General page (`settings.rs`, ADR-0117 §7):
 //! how many scenes besides the program the engine keeps warm, so showing one starts
 //! nothing. The Preview scene is always one of them. It reads the number from
 //! `studio.get` each time the page opens and sets it with `studio.set_warm`; the engine
 //! keeps it on its machine, whatever collection is open. An engine older than 0.115
-//! reports none, and the control hides. Beside it, "Warm scenes' GPU memory" sets the
+//! reports none, and the control hides. Beside it, "Memory limit" sets the
 //! limit on what the warm scenes are estimated to hold on the GPU (`gpu_mib`,
 //! ADR-0150), hidden from an engine older than 0.117.
 //!
@@ -90,7 +90,7 @@ pub fn choice_label(scenes: u32) -> String {
     }
 }
 
-/// The "Warm scenes" choice, shown once the engine has reported its budget.
+/// The "Keep ready" choice (the warm scenes), shown once the engine has reported its budget.
 #[component]
 pub fn WarmScenesSetting() -> impl IntoView {
     let session = use_context::<SessionContext>().and_then(|context| context.get());

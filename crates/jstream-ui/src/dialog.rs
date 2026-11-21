@@ -368,25 +368,86 @@ pub fn Modal(
     }
 }
 
+/// The boxes an (i)'s details must stay inside: a dialog's scrolling bodies, which clip
+/// what overflows them, else the dialog, else the window.
+const TIP_BOUNDS: &str = ".settings-body, .output-dialog-body, .libraries-body, \
+    .plugin-dialog-body, .filter-dialog-body, .props-settings, .props-side, .add-detail, \
+    .filters-window-pane, .modal";
+
+/// How tall and wide an (i)'s details may be, in CSS pixels, for choosing their side.
+const TIP_HEIGHT: f64 = 120.0;
+const TIP_WIDTH: f64 = 268.0;
+
+/// Where an (i)'s details open: `(above, end)`. They open below the mark and run right
+/// from it, unless the room below (`below`) or to the right (`right`) is short, in which
+/// case they open above, or end at the mark.
+fn tip_side(below: f64, right: f64) -> (bool, bool) {
+    (below < TIP_HEIGHT, right < TIP_WIDTH)
+}
+
 /// More about a setting, behind an (i) beside its label (UI-DESIGN › Copy): the
 /// details that don't fit the one helper line a setting may have. Hover or focus shows
-/// them, and a screen reader reads them as the mark's name.
+/// them, and a screen reader reads them as the mark's name. They open on the side with
+/// room, inside the scrolling body that would clip them.
 #[component]
 pub fn Info(
     /// The details, in a sentence or three.
     text: &'static str,
 ) -> impl IntoView {
+    let mark = NodeRef::<html::Span>::new();
+    let side = RwSignal::new((false, false));
+    let place = move || {
+        let Some(mark) = mark.get_untracked() else {
+            return;
+        };
+        let at = mark.get_bounding_client_rect();
+        let (vw, vh) = viewport();
+        let (bottom, right) = mark
+            .parent_element()
+            .and_then(|p| p.closest(TIP_BOUNDS).ok().flatten())
+            .map_or((vh, vw), |b| {
+                let r = b.get_bounding_client_rect();
+                (r.bottom(), r.right())
+            });
+        side.set(tip_side(bottom - at.bottom(), right - at.left()));
+    };
     view! {
-        <span class="info" tabindex="0" role="img" aria-label=text>
+        <span
+            class="info"
+            tabindex="0"
+            role="img"
+            aria-label=text
+            node_ref=mark
+            on:pointerenter=move |_| place()
+            on:focus=move |_| place()
+        >
             "i"
-            <span class="info-tip" aria-hidden="true">{text}</span>
+            <span
+                class="info-tip"
+                class:up=move || side.get().0
+                class:end=move || side.get().1
+                aria-hidden="true"
+            >
+                {text}
+            </span>
         </span>
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{CLICK_PX, DOUBLE_CLICK_MS, clamp_axis, clamp_top, enter_submits, is_double_click};
+    use super::{
+        CLICK_PX, DOUBLE_CLICK_MS, TIP_HEIGHT, TIP_WIDTH, clamp_axis, clamp_top, enter_submits,
+        is_double_click, tip_side,
+    };
+
+    #[test]
+    fn an_info_tip_opens_on_the_side_with_room() {
+        assert_eq!(tip_side(400.0, 600.0), (false, false));
+        assert_eq!(tip_side(TIP_HEIGHT - 1.0, 600.0), (true, false));
+        assert_eq!(tip_side(400.0, TIP_WIDTH - 1.0), (false, true));
+        assert_eq!(tip_side(0.0, 0.0), (true, true));
+    }
 
     #[test]
     fn enter_presses_the_primary_button_from_fields_only() {
