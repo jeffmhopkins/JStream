@@ -2616,7 +2616,7 @@ stamp = { hash = "b3:dc6be16d8c9bcf2b", by = "agent:ptz-builder", note = "ADR-01
 stamp = { hash = "b3:a44921826e5bb95e", by = "agent:claude", note = "Browser sources behind cef: host.rs wires crate::browser::backend on Windows, macOS (#1522) and now 64-bit Linux, beside the Linux vcam (#1521, --no-vcam drops it), with Live::with_browser taking jstream_browser::BrowserBackend. bundle-app.sh still copies the licences into Contents/Resources before signing, alongside #1522's --browser-helper/--cef bundling. | kept from the merged side: Docs only: the backend is built on Windows and macOS with cef, and on macOS the helper is in the bundle. The Browser sources bullet of Design holds. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:cbb83dae216e6b7c", by = "agent:claude", note = "Re-read after a rustdoc-only fix to Host::stop's comment (the private constants named in code spans, not links); the section still holds." }
+stamp = { hash = "b3:3fc4263f2629ee11", by = "agent:claude", note = "Re-read after a test-only fix: the two existing host tests also get their own data folders, so no test shares the temp folder's recent-projects list; the section still holds." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/hotkeys.rs"]
 stamp = { hash = "b3:29cd7088571097b1", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -2679,7 +2679,7 @@ stamp = { hash = "b3:dc6be16d8c9bcf2b", by = "agent:ptz-builder", note = "ADR-01
 stamp = { hash = "b3:a44921826e5bb95e", by = "agent:claude", note = "The Browser sources bullet names Windows, macOS (helper in the bundle, ADR-0157) and 64-bit Linux (helper beside the app, ADR-0158), matching lib.rs's cfg for the browser module (windows, macos, or 64-bit linux, with cef), host.rs's with_browser cfg and its Linux branch, and browser.rs's module doc. | kept from the merged side: Purpose's Browser sources bullet now says Windows and macOS with cef, the macOS helper in the app bundle (ADR-0157); 'browser sources on macOS' left the Not here yet list. host.rs's macOS branch wires browser::backend and with_browser under cef, and browser.rs's docs match. The ARCH apps/* row change (helper executable on Linux and macOS) agrees. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:cbb83dae216e6b7c", by = "agent:claude", note = "Re-read after a rustdoc-only fix to Host::stop's comment (the private constants named in code spans, not links); the section still holds." }
+stamp = { hash = "b3:3fc4263f2629ee11", by = "agent:claude", note = "Re-read after a test-only fix: the two existing host tests also get their own data folders, so no test shares the temp folder's recent-projects list; the section still holds." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/hotkeys.rs"]
 stamp = { hash = "b3:29cd7088571097b1", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }

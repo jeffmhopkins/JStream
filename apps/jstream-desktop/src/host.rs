@@ -1152,15 +1152,17 @@ mod tests {
     /// The host serves its engine on localhost behind its token until it stops.
     #[test]
     fn serves_the_engine_behind_its_token_until_stopped() {
-        let collection = std::env::temp_dir().join(format!(
-            "jstream-desktop-collection-{}.json",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_file(&collection);
+        // A data folder of its own: one shared with another test shares its list of
+        // recent projects, and so the collection that test's engine opens.
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-collection-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
+        let collection = scratch.join("collection.json");
         let secrets = Secrets::new();
         let engine = engine(
             &collection,
-            &std::env::temp_dir(),
+            &scratch,
             Arc::new(AuditMemory::new()),
             true,
             &secrets,
@@ -1214,7 +1216,7 @@ mod tests {
         let again = client.block_on(WsControl::connect(WsConfig::new(&url, &token)));
         assert!(again.is_err(), "stopped");
         assert!(collection.is_file(), "the collection file was created");
-        let _ = std::fs::remove_file(&collection);
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 
     /// The status line of a WebSocket upgrade to `host`'s server with its token and
@@ -1242,14 +1244,16 @@ mod tests {
     /// The webview's origin is let in; another page's is refused, token or not.
     #[test]
     fn only_the_webview_origin_is_accepted() {
-        let collection = std::env::temp_dir().join(format!(
-            "jstream-desktop-origin-{}.json",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_file(&collection);
+        // A data folder of its own: one shared with another test shares its list of
+        // recent projects, and so the collection that test's engine opens.
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-origin-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
+        let collection = scratch.join("collection.json");
         let engine = engine(
             &collection,
-            &std::env::temp_dir(),
+            &scratch,
             Arc::new(AuditMemory::new()),
             false,
             &Secrets::new(),
@@ -1260,7 +1264,7 @@ mod tests {
         assert_eq!(upgrade_status(&host, ORIGIN), "HTTP/1.1 101");
         assert_eq!(upgrade_status(&host, "http://evil.example"), "HTTP/1.1 403");
         host.stop();
-        let _ = std::fs::remove_file(&collection);
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 
     /// `--mcp`: the host listens on its port, takes its token from the token file (made
