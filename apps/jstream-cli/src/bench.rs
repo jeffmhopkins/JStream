@@ -170,7 +170,8 @@ pub struct BenchOptions {
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct Gates {
-    /// Capture frames a mailbox replaced before the renderer took them.
+    /// Capture frames dropped that the canvas could have shown (a capture faster than
+    /// the canvas replaces the frames it can't show, and those don't count).
     pub capture_frames: u64,
     /// Audio frames dropped before the mixer.
     pub audio_frames: u64,
