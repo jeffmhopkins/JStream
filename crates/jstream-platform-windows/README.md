@@ -32,7 +32,7 @@ teardown, error mapping) is in its module's rustdoc, under **Behaviour**:
 | Type | Trait | Module | What it is |
 |---|---|---|---|
 | `QpcClock` | `MediaClock` | `clock.rs` | QueryPerformanceCounter in 100 ns ticks, WASAPI's time line ([ADR-0014](../../docs/adr/0014-media-clock.md)) |
-| `WindowsProcessCpu`, `WindowsThreadCpu`, `WindowsThreadPriority` | `ProcessCpu`, `ThreadCpu`, `ThreadPriority` | `process.rs` | CPU time, and MMCSS for the real-time threads |
+| `WindowsProcessCpu`, `WindowsThreadCpu`, `WindowsThreadPriority` | `ProcessCpu`, `ThreadCpu`, `ThreadPriority` | `process.rs` | CPU time, each thread's under its description or, without one, the module it started in, and MMCSS for the real-time threads |
 | `WasapiAudio` | `AudioIo` | `audio/` | endpoints, inputs, outputs, loopback and process loopback; event-driven, shared mode, one MMCSS "Pro Audio" thread per stream |
 | `WgcCapture` | `Capture` | `capture/` | Windows.Graphics.Capture of displays and windows, on the CPU path or the GPU path (`on_gpu`) |
 | `MfCodecs` | `Codecs` | `codec/` | Media Foundation AAC and H.264, HEVC and AV1 encoders, on CPU frames or the context's encode targets, with the first-frame software fallback, and the H.264 decoder MFT for the engine's own streams ([ADR-0140](../../docs/adr/0140-source-types-and-decoding-scope-v3.md)) |
