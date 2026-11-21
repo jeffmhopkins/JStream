@@ -133,7 +133,13 @@ and calls this crate.
   then shows or hides the item at once. `Track::sample` gives the
   endpoint at a time since the start, or nothing once the item is invisible; it is a
   pure function, so the render thread and the control thread that retargets a running
-  transition get the same answer. Angles take the shortest way round, discrete fields
+  transition get the same answer. Angles take the shortest way round: one that changes
+  alone on its own angle, and more than one as one rotation along the shortest arc
+  between the two orientations (`turn.rs`, unit quaternions in ADR-0022's order, turned
+  back into the angle triple nearest the per-axis path, and a billboard, which draws only
+  its rotation, keeping the per-axis way;
+  [ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+  decision 1). Discrete fields
   (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
   opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
   perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are
