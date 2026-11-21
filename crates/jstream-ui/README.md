@@ -374,9 +374,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   preset, so the engine resolves the transition); in studio mode it goes on preview
   instead (`studio.set_preview`), and a hover button puts it on program. A mouse picks
   on the press, as OBS does, so the switch doesn't wait for the button's release (a
-  click is about a tenth of a second), and a drag that reorders the scenes puts the
-  dragged one on program as it starts, as in OBS; a touch or a pen picks on the click,
-  since its press may start a scroll. The action is queued before the selection
+  click is about a tenth of a second), and a drag that reorders the scenes picks the
+  dragged one (program, or preview in studio mode) as it starts, as in OBS; a press with
+  Shift, Ctrl or Meta (on macOS a Ctrl+click opens the row menu), a touch and a pen pick
+  on the click, the last two since their press may start a scroll. The action is queued before the selection
   changes, so the request leaves before the panels redraw, and a `scene.switch` shows
   its scene on program at once (`Studio::act`), before `studio.changed` confirms it, so
   the badge moves on the press and the canvas keeps its program stream; a refused

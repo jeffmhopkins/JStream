@@ -352,14 +352,24 @@ fn stepped(collection: &Collection, scene_id: &SceneId, up: bool) -> Vec<Edit> {
     )
 }
 
-/// The name a new keyframe scene of a scene with `count` of them gets.
 /// Whether a press picks its scene row at once ([`Scenes`]): a mouse's primary button
-/// with no Shift (which the rows leave to the reorder). A touch or a pen picks on the
-/// click, since its press may start a scroll.
-fn picks_on_press(pointer_type: &str, button: i16, shift: bool) -> bool {
-    pointer_type == "mouse" && button == 0 && !shift
+/// with no modifier. Shift, which the reorder leaves alone, and Ctrl and Meta (on macOS a
+/// Ctrl+click is the secondary click, which opens the row menu and sends no `click`)
+/// pick on the click, as before. A touch or a pen picks on the click too, since its
+/// press may start a scroll.
+fn picks_on_press(pointer_type: &str, button: i16, modifiers: Modifiers) -> bool {
+    pointer_type == "mouse" && button == 0 && modifiers == Modifiers::default()
 }
 
+/// The modifier keys held at a press.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Modifiers {
+    shift: bool,
+    ctrl: bool,
+    meta: bool,
+}
+
+/// The name a new keyframe scene of a scene with `count` of them gets.
 fn keyframe_name(count: usize) -> String {
     format!("Keyframe {}", count + 1)
 }
@@ -669,8 +679,15 @@ pub fn Scenes() -> impl IntoView {
         let pick_on_press = {
             let pick = pick.clone();
             move |event: leptos::ev::PointerEvent| {
-                let picks =
-                    picks_on_press(&event.pointer_type(), event.button(), event.shift_key());
+                let picks = picks_on_press(
+                    &event.pointer_type(),
+                    event.button(),
+                    Modifiers {
+                        shift: event.shift_key(),
+                        ctrl: event.ctrl_key(),
+                        meta: event.meta_key(),
+                    },
+                );
                 pressed.set_value(picks);
                 if picks {
                     pick();
@@ -1424,7 +1441,7 @@ pub fn RenameField(value: String, done: impl Fn(String) + Clone + 'static) -> im
 
 #[cfg(test)]
 mod tests {
-    use super::{Node, Row, keyframe_name, moved, picks_on_press, rows, stepped};
+    use super::{Modifiers, Node, Row, keyframe_name, moved, picks_on_press, rows, stepped};
     use crate::panels::tree::Side;
     use crate::store::Collection;
     use jstream_control::protocol::{
@@ -1744,14 +1761,25 @@ mod tests {
 
     #[test]
     fn a_mouse_picks_a_scene_on_the_press_and_a_touch_or_pen_on_the_click() {
-        assert!(picks_on_press("mouse", 0, false));
-        // The other buttons, and Shift, which the reorder leaves alone.
-        assert!(!picks_on_press("mouse", 1, false));
-        assert!(!picks_on_press("mouse", 2, false));
-        assert!(!picks_on_press("mouse", 0, true));
+        let none = Modifiers::default();
+        assert!(picks_on_press("mouse", 0, none));
+        // The other buttons.
+        assert!(!picks_on_press("mouse", 1, none));
+        assert!(!picks_on_press("mouse", 2, none));
+        // Shift, which the reorder leaves alone, and Ctrl and Meta: on macOS a Ctrl+click
+        // opens the row menu and must not switch program.
+        let shift = Modifiers {
+            shift: true,
+            ..none
+        };
+        let ctrl = Modifiers { ctrl: true, ..none };
+        let meta = Modifiers { meta: true, ..none };
+        assert!(!picks_on_press("mouse", 0, shift));
+        assert!(!picks_on_press("mouse", 0, ctrl));
+        assert!(!picks_on_press("mouse", 0, meta));
         // A press that may be a scroll.
-        assert!(!picks_on_press("touch", 0, false));
-        assert!(!picks_on_press("pen", 0, false));
-        assert!(!picks_on_press("", 0, false));
+        assert!(!picks_on_press("touch", 0, none));
+        assert!(!picks_on_press("pen", 0, none));
+        assert!(!picks_on_press("", 0, none));
     }
 }

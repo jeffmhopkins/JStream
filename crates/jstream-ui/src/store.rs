@@ -1070,6 +1070,8 @@ impl Studio {
                 .program
                 .with_untracked(|p| p.as_ref() != Some(&scene_id))
         {
+            // Newer than any `studio.get` in flight, which `take_studio` then drops.
+            self.studio_seq.update_value(|seq| *seq += 1);
             self.program.set(Some(scene_id));
         }
     }
