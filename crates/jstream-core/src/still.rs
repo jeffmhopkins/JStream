@@ -45,6 +45,9 @@ pub(crate) struct ShownStill {
     /// True until it is dropped: the program stage's cache keeps its upload while
     /// this is ([`Self::alive`]).
     alive: Arc<AtomicBool>,
+    /// A draw of the program stage has said it drew nothing for want of pixels
+    /// ([`Self::drew_nothing`]), so it says so once.
+    blank: AtomicBool,
     keeper: Arc<Shared>,
 }
 
@@ -69,6 +72,7 @@ impl ShownStill {
             wanted: AtomicBool::new(false),
             uploaded: AtomicBool::new(false),
             alive: Arc::new(AtomicBool::new(true)),
+            blank: AtomicBool::new(false),
             keeper,
         }
     }
@@ -109,6 +113,22 @@ impl ShownStill {
     pub(crate) fn want(&self) {
         if !self.wanted.swap(true, Ordering::AcqRel) {
             self.keeper.wake();
+        }
+    }
+
+    /// A draw of the program stage found neither its pixels nor a texture of it, so the
+    /// item drew nothing (#1562). Logged once per shown still, as a warning, since the
+    /// thread is asked to decode them again and the next draws should show it. The
+    /// stills thread logs that decode, so the log shows whether the still came back.
+    pub(crate) fn drew_nothing(&self) {
+        if !self.blank.swap(true, Ordering::AcqRel) {
+            let size = self.size();
+            tracing::warn!(
+                width = size.width(),
+                height = size.height(),
+                "the program stage drew a still image as nothing: its pixels were let go of \
+                 and it has no texture of it; asking for them again"
+            );
         }
     }
 
@@ -272,6 +292,12 @@ fn keep(still: &ShownStill, kept: &mut Kept, now: Instant) -> Option<Arc<VideoFr
     still.uploaded.store(false, Ordering::Release);
     match still.still.frame() {
         Ok(frame) if crate::slot::packed(&frame) => {
+            // Rare: only a draw that needs the pixels again asks (#1562).
+            tracing::info!(
+                width = frame.info().size.width(),
+                height = frame.info().size.height(),
+                "decoded a still image again for a draw that wanted it"
+            );
             kept.retry = None;
             kept.warned = false;
             still.held.store(Some(frame));
