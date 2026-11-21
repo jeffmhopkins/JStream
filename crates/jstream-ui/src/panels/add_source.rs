@@ -1138,6 +1138,7 @@ mod tests {
             transition_in: None,
             transition_out: None,
             camera: None,
+            camera_anchor: None,
             camera_motion: Vec::new(),
             ptz_shots: Vec::new(),
             camera_follow: None,

@@ -65,7 +65,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `transition.set_default`, `scene.set_transitions`, `item.set_transition`,
   `item.set_locked`, `item.set_effects_space`, `item.set_motion`, `item.set_timing`, `folder.create`, `folder.rename`, `folder.set_parent`, `folder.reorder`,
   `folder.delete`, `scene.set_folder`, `scene.set_meta`, `scene.set_options`,
-  `scene.set_camera`, `scene.set_camera_motion`, `scene.set_camera_follow`,
+  `scene.set_camera`, `scene.set_camera_anchor`, `scene.set_camera_motion`, `scene.set_camera_follow`,
   `scene.set_ptz_shots`, `label.create`,
   `label.update`, `label.reorder`, `label.delete`, `source.set_meta`, `timeline.set`,
   `timeline.delete`), with
@@ -181,7 +181,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   overrides and its `camera` (since 0.70; on a keyframe scene its own override) with its
   `camera_motion` and `camera_follow` (since 0.85, ADR-0113, each omitted while absent;
   since 0.91 `camera_follow` is read from its items' `follow_pointer` filters, ADR-0120)
-  and its `timelines` (since 0.87, ADR-0115, omitted while empty), and `studio.get`
+  and its `timelines` (since 0.87, ADR-0115, omitted while empty) and its
+  `camera_anchor` (since 0.127, ADR-0164, omitted while absent), and `studio.get`
   the timelines playing (`PlayingTimeline`) and since 0.88 the keyframes placed scenes
   are drawn through (`PlacedKeyframe`, ADR-0116) and since 0.115 the warm budget
   (`warm_scenes`, with `warm_gpu_mib` since 0.117), `ItemInfo` its `transition` and `state.get` the presets. `video.snapshot`
@@ -318,6 +319,10 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
   depth-of-field blur at a distance along its view
   ([ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and whose `in_view` and
   `direction_in_view` take scene points and directions into a model's viewing frame.
+  `geometry/group.rs` holds `GroupPose`, a 3D group's pose in its scene
+  ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)): `place` puts a
+  child's geometry, and `place_camera` an anchored camera, in the scene's space through
+  the group item's uniform scale, rotation and position.
   `ItemGeometry::light_pose` is where a light its item places sits and shines: the
   box's centre at its `depth_px`, and its back normal.
   `drawn_polygon_seen`, `unplace_seen`,
@@ -346,7 +351,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.124 because a follow camera can hold its zoom: `CameraFollow`'s
+`PROTOCOL_VERSION` is 0.127 because a group can share its 3D scene's space and a camera
+can ride with one: `SceneOptions`' `share_space`, `SceneInfo`'s `camera_anchor` and
+`scene.set_camera_anchor`
+([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md));
+0.124 because a follow camera can hold its zoom: `CameraFollow`'s
 `hold_zoom` and the `follow_pointer` filter's Hold zoom setting
 ([ADR-0161](../../docs/adr/0161-follow-camera-holds-its-zoom.md));
 0.123 because `kind.describe` takes an optional `source_id`
@@ -1435,7 +1444,11 @@ none, which is transparent), `#rrggbb` or `#rrggbbaa` with straight alpha, drawn
 scene's items wherever it is drawn, though never for a group (`parse_rgba` reads it), and
 since 0.116 `keep_warm` (default `false`), which keeps the scene warm while it is off
 program, ranked after the Preview scene within the warm budget
-([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)). `scene.set_options` replaces them all the
+([ADR-0149](../../docs/adr/0149-where-warm-scenes-are-pinned.md)), and since 0.127
+`share_space` (default `false`), which on a group placed in a 3D scene draws its children
+in that scene's space through the group item's pose instead of as one card
+([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), kept and ignored
+on any other scene. `scene.set_options` replaces them all the
 same way, a keyframe scene has its own except a background, which it shows from its
 parent and is refused, and `keep_warm`, which its parent decides and is refused, and `state.get` reports them flattened beside the scene's other
 fields, each omitted while it has its default. A scene's **camera**
@@ -1456,7 +1469,16 @@ keyframe of a 2D scene may have too ([ADR-0128](../../docs/adr/0128-moves-betwee
 removing the parent's camera drops its variants' overrides (a removal on a parent with
 none drops nothing), and its inverse restores them. `SceneInfo.camera` reports the scene's own
 camera, on a keyframe scene its override (it shows its parent's where it has none), and
-is omitted when there is none. It is live-adjustable. Other colours are sRGB `#rrggbb`;
+is omitted when there is none. It is live-adjustable. Since 0.127
+`scene.set_camera_anchor {scene_id, anchor?}` (ADR-0164) names the item of the scene,
+placing a `group`-role scene, that the camera rides with: its position and target are
+then in that group's space, placed through the group item each frame (`GroupPose`,
+[Geometry](#geometry)). It belongs to the family, so it is refused on a keyframe scene
+(`edits.N.anchor`, `invalid_argument`), and only there
+([ADR-0169](../../docs/adr/0169-a-camera-anchor-is-kept-whatever-it-names.md)): an anchor that names no group
+sharing the space, on a scene without a camera, set so or left so later, is kept and
+ignored, as it is while the family has a follow camera. `SceneInfo.camera_anchor`
+reports it, omitted when absent, and its inverse is itself with the old value. Other colours are sRGB `#rrggbb`;
 an icon is an opaque name from the UI's icon set, checked only for its length (1 to 64
 bytes). Since 0.100 hotkey bindings ([Hotkeys](#hotkeys)) and timelines
 ([Timelines](#timelines)) carry labels from the same set, checked the same way
@@ -2358,7 +2380,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   edits, among them a scene's folder, metadata and transitions, a source's metadata, a
   hotkey binding's labels (ADR-0133), an
   item's transition settings, the `transition.*` presets and `studio.set_preview`,
-  a camera's motion and follow camera, a scene's PTZ shots (ADR-0146), `live.set` and `live.cancel`, and `undo`/`redo` on
+  a camera's motion and follow camera, the group it rides with (ADR-0164), a scene's PTZ shots (ADR-0146), `live.set` and `live.cancel`, and `undo`/`redo` on
   the plugin's own session), `live` (`scene.switch`, `scene.set_keyframe` (ADR-0116),
   `scene.zoom_camera`, which
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
@@ -3030,6 +3052,17 @@ shipped with `events.dropped`, so they ship as 0.11, an additive minor under
   Before 0.34 a non-neutral one was `invalid_argument` naming that field, with
   `is_neutral_3d` as the predicate. ADR-0022 said accepting them is not a breaking
   change.
+- **3D groups** ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md),
+  `geometry/group.rs`). `GroupPose::of` reads a group item's box as a pose: a uniform
+  scale from its fit mode (`fit` and `stretch` the smaller of the two scales, `fill` the
+  larger, against the canvas), its rotation `Rx(tilt)·Ry(turn)·Rz(rotation)` and its
+  centre at `depth_px`. `place` maps a child's geometry, in the group's canvas pixels,
+  to an ordinary geometry in the scene's space: its centre through the pose, its size
+  and depth scaled, and its orientation composed and written back as the three angles
+  (each read against the others, so a quarter turn keeps it), so nested groups compose by placing each pose through
+  the one outside it. `place_camera` maps a camera the same way, its roll worked out
+  from the group's placed up and its `focus_px` scaled, so it sees the group's points
+  where its own numbers would.
 - **Reads.** `ItemInfo.placement` is `legacy` or `geometry` (missing from a pre-0.11
   server, it parses as `legacy`). A legacy item reports its transform exactly as
   written and no `geometry`, because its box depends on the source's runtime size. A
