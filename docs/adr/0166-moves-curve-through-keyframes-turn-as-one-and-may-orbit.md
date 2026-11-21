@@ -50,19 +50,22 @@ preset's duration. The protocol gains optional fields only.
 
 <a id="decision"></a>
 ## Decision
-This extends ADR-0094 decision 7, ADR-0049 §3 and ADR-0116 decision 4. The rest of each
+This amends ADR-0029 §5 (angles the shortest way, everything else in a straight line)
+and extends ADR-0094 decision 7, ADR-0049 §3 and ADR-0116 decision 4. The rest of each
 stands.
 
 **1. An item turns as one rotation.** When a pair's orientation changes in more than one
 of `rotation_deg`, `turn_deg` and `tilt_deg`, a Move turns it as one rotation: each end's
 three angles, in ADR-0022's order, as a unit quaternion, and the shortest arc between the
 two, at the pair's eased progress. Each sample turns back into the three angles, which is
-what the placement reads. Of the angle triples that give the same orientation, it takes
-the one nearest the per-axis path, so the angles never jump by a turn between frames, and
-the first and last samples are the ends' own angles. A spring's overshoot carries on
-along the same arc.
+what the placement reads. The orientation is continuous; the triple is, of those that
+give it, the one nearest the per-axis path, so it may switch to another triple for the
+same orientation between frames, which draws the same. The first and last samples are
+the ends' own angles. A spring's overshoot carries on along the same arc.
 - A pair that changes only one angle moves as it does today, the shortest way on that
   angle, which is the same rotation.
+- A billboard (ADR-0151 decision 2) keeps the per-axis way: it draws only its rotation
+  and faces the camera with the rest, so one rotation split over all three would roll it.
 - This holds wherever a pair interpolates: scene switches, keyframe Moves, placed
   keyframes, and the Moves of `item.show` and `item.hide`. It is the same in 2D scenes,
   where an item's own perspective draws the same angles.

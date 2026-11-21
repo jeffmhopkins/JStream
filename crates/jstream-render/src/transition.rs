@@ -875,7 +875,8 @@ fn lerp_geometry(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> ItemGeometry {
 /// The angles `[rotation, turn, tilt]` `k` of the way from `a`'s to `b`'s
 /// ([ADR-0166](../../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
 /// decision 1): the shortest way on the one angle that changes, or, when more than one
-/// does, one rotation along the shortest arc between the two orientations.
+/// does, one rotation along the shortest arc between the two orientations. A billboard
+/// at either end keeps the per-axis way.
 fn lerp_orientation(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> [f32; 3] {
     let from = [a.rotation_deg, a.turn_deg, a.tilt_deg].map(Finite32::get);
     let to = [b.rotation_deg, b.turn_deg, b.tilt_deg].map(Finite32::get);
@@ -887,7 +888,9 @@ fn lerp_orientation(a: &ItemGeometry, b: &ItemGeometry, k: f32) -> [f32; 3] {
             changed += 1;
         }
     }
-    if changed <= 1 {
+    // A billboard draws only its rotation: its turn and tilt face the camera
+    // (ADR-0151 decision 2), so one rotation split over all three would roll it.
+    if changed <= 1 || a.billboard || b.billboard {
         return per_axis;
     }
     crate::turn::slerp_angles(from, to, k, per_axis)
@@ -1336,6 +1339,28 @@ mod tests {
         assert_eq!(half.turn_deg.get(), 30.0);
         assert_eq!(half.tilt_deg.get(), 0.0);
         assert_eq!(half.rotation_deg.get(), 0.0);
+    }
+
+    /// A billboard draws only its rotation, facing the camera with the rest
+    /// (ADR-0151 decision 2), so a Move that changes its turn and tilt keeps the
+    /// per-axis way and never rolls it (#1583 review B1).
+    #[test]
+    fn a_billboard_keeps_the_per_axis_way_and_never_rolls() {
+        let mut from = at(500.0, 500.0, 100.0, 100.0);
+        from.geometry.billboard = true;
+        let mut to = from;
+        to.geometry.turn_deg = Finite32::new(170.0).expect("finite");
+        to.geometry.tilt_deg = Finite32::new(170.0).expect("finite");
+        let track = Track::Pair {
+            from,
+            to,
+            timing: linear(0.0),
+            source: None,
+        };
+        for ms in [250.0, 500.0, 520.0, 521.0, 750.0] {
+            let g = track.sample(ms, CANVAS).expect("drawn").geometry;
+            assert_eq!(g.rotation_deg.get(), 0.0, "{ms}");
+        }
     }
 
     #[test]

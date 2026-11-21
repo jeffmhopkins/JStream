@@ -88,7 +88,8 @@ fn to_angles(q: Quat, hint: [f32; 3]) -> [f32; 3] {
     let m12 = 2.0 * (y * z - w * x);
     let m22 = 1.0 - 2.0 * (x * x + y * y);
     let hint64 = hint.map(|deg| f64::from(deg).to_radians());
-    let candidates: Vec<[f64; 3]> = if m02.abs() >= 1.0 - GIMBAL {
+    // At most two triples give one orientation; a quarter turn has one.
+    let candidates: [Option<[f64; 3]>; 2] = if m02.abs() >= 1.0 - GIMBAL {
         // A quarter turn: rotation and tilt turn about the same axis, so only their sum
         // (or difference) is fixed. Keep the hint's rotation and give the rest to tilt.
         let rotation = hint64[0];
@@ -97,16 +98,16 @@ fn to_angles(q: Quat, hint: [f32; 3]) -> [f32; 3] {
         } else {
             (-std::f64::consts::FRAC_PI_2, rotation - m10.atan2(m11))
         };
-        vec![[rotation, turn, tilt]]
+        [Some([rotation, turn, tilt]), None]
     } else {
         let turn = m02.asin();
         let tilt = (-m12).atan2(m22);
         let rotation = (-m01).atan2(m00);
         let pi = std::f64::consts::PI;
-        vec![
-            [rotation, turn, tilt],
+        [
+            Some([rotation, turn, tilt]),
             // The same orientation, the other way round.
-            [rotation + pi, pi - turn, tilt + pi],
+            Some([rotation + pi, pi - turn, tilt + pi]),
         ]
     };
     let near = |angles: [f64; 3]| {
@@ -125,6 +126,7 @@ fn to_angles(q: Quat, hint: [f32; 3]) -> [f32; 3] {
     };
     let best = candidates
         .into_iter()
+        .flatten()
         .map(near)
         .min_by(|a, b| distance(a).total_cmp(&distance(b)))
         .unwrap_or(hint64);

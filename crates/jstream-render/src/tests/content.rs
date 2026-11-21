@@ -350,13 +350,12 @@ fn a_filter_keeps_the_bound_only_when_it_can() {
     assert!(pixels.rgba().iter().all(|&byte| byte == 0));
 }
 
-/// A shadow's or a glow's blur runs in a frame grown around the output by its radius,
-/// so its bound is moved into that frame (`Bound::placed`). Unmoved, the bound would
-/// land up to the radius short of the blurred shape on the side of a frame far from its
-/// origin: a strong glow of a small square near the right edge of a wide frame shows
-/// that tail.
+/// A strong glow of a small square near the right edge of a wide frame, far from its
+/// origin, draws the same bounded as whole. Its flood and its light run in the output's
+/// frame, so the bound needs no moving; a drop shadow's blur, in a grown frame, moves
+/// it there (`Bound::placed`, checked by the kinds above).
 #[test]
-fn a_glow_bounds_its_blur_in_its_grown_frame() {
+fn a_glow_near_the_far_edge_of_a_wide_frame_draws_the_same_bounded() {
     let Some(mut opened) = open() else {
         return;
     };
