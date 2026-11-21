@@ -1702,12 +1702,28 @@ fn stop_and_join(stop: &AtomicBool, handles: Vec<JoinHandle<()>>) {
 }
 
 fn join(name: &str, handle: Option<JoinHandle<()>>) {
-    if let Some(handle) = handle
-        && let Err(err) = handle.join()
-    {
+    let Some(handle) = handle else {
+        return;
+    };
+    let started = Instant::now();
+    tracing::debug!(thread = name, "waiting for a pipeline thread to stop");
+    if let Err(err) = handle.join() {
         tracing::error!(thread = name, panic = ?err, "pipeline thread panicked");
     }
+    let took = started.elapsed();
+    if took >= SLOW_JOIN {
+        // A slow stop shows in the log at the default level, so an exit that waits on
+        // one names the thread (#1564).
+        tracing::info!(
+            thread = name,
+            ms = u64::try_from(took.as_millis()).unwrap_or(u64::MAX),
+            "a pipeline thread was slow to stop"
+        );
+    }
 }
+
+/// How long a pipeline thread may take to stop before [`join`] logs it.
+const SLOW_JOIN: Duration = Duration::from_millis(250);
 
 pub(crate) struct Parts {
     clock: Arc<dyn MediaClock>,
@@ -4071,7 +4087,7 @@ fn render_loop(job: RenderJob) {
             unread = unread.saturating_add(frame.take_unread());
         }
         drops.publish(
-            capture_drops(captures.stats())
+            capture_drops(captures.dropped())
                 .saturating_add(render_tick_drops(skipped.saturating_add(unread)))
                 .saturating_add(encode_frame_drops(encode_held)),
         );

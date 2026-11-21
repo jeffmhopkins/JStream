@@ -49,6 +49,8 @@ jstream-protocol.workspace = true
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
     "std",
+    # NtQueryInformationThread: the start address an unnamed thread is labelled by.
+    "Wdk_System_Threading",
     "Foundation",
     "Graphics",
     "Graphics_Capture",

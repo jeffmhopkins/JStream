@@ -20,7 +20,10 @@
 //! The file-dialog filter (which extensions a row keeps, All files beside them, which
 //! paths may start the dialog, and the suggested file name), the clock conversion, the
 //! stream helpers (format choice, sample copies, packet flags, positions across a
-//! device move), the capture helpers (target IDs; the BGRA and RGBA to NV12 converter
+//! device move), the capture helpers (target IDs, keyed and key-less, and how a
+//! window's ID finds it again: its own handle while that is its program and class, a
+//! reused handle refused, the same title first, else the topmost of its kind, and the
+//! UWP host and unknown programs needing the title; the BGRA and RGBA to NV12 converter
 //! and the mailbox are `jstream-platform`'s, tested there), the AAC helpers
 //! (configuration check, PCM conversion, packet timing and padding), the video encoder
 //! helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping),
@@ -40,6 +43,8 @@
 //! rates, 100 ns times, the verbatim path prefix, the gapless cut of audio priming and
 //! padding, and reading an MP3's LAME tag) run on every platform. The QPC clock test,
 //! the start-race test (a destroyed message-only window maps to `NotFound`), the
+//! keyed-ID test (a live message-only window keeps its handle; a key of another class,
+//! or the window destroyed, is `NotFound`), the
 //! credential limits check, the credential round trip (a uniquely named credential
 //! written, replaced, read and deleted in the real store, a non-UTF-8 one refused on
 //! read, deleted again on failure), the same through `StreamKeyStore`, a refresh token
@@ -57,7 +62,8 @@
 //! encodes them (AV1 needs an NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer). The
 //! capture tests list the displays, capture the primary display for a second, checking
 //! the frames' format and `pts`, start a capture of a destroyed window, which must be
-//! `NotFound`, and capture three times in a row in one process. The audio tests list
+//! `NotFound`, find a listed window again from its key with a stale handle, and capture
+//! three times in a row in one process. The audio tests list
 //! the devices (one default each way), record the default input for a second on the
 //! media clock, play a quiet tone and record its loopback, check that `input_format`
 //! matches the opened stream for the default input and the default output's loopback,

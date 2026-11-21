@@ -5169,6 +5169,9 @@ fn upload_still(
             still.uploaded();
         } else if asked {
             still.want();
+            if cache.get(key).is_none() {
+                still.drew_nothing();
+            }
         }
     }
     Ok(())

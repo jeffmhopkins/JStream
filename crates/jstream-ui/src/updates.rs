@@ -436,7 +436,7 @@ pub fn UpdateDialog(
                 }}
             </div>
             <div class="modal-footer">
-                <button type="button" class="primary" data-primary on:click=move |_| close()>"Close"</button>
+                <button type="button" class="secondary" data-primary on:click=move |_| close()>"Close"</button>
             </div>
         </Modal>
     }

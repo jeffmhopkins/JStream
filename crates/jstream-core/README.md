@@ -69,7 +69,8 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
   `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
   for the apps' crash hook to leave out (#999);
-  `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
+  `connect()` opens a session, and `handles()` counts the handles and sessions that keep
+  the engine alive; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
@@ -645,7 +646,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   controls the platform knows, and the thread setting each control's latest value, on
   the first device listed for an empty `device`),
   one open of a device shared by two readers, each taking each frame once, closed
-  with its last reader, a reader that joins counting frames from then on, a lost
+  with its last reader, a reader that joins counting frames from then on, a frame
+  another reader took and a newer one replaced counted as skipped for the reader that
+  missed it, a lost
   device failing every reader and not shared again, a device the GPU view opened moved
   to the CPU path in place when a CPU reader joins, its counters carried on, and
   `DeviceLost` for every reader when it doesn't open again there, one open on the
@@ -659,7 +662,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   opening on the video-device backend's GPU path in an uncompressed format, MJPEG and a
   refused format on the CPU path, a webcam on the CPU path left running, and not opened
   twice, when the GPU path is left, and one on the GPU path, running or still starting,
-  moved to the CPU path, closed before it opens again (`runtime/captures.rs`), which
+  moved to the CPU path, closed before it opens again, and which replaced frames count
+  as drops: none from a capture faster than the canvas, one beside each repeat, and a
+  device's once across its captures (#1555) (`runtime/captures.rs`), which
   capture path an output takes and each
   fallback, the video-device backend asked onto the platform's device and
   `SharedVideoDevices` passing that through, an output compositing GPU capture frames (opaque, whatever alpha the
@@ -908,7 +913,8 @@ the queue to the snapshot thread. The drop ledger is a second mutex, outside tha
 `Arc`. Cloning it shares the engine, so a
 host can give one clone to the server's connector and another to an MCP session.
 `Engine::connect()` opens an `InProcessControl`, which holds a clone too: the engine
-lives as long as any handle or session does.
+lives as long as any handle or session does. `Engine::handles` counts them, so a host
+shutting down can log whether its own drop is the one that stops the engine.
 
 A session follows the protocol's envelope
 ([jstream-protocol › Design](../jstream-protocol/README.md#design)) exactly as the
@@ -1641,8 +1647,9 @@ shown still costs its texture and no decoded copy (#1139, ADR-0117 §2). That ca
 keeps the still's upload while no mix draws it, for as long as the still is shown
 (`ResourceCache::keep_while` on `ShownStill::alive`, which turns false when the source
 is deleted or rebuilt), so a cut back to it draws it at once. A program-stage draw that
-needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none)
-until the thread has decoded the file again (`jstream_sources::Still::frame`); the
+needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none, which it logs once
+per shown still: #1562) until the thread has decoded the file again
+(`jstream_sources::Still::frame`, logged at info); the
 render thread only reads atomics and unparks the thread, never decodes, and never frees
 the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). The
 decode takes the still's own decode lock, never the one `frame_if_held` takes, so a
@@ -2462,7 +2469,13 @@ and a preview stream that skips an unchanged picture draws one whose slots chang
 asks for, since where it is placed depends on its size. A painter whose frames aren't
 packed RGBA8 has no slot and re-plans as other animations do. The thread paints only the painters the latest round of plans looked at, the
 program's or a preview's (the same end-of-round `LiveSources::rest_undrawn` that rests a browser page), so one no mix draws costs nothing
-while something else re-plans every frame; a plan that reaches one again paints it for
+while something else re-plans every frame, and of those it paints one with a slot only
+once the time its last paint's `next_change` gave has come (rounded as its wake is), so
+a tick another source asked for (a page re-plans every program frame) leaves a timer
+whose text changes once a second alone, and `profile.get`'s `paints` counts its
+redraws, not the program's frames (#1556). A painter that polls (a settled scope or MIDI
+source every 250 ms, `chat_message` every 100 ms) so notices new sound, notes or a
+featured message within its own interval, as it does when it is alone; a plan that reaches one again paints it for
 the current time first, under the lock, so it never shows the frame it had when it was
 last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
 them ahead on a thread of its own, so apart from that catch-up the plan's `frame`
@@ -2714,7 +2727,9 @@ program's frame itself, drawn once for every consumer. The render thread reads i
 without waiting and pushes it to the session. A `jstream-preview-send` thread per stream
 sends each packet as it comes, timed from the stream's first one, with the collection's
 `rev` at that moment. The hub only opens the session again when the picture size
-changes, passes keyframe requests on, and lets go of it when the stream closes. So the
+changes (logging at info each stream the stage starts drawing, with its channel, scene,
+codec and size, so a wrong picture can be matched to its stream: #1562), passes keyframe
+requests on, and lets go of it when the stream closes. So the
 preview shows what goes out, and costs no second composite, no second device and no
 second capture of the program's displays. Outputs that start while the preview holds the
 stage share it, as they share each other's. A stage only the hub holds is let go of
@@ -2806,7 +2821,9 @@ and reads nothing when the other reader holds it, so the render thread never wai
 the preview thread; the frame is still there on its next tick. The device closes with
 its last reader, and once it is lost every reader reports it and the next open opens it
 afresh. Each reader's `stats` count from when it joined, so an output that joins a
-webcam the preview opened reports only its own frames and drops in `stats.tick`. The
+webcam the preview opened reports only its own frames and drops in `stats.tick`. A
+reader's skips are the frames it didn't get: those the device's stream replaced, and
+those another reader took and a newer frame replaced before this one read. The
 program stage on the GPU context opens through a second view of the same devices
 (`VideoDevices::on_context`), which opens a device that isn't open yet on the
 platform's GPU path, shares one open on the GPU path, and refuses one open on the CPU
@@ -2881,7 +2898,7 @@ What each stage contributes:
 
 | Stage | Read from | Fields |
 |---|---|---|
-| Capture mailbox | [`CaptureStats::frames_skipped`](../jstream-platform/src/capture.rs), published by the render thread | `capture_frames` |
+| Capture mailbox | the frames a stream replaced ([`CaptureStats::frames_skipped`](../jstream-platform/src/capture.rs)) beside a read that took no new frame (`Pace` in [`runtime/captures.rs`](src/runtime/captures.rs)), a device's once across its captures, published by the render thread | `capture_frames` |
 | Render loop | ticks skipped to catch up with the media clock, published by the render thread | `render_ticks` |
 | Mixer input | overrun and late frames, each input while it records | `audio_frames` |
 | Mix bus | frames skipped when the mixer falls behind the clock | `audio_frames` |
@@ -2898,9 +2915,13 @@ the loop skips to the current tick, stamps the frame with it and counts the skip
 ticks in `render_ticks`, so video stays on the clock that stamps audio
 ([R-RT-004](../../docs/RULES.md#R-RT-004)). Both render-thread counters count base
 ticks (1/30 s by default, 1/60 s when the collection opts into it), whatever the video mixes' rates: `render_ticks` counts every skipped
-base tick, including ones on which no mix was due, and the capture mailbox is read
-only on ticks that draw, so when every running mix has a divisor above 1,
-`capture_frames` also counts the captures between its ticks, which no mix wanted. There is no separate output queue in front of the network. Underruns, device gaps and
+base tick, including ones on which no mix was due. The capture mailbox is read only on
+ticks that draw, and a frame a capture replaced between two reads counts in
+`capture_frames` only when a read beside it took no new frame, so the canvas repeated a
+frame it could have shown. A capture faster than the canvas (a 60 fps webcam on a 30 fps
+canvas), or than mixes that all have a divisor above 1, replaces frames no tick could
+show, and those are not drops (#1555). Captures of one device in different formats read
+the same frames, so a drop of the device counts once. There is no separate output queue in front of the network. Underruns, device gaps and
 encoder gap-fill silence are not drops: the mixer plays silence for them, and the late
 or overwritten frames are already in `audio_frames`. A late plugin block is the same
 kind of audio drop ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md));
@@ -4199,7 +4220,9 @@ encoder that ends up on the CPU path is opening.
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as
-`GpuContext` requires.
+`GpuContext` requires. A pipeline thread being stopped is a `debug` line, and one that
+takes 250 ms or more to stop an `info` line naming it and how long it took, so a slow
+exit's log says which thread it waited on (#1564).
 
 **Captures** (`runtime/captures.rs`). Opening the program stage starts no capture. Each tick the
 render thread compares what the snapshot captures (`Shot::captures`, one key per
@@ -4244,8 +4267,8 @@ doesn't start. Its paired audio input is recorded by the audio sources' thread (
 *Audio sources* in Design), not here. A
 capture that doesn't start, or whose stream reports `DeviceLost` (a
 closed window, an unplugged display or webcam), keeps its last frame and is started again 2 s
-later on the media clock. The skips of every stream the pipeline ran are added up into
-`capture_frames`. At the end of the render loop the captures are stopped and the
+later on the media clock. The frames a stream replaced count in `capture_frames` only
+beside a read that took no new frame (see [Drop counts](#drop-counts)). At the end of the render loop the captures are stopped and the
 `jstream-capture` thread joined, before the context is dropped.
 
 The mixer thread builds its mixer, polls the media clock and pushes 48 kHz stereo
@@ -4292,7 +4315,7 @@ render thread sends under the collection lock and announces the sources it chang
 lets go of its captures it forgets them all and ends. `Program`'s drop joins it after
 the render thread. It also joins `jstream-device-losses`, which hands each lost device
 the render thread sends to the engine (the lost-device paragraph above). The render loop counts each tick it composites into the render hub
-(`stats.tick`'s `program_frames`), and publishes capture mailbox skips and the frames an encode ring drops
+(`stats.tick`'s `program_frames`), and publishes capture drops and the frames an encode ring drops
 (`encode_frames`), and a tick that falls a
 whole period behind the clock skips to the current tick and counts the skipped ones in
 `render_ticks`. Each frame it draws is timed into its `DrawMeter` (the skipped ticks
