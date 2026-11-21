@@ -2043,7 +2043,7 @@ stamp = { hash = "b3:b9343fd04c0483b4", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:63d33b0365f787d9", by = "agent:claude", note = "This PR: tests/timelines.rs gains a_label_gathers_keyframes_hotkeys_and_a_timeline_and_one_undo_restores_their_preset, and the timeline literals gain labels. Merge: #1267's late-tick timeline tests (kept beside ours) and #1283 (#1267 and #1283). On re-reading, the tests contents hold. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/keyframes.rs"]
-stamp = { hash = "b3:2674dd4b3b03faa2", by = "agent:claude", note = "keyframes.rs gains a midi modifier test; the section summarises tests and stays accurate" }
+stamp = { hash = "b3:b774f20d58a8b94a", by = "agent:claude", note = "keyframes.rs gains a midi modifier test, now rustfmt'd; the section summarises tests and stays accurate" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/live_values.rs"]
 stamp = { hash = "b3:ad8a24f6d8bc55dd", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
