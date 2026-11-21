@@ -864,8 +864,23 @@ fn startup_project_with(
     data: &Path,
     keys: impl FnOnce() -> anyhow::Result<Option<Arc<dyn jstream_platform::StreamKeyStore>>>,
 ) -> PathBuf {
-    if default == legacy || !legacy.is_file() || default.exists() {
+    if default == legacy {
         return default.to_path_buf();
+    }
+    if !legacy.is_file() || default.exists() {
+        // A first start makes the default project's folder, where the engine creates
+        // the file; a folder that can't be made leaves the data folder's file for now.
+        return match default.parent().map(std::fs::create_dir_all) {
+            Some(Err(error)) => {
+                tracing::warn!(
+                    folder = ?default.parent().map(Path::display),
+                    %error,
+                    "could not make the default project's folder; the project stays in the data folder for now"
+                );
+                legacy.to_path_buf()
+            }
+            _ => default.to_path_buf(),
+        };
     }
     match move_project(legacy, default, data, keys) {
         Ok(renamed) => {
@@ -1464,6 +1479,12 @@ mod tests {
             startup_project_with(&default, &legacy, &data, unused),
             default
         );
+        assert!(
+            default.parent().is_some_and(std::path::Path::is_dir),
+            "a first start makes the folder the engine creates the file in"
+        );
+        std::fs::remove_dir_all(data.parent().unwrap_or(&data).join("Documents"))
+            .unwrap_or_else(|e| panic!("{e}"));
         // The app before #1559 saved here, with a key under the old path's scope.
         let output = jstream_control::protocol::OutputId::new("yt");
         let keys = Arc::new(Keys::default());
