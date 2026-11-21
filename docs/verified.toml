@@ -2619,7 +2619,7 @@ stamp = { hash = "b3:a44921826e5bb95e", by = "agent:claude", note = "Browser sou
 stamp = { hash = "b3:10d401e349489dcb", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:cb8851e4dceaf488", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
+stamp = { hash = "b3:977ce2932968c553", by = "agent:claude", note = '''Re-read against host.rs's fix: a first start now makes the default project's folder (Documents\JStream) before the engine creates the file, falling back to the data folder's collection.json when it can't; the section's description of the default project, its one-time move and the screenshot commands still holds. The main merge (#1571, CI review-gate) touched none of this section's inputs.''' }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/hotkeys.rs"]
 stamp = { hash = "b3:29cd7088571097b1", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -2688,7 +2688,7 @@ stamp = { hash = "b3:a44921826e5bb95e", by = "agent:claude", note = "The Browser
 stamp = { hash = "b3:10d401e349489dcb", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/host.rs"]
-stamp = { hash = "b3:cb8851e4dceaf488", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
+stamp = { hash = "b3:977ce2932968c553", by = "agent:claude", note = '''Re-read against host.rs's fix: a first start now makes the default project's folder (Documents\JStream) before the engine creates the file, falling back to the data folder's collection.json when it can't; the section's description of the default project, its one-time move and the screenshot commands still holds. The main merge (#1571, CI review-gate) touched none of this section's inputs.''' }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/hotkeys.rs"]
 stamp = { hash = "b3:29cd7088571097b1", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
