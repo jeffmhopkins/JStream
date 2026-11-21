@@ -132,7 +132,8 @@ quarter of full warp, so at warp only the stars are seen.
   they are read up to 3 further out in `v`, falling to none as the warp reaches 0, and
   blurred over 9 taps along that rush. So as the warp collapses they zoom back out to
   their places rather than fade in. The render thread's per-scene state says whether
-  the warp is dropping: whether it is still above its setting.
+  how much the warp is dropping: fully while it is above its setting, easing out over
+  the last 0.15 toward a setting above 0, so arriving at a cruise doesn't snap.
 - **Aberration and Doppler.** Warp 1 shifts the stars' light as a speed of 0.9 of
   light's would, a mix of the real effect and the familiar streaks. Aberration crowds
   the stars toward the direction of travel: in `v` it is exactly a shift by the speed's
@@ -155,7 +156,8 @@ quarter of full warp, so at warp only the stars are seen.
   the media time since the last frame. So one edit of `warp` to 0.8 accelerates into
   warp and one edit to 0 slows out of it, with no jump. A step back in time or of more
   than a second, and a new render context or a snapshot, starts at the setting with no
-  travel, so the stars' places then are the same on every machine.
+  travel (a frame at the same time as the last, a held clock, moves nothing and keeps
+  the warp), so the stars' places then are the same on every machine.
 - The whole travel is passed as whole cells, wrapped to 32 bits, and a fraction, so a
   long journey keeps every star exact.
 

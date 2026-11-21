@@ -31,8 +31,8 @@ struct Sky {
     // z: the same fraction of a faint cell; w: its whole faint cells, as u32 bits.
     travel: vec4<f32>,
     // x: the seed, as u32 bits; y: the warp's speed as a fraction of light's, which
-    // crowds the stars ahead and shifts their light; z: 1 while the warp is dropping;
-    // w: unused.
+    // crowds the stars ahead and shifts their light; z: how much the warp is dropping,
+    // 0 to 1; w: the warp, 0 to 1.
     seed: vec4<f32>,
 }
 
@@ -354,26 +354,22 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
         c = panorama(d);
     }
     let length_v = u.stars.w;
-    // The deep sky blurs along the streaks as the warp builds, and fades out by the time
-    // it's at speed: at warp only the stars are seen.
-    let warp = beta() / 0.9;
-    let dropping = u.seed.z > 0.5;
+    let warp = u.seed.w;
+    let dropping = clamp(u.seed.z, 0.0, 1.0);
     // Going into warp the deep sky blurs along the streaks and is gone by a quarter of
     // the way. Coming out it returns sooner, squeezed toward straight ahead, and rushes
-    // back out to its place as the warp collapses: a zoom, blurred along its rush.
-    var deep = 1.0 - smoothstep(0.0, 0.25, warp);
-    var zoom = 0.0;
-    if dropping {
-        deep = 1.0 - smoothstep(0.15, 0.55, warp);
-        zoom = 3.0 * smoothstep(0.0, 0.55, warp);
-    }
+    // back out to its place as the warp collapses: a zoom, blurred along its rush. The
+    // two blend by how much it is dropping, so arriving at a cruise doesn't snap.
+    let deep = mix(1.0 - smoothstep(0.0, 0.25, warp), 1.0 - smoothstep(0.15, 0.55, warp), dropping);
+    let zoom = 3.0 * smoothstep(0.0, 0.55, warp) * dropping;
+    let rushing = dropping > 0.0;
     if (u.nebula.w > 0.0 || u.nebula_2.w > 0.0) && deep > 0.0 {
-        let reach = select(length_v, zoom * 0.6, dropping);
+        let reach = mix(length_v, zoom * 0.6, dropping);
         if reach > 0.01 || zoom > 0.0 {
             let at = about_travel(d);
             var sum = vec3<f32>(0.0);
             // More taps for the long rush out of warp, so it smears rather than ghosts.
-            let taps = select(5, 9, dropping);
+            let taps = select(5, 9, rushing);
             for (var k = 0; k < taps; k++) {
                 sum += deep_sky(from_travel(at.x, at.y + zoom - reach * f32(k) / f32(taps - 1)));
             }

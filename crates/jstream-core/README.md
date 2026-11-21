@@ -1600,7 +1600,7 @@ streams at now, which moves toward the setting at its ramp's pace (dropping whil
 is above it, which zooms the deep sky back in), and how far its
 stars have travelled, advanced once a frame by the warp's mean rate times the media
 time since the last (a step back or of over a second jumps to the setting and moves
-nothing).
+nothing; a step of no time, a held clock, keeps the warp as it is).
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
 `draw_transition_skies` draws each end's sky through that end's camera, the shown
 scene's fading in, and `fill_tracks` puts them under the tracks.

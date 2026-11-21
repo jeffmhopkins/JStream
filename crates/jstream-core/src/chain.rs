@@ -638,20 +638,23 @@ pub(crate) struct SkyState {
     /// ([`jstream_render::SkyDraw::travel`]).
     pub(crate) travel: f64,
     /// Whether its warp is heading down toward a lower setting.
-    pub(crate) dropping: bool,
+    pub(crate) dropping: f32,
 }
 
 impl SkyState {
     /// Advances the sky to `at_s` seconds, once per cache `frame`: its warp moves toward
     /// `target` by one over `ramp_s` seconds (at once for a ramp of 0), and its travel by
     /// [`jstream_render::SkyDraw::travel_rate`] of that warp. The first step starts at
-    /// `target`; a step back in time or of over a second, a seek or a pause, takes the
-    /// warp to `target` and moves nothing. It is dropping while its warp is still above
-    /// `target`.
+    /// `target`; a step back in time or of over a second, as a seek makes, takes the
+    /// warp to `target` and moves nothing, and a step of no time, a held or paused clock
+    /// still drawing, keeps it as it is. It is dropping while its warp is still above
+    /// `target`, easing out as it nears a `target` above 0.
     pub(crate) fn step(&mut self, frame: u64, at_s: f64, (target, ramp_s): (f32, f32)) {
         match self.stepped {
             Some((stepped, _)) if stepped == frame => return,
-            Some((_, last)) if at_s - last > 0.0 && at_s - last <= 1.0 => {
+            // A step of no time (a held or paused clock still drawing) moves nothing and
+            // keeps the warp, rather than jumping it to the setting.
+            Some((_, last)) if at_s >= last && at_s - last <= 1.0 => {
                 let dt = (at_s - last) as f32;
                 let before = self.warp;
                 self.warp = if ramp_s > 0.0 {
@@ -668,7 +671,15 @@ impl SkyState {
             }
             _ => self.warp = target,
         }
-        self.dropping = target < self.warp;
+        // Dropping in full while above the setting, easing out over the last 0.15 toward
+        // a setting above 0 (a drop to 0 ends continuous, with nothing to ease).
+        self.dropping = if target >= self.warp {
+            0.0
+        } else if target <= 0.0 {
+            1.0
+        } else {
+            ((self.warp - target) / 0.15).min(1.0)
+        };
         self.stepped = Some((frame, at_s));
     }
 }
@@ -3217,18 +3228,38 @@ mod tests {
             (sky.travel - ramped).abs() < 1e-6,
             "back in time moves nothing"
         );
-        assert!(!sky.dropping, "at its setting, it isn't dropping");
+        // A held clock: frames at one time keep the warp where it is.
+        sky.step(50, 40.0, (0.0, 0.0));
+        sky.step(51, 40.0, (1.0, 2.0));
+        sky.step(52, 40.0, (1.0, 2.0));
+        assert_eq!(sky.warp, 0.0, "no time, no ramp and no jump");
+        sky.step(53, 40.5, (1.0, 2.0));
+        assert!((sky.warp - 0.25).abs() < 1e-6, "{}", sky.warp);
+        sky.step(5, 29.0, (1.0, 2.0));
+        assert_eq!(sky.dropping, 0.0, "at its setting, it isn't dropping");
         // Setting it lower: dropping until the warp gets there.
         sky.step(6, 29.5, (0.0, 2.0));
         assert!(
-            sky.dropping && (sky.warp - 0.75).abs() < 1e-6,
+            sky.dropping == 1.0 && (sky.warp - 0.75).abs() < 1e-6,
             "{}",
             sky.warp
         );
         sky.step(7, 30.5, (0.0, 2.0));
-        assert!((sky.warp - 0.25).abs() < 1e-6 && sky.dropping);
+        assert!((sky.warp - 0.25).abs() < 1e-6 && sky.dropping == 1.0);
         sky.step(8, 31.0, (0.0, 2.0));
-        assert!(sky.warp == 0.0 && !sky.dropping, "it arrives");
+        assert!(sky.warp == 0.0 && sky.dropping == 0.0, "it arrives");
+        // Toward a cruise above 0 it eases out over the last 0.15.
+        sky.step(9, 31.5, (1.0, 0.0));
+        sky.step(10, 32.0, (0.1, 4.0));
+        assert!((sky.dropping - 1.0).abs() < 1e-6);
+        sky.step(11, 33.0, (0.1, 4.0));
+        sky.step(12, 34.0, (0.1, 4.0));
+        sky.step(13, 34.9, (0.1, 4.0));
+        assert!(
+            (sky.warp - 0.15).abs() < 1e-5 && (sky.dropping - 1.0 / 3.0).abs() < 1e-4,
+            "{}",
+            sky.dropping
+        );
     }
 
     /// ADR-0167: an environment light drawn as a backdrop fills a 3D scene's background

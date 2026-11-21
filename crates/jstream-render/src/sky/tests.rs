@@ -81,7 +81,7 @@ fn sky(environment: Environment<'_>, camera: SceneCamera) -> SkyDraw<'_> {
         deep: super::DeepSky::NONE,
         warp: 0.0,
         travel: 0.0,
-        dropping: false,
+        dropping: 0.0,
     }
 }
 
@@ -471,8 +471,8 @@ fn golden_sky_dropping_out_of_warp_zooms_the_nebulae_back() {
         camera: looking([0.0; 3], [0.0, 0.0, 1.0]),
         ..deep(1.0, 0.0, 1)
     };
-    let rising = total(&shot(&mut opened.compositor, &at(false)));
-    let dropping = total(&shot(&mut opened.compositor, &at(true)));
+    let rising = total(&shot(&mut opened.compositor, &at(0.0)));
+    let dropping = total(&shot(&mut opened.compositor, &at(1.0)));
     assert!(
         dropping > rising * 5 + 5_000,
         "the nebulae rush back: {dropping} dropping, {rising} rising"
