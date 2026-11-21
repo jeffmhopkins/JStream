@@ -138,6 +138,8 @@ pub struct Compositor {
     /// Depth of field on models (ADR-0165): its passes and the layers a model with depth
     /// of field is drawn into first, made on first use.
     model_focus: ModelFocusRun,
+    /// The sky backdrop's pipeline (ADR-0167), built the first time one draws.
+    sky: Option<crate::sky::SkyRuntime>,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
     /// Times effect-pack passes once [`Self::time_passes`] asked, on a device that can
@@ -823,6 +825,26 @@ impl Compositor {
         Ok(layers)
     }
 
+    /// Draws a 3D scene's sky backdrop into `target`, a [`Self::layer`] of the canvas
+    /// size, replacing every texel (ADR-0167): the sky of `sky.environment` along each
+    /// pixel's ray from `sky.camera`, infinitely far away, with its stars, at
+    /// `sky.opacity`. A scene then places the layer under its items.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when `target` is not a layer this compositor made, or the
+    /// camera can't be seen on it.
+    pub fn draw_sky(
+        &mut self,
+        sky: &crate::SkyDraw<'_>,
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let runtime = self
+            .sky
+            .get_or_insert_with(|| crate::sky::SkyRuntime::new(&self.gpu));
+        errors.close(runtime.draw(&self.gpu, &self.owner, sky, target))
+    }
+
     /// Lights a card's picture by its 3D scene (ADR-0151 decision 10): `card.image`, the
     /// picture flat in its box layer, shaded texel by texel where that layer sits in the
     /// scene (its lights, their shadows and its environment, seen from its camera's side)
@@ -1284,6 +1306,7 @@ impl Compositor {
             mip_pipelines,
             models,
             model_focus: ModelFocusRun::default(),
+            sky: None,
             readback_wait: std::time::Duration::ZERO,
             timer: None,
             ingest: Mutex::new(None),

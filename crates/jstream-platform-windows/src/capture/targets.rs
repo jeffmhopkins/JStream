@@ -6,7 +6,9 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jstream_platform::PlatformError;
 use jstream_platform::media::FrameSize;
-use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{
+    CloseHandle, ERROR_INSUFFICIENT_BUFFER, HANDLE, HWND, LPARAM, RECT,
+};
 use windows::Win32::Graphics::Dwm::{
     DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
 };
@@ -265,9 +267,24 @@ fn program_name(pid: u32) -> Option<String> {
     // SAFETY: plain call; the handle it returns is owned by `Process` and closed there.
     let process =
         Process(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?);
-    // Long paths can exceed MAX_PATH; 32 767 is the longest Windows allows.
-    let mut buf = vec![0u16; 32_768];
-    let mut len = u32::try_from(buf.len()).ok()?;
+    // Most paths fit in MAX_PATH, on the stack; a longer one (up to 32 767, the longest
+    // Windows allows) takes a buffer from the heap, only for that process.
+    let mut short = [0u16; 261];
+    let path = match image_path(&process, &mut short) {
+        Ok(path) => path,
+        Err(e) if e.code() == ERROR_INSUFFICIENT_BUFFER.to_hresult() => {
+            image_path(&process, &mut vec![0u16; 32_768]).ok()?
+        }
+        Err(_) => return None,
+    };
+    let name = path.rsplit(['\\', '/']).next().unwrap_or(&path);
+    (!name.is_empty()).then(|| name.to_owned())
+}
+
+/// `process`'s program path, if it fits in `buf` (else `ERROR_INSUFFICIENT_BUFFER`) and
+/// Windows says it.
+fn image_path(process: &Process, buf: &mut [u16]) -> windows::core::Result<String> {
+    let mut len = u32::try_from(buf.len()).unwrap_or(u32::MAX);
     // SAFETY: `buf` holds `len` units and outlives the call; `len` is a valid in/out
     // pointer to a local; the process handle is open.
     unsafe {
@@ -277,11 +294,9 @@ fn program_name(pid: u32) -> Option<String> {
             PWSTR(buf.as_mut_ptr()),
             &raw mut len,
         )
-    }
-    .ok()?;
-    let path = String::from_utf16_lossy(&buf[..usize::try_from(len).ok()?.min(buf.len())]);
-    let name = path.rsplit(['\\', '/']).next().unwrap_or(&path);
-    (!name.is_empty()).then(|| name.to_owned())
+    }?;
+    let len = usize::try_from(len).map_or(buf.len(), |n| n.min(buf.len()));
+    Ok(String::from_utf16_lossy(&buf[..len]))
 }
 
 /// A rectangle's size, if it isn't empty.
