@@ -34,6 +34,7 @@ pub struct Item {
     checked: Option<bool>,
     swatch: Option<String>,
     disabled: bool,
+    danger: bool,
     run: Option<Run>,
     sub: Vec<Entry>,
 }
@@ -47,6 +48,7 @@ impl Entry {
             checked: None,
             swatch: None,
             disabled: false,
+            danger: false,
             run: Some(Rc::new(run)),
             sub: Vec::new(),
         })
@@ -60,6 +62,7 @@ impl Entry {
             checked: None,
             swatch: None,
             disabled: true,
+            danger: false,
             run: None,
             sub: Vec::new(),
         })
@@ -73,6 +76,7 @@ impl Entry {
             checked: None,
             swatch: None,
             disabled: entries.is_empty(),
+            danger: false,
             run: None,
             sub: entries,
         })
@@ -101,6 +105,16 @@ impl Entry {
     pub fn swatch(mut self, color: impl Into<String>) -> Entry {
         if let Entry::Item(item) = &mut self {
             item.swatch = Some(color.into());
+        }
+        self
+    }
+
+    /// The same item drawn as destructive: it deletes something, so it reads in the
+    /// danger colour, as the last group of its menu.
+    #[must_use]
+    pub fn danger(mut self) -> Entry {
+        if let Entry::Item(item) = &mut self {
+            item.danger = true;
         }
         self
     }
@@ -337,9 +351,11 @@ pub fn ContextMenu() -> impl IntoView {
             checked,
             swatch,
             disabled,
+            danger,
             run,
             sub: children,
         } = item;
+        let has_swatch = swatch.is_some();
         let has_sub = !children.is_empty();
         let children = Rc::new(children);
         let opened = move || !in_sub && sub.get().is_some_and(|s| s.index == index);
@@ -417,6 +433,7 @@ pub fn ContextMenu() -> impl IntoView {
                 type="button"
                 class="menuitem ctx-item"
                 class:on=opened
+                class:danger=danger
                 role=role
                 aria-checked=checked.map(|on| if on { "true" } else { "false" })
                 aria-haspopup=has_sub.then_some("menu")
@@ -430,10 +447,10 @@ pub fn ContextMenu() -> impl IntoView {
                 <span class="ctx-check" aria-hidden="true">
                     {(checked == Some(true)).then_some("✓")}
                 </span>
-                <span class="ctx-swatch" aria-hidden="true" style:background-color=swatch></span>
+                <span class="ctx-swatch" class:set=has_swatch aria-hidden="true" style:background-color=swatch></span>
                 <span class="ctx-label">{label}</span>
                 {hint.map(|hint| view! { <span class="hint">{hint}</span> })}
-                {has_sub.then(|| view! { <span class="ctx-arrow" aria-hidden="true">"▸"</span> })}
+                {has_sub.then(|| view! { <span class="ctx-arrow" aria-hidden="true">"›"</span> })}
             </button>
         }
     };
@@ -625,5 +642,20 @@ mod tests {
             (item.hint.as_deref(), item.checked, item.disabled),
             (Some("Ctrl+V"), Some(true), true)
         );
+    }
+
+    #[test]
+    fn a_destructive_item_is_marked_and_keeps_its_other_parts() {
+        let Entry::Item(item) = Entry::item("Delete scene", || {}).hint("Del").danger() else {
+            panic!("an item");
+        };
+        assert_eq!(
+            (item.hint.as_deref(), item.danger, item.disabled),
+            (Some("Del"), true, false)
+        );
+        let Entry::Item(item) = Entry::item("Rename", || {}) else {
+            panic!("an item");
+        };
+        assert!(!item.danger);
     }
 }

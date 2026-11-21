@@ -915,7 +915,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   an existing source or a duplicate, shows in the toast (`Studio::notify`, or
   `apply_noting` once a batch is applied): one at a time, bottom centre, gone after
   4.5 s, a new one replacing it. The look follows the UI prototype ([UI features](../../docs/UI-FEATURES.md)): dark only, with the
-  prototype's palette as CSS variables in `style.css`. The fonts are IBM Plex Sans and
+  prototype's palette as CSS variables in `style.css`. Menus, dialogs and the secondary
+  panels share one design language on top of it: colour roles, buttons, menu anatomy,
+  type and controls ([UI design language](../../docs/UI-DESIGN.md)); a menu item that
+  deletes is built with `Entry::danger` and reads red. The fonts are IBM Plex Sans and
   Mono, bundled in `fonts/` under the SIL OFL 1.1 and served from the page's own origin,
   since its policy loads fonts from nowhere else
   ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)). They show with
