@@ -1084,12 +1084,15 @@ mod tests {
     #[test]
     fn stopping_the_host_lets_the_engine_go() {
         use std::time::{Duration, Instant};
-        let collection =
-            std::env::temp_dir().join(format!("jstream-desktop-stop-{}.json", std::process::id()));
-        let _ = std::fs::remove_file(&collection);
+        // A data folder of its own: one shared with another test shares its list of
+        // recent projects, and so the collection that test's engine opens.
+        let scratch =
+            std::env::temp_dir().join(format!("jstream-desktop-stop-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&scratch);
+        std::fs::create_dir_all(&scratch).unwrap_or_else(|e| panic!("{e}"));
         let engine = engine(
-            &collection,
-            &std::env::temp_dir(),
+            &scratch.join("collection.json"),
+            &scratch,
             Arc::new(AuditMemory::new()),
             false,
             &Secrets::new(),
@@ -1103,7 +1106,7 @@ mod tests {
         host.stop();
         assert!(started.elapsed() < Duration::from_secs(9));
         assert!(weak.upgrade().is_none(), "the engine outlived the host");
-        let _ = std::fs::remove_file(&collection);
+        let _ = std::fs::remove_dir_all(&scratch);
     }
 
     /// `--no-vcam` is off whatever the registry says; the UI reads these exact values.
