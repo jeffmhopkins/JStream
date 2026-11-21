@@ -1554,10 +1554,10 @@ stamp = { hash = "b3:2ff1aa57044de8e2", by = "agent:smooth-paths", note = "Its d
 stamp = { hash = "b3:e0012441d40d5541", by = "agent:claude@session_01S5wwtX3BX1XjmFQac6uajZ", note = "Cargo.toml only moves the package version to version.workspace = true (0.1.0-alpha.1, the release version, docs/runbooks/release.md); the section names no version, so it still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:4681f6b9430a8fa1", by = "agent:claude", note = "args.rs adds surface: None only; the design holds | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). args.rs keeps this branch's surface flag beside the wave's; still holds. | kept from the merged side: args.rs only gains billboard: false in a geometry literal; the CLI design is unchanged" }
+stamp = { hash = "b3:6fbc7954725137e6", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; the design text still holds" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:dc510cbb36c86e92", by = "agent:claude-1555", note = "#1555: bench gate handling unchanged; capture_frames gate doc reworded only" }
+stamp = { hash = "b3:b3481634a6fd72e0", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; the design text still holds | kept from the merged side: #1555: bench gate handling unchanged; capture_frames gate doc reworded only" }
 
 ["CRATE-jstream-cli#design"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -1584,10 +1584,10 @@ stamp = { hash = "b3:1c9936a59c9c02c5", by = "agent:perf-thread", note = "Conten
 stamp = { hash = "b3:4e90635d835b4a5c", by = "agent:claude", note = "ARCH's crate map now says jstream-desktop links jstream-browser with cef on Windows, macOS and Linux (ADR-0157, ADR-0158) and no longer links jstream-sources; this section doesn't describe either, so it holds. | kept from the merged side: The apps/* row changed only in the browser helper's clause (its executable on Linux and macOS, ADR-0157). Re-read this crate's purpose: it says nothing about the helper or macOS browser sources, so it still holds. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:4681f6b9430a8fa1", by = "agent:claude", note = "args.rs only adds surface: None to the geometry literal it builds; the purpose holds | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). args.rs keeps this branch's surface flag beside the wave's; still holds. | kept from the merged side: args.rs only gains billboard: false in a geometry literal; the purpose holds" }
+stamp = { hash = "b3:6fbc7954725137e6", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; the purpose text still holds" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:dc510cbb36c86e92", by = "agent:claude-1555", note = "#1555: bench.rs only rewords the capture_frames gate's doc to the new meaning (replaced frames beside a repeat); purpose unchanged" }
+stamp = { hash = "b3:b3481634a6fd72e0", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; the purpose text still holds | kept from the merged side: #1555: bench.rs only rewords the capture_frames gate's doc to the new meaning (replaced frames beside a repeat); purpose unchanged" }
 
 ["CRATE-jstream-cli#purpose"."file:apps/jstream-cli/src/block.rs"]
 stamp = { hash = "b3:19c53d8711aea68a" }
@@ -1611,10 +1611,10 @@ stamp = { hash = "b3:7c23a9987a7049c6", by = "agent:claude", note = """The CLI's
 stamp = { hash = "b3:1fb8e51769db6783", by = "agent:release-thread", note = "bench now adds a bench_fade_<pid> fade preset when the default fade is asked for and the collection has none, and deletes it after; usage's Bench paragraph says so. Re-read usage against that: it still holds." }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/args.rs"]
-stamp = { hash = "b3:4681f6b9430a8fa1", by = "agent:claude", note = "No flag changed; args.rs adds surface: None to its ItemGeometry literal | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). args.rs keeps this branch's surface flag beside the wave's; still holds. | kept from the merged side: no flag or usage changes; args.rs only fills the new geometry field" }
+stamp = { hash = "b3:6fbc7954725137e6", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; 'scene switch <id> [--preset]' is unchanged, so usage still holds" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/bench.rs"]
-stamp = { hash = "b3:dc510cbb36c86e92", by = "agent:claude-1555", note = "#1555: the gate list still names capture_frames; only its meaning narrowed, described in the core and protocol docs" }
+stamp = { hash = "b3:b3481634a6fd72e0", by = "agent:smooth-paths", note = "Only mechanical: args.rs's scene.switch constructors and bench.rs's scene.switch and scene.switch_and_watch gain via: Vec::new() for ADR-0166's new field; the CLI sends no via and its behaviour is unchanged; 'scene switch <id> [--preset]' is unchanged, so usage still holds | kept from the merged side: #1555: the gate list still names capture_frames; only its meaning narrowed, described in the core and protocol docs" }
 
 ["CRATE-jstream-cli#usage"."file:apps/jstream-cli/src/exit.rs"]
 stamp = { hash = "b3:c3e2bb63c14b238a", by = "agent:perf-thread", note = "Bench paragraph names exit 5 for a run that can't finish (CliError::Bench), that the engine writes the recording to the CLI's --out path, and the two counts not over the window; the exit table and JSON codes gain 5 and bench_failed; the help text in args.rs matches" }
@@ -2628,7 +2628,7 @@ stamp = { hash = "b3:a44921826e5bb95e", by = "agent:claude", note = "Browser sou
 stamp = { hash = "b3:3fc4263f2629ee11", by = "agent:claude", note = "Re-read after a test-only fix: the two existing host tests also get their own data folders, so no test shares the temp folder's recent-projects list; the section still holds." }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/hotkeys.rs"]
-stamp = { hash = "b3:29cd7088571097b1", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
+stamp = { hash = "b3:79fa605c1a88dac5", by = "agent:smooth-paths", note = "Only mechanical: hotkeys.rs's scene.switch test constructor gains via: Vec::new() for ADR-0166's new field; the desktop's hotkey handling is unchanged; the design text still holds" }
 
 ["CRATE-jstream-desktop#design"."file:apps/jstream-desktop/src/jtunnel.rs"]
 stamp = { hash = "b3:044bd2aab6104083", by = "agent:jtunnel-accept", note = "The JTunnel design bullet: a leftover temporary file removed before the user-only write (#1446 N1), and on with no sender starts the receiver for jtunnel.senders only." }
@@ -2691,7 +2691,7 @@ stamp = { hash = "b3:a44921826e5bb95e", by = "agent:claude", note = "The Browser
 stamp = { hash = "b3:3fc4263f2629ee11", by = "agent:claude", note = "Re-read after a test-only fix: the two existing host tests also get their own data folders, so no test shares the temp folder's recent-projects list; the section still holds." }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/hotkeys.rs"]
-stamp = { hash = "b3:29cd7088571097b1", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
+stamp = { hash = "b3:79fa605c1a88dac5", by = "agent:smooth-paths", note = "Only mechanical: hotkeys.rs's scene.switch test constructor gains via: Vec::new() for ADR-0166's new field; the desktop's hotkey handling is unchanged; the purpose text still holds" }
 
 ["CRATE-jstream-desktop#purpose"."file:apps/jstream-desktop/src/jtunnel.rs"]
 stamp = { hash = "b3:044bd2aab6104083", by = "agent:jtunnel-accept", note = "Re-read: jtunnel.rs now runs the receiver on with no sender (discovery) and removes a leftover temporary file; the JTunnel bullet's summary still holds." }
@@ -6780,7 +6780,7 @@ stamp = { hash = "b3:cd1222001aad0cda" }
 stamp = { hash = "b3:e97684fe742d6756" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/mock-daemon/src/main.rs"]
-stamp = { hash = "b3:b99f9face13e57e7", by = "agent:claude-settings", note = "Documented the mock daemon's --agent-token mode and the daemonArgs fixture; matches main.rs and fixtures.js" }
+stamp = { hash = "b3:31b0f2c7a62346f3", by = "agent:smooth-paths", note = "Only mechanical: the mock daemon's seeded scene.switch hotkey gains via: Vec::new() for ADR-0166's new field; what the daemon seeds and serves is unchanged, so the harness text still holds" }
 
 ["CRATE-jstream-ui-e2e#harness"."file:crates/jstream-ui/tests/e2e/package.json"]
 stamp = { hash = "b3:6211f670897609d3", by = "agent:dependabot-lander", note = "Dependabot bump only moves @playwright/test 1.64.1 -> 1.65.0 in package.json; the section names no Playwright version and its fixtures, mock daemon and scripts are unchanged, so it holds" }
