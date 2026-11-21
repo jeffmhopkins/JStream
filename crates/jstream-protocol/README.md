@@ -210,7 +210,9 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and `MotionCurve`, follows a bus or a source
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
   `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
-  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)).
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.125
+  `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -346,7 +348,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.124 because a follow camera can hold its zoom: `CameraFollow`'s
+`PROTOCOL_VERSION` is 0.125 because a motion modifier can follow MIDI: `MotionKind`'s
+`midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
+onto an item's property, smoothed over `smoothing_ms`
+([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md));
+0.124 because a follow camera can hold its zoom: `CameraFollow`'s
 `hold_zoom` and the `follow_pointer` filter's Hold zoom setting
 ([ADR-0161](../../docs/adr/0161-follow-camera-holds-its-zoom.md));
 0.123 because `kind.describe` takes an optional `source_id`
@@ -2688,12 +2694,12 @@ after 1.0:
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
-  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, and `MotionMeasure` and
-  `MotionCurve`, 0.86): a later kind or property won't break a 0.81 client's
+  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, `MotionMeasure` and
+  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.125): a later kind or property won't break a 0.81 client's
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86) and a `midi` one (0.125) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2754,6 +2760,20 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   and so is everything the engine doesn't hear: while no output runs the program mix
   is silent, and a preview reads every audio modifier as silence. Its `clock` is
   ignored.
+- **`midi`** (since 0.125,
+  [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)) follows a MIDI
+  controller instead of a clock, the value binding of ADR-0122: `control` is `cc` (the
+  default, with its `controller` 0 to 127, which only `cc` takes), `pitch_bend` or
+  `pressure` (channel pressure), read on `channel` 1 to 16 (omitted for the latest on any
+  channel) from `input`, a MIDI port or JTunnel sender by name as a trigger names one
+  (omitted for any). A control change and pressure map 0 to 127 onto 0 to 1, a pitch bend
+  -8192 to 8191 with its rest at one half. That is followed over `smoothing_ms` (default
+  50, `0..=10000`, a one-pole time constant for rising and falling alike; 0 jumps, and
+  the first frame an item is drawn lands on the value), bent by `curve` as an audio
+  modifier's is, and mapped onto `from` (default 0) to `to` (default 1), each within
+  ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
+  preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
+  camera's motion refuses it.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.

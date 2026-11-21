@@ -175,4 +175,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0160](0160-aac-lc-decoder-patent-check.md) | AAC-LC decoder patent check: may Linux decode AAC-LC through symphonia? | accepted | maintainer |  |
 | [ADR-0161](0161-follow-camera-holds-its-zoom.md) | A follow camera holds its zoom, and only pans at the edges | accepted | agent |  |
 | [ADR-0162](0162-a-carried-pass-compares-added-binaries-by-blob.md) | A carried review pass compares an added file without a patch by its blob | accepted | agent |  |
+| [ADR-0168](0168-midi-controllers-drive-motion.md) | MIDI controllers drive motion: value bindings as a `midi` motion modifier | accepted | agent |  |
 <!-- @generated end adr-index -->

@@ -353,8 +353,10 @@ that does not want to change the graph it has.
   override. `anim_modifiers` turns a stored list into `jstream-anim`'s modifiers for the
   engine to evaluate, `impulse` and the `triggered` clock included (#1107), and an `audio`
   modifier into `Kind::Audio` with its measure, range, envelope times and curve
-  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)); what it hears
-  stays the engine's. The graph never evaluates motion: an item's values are what was
+  ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), and a `midi`
+  one into `Kind::Midi` with its smoothing, range and curve
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)); what it hears or
+  which controller it reads stays the engine's. The graph never evaluates motion: an item's values are what was
   set.
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):

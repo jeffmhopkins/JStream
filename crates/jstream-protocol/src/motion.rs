@@ -19,7 +19,14 @@
 //! `property` `effect` with an `effect` target, [`MotionEffect`]. Its value is added to
 //! a number, kept within the range the effect's kind gives it, or to a colour's red,
 //! green and blue as a fraction of full.
+//!
+//! A `midi` modifier ([ADR-0168](../../../docs/adr/0168-midi-controllers-drive-motion.md),
+//! since 0.125) follows a MIDI control change, pitch bend or channel pressure instead of
+//! the clock: the controller's value is mapped onto 0 to 1, smoothed over
+//! `smoothing_ms`, bent by `curve` and mapped onto `from..to`, so a fader or a knob
+//! poses an item live, as ADR-0122 decision 1's value bindings describe.
 
+use crate::binding::MAX_INPUT_NAME_LEN;
 use crate::finite::Finite32;
 use crate::{BusId, FilterId, SourceId};
 use schemars::JsonSchema;
@@ -173,6 +180,26 @@ pub enum MotionCurve {
     Unknown,
 }
 
+/// What a `midi` modifier follows (since 0.125, ADR-0168).
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+#[non_exhaustive]
+pub enum MotionMidiControl {
+    /// A control change: `controller`'s value, 0 to 127, as 0 to 1.
+    #[default]
+    Cc,
+    /// The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.
+    PitchBend,
+    /// The channel pressure (aftertouch), 0 to 127, as 0 to 1.
+    Pressure,
+    /// A control this version of the protocol doesn't know, from a newer server. Never
+    /// sent; the engine refuses it in an edit with `invalid_argument` and draws a stored
+    /// one as still.
+    #[serde(other)]
+    #[schemars(skip)]
+    Unknown,
+}
+
 /// What a modifier does, with its parameters, tagged by `kind`.
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, JsonSchema)]
 #[serde(tag = "kind", rename_all = "snake_case")]
@@ -264,6 +291,42 @@ pub enum MotionKind {
         #[serde(default = "default_to")]
         to: Finite32,
     },
+    /// Follows a MIDI controller (ADR-0168, since 0.125): `control`'s latest value on
+    /// `channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`
+    /// and mapped onto `from..to`. Before the controller has sent anything it reads 0
+    /// (a pitch bend one half), so the item rests at `from`.
+    Midi {
+        /// What it follows. Default `cc`.
+        #[serde(default)]
+        control: MotionMidiControl,
+        /// The controller number, 0 to 127, with `control` `cc` and only then.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        controller: Option<u8>,
+        /// The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:
+        /// then the latest value sent on any channel.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        channel: Option<u8>,
+        /// The input, a MIDI port or a JTunnel sender by name, as a binding's trigger
+        /// names it, or omitted for any.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+        /// How long it takes to follow a new value, in milliseconds, `0..=10000`: about
+        /// two thirds of the way in that time, a one-pole smoothing. 0 jumps at once.
+        /// Default 50, which hides a controller's 128 steps.
+        #[serde(default = "default_smoothing_ms")]
+        smoothing_ms: u32,
+        /// How the 0 to 1 value is bent. Default `linear`.
+        #[serde(default)]
+        curve: MotionCurve,
+        /// Its value at the controller's lowest, in the property's unit, within
+        /// `-100000..=100000`. Default 0.
+        #[serde(default)]
+        from: Finite32,
+        /// Its value at the controller's highest, within `-100000..=100000`; below
+        /// `from` to invert. Default 1.
+        #[serde(default = "default_to")]
+        to: Finite32,
+    },
     /// A one-shot decaying shake, since 0.84 (#1107):
     /// `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from
     /// the start of its clock, until `duration_ms`, and 0 after. Usually on the
@@ -302,6 +365,10 @@ fn default_attack_ms() -> u32 {
 
 fn default_release_ms() -> u32 {
     250
+}
+
+fn default_smoothing_ms() -> u32 {
+    50
 }
 
 fn default_to() -> Finite32 {
@@ -511,6 +578,24 @@ impl MotionKind {
                 curve,
                 (from, to),
             ),
+            MotionKind::Midi {
+                control,
+                controller,
+                channel,
+                ref input,
+                smoothing_ms,
+                curve,
+                from,
+                to,
+            } => midi_problem(
+                control,
+                controller,
+                channel,
+                input.as_deref(),
+                smoothing_ms,
+                curve,
+                (from, to),
+            ),
             MotionKind::Wiggle {
                 amplitude,
                 frequency_hz,
@@ -620,6 +705,58 @@ fn audio_problem(
         Some(("attack_ms", "must be within 0..=10000"))
     } else if release_ms > MAX_ENVELOPE_MS {
         Some(("release_ms", "must be within 0..=10000"))
+    } else if curve == MotionCurve::Unknown {
+        Some(("curve", unknown))
+    } else if !end(from) {
+        Some(("from", "must be within -100000..=100000"))
+    } else if !end(to) {
+        Some(("to", "must be within -100000..=100000"))
+    } else {
+        None
+    }
+}
+
+/// A `midi` modifier's first parameter out of range (ADR-0168).
+fn midi_problem(
+    control: MotionMidiControl,
+    controller: Option<u8>,
+    channel: Option<u8>,
+    input: Option<&str>,
+    smoothing_ms: u32,
+    curve: MotionCurve,
+    (from, to): (Finite32, Finite32),
+) -> Option<(&'static str, &'static str)> {
+    let unknown = "is not one this version of the protocol knows";
+    let end = |v: Finite32| v.get().abs() <= MAX_MAGNITUDE;
+    match (control, controller) {
+        (MotionMidiControl::Unknown, _) => return Some(("control", unknown)),
+        (MotionMidiControl::Cc, None) => {
+            return Some(("controller", "a `cc` control needs its controller number"));
+        }
+        (MotionMidiControl::Cc, Some(n)) if n > 127 => {
+            return Some(("controller", "must be 0 to 127"));
+        }
+        (MotionMidiControl::PitchBend | MotionMidiControl::Pressure, Some(_)) => {
+            return Some(("controller", "only a `cc` control has it"));
+        }
+        _ => {}
+    }
+    if channel.is_some_and(|c| !(1..=16).contains(&c)) {
+        return Some(("channel", "must be 1 to 16, or missing for any channel"));
+    }
+    if let Some(name) = input {
+        if name.is_empty() {
+            return Some(("input", "must not be empty: leave it out for any input"));
+        }
+        if name.len() > MAX_INPUT_NAME_LEN {
+            return Some(("input", "must be at most 64 bytes"));
+        }
+        if name.chars().any(char::is_control) {
+            return Some(("input", "must not hold control characters"));
+        }
+    }
+    if smoothing_ms > MAX_ENVELOPE_MS {
+        Some(("smoothing_ms", "must be within 0..=10000"))
     } else if curve == MotionCurve::Unknown {
         Some(("curve", unknown))
     } else if !end(from) {
@@ -965,6 +1102,86 @@ mod tests {
         for (extra, param) in cases {
             assert_eq!(
                 field(audio(extra.clone())),
+                Some(format!("motion.0.{param}")),
+                "{extra}"
+            );
+        }
+    }
+
+    /// ADR-0168: a `midi` modifier parses with its defaults, names one control, and
+    /// checks each parameter.
+    #[test]
+    fn a_midi_modifier_takes_defaults_and_checks_each_parameter() {
+        let parse = |json: serde_json::Value| -> MotionModifier {
+            serde_json::from_value(json).expect("parses")
+        };
+        let lever = parse(serde_json::json!({
+            "modifier_id": "lever", "property": "tilt", "kind": "midi", "controller": 7
+        }));
+        assert_eq!(
+            lever.kind,
+            MotionKind::Midi {
+                control: MotionMidiControl::Cc,
+                controller: Some(7),
+                channel: None,
+                input: None,
+                smoothing_ms: 50,
+                curve: MotionCurve::Linear,
+                from: Finite32::ZERO,
+                to: Finite32::ONE,
+            }
+        );
+        assert_eq!(check_motion(std::slice::from_ref(&lever)), Ok(()));
+        assert_eq!(
+            serde_json::to_value(&lever).expect("serializes"),
+            serde_json::json!({
+                "modifier_id": "lever", "property": "tilt", "kind": "midi", "control": "cc",
+                "controller": 7, "smoothing_ms": 50, "curve": "linear", "from": 0.0, "to": 1.0,
+                "clock": "engine"
+            })
+        );
+        let instant = parse(serde_json::json!({
+            "modifier_id": "w", "property": "rotation", "kind": "midi",
+            "control": "pitch_bend", "channel": 16, "input": "Keys", "smoothing_ms": 0
+        }));
+        assert_eq!(
+            check_motion(&[instant]),
+            Ok(()),
+            "0 ms jumps, and is allowed"
+        );
+
+        let field = |json: serde_json::Value| field_of(&[parse(json)]);
+        let midi = |extra: serde_json::Value| {
+            let mut json = serde_json::json!({
+                "modifier_id": "a", "property": "x", "kind": "midi", "controller": 1
+            });
+            for (k, v) in extra.as_object().expect("object") {
+                json[k] = v.clone();
+            }
+            json
+        };
+        let cases = [
+            (serde_json::json!({ "controller": null }), "controller"),
+            (serde_json::json!({ "controller": 128 }), "controller"),
+            (serde_json::json!({ "control": "pressure" }), "controller"),
+            (serde_json::json!({ "control": "pitch_bend" }), "controller"),
+            (serde_json::json!({ "control": "aftertouch" }), "control"),
+            (serde_json::json!({ "channel": 0 }), "channel"),
+            (serde_json::json!({ "channel": 17 }), "channel"),
+            (serde_json::json!({ "input": "" }), "input"),
+            (serde_json::json!({ "input": "x".repeat(65) }), "input"),
+            (serde_json::json!({ "input": "Pads\n" }), "input"),
+            (
+                serde_json::json!({ "smoothing_ms": 10_001 }),
+                "smoothing_ms",
+            ),
+            (serde_json::json!({ "curve": "spring" }), "curve"),
+            (serde_json::json!({ "from": -100_001.0 }), "from"),
+            (serde_json::json!({ "to": 100_001.0 }), "to"),
+        ];
+        for (extra, param) in cases {
+            assert_eq!(
+                field(midi(extra.clone())),
                 Some(format!("motion.0.{param}")),
                 "{extra}"
             );

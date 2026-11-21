@@ -1,5 +1,6 @@
 //! Audio-reactive motion modifiers as the engine draws them
-//! ([ADR-0100](../../../docs/adr/0100-audio-reactive-motion-modifiers.md)).
+//! ([ADR-0100](../../../docs/adr/0100-audio-reactive-motion-modifiers.md)), and MIDI-driven
+//! ones ([ADR-0168](../../../docs/adr/0168-midi-controllers-drive-motion.md)).
 //!
 //! An `audio` modifier hears what a `spectrum` source with the same `audio` and
 //! `audio_source` would draw ([`Hearing`]). The engine keeps a scope for every bus and
@@ -39,16 +40,26 @@
 //! the modifier's `from`. A scene frame sheet follows those scopes itself, across its
 //! pictures, so an audio modifier there hears the mix (#1189).
 //!
-//! Docs: docs/adr/0100-audio-reactive-motion-modifiers.md
+//! **MIDI-driven motion** (`reactive.rs`, ADR-0168): a `midi` modifier is recorded the
+//! same way, with its input's `MidiState` (the named input's, or every input's) and the
+//! control it reads (`Control`), when the engine has MIDI inputs. Once a tick the same
+//! `Follower` reads each control from atomics, maps it onto 0 to 1, follows it with a
+//! `Smoothing` per item and modifier ID (its first step lands on the value, so an item
+//! that appears shows the controller where it is) and stores the level. A binding no
+//! follower has stored (a preview shot's) reads its control as it is, unsmoothed, so
+//! previews show the controller too. A modifier ID that turns from audio to MIDI between
+//! plans gets a fresh state of its new kind.
+//!
+//! Docs: docs/adr/0100-audio-reactive-motion-modifiers.md, docs/adr/0168-midi-controllers-drive-motion.md
 
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU32, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
-use jstream_anim::{Audio, Envelope, Measure};
+use jstream_anim::{Audio, Envelope, Measure, Midi, Smoothing};
 use jstream_media::MediaTime;
-use jstream_protocol::{BusId, ItemId, MotionKind, MotionModifier, SourceId};
-use jstream_sources::{AudioMeter, AudioScope, AudioScopes};
+use jstream_protocol::{BusId, ItemId, MotionKind, MotionMidiControl, MotionModifier, SourceId};
+use jstream_sources::{AudioMeter, AudioScope, AudioScopes, MidiInputs, MidiState};
 
 /// What an audio modifier hears.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -100,23 +111,157 @@ pub(crate) fn heard_scopes(
         .collect()
 }
 
-/// One audio modifier of a drawn item, with the scope it hears and its level for the
-/// current tick.
+/// What a MIDI modifier reads of its input's state (ADR-0168): one control, on one
+/// channel (0 to 15) or the latest of any.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Control {
+    /// A control change's value.
+    Cc { channel: Option<u8>, controller: u8 },
+    /// The pitch bend.
+    Bend { channel: Option<u8> },
+    /// The channel pressure.
+    Pressure { channel: Option<u8> },
+}
+
+impl Control {
+    /// What `modifier` reads, when it is a MIDI one this version knows.
+    pub(crate) fn of(modifier: &MotionModifier) -> Option<Self> {
+        let MotionKind::Midi {
+            control,
+            controller,
+            channel,
+            ..
+        } = &modifier.kind
+        else {
+            return None;
+        };
+        // The wire's channel is 1 to 16; the state's is 0 to 15.
+        let channel = channel.map(|c| c.saturating_sub(1) & 0x0F);
+        Some(match control {
+            MotionMidiControl::Cc => Control::Cc {
+                channel,
+                controller: (*controller)? & 0x7F,
+            },
+            MotionMidiControl::PitchBend => Control::Bend { channel },
+            MotionMidiControl::Pressure => Control::Pressure { channel },
+            _ => return None,
+        })
+    }
+
+    /// Its value in `state` now, as `0..=1`. Reads atomics only.
+    pub(crate) fn read(self, state: &MidiState) -> f32 {
+        match self {
+            Control::Cc {
+                channel: Some(c),
+                controller,
+            } => Midi::normalize_cc(state.controller(c, controller)),
+            Control::Cc {
+                channel: None,
+                controller,
+            } => Midi::normalize_cc(state.controller_any(controller)),
+            Control::Bend { channel: Some(c) } => Midi::normalize_bend(state.bend(c)),
+            Control::Bend { channel: None } => Midi::normalize_bend(state.bend_any()),
+            Control::Pressure { channel: Some(c) } => Midi::normalize_cc(state.pressure(c)),
+            Control::Pressure { channel: None } => Midi::normalize_cc(state.pressure_any()),
+        }
+    }
+}
+
+/// What a binding follows.
+#[derive(Debug)]
+enum Input {
+    /// An audio modifier's scope (ADR-0100).
+    Scope {
+        audio: Audio,
+        scope: Arc<AudioScope>,
+    },
+    /// A MIDI modifier's input state and control (ADR-0168).
+    Midi {
+        midi: Midi,
+        state: Arc<MidiState>,
+        control: Control,
+    },
+}
+
+impl PartialEq for Input {
+    /// Two inputs are the same when they follow the same scope or state with the same
+    /// parameters.
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Input::Scope { audio, scope }, Input::Scope { audio: a, scope: s }) => {
+                audio == a && Arc::ptr_eq(scope, s)
+            }
+            (
+                Input::Midi {
+                    midi,
+                    state,
+                    control,
+                },
+                Input::Midi {
+                    midi: m,
+                    state: s,
+                    control: c,
+                },
+            ) => midi == m && control == c && Arc::ptr_eq(state, s),
+            _ => false,
+        }
+    }
+}
+
+/// One audio or MIDI modifier of a drawn item, with what it follows and its level for
+/// the current tick.
 #[derive(Debug)]
 pub(crate) struct Binding {
-    audio: Audio,
-    scope: Arc<AudioScope>,
+    input: Input,
     /// The envelope's level, `0..=1`, as `f32` bits: the render thread's [`Follower`],
     /// or a scene frame sheet's own, stores it once a tick, and every mix of the tick
     /// reads it.
     level: AtomicU32,
+    /// Whether a follower has stored `level`. A MIDI binding no follower follows (a
+    /// preview shot's) reads its control as it is now, unsmoothed, so a preview shows
+    /// the controller too.
+    followed: AtomicBool,
 }
 
 impl PartialEq for Binding {
-    /// Two bindings are the same when they hear the same scope with the same
+    /// Two bindings are the same when they follow the same input with the same
     /// parameters: a level is the tick's, never the plan's.
     fn eq(&self, other: &Self) -> bool {
-        self.audio == other.audio && Arc::ptr_eq(&self.scope, &other.scope)
+        self.input == other.input
+    }
+}
+
+impl Binding {
+    fn new(input: Input) -> Self {
+        Binding {
+            input,
+            level: AtomicU32::new(0),
+            followed: AtomicBool::new(false),
+        }
+    }
+
+    /// The scope it hears, when it is an audio binding.
+    fn scope(&self) -> Option<&Arc<AudioScope>> {
+        match &self.input {
+            Input::Scope { scope, .. } => Some(scope),
+            Input::Midi { .. } => None,
+        }
+    }
+
+    /// Its level this tick: what a follower stored, or a MIDI control as it is now
+    /// when none has.
+    fn level(&self) -> f32 {
+        if let Input::Midi { state, control, .. } = &self.input
+            && !self.followed.load(Ordering::Relaxed)
+        {
+            return control.read(state);
+        }
+        f32::from_bits(self.level.load(Ordering::Relaxed))
+    }
+
+    fn store(&self, level: f32) {
+        self.level.store(level.to_bits(), Ordering::Relaxed);
+        self.followed.store(true, Ordering::Relaxed);
     }
 }
 
@@ -128,48 +273,74 @@ pub(crate) struct Bindings {
 }
 
 impl Bindings {
-    /// Records `item`'s audio modifiers in `motion` that hear a scope in `heard`. A
-    /// modifier whose scope isn't found (the collection changed since the scopes were
-    /// found) is left out, so it reads as silence until the next plan.
+    /// Records `item`'s audio modifiers in `motion` that hear a scope in `heard`, and
+    /// its MIDI modifiers (ADR-0168), each on its input's state in `midi`. A modifier
+    /// whose scope isn't found (the collection changed since the scopes were found) is
+    /// left out, so it reads as silence until the next plan, and so is a MIDI one when
+    /// the engine has no MIDI inputs, which rests at its `from`.
     ///
     /// One shot can draw an item through two motion lists with the same modifier ID: a
     /// keyframe Move's two sides, or a keyframe in one mix and its parent in another.
     /// They share one envelope (ADR-0100 decision 4 keys it by item and ID), and the
     /// first list recorded decides what it hears and measures and its dB map and times;
-    /// each side's own curve and range still map it.
-    pub(crate) fn record(&mut self, item: &ItemId, motion: &[MotionModifier], heard: &HeardScopes) {
+    /// each side's own curve and range still map it. A MIDI modifier's control and
+    /// smoothing are decided the same way.
+    pub(crate) fn record(
+        &mut self,
+        item: &ItemId,
+        motion: &[MotionModifier],
+        heard: &HeardScopes,
+        midi: Option<&MidiInputs>,
+    ) {
         for modifier in motion {
-            let Some(hearing) = hearing(modifier) else {
-                continue;
-            };
-            let Some(scope) = heard.get(&hearing) else {
-                continue;
-            };
-            let Some(jstream_anim::Modifier {
-                kind: jstream_anim::Kind::Audio(audio),
-                ..
-            }) = jstream_graph::anim_modifiers(std::slice::from_ref(modifier))
+            let Some(kind) = jstream_graph::anim_modifiers(std::slice::from_ref(modifier))
                 .pop()
-                // One that drives an effect setting (ADR-0138) hears as one that moves
+                // One that drives an effect setting (ADR-0138) follows as one that moves
                 // the box does.
                 .or_else(|| {
                     jstream_graph::effect_anim_modifiers(std::slice::from_ref(modifier))
                         .pop()
                         .map(|(_, modifier)| modifier)
                 })
+                .map(|modifier| modifier.kind)
             else {
                 continue;
             };
-            let listed = self.by_item.entry(item.clone()).or_default();
-            if listed.iter().all(|(id, _)| *id != modifier.modifier_id) {
-                listed.push((
-                    modifier.modifier_id.clone(),
-                    Binding {
+            let input = match kind {
+                jstream_anim::Kind::Audio(audio) => {
+                    let Some(scope) = hearing(modifier).and_then(|h| heard.get(&h)) else {
+                        continue;
+                    };
+                    Input::Scope {
                         audio,
                         scope: Arc::clone(scope),
-                        level: AtomicU32::new(0),
-                    },
-                ));
+                    }
+                }
+                jstream_anim::Kind::Midi(params) => {
+                    let (Some(control), Some(inputs)) = (Control::of(modifier), midi) else {
+                        continue;
+                    };
+                    let state = match &modifier.kind {
+                        MotionKind::Midi {
+                            input: Some(name), ..
+                        } => match inputs.input(name) {
+                            Some(state) => state,
+                            // Past the inputs the engine tracks by name: nothing comes.
+                            None => Arc::new(MidiState::new()),
+                        },
+                        _ => inputs.any(),
+                    };
+                    Input::Midi {
+                        midi: params,
+                        state,
+                        control,
+                    }
+                }
+                _ => continue,
+            };
+            let listed = self.by_item.entry(item.clone()).or_default();
+            if listed.iter().all(|(id, _)| *id != modifier.modifier_id) {
+                listed.push((modifier.modifier_id.clone(), Binding::new(input)));
             }
         }
     }
@@ -186,7 +357,7 @@ impl Bindings {
             .get(item)?
             .iter()
             .find(|(id, _)| id == modifier)
-            .map(|(_, binding)| f32::from_bits(binding.level.load(Ordering::Relaxed)))
+            .map(|(_, binding)| binding.level())
     }
 
     /// Every binding, with its item and modifier ID.
@@ -229,25 +400,55 @@ fn address(scope: &Arc<AudioScope>) -> usize {
     Arc::as_ptr(scope) as usize
 }
 
+/// What a [`Follower`] keeps for one binding between ticks.
+#[derive(Clone, Copy, Debug, PartialEq)]
+enum Follow {
+    /// An audio binding's envelope (ADR-0100).
+    Envelope(Envelope),
+    /// A MIDI binding's smoothing (ADR-0168).
+    Smoothing(Smoothing),
+}
+
+impl Follow {
+    /// A fresh state for `binding`.
+    fn new(binding: &Binding) -> Self {
+        match binding.input {
+            Input::Scope { .. } => Follow::Envelope(Envelope::default()),
+            Input::Midi { .. } => Follow::Smoothing(Smoothing::default()),
+        }
+    }
+
+    /// Whether it is the state `binding` keeps.
+    fn fits(&self, binding: &Binding) -> bool {
+        matches!(
+            (self, &binding.input),
+            (Follow::Envelope(_), Input::Scope { .. }) | (Follow::Smoothing(_), Input::Midi { .. })
+        )
+    }
+}
+
 /// The render thread's half, and a scene frame sheet's own: a meter per heard scope
-/// and an envelope per item and modifier, advanced once a tick ([`Follower::follow`]).
+/// and an envelope (or a MIDI smoothing) per item and modifier, advanced once a tick
+/// ([`Follower::follow`]).
 #[derive(Debug, Default)]
 pub(crate) struct Follower {
     /// Each heard scope's meter.
     meters: Vec<Meter>,
-    /// Each binding's envelope, by item and modifier ID.
-    envelopes: BTreeMap<ItemId, Vec<(String, Envelope)>>,
+    /// Each binding's envelope or smoothing, by item and modifier ID.
+    envelopes: BTreeMap<ItemId, Vec<(String, Follow)>>,
     /// The tick it last followed, so a second call for the same tick changes nothing.
     last: Option<MediaTime>,
 }
 
 impl Follower {
-    /// Measures each scope `bindings` hears at `now`, advances each binding's envelope
-    /// by the time since the last tick, and stores its level for every mix of the tick.
+    /// Measures each scope `bindings` hears at `now`, reads each MIDI control, advances
+    /// each binding's envelope or smoothing by the time since the last tick, and stores
+    /// its level for every mix of the tick.
     ///
     /// A meter is made the first time a shot names its scope, and an envelope the first
     /// time a shot names its binding (so on a new plan, never while a steady shot draws);
-    /// both are dropped once no binding names them. Allocates nothing otherwise.
+    /// both are dropped once no binding names them. Allocates nothing otherwise. A MIDI
+    /// smoothing's first step lands on the control's value (ADR-0168).
     pub(crate) fn follow(&mut self, bindings: &Bindings, now: MediaTime) {
         if bindings.is_empty() {
             if !self.envelopes.is_empty() || !self.meters.is_empty() {
@@ -268,60 +469,75 @@ impl Follower {
         self.keep(bindings);
         // Each scope once, through the first binding that names it.
         for meter in &mut self.meters {
-            let Some(binding) = bindings
+            let Some(scope) = bindings
                 .all()
-                .map(|(_, _, binding)| binding)
-                .find(|binding| address(&binding.scope) == meter.scope)
+                .filter_map(|(_, _, binding)| binding.scope())
+                .find(|scope| address(scope) == meter.scope)
             else {
                 continue;
             };
             if meter.spectrum {
-                meter.meter.measure(&binding.scope, ms);
+                meter.meter.measure(scope, ms);
             } else {
-                meter.meter.measure_levels(&binding.scope, ms);
+                meter.meter.measure_levels(scope, ms);
             }
         }
         for (item, id, binding) in bindings.all() {
-            let Some(Meter { meter, .. }) = self
-                .meters
-                .iter()
-                .find(|meter| meter.scope == address(&binding.scope))
-            else {
-                continue;
-            };
-            let raw = meter.raw();
-            let measured = match binding.audio.measure {
-                Measure::Level => raw.level,
-                Measure::Peak => raw.peak,
-                Measure::Onset => raw.onset,
-                Measure::Band { low_hz, high_hz } => meter.band(low_hz, high_hz),
-            };
-            let Some((_, envelope)) = self
+            let Some((_, follow)) = self
                 .envelopes
                 .get_mut(item)
                 .and_then(|listed| listed.iter_mut().find(|(at, _)| at == id))
             else {
                 continue;
             };
-            let level = envelope.advance(&binding.audio, measured, dt_s);
-            binding.level.store(level.to_bits(), Ordering::Relaxed);
+            let level = match (&binding.input, follow) {
+                (Input::Scope { audio, scope }, Follow::Envelope(envelope)) => {
+                    let Some(Meter { meter, .. }) = self
+                        .meters
+                        .iter()
+                        .find(|meter| meter.scope == address(scope))
+                    else {
+                        continue;
+                    };
+                    let raw = meter.raw();
+                    let measured = match audio.measure {
+                        Measure::Level => raw.level,
+                        Measure::Peak => raw.peak,
+                        Measure::Onset => raw.onset,
+                        Measure::Band { low_hz, high_hz } => meter.band(low_hz, high_hz),
+                    };
+                    envelope.advance(audio, measured, dt_s)
+                }
+                (
+                    Input::Midi {
+                        midi,
+                        state,
+                        control,
+                    },
+                    Follow::Smoothing(smoothing),
+                ) => smoothing.advance(midi, control.read(state), dt_s),
+                // `keep` gave every binding the state of its kind.
+                _ => continue,
+            };
+            binding.store(level);
         }
     }
 
-    /// Makes a meter for each scope and an envelope for each binding `bindings` names
-    /// that it has none for, drops the ones it no longer names, and marks each meter
-    /// whose scope a `band` binding hears.
+    /// Makes a meter for each scope and an envelope or smoothing for each binding
+    /// `bindings` names that it has none for (or one of the other kind), drops the ones
+    /// it no longer names, and marks each meter whose scope a `band` binding hears.
     fn keep(&mut self, bindings: &Bindings) {
         let named = |scope: usize| {
             bindings
                 .all()
-                .any(|(_, _, binding)| address(&binding.scope) == scope)
+                .filter_map(|(_, _, binding)| binding.scope())
+                .any(|heard| address(heard) == scope)
         };
         if self.meters.iter().any(|meter| !named(meter.scope)) {
             self.meters.retain(|meter| named(meter.scope));
         }
-        for (_, _, binding) in bindings.all() {
-            let scope = address(&binding.scope);
+        for scope in bindings.all().filter_map(|(_, _, binding)| binding.scope()) {
+            let scope = address(scope);
             if !self.meters.iter().any(|meter| meter.scope == scope) {
                 self.meters.push(Meter {
                     scope,
@@ -331,9 +547,11 @@ impl Follower {
             }
         }
         for meter in &mut self.meters {
-            meter.spectrum = bindings.all().any(|(_, _, binding)| {
-                matches!(binding.audio.measure, Measure::Band { .. })
-                    && address(&binding.scope) == meter.scope
+            meter.spectrum = bindings.all().any(|(_, _, binding)| match &binding.input {
+                Input::Scope { audio, scope } => {
+                    matches!(audio.measure, Measure::Band { .. }) && address(scope) == meter.scope
+                }
+                Input::Midi { .. } => false,
             });
         }
         let stale = self
@@ -346,13 +564,15 @@ impl Follower {
             }
             self.envelopes.retain(|_, listed| !listed.is_empty());
         }
-        for (item, id, _) in bindings.all() {
+        for (item, id, binding) in bindings.all() {
             let listed = match self.envelopes.get_mut(item) {
                 Some(listed) => listed,
                 None => self.envelopes.entry(item.clone()).or_default(),
             };
-            if listed.iter().all(|(at, _)| at != id) {
-                listed.push((id.to_owned(), Envelope::default()));
+            match listed.iter_mut().find(|(at, _)| at == id) {
+                Some((_, follow)) if !follow.fits(binding) => *follow = Follow::new(binding),
+                Some(_) => {}
+                None => listed.push((id.to_owned(), Follow::new(binding))),
             }
         }
     }
@@ -362,6 +582,7 @@ impl Follower {
 mod tests {
     use super::*;
     use jstream_protocol::{Finite32, MotionClock, MotionCurve, MotionMeasure, MotionProperty};
+    use jstream_sources::MidiInputs;
 
     fn at_ms(ms: i64) -> MediaTime {
         MediaTime::new(ms * 1000, jstream_media::Timebase::MICROS)
@@ -449,6 +670,7 @@ mod tests {
                 light("unheard", Some("elsewhere"), MotionMeasure::Peak),
             ],
             &heard,
+            None,
         );
         assert!(bindings.level(&item, "unheard").is_none(), "no scope found");
         let mut follower = Follower::default();
@@ -490,7 +712,7 @@ mod tests {
         let item = ItemId::new("itm_light");
         let plan = |measure| {
             let mut bindings = Bindings::default();
-            bindings.record(&item, &[light("pulse", None, measure)], &heard);
+            bindings.record(&item, &[light("pulse", None, measure)], &heard, None);
             bindings
         };
         let levels = plan(MotionMeasure::Level);
@@ -524,11 +746,17 @@ mod tests {
         ));
         let item = ItemId::new("itm_light");
         let mut bindings = Bindings::default();
-        bindings.record(&item, &[light("pulse", None, MotionMeasure::Level)], &heard);
+        bindings.record(
+            &item,
+            &[light("pulse", None, MotionMeasure::Level)],
+            &heard,
+            None,
+        );
         bindings.record(
             &item,
             &[light("pulse", Some("music"), MotionMeasure::Peak)],
             &heard,
+            None,
         );
         let mut follower = Follower::default();
         follower.follow(&bindings, at_ms(0));
@@ -548,7 +776,12 @@ mod tests {
         let item = ItemId::new("itm_light");
         let plan = || {
             let mut bindings = Bindings::default();
-            bindings.record(&item, &[light("level", None, MotionMeasure::Level)], &heard);
+            bindings.record(
+                &item,
+                &[light("level", None, MotionMeasure::Level)],
+                &heard,
+                None,
+            );
             bindings
         };
         let first = plan();
@@ -567,5 +800,126 @@ mod tests {
         // A shot without it lets its envelope and meter go.
         follower.follow(&Bindings::default(), at_ms(48));
         assert!(follower.envelopes.is_empty() && follower.meters.is_empty());
+    }
+
+    fn fader(
+        id: &str,
+        smoothing_ms: u32,
+        channel: Option<u8>,
+        input: Option<&str>,
+    ) -> MotionModifier {
+        MotionModifier {
+            modifier_id: id.into(),
+            property: MotionProperty::Tilt,
+            effect: None,
+            kind: MotionKind::Midi {
+                control: MotionMidiControl::Cc,
+                controller: Some(7),
+                channel,
+                input: input.map(str::to_owned),
+                smoothing_ms,
+                curve: MotionCurve::Linear,
+                from: Finite32::new(-25.0).expect("finite"),
+                to: Finite32::new(25.0).expect("finite"),
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        }
+    }
+
+    fn cc(channel: u8, controller: u8, value: u8) -> jstream_midi::Message {
+        jstream_midi::Message::parse(&[0xB0 | channel, controller, value]).expect("a CC")
+    }
+
+    /// ADR-0168: a MIDI binding reads its control on its input and channel, lands on it
+    /// on the first tick, smooths after, and a 0 ms one jumps.
+    #[test]
+    fn a_midi_binding_follows_its_control_smoothed() {
+        let midi = MidiInputs::new();
+        let item = ItemId::new("itm_lever");
+        let heard: HeardScopes = Arc::default();
+        let mut bindings = Bindings::default();
+        bindings.record(
+            &item,
+            &[
+                fader("smooth", 100, None, None),
+                fader("instant", 0, Some(2), None),
+                fader("other", 0, None, Some("Pads")),
+            ],
+            &heard,
+            Some(&midi),
+        );
+        assert_eq!(
+            bindings.level(&item, "smooth"),
+            Some(0.0),
+            "nothing sent yet"
+        );
+        midi.push("Faders", 0, &cc(0, 7, 127));
+        // A shot no follower follows (a preview) reads the control as it is.
+        assert_eq!(bindings.level(&item, "smooth"), Some(1.0));
+        let mut follower = Follower::default();
+        follower.follow(&bindings, at_ms(0));
+        assert_eq!(
+            bindings.level(&item, "smooth"),
+            Some(1.0),
+            "the first tick lands"
+        );
+        assert_eq!(
+            bindings.level(&item, "instant"),
+            Some(0.0),
+            "channel 2 is silent"
+        );
+        assert_eq!(bindings.level(&item, "other"), Some(0.0), "another input");
+
+        midi.push("Faders", 1, &cc(0, 7, 0));
+        midi.push("Faders", 1, &cc(1, 7, 127));
+        follower.follow(&bindings, at_ms(100));
+        let smooth = bindings.level(&item, "smooth").expect("level");
+        // One time constant: about 63% of the way from 1 to the latest on any channel,
+        // which is channel 2's 127, so it stays at 1.
+        assert_eq!(smooth, 1.0, "the latest on any channel is 127");
+        assert_eq!(bindings.level(&item, "instant"), Some(1.0), "0 ms jumps");
+        midi.push("Faders", 2, &cc(1, 7, 0));
+        follower.follow(&bindings, at_ms(200));
+        let fell = bindings.level(&item, "smooth").expect("level");
+        assert!((fell - (-1f32).exp()).abs() < 1e-3, "{fell}");
+        assert_eq!(bindings.level(&item, "instant"), Some(0.0));
+        midi.push("Pads", 3, &cc(4, 7, 127));
+        follower.follow(&bindings, at_ms(216));
+        assert_eq!(bindings.level(&item, "other"), Some(1.0), "its own input");
+
+        // A plan without MIDI inputs records none: it rests at `from`.
+        let mut none = Bindings::default();
+        none.record(&item, &[fader("smooth", 0, None, None)], &heard, None);
+        assert!(none.is_empty());
+    }
+
+    /// A modifier ID that turns from audio to MIDI between plans gets a fresh state of
+    /// its new kind.
+    #[test]
+    fn a_binding_that_changes_kind_starts_afresh() {
+        let midi = MidiInputs::new();
+        let scopes = AudioScopes::new();
+        let heard: HeardScopes = Arc::new(heard_scopes(&scopes, [Hearing::Program]));
+        let item = ItemId::new("itm_light");
+        let mut audio = Bindings::default();
+        audio.record(
+            &item,
+            &[light("m", None, MotionMeasure::Level)],
+            &heard,
+            Some(&midi),
+        );
+        let mut follower = Follower::default();
+        follower.follow(&audio, at_ms(0));
+        let mut fader_plan = Bindings::default();
+        fader_plan.record(&item, &[fader("m", 1000, None, None)], &heard, Some(&midi));
+        midi.push("Faders", 0, &cc(0, 7, 127));
+        follower.follow(&fader_plan, at_ms(16));
+        assert_eq!(
+            fader_plan.level(&item, "m"),
+            Some(1.0),
+            "a fresh smoothing lands on its first step"
+        );
+        assert!(follower.meters.is_empty(), "the scope's meter went");
     }
 }

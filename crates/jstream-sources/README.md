@@ -197,7 +197,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   channel and key, its controllers, pitch bend and channel pressure, and a log of the
   last 1024 note events (`recent(out, most)`, oldest first), all in atomics, so any
   thread pushes a `jstream_midi::Message` with `push(at_ms, message)` and any reads it
-  without a lock or an allocation. A reader skips a log slot a push is writing. CC 120
+  without a lock or an allocation. It also keeps each controller's, the bend's and the
+  pressure's latest value on any channel (`controller_any`, `bend_any`, `pressure_any`),
+  which a `midi` motion modifier with no channel follows
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)). A reader skips a log slot a push is writing. CC 120
   and 123 release the channel's held keys. `MidiInputs` keeps one state per input name
   (`input(name)`, at most `MAX_INPUTS`, 64) and one that every input feeds (`any()`);
   `drawn(name)` is the state a source's `input` setting draws. An input thread pushes

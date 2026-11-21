@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-anim/src/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-anim", "docs/adr/0049-keyframe-scene-model-and-evaluation.md#decision", "docs/adr/0099-native-motion-modifiers-and-timelines.md#decision", "docs/adr/0100-audio-reactive-motion-modifiers.md#decision"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-anim", "docs/adr/0049-keyframe-scene-model-and-evaluation.md#decision", "docs/adr/0099-native-motion-modifiers-and-timelines.md#decision", "docs/adr/0100-audio-reactive-motion-modifiers.md#decision", "docs/adr/0168-midi-controllers-drive-motion.md#decision"]
 -->
 
 Layer-0 model of keyframe scenes and native motion
@@ -83,6 +83,15 @@ Contents:
   evaluator keeps an `Envelope` per item and modifier and hands each level to
   `evaluate_with` by modifier ID. `evaluate` and `value_at` read an audio modifier as
   silence, its `from`.
+- MIDI-driven modifiers
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): `Kind::Midi` holds
+  a `Midi`: a smoothing time, a `Curve` and a `from`..`to` range. `Midi::normalize_cc`
+  and `Midi::normalize_bend` map a controller's value onto `0..=1` (a bend's rest is one
+  half), `Smoothing::advance` follows it with one one-pole time constant for rising and
+  falling (0 jumps, and the first step lands on the value), and `Midi::value` bends and
+  maps it. Which input, channel and controller it reads stay outside this crate: the
+  evaluator hands each smoothed value to `evaluate_with` by modifier ID, as an audio
+  level. `evaluate` and `value_at` read it at `from`.
 - `Timeline`: cues sorted by time, a duration and a `Looping` (`Once`, `Loop`, or `Range`:
   an intro, then a loop). `check` refuses unsorted, unreachable or too many cues and bad
   bounds. `due` gives the cues that fire in a window of the animation clock, each with
