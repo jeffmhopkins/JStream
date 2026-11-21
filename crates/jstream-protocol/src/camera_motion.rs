@@ -189,6 +189,16 @@ pub struct CameraFollow {
     /// frame reach it. At 0 it stays inside the frame.
     #[serde(default = "default_margin")]
     pub safe_margin_pct: u32,
+    /// Whether the zoom holds (since 0.124): the camera stays at the distance the zoom
+    /// asks for, and near the item's edges it only pans, its frame stopping at the edge.
+    /// Default true. Off, it is ADR-0113's: it pulls back on a fast pointer and moves
+    /// nearer where a corner would show past the item.
+    #[serde(default = "yes")]
+    pub hold_zoom: bool,
+}
+
+fn yes() -> bool {
+    true
 }
 
 fn one() -> Finite32 {
@@ -238,6 +248,7 @@ impl CameraFollow {
             lean_deg: default_lean(),
             smooth_ms: default_smooth(),
             safe_margin_pct: default_margin(),
+            hold_zoom: true,
         }
     }
 
@@ -273,6 +284,10 @@ impl CameraFollow {
                 default_margin(),
                 (0, MAX_FOLLOW_MARGIN_PCT),
             ),
+            hold_zoom: settings
+                .get("hold_zoom")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
         }
     }
 
@@ -288,6 +303,7 @@ impl CameraFollow {
         settings.insert("lean_deg", float(self.lean_deg));
         settings.insert("smooth_ms", Value::from(self.smooth_ms));
         settings.insert("safe_margin_pct", Value::from(self.safe_margin_pct));
+        settings.insert("hold_zoom", Value::from(self.hold_zoom));
         settings
     }
 
@@ -398,6 +414,14 @@ pub fn follow_pointer_descriptor() -> KindDescriptor {
                     "%",
                 ),
                 "How far in from each edge of the frame the pointer always stays.",
+            ),
+            describe(
+                ParamDescriptor {
+                    ty: ParamType::Bool,
+                    default: Value::from(true),
+                    ..number("hold_zoom", "Hold zoom", (0.0, 0.0), 0.0, "")
+                },
+                "Keep the zoom steady: near the capture's edges the camera only pans.",
             ),
         ],
     }
@@ -542,6 +566,7 @@ mod tests {
             lean_deg: f(0.0),
             smooth_ms: 900,
             safe_margin_pct: 25,
+            hold_zoom: false,
             ..CameraFollow::of(ItemId::new("screen"))
         };
         let settings = follow.settings();
