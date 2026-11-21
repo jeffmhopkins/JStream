@@ -89,9 +89,11 @@ test('Add filter says where CLAP plugins go, and a rescan offers one installed s
   const add = await addProgramFilter(page);
   await expect(add.locator('.add-filter-group')).toHaveText(['Effect packs', 'Levels and dynamics', 'Plugins']);
   await expect(add.locator('.add-filter-clap')).toContainText('No CLAP audio plugins found.');
-  // A search hides it.
+  // A search hides it, and the dialog keeps its height.
+  const height = (await add.boundingBox()).height;
   await add.getByRole('textbox', { name: 'Search filters' }).fill('gain');
   await expect(add.locator('.add-filter-clap')).toHaveCount(0);
+  expect((await add.boundingBox()).height).toBe(height);
   await add.getByRole('textbox', { name: 'Search filters' }).fill('');
   await add.getByRole('button', { name: 'Where to install them…' }).click();
 

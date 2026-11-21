@@ -610,6 +610,8 @@ test('the Add source dialog\'s search narrows the types, and says so when none m
   const types = dialog.getByRole('listbox', { name: 'Source type' }).getByRole('option');
   const all = await types.count();
   const search = dialog.getByRole('textbox', { name: 'Search source types' });
+  // The dialog keeps its height while the search narrows the list.
+  const height = (await dialog.boundingBox()).height;
   // By name, in any case: the Color type, picked, with its description.
   await search.fill('COLOR');
   await expect(types).toHaveText(['Color']);
@@ -622,6 +624,7 @@ test('the Add source dialog\'s search narrows the types, and says so when none m
   await expect(types).toHaveCount(0);
   await expect(dialog.locator('.add-types .placeholder')).toHaveText('No source type matches.');
   await expect(dialog.getByRole('button', { name: 'Add', exact: true })).toBeDisabled();
+  expect((await dialog.boundingBox()).height).toBe(height);
   await search.fill('');
   await expect(types).toHaveCount(all);
 });
