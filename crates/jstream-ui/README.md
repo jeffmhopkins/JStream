@@ -664,9 +664,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `target`, or a `webcam`'s `device`) lists the targets of its kind that
   `capture.targets` reports, each by name and size, after "Primary display", "First
   device listed" or "None" for the empty value. A target the source names that isn't
-  listed as is but has a listed target's key (the part after `;`, which finds a window
-  again once it is opened again), else the same part before it (the same window, its
-  title changed), shows as that target. Any other one not listed now (a closed window,
+  listed as is but, for a window, has a listed window's key (the part after `;`, which
+  finds a window again once it is opened again), else the same part before it (the same
+  window, its title changed), else the same key but for its last field, with the others
+  known (the same program and class under another title, which the engine takes when no
+  window has the old one), shows as that target. Any other one not listed now (a closed window,
   an unplugged device) shows as "Window not open (<ID>)" or "Device not connected
   (<ID>)". It asks again each time the field gets focus, so a
   window opened since shows up; until the first list arrives, or while the engine can't

@@ -23,7 +23,7 @@
 //! device move), the capture helpers (target IDs, keyed and key-less, and how a
 //! window's ID finds it again: its own handle while that is its program and class, a
 //! reused handle refused, the same title first, else the topmost of its kind, and the
-//! UWP host and unknown programs needing the title; the BGRA and RGBA to NV12 converter
+//! UWP host, keyed without its program, and unknown programs needing the title; the BGRA and RGBA to NV12 converter
 //! and the mailbox are `jstream-platform`'s, tested there), the AAC helpers
 //! (configuration check, PCM conversion, packet timing and padding), the video encoder
 //! helpers (configuration check, NV12 packing and RGBA/BGRA conversion, `pts` mapping),
