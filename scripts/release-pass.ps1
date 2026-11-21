@@ -523,9 +523,12 @@ function Test-Engine($d) {
     # drawn, so a daemon with neither may not list them: a warning, not a failure.
     $detail = "thread_cpu: $($prof.thread_cpu); threads: $(($names | Select-Object -Unique) -join ', ')$(if ($lack) { "; not running now: $($lack -join ', ')" })"
     if (-not $prof.thread_cpu) { Fail 'profile.get threads' $detail } elseif ($lack) { Warn 'profile.get threads' $detail } else { Pass 'profile.get threads' $detail }
-    $fields = @('views', 'warm', 'streams', 'ptz_controllers', 'ptz_cameras')
+    # warm, ptz_controllers and ptz_cameras are left out while empty (no warm scene, no
+    # controller or camera), so only views and streams must be there.
+    $fields = @('views', 'streams')
     $absent = @($fields | Where-Object { -not $prof.PSObject.Properties[$_] })
-    Check (-not $absent) 'profile.get fields' $(if ($absent) { "missing: $($absent -join ', ')" } else { "has $($fields -join ', ')" })
+    $empty = @(@('warm', 'ptz_controllers', 'ptz_cameras') | Where-Object { -not $prof.PSObject.Properties[$_] })
+    Check (-not $absent) 'profile.get fields' $(if ($absent) { "missing: $($absent -join ', ')" } else { "has $($fields -join ', ')$(if ($empty) { "; empty, so left out: $($empty -join ', ')" })" })
     $drawer = @($prof.drawers | Where-Object { $_.drawer -eq 'program' } | Select-Object -First 1)
     if ($drawer) {
         $d0 = $drawer[0]
@@ -585,7 +588,9 @@ function Test-Projects($d) {
     $hasIn = { param($r) ($r | ConvertTo-Json -Depth 10 -Compress) -match '"saved"' }
     $norm = { param($p) ("$p" -replace '/', '\').ToLower() }
     $recent = @()
-    if ($info) { $recent = @($info.result.result.recent | ForEach-Object { & $norm $_ }) }
+    # collection.info leaves out an empty recent list, and StrictMode throws on a missing
+    # property, so read it only when it is there.
+    if ($info -and $info.result.result.PSObject.Properties['recent']) { $recent = @($info.result.result.recent | ForEach-Object { & $norm $_ }) }
     $path = ''
     if ($info) { $path = & $norm $info.result.result.path }
     Check ((Test-Path -LiteralPath $b) -and -not (& $hasIn $before) -and (& $hasIn $after)) 'save, new, open' "second.json written: $(Test-Path -LiteralPath $b); the new project is empty: $(-not (& $hasIn $before)); opening second.json brings its scene back: $(& $hasIn $after)"
@@ -648,7 +653,11 @@ function Invoke-Automated {
     $script:Item = 'A'
     Section 'Automatic checks'
     Test-Versions
-    $d = Start-Daemon
+    # A collection file, as the app has: without one the daemon serves no collection.new,
+    # save_as or open.
+    $projects = Join-Path $OutDir 'projects'
+    New-Item -ItemType Directory -Force -Path $projects | Out-Null
+    $d = Start-Daemon @('--collection', (Join-Path $projects 'start.json'))
     if (-not (Need-Daemon $d)) { return }
     Pass 'daemon starts' "listening on $($d.WsUrl), with its own data folder"
     $cams = 0
@@ -741,7 +750,7 @@ function Test-PtzController {
         if ($ctl) {
             $c = $ctl[0]
             Check ($c.answered -gt 0) 'the endpoint answered the controller' "answered $($c.answered), unallowed $($c.unallowed), malformed $($c.malformed), refused $($c.refused)"
-            if ($c.unallowed -gt 0 -and $c.answered -eq 0) { Say "Packets came from an address other than $ip: check the controller's address." 'Yellow' }
+            if ($c.unallowed -gt 0 -and $c.answered -eq 0) { Say "Packets came from an address other than ${ip}: check the controller's address." 'Yellow' }
         } else { Fail 'the endpoint answered the controller' "no ptz_controllers in profile.get: $(Get-CliError)" }
         if ($aim) {
             $moved = ([Math]::Abs([double]$aim.pan_deg) -gt 0.5 -or [Math]::Abs([double]$aim.tilt_deg) -gt 0.5 -or [Math]::Abs([double]$aim.zoom - 1) -gt 0.05)
@@ -885,7 +894,7 @@ try {
     Remove-Item -Recurse -Force -LiteralPath $stage -ErrorAction SilentlyContinue
     $textExt = @('.md', '.json', '.log', '.txt', '.jsonl')
     foreach ($f in @(Get-ChildItem -LiteralPath $OutDir -Recurse -File | Where-Object {
-            ($textExt -contains $_.Extension -or $_.Extension -eq '.png') -and $_.FullName -notlike "$stage*" -and $_.Name -notmatch 'token' -and $_.FullName -notmatch '\\appdata\\' })) {
+            ($textExt -contains $_.Extension -or $_.Extension -eq '.png') -and $_.FullName -notlike "$stage*" -and $_.Name -notmatch 'token' -and $_.FullName.Substring($OutDir.Length) -notmatch '\\appdata\\' })) {
         $rel = $f.FullName.Substring($OutDir.Length).TrimStart('\')
         $dest = Join-Path $stage $rel
         New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dest) | Out-Null
