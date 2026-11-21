@@ -69,7 +69,8 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
   `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
   for the apps' crash hook to leave out (#999);
-  `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
+  `connect()` opens a session, and `handles()` counts the handles and sessions that keep
+  the engine alive; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
@@ -910,7 +911,8 @@ the queue to the snapshot thread. The drop ledger is a second mutex, outside tha
 `Arc`. Cloning it shares the engine, so a
 host can give one clone to the server's connector and another to an MCP session.
 `Engine::connect()` opens an `InProcessControl`, which holds a clone too: the engine
-lives as long as any handle or session does.
+lives as long as any handle or session does. `Engine::handles` counts them, so a host
+shutting down can log whether its own drop is the one that stops the engine.
 
 A session follows the protocol's envelope
 ([jstream-protocol › Design](../jstream-protocol/README.md#design)) exactly as the
@@ -4197,7 +4199,9 @@ encoder that ends up on the CPU path is opening.
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as
-`GpuContext` requires.
+`GpuContext` requires. A pipeline thread being stopped is a `debug` line, and one that
+takes 250 ms or more to stop an `info` line naming it and how long it took, so a slow
+exit's log says which thread it waited on (#1564).
 
 **Captures** (`runtime/captures.rs`). Opening the program stage starts no capture. Each tick the
 render thread compares what the snapshot captures (`Shot::captures`, one key per
