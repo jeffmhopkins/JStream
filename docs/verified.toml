@@ -4383,7 +4383,7 @@ stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:e4a50a07cff8a839", by = "agent:hold-zoom", note = "hold_zoom is a new optional field defaulting true, a minor additive change as this section describes; snapshots regenerated for it and 0.124" }
 
 ["CRATE-jstream-protocol#contents-calls"."body"]
-stamp = { hash = "b3:81d8caaa7a8e44f3", by = "agent:hold-zoom", note = "CameraFollow bullet now lists hold_zoom since 0.124 beside safe_margin_pct; checked against camera_motion.rs fields, settings and descriptor" }
+stamp = { hash = "b3:8a1742b2caf2084a", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client) | merge: #1565 added CameraFollow.hold_zoom (protocol 0.124); the activity.rs line with HOTKEYS_CLIENT_NAME is unchanged, both hold | kept from the merged side: CameraFollow bullet now lists hold_zoom since 0.124 beside safe_margin_pct; checked against camera_motion.rs fields, settings and descriptor" }
 
 ["CRATE-jstream-protocol#contents-calls"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
