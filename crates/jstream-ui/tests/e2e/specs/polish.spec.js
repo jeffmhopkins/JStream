@@ -77,9 +77,9 @@ test('the View menu lists all eleven panels, and adds one that waits on the engi
     /Audio mixer/, /Outputs/, /Agent activity/, /Transitions/,
   ]);
   const chat = view.getByRole('menuitemcheckbox', { name: /Live chat/ });
-  await expect(chat).toHaveText(/add/);
+  await expect(chat).toHaveAttribute('aria-checked', 'false');
   await chat.click();
-  await expect(chat).toHaveText(/shown/);
+  await expect(chat).toHaveAttribute('aria-checked', 'true');
   await page.keyboard.press('Escape');
   await expect(page.getByRole('tabpanel', { name: 'Live chat' })).toContainText('sign in to YouTube');
 });

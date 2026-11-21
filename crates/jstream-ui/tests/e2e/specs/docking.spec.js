@@ -46,10 +46,10 @@ test('the Editing layout docks every panel, and the View menu hides and adds the
   await openMenu(page, 'View');
   const view = page.getByRole('menu', { name: 'View' });
   const inspector = view.getByRole('menuitemcheckbox', { name: /Inspector/ });
-  await expect(inspector).toHaveText(/shown/);
+  await expect(inspector).toHaveAttribute('aria-checked', 'true');
   await inspector.click();
   await expect(tab(page, 'Inspector')).toHaveCount(0);
-  await expect(inspector).toHaveText(/add/);
+  await expect(inspector).toHaveAttribute('aria-checked', 'false');
   // The menu stays open; adding puts the panel back at the end of its home zone.
   await inspector.click();
   await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Filters', 'Transform', 'Inspector']);
@@ -134,8 +134,8 @@ test('the Layout menu switches to Live and resets to Editing', async ({ page, da
   await connect(page, daemon);
   await openMenu(page, 'Layout');
   const menu = page.getByRole('menu', { name: 'Layout' });
-  await expect(menu.getByRole('menuitem', { name: /Editing/ })).toContainText('current');
-  await menu.getByRole('menuitem', { name: 'Live' }).click();
+  await expect(menu.getByRole('menuitemradio', { name: /Editing/ })).toHaveAttribute('aria-checked', 'true');
+  await menu.getByRole('menuitemradio', { name: 'Live' }).click();
   await expect(zone(page, 'Dock below the canvas').getByRole('tab')).toHaveText(['Audio mixer', 'Transitions']);
   await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Stream stats', 'Outputs', 'Agent activity']);
   await expect(zone(page, 'Bottom dock')).toBeHidden();
