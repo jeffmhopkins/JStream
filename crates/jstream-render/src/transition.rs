@@ -666,7 +666,11 @@ fn path_endpoint(stops: &[Endpoint], k: f32, source: Option<[u32; 2]>) -> Endpoi
         ends(&a)
     } else if k == 1.0 {
         ends(&b)
-    } else if changes.iter().filter(|c| **c).count() <= 1 {
+    } else if changes.iter().filter(|c| **c).count() <= 1
+        // A billboard draws only its rotation (ADR-0151 decision 2): per axis, as in
+        // a straight Move.
+        || stops.iter().any(|s| s.geometry.billboard)
+    {
         hint
     } else {
         let mut raw = [[0.0; 3]; MAX_STOPS];
@@ -1356,6 +1360,7 @@ mod tests {
             to,
             timing: linear(0.0),
             source: None,
+            via: super::Stops::NONE,
         };
         for ms in [250.0, 500.0, 520.0, 521.0, 750.0] {
             let g = track.sample(ms, CANVAS).expect("drawn").geometry;
