@@ -182,8 +182,8 @@ any group.
   - anchoring a light, or any item other than a camera, to an item that isn't its group.
 - **Follow-up implementation PRs:**
   - `jstream-protocol`: `SceneOptions::share_space`, `SceneInfo::camera_anchor` and
-    `scene.set_camera_anchor`, and the composition of a child's geometry and of a camera through a group's pose beside the
-    placement math, with unit tests that a neutral group places its children where their
+    `scene.set_camera_anchor`, and the composition of a child's geometry and of a camera
+    through a group's pose beside the placement math, with unit tests that a neutral group places its children where their
     own geometry would; the graph's validation, the mock engine and collection files;
   - `jstream-core`: a 3D scene's 3D groups planned into its own pass, children placed each
     frame through the group's live, moved and gliding pose, their lights, models and boxes
