@@ -176,5 +176,6 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0161](0161-follow-camera-holds-its-zoom.md) | A follow camera holds its zoom, and only pans at the edges | accepted | agent |  |
 | [ADR-0162](0162-a-carried-pass-compares-added-binaries-by-blob.md) | A carried review pass compares an added file without a patch by its blob | accepted | agent |  |
 | [ADR-0164](0164-3d-groups-share-their-scenes-space.md) | 3D groups share their scene's space, and a camera may ride with one | accepted | agent |  |
+| [ADR-0166](0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md) | Moves curve through keyframes, turn as one rotation, and may orbit the camera | accepted | agent |  |
 | [ADR-0169](0169-a-camera-anchor-is-kept-whatever-it-names.md) | A camera anchor is kept whatever it names | accepted | agent |  |
 <!-- @generated end adr-index -->
