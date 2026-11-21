@@ -592,6 +592,11 @@ mod tests {
             CameraFollow::from_settings(ItemId::new("screen"), &Settings::new()),
             CameraFollow::of(ItemId::new("screen"))
         );
+        // ADR-0161: a follow saved or sent without `hold_zoom` holds its zoom.
+        assert!(CameraFollow::from_settings(ItemId::new("screen"), &Settings::new()).hold_zoom);
+        let sent: CameraFollow =
+            serde_json::from_value(serde_json::json!({"item_id": "screen"})).expect("parses");
+        assert!(sent.hold_zoom);
         let wild: Settings = [
             ("zoom", serde_json::json!(9.0)),
             ("safe_margin_pct", serde_json::json!(90)),

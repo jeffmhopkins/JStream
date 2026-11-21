@@ -14,7 +14,8 @@ tier = "agent"
 
 Amends [ADR-0113](0113-camera-motion-and-follow-pointer.md) decision 2 (the follow
 camera's fields and algorithm) and [ADR-0120](0120-follow-pointer-is-a-filter.md)
-decision 1 (the `follow_pointer` filter's parameters). Where the follow camera lives,
+decisions 1 (the `follow_pointer` filter's parameters) and 4 (with the zoom held there
+is no corner pull-in to aim for the margin). Where the follow camera lives,
 its state, its zoom action and its safe margin are unchanged.
 
 <a id="context"></a>

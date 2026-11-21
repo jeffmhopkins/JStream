@@ -785,7 +785,16 @@ impl Follow {
         let goal = (t.dist / self.zoom)
             .min(0.97 * t.max_dist(centre, t.yaw, t.pitch))
             .max(1.0);
-        let dist = self.log_dist.step(goal.ln(), t.zoom_time, dt).exp();
+        let mut dist = self.log_dist.step(goal.ln(), t.zoom_time, dt).exp();
+        // A box that shrank leaves the glide past what fills the frame: hold it there.
+        let limit = t.max_dist(centre, t.yaw, t.pitch);
+        if limit > 0.0 && dist > limit {
+            dist = limit;
+            self.log_dist = Smooth {
+                x: limit.ln(),
+                v: self.log_dist.v.min(0.0),
+            };
+        }
         // 3. Slide the look point back by any overshoot past the box; never move in.
         let (yaw_now, pitch_now) = (self.yaw.x, self.pitch.x);
         let want = t.inside(follow, yaw_now, pitch_now, dist);
@@ -1078,6 +1087,33 @@ mod tests {
             assert!(held < 1.001, "zoom {zoom}: the distance changed by {held}");
         }
         assert!(spread(false, 2.0) > 1.05, "without it the edges zoom");
+    }
+
+    /// ADR-0161: with the zoom held, a box that shrinks while it is followed (a resized
+    /// window, an edited item) never leaves the frame showing past it.
+    #[test]
+    fn a_held_zoom_stays_on_a_box_that_shrinks() {
+        let mut cameras = Cameras::default();
+        let family = SceneId::new("a");
+        let small = FollowBox {
+            size: [720.0, 450.0],
+            ..SCREEN
+        };
+        for i in 0..120 {
+            let bx = if i < 30 { SCREEN } else { small };
+            let pointer = (bx.size[0] * 0.5, bx.size[1] * 0.5);
+            let camera = cameras.follow(
+                &family,
+                &follow(),
+                base(),
+                CANVAS,
+                bx,
+                Some(pointer),
+                (ms(i * 16), 0),
+            );
+            let t = Tuning::new(&follow(), base(), CANVAS, bx);
+            assert!(t.covers(camera), "frame {i} shows past the box");
+        }
     }
 
     #[test]
