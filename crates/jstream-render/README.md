@@ -902,8 +902,12 @@ draws past it only with an outer stroke: its gap, its width and an antialiased p
   - A blur gives its span plus one working texel for its downsample and one for its
     read back.
   - `image_mask` and `scene_mask` multiply by coverage, so they give 0.
-  - A drop shadow or a glow gives its offset plus that span. For its blur, it moves
-    the bound into its grown shape frame (`Bound::placed`).
+  - A drop shadow gives its offset plus that span. For its blur, it moves the bound
+    into its grown shape frame (`Bound::placed`).
+  - A glow gives its radius, the half pixel to its nearest shape pixel's centre and
+    one more pixel, rounded up. Its jump flood runs in the output's frame, and under a
+    bound each pass clears what lies outside it, which holds no seed the flood needs:
+    the steps that carry a seed to a pixel stay in the rectangle between the two.
 
   Each reach is the kind's whole support, so outside the bound a whole-frame draw is
   transparent too. A kind that opts in joins the test that draws each kind both
@@ -1139,9 +1143,19 @@ The multi-pass filters (V2), in `src/filter/multipass/`, and bloom beside them:
   steps of 9 loads each, in two scratch layers. Coverage is antialiased over one pixel.
   An inside stroke treats the area past the frame as outside the shape.
 - `glow`: `color`, `radius` (0 to 100 px, default 16) and `strength` (0 to 4, default
-  1, which multiplies the blurred alpha before it is clamped). It is a drop shadow with
-  no offset: light around an alpha shape, under it, so it needs a transparent edge (a
-  logo, text, a keyed camera, or an item's outset, **Bounds** below).
+  1, which multiplies the glow's alpha before it is clamped, so values above 1 widen
+  its bright core). Light around an alpha shape, under it, so it needs a transparent
+  edge (a logo, text, a keyed camera, or an item's outset, **Bounds** below). It is an
+  even width all round: outline's jump flood, reaching the radius and a half pixel,
+  gives each pixel its distance `e` past the shape's edge (to its nearest pixel at
+  least half opaque, less the half pixel to that pixel's edge), and the glow there is
+  `strength × that pixel's alpha × erfc(3e / (radius √2)) / 2`, clamped to 1, and
+  nothing from the radius on. That is the light a straight edge blurred by the radius
+  (sigma radius / 3) gives at `e`, so an edge looks as a blurred glow would, and a
+  corner lights as far and as brightly and rounds off, where a blur gives a corner
+  about half an edge's light (#1563). A thin stroke glows as brightly as a wide one;
+  a shape less than half opaque has no edge and no glow. That is at most 8 flood steps
+  of 9 loads each, in two scratch layers. Radius 0 or strength 0 copies the input.
 - `bloom`: `threshold` (0..1, default 0.7), `intensity` (0 to 4, default 1), `radius`
   (0 to 100 px, default 24) and `tint` (default white). The light that bright parts of
   any picture give off, an opaque camera included: a bright pass keeps what is above
@@ -1271,9 +1285,8 @@ a source or scene chain: the output is the input's size, the input is drawn 1:1,
 the part of the effect past the frame's edge is cut. So they don't change the
 source's reported size, and around an opaque frame a shadow, an outside stroke or a
 glow is cut away whole; on a shape with transparent margins (a keyed camera, a logo)
-they show inside them. A drop shadow and a glow still blur the shape in a scratch
-frame grown by the blur radius, so the blur fades out instead of stopping at the
-frame's edge. An effect that hangs outside a placement is an item effect, whose layer
+they show inside them. A drop shadow still blurs the shape in a scratch frame grown
+by the blur radius, so the blur fades out instead of stopping at the frame's edge. An effect that hangs outside a placement is an item effect, whose layer
 grows by the chain's summed outsets at its settings (`video_filter_outset`) where the
 first effect that draws past its input runs
 ([ADR-0125](../../docs/adr/0125-item-effects-layer-grows-where-it-is-needed.md)).

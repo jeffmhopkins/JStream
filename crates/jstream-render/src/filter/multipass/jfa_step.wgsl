@@ -1,6 +1,6 @@
 // Jump flood, one step: of the nine pixels `step` apart around this one (itself
 // included), keep the seed nearest to this pixel. rg is the vector from this pixel to
-// its seed, in pixels; alpha 1 when it has one. Vectors stay small whole numbers, which
+// its seed, in pixels, and b the seed's input alpha; alpha 1 when it has one. Vectors stay small whole numbers, which
 // Rgba16Float holds exactly.
 
 struct Params {
@@ -14,6 +14,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let px = out_px(in.pos);
     let size = vec2<i32>(frame.in_size);
     var best = vec2<f32>(0.0);
+    var best_alpha = 0.0;
     var best_d = 3.4e38;
     var found = false;
     for (var dy = -1; dy <= 1; dy++) {
@@ -29,10 +30,11 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
                 if (d < best_d) {
                     best_d = d;
                     best = to_seed;
+                    best_alpha = v.b;
                     found = true;
                 }
             }
         }
     }
-    return vec4<f32>(best, 0.0, select(0.0, 1.0, found));
+    return vec4<f32>(best, best_alpha, select(0.0, 1.0, found));
 }
