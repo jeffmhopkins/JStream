@@ -100,6 +100,9 @@ passes through, in order, before it ends on the one it names.
   follows the path.
 - **Cutting it short.** A switch while a path runs starts from what is on screen, as
   ADR-0029 §7 retargets any transition.
+- **Bindings.** A hotkey binding names its `via` scenes as well as its destination, so
+  ADR-0040 §3 removes it when any of them is deleted. A timeline cue's path to a deleted
+  stop fails when it fires, as ADR-0115 decision 2 says of any cue.
 - **What a path reports.** The switch reports only its destination, as it would without
   `via` (`studio.changed`): the `via` scenes are never on program.
 
