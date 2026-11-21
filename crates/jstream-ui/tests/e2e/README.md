@@ -485,10 +485,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the Backdrop's Timing into this keyframe shows an unset Delay blank, a typed delay
   sends `item.set_timing` naming the item, and Clear timing sends `item.clear_override`
   of `timing` and blanks the field again.
-- **Studio mode** (`studio.spec.js`, on the Transitions tab): in studio mode a scene
-  picked for preview goes to program with Transition, and the old program scene comes
-  back on preview; Transition and Cut are off while preview is the program scene; the
-  studio bar shows only in studio mode; the preset picker lists the default with its
+- **Studio mode** (`studio.spec.js`): turning studio mode on puts the canvas, the
+  studio controls and the program monitor side by side, labelled "Preview · Main" and
+  "Program · Main", and turning it off takes the controls and the monitor away;
+  Transition and Cut are off while preview is the program scene; a scene clicked onto
+  preview goes to program with Transition, and the old program scene comes back on
+  preview, where the canvas shows it; with Swap off, Cut takes the preview scene and it
+  stays on preview; the Transitions panel says whether studio mode is on and has no
+  preset switch picker; the preset picker lists the default with its
   kind and "+ New preset…", the default's editor has no duration, Delete or Make
   default and counts its overrides, and choosing Fade and "+ New preset…" send their
   `transition.update` and `transition.create`; a Fade's Custom curve easing shows the
