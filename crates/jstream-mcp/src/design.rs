@@ -10,7 +10,8 @@
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
 //! light by role, use the light and framing filters (bloom, glow, vignette, scanlines) and
 //! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
-//! set with a scene camera (ADR-0094) and its depth of field (ADR-0108), which
+//! set with a scene camera (ADR-0094), its depth of field (ADR-0108) and its paths through
+//! keyframes and orbits (ADR-0166), which
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
@@ -205,7 +206,15 @@ the camera with a keyframe scene that overrides it (`scene.set_camera` on the \
 variant) and a `move` transition, which glides the camera with the items. A 2D \
 scene's keyframe may have a camera of its own too: a `move` into it starts from the \
 framing camera, so a flat 2D layout tilts or pushes into 3D and back; keep the 2D \
-side's items flat (no tilt, turn or depth), or the move fades. Depth of \
+side's items flat (no tilt, turn or depth), or the move fades. For a camera move \
+through several shots, make a keyframe scene per shot and switch to the last with \
+`via` naming the others in order (`scene.switch` `{scene_id, via: [..], preset_id}`, \
+up to 8): the camera and every item pass through each shot on one smooth curve, \
+without stopping, in the preset's duration, which beats chaining switches that stop \
+at each shot. To circle a subject instead of cutting across toward it, give the \
+`move` preset `camera_path` `orbit`: the camera keeps its distance from its target \
+as it turns. A Move turns a model or card that changes several angles at once as one \
+rotation. Depth of \
 field: `focus_px` is the distance along the view that stays sharp and `blur_px` (0-64) \
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \

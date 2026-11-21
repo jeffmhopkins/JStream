@@ -480,6 +480,7 @@ pub fn Scenes() -> impl IntoView {
                 Action::SceneSwitch {
                     scene_id,
                     preset_id: None,
+                    via: Vec::new(),
                 },
             );
         }

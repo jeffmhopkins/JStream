@@ -62,6 +62,7 @@ fn switch(scene: &str) -> Action {
     Action::SceneSwitch {
         scene_id: SceneId::new(scene),
         preset_id: None,
+        via: Vec::new(),
     }
 }
 

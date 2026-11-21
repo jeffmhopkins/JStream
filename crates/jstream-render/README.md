@@ -137,7 +137,15 @@ and calls this crate.
   back into the angle triple nearest the per-axis path, and a billboard, which draws only
   its rotation, keeping the per-axis way;
   [ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
-  decision 1). Discrete fields
+  decision 1). A pair with stops on the way (`Stops`, a shared list of at most
+  `MAX_VIA` endpoints, ADR-0166 decision 2) follows one curve through all of them
+  instead: `catmull`, the uniform Catmull-Rom curve in its pyramidal form, for every
+  number, and the same with slerps for the orientation (`turn::path_angles`), each stop
+  at an equal share of the eased progress and the ends taking the one-sided tangent, so
+  no stop gives the straight Move. `move_camera` moves a scene camera the same way
+  through a path's cameras (`Via`, inline so the caller's camera list stays `Copy`), and
+  with `orbit` turns its direction from the target along the sphere
+  (`turn::slerp_direction`) while its distance follows its own curve. Discrete fields
   (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
   opacity is clamped to `[0, 1]`, the crop to the source, the size to `≥ 0` and the
   perspective to `≥ 1`. Pairing items and drawing the sampled endpoints are

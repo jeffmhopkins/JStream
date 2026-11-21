@@ -394,7 +394,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   which preset a switch runs (`resolve`), and the plan that pairs what is on screen
   with the new scene's items, one `jstream-render` `Track` per item (`plan`), and for
   a group that moves as one item within a family its children's tracks inside its
-  layer (`Inside`, ADR-0049 §3).
+  layer (`Inside`, ADR-0049 §3); `check_via` checks a switch's path through keyframes
+  (ADR-0166 decision 2), and `Run::orbit` is a `move` preset's `camera_path` of
+  `orbit` (decision 3).
 
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
@@ -1397,6 +1399,13 @@ keyframe's overrides, and an item the keyframe times
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) takes its delay
 and easing in place of the item's own and its duration in place of the preset's, on
 either side of the switch; a group's children still follow the group item's timing.
+A switch's `via` ([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+decision 2) is checked when it starts (`transition::check_via`) and kept on the
+`Running` only for a Move within the family. The planner then plans each stop as a side
+of its own into a scratch shot it drops (`Planner::pass_through`), so nothing only a
+stop shows is drawn, and gives each pair its values in the stops that show it
+(`Track::Pair`'s `via`, `Stops`); the sampler runs the pair along one curve through
+them. A group's children inside its layer go straight between their ends.
 Audio does not follow a transition
 yet (D29).
 
@@ -1408,7 +1417,10 @@ variant's override, and a variant's parent's) as `Pass.camera`, and live
 parent's camera, and a live removal of the parent's makes its variants 2D. The switch records the camera on screen when it starts
 (`Running.from_camera`, which a switch mid-Move takes from the running Move). A Move
 between two 3D scenes interpolates the camera with the Move's own timing
-(`lerp_camera`, its focus and blur too, a side with no focus taken as focused where the
+(`move_camera`: `lerp_camera` for a straight Move, or along the curve through the
+cameras of a path's stops, `TrackCameras.via`, a 2D stop through the framing camera,
+and around the target under a `camera_path` of `orbit`, `Run::orbit`, ADR-0166
+decisions 2 and 3; its focus and blur too, a side with no focus taken as focused where the
 other is with no blur, [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)) and draws both sides' tracks through it. A Move between a 3D side and
 a 2D one moves too ([ADR-0128](../../docs/adr/0128-moves-between-2d-and-3d-glide.md)):
 `Planner::track_cameras` takes the canvas's framing camera for the 2D end, which draws
