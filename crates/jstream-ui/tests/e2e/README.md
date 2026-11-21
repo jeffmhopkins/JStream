@@ -188,7 +188,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
   answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter
   on the program output's chain shows Plugins with "No CLAP audio plugins found." (gone
-  while a search is typed), whose link opens Settings on Audio plugins: the install
+  while a search is typed, the dialog keeping its height), whose link opens Settings on Audio plugins: the install
   folder, each folder searched or missing, the summary and the file that failed. Rescan
   sends one `plugin.clap_rescan`, then lists the plugin it found, Escape still closes
   the dialog, and Add filter offers the plugin under Plugins. Against the mock engine
@@ -247,7 +247,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   down and right, selected (the mock lists no kinds, so Color can't create); a scene nests once and isn't offered again, and the backdrop
   cancels the dialog. Its search box narrows the types by name ("COLOR" leaves Color,
   picked) or description ("nest" leaves Scene), shows "No source type matches." with
-  Add disabled when none match, and an empty search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
+  Add disabled when none match, the dialog keeping its height throughout, and an empty
+  search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
   restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
   with its check following, Screenshot (source) shows a toast (the mock engine streams
