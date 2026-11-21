@@ -316,7 +316,7 @@ pub fn Header(
     let video_open = RwSignal::new(false);
     let update_open = RwSignal::new(false);
     // The project dialog, with the path its field starts with.
-    let project_ask = RwSignal::new(None::<(ProjectAsk, String)>);
+    let project_ask = RwSignal::new(None::<(ProjectAsk, String, String)>);
     let project = use_context::<OpenProject>().unwrap_or_default().0;
     let protocol = Signal::derive(move || info.with(|i| i.protocol.clone()));
     let loads = StoredValue::new(0_u64);
@@ -452,13 +452,16 @@ pub fn Header(
     };
     let ask_project = move |ask: ProjectAsk| {
         open.set(None);
-        let start = project.with_untracked(|p| ask.suggested(p.as_ref().map(|p| p.path.as_str())));
-        project_ask.set(Some((ask, start)));
+        let (start, folder) = project.with_untracked(|p| {
+            let open = p.as_ref().map(|p| p.path.as_str());
+            (ask.suggested(open), ProjectAsk::browse_folder(open))
+        });
+        project_ask.set(Some((ask, start, folder)));
     };
     let open_recent = move |path: String| {
         open.set(None);
         if running() > 0 {
-            project_ask.set(Some((ProjectAsk::Open, path)));
+            project_ask.set(Some((ProjectAsk::Open, path, String::new())));
         } else {
             open_now(session.get(), studio, path);
         }
@@ -848,10 +851,11 @@ pub fn Header(
             <Show when=move || update_open.get()>
                 <UpdateDialog close=move || update_open.set(false) />
             </Show>
-            {move || project_ask.get().map(|(ask, start)| view! {
+            {move || project_ask.get().map(|(ask, start, folder)| view! {
                 <ProjectDialog
                     ask=ask
                     start=start
+                    folder=folder
                     running=running()
                     close=move || project_ask.set(None)
                 />
