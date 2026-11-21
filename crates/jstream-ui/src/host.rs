@@ -183,8 +183,20 @@ pub fn desktop_jtunnel() -> Option<JtunnelSetting> {
 pub struct JtunnelSetting {
     /// Whether receiving is on.
     pub on: bool,
-    /// The accepted senders: `(name, address)`.
-    pub accepted: Vec<(String, String)>,
+    /// The accepted senders.
+    pub accepted: Vec<JtunnelSender>,
+}
+
+/// One accepted JTunnel sender.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct JtunnelSender {
+    /// Its tunnel name.
+    pub name: String,
+    /// The address and port it sends from, as `192.168.1.5:9000`.
+    pub address: String,
+    /// "Use this sender's state" (ADR-0171 decision 1): off unless the person turns it
+    /// on.
+    pub state: bool,
 }
 
 impl JtunnelSetting {
@@ -199,7 +211,13 @@ impl JtunnelSetting {
                     .filter_map(|entry| {
                         let name = entry.get("name")?.as_str()?;
                         let address = entry.get("address")?.as_str()?;
-                        Some((name.to_owned(), address.to_owned()))
+                        let state =
+                            entry.get("state").and_then(serde_json::Value::as_bool) == Some(true);
+                        Some(JtunnelSender {
+                            name: name.to_owned(),
+                            address: address.to_owned(),
+                            state,
+                        })
                     })
                     .collect()
             })
@@ -217,7 +235,13 @@ impl JtunnelSetting {
             "accepted": self
                 .accepted
                 .iter()
-                .map(|(name, address)| serde_json::json!({ "name": name, "address": address }))
+                .map(|sender| {
+                    serde_json::json!({
+                        "name": sender.name,
+                        "address": sender.address,
+                        "state": sender.state,
+                    })
+                })
                 .collect::<Vec<_>>(),
         })
         .to_string()

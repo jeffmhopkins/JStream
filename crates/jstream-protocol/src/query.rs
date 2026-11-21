@@ -248,6 +248,23 @@ pub enum Query {
     /// changes.
     #[serde(rename = "jtunnel.senders")]
     JtunnelSenders,
+    /// Lists the JTunnel senders with live data (0.133, ADR-0171 decision 2), by name,
+    /// each with its keys that hold a current message: only senders whose "Use this
+    /// sender's state" is on send any. A key the sender stops resending goes after 3 s,
+    /// and everything a sender sent goes when it starts again or the receiver stops.
+    /// Runtime state, so no `rev`; empty while the receiver is off, which is the default.
+    #[serde(rename = "data.list")]
+    DataList,
+    /// Reads one sender's newest message for one key (0.133, ADR-0171 decision 2): the
+    /// JSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left
+    /// out when that sender has no current message for that key.
+    #[serde(rename = "data.get")]
+    DataGet {
+        /// The sender's name, as `data.list` gives it.
+        input: String,
+        /// The key, as `data.list` gives it.
+        key: String,
+    },
     /// A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom
     /// `scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether
     /// one is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its
@@ -467,6 +484,8 @@ impl Query {
             Query::CaptureTargets => "capture.targets",
             Query::PtzList => "ptz.list",
             Query::JtunnelSenders => "jtunnel.senders",
+            Query::DataList => "data.list",
+            Query::DataGet { .. } => "data.get",
             Query::SceneCameraAim { .. } => "scene.camera_aim",
             Query::FontList => "font.list",
             Query::PackList => "pack.list",
@@ -826,6 +845,20 @@ pub enum QueryResult {
         /// The senders heard, ordered by name, then address.
         senders: Vec<crate::JtunnelSenderInfo>,
     },
+    /// The result of `data.list` (0.133).
+    #[serde(rename = "data.list")]
+    DataList {
+        /// The senders with live data, ordered by name.
+        inputs: Vec<crate::DataInputInfo>,
+    },
+    /// The result of `data.get` (0.133).
+    #[serde(rename = "data.get")]
+    DataGet {
+        /// The message: any JSON value the sender sent, at most 76,800 bytes of it, so
+        /// `remote_` (ADR-0059). Left out when there is none.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        remote_value: Option<serde_json::Value>,
+    },
     /// The result of `font.list`.
     #[serde(rename = "font.list")]
     FontList {
@@ -966,6 +999,8 @@ impl QueryResult {
             QueryResult::CaptureTargets { .. } => "capture.targets",
             QueryResult::PtzList { .. } => "ptz.list",
             QueryResult::JtunnelSenders { .. } => "jtunnel.senders",
+            QueryResult::DataList { .. } => "data.list",
+            QueryResult::DataGet { .. } => "data.get",
             QueryResult::SceneCameraAim { .. } => "scene.camera_aim",
             QueryResult::FontList { .. } => "font.list",
             QueryResult::PackList { .. } => "pack.list",

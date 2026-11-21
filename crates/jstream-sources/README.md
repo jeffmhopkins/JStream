@@ -192,6 +192,20 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   half-scale sine read at its amplitude by a band around it and not by one away from
   it, an inverted or NaN band reading 0, with its raw level, peak and onset, and a levels-only
   measure hearing the level with no spectrum.
+- `LiveData` (`data.rs`, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
+  decision 2): each JTunnel sender's newest state message per key, as a JSON value,
+  which the engine's JTunnel receiver fills with `put` (one JSON value of at most
+  76,800 bytes nested no deeper than 32; at most 1,024 keys, 4 MiB and 32 senders) and
+  `touch` (a resend keeps the key current), and empties with `restart` and `expire`
+  (a key not kept current for 3 s). `list` and `get` answer `data.list` and `data.get`.
+  `watch` hands out a `DataCell` for a `DataWatch` (a sender or any, a key, a dotted
+  field of object names and list indexes from 0, and whether a `#rrggbb` text reads as
+  a colour), set to what it reads now and again by whichever thread puts a message for
+  the key, under the store's lock; a reader only loads its one `u64`, a number's own
+  bits, or a NaN-tagged absent, `text_hash` (48 bits of FNV-1a) or RGBA colour, so the
+  render thread reads it without a lock or an allocation. `true` reads 1 and `false` 0;
+  an object, a list, `null` or a missing field read absent. One watch asked for twice
+  shares a cell, a watch nobody holds is forgotten, and past 4,096 a cell reads absent.
 - `MidiState` and `MidiInputs` (`midi/`, [ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)):
   what the `midi_*` kinds draw. A `MidiState` holds one input's held velocity per
   channel and key, its controllers, pitch bend and channel pressure, and a log of the

@@ -22,19 +22,34 @@ the format only: no sockets and no threads, so the engine's receive thread, the 
 the `jtunnel` fuzz target drive the same code. It depends on `jstream-midi` alone.
 
 Contents:
-- `wire`: version 2 of JTunnel's packets. `parse` takes a datagram and refuses what
+- `wire`: version 2 of JTunnel's packets, the state packet (type 4, JTunnel 0.13's side
+  channel, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
+  decision 1) included. `parse` takes a datagram and refuses what
   JTunnel's own parser refuses (another version, a malformed field, a truncated frame),
   ignoring bytes after the packet as JTunnel does. An audio packet has its header and one
   or two frames, newest first; a frame walks its events (`events`, decoded: a MIDI
   `Message`, an undefined status byte, a SysEx piece or a CLAP note expression; or
   `raw_events`, as wire bytes, which `decode` turns into an event later) with their
   sample offsets, and has its coded audio.
-  `write_subscribe` and `write_bye` are what a receiver sends; `write_audio` writes what
-  a sender would, for tests and fuzzing. `decode_pcm24` decodes 24-bit PCM at JTunnel's
-  scale. A test checks the parser and writer against bytes JTunnel's C++ writer wrote.
+  A state packet is a `StatePiece`: stream ID, message ID, piece and piece count (1 to
+  64), a key `is_state_key` accepts (1 to 63 of ASCII letters, digits, `/`, `_`, `.`,
+  `-`) and at most 1,200 bytes of data, with nothing after it, as JTunnel's own parser
+  insists.
+  `write_subscribe` and `write_bye` are what a receiver sends; `write_audio` and
+  `write_state` write what a sender would, for tests and fuzzing. `decode_pcm24`
+  decodes 24-bit PCM at JTunnel's scale. A test checks the parser and writer against
+  bytes JTunnel's C++ writer wrote, a state piece's included.
 - `SysexAssembler`: joins SysEx pieces into whole messages in a buffer allocated once,
   dropping a message whole when a piece is missing or out of order, or when the caller
   abandons it after a lost frame.
+- `StateAssembler`: one sender's state messages from their pieces, as JTunnel's own
+  receiver joins them: per key, in any order, repeats ignored, all or nothing; a piece
+  of another message for the key starts that one over; a piece of the message the key
+  last finished is a `Repeat` (the sender's once-a-second resend, which keeps the key
+  current); a new stream ID resets it and says so. At most `MAX_PARTIAL_STATE` (128)
+  messages wait part-way, the one that waited longest forgotten and counted for one
+  more, and the last message of at most `MAX_STATE_KEYS` (1,024) keys is remembered.
+  It allocates, on the receive thread.
 - `SeqTracker`: per stream, tells a fresh frame from a repeat (a redundant copy) or a
   stale one, sees a restart (a new stream id, or a jump of more than 2^16), and counts
   frames that left its 64-frame window without arriving.

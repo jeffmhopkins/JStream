@@ -161,6 +161,7 @@ mod tests {
                     accepted: vec![crate::jtunnel::Entry {
                         name: "</script>".into(),
                         address: "192.168.1.5:9000".into(),
+                        state: false,
                     }],
                 },
                 ptz: &crate::ptz::Setting {

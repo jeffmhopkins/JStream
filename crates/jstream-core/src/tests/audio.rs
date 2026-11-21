@@ -1700,3 +1700,72 @@ fn jtunnel_senders_lists_the_senders_that_answer_and_says_when_they_change() {
         .iter()
         .any(|e| matches!(e, Event::JtunnelSendersChanged {}))));
 }
+
+/// ADR-0171 decisions 1 and 2: an accepted sender's state, once "Use this sender's
+/// state" is on, is what `data.list` and `data.get` read.
+#[test]
+fn a_jtunnel_senders_state_is_read_with_data_list_and_data_get() {
+    use jstream_jtunnel::wire::{self, StatePiece};
+    use jstream_protocol::{DataInputInfo, Query, QueryResult};
+    let clock = FakeClock::new(Timebase::MICROS);
+    let audio = FakeAudioIo::new(clock.clone(), 48_000, ChannelLayout::Stereo).expect("audio");
+    let sender = jtunnel_sender();
+    let mut setup = crate::JtunnelSetup::new(vec![
+        crate::AcceptedSender::new("Bitwig", sender.local_addr().expect("an address"))
+            .expect("accepted")
+            .with_state(true),
+    ])
+    .expect("a setup");
+    setup.bind = "127.0.0.1:0".parse().expect("an address");
+    setup.discover = None;
+    let engine = engine(&audio, &clock);
+    let control = connected(&engine);
+    assert_eq!(
+        super::query(&control, Query::DataList).ok(),
+        Some(QueryResult::DataList { inputs: Vec::new() })
+    );
+    engine.start_jtunnel(&setup).expect("a receiver");
+    let mut buf = [0; 64];
+    let (_, receiver) = sender.recv_from(&mut buf).expect("a subscribe");
+    let piece = StatePiece {
+        stream_id: 1,
+        message_id: 1,
+        piece: 0,
+        pieces: 1,
+        key: "track/0",
+        data: br#"{"name":"Drums","volume":0.8}"#,
+    };
+    let mut out = [0; wire::MAX_PACKET_BYTES];
+    let n = wire::write_state(&mut out, &piece).expect("a packet");
+    sender.send_to(&out[..n], receiver).expect("sent");
+    assert!(eventually(|| {
+        super::query(&control, Query::DataList).ok()
+            == Some(QueryResult::DataList {
+                inputs: vec![DataInputInfo {
+                    input: "Bitwig".into(),
+                    remote_keys: vec!["track/0".into()],
+                }],
+            })
+    }));
+    let get = |input: &str, key: &str| {
+        super::query(
+            &control,
+            Query::DataGet {
+                input: input.into(),
+                key: key.into(),
+            },
+        )
+        .ok()
+    };
+    assert_eq!(
+        get("Bitwig", "track/0"),
+        Some(QueryResult::DataGet {
+            remote_value: Some(serde_json::json!({"name": "Drums", "volume": 0.8}))
+        })
+    );
+    assert_eq!(
+        get("Bitwig", "clock"),
+        Some(QueryResult::DataGet { remote_value: None })
+    );
+    assert_eq!(engine.jtunnel_stats().map(|s| s.state), Some(1));
+}

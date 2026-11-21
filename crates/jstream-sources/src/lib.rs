@@ -36,6 +36,7 @@ mod browser;
 mod capture;
 mod chat;
 mod color;
+mod data;
 mod describe;
 mod error;
 mod fonts;
@@ -60,6 +61,10 @@ pub use capture::{
     CameraControlSetting, CaptureSpec, DeviceFormatWant, fps_centi, webcam_controls, webcam_device,
 };
 pub use chat::{ChatFeature, FeaturedMessage, MAX_CHAT_LABEL, MAX_CHAT_TEXT};
+pub use data::{
+    DataCell, DataReading, DataWatch, LiveData, Refused as DataRefused, STALE_MS as DATA_STALE_MS,
+    field as data_field, reading as data_reading, text_hash,
+};
 pub use error::SourceError;
 pub use fonts::{InstalledFont, installed_fonts, system_font_dirs};
 pub use image::{StillImage, decode_still};
