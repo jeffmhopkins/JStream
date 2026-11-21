@@ -134,7 +134,8 @@ and calls this crate.
   transition get the same answer. Angles take the shortest way round: one that changes
   alone on its own angle, and more than one as one rotation along the shortest arc
   between the two orientations (`turn.rs`, unit quaternions in ADR-0022's order, turned
-  back into the angle triple nearest the per-axis path;
+  back into the angle triple nearest the per-axis path, and a billboard, which draws only
+  its rotation, keeping the per-axis way;
   [ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
   decision 1). Discrete fields
   (fit mode, the flips, a perspective present at one end) switch halfway, and after easing the
