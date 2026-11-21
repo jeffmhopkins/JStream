@@ -97,9 +97,11 @@ test('F2 renames a scene, and a drag reorders it', async ({ page, context, daemo
   await dragRow(page, scene(page, 'Main'), scene(page, 'Opening'), 'before');
   await expect(sceneNames(page)).toHaveText(['Main', 'Opening']);
   await expect(sceneNames(other)).toHaveText(['Main', 'Opening']);
-  // The drag didn't click the dragged row: Opening stays selected.
-  await expect(scene(page, 'Opening')).toHaveClass(/selected/);
-  await expect(scene(page, 'Main')).not.toHaveClass(/selected/);
+  // A mouse picks a scene on the press, as OBS does, so the drag's press picked the
+  // dragged row, and its release didn't pick again.
+  await expect(scene(page, 'Main')).toHaveClass(/selected/);
+  await expect(scene(page, 'Main')).toHaveAttribute('aria-current', 'true');
+  await expect(scene(page, 'Opening')).not.toHaveClass(/selected/);
 });
 
 test('the search box and the favourites filter narrow the rows', async ({ page, daemon }) => {

@@ -115,7 +115,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   studio mode on preview, with the hover button putting it on program and the mode
   kept over a reload; F2 renaming a
   scene in place (Del inside the field deletes a character, not the scene) and a drag reordering the scenes, which a second client follows and
-  which doesn't select the dragged row; the search boxes and the favourites filter
+  whose press picks the dragged row, as a mouse press does; the search boxes and the favourites filter
   with its count, Favorites only and Clear; hiding and showing an item with its eye,
   placing an existing source again through the Add source dialog, a drag restacking the
   two items, F2 renaming one of the two placements of a source (Del there edits the

@@ -378,7 +378,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   indented by depth, with a caret that folds a folder, and leaves out groups (ADR-0024). It marks the program scene
   "program". A click selects a scene and puts it on program (`scene.switch`, naming no
   preset, so the engine resolves the transition); in studio mode it goes on preview
-  instead (`studio.set_preview`), and a hover button puts it on program. The click is
+  instead (`studio.set_preview`), and a hover button puts it on program. A mouse picks
+  on the press, as OBS does, so the switch doesn't wait for the button's release (a
+  click is about a tenth of a second), and a drag that reorders the scenes picks the
+  dragged one (program, or preview in studio mode) as it starts, as in OBS; a press with
+  Shift, Ctrl or Meta (on macOS a Ctrl+click opens the row menu), a touch and a pen pick
+  on the click, the last two since their press may start a scroll. The action is queued before the selection
+  changes, so the request leaves before the panels redraw, and a `scene.switch` shows
+  its scene on program at once (`Studio::act`), before `studio.changed` confirms it, so
+  the badge moves on the press and the canvas keeps its program stream; a refused
+  switch reads `studio.get` back. The pick is
   sent even for a scene already there, which the engine ignores, so a stale copy of
   program or preview never drops one; and outside studio mode the double click that
   opens a scene's Properties puts it on program first, as in OBS. Studio mode is the
@@ -1371,9 +1380,11 @@ beside it ([Design › Studio mode](#design)).
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
   channel number, so a late frame of the old stream is never drawn, once the change has
-  held for 250 ms (`preview::SETTLE`). A scene switch changes the selection before the
-  program, so for that moment the canvas wants the new scene on its own; settling keeps
-  the program stream, with its transition, through the switch (#1205). Until a new
+  held for 250 ms (`preview::SETTLE`). A scene switch from this page shows its scene on
+  program as the selection changes (`Studio::act`), so the canvas never wants the new
+  scene on its own and keeps the program stream, with its transition, through the
+  switch; settling still keeps it through any other moment the selection runs ahead of
+  the program (#1205). Until a new
   stream's first frame, the last picture stays on the canvas; only a canvas that has
   shown no picture yet, or whose stream had ended, says the preview is starting. The
   canvas reports what it did with its pictures as the view `canvas`

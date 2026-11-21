@@ -94,10 +94,10 @@ pub fn stream_scene(shown: Option<&SceneId>, program: Option<&SceneId>) -> Optio
 }
 
 /// How long what the canvas's stream should show must hold before the canvas switches
-/// streams. A scene switch changes the canvas's selection first and the program once the
-/// switch lands, so for that moment the canvas wants the new scene on its own; within
-/// this time it wants the program again, and the program stream, with its transition,
-/// plays on (#1205).
+/// streams. A switch from this page moves the program with the selection (`Studio::act`),
+/// but whenever the selection runs ahead of the program, the canvas wants the new scene on
+/// its own for a moment; within this time it wants the program again, and the program
+/// stream, with its transition, plays on (#1205).
 pub const SETTLE: std::time::Duration = std::time::Duration::from_millis(250);
 
 /// The stream to switch to once `want`, wanted [`SETTLE`] ago, has settled: `None` while

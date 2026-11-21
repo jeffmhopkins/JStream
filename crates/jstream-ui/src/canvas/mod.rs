@@ -400,8 +400,8 @@ pub fn Canvas() -> impl IntoView {
         });
     };
     // Another scene shown: close the stream and open one of it (CV-03), once what the
-    // canvas wants has held for `preview::SETTLE`. A scene switch changes the selection
-    // before the program, so `wanted` goes program, the scene, program again: settling
+    // canvas wants has held for `preview::SETTLE`. Should the selection run ahead of the
+    // program in a switch, `wanted` goes program, the scene, program again: settling
     // keeps the program stream through it, and its transition plays without a stall
     // (#1205).
     let resubscribe = move |want: Option<SceneId>| {

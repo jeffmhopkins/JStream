@@ -4,7 +4,8 @@
 //! whose popover opens under the row, and a favourite star. The label manager opens
 //! over the rows when "Edit labels…" is chosen here (`labels.rs`). Clicking a scene shows it in
 //! Sources and the canvas and puts it on program (`scene.switch`), or, in studio mode,
-//! on preview (`studio.set_preview`), where a hover button puts it on program. A double
+//! on preview (`studio.set_preview`), where a hover button puts it on program; a mouse
+//! picks on the press, as OBS does, and a touch, a pen or the keyboard on the click. A double
 //! click opens its Properties dialog (a keyframe's renames it). Rows are reordered by
 //! dragging them (`scene.reorder`), renamed in place (F2) and deleted (Del or the menu)
 //! through `delete.plan`, so the user sees what else goes. A right-click on a scene
@@ -351,6 +352,23 @@ fn stepped(collection: &Collection, scene_id: &SceneId, up: bool) -> Vec<Edit> {
     )
 }
 
+/// Whether a press picks its scene row at once ([`Scenes`]): a mouse's primary button
+/// with no modifier. Shift, which the reorder leaves alone, and Ctrl and Meta (on macOS a
+/// Ctrl+click is the secondary click, which opens the row menu and sends no `click`)
+/// pick on the click, as before. A touch or a pen picks on the click too, since its
+/// press may start a scroll.
+fn picks_on_press(pointer_type: &str, button: i16, modifiers: Modifiers) -> bool {
+    pointer_type == "mouse" && button == 0 && modifiers == Modifiers::default()
+}
+
+/// The modifier keys held at a press.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+struct Modifiers {
+    shift: bool,
+    ctrl: bool,
+    meta: bool,
+}
+
 /// The name a new keyframe scene of a scene with `count` of them gets.
 fn keyframe_name(count: usize) -> String {
     format!("Keyframe {}", count + 1)
@@ -642,14 +660,47 @@ pub fn Scenes() -> impl IntoView {
             let key = key.clone();
             move || renaming.with(|r| r.as_deref() == Some(key.as_str()))
         };
-        // A click selects the scene, and puts it on program, or on preview in studio
-        // mode.
-        let select = {
+        // Picking the scene selects it, and puts it on program, or on preview in studio
+        // mode. The action goes first, so it leaves before the panels redraw for the
+        // new selection. A mouse picks on the press, as OBS does, so the switch doesn't
+        // wait for the button's release (a click is about a tenth of a second); a touch
+        // or a pen, which may be starting a scroll, and the keyboard pick on the click.
+        let pick = {
             let id = scene_id.clone();
-            move |_| {
-                studio.select_scene(id.clone());
+            move || {
                 if let Some(s) = session.get() {
                     studio.act(&s, studio.click_action(&id));
+                }
+                studio.select_scene(id.clone());
+            }
+        };
+        // Whether the last press picked, so its click doesn't pick again.
+        let pressed = StoredValue::new(false);
+        let pick_on_press = {
+            let pick = pick.clone();
+            move |event: leptos::ev::PointerEvent| {
+                let picks = picks_on_press(
+                    &event.pointer_type(),
+                    event.button(),
+                    Modifiers {
+                        shift: event.shift_key(),
+                        ctrl: event.ctrl_key(),
+                        meta: event.meta_key(),
+                    },
+                );
+                pressed.set_value(picks);
+                if picks {
+                    pick();
+                }
+            }
+        };
+        let select = {
+            let pick = pick.clone();
+            move |event: leptos::ev::MouseEvent| {
+                // A keyboard's click has no presses (`detail` 0).
+                let picked = std::mem::take(&mut *pressed.write_value()) && event.detail() > 0;
+                if !picked {
+                    pick();
                 }
             }
         };
@@ -1000,7 +1051,12 @@ pub fn Scenes() -> impl IntoView {
                     fallback=move || {
                         let name = shown_name.clone();
                         view! {
-                            <button class="row-main" on:click=select.clone() on:dblclick=on_double_click.clone()>
+                            <button
+                                class="row-main"
+                                on:pointerdown=pick_on_press.clone()
+                                on:click=select.clone()
+                                on:dblclick=on_double_click.clone()
+                            >
                                 <span class="tree-icon" class:keyframe-icon=is_keyframe>
                                     <Icon name=icon size=15 />
                                 </span>
@@ -1385,7 +1441,7 @@ pub fn RenameField(value: String, done: impl Fn(String) + Clone + 'static) -> im
 
 #[cfg(test)]
 mod tests {
-    use super::{Node, Row, keyframe_name, moved, rows, stepped};
+    use super::{Modifiers, Node, Row, keyframe_name, moved, picks_on_press, rows, stepped};
     use crate::panels::tree::Side;
     use crate::store::Collection;
     use jstream_control::protocol::{
@@ -1701,5 +1757,29 @@ mod tests {
         assert!(moved(&c, &scene_node("k1"), &scene_node("a"), Side::Before).is_empty());
         assert!(moved(&c, &scene_node("a"), &scene_node("k1"), Side::After).is_empty());
         assert_eq!(keyframe_name(2), "Keyframe 3");
+    }
+
+    #[test]
+    fn a_mouse_picks_a_scene_on_the_press_and_a_touch_or_pen_on_the_click() {
+        let none = Modifiers::default();
+        assert!(picks_on_press("mouse", 0, none));
+        // The other buttons.
+        assert!(!picks_on_press("mouse", 1, none));
+        assert!(!picks_on_press("mouse", 2, none));
+        // Shift, which the reorder leaves alone, and Ctrl and Meta: on macOS a Ctrl+click
+        // opens the row menu and must not switch program.
+        let shift = Modifiers {
+            shift: true,
+            ..none
+        };
+        let ctrl = Modifiers { ctrl: true, ..none };
+        let meta = Modifiers { meta: true, ..none };
+        assert!(!picks_on_press("mouse", 0, shift));
+        assert!(!picks_on_press("mouse", 0, ctrl));
+        assert!(!picks_on_press("mouse", 0, meta));
+        // A press that may be a scroll.
+        assert!(!picks_on_press("touch", 0, none));
+        assert!(!picks_on_press("pen", 0, none));
+        assert!(!picks_on_press("", 0, none));
     }
 }
