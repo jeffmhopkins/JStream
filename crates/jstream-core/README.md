@@ -1592,7 +1592,8 @@ before each of its colour passes, through the camera that pass's items are seen
 through, into a canvas-sized `GpuKey::Sky` layer (`draw_sky`), which `under_sky` puts
 under its items, flat and seen through no camera, only in the cache frame that drew it.
 `Chains::skies` keeps each scene's `SkyState`: the frame that drew it, the warp it
-streams at now, which moves toward the setting at its ramp's pace, and how far its
+streams at now, which moves toward the setting at its ramp's pace (dropping while it
+is above it, which zooms the deep sky back in), and how far its
 stars have travelled, advanced once a frame by the warp's mean rate times the media
 time since the last (a step back or of over a second jumps to the setting and moves
 nothing).

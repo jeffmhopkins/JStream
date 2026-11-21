@@ -248,7 +248,8 @@ light source (another seed or colours), and a transition cross-fades the skies. 
 (0-1) streams the sky past toward its centre ahead: stars stretch into streaks that \
 burst out ahead, slide past at the sides and converge behind, right from any camera \
 angle; they crowd ahead in bluer, brighter light and thin behind in redder, dimmer \
-light over a blue glow ahead, and the nebulae and band fade out as it builds. \
+light over a blue glow ahead, and the nebulae and band fade out as it builds and zoom \
+back out from straight ahead as it drops. \
 One `source.set_settings` of `warp` jumps: the sky accelerates to it over \
 `warp_ramp_s` (default 1.5 s) by itself, and setting 0 slows back out; 0.6-1 is a \
 jump, about 0.05-0.15 a slow cruise. Add a brief white flash card or `bloom` at the \

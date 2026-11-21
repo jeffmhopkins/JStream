@@ -637,6 +637,8 @@ pub(crate) struct SkyState {
     /// How far its stars have moved away from the direction of travel
     /// ([`jstream_render::SkyDraw::travel`]).
     pub(crate) travel: f64,
+    /// Whether its warp is heading down toward a lower setting.
+    pub(crate) dropping: bool,
 }
 
 impl SkyState {
@@ -644,7 +646,8 @@ impl SkyState {
     /// `target` by one over `ramp_s` seconds (at once for a ramp of 0), and its travel by
     /// [`jstream_render::SkyDraw::travel_rate`] of that warp. The first step starts at
     /// `target`; a step back in time or of over a second, a seek or a pause, takes the
-    /// warp to `target` and moves nothing.
+    /// warp to `target` and moves nothing. It is dropping while its warp is still above
+    /// `target`.
     pub(crate) fn step(&mut self, frame: u64, at_s: f64, (target, ramp_s): (f32, f32)) {
         match self.stepped {
             Some((stepped, _)) if stepped == frame => return,
@@ -665,6 +668,7 @@ impl SkyState {
             }
             _ => self.warp = target,
         }
+        self.dropping = target < self.warp;
         self.stepped = Some((frame, at_s));
     }
 }
@@ -3213,6 +3217,18 @@ mod tests {
             (sky.travel - ramped).abs() < 1e-6,
             "back in time moves nothing"
         );
+        assert!(!sky.dropping, "at its setting, it isn't dropping");
+        // Setting it lower: dropping until the warp gets there.
+        sky.step(6, 29.5, (0.0, 2.0));
+        assert!(
+            sky.dropping && (sky.warp - 0.75).abs() < 1e-6,
+            "{}",
+            sky.warp
+        );
+        sky.step(7, 30.5, (0.0, 2.0));
+        assert!((sky.warp - 0.25).abs() < 1e-6 && sky.dropping);
+        sky.step(8, 31.0, (0.0, 2.0));
+        assert!(sky.warp == 0.0 && !sky.dropping, "it arrives");
     }
 
     /// ADR-0167: an environment light drawn as a backdrop fills a 3D scene's background

@@ -207,7 +207,7 @@ stamp = { hash = "b3:64dbb25a25fcaabd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:ad252b9ba0942b42", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the blue glow and cooler shift are shader details in the render README and ADR-0167." }
+stamp = { hash = "b3:67ea3cf530168d41", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the drop-out zoom is a shader detail in the render README and ADR-0167." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:f0debc77953a941e", by = "agent:claude", note = "Added the environment light's sky replacing the studio gradient for scene-lit models; checked against render model.wgsl. | merge: Merged #1490's round 1 fix: ModelDraw gains floor beside environment, the frame uniform's cut plane follows the environment block, and the mirrored models keep their environment while cut at the floor. The section's environment text and the fix's lines both hold. | merge: Merged wave/alpha5: #1491 depth bloom (this PR's base, squashed), #1490 reflections, #1489 shafts, #1488 shadows, #1487 volumetric fog and earlier 3D and PTZ work. The environment sky and the wave's 3D passes read as described. | kept from the merged side: Its scene-filter depth sentence still holds; depth_bloom is a filter detail in the render README. | merge: Merged #1490's round 1 fix (ModelDraw::floor and the shader's cut plane, corners_in_scene, the mirrored pass cut at its floor) under depth_bloom; the section's depth_bloom text and the fix's own lines both still hold. | merge: Merged wave/alpha5: #1490 floor reflections (this PR's base, squashed), #1489 shafts, #1488 shadows, #1487 volumetric fog and earlier 3D and PTZ work. The depth-aware filters read as described; each is benched once. | kept from the merged side: Review round 1 B1 on #1490: the mirrored floor pass is cut at the floor. ModelDraw::floor cuts models in model.wgsl fs and fs_depth (frame cut plane), draw_reflection leaves out cards whose corners_in_scene lie at or below it, and draw_view_depth takes the floor through DepthFrom. The core, render and protocol READMEs say so and name the two new tests; no other claim in the section changed. | merge: Merged wave/alpha5: #1489 light shafts, #1488 shadows, #1487 volumetric fog (this stack's bases, squashed), #1499 PTZ counters (0.121), and earlier 3D and PTZ work. The reflection pass and depth-aware filters read as described; the bench lists volumetric fog once. | kept from the merged side: B1 on #1488: the wave merge left volumetric_fog_1080p_camera listed twice in the composite bench; one entry removed, so each depth-aware filter is benched once. Section text still holds. | kept from the merged side: the depth-aware filter paragraph still holds; volumetric fog reads the same depth plus the camera view | merge: Merged wave/alpha5: #1485's squash (this PR's base, the same AO content), #1484 billboards, #1486/#1496 PTZ, #1493 and ADR-0151. Depth-aware filters, now three, still read the view depth as described. | kept from the merged side: the depth-aware filter paragraph still holds with depth_fog first; ambient occlusion reads the same view depth" }
@@ -540,13 +540,13 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: five
 stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: the background sentence says the fade between backgrounds is in the project's blending space, matching color.rs and scene.rs" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky.rs"]
-stamp = { hash = "b3:b43fe5d74e8c36e3", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; Doppler, aberration and nebula styles are details in the render README and ADR-0167." }
+stamp = { hash = "b3:be148cd6718a63a0", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the drop-out zoom is a shader detail in the render README and ADR-0167." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:2d2ba70671282976", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the blue glow and cooler shift are shader details in the render README and ADR-0167." }
+stamp = { hash = "b3:a19ceede45cbae27", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the drop-out zoom is a shader detail in the render README and ADR-0167." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:82678af0adc77d49", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the blue glow and cooler shift are shader details in the render README and ADR-0167." }
+stamp = { hash = "b3:78c1f811bece08f5", by = "agent:sky-backdrop", note = "Re-read the backdrop sentence: still accurate; the drop-out zoom is a shader detail in the render README and ADR-0167." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "The one-scene compositor summary doesn't cover the blur's reads or test helpers; nothing it states changes." }
@@ -600,7 +600,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:a9cebaf0d538076a", by = "agent:hold-zoom", note = "MCP architecture unchanged: tools.snap differs by the CameraFollow hold_zoom field and version, design.rs by one guidance sentence" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:7cc5118e7c6596e8", by = "agent:sky-backdrop", note = "Re-read: MCP tool grouping and rules unchanged; only design guidance wording changed." }
+stamp = { hash = "b3:d62334a8d37607fb", by = "agent:sky-backdrop", note = "Re-read: MCP tool grouping and rules unchanged; only design guidance wording changed." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -1983,7 +1983,7 @@ stamp = { hash = "b3:11ab863d21527e02", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:59998357ffc3b030", by = "agent:claude", note = "Edited: LiveSources::describe adds a running source's own settings to its descriptor; #1497: kind.describe takes an optional source_id (0.123); a model source adds its file's animation names to the animation setting's description. | merge: Merged wave/alpha5: #1498 glTF animation (this PR's base, squashed), #1495 lit cards at 0.122, the earlier 3D and PTZ work. The KindDescribe intercept and LiveSources::describe are unchanged by the wave; still holds. | kept from the merged side: live.rs builds looks with Look::frame, snapshot.rs gains pose and the pose in model_key; the module list holds" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:76781da5988deeee", by = "agent:sky-backdrop", note = "Re-read against snapshot.rs: the transition sky's fade now follows the preset's eased progress, like its camera; the snapshot summary here still holds. | merge: Main's #1579 added still.drew_nothing() in upload_still; the contents summary of snapshot.rs still holds alongside the sky draw. | kept from the merged side: re-read the live sources summary: the new log line in upload_still changes no behaviour it describes" }
+stamp = { hash = "b3:f8d7b001c98efa99", by = "agent:sky-backdrop", note = "Re-read against snapshot.rs: draw_sky_of now passes SkyState's dropping to SkyDraw; the snapshot summary here still holds. | kept from the merged side: re-read the live sources summary: the new log line in upload_still changes no behaviour it describes" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/transition.rs"]
 stamp = { hash = "b3:34f209c09ae51711", by = "agent:claude", note = "This PR: snapshot.rs's planner looks up the keyframe's overrides for a switch into it and passes them to transition::plan, a group's children planned with none. The merge brought #1261, #1281 and #1302, plus #1316's framing-camera fade, which the lookup now sits after. The sources contents list holds. | kept from the merged side: merge: snapshot.rs and transition.rs gained #1261, #1281 (bloom, glow and shadow bounds) and #1302 (a Move blends effect settings); the sources contents list names neither this PR's framing-camera planning nor those, and still holds. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section. | merge: Main's #1261 (model items drawn through the scene camera) and #1302 (Moves blend effect values) changed live.rs, snapshot.rs and transition.rs; the moved bullets still describe them, the details are in Snapshots." }
@@ -2322,7 +2322,7 @@ stamp = { hash = "b3:5701f7cb5f0a502c", by = "agent:claude", note = "added that 
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:76598958cf761499", by = "agent:sky-backdrop", note = "Re-read the Sky backdrops paragraph against chain.rs SkyState::step and snapshot.rs draw_sky_of: drawn frame, ramped warp, mean-rate travel, reset on a step back or over a second; matches. | merge: Main's #1579 edited the still-upload paragraph (log once per still drawn as nothing); re-read it and the Sky backdrops paragraph, both accurate together. | kept from the merged side: a program-stage draw that finds neither pixels nor texture now logs once per shown still, and the stills thread logs each decode again; added both to the still paragraph (#1562)" }
+stamp = { hash = "b3:097b1ed8b4901a75", by = "agent:sky-backdrop", note = "Re-read the Sky backdrops paragraph against chain.rs SkyState::step (dropping set after the step while warp is above its setting) and snapshot.rs; now names it. | kept from the merged side: a program-stage draw that finds neither pixels nor texture now logs once per shown still, and the stills thread logs each decode again; added both to the still paragraph (#1562)" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2334,7 +2334,7 @@ stamp = { hash = "b3:a47988adc367c5dc", by = "agent:claude", note = "Added the l
 stamp = { hash = "b3:25f2f3b47ccb9f93", by = "agent:claude", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds | merge: #1375 brought in JTunnel senders received into network_audio sources; it touches this section's inputs alongside this branch's change without contradicting it, and wave/alpha5 verified its text for #1375 | kept from the merged side: audio_sources.rs gains the Network want and the receiver slot in Wanted; nothing about snapshots or kinds' building changed." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/chain.rs"]
-stamp = { hash = "b3:2fa16c5060f94a3d", by = "agent:sky-backdrop", note = "Re-read the Sky backdrops paragraph against chain.rs SkyState::step and snapshot.rs draw_sky_of: drawn frame, ramped warp, mean-rate travel, reset on a step back or over a second; matches." }
+stamp = { hash = "b3:08067e0022c9fbeb", by = "agent:sky-backdrop", note = "Re-read the Sky backdrops paragraph against chain.rs SkyState::step (dropping set after the step while warp is above its setting) and snapshot.rs; now names it." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/effect_packs.rs"]
 stamp = { hash = "b3:2dea51e38948ab0c", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Extended the upgrade paragraph to shader sources (Migration, ShaderSource::migrate, live sync after) and said a shader source loads before its pack verbatim; checked against effect_packs.rs, engine.rs and the new test; dropped the not-yet line for sources. | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Replaced 'not migrated yet' with the upgrade: older-version settings through Effect::migrate, fitted to the kind, newer ones kept, one revision with state.changed from client engine, saved, logged in undo history; checked against install_effects and Graph::upgrade_filters." }
@@ -2358,7 +2358,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:76781da5988deeee", by = "agent:sky-backdrop", note = "Re-read the Sky backdrops paragraph: draw_transition_skies' shown sky fading in now uses timing.progress (eased), which the paragraph's 'fading in' still describes; SkyState ramp and travel unchanged. | merge: Main's #1579 edited the still-upload paragraph (log once per still drawn as nothing); re-read it and the Sky backdrops paragraph, both accurate together. | kept from the merged side: a program-stage draw that finds neither pixels nor texture now logs once per shown still, and the stills thread logs each decode again; added both to the still paragraph (#1562)" }
+stamp = { hash = "b3:f8d7b001c98efa99", by = "agent:sky-backdrop", note = "Re-read the Sky backdrops paragraph against chain.rs SkyState::step (dropping set after the step while warp is above its setting) and snapshot.rs; now names it. | kept from the merged side: a program-stage draw that finds neither pixels nor texture now logs once per shown still, and the stills thread logs each decode again; added both to the still paragraph (#1562)" }
 
 ["CRATE-jstream-core#timelines"."body"]
 stamp = { hash = "b3:2d341c6156859b72", by = "agent:claude", note = "This PR: the body's paragraph on timeline labels, checked at timeline.labels and sorted. Merge: #1267's late-tick fixes in timelines.rs and tests/timelines.rs (#1261, #1267, #1269, #1281, #1283, #1284, #1293, #1299, #1302, #1316 and #1319). On re-reading, both match the code. | kept from the merged side: Re-read against #1253: added the sentence that a round sends each looped/ended in time order with its cues, after those due at or before the pass boundary, and drops it when such a cue stopped or restarted that run (send_timeline_step); the rest (rounds, skipped fires, cue_at, seek, removal) holds." }
@@ -2448,7 +2448,7 @@ stamp = { hash = "b3:01ad296c6270687e", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:048747410023f472", by = "agent:claude", note = "core outputs now says the program readback can be NV12; the daemon's design text doesn't describe the readback, still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:76598958cf761499", by = "agent:sky-backdrop", note = "Re-read: the daemon still just builds the engine; the snapshots section's new sky state (warp ramp, travel in Chains) changes nothing it describes. | merge: Main's #1579 changed the snapshots section's still-upload paragraph (logging a still drawn as nothing); the daemon's design text doesn't depend on it and still holds. | kept from the merged side: re-read the daemon design: it relies on video.snapshot and the snapshot section only for what draws, which the added still log lines don't change" }
+stamp = { hash = "b3:097b1ed8b4901a75", by = "agent:sky-backdrop", note = "Re-read: the snapshots section now notes SkyState's dropping flag; the daemon's design text doesn't depend on it and still holds. | kept from the merged side: re-read the daemon design: it relies on video.snapshot and the snapshot section only for what draws, which the added still log lines don't change" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note = "depends_on now names the core sections this design links to (#design for one engine and a session per connection, #snapshots for live sources, #outputs for the placeholder outputs, #wasm-plugins, #logging, #audit-log) instead of the whole old core #design, which is split into topic sections; re-read those passages against them; holds | merge: #1126 changes only core #wasm-plugins' Disabling bullet (save before the event); the daemon's saved-plugin passage still holds; the other core deps are unchanged by the merge" }
@@ -3072,7 +3072,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:7cc5118e7c6596e8", by = "agent:sky-backdrop", note = "Re-read the design-list sky entry: still accurate after the guidance names the blue glow ahead at warp." }
+stamp = { hash = "b3:d62334a8d37607fb", by = "agent:sky-backdrop", note = "Re-read the design-list sky entry: still accurate with the added drop-out zoom guidance." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3105,7 +3105,7 @@ stamp = { hash = "b3:af5c949db44560d1", by = "agent:ptz-builder", note = "OPEN_W
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:7cc5118e7c6596e8", by = "agent:sky-backdrop", note = "Re-read: design.rs only adds the warp's blue glow ahead to the sky guidance; the crate's purpose is unchanged." }
+stamp = { hash = "b3:d62334a8d37607fb", by = "agent:sky-backdrop", note = "Re-read: design.rs adds the zoom back as the warp drops to the sky guidance; purpose unchanged." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -5211,13 +5211,13 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: step
 stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: the Color bullet says over_black and mix blend in the Blending space given, encoded for srgb and linear light for linear, matching color.rs and scene.rs" }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky.rs"]
-stamp = { hash = "b3:b43fe5d74e8c36e3", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: the Doppler, aberration and nebula styles are shader-only, one more uniform lane (seed.y = beta), no new resource or draw path." }
+stamp = { hash = "b3:be148cd6718a63a0", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: dropping is one more uniform lane, no new resource or draw path." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:2d2ba70671282976", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: the glow and cooler shift are shader-only, no new resource, uniform lane or draw path." }
+stamp = { hash = "b3:a19ceede45cbae27", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: dropping is one more uniform lane, no new resource or draw path." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:82678af0adc77d49", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: the glow and cooler shift are shader-only, no new resource, uniform lane or draw path." }
+stamp = { hash = "b3:78c1f811bece08f5", by = "agent:sky-backdrop", note = "Re-read the resource table and draw sections: dropping is one more uniform lane, no new resource or draw path." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "Only tests and the params refactor in gauss.rs changed; the pipeline steps, including the resolve's load on software adapters, still hold." }
@@ -5505,7 +5505,7 @@ stamp = { hash = "b3:a4fdee2216af9c7a", by = "agent:shader-source", note = "Prog
 stamp = { hash = "b3:73fa9d7c864c0a4f", by = "agent:lane-d", note = "border gains speed_unit (px_s default) and lap_beats (-64..64, default 4, 0 still); the paragraph gives the beats rule (perimeter x FilterClock::beat / lap_beats) matching border.rs uniforms; apply_filter's clock now also carries beat (ADR-0148) | merge: Main→wave sync. This branch only merged; the merge brought #1441 and #1448 (drop shadow and glow bounded by content), #1436 and #1437 (the program stage draws H.264, JPEG and PNG scene and program streams, #1221), #1413 and #1458 (scene view depth, depth fog, light sources, ADR-0143), #1420 (scanlines filter, #1406), #1451 (wipe a layer's known content), #1452 (resolve samples the working target), #1454/#1456 and #1461 (lost devices), #1432 (#1268, a compositor's own wgpu errors on the shared context), #1459 (NV12 readback of the program mix) and #1462, #1463 and #1464 (warm scenes). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Added depth to the module list and a Depth-aware kinds paragraph: set_depth/ViewDepth, reads_depth, pass-through, listed by depth_filter_descriptors not video_filter_descriptors yet, and depth_fog's settings and formula as fog.rs and fog.wgsl draw them." }
 
 ["CRATE-jstream-render#purpose"."body"]
-stamp = { hash = "b3:bea1689e59afc377", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: faster deep-sky fade, cooler-leaning Doppler, and the radiation() blue glow where the Doppler factor exceeds 1; the bullet now names them." }
+stamp = { hash = "b3:5abc2661bdbf569d", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl and sky.rs: SkyDraw::dropping (seed.z) brings the deep sky back early, read further out in v by up to 3 and blurred over 9 taps; the bullet now names it." }
 
 ["CRATE-jstream-render#purpose"."dep:crates/jstream-platform/README.md#gpu-frames"]
 stamp = { hash = "b3:5d8e0c98027957ce", by = "agent:lane-a", note = "S1 (#1194): compositors on one context share its loss watch, context_lost added; per-device error handler note now names the preview's and snapshot compositors" }
@@ -5853,13 +5853,13 @@ stamp = { hash = "b3:8e5151517a997eb7", by = "agent:lane-d", note = "#1230: the 
 stamp = { hash = "b3:17129a14b7ba4ce4", by = "agent:claude", note = "re-applied this PR's commit (aa37bc1e) onto wave/alpha5, which already has #1298; re-read: Color::over_black and mix take a Blending; the purpose names no colour space for them, so it holds" }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky.rs"]
-stamp = { hash = "b3:b43fe5d74e8c36e3", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: seed Style (size, cover, churn, wisps, dust, gathering), seeded band tilt, deep sky fading at warp, aberration as a rapidity shift in log-tan, Doppler tint and squared brightness clamp; matches." }
+stamp = { hash = "b3:be148cd6718a63a0", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl and sky.rs: SkyDraw::dropping (seed.z) brings the deep sky back early, read further out in v by up to 3 and blurred over 9 taps; the bullet now names it." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky.wgsl"]
-stamp = { hash = "b3:2d2ba70671282976", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: faster deep-sky fade, cooler-leaning Doppler, and the radiation() blue glow where the Doppler factor exceeds 1; the bullet now names them." }
+stamp = { hash = "b3:a19ceede45cbae27", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl and sky.rs: SkyDraw::dropping (seed.z) brings the deep sky back early, read further out in v by up to 3 and blurred over 9 taps; the bullet now names it." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/sky/tests.rs"]
-stamp = { hash = "b3:82678af0adc77d49", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl: faster deep-sky fade, cooler-leaning Doppler, and the radiation() blue glow where the Doppler factor exceeds 1; the bullet now names them." }
+stamp = { hash = "b3:78c1f811bece08f5", by = "agent:sky-backdrop", note = "Re-read the sky bullet against sky.wgsl and sky.rs: SkyDraw::dropping (seed.z) brings the deep sky back early, read further out in v by up to 3 and blurred over 9 taps; the bullet now names it." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/tests.rs"]
 stamp = { hash = "b3:65848b96c8c91aae", by = "agent:claude", note = "Tests and a params refactor only: the crate's purpose and scope are unchanged." }

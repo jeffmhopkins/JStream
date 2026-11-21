@@ -6827,9 +6827,9 @@ fn draw_sky_of(
         let mut skies = chains.skies.borrow_mut();
         let state = skies.entry(scene.clone()).or_default();
         state.step(cache.frame(), at.as_secs_f64(), (sky.warp, sky.warp_ramp_s));
-        (state.warp, state.travel)
+        (state.warp, state.travel, state.dropping)
     };
-    let (warp, travel) = travel;
+    let (warp, travel, dropping) = travel;
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
     compositor.draw_sky(
         &jstream_render::SkyDraw {
@@ -6846,6 +6846,7 @@ fn draw_sky_of(
             },
             warp,
             travel,
+            dropping,
         },
         target,
     )?;

@@ -41,6 +41,9 @@ pub struct SkyDraw<'a> {
     /// units [`SkyDraw::travel_rate`] advances: the engine adds the rate times each
     /// frame's time, so a warp that ramps up and down moves them smoothly.
     pub travel: f64,
+    /// Whether the warp is dropping toward a lower setting: as it comes out of warp the
+    /// nebulae and band rush back out from straight ahead and settle, rather than fade.
+    pub dropping: bool,
 }
 
 /// A backdrop's nebulae and galaxy band (ADR-0167), drawn over its sky, under its stars.
@@ -381,7 +384,7 @@ fn sky_values(
         f32::from_bits(faint.0),
         f32::from_bits(deep.seed),
         warp * MAX_WARP_BETA,
-        0.0,
+        if sky.dropping { 1.0 } else { 0.0 },
         0.0,
     ]
 }

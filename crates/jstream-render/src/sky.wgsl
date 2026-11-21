@@ -31,7 +31,8 @@ struct Sky {
     // z: the same fraction of a faint cell; w: its whole faint cells, as u32 bits.
     travel: vec4<f32>,
     // x: the seed, as u32 bits; y: the warp's speed as a fraction of light's, which
-    // crowds the stars ahead and shifts their light; zw: unused.
+    // crowds the stars ahead and shifts their light; z: 1 while the warp is dropping;
+    // w: unused.
     seed: vec4<f32>,
 }
 
@@ -355,15 +356,28 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
     let length_v = u.stars.w;
     // The deep sky blurs along the streaks as the warp builds, and fades out by the time
     // it's at speed: at warp only the stars are seen.
-    let deep = 1.0 - smoothstep(0.0, 0.25, beta() / 0.9);
+    let warp = beta() / 0.9;
+    let dropping = u.seed.z > 0.5;
+    // Going into warp the deep sky blurs along the streaks and is gone by a quarter of
+    // the way. Coming out it returns sooner, squeezed toward straight ahead, and rushes
+    // back out to its place as the warp collapses: a zoom, blurred along its rush.
+    var deep = 1.0 - smoothstep(0.0, 0.25, warp);
+    var zoom = 0.0;
+    if dropping {
+        deep = 1.0 - smoothstep(0.15, 0.55, warp);
+        zoom = 3.0 * smoothstep(0.0, 0.55, warp);
+    }
     if (u.nebula.w > 0.0 || u.nebula_2.w > 0.0) && deep > 0.0 {
-        if length_v > 0.01 {
+        let reach = select(length_v, zoom * 0.6, dropping);
+        if reach > 0.01 || zoom > 0.0 {
             let at = about_travel(d);
             var sum = vec3<f32>(0.0);
-            for (var k = 0; k < 5; k++) {
-                sum += deep_sky(from_travel(at.x, at.y - length_v * f32(k) * 0.25));
+            // More taps for the long rush out of warp, so it smears rather than ghosts.
+            let taps = select(5, 9, dropping);
+            for (var k = 0; k < taps; k++) {
+                sum += deep_sky(from_travel(at.x, at.y + zoom - reach * f32(k) / f32(taps - 1)));
             }
-            c += sum / 5.0 * deep;
+            c += sum / f32(taps) * deep;
         } else {
             c += deep_sky(d) * deep;
         }
