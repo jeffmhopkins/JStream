@@ -26,7 +26,8 @@ pub struct ThreadTime {
     /// The thread's name, as the OS reports it, or empty for an unnamed thread. Linux
     /// keeps the first 15 bytes of a name. Windows names a thread that has none after
     /// the module it started in (`unnamed: mfplat.dll`), so the threads a library or
-    /// driver starts are told apart.
+    /// driver starts are told apart where they start in its own code (thread-pool
+    /// workers all start in `ntdll.dll`).
     pub name: String,
     /// The CPU time it has used since it started, in user and kernel mode.
     pub cpu: Duration,

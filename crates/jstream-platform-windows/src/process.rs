@@ -11,6 +11,8 @@
 //! thread with no description (one the OS, a driver or a library started) is named
 //! after the module its start address is in, as `unnamed: mfplat.dll`, so the profile
 //! splits them by where they came from instead of summing them under no name (#1556).
+//! A thread-pool worker starts in `ntdll.dll` whoever queued its work, so those all list
+//! as `unnamed: ntdll.dll`.
 //! **`WindowsThreadPriority`** (`ThreadPriority`): MMCSS through
 //! `AvSetMmThreadCharacteristicsW`, the `Playback` task for video and `Pro Audio` for
 //! audio, reverted when the guard drops.

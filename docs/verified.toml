@@ -2307,7 +2307,7 @@ stamp = { hash = "b3:5701f7cb5f0a502c", by = "agent:claude", note = "added that 
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:d54335c9864c145a", by = "agent:claude", note = "#1556: added that the thread paints a painter with a slot only once the time its last paint's next_change gave has come (rounded as its wake is), so a tick another source asked for leaves a timer alone and profile.get's paints counts redraws" }
+stamp = { hash = "b3:e670ce9f396f54f2", by = "agent:claude", note = "review N1: added that a polling painter (settled scope or MIDI every 250 ms, chat every 100 ms) now notices new input within its own interval, as when alone, since the thread paints a slotted painter only when due" }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2433,7 +2433,7 @@ stamp = { hash = "b3:01ad296c6270687e", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:048747410023f472", by = "agent:claude", note = "core outputs now says the program readback can be NV12; the daemon's design text doesn't describe the readback, still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:d54335c9864c145a", by = "agent:claude", note = "#1556: its snapshots dependency now says the sources thread paints a slotted painter only once it is due; the daemon's design (hosting the engine, pages, devices) doesn't depend on when painters are painted, holds" }
+stamp = { hash = "b3:e670ce9f396f54f2", by = "agent:claude", note = "its snapshots dependency gained the polling-painter sentence (review N1); the daemon's design doesn't depend on when painters are painted, holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:29418ea6d89f5d31", by = "agent:narrow-hot-sections", note = "depends_on now names the core sections this design links to (#design for one engine and a session per connection, #snapshots for live sources, #outputs for the placeholder outputs, #wasm-plugins, #logging, #audit-log) instead of the whole old core #design, which is split into topic sections; re-read those passages against them; holds | merge: #1126 changes only core #wasm-plugins' Disabling bullet (save before the event); the daemon's saved-plugin passage still holds; the other core deps are unchanged by the merge" }
@@ -3390,7 +3390,7 @@ stamp = { hash = "b3:32dfd0839d7d2153", by = "agent:claude", note = "added paths
 stamp = { hash = "b3:a0933b20221c3637", by = "agent:claude-settings", note = "CLAP plugin hosts bullet now names PluginHosts::folders, every folder searched whether it exists, defaulting to search_paths; matches plugin_host.rs" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/process.rs"]
-stamp = { hash = "b3:f053d4221ef5d173", by = "agent:claude", note = "#1556: only ThreadTime::name's rustdoc grew (Windows names an undescribed thread after the module it started in); the Process CPU paragraph (ID, name and CPU time per thread) still holds" }
+stamp = { hash = "b3:79ee23ba0e4b255b", by = "agent:claude", note = "review N2: ThreadTime::name's rustdoc now says thread-pool workers all start in ntdll.dll; the Process CPU paragraph still holds" }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/surface.rs"]
 stamp = { hash = "b3:acaa4ad70c04147a" }
@@ -4095,7 +4095,7 @@ stamp = { hash = "b3:381acb6b66c0c91d", by = "agent:claude-settings", note = "Wi
 stamp = { hash = "b3:27ddf488a7b09c9d", by = "agent:readme-scrub", note = "Trimmed Purpose from 635 lines to a map: role, layer, unsafe and bindings policy, a table of every backend type with its trait and module, the not-yet list and a test summary that keeps the hw-tests command and what a hardware run needs. Each backend's behaviour moved, nearly verbatim, into its module's rustdoc under a Behaviour heading (clock, process, audio, capture, codec, video_device, decode, gpu, vcam, credential, private_file, n_edition, vcam_register, plugin_block), with text already in a module's own doc left out and capture's stale 'GPU path waits' line replaced. Checked every type, trait and module in the table against src/. Open questions unchanged except its pointer to the first-frame fallback." }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/process.rs"]
-stamp = { hash = "b3:708713eb83f66114", by = "agent:claude", note = "#1556: WindowsThreadCpu names a thread without a description after the module its start address is in (NtQueryInformationThread, GetModuleHandleExW); the table row for process.rs says so, the rest of the crate map holds" }
+stamp = { hash = "b3:d8e8e2b7f949ee44", by = "agent:claude", note = "review N2: process.rs rustdoc now says thread-pool workers all list as unnamed: ntdll.dll; the table row still holds" }
 
 ["CRATE-jstream-platform-windows#purpose"."file:crates/jstream-platform-windows/src/security.rs"]
 stamp = { hash = "b3:bc20d2f397516962", by = "agent:lane-e", note = "security::check no longer counts app package and capability SIDs (S-1-15-2/3) as another account; the private-file bullet now says so and why (#1189)" }
@@ -6114,7 +6114,7 @@ stamp = { hash = "b3:52a007ff2f245d4c", by = "agent:claude", note = "Adds the mi
 stamp = { hash = "b3:dee1aec3fce7471a", by = "agent:audio-motion", note = "AudioMeter bullet now describes raw (RawMeasure), measure_levels (no FFT, review B2) and band(low_hz, high_hz) as meter.rs implements them, and the tests line names the band test's assertions and the levels-only measure. | merge: the wave didn't change this input; this branch's change to it is as described." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/scope/mod.rs"]
-stamp = { hash = "b3:60c66820335961c9", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
+stamp = { hash = "b3:8a687f31caf0349d", by = "agent:claude", note = "#1556: only a comment in scope update changed (a restyle is applied at the next paint, within STILL_MS while settled, since the host paints a painter when it is due); the crate's purpose holds" }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/scope/spectrum.rs"]
 stamp = { hash = "b3:35379e241b72062a", by = "agent:shader-source", note = "Scope entry adds heard_source and heard_scope for a shader source with audio/audio_source settings; new AudioMeter entry (scope/meter.rs): level, peak, onset, 64 log bands on spectrum's dB scale, 64-point wave, FFT planned in new so measure allocates nothing and takes no lock, silence after STILL_MS, one test. spectrum.rs only made height and the Hz bounds pub(super)." }

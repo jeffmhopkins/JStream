@@ -2454,7 +2454,9 @@ while something else re-plans every frame, and of those it paints one with a slo
 once the time its last paint's `next_change` gave has come (rounded as its wake is), so
 a tick another source asked for (a page re-plans every program frame) leaves a timer
 whose text changes once a second alone, and `profile.get`'s `paints` counts its
-redraws, not the program's frames (#1556); a plan that reaches one again paints it for
+redraws, not the program's frames (#1556). A painter that polls (a settled scope or MIDI
+source every 250 ms, `chat_message` every 100 ms) so notices new sound, notes or a
+featured message within its own interval, as it does when it is alone; a plan that reaches one again paints it for
 the current time first, under the lock, so it never shows the frame it had when it was
 last drawn. Every other built kind makes its frames when built, or (a `media` file) decodes
 them ahead on a thread of its own, so apart from that catch-up the plan's `frame`
