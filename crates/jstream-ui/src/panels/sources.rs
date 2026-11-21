@@ -707,7 +707,8 @@ pub fn Sources() -> impl IntoView {
                         Entry::Sep,
                         Entry::item("Delete source everywhere…", move || {
                             ask_delete(source.clone(), name.clone());
-                        }),
+                        })
+                        .danger(),
                     ]);
                 }
                 menus.open(&event, entries);

@@ -827,7 +827,8 @@ pub fn Scenes() -> impl IntoView {
                                     delete_name.clone(),
                                 );
                             })
-                            .hint("Del"),
+                            .hint("Del")
+                            .danger(),
                         ],
                     );
                     return;
@@ -970,7 +971,8 @@ pub fn Scenes() -> impl IntoView {
                         Entry::item("Delete scene", move || {
                             ask_delete(delete_id.clone(), delete_name.clone());
                         })
-                        .hint("Del"),
+                        .hint("Del")
+                        .danger(),
                     ],
                 );
             }
@@ -1163,7 +1165,8 @@ pub fn Scenes() -> impl IntoView {
                             Entry::item("Delete folder", move || {
                                 ask_delete_folder(delete_id.clone(), delete_name.clone());
                             })
-                            .hint("Del"),
+                            .hint("Del")
+                            .danger(),
                         ],
                     );
                 }

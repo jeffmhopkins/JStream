@@ -1266,6 +1266,7 @@ impl Panel {
                 Entry::item("Delete…", move || {
                     self.deleting.set(Some(output_id.clone()))
                 })
+                .danger()
                 .disabled_if(running),
             ],
         );
@@ -1513,7 +1514,7 @@ pub fn Outputs() -> impl IntoView {
                     <div class="modal-footer">
                         <button
                             type="button"
-                            class="primary"
+                            class="secondary"
                             data-primary
                             on:click=move |_| close_libraries()
                         >
