@@ -262,7 +262,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   the engine's `LiveData` (`jstream-sources`, one per engine, `Engine::live_data`) under
   the sender's name, counted as `state`, or as `state_dropped` when it isn't one JSON
   value or is over a bound, as is a message forgotten part-way; a resend of a finished
-  message keeps its key current, a new stream ID forgets the sender's keys, every
+  message keeps its key current, and is taken again whole when its key expired or its
+  message was refused for room (`StateAssembler::forget`), a new stream ID forgets the sender's keys, every
   second keys not kept current for 3 s go, and a receiver that stops forgets its
   senders' state. `data.list` and `data.get` (protocol 0.133) answer from `LiveData` on
   its own lock, outside the collection lock; `profile.get`'s `network` carries the three

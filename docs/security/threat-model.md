@@ -749,8 +749,9 @@ somewhere it shouldn't.
   accepted sender (the desktop app's checkbox, the daemon's `--jtunnel-state`), off by
   default. Taken, they are bounded: a key of 1 to 63 of `[A-Za-z0-9/_.-]`, a message of
   at most 64 pieces and 76,800 bytes that must be one JSON value nested no deeper than
-  32, at most 128 messages part-way, 1,024 keys and 4 MiB per sender, and a key not
-  resent for 3 s goes. They land in the engine's live data, which protocol clients only
+  32, at most 128 messages part-way, 1,024 keys and 4 MiB of JSON per sender (counted
+  as sent; the parsed values take several times that in memory), and a key not resent
+  for 3 s goes until its next resend. They land in the engine's live data, which protocol clients only
   read (`data.list`, `data.get`, the sender's text marked `remote_`) and plugins can't;
   nothing in them runs a command.
 - An mDNS answer from a LAN address's port 5353 only lists a sender in

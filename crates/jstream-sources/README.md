@@ -195,8 +195,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
 - `LiveData` (`data.rs`, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decision 2): each JTunnel sender's newest state message per key, as a JSON value,
   which the engine's JTunnel receiver fills with `put` (one JSON value of at most
-  76,800 bytes nested no deeper than 32; at most 1,024 keys, 4 MiB and 32 senders) and
-  `touch` (a resend keeps the key current), and empties with `restart` and `expire`
+  76,800 bytes nested no deeper than 32; at most 1,024 keys, 4 MiB of JSON as sent and
+  32 senders) and `touch` (a resend keeps the key current, and says when the key is
+  gone so the caller puts it again), and empties with `restart` and `expire`
   (a key not kept current for 3 s). `list` and `get` answer `data.list` and `data.get`.
   `watch` hands out a `DataCell` for a `DataWatch` (a sender or any, a key, a dotted
   field of object names and list indexes from 0, and whether a `#rrggbb` text reads as

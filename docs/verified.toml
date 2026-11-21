@@ -1974,7 +1974,7 @@ stamp = { hash = "b3:66ca5407f4e58d13", by = "agent:wave-owner", note = "merge: 
 stamp = { hash = "b3:25f97d745679c9e0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."body"]
-stamp = { hash = "b3:38d6c9b80c00a4f7", by = "agent:claude", note = "Re-read and edited the JTunnel receiver bullet: state packets dropped as state_off unless AcceptedSender::with_state, StateAssembler into the engine LiveData, state/state_dropped counters, resend, new stream, 3 s expiry and stop forgetting; data.list/data.get outside the collection lock; the new loopback and engine tests listed. | merge: merge of main (#1591, protocol 0.127: share_space, camera_anchor, scene.set_camera_anchor, ADR-0164) re-read: its additions sit beside this PR's data.list/data.get and state counters without conflict; this section still holds for both. | kept from the merged side: Added the 3D groups paragraph: collect plans a sharing group's children into the scene's pass with GroupLinks, each frame places them through GroupPose after live values and motion, transitions place them as planned, PassCamera.anchor places the camera, and a follow camera ignores the anchor; covers now lists snapshot/groups.rs." }
+stamp = { hash = "b3:8d5e3edc0dd110dd", by = "agent:claude", note = "Re-read and edited for review B1: a resend of a finished message is taken again whole when its key expired or was refused for room (StateAssembler::forget); the tests list holds the gap-then-resend case. Earlier note: the JTunnel receiver state bullet (state_off gate, StateAssembler into LiveData, counters, expiry, data.list/data.get outside the collection lock) still holds. | kept from the merged side: Added the 3D groups paragraph: collect plans a sharing group's children into the scene's pass with GroupLinks, each frame places them through GroupPose after live values and motion, transitions place them as planned, PassCamera.anchor places the camera, and a follow camera ignores the anchor; covers now lists snapshot/groups.rs." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/activity.rs"]
 stamp = { hash = "b3:ff5e2c24579293a0", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
@@ -1986,10 +1986,10 @@ stamp = { hash = "b3:25f2f3b47ccb9f93", by = "agent:claude", note = "Re-read for
 stamp = { hash = "b3:f7362809da0fae8d", by = "agent:perf-thread", note = "merge: #1293 split this out of Purpose. Re-read it against this branch: live.rs, snapshot.rs and frames.rs gain frame slots and sheet pinning, which the Live sources, Snapshots and Frame sheets design sections describe. This summary still holds. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/mod.rs"]
-stamp = { hash = "b3:aa76384725af5c82", by = "agent:claude", note = "Re-read and edited the JTunnel receiver bullet: state packets dropped as state_off unless AcceptedSender::with_state, StateAssembler into the engine LiveData, state/state_dropped counters, resend, new stream, 3 s expiry and stop forgetting; data.list/data.get outside the collection lock; the new loopback and engine tests listed." }
+stamp = { hash = "b3:8c77a343a2224fe0", by = "agent:claude", note = "Re-read and edited for review B1: a resend of a finished message is taken again whole when its key expired or was refused for room (StateAssembler::forget); the tests list holds the gap-then-resend case. Earlier note: the JTunnel receiver state bullet (state_off gate, StateAssembler into LiveData, counters, expiry, data.list/data.get outside the collection lock) still holds." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/jtunnel/tests.rs"]
-stamp = { hash = "b3:cd69f6aab7d73118", by = "agent:claude", note = "Re-read and edited the JTunnel receiver bullet: state packets dropped as state_off unless AcceptedSender::with_state, StateAssembler into the engine LiveData, state/state_dropped counters, resend, new stream, 3 s expiry and stop forgetting; data.list/data.get outside the collection lock; the new loopback and engine tests listed." }
+stamp = { hash = "b3:e90b249930789b5f", by = "agent:claude", note = "Re-read and edited for review B1: a resend of a finished message is taken again whole when its key expired or was refused for room (StateAssembler::forget); the tests list holds the gap-then-resend case. Earlier note: the JTunnel receiver state bullet (state_off gate, StateAssembler into LiveData, counters, expiry, data.list/data.get outside the collection lock) still holds." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/live.rs"]
 stamp = { hash = "b3:b2855255b9258e10", by = "agent:claude", note = "#1556: the sources thread now paints a painter with a slot only once its last next_change is due; the section's account of live sources (built, rebuilt, dropped on the jstream-sources thread, frames on the media clock) still holds" }
@@ -3048,7 +3048,7 @@ stamp = { hash = "b3:0a860e04dbcddc2d", by = "agent:3d-groups", note = "Added Sc
 stamp = { hash = "b3:bc365c27a1f12a16", by = "agent:claude", note = "Edited: schema_version 9 placeholder for an override's timing, the 8 to 9 migration, and item.set_timing on load; set_timing, Prop::Timing and the preset easing check hold" }
 
 ["CRATE-jstream-jtunnel#purpose"."body"]
-stamp = { hash = "b3:6e39146769b4df1f", by = "agent:claude", note = "Re-read and edited for ADR-0171 decision 1: wire now lists the state packet (StatePiece, is_state_key, write_state, nothing after the data), the new StateAssembler bullet (per key, Repeat for a resend, new stream resets, 128 part-way, 1,024 keys remembered), and the C++ bytes test covering a state piece." }
+stamp = { hash = "b3:6dd0063968c3bf93", by = "agent:claude", note = "Re-read and edited for review B1: StateAssembler gains forget, so a caller can take a resend of a message it lost; its tests cover that and a new piece count under one message (N2). The state packet and assembler text from the first round still holds." }
 
 ["CRATE-jstream-jtunnel#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-jtunnel"]
 stamp = { hash = "b3:e1f8635b11f1bf1a", by = "agent:claude", note = "Re-read and edited for ADR-0171 decision 1: wire now lists the state packet (StatePiece, is_state_key, write_state, nothing after the data), the new StateAssembler bullet (per key, Repeat for a resend, new stream resets, 128 part-way, 1,024 keys remembered), and the C++ bytes test covering a state piece." }
@@ -3069,7 +3069,7 @@ stamp = { hash = "b3:d78e46dc14006613", by = "agent:r9bzj2", note = "Re-read aga
 stamp = { hash = "b3:3f73e066c99b1fda", by = "agent:claude", note = "New crate: re-read against src (wire v2 parse/write matching JTunnel's protocol.cpp checks, trailing bytes ignored, events/raw_events, decode_pcm24, golden-bytes test from JTunnel's C++ writer, SysexAssembler, SeqTracker 64-frame window and restart rule, dnssd query/announcements/Directory 35 s forget) and tests/no_alloc.rs" }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/state.rs"]
-stamp = { hash = "b3:99cd35f189e9517f", by = "agent:claude", note = "Re-read and edited for ADR-0171 decision 1: wire now lists the state packet (StatePiece, is_state_key, write_state, nothing after the data), the new StateAssembler bullet (per key, Repeat for a resend, new stream resets, 128 part-way, 1,024 keys remembered), and the C++ bytes test covering a state piece." }
+stamp = { hash = "b3:34eb498e70cb1fa1", by = "agent:claude", note = "Re-read and edited for review B1: StateAssembler gains forget, so a caller can take a resend of a message it lost; its tests cover that and a new piece count under one message (N2). The state packet and assembler text from the first round still holds." }
 
 ["CRATE-jstream-jtunnel#purpose"."file:crates/jstream-jtunnel/src/sysex.rs"]
 stamp = { hash = "b3:f372f4393411319f", by = "agent:claude", note = "New crate: re-read against src (wire v2 parse/write matching JTunnel's protocol.cpp checks, trailing bytes ignored, events/raw_events, decode_pcm24, golden-bytes test from JTunnel's C++ writer, SysexAssembler, SeqTracker 64-frame window and restart rule, dnssd query/announcements/Directory 35 s forget) and tests/no_alloc.rs" }
@@ -6099,7 +6099,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:2acaf2288ea6afe1", by = "agent:claude", note = "Re-read and edited: new LiveData bullet (data.rs, ADR-0171 decision 2): put/touch/restart/expire and their bounds, list/get for data.list/data.get, watch and DataCell (one NaN-boxed u64, text_hash, colour), shared and forgotten watches. The rest of the section is unchanged by this diff." }
+stamp = { hash = "b3:6ae7636d76703feb", by = "agent:claude", note = "Re-read and edited for review B1 and N1: touch says when the key is gone so the caller puts it again, and the 4 MiB bound is of JSON as sent. The rest of the LiveData bullet still holds." }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }
@@ -6141,7 +6141,7 @@ stamp = { hash = "b3:3d37b631c2a2b2e7", by = "agent:perf-thread", note = "Painte
 stamp = { hash = "b3:7b80176800be4eda", by = "agent:obs-ui-thread", note = "Re-read: the change only respells user-facing strings from colour to color (kind names, parameter labels, descriptions, error text) for one US spelling across the UI, as OBS and the prototype use; nothing this section describes changed (the docs' own prose keeps the project's spelling)." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/data.rs"]
-stamp = { hash = "b3:5cd9598f7475437e", by = "agent:claude", note = "Re-read and edited: new LiveData bullet (data.rs, ADR-0171 decision 2): put/touch/restart/expire and their bounds, list/get for data.list/data.get, watch and DataCell (one NaN-boxed u64, text_hash, colour), shared and forgotten watches. The rest of the section is unchanged by this diff." }
+stamp = { hash = "b3:1b8fc54643f82175", by = "agent:claude", note = "Re-read and edited for review B1 and N1: touch says when the key is gone so the caller puts it again, and the 4 MiB bound is of JSON as sent. The rest of the LiveData bullet still holds." }
 
 ["CRATE-jstream-sources#purpose"."file:crates/jstream-sources/src/describe.rs"]
 stamp = { hash = "b3:7ca129062ff4a458", by = "agent:page-api-review", note = "Page API group: page_api_shared_values and page_api_audio checkboxes gate page_api_values and page_api_bus, each setting's warning listed, and the spectrogram example added; describe.rs only adds warning: None" }
@@ -8007,7 +8007,7 @@ stamp = { hash = "b3:8c7a85b215d09cba", by = "agent:mac-browser", note = "One cf
 stamp = { hash = "b3:b23072c2189801ff", by = "agent:claude", note = "Edited: the Page API paragraph lists the engine's tempo as its own grant (ADR-0124 decision 7): tempo.* never reaches a page through the shared values grant, and a MIDI reading has a tempo only with it." }
 
 ["THREAT-MODEL#lan-inputs"."body"]
-stamp = { hash = "b3:e798216b8f356044", by = "agent:claude", note = "Re-read and edited: new control for state packets (ADR-0171): dropped unless Use this sender state is on, the key, piece, size, depth, part-way, key and byte bounds, 3 s expiry, read-only over the protocol with remote_ text, no plugin, nothing runs a command." }
+stamp = { hash = "b3:fdefb78e767868dd", by = "agent:claude", note = "Re-read and edited for review N1 and B1: the per-sender bound is 4 MiB of JSON as sent (parsed values take several times that), and an expired key returns on its next resend. The opt-in, bounds, read-only and no-plugin controls still hold." }
 
 ["THREAT-MODEL#lan-inputs"."dep:docs/RULES.md#R-SEC-002"]
 stamp = { hash = "b3:78fc3939e967388d", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }
@@ -8016,10 +8016,10 @@ stamp = { hash = "b3:78fc3939e967388d", by = "agent:claude", note = "New section
 stamp = { hash = "b3:566e43a3335da375", by = "agent:claude", note = "New section for ADR-0123's JTunnel receiver as built: off unless --jtunnel-accept, sends only subscribe/bye to LAN accepted senders, drops and counts outside-LAN, unaccepted and malformed datagrams, not a control listener; the accepted spoofing risk." }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/mod.rs"]
-stamp = { hash = "b3:aa76384725af5c82", by = "agent:claude", note = "Re-read and edited: new control for state packets (ADR-0171): dropped unless Use this sender state is on, the key, piece, size, depth, part-way, key and byte bounds, 3 s expiry, read-only over the protocol with remote_ text, no plugin, nothing runs a command." }
+stamp = { hash = "b3:8c77a343a2224fe0", by = "agent:claude", note = "Re-read and edited for review N1 and B1: the per-sender bound is 4 MiB of JSON as sent (parsed values take several times that), and an expired key returns on its next resend. The opt-in, bounds, read-only and no-plugin controls still hold." }
 
 ["THREAT-MODEL#lan-inputs"."file:crates/jstream-core/src/jtunnel/tests.rs"]
-stamp = { hash = "b3:cd69f6aab7d73118", by = "agent:claude", note = "Re-read and edited: new control for state packets (ADR-0171): dropped unless Use this sender state is on, the key, piece, size, depth, part-way, key and byte bounds, 3 s expiry, read-only over the protocol with remote_ text, no plugin, nothing runs a command." }
+stamp = { hash = "b3:e90b249930789b5f", by = "agent:claude", note = "Re-read and edited for review N1 and B1: the per-sender bound is 4 MiB of JSON as sent (parsed values take several times that), and an expired key returns on its next resend. The opt-in, bounds, read-only and no-plugin controls still hold." }
 
 ["THREAT-MODEL#mcp"."body"]
 stamp = { hash = "b3:98df5fd57774c8a1", by = "agent:claude-settings", note = "Re-read after #1229 build A: agent approval (ADR-0131), placeholder protocol 0.107: agent.* events/actions/query, not_allowed, EntityKind::Approval; jstream-server Approvals holds a control-token hello per session, ui_token credential, approvals file, non-blocking hello in session.rs, agent.* people-only in MCP; holds (edited where it lists commands, events, errors, versions, people-only MCP nouns, server parts or gate credentials)" }

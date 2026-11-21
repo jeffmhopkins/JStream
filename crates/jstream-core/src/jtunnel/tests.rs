@@ -737,3 +737,48 @@ fn a_senders_state_reaches_the_live_data_once_its_switch_is_on() {
     drop(receiver);
     assert!(data.list().is_empty());
 }
+
+/// The media clock, moved on by hand on top of real time.
+struct Shifted(Instant, Arc<AtomicU64>);
+
+impl MediaClock for Shifted {
+    fn timebase(&self) -> Timebase {
+        Timebase::NANOS
+    }
+
+    fn now(&self) -> MediaTime {
+        let ns = u64::try_from(self.0.elapsed().as_nanos()).unwrap_or(u64::MAX / 2)
+            + self.1.load(Ordering::Relaxed);
+        MediaTime::new(i64::try_from(ns).unwrap_or(i64::MAX), Timebase::NANOS)
+    }
+}
+
+/// #1597 review B1: a key that expired after a gap comes back with the sender's next
+/// resend of the same message, rather than staying absent until the message changes.
+#[test]
+fn an_expired_key_comes_back_with_its_next_resend() {
+    let sender = FakeSender::new();
+    let data = LiveData::new();
+    let mut setup = setup("Bitwig", &sender);
+    setup.accepted[0] = setup.accepted[0].clone().with_state(true);
+    let shift = Arc::new(AtomicU64::new(0));
+    let receiver = Receiver::start(
+        &setup,
+        Arc::new(Shifted(Instant::now(), Arc::clone(&shift))),
+        None,
+        data.clone(),
+        None,
+    )
+    .expect("a receiver");
+    let to = receiver.local_addr();
+    let track = piece(1, 1, 0, 1, "track/0", b"{\"name\":\"Drums\"}");
+    sender.state(to, &track);
+    assert!(eventually(|| data.get("Bitwig", "track/0").is_some()));
+    // Four seconds pass with nothing resent: the key goes.
+    shift.store(4_000_000_000, Ordering::Relaxed);
+    assert!(eventually(|| data.get("Bitwig", "track/0").is_none()));
+    // The resend of the same message brings it back.
+    sender.state(to, &track);
+    assert!(eventually(|| data.get("Bitwig", "track/0").is_some()));
+    assert_eq!(receiver.stats().state, 2);
+}

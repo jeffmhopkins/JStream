@@ -48,7 +48,8 @@ Contents:
   last finished is a `Repeat` (the sender's once-a-second resend, which keeps the key
   current); a new stream ID resets it and says so. At most `MAX_PARTIAL_STATE` (128)
   messages wait part-way, the one that waited longest forgotten and counted for one
-  more, and the last message of at most `MAX_STATE_KEYS` (1,024) keys is remembered.
+  more, and the last message of at most `MAX_STATE_KEYS` (1,024) keys is remembered;
+  `forget` drops one, so the caller can take a resend of a message it lost.
   It allocates, on the receive thread.
 - `SeqTracker`: per stream, tells a fresh frame from a repeat (a redundant copy) or a
   stale one, sees a restart (a new stream id, or a jump of more than 2^16), and counts

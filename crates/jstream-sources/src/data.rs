@@ -340,15 +340,20 @@ impl LiveData {
     }
 
     /// Notes that the sender `input` resent its message for `key` at `now_ms`, so the
-    /// key stays current.
-    pub fn touch(&self, input: &str, key: &str, now_ms: u64) {
-        if let Some(entry) = self
+    /// key stays current. Returns whether the key is here: `false` once it expired or
+    /// was forgotten, when the caller should put the resend in again.
+    pub fn touch(&self, input: &str, key: &str, now_ms: u64) -> bool {
+        match self
             .lock()
             .inputs
             .get_mut(input)
             .and_then(|i| i.keys.get_mut(key))
         {
-            entry.seen_ms = entry.seen_ms.max(now_ms);
+            Some(entry) => {
+                entry.seen_ms = entry.seen_ms.max(now_ms);
+                true
+            }
+            None => false,
         }
     }
 
@@ -547,7 +552,7 @@ mod tests {
             .unwrap();
         assert_eq!(cell.read(), DataReading::Number(1.0));
         // A resend keeps clock current; transport isn't resent.
-        data.touch("A", "clock", 3_500);
+        assert!(data.touch("A", "clock", 3_500));
         data.expire(4_000);
         assert_eq!(data.list()[0].1, vec!["clock".to_owned()]);
         assert_eq!(cell.read(), DataReading::Number(1.0));
@@ -555,6 +560,10 @@ mod tests {
         assert_eq!(cell.read(), DataReading::Absent);
         assert!(data.list().is_empty());
         assert!(data.get("A", "clock").is_none());
+        assert!(
+            !data.touch("A", "clock", 7_000),
+            "gone: the caller puts it again"
+        );
     }
 
     #[test]

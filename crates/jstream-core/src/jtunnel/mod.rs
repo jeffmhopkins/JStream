@@ -40,7 +40,9 @@
 //! ([`StateAssembler`]) and puts each whole message in the engine's [`LiveData`] under
 //! the sender's name, where a message that is not one JSON value or is over a bound is
 //! counted and dropped. A new stream ID forgets what the sender sent before, a key it
-//! stops resending goes after 3 s, and a receiver that stops forgets its senders' state.
+//! stops resending goes after 3 s (and comes back with its next resend), and a receiver
+//! that stops forgets its senders' state. A message refused for room is taken again
+//! when it is resent.
 
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
@@ -58,7 +60,7 @@ use jstream_media::{AudioFormat, ChannelLayout, MediaTime, Rounding, SampleForma
 use jstream_platform::{
     AudioInputHandler, AudioPacket, AudioPacketFlags, AudioStream, MediaClock, PlatformError,
 };
-use jstream_sources::{LiveData, MidiFeed, MidiInputs};
+use jstream_sources::{DataRefused, LiveData, MidiFeed, MidiInputs};
 
 /// How often a sender is subscribed to again: JTunnel's keepalive.
 const SUBSCRIBE_EVERY: Duration = Duration::from_millis(500);
@@ -965,19 +967,31 @@ impl Run {
         }
         let now = self.now_ms();
         let stream = &mut self.streams[index];
-        let pushed = stream.state.push(piece);
+        let mut pushed = stream.state.push(piece);
         if pushed.restarted {
             self.data.restart(&sender.name);
         }
-        match pushed.step {
-            StateStep::Whole(json) => {
-                match self.data.put(&sender.name, piece.key, &json, now) {
-                    Ok(()) => counters.state.fetch_add(1, Ordering::Relaxed),
-                    Err(_) => counters.state_dropped.fetch_add(1, Ordering::Relaxed),
-                };
+        if pushed.step == StateStep::Repeat && !self.data.touch(&sender.name, piece.key, now) {
+            // A resend of a message the live data no longer has (it expired after a gap,
+            // or a stopped receiver forgot it): take it again, at once for one piece and
+            // from the next resend round for more (#1597 review B1).
+            stream.state.forget(piece.key);
+            pushed = stream.state.push(piece);
+        }
+        if let StateStep::Whole(json) = pushed.step {
+            match self.data.put(&sender.name, piece.key, &json, now) {
+                Ok(()) => {
+                    counters.state.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(refused) => {
+                    counters.state_dropped.fetch_add(1, Ordering::Relaxed);
+                    // Refused for room, it may fit on a later resend once room frees up;
+                    // a message that isn't JSON never will.
+                    if matches!(refused, DataRefused::TooManyKeys | DataRefused::TooLarge) {
+                        stream.state.forget(piece.key);
+                    }
+                }
             }
-            StateStep::Repeat => self.data.touch(&sender.name, piece.key, now),
-            StateStep::Partial => {}
         }
         let evicted = stream.state.evicted();
         if evicted != stream.evicted {

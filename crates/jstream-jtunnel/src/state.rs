@@ -150,6 +150,13 @@ impl StateAssembler {
         }
     }
 
+    /// Forgets that `key` finished a message, so the next piece of it, a resend
+    /// included, is assembled again rather than taken as a [`StateStep::Repeat`]: for
+    /// a caller that lost or refused the message and wants it back.
+    pub fn forget(&mut self, key: &str) {
+        self.done.remove(key);
+    }
+
     /// Forgets everything: the stream, the messages part-way and the ones finished.
     pub fn reset(&mut self) {
         self.stream_id = None;
@@ -259,6 +266,37 @@ mod tests {
             pushed.step,
             StateStep::Whole(b"z".to_vec()),
             "not a repeat any more"
+        );
+    }
+
+    #[test]
+    fn a_forgotten_key_takes_its_resend_again() {
+        let mut a = StateAssembler::new();
+        a.push(&piece(1, 0, 1, "clock", b"{}"));
+        assert_eq!(
+            a.push(&piece(1, 0, 1, "clock", b"{}")).step,
+            StateStep::Repeat
+        );
+        a.forget("clock");
+        assert_eq!(
+            a.push(&piece(1, 0, 1, "clock", b"{}")).step,
+            StateStep::Whole(b"{}".to_vec())
+        );
+    }
+
+    #[test]
+    fn a_new_piece_count_under_the_same_message_starts_over() {
+        let mut a = StateAssembler::new();
+        assert!(
+            a.push(&piece(1, 0, 2, "k", b"a")).restarted,
+            "the first piece starts the stream"
+        );
+        assert_eq!(a.push(&piece(1, 1, 3, "k", b"b")).step, StateStep::Partial);
+        // Piece 0 of the two-piece form is gone: the three-piece one needs all three.
+        assert_eq!(a.push(&piece(1, 0, 3, "k", b"x")).step, StateStep::Partial);
+        assert_eq!(
+            a.push(&piece(1, 2, 3, "k", b"c")).step,
+            StateStep::Whole(b"xbc".to_vec())
         );
     }
 
