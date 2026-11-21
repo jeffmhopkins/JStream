@@ -91,12 +91,12 @@ pub fn recent_collections(path: &Path) -> Vec<PathBuf> {
 }
 
 /// What [`Engine::move_collection_file`](crate::Engine::move_collection_file) appends
-/// to the name of the file it moved away from (ADR-0162 §2): `collection.json` becomes
+/// to the name of the file it moved away from (ADR-0163 §2): `collection.json` becomes
 /// `collection.json.moved`, so a host that looks for the old file finds none, and the
 /// person still has the old copy.
 pub const MOVED_SUFFIX: &str = ".moved";
 
-/// Names `to` in place of `from` in the recent list kept at `path` (ADR-0162 §2), where
+/// Names `to` in place of `from` in the recent list kept at `path` (ADR-0163 §2), where
 /// `from` stood, so a moved project keeps its place and the order of the others holds. A
 /// list without `from` gets `to` last, unless it holds it already. A list that can't be
 /// read is read as empty, as [`recent_collections`] reads it, and a failed save is

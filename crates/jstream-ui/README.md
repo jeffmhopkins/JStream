@@ -173,7 +173,7 @@ Contents ([Design](#design) explains the choices):
   PNG preview stream on a tap of the canvas's channel, saved through a download link in
   a browser, and in the desktop app by the app itself, in Downloads, with a toast that
   says where and offers Open and Show in folder (`host::save_screenshot`,
-  `host::open_saved`, [ADR-0162](../../docs/adr/0162-projects-and-screenshots-in-the-persons-folders.md));
+  `host::open_saved`, [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md));
   the request, the frame's outcome, the file's name and the saved toast are tested
   natively), `dialog.rs` (`Modal`,
   the modal dialog frame, and `DialogPlaces`, where the shell remembers each dialog's

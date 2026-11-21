@@ -843,7 +843,7 @@ fn linux_keys() -> anyhow::Result<Arc<dyn StreamKeyStore>> {
     Ok(Arc::new(keys))
 }
 
-/// The project file the app falls back on at startup (ADR-0162): `default`, in the
+/// The project file the app falls back on at startup (ADR-0163): `default`, in the
 /// person's Documents folder, once the collection file the app used before, `legacy` in
 /// the data folder, has moved there. It moves the first time the app starts with
 /// `legacy` there and nothing at `default`: the move is a save as made by the engine
@@ -1436,7 +1436,7 @@ mod tests {
         }
     }
 
-    /// #1559 (ADR-0162 §2): the collection file in the data folder moves to the default
+    /// #1559 (ADR-0163 §2): the collection file in the data folder moves to the default
     /// project in Documents the first time, with its stream keys and its place in the
     /// recent list, and the old file is kept renamed. After that, nothing moves.
     #[test]

@@ -1615,7 +1615,7 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   new and save as. The desktop app opens the first at startup if it still loads, and
   its default project otherwise: `Documents\JStream\My project.json`, or
   `collection.json` in the data folder for a portable app
-  ([ADR-0162](adr/0162-projects-and-screenshots-in-the-persons-folders.md)).
+  ([ADR-0163](adr/0163-projects-and-screenshots-in-the-persons-folders.md)).
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source, filter and transition preset records its kind's descriptor
@@ -1687,7 +1687,7 @@ Foundation, Direct3D 12).
   `portable` marker file is present. Every host finds it through `jstream-platform`'s
   `paths` module. The desktop app's default project is the exception: it is in
   `Documents\JStream`, unless the app is portable
-  ([ADR-0162](adr/0162-projects-and-screenshots-in-the-persons-folders.md)).
+  ([ADR-0163](adr/0163-projects-and-screenshots-in-the-persons-folders.md)).
 - **Building the zip:** `cargo xtask dist`, on Windows with MSVC, CMake and Ninja. It
   builds the web UI for release with trunk (or takes a built one with `--ui-dir`), builds
   `jstream.exe`, `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for

@@ -506,7 +506,7 @@ fn a_project_with_no_scene_still_reports_studio() {
     let _ = fs::remove_dir_all(dir);
 }
 
-/// ADR-0162 §2: a host moving its default project takes the keys, the assets and the
+/// ADR-0163 §2: a host moving its default project takes the keys, the assets and the
 /// recent list's place along, and leaves the old file renamed.
 #[test]
 fn moving_the_collection_file_takes_its_keys_assets_and_place() {

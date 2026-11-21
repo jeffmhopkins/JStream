@@ -229,7 +229,7 @@ Contents:
   `paths::WARM_SCENES_FILE` the one that keeps the warm budget, which both hosts name
   (ADR-0117 §7).
 - **The person's folders** (`paths.rs`,
-  [ADR-0162](../../docs/adr/0162-projects-and-screenshots-in-the-persons-folders.md)):
+  [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
   `paths::user_folder` finds Documents and Downloads (`UserFolder`), where the desktop app
   keeps its default project (`paths::PROJECTS_DIR`, `paths::DEFAULT_PROJECT`) and saves
   screenshots. On macOS they are `~/Documents` and `~/Downloads`; on Linux,

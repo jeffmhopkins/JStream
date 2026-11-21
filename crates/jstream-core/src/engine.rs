@@ -1141,7 +1141,7 @@ impl Engine {
     }
 
     /// Moves the open collection file to `to`, for a host whose default project moves to
-    /// another folder (ADR-0162 §2). It is a `collection.save_as` to `to`, made by the
+    /// another folder (ADR-0163 §2). It is a `collection.save_as` to `to`, made by the
     /// engine itself: nothing at `to` is replaced, `collection` asset references keep
     /// naming the same files, and each output's stream key is copied to the new path's
     /// scope. Then the old path's keys are removed and the old file is renamed to

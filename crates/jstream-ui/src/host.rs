@@ -12,7 +12,7 @@
 //! `ptz` are the JTunnel and PTZ controller settings as the app read them, and
 //! `setJtunnel` and `setPtz` save them. `saveScreenshot` saves a screenshot in Downloads and
 //! answers its path, and `openSaved` and `showSaved` open such a file or show it in its
-//! folder (ADR-0162 §3). In a browser the global is absent and the UI shows
+//! folder (ADR-0163 §3). In a browser the global is absent and the UI shows
 //! the connect form.
 //!
 //! A projector window the app opens for `window.open` (`projector.rs`) may not run that
@@ -433,7 +433,7 @@ async fn allow_network_js(allow: bool) -> bool {
 }
 
 /// Whether the desktop app saves screenshots itself (the global's `saveScreenshot`,
-/// ADR-0162 §3), in Downloads, and says where. A browser saves one as a download.
+/// ADR-0163 §3), in Downloads, and says where. A browser saves one as a download.
 pub fn saves_screenshots() -> bool {
     global()
         .and_then(|global| Reflect::get(&global, &JsValue::from_str("saveScreenshot")).ok())

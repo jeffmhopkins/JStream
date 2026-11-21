@@ -66,7 +66,7 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   the JTunnel setting as it was at start with `setJtunnel`, which saves it, and
   `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands.
 - **The person's folders** (`folders.rs`, `screenshots.rs`;
-  [ADR-0162](../../docs/adr/0162-projects-and-screenshots-in-the-persons-folders.md)):
+  [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
   the default project in `Documents\JStream`, which `host::startup_project` moves the
   old `collection.json` from the data folder to once, and screenshots saved in
   Downloads, never replacing a file, with the commands that open a saved one or show it
@@ -217,7 +217,7 @@ folder, and its log `logs\cef.log`.
   `recent-collections.json` in the data folder, if it still loads, and otherwise the
   default project, `Documents\JStream\My project.json` (`~/Documents/JStream` on macOS
   and Linux), created the first time with nothing in it but the prototype's four sample
-  labels ([ADR-0162](../../docs/adr/0162-projects-and-screenshots-in-the-persons-folders.md)).
+  labels ([ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)).
   A portable app, or one with no Documents folder, keeps `collection.json` in the data
   folder instead. An app that saved there before moves that file to the default
   project's path the first time it starts, with its stream keys and its place in the
@@ -509,7 +509,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `registered`, `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable`
   (not Windows: on Linux the camera finds its device only when it starts). The UI uses `vcam` only to say whether the camera can start (its
   outputs panel); the engine still decides. It also carries `collection`, the default
-  project's folder (ADR-0162), `network`, whether "Allow devices on my network" was on at start,
+  project's folder (ADR-0163), `network`, whether "Allow devices on my network" was on at start,
   `networkOpen`, whether its listener then opened, `wheelFocusOnly`, whether wheel
   chords were heard only while the window had the focus (macOS without Accessibility,
   Wayland, or no listener that hears the wheel),

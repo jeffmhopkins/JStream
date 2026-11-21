@@ -57,7 +57,7 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
   `youtube_chat` preset open pages in) and `with_collection_file`;
-  `move_collection_file` (a host's default project moving, ADR-0162); `set_process_cpu`
+  `move_collection_file` (a host's default project moving, ADR-0163); `set_process_cpu`
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel` and
   `jtunnel_stats` (the JTunnel receiver, off until a host starts it; see *Contents:
   live sources*); `set_thread_cpu`
@@ -795,7 +795,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   as they were, a failed save that the next change recovers, and concurrent sessions
   leaving the latest collection and no temporary file), projects
   (`src/tests/projects.rs`, ADR-0121: open, new and save as with their keys, assets,
-  undo and recent list, and ADR-0162's move of a default project, which takes its keys,
+  undo and recent list, and ADR-0163's move of a default project, which takes its keys,
   assets and place in the recent list and keeps the old file renamed), `scene.switch` and the program
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, transitions and preview (`src/tests/transitions.rs`: preset
@@ -3955,7 +3955,7 @@ and puts the file first in the recent list (`with_recent_collections`, at most t
 in a JSON file the host names; `recent_collections` reads it for a host's startup).
 
 **Moving a host's default project**
-([ADR-0162](../../docs/adr/0162-projects-and-screenshots-in-the-persons-folders.md) §2).
+([ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md) §2).
 `Engine::move_collection_file(to)` is a save as the engine makes itself, as the client
 `engine`: it refuses a path where anything is, copies the keys and rewrites the asset
 references as any save as does. Then it removes each output's key under the old path's

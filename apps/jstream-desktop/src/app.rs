@@ -135,7 +135,7 @@ pub fn start(
     if let Err(error) = jstream_platform_windows::check_media_foundation() {
         return problem(anyhow::Error::from(error));
     }
-    // The default project, in Documents (ADR-0162), moved there from the data folder the
+    // The default project, in Documents (ADR-0163), moved there from the data folder the
     // first time.
     let documents = folders::user_folder(jstream_platform::paths::UserFolder::Documents);
     let default = folders::default_project(exe_dir, data, documents.as_deref());

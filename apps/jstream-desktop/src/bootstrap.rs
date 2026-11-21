@@ -6,7 +6,7 @@
 //! setPtz, saveScreenshot, openSaved, showSaved }` that can't be reassigned, and only on a page from the
 //! app's own origin: the webview also refuses to navigate anywhere else (see `shell.rs`),
 //! so no other page ever sees the token. `collection` is the default project's folder
-//! (ADR-0162), which `collection` asset paths are relative to until the engine names
+//! (ADR-0163), which `collection` asset paths are relative to until the engine names
 //! the open project. `browse` asks the app's `pick_path` command
 //! to open a native dialog and resolves to the path the person picked, or null.
 //! `wheelFocusOnly` is whether, at the start, wheel chords were heard only while JStream

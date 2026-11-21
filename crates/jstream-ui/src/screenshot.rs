@@ -5,7 +5,7 @@
 //! within the largest a preview may be, on a channel from the canvas's taps
 //! ([`Taps`](crate::canvas::taps::Taps)). Its first picture is saved and the stream is
 //! closed. In the desktop app the app saves it in Downloads itself, and the toast says
-//! where, with Open and Show in folder (ADR-0162 §3, #1559); in a browser it is saved
+//! where, with Open and Show in folder (ADR-0163 §3, #1559); in a browser it is saved
 //! through a download link. Captures show in it, as in any preview. If
 //! the engine refuses the stream (too many streams, a scene or source gone), a toast
 //! gives its reason. Native builds (tests, clippy) get a stand-in that only says so.

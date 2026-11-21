@@ -1,5 +1,5 @@
 //! The person's own folders, which the app saves into so its files show where people look
-//! (ADR-0162): the default project in `Documents\JStream`, and screenshots in Downloads.
+//! (ADR-0163): the default project in `Documents\JStream`, and screenshots in Downloads.
 //!
 //! - **The default project** is `Documents\JStream\My project.json` (`~/Documents/JStream`
 //!   on macOS and Linux), and `collection.json` in the data folder for a portable app or
@@ -20,7 +20,7 @@ use std::io::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-/// The collection file in the data folder: the default project before ADR-0162, and still
+/// The collection file in the data folder: the default project before ADR-0163, and still
 /// a portable app's.
 pub const COLLECTION: &str = "collection.json";
 

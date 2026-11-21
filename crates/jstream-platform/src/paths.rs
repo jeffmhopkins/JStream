@@ -5,7 +5,7 @@
 //! they agree on one folder.
 //!
 //! It also finds the person's own folders the desktop app saves into, which Explorer and
-//! Finder show (ADR-0162): Documents, for the default project, and Downloads, for
+//! Finder show (ADR-0163): Documents, for the default project, and Downloads, for
 //! screenshots. On macOS and Linux they come from here; on Windows a known-folder call
 //! in `jstream-platform-windows` finds them, since OneDrive can move Documents.
 //!
@@ -41,14 +41,14 @@ pub const WARM_SCENES_FILE: &str = "warm-scenes.json";
 pub const RECENT_COLLECTIONS_FILE: &str = "recent-collections.json";
 
 /// The folder the desktop app keeps its default project in, inside the person's
-/// Documents folder (ADR-0162 §1): `Documents\JStream` on Windows, `~/Documents/JStream`
+/// Documents folder (ADR-0163 §1): `Documents\JStream` on Windows, `~/Documents/JStream`
 /// on macOS and Linux.
 pub const PROJECTS_DIR: &str = "JStream";
 
-/// The desktop app's default project file in [`PROJECTS_DIR`] (ADR-0162 §1).
+/// The desktop app's default project file in [`PROJECTS_DIR`] (ADR-0163 §1).
 pub const DEFAULT_PROJECT: &str = "My project.json";
 
-/// One of the person's own folders, which the desktop app saves into (ADR-0162).
+/// One of the person's own folders, which the desktop app saves into (ADR-0163).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum UserFolder {
     /// Documents: the default project's folder is in it.
@@ -59,7 +59,7 @@ pub enum UserFolder {
 
 /// Whether the exe in `exe_dir` is portable: a [`PORTABLE_MARKER`] file sits beside it.
 /// A portable JStream keeps its default project in its data folder too, so the whole
-/// app stays on its USB stick (ADR-0162 §1).
+/// app stays on its USB stick (ADR-0163 §1).
 pub fn is_portable(exe_dir: Option<&Path>) -> bool {
     exe_dir.is_some_and(|dir| dir.join(PORTABLE_MARKER).is_file())
 }

@@ -1,4 +1,4 @@
-//! The window's screenshot commands (ADR-0162 §3): `save_screenshot` writes the PNG the
+//! The window's screenshot commands (ADR-0163 §3): `save_screenshot` writes the PNG the
 //! page sends to Downloads and answers its path, and `open_saved` and `show_saved` open
 //! that file, or show it in its folder, for the toast's Open and Show in folder. The rules
 //! are in `folders.rs`; this is the Tauri side.
