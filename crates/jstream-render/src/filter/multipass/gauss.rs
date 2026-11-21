@@ -1,4 +1,4 @@
-//! The bounded gaussian blur that blur, drop shadow and glow share, and the box
+//! The bounded gaussian blur that blur, drop shadow and bloom share, and the box
 //! downsample that blur and pixelate share.
 //!
 //! A blur of radius `r` px spans `r` on each side (sigma `r / 3`). It runs at a working

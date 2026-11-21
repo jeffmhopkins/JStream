@@ -22,6 +22,11 @@ retired_sections = { "today" = [], "humans" = ["install"], "progress" = ["status
 > JStream is in **pre-release**. Expect rough edges, and keep a second way to stream for
 > a show that matters. [Status](#status) says where it stands.
 
+![The JStream desktop app on Linux, editing a talk-show scene: the scene list, the sources, the canvas with the screen share selected, and its settings in the inspector](docs/media/desktop-editing.jpg)
+
+<sub>The desktop app on Linux with a talk-show scene an agent built over MCP: a screen share,
+two guest frames, a lower third, a ticker and a clock, all built-in sources.</sub>
+
 <a id="what"></a>
 ## What JStream is
 <!-- @section
@@ -76,17 +81,17 @@ the code today:
 <!-- @section
 -->
 
-Examples of what JStream can do. Each clip links to the video file; the scenes and the
-code behind them live in [StreamingScenes](https://github.com/jeffmhopkins/StreamingScenes),
-not in JStream.
+Examples of what JStream can do. The stills are from the app's own program output; the
+camera clip and the code behind it live in
+[StreamingScenes](https://github.com/jeffmhopkins/StreamingScenes), not in JStream.
 
 | | |
 |---|---|
-| [![A scene of stacked browser pages, recorded in JStream](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/starship-cockpit/media/nebula.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/starship-cockpit/media/cockpit-jstream.mp4) | **A layered scene, recorded live.** Browser pages and images stacked into one scene, with live cameras inside it; its effects and music-driven lights are the scene's own pages. Recorded on Linux with JStream's own `record` output. |
-| [![Depth of field through a scene camera](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/depth-of-field.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/camera-demos/media/depth-of-field.mp4) | **Depth of field.** Cards at three depths seen through a scene camera; the focus pulls from one to the next and the blur grows and shrinks. |
-| [![A screen capture seen up close through a moving camera](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/screen-closeup.jpg)](https://github.com/jeffmhopkins/StreamingScenes/raw/main/camera-demos/media/screen-closeup.mp4) | **A 3D screen close-up.** A screen capture placed flat in a 3D scene, with the camera gliding between close, angled views of it. |
+| [![A talk-show scene: a slide, two guests, a lower third and a scrolling ticker](docs/media/scene-talk-show.jpg)](docs/media/desktop-filters.jpg) | **A talk-show scene, built by an agent.** A screen share and two guest frames with rounded corners and drop shadows, a lower third, a live clock and a scrolling ticker, all from built-in sources and effects. Built over MCP on Linux; the link opens the app with the screen share's effects shown. |
+| ![A starting-soon scene with a live countdown](docs/media/scene-starting-soon.jpg) | **A starting-soon screen.** A painted backdrop, a title and a countdown timer that ends on a word of your choosing. |
+| [![Depth of field through a scene camera](https://raw.githubusercontent.com/jeffmhopkins/StreamingScenes/main/camera-demos/media/depth-of-field.jpg)](https://github.com/jeffmhopkins/StreamingScenes/blob/main/camera-demos/media/depth-of-field.mp4) | **Depth of field.** Cards at three depths seen through a scene camera; the focus pulls from one to the next and the blur grows and shrinks. The clip plays on GitHub. |
 
-The two camera clips were rendered frame by frame by JStream's compositor, outside the app.
+The camera clip was rendered frame by frame by JStream's compositor, outside the app.
 
 <a id="platforms"></a>
 ## Platforms
