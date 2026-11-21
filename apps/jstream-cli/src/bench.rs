@@ -20,10 +20,10 @@
 use crate::block::block_on;
 use crate::exit::CliError;
 use jstream_control::protocol::{
-    Action, ActionResult, Batch, BlendMode, Call, CallResult, DropCounts, Edit, Event, FrameSheet,
-    FrameStrip, ItemGeometry, ItemId, OutputId, OutputKind, OutputStatsInfo, ProfileInfo, Query,
-    QueryResult, RecordContainer, SceneId, Settings, Size, SourceId, SourceKind,
-    TransitionPresetId, Vec2, ViewCounts,
+    Action, ActionResult, Batch, BlendMode, Call, CallResult, DropCounts, Easing, Edit, Event,
+    FrameSheet, FrameStrip, ItemGeometry, ItemId, OutputId, OutputKind, OutputStatsInfo,
+    ProfileInfo, Query, QueryResult, RecordContainer, SceneId, Settings, Size, SourceId,
+    SourceKind, TransitionPresetId, Vec2, ViewCounts,
 };
 use jstream_control::protocol::{MAX_PSNR_DB, ProbeStream, QualityProbeInfo};
 use jstream_control::{Control, EventStream};
@@ -429,6 +429,18 @@ pub fn run(
     if options.scenarios.contains(&Scenario::Browser) {
         std::fs::write(&inputs.page, PAGE)?;
     }
+    let added_preset = ensure_preset(control, &options.preset)?;
+    let with_added;
+    let options = match &added_preset {
+        Some(preset) => {
+            with_added = BenchOptions {
+                preset: preset.to_string(),
+                ..options.clone()
+            };
+            &with_added
+        }
+        None => options,
+    };
     let mut runs = Vec::new();
     let mut skipped = Vec::new();
     for &scenario in &options.scenarios {
@@ -461,6 +473,10 @@ pub fn run(
             }
         }
     }
+    if let Some(preset) = added_preset {
+        // Best effort, like a plan's removal: a preset left behind is harmless.
+        let _ = batch(control, vec![Edit::TransitionDelete { preset_id: preset }]);
+    }
     let pass = runs.iter().all(|run| run.pass);
     let report = Report {
         cli: env!("CARGO_PKG_VERSION"),
@@ -478,6 +494,48 @@ pub fn run(
     out.write_all(summary.as_bytes())?;
     writeln!(out, "report: {}", dir.join("report.json").display())?;
     Ok(pass)
+}
+
+/// How long the default preset's fade takes when the bench adds it.
+const DEFAULT_PRESET_MS: u32 = 400;
+
+/// Adds a fade preset of its own (`bench_fade_<pid>`) when the default `fade` is asked
+/// for and the engine's collection has none by that ID, as a new collection doesn't (it
+/// starts with the one `cut` preset), and returns its ID: the switches take it, and the
+/// run removes it again. A preset named with `--preset` is the caller's to have:
+/// missing, its switches fail and say so, as they do when the engine refuses the preset.
+fn ensure_preset(
+    control: &dyn Control,
+    preset: &str,
+) -> Result<Option<TransitionPresetId>, CliError> {
+    let state =
+        serde_json::to_value(query(control, Query::StateGet)?).map_err(std::io::Error::other)?;
+    let Some(edit) = preset_to_add(&state, preset) else {
+        return Ok(None);
+    };
+    // An engine that refuses it still runs the bench: each switch then names the missing
+    // preset in the report.
+    let Edit::TransitionCreate { preset_id, .. } = &edit else {
+        return Ok(None);
+    };
+    let preset_id = preset_id.clone();
+    Ok(batch(control, vec![edit]).ok().map(|()| preset_id))
+}
+
+/// The `transition.create` that adds the bench's fade, when `preset` is the default and
+/// `state` (a `state.get` result) has no preset by that ID.
+fn preset_to_add(state: &Value, preset: &str) -> Option<Edit> {
+    let has = state["transitions"]["presets"]
+        .as_array()
+        .is_some_and(|presets| presets.iter().any(|p| p["preset_id"] == preset));
+    (preset == DEFAULT_PRESET && !has).then(|| Edit::TransitionCreate {
+        preset_id: TransitionPresetId::new(format!("bench_{preset}_{}", std::process::id())),
+        name: "Fade (bench)".into(),
+        kind: preset.into(),
+        duration_ms: DEFAULT_PRESET_MS,
+        easing: Easing::EaseInOut,
+        settings: Settings::new(),
+    })
 }
 
 /// The page the `browser` scenario shows, written to the output directory.
@@ -2046,7 +2104,46 @@ mod tests {
         );
         assert!(dir.join("summary.md").exists());
         assert_eq!(leftovers(&control), Vec::<String>::new());
+        // The mock refuses transition.create, and the run goes on without it.
+        assert_eq!(presets(&control), ["cut"]);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn presets(control: &dyn Control) -> Vec<String> {
+        let state =
+            serde_json::to_value(query(control, Query::StateGet).expect("state")).expect("json");
+        state["transitions"]["presets"]
+            .as_array()
+            .expect("presets")
+            .iter()
+            .map(|p| p["preset_id"].as_str().expect("an ID").to_owned())
+            .collect()
+    }
+
+    #[test]
+    fn a_new_collection_gets_the_default_fade_for_the_run_only() {
+        // A new collection has only `cut`, so every switch with `fade` was not_found on
+        // the alpha.6 Windows release pass.
+        let new = engine_state(&jstream_control::protocol::TransitionsInfo::default());
+        let Some(Edit::TransitionCreate {
+            preset_id, kind, ..
+        }) = preset_to_add(&new, DEFAULT_PRESET)
+        else {
+            panic!("the default preset is added");
+        };
+        assert_eq!(kind, "fade");
+        assert!(preset_id.as_str().starts_with("bench_fade_"), "{preset_id}");
+        // A preset the caller named is theirs to have.
+        assert!(preset_to_add(&new, "wipe").is_none());
+        // Already there: nothing added, so nothing for the run to remove.
+        let with_fade = json!({ "transitions": { "presets": [
+            { "preset_id": "cut" }, { "preset_id": "fade" }
+        ] } });
+        assert!(preset_to_add(&with_fade, DEFAULT_PRESET).is_none());
+    }
+
+    fn engine_state(transitions: &jstream_control::protocol::TransitionsInfo) -> Value {
+        json!({ "transitions": transitions })
     }
 
     #[test]
