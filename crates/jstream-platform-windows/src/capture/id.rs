@@ -8,7 +8,9 @@
 //!   `hwnd:0x1a2b;w1.<exe>.<class>.<title>`. A handle is valid until the window is
 //!   destroyed, and Windows may reuse it afterwards. The key ([`WindowKey`]) is what
 //!   outlives the window: hashes of its program's file name, its window class and its
-//!   title, each 16 hex digits, or `-` when Windows wouldn't say. Hashes rather than the
+//!   title, each 16 hex digits, or `-` when Windows wouldn't say. The UWP host's program
+//!   is `-` too, since it hosts every UWP app and so doesn't tell them apart: a field
+//!   that is `-` means "find this window by its title". Hashes rather than the
 //!   text itself, so the ID carries no text from outside JStream (ADR-0085). An ID
 //!   without a key (`hwnd:0x1a2b`, as IDs were before keys) names only its handle.
 //!
@@ -44,7 +46,8 @@ pub(crate) fn parse_monitor(id: &DeviceId) -> Option<&str> {
 
 /// What finds a window again once its handle has gone: hashes of its program's file name
 /// (lower case), its window class and its title. A field is `None` where Windows wouldn't
-/// say, such as the program of an elevated window.
+/// say, such as the program of an elevated window. The program is `None` for the UWP host
+/// too, which doesn't tell one app from another.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) struct WindowKey {
     exe: Option<u64>,
@@ -57,8 +60,9 @@ impl WindowKey {
     /// `notepad.exe`), class and title are these. An empty one counts as unknown.
     pub(crate) fn new(exe: Option<&str>, class: Option<&str>, title: Option<&str>) -> Self {
         let hash = |text: Option<&str>| text.filter(|t| !t.is_empty()).map(fnv1a);
+        let exe = exe.map(str::to_lowercase).filter(|e| e != SHARED_HOST);
         Self {
-            exe: hash(exe.map(str::to_lowercase).as_deref()),
+            exe: hash(exe.as_deref()),
             class: hash(class),
             title: hash(title),
         }
@@ -71,9 +75,9 @@ impl WindowKey {
     }
 
     /// Whether a window of the same kind but another title may stand in for `self`: not
-    /// when the program is unknown, or is the UWP host, whose windows are all one kind.
+    /// when the program is unknown (or the UWP host, whose windows are all one kind).
     fn kind_is_enough(&self) -> bool {
-        self.exe.is_some_and(|exe| exe != fnv1a(SHARED_HOST))
+        self.exe.is_some()
     }
 
     fn encode(&self) -> String {
@@ -99,7 +103,9 @@ impl WindowKey {
             }
         };
         let key = Self {
-            exe: field()?,
+            // An ID saved while the UWP host's program was hashed reads as the host's
+            // windows are keyed now.
+            exe: field()?.filter(|&exe| exe != fnv1a(SHARED_HOST)),
             class: field()?,
             title: field()?,
         };
@@ -332,6 +338,25 @@ mod tests {
         let settings = key(host, "ApplicationFrameWindow", "Settings");
         let open = [open[0], (0x50, settings)];
         assert_eq!(find_window(wanted(0x10, was), &open, None), Some(0x50));
+        // Its program is left out of the key, as an unknown one is, so a list that
+        // compares keys' fields doesn't take one UWP app for another.
+        assert_eq!(
+            was,
+            WindowKey::new(None, Some("ApplicationFrameWindow"), Some("Settings"))
+        );
+        assert!(
+            window_id(0x10, &was)
+                .as_str()
+                .starts_with("hwnd:0x10;w1.-.")
+        );
+        // An ID saved with the host's program hashed reads the same way.
+        let saved = format!(
+            "hwnd:0x10;w1.{:016x}.{:016x}.{:016x}",
+            fnv1a("applicationframehost.exe"),
+            fnv1a("ApplicationFrameWindow"),
+            fnv1a("Settings")
+        );
+        assert_eq!(parse_window(&DeviceId::new(saved)), Some(wanted(0x10, was)));
 
         let was = WindowKey::new(None, Some("Admin"), Some("Tool"));
         let other = WindowKey::new(None, Some("Admin"), Some("Else"));
