@@ -359,6 +359,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `WindowsProcessCpu` for that readout's CPU share, `WindowsThreadCpu` for
   `profile.get`'s threads and `WindowsThreadPriority` for the render and mixer threads'
   MMCSS tasks ([ADR-0117](../../docs/adr/0117-real-time-video-thread-model.md) §8).
+  On Windows it also scans the CLAP audio plugins on a worker thread, as the daemon
+  does ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)), each file in a
+  `jstream-plugin-host.exe` started from beside the app, so they show in Settings ›
+  Audio plugins and Add filter; elsewhere the engine says CLAP is hosted on Windows only.
   When the app exits, the server closes its connections and the engine stops.
 - **Network access** (`network.rs`, [ADR-0104](../../docs/adr/0104-network-listener-over-tls.md)
   decision 1). The setting is `{"allow": true}` in the data folder's `network.json`,

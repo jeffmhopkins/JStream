@@ -538,6 +538,12 @@ pub fn engine(
         Arc::new(engine)
     };
     engine.watch_effect_packs(data.join(jstream_platform::paths::EFFECTS_DIR));
+    // CLAP audio plugins, as the daemon hosts them (ADR-0035): without this the app's
+    // Settings › Audio plugins said "This engine doesn't host CLAP plugins".
+    #[cfg(windows)]
+    scan_clap_plugins(&engine);
+    #[cfg(not(windows))]
+    engine.set_clap_unavailable("CLAP plugins are hosted on Windows only so far");
     // `stats.tick`'s load: the process's CPU time, and a tick a second while idle.
     #[cfg(windows)]
     engine.set_process_cpu(Arc::new(jstream_platform_windows::WindowsProcessCpu));
@@ -557,6 +563,30 @@ pub fn engine(
     engine.set_thread_priority(Arc::new(jstream_platform_windows::WindowsThreadPriority));
     engine.start_stats_heartbeat();
     Ok(engine)
+}
+
+/// Scans the CLAP plugins on a worker thread, so they appear in `kind.list` as audio
+/// filter kinds once found (ADR-0035), as `jstream-daemon` does. Each plugin file gets
+/// its own short-lived `jstream-plugin-host.exe` from beside the app; the engine keeps
+/// the hosts for `plugin.clap_rescan`.
+#[cfg(windows)]
+fn scan_clap_plugins(engine: &Arc<Engine>) {
+    let hosts: Arc<dyn jstream_platform::PluginHosts> =
+        match jstream_platform_windows::WindowsPluginHosts::new() {
+            Ok(hosts) => Arc::new(hosts),
+            Err(e) => {
+                tracing::warn!(error = %e, "CLAP plugins are unavailable");
+                engine.set_clap_unavailable(format!("the plugin host couldn't be set up: {e}"));
+                return;
+            }
+        };
+    let engine = Arc::clone(engine);
+    let spawned = std::thread::Builder::new()
+        .name("jstream-clap-scan".into())
+        .spawn(move || engine.scan_clap_plugins(hosts));
+    if let Err(e) = spawned {
+        tracing::warn!(error = %e, "could not start the CLAP plugin scan");
+    }
 }
 
 /// What the app tells the UI about its virtual camera.
