@@ -190,9 +190,12 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-sources"></a>
 ## Contents: live sources and snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
+- **The media clock** (`clock.rs`): `HeldClock` wraps the injected media clock so that
+  `clock.hold`, `clock.step` and `clock.release` can hold it and step it by hand
+  (ADR-0172). The sources, the engine's state and MIDI read it. See *Live sources*.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. Sources are
@@ -2523,7 +2526,14 @@ warm scene draws never rests, and is cued when nothing draws it (`LiveSources::s
 streams*). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
-the thread re-plans at once on the new one. `media` sources play through the injected
+the thread re-plans at once on the new one. That clock is the engine's own holdable
+one (`clock.rs`, `HeldClock`, [ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)),
+wrapping the injected clock, and the engine's state and MIDI read it too:
+`clock.hold` stops it, `clock.step` moves the held time on and wakes the sources thread
+(`LiveSources::clock_moved`), and `clock.release` lets it run again, never below the
+time it was held at. A clock swap releases it. The output pipeline keeps the injected
+clock, so `clock.hold` fails while an output runs and `output.start` while it is held.
+`media` sources play through the injected
 backends' media files (`Backends::media`); before any are injected a `media` source
 fails to build (`NoBackend`), and injecting them rebuilds every source. `collection` asset
 references resolve in the collection file's folder; without a collection file, and

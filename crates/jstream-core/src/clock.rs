@@ -171,7 +171,11 @@ mod tests {
         assert_eq!(clock.step(40).map(MediaTime::ticks), Some(1_040));
         assert_eq!(clock.step(40).map(MediaTime::ticks), Some(1_080));
         assert_eq!(ms(&clock), 1_080);
-        assert_eq!(clock.hold().ticks(), 1_080, "holding again keeps the held time");
+        assert_eq!(
+            clock.hold().ticks(),
+            1_080,
+            "holding again keeps the held time"
+        );
     }
 
     #[test]
@@ -190,7 +194,11 @@ mod tests {
         hand.set(10_000);
         assert_eq!(ms(&clock), 11_000);
         hand.set(12_000);
-        assert_eq!(ms(&clock), 12_000, "then it runs with the platform's clock again");
+        assert_eq!(
+            ms(&clock),
+            12_000,
+            "then it runs with the platform's clock again"
+        );
         // Stepped less than real time passed: it jumps forward to now.
         clock.hold();
         clock.step(10);

@@ -85,7 +85,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
-  `collection.save_as`), with
+  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104),
   which every implementation uses to check and follow a hotkey's action, and
@@ -2389,7 +2389,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
   `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
-  physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
+  physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
+  client's animation), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` (an application setting), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2877,6 +2878,27 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+
+<a id="media-clock"></a>
+## Holding the media clock
+<!-- @section
+depends_on = ["docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md"]
+-->
+
+Since 0.128 a client can hold the engine's media clock and step it by hand, to render a
+scene frame by frame on a machine that can't draw it in real time
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)). The clock
+is what transitions, Moves, motion, timelines, keyframe tracks, a sky's warp, animated
+sources, `video.snapshot` and `video.frames` read. None of the three actions changes
+`rev`, is undone or is saved, and none can be bound or granted to a plugin.
+- **`clock.hold`** stops the clock where it is; holding it again keeps the held time.
+  It fails with `action_failed` while an output runs.
+- **`clock.step {ms}`** moves the held time on by `ms`, 1 to 10000
+  (`invalid_argument` on `ms` otherwise). It fails with `action_failed` when the clock
+  isn't held.
+- **`clock.release`** lets the clock run again, never backward: it waits at the held
+  time until real time passes it. Releasing a clock that runs does nothing.
+- While the clock is held, `output.start` fails with `action_failed`.
 
 <a id="keyframe-tracks"></a>
 ## Keyframe tracks
