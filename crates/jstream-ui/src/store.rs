@@ -471,6 +471,16 @@ impl Selection {
     }
 }
 
+/// The scene `action` puts on program, which the UI shows there before the engine
+/// confirms it ([`Studio::act`]): a `scene.switch`'s. Every other action leaves the
+/// program to the engine's `studio.changed`.
+pub fn optimistic_program(action: &Action) -> Option<SceneId> {
+    match action {
+        Action::SceneSwitch { scene_id, .. } => Some(scene_id.clone()),
+        _ => None,
+    }
+}
+
 /// What a click on `scene_id` in the scene list sends: in studio mode a
 /// `studio.set_preview`, else a `scene.switch` that lets the engine choose the preset.
 /// It is sent even for a scene the page thinks is there already: the engine treats
@@ -1036,14 +1046,32 @@ impl Studio {
     }
 
     /// Runs an action, reporting a failure in the problem bar.
+    ///
+    /// A `scene.switch` shows its scene on program at once, before the engine's
+    /// `studio.changed` confirms it, so the "program" badge moves on the click and the
+    /// canvas keeps the program stream rather than wanting the new scene on its own for
+    /// the round trip. The call is queued before that change wakes the panels, so the
+    /// request leaves before they redraw. A refused switch reads the studio back.
     pub fn act(&self, session: &Session, action: Action) {
         let studio = *self;
+        let switched = optimistic_program(&action);
+        let reread = switched.is_some();
         let session = session.clone();
         spawn_local(async move {
             if let Err(error) = session.control.call(Call::Action { action }).await {
                 studio.report(&error);
+                if reread {
+                    studio.read_studio(&session).await;
+                }
             }
         });
+        if let Some(scene_id) = switched
+            && self
+                .program
+                .with_untracked(|p| p.as_ref() != Some(&scene_id))
+        {
+            self.program.set(Some(scene_id));
+        }
     }
 
     /// The descriptor of `kind_id`, reading it with `kind.describe` the first time.
@@ -1152,8 +1180,8 @@ fn unexpected(what: &str) -> ControlError {
 #[cfg(test)]
 mod tests {
     use super::{
-        Collection, Selection, Studio, apply, fresh_id, list_kinds, plan_summary, query,
-        reset_edits, scene_click, sizes_of,
+        Collection, Selection, Studio, apply, fresh_id, list_kinds, optimistic_program,
+        plan_summary, query, reset_edits, scene_click, sizes_of,
     };
     use crate::session::Session;
     use jstream_control::protocol::{
@@ -1791,6 +1819,27 @@ mod tests {
         assert_eq!(
             scene_click(true, &b),
             Action::StudioSetPreview { scene_id: b }
+        );
+    }
+
+    /// Only a `scene.switch` shows its scene on program before the engine confirms it;
+    /// a preview, which leaves the program, doesn't.
+    #[test]
+    fn only_a_switch_moves_the_program_before_the_engine_answers() {
+        let b = SceneId::new("b");
+        assert_eq!(optimistic_program(&scene_click(false, &b)), Some(b.clone()));
+        let named = Action::SceneSwitch {
+            scene_id: b.clone(),
+            preset_id: Some("fade".into()),
+        };
+        assert_eq!(optimistic_program(&named), Some(b.clone()));
+        assert_eq!(optimistic_program(&scene_click(true, &b)), None);
+        assert_eq!(
+            optimistic_program(&Action::SceneZoomCamera {
+                scene_id: b,
+                steps: 1
+            }),
+            None
         );
     }
 
