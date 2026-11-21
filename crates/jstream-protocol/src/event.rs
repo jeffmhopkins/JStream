@@ -267,7 +267,7 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         remote_name: Option<String>,
     },
-    /// A person removed a plugin with `plugin.uninstall` (0.125): it no longer runs and
+    /// A person removed a plugin with `plugin.uninstall` (0.132): it no longer runs and
     /// is no longer listed. A client that shows the plugins drops it, or reads
     /// `plugin.list` again.
     #[serde(rename = "plugin.uninstalled")]
