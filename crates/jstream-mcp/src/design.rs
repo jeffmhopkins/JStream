@@ -210,6 +210,8 @@ field: `focus_px` is the distance along the view that stays sharp and `blur_px` 
 how soft the far background gets; things nearer or farther blur in proportion. A soft \
 backdrop behind a presenter is `blur_px` 4-8 focused on the presenter's distance; pull \
 focus with two keyframe scenes that differ only in `focus_px` and a `move` transition. \
+Models blur too, each part by its own distance, so a near part of a model goes soft \
+while the focus sits on something past it. \
 A camera can move on its own: `scene.set_camera_motion` gives it up to 8 modifiers, the \
 kinds and clocks of `item.set_motion`, on `position_x`/`_y`/`_z`, `target_x`/`_y`/`_z`, \
 `fov`, `roll`, `focus` or `blur`; a slow `wiggle` of 4-8 px on the position is a \
