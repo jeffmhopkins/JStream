@@ -56,7 +56,8 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   `Engine::new()`, `with_output(id)`, `with_backends`, `with_publish`,
   `with_publish_opener`, `with_key_store`, `with_youtube`, `with_audit`,
   `with_history_limit`, `with_browser` (the browser engine `browser` sources and their
-  `youtube_chat` preset open pages in) and `with_collection_file`; `set_process_cpu`
+  `youtube_chat` preset open pages in) and `with_collection_file`;
+  `move_collection_file` (a host's default project moving, ADR-0163); `set_process_cpu`
   and `start_stats_heartbeat` (`stats.tick`'s load, below); `start_jtunnel` and
   `jtunnel_stats` (the JTunnel receiver, off until a host starts it; see *Contents:
   live sources*); `set_thread_cpu`
@@ -797,7 +798,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   draws made first, and loaded from a file from before `audio_source` existed
   (`a_source_drawing_a_source_round_trips`), refused files left
   as they were, a failed save that the next change recovers, and concurrent sessions
-  leaving the latest collection and no temporary file), `scene.switch` and the program
+  leaving the latest collection and no temporary file), projects
+  (`src/tests/projects.rs`, ADR-0121: open, new and save as with their keys, assets,
+  undo and recent list, and ADR-0163's move of a default project, which takes its keys,
+  assets and place in the recent list and keeps the old file renamed), `scene.switch` and the program
   scene's rules (in `tests.rs`, the differential script and `studio.rs`), a snapshot
   that follows program, transitions and preview (`src/tests/transitions.rs`: preset
   resolution, a fade that ends on the clock, a cut (including one that still stores a
@@ -3970,6 +3974,17 @@ lock, so no batch lands between the copy and the switch; a rewrite is a new `rev
 clears undo, and a save as that fails removes the copied keys. Each ends with `collection.file_changed`
 and puts the file first in the recent list (`with_recent_collections`, at most ten, kept
 in a JSON file the host names; `recent_collections` reads it for a host's startup).
+
+**Moving a host's default project**
+([ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md) §2).
+`Engine::move_collection_file(to)` is a save as the engine makes itself, as the client
+`engine`: it refuses a path where anything is, copies the keys and rewrites the asset
+references as any save as does. Then it removes each output's key under the old path's
+scope and renames the old file with `MOVED_SUFFIX` (`.moved`) appended, logging a failure
+of either, since the move has happened. `rename_recent_collection` names the new path in
+a recent list file where the old one stood, keeping the order, for a host that moves its
+default project before its engine has the list. The desktop app does both once, on an
+engine of its own, before its engine starts.
 
 **Stream-key scopes.** An output's key is stored under `<scope>/<output_id>`
 (`Engine::stream_key_name`, which hosts' publish openers read too), where the scope is
