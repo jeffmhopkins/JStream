@@ -174,4 +174,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0159](0159-opus-decodes-in-pure-rust-on-linux.md) | Opus decodes in pure Rust on Linux | accepted | agent |  |
 | [ADR-0160](0160-aac-lc-decoder-patent-check.md) | AAC-LC decoder patent check: may Linux decode AAC-LC through symphonia? | accepted | maintainer |  |
 | [ADR-0161](0161-follow-camera-holds-its-zoom.md) | A follow camera holds its zoom, and only pans at the edges | accepted | agent |  |
+| [ADR-0164](0164-3d-groups-share-their-scenes-space.md) | 3D groups share their scene's space, and a camera may ride with one | accepted | agent |  |
 <!-- @generated end adr-index -->
