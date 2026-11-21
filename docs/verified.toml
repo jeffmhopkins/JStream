@@ -780,7 +780,7 @@ stamp = { hash = "b3:bb29b13aa73f3452", by = "agent:claude@session_016ERA9mo5DEB
 stamp = { hash = "b3:11be16d113e8135f", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated." }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:5659a5571c82b560", by = "agent:claude-1555", note = "#1555: snapshot and event.rs change only a field description; the architecture's protocol section still holds" }
+stamp = { hash = "b3:4c8957404d55881a", by = "agent:3d-groups", note = "Updated the 3D groups bullet to protocol 0.127; the mock's anchor checks narrowed to a keyframe scene as the graph's; snapshots regenerated. | merge: Main's #1573 rewords the capture_frames drop description in event.rs and protocol.snap; this branch's 3D groups and 0.127 changes beside it are unaffected, and the section holds. | kept from the merged side: #1555: snapshot and event.rs change only a field description; the architecture's protocol section still holds" }
 
 ["ARCH#protocol"."file:crates/jstream-protocol/src/activity.rs"]
 stamp = { hash = "b3:6b71548f3a460259", by = "agent:claude", note = "Agent activity now leaves out the desktop hotkeys client via the new jstream_protocol::HOTKEYS_CLIENT_NAME; re-read the section, it holds (wording added where it names the activity filter or the hotkeys client)" }
@@ -1989,7 +1989,7 @@ stamp = { hash = "b3:c0802860d71a4cb4", by = "agent:3d-groups", note = "Added th
 stamp = { hash = "b3:be3808e9a8f2aa50", by = "agent:3d-groups", note = "Re-read the 3D groups paragraph after transition.rs's camera_of doc comment changed: it still calls placed_camera, as the paragraph says." }
 
 ["CRATE-jstream-core#contents-tests"."body"]
-stamp = { hash = "b3:ff3cd6e121d3a071", by = "agent:claude-1555", note = "#1555: scenarios.rs passes a drop count to capture_drops; windows_gpu.rs only rewords a log line; listed tests unchanged" }
+stamp = { hash = "b3:e33360672c899c59", by = "agent:3d-groups", note = "Listed src/tests/groups3d.rs and what its three video.snapshot tests check: the child sorts in front, moves and fades with the group item, and an anchored camera rides with it. | merge: Main's #1573 adds the capture-drop tests' description (frames skipped per reader, drops beside repeats); this branch's groups3d.rs entry is unaffected and both hold. | kept from the merged side: #1555: scenarios.rs passes a drop count to capture_drops; windows_gpu.rs only rewords a log line; listed tests unchanged" }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/aim/tests.rs"]
 stamp = { hash = "b3:ed73b276a16e5ff2", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the controller emulator and live aim tests and their covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -4395,7 +4395,7 @@ stamp = { hash = "b3:1783d2b84f435d63", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:11be16d113e8135f", by = "agent:3d-groups", note = "protocol.snap and examples.snap regenerated for 0.127 and the reworded anchor docs; still additive minor changes." }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/schema/protocol.snap"]
-stamp = { hash = "b3:5659a5571c82b560", by = "agent:claude-1555", note = "#1555: protocol.snap changes only capture_frames' description; no wire change, no version bump" }
+stamp = { hash = "b3:4c8957404d55881a", by = "agent:3d-groups", note = "protocol.snap and examples.snap regenerated for 0.127 and the reworded anchor docs; still additive minor changes. | merge: Main's #1573 rewords the capture_frames drop description in event.rs and protocol.snap; this branch's 3D groups and 0.127 changes beside it are unaffected, and the section holds. | kept from the merged side: #1555: protocol.snap changes only capture_frames' description; no wire change, no version bump" }
 
 ["CRATE-jstream-protocol#compatibility"."file:crates/jstream-protocol/src/schema.rs"]
 stamp = { hash = "b3:b48737a114c2fced", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to schema.rs, version.rs, schema/**, the modules its text names; #purpose still covers all of src/**; depends_on RULES.md#R-API-001, matching what it relies on; self-links to #design now name this anchor" }
