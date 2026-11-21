@@ -3396,7 +3396,7 @@ stamp = { hash = "b3:3cc8439dd9b71bc3", by = "agent:claude", note = "Re-read Pur
 stamp = { hash = "b3:fd40c30ef5b30c93", by = "agent:claude", note = "Re-read Purpose against #516: added the shared-helpers bullet (mailbox::Mailbox on crossbeam-utils' AtomicCell, nv12's rgb_to_nv12, rgb_to_nv12_image, Nv12Image, even_size) and crossbeam-utils to the dependency list; still no unsafe (forbid(unsafe_code) kept)." }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/paths.rs"]
-stamp = { hash = "b3:7486ec21bb6ef253", by = "agent:claude", note = "Re-read after renumbering this PR's ADR from 0162 to 0163 (0162 is taken by #1571): only the ADR number and link in this section's inputs changed; what the earlier note checked still holds." }
+stamp = { hash = "b3:00915c24795ba3e7", by = "agent:claude", note = "Re-read against paths.rs: only the tests' imports moved into the macOS and Linux tests (Windows clippy flagged them unused); the folders bullet (user_folder, UserFolder, PROJECTS_DIR, DEFAULT_PROJECT, is_portable) still matches." }
 
 ["CRATE-jstream-platform#purpose"."file:crates/jstream-platform/src/plugin_host.rs"]
 stamp = { hash = "b3:a0933b20221c3637", by = "agent:claude-settings", note = "CLAP plugin hosts bullet now names PluginHosts::folders, every folder searched whether it exists, defaulting to search_paths; matches plugin_host.rs" }

@@ -177,9 +177,7 @@ pub fn data_dir_for(
 
 #[cfg(test)]
 mod tests {
-    use super::{
-        PORTABLE_DATA_DIR, PORTABLE_MARKER, UserFolder, data_dir_for, is_portable, user_folder_for,
-    };
+    use super::{PORTABLE_DATA_DIR, PORTABLE_MARKER, data_dir_for, is_portable};
     use std::ffi::OsString;
     use std::fs;
 
@@ -274,6 +272,7 @@ mod tests {
     #[cfg(target_os = "macos")]
     #[test]
     fn macos_saves_in_the_home_folders() {
+        use super::{UserFolder, user_folder_for};
         let none = |_: &std::path::Path| None;
         assert_eq!(
             user_folder_for(UserFolder::Documents, env(&[("HOME", "/Users/me")]), none),
@@ -288,6 +287,7 @@ mod tests {
     #[cfg(all(unix, not(target_os = "macos")))]
     #[test]
     fn linux_reads_the_xdg_user_folders() {
+        use super::{UserFolder, user_folder_for};
         use std::path::{Path, PathBuf};
         let home = env(&[("HOME", "/h")]);
         let file = |text: &'static str| {
