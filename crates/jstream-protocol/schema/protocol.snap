@@ -5450,6 +5450,10 @@ source: crates/jstream-protocol/src/fixtures.rs
               "$ref": "#/$defs/SceneId",
               "description": "The scene to change."
             },
+            "share_space": {
+              "description": "Whether a group shares the 3D space of the scene that places it (ADR-0164 §1,\nsince 0.125): placed in a 3D scene, it has no layer, and each of its children is\nplaced in that scene's space through the group item's pose and drawn as an item\nof that scene, sorting, lit and in focus on its own. The group item's opacity\nmultiplies its children's; its crop, flips, blend, effects, the scene source's\nfilters and the group's own video chain don't apply. A group placed in a 2D scene,\nor inside a group that doesn't share space, is drawn flat as before, and a scene\nwith the `scene` role keeps and ignores it. Omitted for `false`, the default.",
+              "type": "boolean"
+            },
             "type": {
               "const": "scene.set_options",
               "type": "string"
@@ -5507,6 +5511,35 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "type": {
               "const": "scene.set_ptz_shots",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "scene_id"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Sets or removes the 3D group a scene's camera rides with (ADR-0164 §5, since\n0.125). With an anchor, the camera's position and target are points of that\ngroup's own space, and the camera moves with the group item's pose as it is drawn.\nIt belongs to the scene family: `invalid_argument` on a keyframe scene, which\nrides with its parent's anchor, on a scene without a camera, and for an item that\nisn't in the scene or doesn't place a group. An anchor that later names no 3D\ngroup is kept and ignored. Inverse: `scene.set_camera_anchor` with the previous\nanchor.",
+          "properties": {
+            "anchor": {
+              "anyOf": [
+                {
+                  "$ref": "#/$defs/ItemId"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "The group item the camera rides with. Omitted removes the anchor."
+            },
+            "scene_id": {
+              "$ref": "#/$defs/SceneId",
+              "description": "The scene to change."
+            },
+            "type": {
+              "const": "scene.set_camera_anchor",
               "type": "string"
             }
           },
@@ -14106,6 +14139,17 @@ source: crates/jstream-protocol/src/fixtures.rs
           ],
           "description": "Its camera (ADR-0094, since 0.70), which makes it a 3D scene. On a keyframe scene,\nits override of its parent's camera, which a keyframe of a 2D scene may have too\n(ADR-0128); the keyframe shows the parent's camera where it has none. Omitted for none, so missing (also from an older server) parses as a\n2D scene."
         },
+        "camera_anchor": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ItemId"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The 3D group item its camera rides with (ADR-0164 §5, since 0.125): the camera's\nposition and target are then points of that group's space, placed through the\ngroup item's pose as the scene is drawn. It belongs to the family, so a keyframe\nscene reports none and rides with its parent's. Omitted for none."
+        },
         "camera_follow": {
           "anyOf": [
             {
@@ -14204,6 +14248,10 @@ source: crates/jstream-protocol/src/fixtures.rs
         "scene_id": {
           "$ref": "#/$defs/SceneId",
           "description": "The scene's ID."
+        },
+        "share_space": {
+          "description": "Whether a group shares the 3D space of the scene that places it (ADR-0164 §1,\nsince 0.125): placed in a 3D scene, it has no layer, and each of its children is\nplaced in that scene's space through the group item's pose and drawn as an item\nof that scene, sorting, lit and in focus on its own. The group item's opacity\nmultiplies its children's; its crop, flips, blend, effects, the scene source's\nfilters and the group's own video chain don't apply. A group placed in a 2D scene,\nor inside a group that doesn't share space, is drawn flat as before, and a scene\nwith the `scene` role keeps and ignores it. Omitted for `false`, the default.",
+          "type": "boolean"
         },
         "show_in_multiview": {
           "description": "Whether a multiview shows it. Omitted for `true`, the default.",
@@ -16149,5 +16197,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.124"
+  "title": "JStream protocol 0.125"
 }

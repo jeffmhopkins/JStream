@@ -218,7 +218,10 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   `scene.set_camera_motion` checked with the protocol's `check_camera_motion`, and
   `scene.set_camera_follow` with `CameraFollow::check`, an item of the scene and a
   `display` or `window` source) belong to the family, refused on a keyframe scene, and
-  undoing a scene's delete restores them. The mock keeps the follow on the scene, as
+  undoing a scene's delete restores them. So does `scene.set_camera_anchor`
+  ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), with the
+  graph's checks: a scene with a camera, and an item of it placing a `group`-role
+  scene, reported as `SceneInfo.camera_anchor`. The mock keeps the follow on the scene, as
   0.85 did, with `scene.set_camera_follow` as its own inverse: it doesn't model the
   `follow_pointer` filter that holds it since 0.91
   ([ADR-0120](../../docs/adr/0120-follow-pointer-is-a-filter.md));

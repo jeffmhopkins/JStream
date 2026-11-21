@@ -1158,6 +1158,7 @@ mod tests {
                 folder: None,
                 meta: Default::default(),
                 options: Default::default(),
+                camera_anchor: None,
                 camera_motion: Vec::new(),
                 ptz_shots: Vec::new(),
                 camera_follow: None,
@@ -1188,6 +1189,7 @@ mod tests {
         let scene = |id: &str, items: Vec<ItemInfo>| SceneInfo {
             scene_id: id.into(),
             name: id.into(),
+            camera_anchor: None,
             camera_motion: Vec::new(),
             ptz_shots: Vec::new(),
             camera_follow: None,

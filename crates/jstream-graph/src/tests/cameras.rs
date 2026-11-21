@@ -433,3 +433,84 @@ fn removing_the_followed_item_removes_the_follow() {
     );
     assert_eq!(info(&graph, "a").camera_follow, None);
 }
+
+fn set_anchor(scene: &str, anchor: Option<&str>) -> Edit {
+    Edit::SceneSetCameraAnchor {
+        scene_id: SceneId::new(scene),
+        anchor: anchor.map(ItemId::new),
+    }
+}
+
+/// Scene `a` with a camera, placing group `b` as `rig` and the webcam as `cam_item`.
+fn with_rig() -> Graph {
+    let mut graph = fixture();
+    apply_ok(
+        &mut graph,
+        vec![
+            Edit::SceneSetRole {
+                scene_id: SceneId::new("b"),
+                role: jstream_protocol::SceneRole::Group,
+            },
+            set("a", Some(framing())),
+            add("a", "rig", "sb"),
+            add("a", "cam_item", "cam"),
+        ],
+    );
+    graph
+}
+
+/// ADR-0164 §5: a camera rides with a group item of its own scene, set, reported,
+/// undone and restored with the scene.
+#[test]
+fn a_camera_anchor_is_set_reported_and_undone() {
+    let mut graph = with_rig();
+    let applied = apply_ok(&mut graph, vec![set_anchor("a", Some("rig"))]);
+    assert_eq!(applied.inverse.edits, vec![set_anchor("a", None)]);
+    assert_eq!(info(&graph, "a").camera_anchor, Some(ItemId::new("rig")));
+    let applied = apply_ok(
+        &mut graph,
+        vec![
+            Edit::SourceDelete {
+                source_id: jstream_protocol::SourceId::new("sa"),
+            },
+            Edit::SceneDelete {
+                scene_id: SceneId::new("a"),
+            },
+        ],
+    );
+    assert!(
+        applied
+            .inverse
+            .edits
+            .contains(&set_anchor("a", Some("rig")))
+    );
+}
+
+#[test]
+fn a_camera_anchor_must_be_a_group_item_of_a_3d_family_scene() {
+    let mut graph = with_rig();
+    // Not a group, not in the scene, and a scene without a camera.
+    for (scene, item) in [("a", "cam_item"), ("a", "nowhere"), ("c", "rig")] {
+        let (field, _) = invalid_reason(apply_err(&mut graph, vec![set_anchor(scene, Some(item))]));
+        assert_eq!(field, "edits.0.anchor", "{scene} {item}");
+    }
+    // A keyframe scene rides with its parent's anchor.
+    apply_ok(&mut graph, vec![variant("k", "a")]);
+    let (field, reason) = invalid_reason(apply_err(&mut graph, vec![set_anchor("k", Some("rig"))]));
+    assert_eq!(field, "edits.0.anchor");
+    assert!(reason.contains("anchor"), "{reason}");
+}
+
+/// An anchor whose item goes is kept, and ignored where the scene is drawn.
+#[test]
+fn removing_the_anchor_item_keeps_the_anchor() {
+    let mut graph = with_rig();
+    apply_ok(&mut graph, vec![set_anchor("a", Some("rig"))]);
+    apply_ok(
+        &mut graph,
+        vec![Edit::ItemRemove {
+            item_id: ItemId::new("rig"),
+        }],
+    );
+    assert_eq!(info(&graph, "a").camera_anchor, Some(ItemId::new("rig")));
+}

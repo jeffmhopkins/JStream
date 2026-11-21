@@ -1250,6 +1250,12 @@ pub struct SceneInfo {
     /// 2D scene.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub camera: Option<SceneCamera>,
+    /// The 3D group item its camera rides with (ADR-0164 §5, since 0.125): the camera's
+    /// position and target are then points of that group's space, placed through the
+    /// group item's pose as the scene is drawn. It belongs to the family, so a keyframe
+    /// scene reports none and rides with its parent's. Omitted for none.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub camera_anchor: Option<ItemId>,
     /// Its camera motion (ADR-0113, since 0.85): the modifiers that change its camera as it is drawn.
     /// It belongs to the family, so a keyframe scene reports none and draws its parent's.
     /// Omitted when empty.
@@ -1305,6 +1311,16 @@ pub struct SceneOptions {
     /// so `scene.set_options` refuses it there. Omitted for `false`, the default.
     #[serde(skip_serializing_if = "is_false")]
     pub keep_warm: bool,
+    /// Whether a group shares the 3D space of the scene that places it (ADR-0164 §1,
+    /// since 0.125): placed in a 3D scene, it has no layer, and each of its children is
+    /// placed in that scene's space through the group item's pose and drawn as an item
+    /// of that scene, sorting, lit and in focus on its own. The group item's opacity
+    /// multiplies its children's; its crop, flips, blend, effects, the scene source's
+    /// filters and the group's own video chain don't apply. A group placed in a 2D scene,
+    /// or inside a group that doesn't share space, is drawn flat as before, and a scene
+    /// with the `scene` role keeps and ignores it. Omitted for `false`, the default.
+    #[serde(skip_serializing_if = "is_false")]
+    pub share_space: bool,
 }
 
 impl Default for SceneOptions {
@@ -1313,6 +1329,7 @@ impl Default for SceneOptions {
             include_audio: true,
             background: None,
             keep_warm: false,
+            share_space: false,
         }
     }
 }

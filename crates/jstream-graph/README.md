@@ -68,7 +68,8 @@ protocol's types (`Overrides`).
   if any, its `SceneMeta`, its `camera` if it is a 3D scene (ADR-0094; a keyframe
   scene's is an override of its parent's), its camera's `camera_motion` (ADR-0113, a
   family's only; its follow camera, `Scene::camera_follow`, is read from its items'
-  `follow_pointer` effects, ADR-0120), its `timelines` ordered by ID
+  `follow_pointer` effects, ADR-0120), the item of it its camera rides with,
+  `Scene::camera_anchor` (ADR-0164, a family's only), its `timelines` ordered by ID
   (ADR-0115), and its items in stacking order, bottom
   first, and its PTZ `ptz_shots` (ADR-0146: a preset or a pose per named camera, where a
   keyframe scene's shot for a camera replaces its parent's and
@@ -401,7 +402,8 @@ that does not want to change the graph it has.
   which the engine reads when it follows nesting for audio, and `background`, checked as
   a colour (`SceneOptions::problem`) and refused on a keyframe scene, which shows its
   parent's, and `keep_warm` (ADR-0149), refused on a keyframe scene too, since its
-  parent is the scene kept warm. A deleted scene's inverse restores them.
+  parent is the scene kept warm, and `share_space` (ADR-0164), which the engine reads on
+  a group placed in a 3D scene. A deleted scene's inverse restores them.
   `scene.set_camera` (`camera.rs`) sets or removes a scene's camera
   ([ADR-0094](../../docs/adr/0094-scene-cameras.md)), checked by `SceneCamera::validate`
   (field `camera.fov_deg`, `camera.target` when it is on the position, else `camera`). On a keyframe scene it writes
@@ -424,7 +426,14 @@ that does not want to change the graph it has.
   those filter edits' inverses. Both are refused on a keyframe scene
   (`invalid_argument`), since they belong to the family. A scene keeps its motion while
   it has no camera; a follow goes with its item. A deleted scene's inverse restores its
-  motion after its items (`camera::restore`), and its follow with their effects. `camera_anim_modifiers` turns a motion list into
+  motion and its camera anchor after its items (`camera::restore`), and its follow with
+  their effects. `scene.set_camera_anchor` (`camera.rs`,
+  [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)) sets or clears
+  the item a scene's camera rides with, undone by the old value: refused on a keyframe
+  scene (field `anchor`, the family's), on a scene without a camera, and for an item
+  that isn't the scene's or whose source isn't a `scene` source of a `group`-role
+  scene (`invalid_argument`). One that later names no such item is kept, and the engine
+  ignores it. `camera_anim_modifiers` turns a motion list into
   `jstream-anim`'s for the engine.
 - **Timelines** (`timeline.rs`, [ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
   `timeline.set` stores a timeline in a scene (the scene `not_found`, then
@@ -532,7 +541,7 @@ change nothing.
 
 **The collection file** (`persist/`, [ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence)):
 `Graph::to_collection_json` writes the collection as pretty JSON: `schema_version`
-(`SCHEMA_VERSION`, now 14), `rev`, the `canvas`, the `blending` space (ADR-0126,
+(`SCHEMA_VERSION`, now 16), `rev`, the `canvas`, the `blending` space (ADR-0126,
 `schema_version` 12, omitted at `srgb`), scenes in display order (a group with
 `role: "group"`, ADR-0024, and its `filters` as a source's, omitted while empty) with
 their items bottom first (each with its placement in
@@ -578,7 +587,9 @@ while absent, is `schema_version` 10. Version 11 (ADR-0133) adds a hotkey bindin
 timeline's `labels`. Version 13 (ADR-0138) adds motion modifiers with `property`
 `effect` and their `effect` target, which drive an effect's setting. A scene's `ptz_shots` (ADR-0146), omitted
 while empty, are `schema_version` 14, and a scene's `keep_warm` (ADR-0149), omitted
-while `false`, is `schema_version` 15. Loading creates the folders top level first, then
+while `false`, is `schema_version` 15. A group's `share_space` and a scene's
+`camera_anchor` (ADR-0164), each omitted while absent, are `schema_version` 16, the
+anchor set after the scene's items exist. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -604,7 +615,8 @@ the engine's; this crate does no I/O.
   into `normal` and `additive`, and sets `linear` when any item used another mode, the
   default `normal` included, so only a file of `_srgb` items, or of none, loads as
   `srgb`, and 12 to 13 refuses a version 12 modifier that drives an effect setting,
-  and 13 to 14 refuses a scene's `ptz_shots` in a version 13 file),
+  and 13 to 14 refuses a scene's `ptz_shots` in a version 13 file, 14 to 15 its
+  `keep_warm`, and 15 to 16 a group's `share_space` and a scene's `camera_anchor`),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.
