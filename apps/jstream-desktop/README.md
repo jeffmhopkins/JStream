@@ -412,7 +412,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   collection's bound chords while another application has the focus
   ([ADR-0112](../../docs/adr/0112-assignable-camera-zoom-bindings.md) §5 and §6, #1188).
   `hotkeys.rs` opens its own session on the engine (`jstream-desktop hotkeys` in the
-  audit log), reads the bindings from `state.get` and reads them again after each
+  audit log, `jstream_protocol::HOTKEYS_CLIENT_NAME`, which the Agent activity panel
+  leaves out as the user's own), reads the bindings from `state.get` and reads them again after each
   `state.changed`, so a chord bound or cleared from any client is heard or let go at
   once. `jstream_platform_windows::GlobalHotkeys` registers exactly those chords with
   `RegisterHotKey` on its own thread (a wheel chord with a low-level mouse hook,
