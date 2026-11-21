@@ -77,6 +77,7 @@ const V14: &str = include_str!("fixtures/v14.json");
 /// A collection file at schema version 15, the current one: version 14 with scene `b`
 /// kept warm (ADR-0117 §7). The same rule applies once version 16 exists.
 const V15: &str = include_str!("fixtures/v15.json");
+const V16: &str = include_str!("fixtures/v16.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -690,9 +691,65 @@ fn v15_graph() -> Graph {
     graph
 }
 
+/// [`v15_graph`] with group `b` sharing scene `a`'s 3D space and `a`'s camera riding
+/// with it, through item `i2` (ADR-0164).
+fn v16_graph() -> Graph {
+    let mut graph = v15_graph();
+    let b = SceneId::new("b");
+    let mut options = graph
+        .state()
+        .scene(&b)
+        .map(|scene| scene.options().clone())
+        .unwrap_or_default();
+    options.share_space = true;
+    let applied = graph.apply(
+        &[
+            Edit::SceneSetOptions {
+                scene_id: b,
+                options,
+            },
+            Edit::SceneSetCameraAnchor {
+                scene_id: SceneId::new("a"),
+                anchor: Some(ItemId::new("i2")),
+            },
+        ],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v15_graph().to_collection_json(), V15);
+    assert_eq!(v16_graph().to_collection_json(), V16);
+}
+
+#[test]
+fn the_v16_fixture_loads_exactly() {
+    let expected = v16_graph();
+    let loaded = load(V16);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(14)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Versions before 16 have no 3D groups or camera anchors, so either field there is
+/// refused.
+#[test]
+fn an_older_file_refuses_share_space_and_an_anchor() {
+    for (scene, field, value) in [
+        (0, "share_space", json!(true)),
+        (1, "camera_anchor", json!("i2")),
+    ] {
+        let mut value_file: Value = serde_json::from_str(V15).unwrap_or_default();
+        value_file["scenes"][scene][field] = value;
+        assert!(
+            matches!(
+                load(&value_file.to_string()),
+                Err(LoadError::Migration { from: 15, .. })
+            ),
+            "{field}"
+        );
+    }
 }
 
 #[test]
@@ -2290,6 +2347,7 @@ fn folders_labels_and_metadata_round_trip() {
                     include_audio: false,
                     background: Some("#0f111580".into()),
                     keep_warm: false,
+                    share_space: false,
                 },
             },
             Edit::SourceSetMeta {

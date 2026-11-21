@@ -142,3 +142,111 @@ fn an_environment_light_carries_its_sky() {
             .is_err()
     );
 }
+
+/// ADR-0167: an environment light carries whether it is drawn as a backdrop and its
+/// stars; settings that predate them read as no backdrop and no stars, and a value out
+/// of range is refused.
+#[test]
+fn an_environment_light_carries_its_backdrop_and_stars() {
+    let source = create(json!({
+        "type": "environment",
+        "backdrop": true,
+        "stars": 0.5,
+        "star_brightness": 2.0,
+    }));
+    let sky = source
+        .light()
+        .and_then(|light| light.environment)
+        .expect("a sky");
+    assert!(sky.backdrop);
+    assert!((sky.stars - 0.5).abs() < 1e-6);
+    assert!((sky.star_brightness - 2.0).abs() < 1e-6);
+    let mut older = settings(json!({"type": "environment"}));
+    for id in ["backdrop", "stars", "star_brightness"] {
+        older.0.remove(id);
+    }
+    let sky = LightKind::new()
+        .create(&older, &Context::default())
+        .expect("a light")
+        .light()
+        .and_then(|light| light.environment)
+        .expect("a sky");
+    assert!(!sky.backdrop);
+    assert_eq!(sky.stars, 0.0);
+    assert!((sky.star_brightness - 1.0).abs() < 1e-6);
+    for bad in [
+        json!({"type": "environment", "stars": 2.0}),
+        json!({"type": "environment", "star_brightness": -1.0}),
+        json!({"type": "environment", "backdrop": "yes"}),
+    ] {
+        assert!(
+            LightKind::new()
+                .create(&settings(bad), &Context::default())
+                .is_err()
+        );
+    }
+}
+
+/// ADR-0167: an environment light carries its backdrop's deep sky and warp; settings
+/// that predate them read as none, still, seed 0 and the default colours.
+#[test]
+fn an_environment_light_carries_its_deep_sky_and_warp() {
+    let sky = create(json!({
+        "type": "environment",
+        "nebula": 0.6,
+        "nebula_color": "#ff0000",
+        "galaxy": 0.4,
+        "sky_seed": 42,
+        "warp": 0.75,
+        "warp_ramp_s": 3.0,
+    }))
+    .light()
+    .and_then(|light| light.environment)
+    .expect("a sky");
+    assert!((sky.nebula - 0.6).abs() < 1e-6);
+    assert_eq!(sky.nebula_colors[0], [1.0, 0.0, 0.0]);
+    assert!((sky.galaxy - 0.4).abs() < 1e-6);
+    assert_eq!(sky.sky_seed, 42);
+    assert!((sky.warp - 0.75).abs() < 1e-6);
+    assert!((sky.warp_ramp_s - 3.0).abs() < 1e-6);
+    let mut older = settings(json!({"type": "environment"}));
+    for id in [
+        "nebula",
+        "nebula_color",
+        "nebula_color_2",
+        "galaxy",
+        "sky_seed",
+        "warp",
+        "warp_ramp_s",
+    ] {
+        older.0.remove(id);
+    }
+    let sky = LightKind::new()
+        .create(&older, &Context::default())
+        .expect("a light")
+        .light()
+        .and_then(|light| light.environment)
+        .expect("a sky");
+    assert_eq!(
+        (sky.nebula, sky.galaxy, sky.sky_seed, sky.warp),
+        (0.0, 0.0, 0, 0.0)
+    );
+    assert!((sky.warp_ramp_s - 1.5).abs() < 1e-6);
+    assert_eq!(
+        sky.nebula_colors[1],
+        [36.0 / 255.0, 113.0 / 255.0, 168.0 / 255.0]
+    );
+    for bad in [
+        json!({"type": "environment", "warp": 1.5}),
+        json!({"type": "environment", "warp_ramp_s": 11.0}),
+        json!({"type": "environment", "sky_seed": 10000}),
+        json!({"type": "environment", "sky_seed": 1.5}),
+        json!({"type": "environment", "nebula_color": "violet"}),
+    ] {
+        assert!(
+            LightKind::new()
+                .create(&settings(bad), &Context::default())
+                .is_err()
+        );
+    }
+}
