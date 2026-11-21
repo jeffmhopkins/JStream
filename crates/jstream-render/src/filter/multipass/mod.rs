@@ -3,10 +3,11 @@
 //!
 //! Docs: crates/jstream-render/README.md#filters
 //!
-//! Shared pieces: [`gauss`] is the bounded separable blur that blur, drop shadow,
-//! glow and bloom use; [`area`] is the whole / inside / outside rectangle that blur and pixelate
-//! share; [`bounds`] is the room drop shadow and glow blur their shape in; `common.wgsl`
-//! holds the WGSL helpers these shaders share.
+//! Shared pieces: [`gauss`] is the bounded separable blur that blur, drop shadow and
+//! bloom use; [`jfa`] is the jump flood that outline and glow measure distances with;
+//! [`area`] is the whole / inside / outside rectangle that blur and pixelate share;
+//! [`bounds`] is the room drop shadow blurs its shape in; `common.wgsl` holds the WGSL
+//! helpers these shaders share.
 
 /// A shader of this group: `common.wgsl`, then the named file.
 macro_rules! wgsl {
@@ -22,6 +23,7 @@ mod bounds;
 mod drop_shadow;
 mod gauss;
 mod glow;
+mod jfa;
 mod outline;
 mod pixelate;
 mod video_delay;

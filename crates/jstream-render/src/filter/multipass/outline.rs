@@ -3,17 +3,15 @@
 //! the frame's edge is cut (ADR-0065 §5); on an item, its `max_outset_px` gives the
 //! effects layer room for the widest outside stroke past the box.
 //!
-//! Method: a jump flood. A seed pass marks the shape's pixels (alpha at least 0.5;
-//! inside: the pixels below it), then steps of `S, S/2, ..., 1` and one more step of 1
-//! carry to every pixel the vector to its nearest seed, where `S` is the power of two
-//! that lets the steps reach `width + 1` px. The stroke covers each pixel by
-//! `clamp(width + 1 - distance, 0, 1)`. Jump flood distances are near-exact (an
-//! occasional pixel takes a seed a little farther than the nearest). [`MAX_WIDTH`] is
-//! 64 px: at most 8 step passes, each of 9 loads, and two scratch layers.
+//! Method: a jump flood ([`jfa`]) that reaches `width + 1` px gives every pixel the
+//! vector to its nearest seed: the shape's pixels (alpha at least 0.5; inside: the
+//! pixels below it). The stroke covers each pixel by `clamp(width + 1 - distance, 0, 1)`.
+//! [`MAX_WIDTH`] is 64 px: at most 8 step passes, each of 9 loads, and two scratch
+//! layers.
 
 use jstream_protocol::{KindDescriptor, Settings};
 
-use super::{copy, premultiplied};
+use super::{copy, jfa, premultiplied};
 use crate::error::RenderError;
 use crate::filter::params::{Read, Uniforms, choice, color, filter, float};
 use crate::filter::{Blend, Ctx, Draw, Pass, Shader};
@@ -23,18 +21,6 @@ pub(super) const KIND: &str = "outline";
 
 /// The widest stroke, px.
 pub(super) const MAX_WIDTH: f32 = 64.0;
-
-const SEED: Shader = Shader {
-    label: "multipass-jfa-seed",
-    source: wgsl!("jfa_seed.wgsl"),
-    blend: Blend::Replace,
-};
-
-const STEP: Shader = Shader {
-    label: "multipass-jfa-step",
-    source: wgsl!("jfa_step.wgsl"),
-    blend: Blend::Replace,
-};
 
 const STROKE: Shader = Shader {
     label: "multipass-outline",
@@ -104,13 +90,6 @@ pub(super) fn outset(settings: &Settings) -> f32 {
     }
 }
 
-/// The jump flood's step sizes for a stroke of `width` px, largest first.
-fn steps(width: f32) -> impl Iterator<Item = u32> {
-    let reach = width.max(0.0).ceil() as u32 + 1;
-    let first = (reach.next_power_of_two() / 2).max(1);
-    std::iter::successors(Some(first), |s| (*s > 1).then_some(s / 2)).chain([1])
-}
-
 impl Pass for Outline {
     fn update(&mut self, settings: &Settings) {
         self.0 = read(settings);
@@ -127,28 +106,7 @@ impl Pass for Outline {
             return copy(ctx, input, output);
         }
         let inside = u32::from(stroke.inside);
-        let (w, h) = (output.width(), output.height());
-        let mut from = ctx.scratch(w, h)?;
-        let mut to = ctx.scratch(w, h)?;
-        let params = Uniforms::new().u32(inside).finish();
-        ctx.draw(&Draw {
-            shader: SEED,
-            input,
-            aux: None,
-            params: &params,
-            target: &from,
-        })?;
-        for step in steps(stroke.width) {
-            let params = Uniforms::new().i32(step as i32).finish();
-            ctx.draw(&Draw {
-                shader: STEP,
-                input: &from,
-                aux: None,
-                params: &params,
-                target: &to,
-            })?;
-            std::mem::swap(&mut from, &mut to);
-        }
+        let nearest = jfa::flood(ctx, input, output, stroke.width + 1.0, stroke.inside)?;
         let params = Uniforms::new()
             .vec4(premultiplied(stroke.color))
             .f32(stroke.width)
@@ -157,7 +115,7 @@ impl Pass for Outline {
         ctx.draw(&Draw {
             shader: STROKE,
             input,
-            aux: Some(&from),
+            aux: Some(&nearest),
             params: &params,
             target: output,
         })
@@ -166,7 +124,6 @@ impl Pass for Outline {
 
 #[cfg(test)]
 mod tests {
-    use super::{MAX_WIDTH, steps};
     use crate::filter::testing::{filter, image, run};
     use crate::tests::{near, open, solid};
     use serde_json::json;
@@ -174,22 +131,6 @@ mod tests {
     const CLEAR: [u8; 4] = [0, 0, 0, 0];
     const RED: [u8; 4] = [255, 0, 0, 255];
     const WHITE: [u8; 4] = [255, 255, 255, 255];
-
-    #[test]
-    fn the_steps_reach_past_the_width_and_stay_bounded() {
-        let all = |w| steps(w).collect::<Vec<_>>();
-        assert_eq!(all(0.0), [1, 1]);
-        assert_eq!(all(1.0), [1, 1]);
-        assert_eq!(all(4.0), [4, 2, 1, 1]);
-        assert_eq!(all(MAX_WIDTH), [64, 32, 16, 8, 4, 2, 1, 1]);
-        let mut w = 0.0;
-        while w <= MAX_WIDTH {
-            let s = all(w);
-            let reach: u32 = s.iter().sum();
-            assert!(reach > w as u32 && s.len() <= 9, "{w}: {s:?}");
-            w += 0.5;
-        }
-    }
 
     /// ADR-0065 §5: outside or inside, the frame keeps its size.
     #[test]

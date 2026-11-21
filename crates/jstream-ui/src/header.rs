@@ -724,10 +724,10 @@ pub fn Header(
                                         aria-checked=move || if shown() { "true" } else { "false" }
                                         on:click=move |_| dock.update(|d| d.toggle(panel))
                                     >
-                                        <span>{panel.title()}</span>
-                                        <span class="mark" class:add=move || !shown()>
-                                            {move || if shown() { "shown" } else { "add" }}
+                                        <span class="menu-check" aria-hidden="true">
+                                            {move || shown().then_some("✓")}
                                         </span>
+                                        <span>{panel.title()}</span>
                                     </button>
                                 }
                             }).collect_view()}
@@ -772,25 +772,29 @@ pub fn Header(
                                         let name = name.clone();
                                         move || dock.with(|d| d.current == name)
                                     };
+                                    let checked = current.clone();
                                     let pick = name.clone();
                                     view! {
                                         <button
                                             class="menuitem"
-                                            role="menuitem"
+                                            role="menuitemradio"
+                                            aria-checked=move || if checked() { "true" } else { "false" }
                                             on:click=move |_| {
                                                 dock.update(|d| d.apply(&pick));
                                                 open.set(None);
                                             }
                                         >
+                                            <span class="menu-check" aria-hidden="true">
+                                                {move || current().then_some("✓")}
+                                            </span>
                                             <span>{name}</span>
-                                            {move || current().then(|| view! { <span class="mark add">"current"</span> })}
                                         </button>
                                     }
                                 })
                                 .collect_view()}
                             <div class="menu-sep"></div>
                             <button
-                                class="menuitem link"
+                                class="menuitem"
                                 role="menuitem"
                                 on:click=move |_| {
                                     dock.update(|d| d.save_as_new());
