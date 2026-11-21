@@ -152,7 +152,31 @@ after a sender's state stream starts sets the baseline and doesn't fire, so conn
 replays nothing. A binding fires at most once every 50 ms. It runs any action a hotkey
 runs (ADR-0122 decision 1).
 
-**8. A `grid` source kind.** `grid` draws cells from live data as a picture, which an item
+**8. An `event_text` source kind: what just happened, as words that fade.** It shows a
+line of text each time a rule fires, holds it, then fades it out:
+- **Rules**, at most 32, each with `enabled`, `key`, `field`, `equals` and `text`. A rule
+  fires as a data trigger does (decision 7). `key` and `field` may hold `*`, matching any
+  one key part or list index, so one rule covers every slot of every column:
+  `track/*` and `slots.*.state` equal to `recording`. Data triggers take `*` the same way.
+- **The text** is a template: `{1}` and `{2}` are what each `*` matched and `{1+}` that
+  plus one, `{value}` the new value, `{.name}` a field beside the matched one, and
+  `{/name}` a field at the top of the message. So
+  `Clip recording started (track {1+}, clip {2+}): {.name}` names the clip. Values from a
+  sender are untrusted text: drawn as plain text, control characters replaced by spaces,
+  each cut to 100 characters, and a line to 300.
+- **Presets.** The kind offers ready-made rules for the keys JTunnel's state documents
+  (a clip recording, playing, stopping or queued; mute, solo and arm; play and stop; a
+  tempo change), each a checkbox, so a person ticks what to show and edits the words.
+  They are rules like any other, not special cases.
+- **Timing.** `hold_ms` (0 to 60000, default 4000) keeps a line fully shown, then
+  `fade_ms` (0 to 10000, default 500) fades it. At most `max_lines` (1 to 20, default 5)
+  show, newest at the `newest` end (`top` or `bottom`); a new line past the limit pushes
+  the oldest out. Lines come at most 8 a second, and any more are dropped and counted.
+- **Look.** The `text` kind's font, size, colour, outline, alignment and wrapping.
+- The receive thread makes the lines; the render thread draws them and fades them on the
+  media clock, with nothing allocated there.
+
+**9. A `grid` source kind.** `grid` draws cells from live data as a picture, which an item
 shows flat or a model takes as `texture` or `emissive_texture` (decision 6):
 - **Where the cells are.** `input`, a `columns_key` with `{column}` in it (`track/{column}`),
   a `cells_field` that is a list in each column's message (`slots`), and `columns` and
@@ -168,19 +192,19 @@ shows flat or a model takes as `texture` or `emissive_texture` (decision 6):
   the render thread draws them with one small pass, blinking on the media clock. Nothing
   allocates there.
 
-**9. Pages.** The `browser` kind gains `page_api_data` (off by default, shown while
+**10. Pages.** The `browser` kind gains `page_api_data` (off by default, shown while
 `page_api` is on, with ADR-0124's warning) and `page_api_data_input`. A granted page gets
 `jstream.data()` (every key of that input, as JSON) and a `data` event per changed key, at
 most once per page frame, as ADR-0147 sends MIDI readings. So a layout no built-in kind
 draws is still possible.
 
-**10. Within ADR-0123.** The JTunnel sockets, what JStream sends, the accepted-senders
+**11. Within ADR-0123.** The JTunnel sockets, what JStream sends, the accepted-senders
 list and the subscribed-address check are unchanged. A sender's state reaches only what
-its MIDI reaches, and only once its own switch is on: bindings (decisions 3 to 7), `grid`
+its MIDI reaches, and only once its own switch is on: bindings (decisions 3 to 7), `event_text` and `grid`
 sources, and pages the person granted. It never runs a protocol command; protocol clients,
 who are already authorised, may read it. The parser is fuzzed with the other packets.
 
-**11. People map it without typing paths.** The Motion section offers **DAW data** beside
+**12. People map it without typing paths.** The Motion section offers **DAW data** beside
 MIDI, and the Bindings list offers a data trigger beside a key chord and a MIDI message.
 Both pick the sender, key and field from a **live field picker**: a tree of the keys and
 fields arriving now, each with its current value, filled from `data.list` and
@@ -190,10 +214,10 @@ and glow strength by name (decision 6). For example, a shape that shows only whi
 transport plays is one `data` modifier on opacity, `key = "transport"`,
 `field = "playing"`, `from = -1`, `to = 0`, `smoothing_ms = 0`.
 
-**12. Delivery and the wire.** Each piece lands in its own PR, each wire addition an
+**13. Delivery and the wire.** Each piece lands in its own PR, each wire addition an
 additive minor version ([R-API-001](../RULES.md#R-API-001)), in this order: decisions 4
-and 6 (no data needed); 1 and 2; 3 and 5; 7; 8; 9. Each PR brings its part of decision
-11.
+and 6 (no data needed); 1 and 2; 3 and 5; 7; 8; 9; 10. Each PR brings its part of
+decision 12.
 
 <a id="consequences"></a>
 ## Consequences
@@ -204,6 +228,8 @@ and 6 (no data needed); 1 and 2; 3 and 5; 7; 8; 9. Each PR brings its part of de
   any modifier, including `midi` and `audio`.
 - **Easier:** a clip launcher or a meter bridge on a model is one `grid` source and one
   `emissive_texture` or `texture`, not a binding per cell.
+- **Easier:** an on-screen log of what the DAW just did ("Clip recording started (track 1,
+  clip 1)") is one `event_text` source with its presets ticked, and fades by itself.
 - **Harder:** live data is a second input store beside MIDI's, with its own bounds,
   counters and fuzzing.
 - **Harder:** a modifier list still holds at most 8, so a rig with many driven parts uses
