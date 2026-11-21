@@ -774,6 +774,7 @@ impl LiveSources {
                     start: r.start,
                     drawn: Arc::clone(&r.drawn),
                     slot: r.slot.as_ref().map(|(slot, _)| Arc::clone(slot)),
+                    due: Arc::default(),
                 })
             })
             .collect();
@@ -1533,6 +1534,11 @@ struct Painted {
     /// painter whose frames aren't packed RGBA8, whose frames reach the picture only
     /// through a re-plan.
     slot: Option<Arc<FrameSlot>>,
+    /// For a painter with a slot, when on the clock its frame next changes, as it said
+    /// after its last paint: a tick before then, which another source asked for, leaves
+    /// it as it is (#1556). `None` until it is first painted, and when it said it never
+    /// changes again, so it is painted on every tick as before.
+    due: Arc<Mutex<Option<MediaTime>>>,
 }
 
 /// What the thread does next.
@@ -1607,9 +1613,20 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
             } => {
                 // Drawing can take milliseconds, so it happens here, before a re-plan
                 // takes the collection lock and asks for the painted frames.
-                // A source no mix drew in the latest plans is skipped.
+                // A source no mix drew in the latest plans is skipped, and so is one
+                // with a slot whose frame isn't due yet: a tick another source asked
+                // for (a page re-plans every program frame) doesn't paint a timer
+                // whose text changes once a second (#1556). The thread wakes for it
+                // at `replan_time` of its due time, so that is when it counts as due.
                 let mut next = None;
                 for painted in painters.iter().filter(|p| p.drawn.load(Ordering::Relaxed)) {
+                    if painted.slot.is_some() {
+                        let due = *lock(&painted.due);
+                        if let Some(due) = due.filter(|&due| now < replan_time(due, fps)) {
+                            next = crate::snapshot::earliest(next, Some(due));
+                            continue;
+                        }
+                    }
                     let started = Instant::now();
                     let at = since(now, painted.start);
                     painted.painter.paint(at);
@@ -1624,6 +1641,7 @@ fn run(worker: &Worker, host: &Weak<dyn LiveHost>) {
                         .painter
                         .next_change(at)
                         .and_then(|change| after(painted.start, change, now.timebase()));
+                    *lock(&painted.due) = due;
                     next = crate::snapshot::earliest(next, due);
                 }
                 {

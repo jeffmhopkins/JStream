@@ -25,6 +25,7 @@ mod readback;
 mod scene;
 mod timer;
 pub mod transition;
+mod turn;
 mod wipe;
 
 pub use cache::{Reclaimed, ResourceCache};
