@@ -1795,6 +1795,11 @@ source: crates/jstream-mcp/src/tests.rs
           "CameraFollow": {
             "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
             "properties": {
+              "hold_zoom": {
+                "default": true,
+                "description": "Whether the zoom holds (since 0.124): the camera stays at the distance the zoom\nasks for, and near the item's edges it only pans, its frame stopping at the edge.\nDefault true. Off, it is ADR-0113's: it pulls back on a fast pointer and moves\nnearer where a corner would show past the item.",
+                "type": "boolean"
+              },
               "item_id": {
                 "$ref": "#/$defs/ItemId",
                 "description": "The item it follows: one of the scene's, showing a display or window capture."
@@ -8561,6 +8566,11 @@ source: crates/jstream-mcp/src/tests.rs
           "CameraFollow": {
             "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
             "properties": {
+              "hold_zoom": {
+                "default": true,
+                "description": "Whether the zoom holds (since 0.124): the camera stays at the distance the zoom\nasks for, and near the item's edges it only pans, its frame stopping at the edge.\nDefault true. Off, it is ADR-0113's: it pulls back on a fast pointer and moves\nnearer where a corner would show past the item.",
+                "type": "boolean"
+              },
               "item_id": {
                 "$ref": "#/$defs/ItemId",
                 "description": "The item it follows: one of the scene's, showing a display or window capture."
@@ -17109,6 +17119,11 @@ source: crates/jstream-mcp/src/tests.rs
           "CameraFollow": {
             "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
             "properties": {
+              "hold_zoom": {
+                "default": true,
+                "description": "Whether the zoom holds (since 0.124): the camera stays at the distance the zoom\nasks for, and near the item's edges it only pans, its frame stopping at the edge.\nDefault true. Off, it is ADR-0113's: it pulls back on a fast pointer and moves\nnearer where a corner would show past the item.",
+                "type": "boolean"
+              },
               "item_id": {
                 "$ref": "#/$defs/ItemId",
                 "description": "The item it follows: one of the scene's, showing a display or window capture."
@@ -26027,6 +26042,11 @@ source: crates/jstream-mcp/src/tests.rs
           "CameraFollow": {
             "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
             "properties": {
+              "hold_zoom": {
+                "default": true,
+                "description": "Whether the zoom holds (since 0.124): the camera stays at the distance the zoom\nasks for, and near the item's edges it only pans, its frame stopping at the edge.\nDefault true. Off, it is ADR-0113's: it pulls back on a fast pointer and moves\nnearer where a corner would show past the item.",
+                "type": "boolean"
+              },
               "item_id": {
                 "$ref": "#/$defs/ItemId",
                 "description": "The item it follows: one of the scene's, showing a display or window capture."
@@ -32448,6 +32468,11 @@ source: crates/jstream-mcp/src/tests.rs
           "CameraFollow": {
             "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
             "properties": {
+              "hold_zoom": {
+                "default": true,
+                "description": "Whether the zoom holds (since 0.124): the camera stays at the distance the zoom\nasks for, and near the item's edges it only pans, its frame stopping at the edge.\nDefault true. Off, it is ADR-0113's: it pulls back on a fast pointer and moves\nnearer where a corner would show past the item.",
+                "type": "boolean"
+              },
               "item_id": {
                 "$ref": "#/$defs/ItemId",
                 "description": "The item it follows: one of the scene's, showing a display or window capture."
@@ -36169,6 +36194,11 @@ source: crates/jstream-mcp/src/tests.rs
           "CameraFollow": {
             "description": "A camera that follows the pointer over a display or window capture (ADR-0113 §2).\nWhile a scene has one, the engine computes its camera's position and target every\nframe; the camera's field of view, roll, depth sorting and blur apply as always, and\nwith a blur its focus is where it looks.",
             "properties": {
+              "hold_zoom": {
+                "default": true,
+                "description": "Whether the zoom holds (since 0.124): the camera stays at the distance the zoom\nasks for, and near the item's edges it only pans, its frame stopping at the edge.\nDefault true. Off, it is ADR-0113's: it pulls back on a fast pointer and moves\nnearer where a corner would show past the item.",
+                "type": "boolean"
+              },
               "item_id": {
                 "$ref": "#/$defs/ItemId",
                 "description": "The item it follows: one of the scene's, showing a display or window capture."
