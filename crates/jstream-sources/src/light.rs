@@ -8,7 +8,8 @@ use crate::source::setting;
 use crate::{Context, Source, SourceError, SourceKind};
 use jstream_media::{FrameSize, MediaTime, Timebase, VideoFrame};
 use jstream_protocol::{
-    EnumOption, KindDescriptor, Media, ParamDescriptor, ParamType, Settings, SourceId, VisibleIf,
+    EnumOption, KindDescriptor, Media, ParamDescriptor, ParamType, Reference, Settings, SourceId,
+    VisibleIf,
 };
 use serde_json::json;
 use std::sync::Arc;
@@ -344,6 +345,16 @@ fn environment(settings: &Settings) -> Result<ShownEnvironment, SourceError> {
     };
     let image = match settings.get("image") {
         None | Some(serde_json::Value::Null) => None,
+        // A source reference, as the parameter's type checks it, or a bare ID.
+        Some(value @ serde_json::Value::Object(_)) => match Reference::from_value(value) {
+            Some(Reference::Source { source_id }) => Some(source_id),
+            _ => {
+                return Err(SourceError::Setting {
+                    param: "image".into(),
+                    reason: "must be a source's ID, or null".into(),
+                });
+            }
+        },
         Some(serde_json::Value::String(id)) if !id.is_empty() => Some(SourceId::new(id.clone())),
         Some(serde_json::Value::String(_)) => None,
         Some(_) => {
