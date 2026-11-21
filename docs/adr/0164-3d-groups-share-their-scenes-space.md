@@ -57,7 +57,7 @@ What exists to build on:
 This extends ADR-0094 decision 5 for groups that ask for it. A group that doesn't is drawn
 exactly as today, so it contradicts nothing accepted. It is agent tier
 ([R-GOV-005](../RULES.md#R-GOV-005)): it changes no licence, security or privacy posture,
-compatibility promise or spending, and the protocol gains two optional fields.
+compatibility promise or spending, and the protocol gains two optional fields and an edit.
 
 <a id="decision"></a>
 ## Decision
@@ -119,34 +119,40 @@ rig, with each child's own live values, modifiers and keyframes on top.
 - A group whose `share_space` differs between the two sides of a Move draws each side as
   that side has it, and the Move runs as a `Fade` of the same duration.
 
-**5. A camera may ride with a 3D group.** `SceneCamera` gains `anchor`, an optional item ID.
-With one that names a 3D group item of the camera's scene (for a keyframe scene, an item of
-its family), the camera's `position` and `target` are points of that group's space, in its
-canvas pixels as its children's are, and the camera is placed through the group item's pose
-each frame as a child is: both points move with the group, the picture's up is the group's
-up (its `−y` placed), and `roll_deg` rolls the picture from there. `fov_deg` doesn't change,
-and `focus_px` is a distance in the group's space, so it scales by `s` with it.
+**5. A camera may ride with a 3D group.** `SceneInfo` gains `camera_anchor`, an optional
+item ID, set by a new edit `scene.set_camera_anchor { scene_id, anchor? }`. It is beside
+the camera rather than in it, so `SceneCamera` stays a plain value of numbers. With an
+anchor that names a 3D group item of the scene, the camera's `position` and `target` are
+points of that group's space, in its canvas pixels as its children's are, and the camera
+is placed through the group item's pose each frame as a child is: both points move with
+the group, the picture's up is the group's up (its `−y` placed), and `roll_deg` rolls the
+picture from there. `fov_deg` doesn't change, and `focus_px` is a distance in the group's
+space, so it scales by `s` with it.
 - **Inside the rig.** Camera motion and the follow camera
   ([ADR-0113](0113-camera-motion-and-follow-pointer.md)) and the live aim (ADR-0152) apply
   in the group's space, before the camera is placed: an operator turns the view about the
   camera's place in the rig while the rig moves.
 - **Resolved each frame.** The placed camera is an ordinary camera in the scene's space,
   with its roll worked out from the group's up, so every consumer of a scene's camera
-  takes it unchanged. When the anchor is within 0.01° of the viewing axis (looking along
-  the group's up), the up falls back as ADR-0094 decision 3's does.
-- **Editing.** `scene.set_camera` writes `anchor` with the rest of the camera.
-  An anchor that names no item of the scene (or family) whose source is a group is
-  `invalid_argument`. One that later names no 3D group (the item removed, its group turned
-  flat or to a scene) is kept and ignored, the camera drawn in the scene's space by its own
-  numbers, and the scene's Properties say so.
-- **Moves.** Between two cameras with the same anchor, a Move glides the camera's numbers
-  in the group's space and places them through the gliding group each frame. Between
-  different anchors, or an anchor and none, it glides between the two placed cameras in
-  the scene's space.
+  takes it unchanged. When the camera looks within 0.01° of the group's up or down, the
+  up falls back as ADR-0094 decision 3's does.
+- **The family's.** The anchor belongs to a keyframe family: its keyframe scenes ride with
+  the parent's anchor, each with its own camera override, and `scene.set_camera_anchor` on
+  a keyframe scene is `invalid_argument`. So a Move within a family glides the camera's
+  numbers in the group's space and places them through the gliding group each frame.
+  Between two scenes with different anchors, or an anchor and none, a Move glides between
+  the two placed cameras in the scene's space.
+- **Editing.** The edit is a state edit, batchable, one undo step; its inverse is itself
+  with the previous value, and it bumps `rev`. An anchor that names no item of the scene
+  whose source is a group is `invalid_argument`, and so is one on a scene without a camera.
+  One that later names no 3D group (the item removed, its group turned flat or to a scene,
+  the camera removed) is kept and ignored, the camera drawn in the scene's space by its own
+  numbers, and the scene's Properties say so. Collection files store it on the scene,
+  omitted when absent.
 
-**6. Agents and people.** `share_space` and `anchor` reach agents through
-`scene.set_options` and `scene.set_camera` with their schemas, and `jstream-mcp`'s design
-notes explain 3D groups, what they drop, and riding a camera with one. The group's
+**6. Agents and people.** `share_space` and the anchor reach agents through
+`scene.set_options` and `scene.set_camera_anchor` with their schemas, and `jstream-mcp`'s
+design notes explain 3D groups, what they drop, and riding a camera with one. The group's
 Properties gain a "Share the 3D space" switch and the scene camera's Properties a "Moves
 with" group picker. In a 3D scene the canvas selects and drags a 3D group as one item, by
 the outline of its children, and opening it edits its children in its own space, as for
@@ -175,8 +181,8 @@ any group.
     camera and options, so it stays a card;
   - anchoring a light, or any item other than a camera, to an item that isn't its group.
 - **Follow-up implementation PRs:**
-  - `jstream-protocol`: `SceneOptions::share_space`, `SceneCamera::anchor`, and the
-    composition of a child's geometry and of a camera through a group's pose beside the
+  - `jstream-protocol`: `SceneOptions::share_space`, `SceneInfo::camera_anchor` and
+    `scene.set_camera_anchor`, and the composition of a child's geometry and of a camera through a group's pose beside the
     placement math, with unit tests that a neutral group places its children where their
     own geometry would; the graph's validation, the mock engine and collection files;
   - `jstream-core`: a 3D scene's 3D groups planned into its own pass, children placed each
