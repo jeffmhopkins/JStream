@@ -50,7 +50,9 @@ mod values;
 mod version;
 mod youtube;
 
-pub use activity::{ActivityEntry, MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS};
+pub use activity::{
+    ActivityEntry, HOTKEYS_CLIENT_NAME, MAX_ACTIVITY_ENTRIES, MAX_ACTIVITY_SUMMARY_CHARS,
+};
 pub use agent::{AgentApproval, AgentTransport, ApprovalDecision, ApprovalOutcome, ApprovedAgent};
 pub use audio::{
     AudioFollow, BusInfo, BusMeter, BusMonitor, Loudness, MAX_BUSES, MAX_GAIN_DB,

@@ -41,7 +41,7 @@ use tokio::sync::{mpsc, watch};
 pub const GLOBAL_KEY: &str = "hotkeys.global";
 
 /// The name the host's session gives the engine, which the audit log shows.
-pub const CLIENT_NAME: &str = "jstream-desktop hotkeys";
+pub const CLIENT_NAME: &str = jstream_protocol::HOTKEYS_CLIENT_NAME;
 
 /// What has the OS listen for chords.
 pub trait Registrar: Send + Sync + 'static {
