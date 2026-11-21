@@ -594,7 +594,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/README.md"]
-stamp = { hash = "b3:4bb57852c33872b6", by = "agent:sky-backdrop", note = "Re-read: the MCP tool grouping and rules are unchanged; only the design guidance text gained the deep sky and warp." }
+stamp = { hash = "b3:4b1a592262e74312", by = "agent:claude", note = "design guidance now names the midi motion modifier (ADR-0168); the section still describes the MCP surface correctly | merge: #1588 added the sky backdrop for 3D scenes (ADR-0167); the midi modifier text from this branch still holds | kept from the merged side: Re-read: the MCP tool grouping and rules are unchanged; only the design guidance text gained the deep sky and warp." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/build.rs"]
 stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the new serverInfo.version bullet: it names the workspace release version and the 0.0.0 crate version, matching build.rs and server.rs; the tool list is unchanged." }
@@ -603,7 +603,7 @@ stamp = { hash = "b3:f76069f4cf4f12b3", by = "agent:grok", note = "Re-read the n
 stamp = { hash = "b3:a290866de2eb2b3b", by = "agent:claude", note = "design guidance now names the midi motion modifier (ADR-0168); the section still describes the MCP surface correctly" }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:d62334a8d37607fb", by = "agent:sky-backdrop", note = "Re-read: MCP tool grouping and rules unchanged; only design guidance wording changed." }
+stamp = { hash = "b3:102e2bbdb7f8c998", by = "agent:claude", note = "design guidance now names the midi motion modifier (ADR-0168); the section still describes the MCP surface correctly | merge: #1588 added the sky backdrop for 3D scenes (ADR-0167); the midi modifier text from this branch still holds | kept from the merged side: Re-read: MCP tool grouping and rules unchanged; only design guidance wording changed." }
 
 ["ARCH#mcp"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -1992,7 +1992,7 @@ stamp = { hash = "b3:11ab863d21527e02", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:b2855255b9258e10", by = "agent:claude", note = "#1556: the sources thread now paints a painter with a slot only once its last next_change is due; the section's account of live sources (built, rebuilt, dropped on the jstream-sources thread, frames on the media clock) still holds" }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:f8d7b001c98efa99", by = "agent:sky-backdrop", note = "Re-read against snapshot.rs: draw_sky_of now passes SkyState's dropping to SkyDraw; the snapshot summary here still holds. | kept from the merged side: re-read the live sources summary: the new log line in upload_still changes no behaviour it describes" }
+stamp = { hash = "b3:260b5b1740a41c54", by = "agent:claude", note = "snapshot.rs passes the plan's MIDI inputs (FilterAssets tempo) to Bindings::record; live sources section unchanged | merge: #1579 adds logging in snapshot.rs for stills drawn as nothing and staged preview streams; this section's text is unaffected | merge: #1588 added the sky backdrop for 3D scenes (ADR-0167); the midi modifier text from this branch still holds | kept from the merged side: re-read the live sources summary: the new log line in upload_still changes no behaviour it describes | kept from the merged side: Re-read against snapshot.rs: draw_sky_of now passes SkyState's dropping to SkyDraw; the snapshot summary here still holds." }
 
 ["CRATE-jstream-core#contents-sources"."file:crates/jstream-core/src/transition.rs"]
 stamp = { hash = "b3:34f209c09ae51711", by = "agent:claude", note = "This PR: snapshot.rs's planner looks up the keyframe's overrides for a switch into it and passes them to transition::plan, a group's children planned with none. The merge brought #1261, #1281 and #1302, plus #1316's framing-camera fade, which the lookup now sits after. The sources contents list holds. | kept from the merged side: merge: snapshot.rs and transition.rs gained #1261, #1281 (bloom, glow and shadow bounds) and #1302 (a Move blends effect settings); the sources contents list names neither this PR's framing-camera planning nor those, and still holds. | kept from the merged side: New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section. | merge: Main's #1261 (model items drawn through the scene camera) and #1302 (Moves blend effect values) changed live.rs, snapshot.rs and transition.rs; the moved bullets still describe them, the details are in Snapshots." }
@@ -2367,7 +2367,7 @@ stamp = { hash = "b3:413aa99979862ab5", by = "agent:claude-timelines", note = "A
 stamp = { hash = "b3:5ae57d8cd8b5fcc1", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to snapshot.rs, chain.rs, effect_packs.rs, pack_store.rs, pack_source.rs, filter_assets.rs, live.rs, audio_sources.rs, forget.rs, kinds.rs, the modules its text names; #purpose still covers all of src/** and tests/**; depends_on README.md#filters, README.md#geometry, matching what it relies on" }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/snapshot.rs"]
-stamp = { hash = "b3:f8d7b001c98efa99", by = "agent:sky-backdrop", note = "Re-read the Sky backdrops paragraph against chain.rs SkyState::step (dropping set after the step while warp is above its setting) and snapshot.rs; now names it. | kept from the merged side: a program-stage draw that finds neither pixels nor texture now logs once per shown still, and the stills thread logs each decode again; added both to the still paragraph (#1562)" }
+stamp = { hash = "b3:260b5b1740a41c54", by = "agent:claude", note = "snapshot.rs records MIDI modifiers with the shot's audio bindings; snapshot behaviour described here unchanged | merge: #1579 adds logging in snapshot.rs for stills drawn as nothing and staged preview streams; this section's text is unaffected | merge: #1588 added the sky backdrop for 3D scenes (ADR-0167); the midi modifier text from this branch still holds | kept from the merged side: a program-stage draw that finds neither pixels nor texture now logs once per shown still, and the stills thread logs each decode again; added both to the still paragraph (#1562) | kept from the merged side: Re-read the Sky backdrops paragraph against chain.rs SkyState::step (dropping set after the step while warp is above its setting) and snapshot.rs; now names it." }
 
 ["CRATE-jstream-core#timelines"."body"]
 stamp = { hash = "b3:2d341c6156859b72", by = "agent:claude", note = "This PR: the body's paragraph on timeline labels, checked at timeline.labels and sorted. Merge: #1267's late-tick fixes in timelines.rs and tests/timelines.rs (#1261, #1267, #1269, #1281, #1283, #1284, #1293, #1299, #1302, #1316 and #1319). On re-reading, both match the code. | kept from the merged side: Re-read against #1253: added the sentence that a round sends each looped/ended in time order with its cues, after those due at or before the pass boundary, and drops it when such a cue stopped or restarted that run (send_timeline_step); the rest (rounds, skipped fires, cue_at, seek, removal) holds." }
@@ -3063,7 +3063,7 @@ stamp = { hash = "b3:f372f4393411319f", by = "agent:claude", note = "New crate: 
 stamp = { hash = "b3:9f5cc48cea3021dc", by = "agent:r9bzj2", note = "Re-read against clock.rs, playout.rs and the link and no_alloc tests: SenderClock, Playout (slew, snap, 2 s restart, replaced stream), and the tests' claims hold; main brought #1272's identical base | kept from the merged side: Re-read after narrowing write_audio's doc to what it checks (frame and event counts, whole events); the section's 'writes what a sender would, for tests and fuzzing' still holds" }
 
 ["CRATE-jstream-mcp#design"."body"]
-stamp = { hash = "b3:c50442cd035b60c9", by = "agent:sky-backdrop", note = "Re-read the design list entry: names backdrop, stars, nebula, galaxy, panorama and warp over warp_ramp_s with ADR-0167, as design.rs now says." }
+stamp = { hash = "b3:db85c95c83979e2a", by = "agent:claude", note = "design.rs gains the midi modifier guidance; tools table is generated and the snapshot regenerated | merge: #1588 added the sky backdrop for 3D scenes (ADR-0167); the midi modifier text from this branch still holds | kept from the merged side: Re-read the design list entry: names backdrop, stars, nebula, galaxy, panorama and warp over warp_ramp_s with ADR-0167, as design.rs now says." }
 
 ["CRATE-jstream-mcp#design"."dep:docs/ARCHITECTURE.md#mcp"]
 stamp = { hash = "b3:1f785207b43989b0", by = "agent:claude", note = "design.rs gains the midi modifier guidance; tools table is generated and the snapshot regenerated" }
@@ -3081,7 +3081,7 @@ stamp = { hash = "b3:528a4d728be121b6" }
 stamp = { hash = "b3:a772352ba69e809b" }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:d62334a8d37607fb", by = "agent:sky-backdrop", note = "Re-read the design-list sky entry: still accurate with the added drop-out zoom guidance." }
+stamp = { hash = "b3:102e2bbdb7f8c998", by = "agent:claude", note = "design.rs gains the midi modifier guidance; tools table is generated and the snapshot regenerated | merge: #1588 added the sky backdrop for 3D scenes (ADR-0167); the midi modifier text from this branch still holds | kept from the merged side: Re-read the design-list sky entry: still accurate with the added drop-out zoom guidance." }
 
 ["CRATE-jstream-mcp#design"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -3114,7 +3114,7 @@ stamp = { hash = "b3:af5c949db44560d1", by = "agent:ptz-builder", note = "OPEN_W
 stamp = { hash = "b3:8a8e9ae67d5d5efb" }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/design.rs"]
-stamp = { hash = "b3:d62334a8d37607fb", by = "agent:sky-backdrop", note = "Re-read: design.rs adds the zoom back as the warp drops to the sky guidance; purpose unchanged." }
+stamp = { hash = "b3:102e2bbdb7f8c998", by = "agent:claude", note = "added the midi modifier guidance (ADR-0168) to the design-guidance summary | merge: #1588 added the sky backdrop for 3D scenes (ADR-0167); the midi modifier text from this branch still holds | kept from the merged side: Re-read: design.rs adds the zoom back as the warp drops to the sky guidance; purpose unchanged." }
 
 ["CRATE-jstream-mcp#purpose"."file:crates/jstream-mcp/src/error.rs"]
 stamp = { hash = "b3:824842188b289238" }
@@ -6072,7 +6072,7 @@ stamp = { hash = "b3:93589619ec715d4c", by = "agent:claude", note = "#1129: cont
 stamp = { hash = "b3:d8e958873d7d4f75", by = "agent:lane-d", note = "Added UiSettingsView and Server::ui_settings: the host reads UI settings and watches for changes; the purpose list (ui_settings.rs) still holds." }
 
 ["CRATE-jstream-sources#purpose"."body"]
-stamp = { hash = "b3:4d3c523e82b4b2c1", by = "agent:sky-backdrop", note = "Re-read the light entry against light.rs: sky_seed now described as picking the nebula kind, warp as Doppler shifted with nebulae fading; ranges and defaults unchanged. | merge: Main's #1586 changed the display/window target wording (a key to find a window again); re-read it and the light entry, both accurate together. | kept from the merged side: The display/window bullet now says a Windows window ID is the handle, ';' and a key that finds the window again after its program or Windows restarts; the rest of the section (target setting, empty targets, capture.targets) holds" }
+stamp = { hash = "b3:d87f93d7c054eebb", by = "agent:claude", note = "MidiState keeps each control's latest value on any channel; added to the MidiState bullet | merge: #1586 reworded window capture's find-again behaviour; the MidiState bullet with the any-channel values still holds | merge: #1588 added the sky backdrop for 3D scenes (ADR-0167); the midi modifier text from this branch still holds | kept from the merged side: The display/window bullet now says a Windows window ID is the handle, ';' and a key that finds the window again after its program or Windows restarts; the rest of the section (target setting, empty targets, capture.targets) holds | kept from the merged side: Re-read the light entry against light.rs: sky_seed now described as picking the nebula kind, warp as Doppler shifted with nebulae fading; ranges and defaults unchanged. | merge: Main's #1586 changed the display/window target wording (a key to find a window again); re-read it and the light entry, both accurate together." }
 
 ["CRATE-jstream-sources#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-sources"]
 stamp = { hash = "b3:2479fd3ec2ea0017", by = "agent:claude", note = "Adds the midi_particles kind (#1224's note particles) beside the other ADR-0137 MIDI kinds: same input and channel settings, same CPU painter at 30 fps that settles while nothing moves. The crate map's jstream-sources row and the kinds list now name it" }
