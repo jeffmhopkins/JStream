@@ -2185,8 +2185,9 @@ After `welcome`, the server pushes every event to every client.
 - `stats.tick {seq, drops, load, chains, outputs}` is one sample of the pipeline's drop counters
   ([R-RT-004](../../docs/RULES.md#R-RT-004)). `drops` is a running total since the
   engine started, not a delta, so a client that misses a tick subtracts the last one
-  it did see. The fields are `capture_frames` (frames a capture mailbox replaced
-  before they were read), `audio_frames` (input-ring overruns, audio that arrived
+  it did see. The fields are `capture_frames` (frames a capture replaced that
+  the canvas could have shown, beside a tick that repeated the capture's frame; a
+  capture faster than the canvas replaces frames it could never show, which don't count), `audio_frames` (input-ring overruns, audio that arrived
   after the mixer had passed it, and frames the mixer skipped because it fell behind
   the clock), `render_ticks` (ticks the render loop skipped to catch up with the media
   clock), `encode_frames` and `encode_blocks` (video frames and audio blocks

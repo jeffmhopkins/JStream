@@ -647,7 +647,9 @@ pub enum OutputHealth {
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
 #[serde(default)]
 pub struct DropCounts {
-    /// Video frames a capture mailbox replaced before the reader took them.
+    /// Video frames a capture replaced that the canvas could have shown: it repeated the
+    /// capture's last frame beside them. A capture faster than the canvas replaces frames
+    /// the canvas could never show, and those are not counted.
     pub capture_frames: u64,
     /// Audio frames dropped before the mixer consumed them: a device ring that
     /// overwrote unread frames, frames that arrived after the mixer had passed them,
