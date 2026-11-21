@@ -277,6 +277,7 @@
               "kind": "follow_pointer",
               "kind_version": 1,
               "settings": {
+                "hold_zoom": true,
                 "lean_deg": 9.0,
                 "pitch_deg": -10.0,
                 "safe_margin_pct": 10,
