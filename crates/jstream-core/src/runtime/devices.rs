@@ -15,7 +15,9 @@
 //! still there on its next tick. Copies are made outside the lock. Each reader counts the
 //! device's frames from when it joined, so an output that joins a webcam the preview
 //! opened reports only the skips since, and a capture that stops and starts again doesn't
-//! count them twice.
+//! count them twice. A reader's skips are the frames it didn't get: those the device's
+//! stream replaced, and those another reader took from the slot and a newer frame
+//! replaced before this one read it.
 //!
 //! The program stage's backend on the GPU context is a second view of the same devices
 //! ([`VideoDevices::on_context`]): it opens a device that isn't open yet on the
@@ -172,6 +174,7 @@ impl VideoDevices for SharedVideoDevices {
                     seen,
                     base,
                     stats: base,
+                    missed: 0,
                 }));
             }
         }
@@ -196,6 +199,7 @@ impl VideoDevices for SharedVideoDevices {
             seen: 0,
             base,
             stats: base,
+            missed: 0,
         }))
     }
 
@@ -365,6 +369,10 @@ struct Reader {
     base: CaptureStats,
     /// The device's counters as of this reader's last read.
     stats: CaptureStats,
+    /// The frames that waited in the device's slot and were replaced before this reader
+    /// took them, because another reader read the device in between: skipped for this
+    /// reader, though the device's stream didn't skip them.
+    missed: u64,
 }
 
 impl CaptureStream for Reader {
@@ -401,6 +409,9 @@ impl CaptureStream for Reader {
         if self.seen == state.seq {
             return Ok(None);
         }
+        self.missed = self
+            .missed
+            .saturating_add(state.seq.saturating_sub(self.seen).saturating_sub(1));
         self.seen = state.seq;
         let Some(slot) = state.frame.as_mut() else {
             return Ok(None);
@@ -419,7 +430,10 @@ impl CaptureStream for Reader {
         let (now, base) = (self.stats, self.base);
         CaptureStats {
             frames_captured: now.frames_captured.saturating_sub(base.frames_captured),
-            frames_skipped: now.frames_skipped.saturating_sub(base.frames_skipped),
+            frames_skipped: now
+                .frames_skipped
+                .saturating_sub(base.frames_skipped)
+                .saturating_add(self.missed),
             frames_undecodable: now
                 .frames_undecodable
                 .saturating_sub(base.frames_undecodable),
@@ -737,5 +751,29 @@ mod tests {
         assert!(lost(shared.open(&id, &format, None).map(drop)));
         assert_eq!(fake.open_streams(), 0, "the GPU stream closed");
         assert!(lost(program.latest().map(drop)));
+    }
+
+    /// #1555: a frame another reader took and a newer one replaced before this reader
+    /// read is a frame this reader skipped, though the device's stream skipped none.
+    #[test]
+    fn a_frame_another_reader_took_is_skipped_for_this_one() {
+        let (clock, _fake, shared) = setup();
+        let id = DeviceId::new(FAKE_WEBCAM);
+        let format = shared.formats(&id).expect("formats")[0];
+        let mut first = shared.open(&id, &format, None).expect("opens");
+        let mut second = shared.open(&id, &format, None).expect("shares");
+        for _ in 0..3 {
+            clock.advance(1);
+            assert!(first.latest().expect("reads").is_some());
+        }
+        assert!(
+            second.latest().expect("reads").is_some(),
+            "the newest frame"
+        );
+        assert_eq!(first.stats().frames_skipped, 0);
+        assert_eq!(second.stats().frames_skipped, 2, "the first two frames");
+        clock.advance(1);
+        assert!(second.latest().expect("reads").is_some());
+        assert_eq!(second.stats().frames_skipped, 2, "none since");
     }
 }
