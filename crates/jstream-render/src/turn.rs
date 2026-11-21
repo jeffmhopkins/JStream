@@ -217,15 +217,20 @@ pub(crate) fn slerp_direction(a: [f64; 3], b: [f64; 3], k: f64, up: [f64; 3]) ->
         return unit([0, 1, 2].map(|i| a[i] + (b[i] - a[i]) * k));
     }
     // The direction a quarter turn from `a` toward `b` in their plane, or, when they are
-    // opposite and have no plane, toward the picture's up.
+    // opposite and have no plane, a quarter turn about the picture's up: `up × a`. From
+    // `b = −a` that is `−(up × a)`, the same sense of turn, so a curve that samples the
+    // pair both ways round (as Catmull-Rom's phantom ends do) turns one way throughout.
     let mut toward = [0, 1, 2].map(|i| b[i] - a[i] * cos);
     if d(toward, toward) < 1e-12 {
         let mut axis = up;
-        if d(axis, a).abs() > 0.999 {
+        if d(unit(axis), a).abs() > 0.999 {
             axis = [1.0, 0.0, 0.0];
         }
-        let along = d(axis, a);
-        toward = [0, 1, 2].map(|i| axis[i] - a[i] * along);
+        toward = [
+            axis[1] * a[2] - axis[2] * a[1],
+            axis[2] * a[0] - axis[0] * a[2],
+            axis[0] * a[1] - axis[1] * a[0],
+        ];
     }
     let toward = unit(toward);
     let (sin_k, cos_k) = (k * angle).sin_cos();

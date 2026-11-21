@@ -1302,6 +1302,43 @@ mod tests {
         let line = super::move_camera(&a, &none, &b, 0.5, false);
         assert!(dist(&line) < d * 0.75);
         assert_eq!(line, super::lerp_camera(&a, &b, 0.5));
+        // Swinging round to the back, between opposite directions: it turns about the
+        // picture's up, level with its target and at its distance, with no jump at
+        // halfway.
+        let back = SceneCamera {
+            position: Vec3 {
+                z: Finite32::new(a.target.z.get() - d).expect("finite"),
+                ..a.position
+            },
+            ..a
+        };
+        let offset = |c: &SceneCamera| {
+            [
+                c.position.x.get() - c.target.x.get(),
+                c.position.y.get() - c.target.y.get(),
+                c.position.z.get() - c.target.z.get(),
+            ]
+        };
+        let mut last = offset(&a);
+        for step in 1..=100 {
+            let k = step as f32 / 100.0;
+            let orbit = super::move_camera(&a, &none, &back, k, true);
+            let now = offset(&orbit);
+            assert!((dist(&orbit) - d).abs() < 0.05, "{k}: {orbit:?}");
+            assert!(now[1].abs() < 0.05, "{k}: stays level, {now:?}");
+            let jump = ((now[0] - last[0]).powi(2) + (now[2] - last[2]).powi(2)).sqrt();
+            // One hundredth of a half turn is about 0.0314 of the distance.
+            assert!(
+                jump < d * 0.04,
+                "{k}: jumps {jump} from {last:?} to {now:?}"
+            );
+            last = now;
+        }
+        let half = offset(&super::move_camera(&a, &none, &back, 0.5, true));
+        assert!(
+            (half[0].abs() - d).abs() < 0.05,
+            "halfway beside it: {half:?}"
+        );
     }
 
     /// ADR-0166 decision 1: a pair that turns and tilts at once moves as one rotation,

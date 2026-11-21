@@ -377,7 +377,11 @@ in-memory stand-in for the stream-key store, and follows the protocol's rules fo
   and `studio.changed` for each and after a batch, undo or redo that creates the first
   scene or deletes the program or preview scene. The mock knows only the initial `cut`
   preset ([ADR-0029](../../docs/adr/0029-transitions.md)): `state.get` reports it, every
-  switch cuts and reports it, a switch naming another preset is `not_found`, and the
+  switch cuts and reports it, a switch naming another preset is `not_found`, a
+  switch's `via` is refused as the engine refuses it (`invalid_argument` past
+  `MAX_VIA`, on the destination or on a repeat of the stop before; `not_found` for a
+  missing scene) except that the mock, which keeps no families, doesn't check that a
+  stop is in the destination's family, and the
   `transition.*`, `scene.set_transitions` and `item.set_transition` edits answer
   `internal`. So do timelines ([ADR-0115](../../docs/adr/0115-timelines-on-the-wire.md)):
   the `timeline.*` edits and actions and `source.restart` answer `internal`, and

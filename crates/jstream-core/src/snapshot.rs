@@ -1771,6 +1771,7 @@ fn plan_inner(
         look,
         assets,
         wake: None,
+        quiet: false,
     };
     let mut finished = running.is_some();
     let mut end_ms = None;
@@ -1983,6 +1984,7 @@ pub(crate) fn on_screen(
         look,
         assets,
         wake: None,
+        quiet: false,
     };
     let (planned, pairs) = planner.transition(running, &mut shot);
     let cameras = planner.track_cameras(running, pairs);
@@ -2138,6 +2140,10 @@ struct Planner<'a, 'f> {
     assets: &'a FilterAssets,
     /// The earliest time a frame in the shot is replaced.
     wake: Option<MediaTime>,
+    /// Plans without reaching any source (ADR-0166 decision 2): set while a Move's
+    /// `via` stops are planned, which are read only for their values, so a source only
+    /// a stop shows isn't shown, heard or woken by `look`.
+    quiet: bool,
 }
 
 impl<'a> Planner<'a, '_> {
@@ -2486,19 +2492,23 @@ impl<'a> Planner<'a, '_> {
     /// Gives each pair of `planned` the stops of `running`'s path (ADR-0166 decision 2):
     /// its values in each `via` scene that shows it, in order, so it follows one curve
     /// through them. A stop that doesn't show the item is passed by. The stops are only
-    /// read for their values: what they would draw is planned into a shot of their own,
-    /// which is dropped, so nothing they alone show is drawn or kept warm.
+    /// read for their values: they are planned quietly, without reaching a source, into
+    /// a shot of their own, which is dropped, so nothing they alone show is drawn, heard,
+    /// shown or woken.
     fn pass_through(&mut self, planned: &mut Planned, running: &Running, flatten: bool) {
         if running.via.is_empty() {
             return;
         }
         let mut scratch = Shot::default();
         let mut stops: Vec<Vec<Visual>> = Vec::with_capacity(running.via.len());
+        let (quiet, wake) = (self.quiet, self.wake);
+        self.quiet = true;
         for id in &running.via {
             if self.drawn(id).is_some() {
                 stops.push(self.endpoint(id, flatten, &mut scratch));
             }
         }
+        (self.quiet, self.wake) = (quiet, wake);
         for (visual, track) in &mut planned.tracks {
             let Track::Pair { via, .. } = track else {
                 continue;
@@ -3158,7 +3168,7 @@ impl<'a> Planner<'a, '_> {
 
     /// What `source_id` shows. Its frame goes in `out`, asked for once per shot.
     fn look(&mut self, source_id: &SourceId, out: &mut Shot) -> Option<SourceRef> {
-        if out.frames.contains_key(source_id) {
+        if out.frames.contains_key(source_id) || self.quiet {
             return Some(SourceRef::Frame(source_id.clone()));
         }
         match (self.look)(source_id)? {

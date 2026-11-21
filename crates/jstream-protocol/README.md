@@ -71,7 +71,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id` and `via` (0.125, with `MAX_VIA`),
+  `scene.switch` with its optional `preset_id` and `via` (0.128, with `MAX_VIA`),
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`),
@@ -347,7 +347,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.125 because a Move may pass through keyframes and orbit its
+`PROTOCOL_VERSION` is 0.128 because a Move may pass through keyframes and orbit its
 camera: `scene.switch`'s and `scene.switch_and_watch`'s `via` and the `move` kind's
 `camera_path` setting
 ([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md));
@@ -1518,7 +1518,7 @@ kind `kind.list` reports (category `transition`: `cut`, `fade`, `move` and `stin
 far) and `settings` are checked against its descriptor as a source's are (`unmatched`,
 the effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
 stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
-A `move` also takes `camera_path` (0.125, `line` by default, or `orbit`,
+A `move` also takes `camera_path` (0.128, `line` by default, or `orbit`,
 `CAMERA_ORBIT`): an orbit circles a 3D scene's camera around its target, keeping its
 distance on a curve, where a line moves it straight
 ([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
@@ -1558,7 +1558,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
-  transition runs starts the new one from what is on screen. Its `via` (0.125, up to
+  transition runs starts the new one from what is on screen. Its `via` (0.128, up to
   `MAX_VIA`, 8) names keyframes of the destination's family that a Move within the
   family passes through on its way, in order: each value follows one smooth curve
   through every stop, at equal shares of the preset's timing (ADR-0166 decision 2). A

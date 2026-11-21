@@ -1637,13 +1637,13 @@ pub enum Action {
     /// reads back. Switching to the scene already on program succeeds and emits nothing.
     /// Fails with `not_found` for a scene or a preset not in the collection.
     ///
-    /// `via` (since 0.125, ADR-0166 decision 2) names keyframes a Move between members
+    /// `via` (since 0.128, ADR-0166 decision 2) names keyframes a Move between members
     /// of one family passes through on its way, in order: each value follows one smooth
     /// curve through every stop, so it neither stops nor kinks at a middle keyframe, and
     /// the preset's timing covers the whole path. Each entry is a member of `scene_id`'s
     /// family other than `scene_id`, at most eight of them, none repeating the one
-    /// before it (`invalid_argument` on `via`, `not_found` for a missing scene). A Fade,
-    /// a cut, a stinger or a switch from outside the family ignores it.
+    /// before it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing
+    /// scene). A Fade, a cut, a stinger or a switch from outside the family ignores it.
     #[serde(rename = "scene.switch")]
     SceneSwitch {
         /// The scene to put on program.

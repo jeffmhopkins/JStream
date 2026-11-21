@@ -2249,6 +2249,80 @@ fn a_via_stop_that_hides_an_item_is_passed_by_and_bad_stops_are_refused() {
     );
 }
 
+/// The sources the program plan of a Move from `a` to `k2` looks up, through `via`, 100
+/// ms in: `blue`'s item is hidden in `a` and `k2` and shown only in `k`.
+fn looked_up(via: &[&str]) -> Vec<String> {
+    use crate::snapshot::{self, Frame, Look};
+    use crate::transition::{self, From, Running};
+    let hidden = |scene: Option<&str>, visible: bool| Edit::ItemSetVisible {
+        item_id: ItemId::new("b1"),
+        scene_id: scene.map(SceneId::new),
+        visible,
+    };
+    let mut graph = jstream_graph::Graph::new().with_kinds(crate::kinds::builtin());
+    let mut blue = colour("blue");
+    if let Edit::SourceCreate { source_id, .. } = &mut blue {
+        *source_id = SourceId::new("blue");
+    }
+    graph
+        .apply(
+            &[
+                create("a"),
+                colour("red"),
+                blue,
+                add("a", "a1", "red"),
+                add("a", "b1", "blue"),
+                hidden(None, false),
+                move_preset(),
+                variant("k", "a"),
+                variant("k2", "a"),
+                hidden(Some("k"), true),
+            ],
+            None,
+        )
+        .expect("edits");
+    let (_, run) = transition::resolve(
+        &graph,
+        Some(&SceneId::new("a")),
+        &SceneId::new("k2"),
+        Some(&TransitionPresetId::new("move")),
+    )
+    .expect("resolves");
+    let running = Running {
+        from: From::Scene(SceneId::new("a")),
+        to: SceneId::new("k2"),
+        start: secs(0.0),
+        run: run.expect("a move runs"),
+        by_item: true,
+        from_camera: None,
+        via: via.iter().map(|id| SceneId::new(*id)).collect(),
+    };
+    let white: Vec<u8> = std::iter::repeat_n([255u8; 4], 4).flatten().collect();
+    let frame = Frame::new(2, 2, &white, 1).expect("2x2 RGBA8");
+    let mut asked = Vec::new();
+    snapshot::plan_with(
+        &graph,
+        Some(&SceneId::new("k2")),
+        Some((&running, secs(0.1))),
+        &mut |source: &SourceId| {
+            asked.push(source.as_str().to_owned());
+            Some(Look::frame(frame.clone(), None))
+        },
+        &crate::filter_assets::FilterAssets::default(),
+    );
+    asked.sort();
+    asked.dedup();
+    asked
+}
+
+/// ADR-0166 decision 2: a Move's stops are read only for their values, so a source only
+/// a stop shows isn't looked up: it isn't shown, heard, restarted or woken for the Move.
+#[test]
+fn a_via_stop_reaches_no_source_that_only_it_shows() {
+    assert_eq!(looked_up(&[]), ["red"]);
+    assert_eq!(looked_up(&["k"]), ["red"]);
+}
+
 /// A camera `degrees` around the framing camera's target, about the vertical axis, at
 /// the framing camera's distance.
 fn around(degrees: f32) -> jstream_protocol::SceneCamera {

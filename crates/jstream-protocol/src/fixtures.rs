@@ -3216,7 +3216,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 Chord::new("F5"),
                 &Action::SceneSwitch {
                     scene_id: SceneId::new("scn_mask"),
-                    preset_id: None, via: Vec::new()
+                    preset_id: None,
+                    via: Vec::new(),
                 },
             )],
             bindings: vec![Binding::new(
@@ -3227,7 +3228,8 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 },
                 &Action::SceneSwitch {
                     scene_id: SceneId::new("scn_mask"),
-                    preset_id: None, via: Vec::new()
+                    preset_id: None,
+                    via: Vec::new(),
                 },
             )],
         },
