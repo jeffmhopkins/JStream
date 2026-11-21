@@ -19,6 +19,11 @@
 //! `property` `effect` with an `effect` target, [`MotionEffect`]. Its value is added to
 //! a number, kept within the range the effect's kind gives it, or to a colour's red,
 //! green and blue as a fraction of full.
+//!
+//! Since 0.130 a modifier can drive a live number or colour setting of the item's
+//! source instead ([ADR-0171](../../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
+//! decision 4): `property` `source` with a `source` target, [`MotionSetting`]: a light's
+//! colour and intensity, or, on a model, one material's colours and glow by name.
 
 use crate::finite::Finite32;
 use crate::{BusId, FilterId, SourceId};
@@ -70,6 +75,11 @@ pub enum MotionProperty {
     /// full. Not in
     /// [`MotionProperty::ALL`], which lists the placement properties.
     Effect,
+    /// A live number or colour setting of the item's own source, which the modifier's
+    /// `source` names, since 0.130 (ADR-0171 decision 4): changed as an `effect`
+    /// setting is, for how this item draws its source only. Not in
+    /// [`MotionProperty::ALL`].
+    Source,
     /// A property this version of the protocol doesn't know, from a newer server, so a
     /// 0.81 client can still read `state.get`. Never sent; the engine refuses it in an
     /// edit with `invalid_argument` and draws a stored one as still.
@@ -343,6 +353,10 @@ pub struct MotionModifier {
     /// 0.109, ADR-0138). Omitted otherwise.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub effect: Option<MotionEffect>,
+    /// The source setting it changes, with `property` `source` and only then (since
+    /// 0.130, ADR-0171). Omitted otherwise.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub source: Option<MotionSetting>,
     /// What it does.
     #[serde(flatten)]
     pub kind: MotionKind,
@@ -369,6 +383,30 @@ pub struct MotionEffect {
     /// The parameter, by its ID in the kind's descriptor, such as a `border`'s `width`:
     /// 1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII letters, digits and `_`.
     pub param: String,
+}
+
+/// The longest material name a [`MotionSetting`] takes, in bytes.
+pub const MAX_MOTION_MATERIAL_LEN: usize = 128;
+
+/// The source setting a `source` modifier drives (since 0.130, ADR-0171 decision 4): a
+/// live number or colour setting of the item's own source kind, as this item draws its
+/// source; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,
+/// `cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`
+/// and `roughness` on every material, or, with `material`, on the file's materials of
+/// that name, which also take `emissive` (the glow's colour) and `emissive_strength`
+/// (a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such
+/// setting, or a material the model doesn't have, adds nothing.
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
+pub struct MotionSetting {
+    /// The setting, by its ID in the source kind's descriptor (or `emissive` and
+    /// `emissive_strength` with `material`): 1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII
+    /// letters, digits and `_`.
+    pub param: String,
+    /// A model's materials it drives, by their name in the file: 1 to
+    /// [`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source
+    /// that isn't a model.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub material: Option<String>,
 }
 
 fn enabled() -> bool {
@@ -450,6 +488,9 @@ pub fn check_motion(motion: &[MotionModifier]) -> Result<(), MotionProblem> {
         if let Some(reason) = effect_problem(m.property, m.effect.as_ref()) {
             return Err(problem(field("effect"), reason));
         }
+        if let Some(reason) = source_problem(m.property, m.source.as_ref()) {
+            return Err(problem(field("source"), reason));
+        }
         if let Some((param, reason)) = m.kind.problem() {
             return Err(problem(field(param), reason));
         }
@@ -481,6 +522,41 @@ fn effect_problem(property: MotionProperty, effect: Option<&MotionEffect>) -> Op
             }
         }
         (_, Some(_)) => Some("only property `effect` takes an `effect`"),
+        (_, None) => None,
+    }
+}
+
+/// What is wrong with a modifier's `source` for its `property`, if anything: property
+/// `source` needs one, every other property takes none, and its `param` and `material`
+/// must be well formed.
+fn source_problem(
+    property: MotionProperty,
+    source: Option<&MotionSetting>,
+) -> Option<&'static str> {
+    match (property, source) {
+        (MotionProperty::Source, None) => {
+            Some("property `source` needs a `source` naming the setting")
+        }
+        (MotionProperty::Source, Some(source)) => {
+            let param = &source.param;
+            if param.is_empty()
+                || param.len() > MAX_MOTION_PARAM_LEN
+                || !param
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || b == b'_')
+            {
+                Some("`param` must be 1 to 64 bytes of ASCII letters, digits and `_`")
+            } else if source
+                .material
+                .as_ref()
+                .is_some_and(|m| m.is_empty() || m.len() > MAX_MOTION_MATERIAL_LEN)
+            {
+                Some("`material` must be 1 to 128 bytes: leave it out for every material")
+            } else {
+                None
+            }
+        }
+        (_, Some(_)) => Some("only property `source` takes a `source`"),
         (_, None) => None,
     }
 }
@@ -640,6 +716,7 @@ mod tests {
             modifier_id: id.into(),
             property: MotionProperty::X,
             effect: None,
+            source: None,
             kind: MotionKind::Wiggle {
                 amplitude: Finite32::new(amplitude).expect("finite"),
                 frequency_hz: Finite32::ONE,
@@ -739,6 +816,71 @@ mod tests {
             );
         }
         assert!(!MotionProperty::ALL.contains(&MotionProperty::Effect));
+    }
+
+    #[test]
+    fn a_source_modifier_names_its_setting_and_only_it_takes_one() {
+        let glow: MotionModifier = serde_json::from_value(serde_json::json!({
+            "modifier_id": "glow", "property": "source",
+            "source": {"param": "emissive_strength", "material": "led_red"},
+            "kind": "oscillate", "amplitude": 1.0, "period_ms": 1000
+        }))
+        .expect("parses");
+        assert_eq!(
+            glow.source,
+            Some(MotionSetting {
+                param: "emissive_strength".into(),
+                material: Some("led_red".into()),
+            })
+        );
+        assert_eq!(field_of(std::slice::from_ref(&glow)), None);
+        let json = serde_json::to_value(&glow).expect("serializes");
+        assert_eq!(json["source"]["material"], "led_red");
+        // A placement modifier writes no `source`, and a setting with no material none.
+        let still = serde_json::to_value(wiggle("a", 1.0)).expect("serializes");
+        assert!(still.get("source").is_none(), "{still}");
+        let with = |source: Option<MotionSetting>, property| MotionModifier {
+            property,
+            source,
+            ..glow.clone()
+        };
+        let target = |param: &str, material: Option<&str>| {
+            Some(MotionSetting {
+                param: param.into(),
+                material: material.map(Into::into),
+            })
+        };
+        let whole = serde_json::to_value(with(target("color", None), MotionProperty::Source))
+            .expect("serializes");
+        assert!(whole["source"].get("material").is_none(), "{whole}");
+        assert_eq!(
+            field_of(&[with(target("intensity", None), MotionProperty::Source)]),
+            None
+        );
+        let source = Some("motion.0.source");
+        assert_eq!(
+            field_of(&[with(None, MotionProperty::Source)]).as_deref(),
+            source
+        );
+        assert_eq!(
+            field_of(&[with(target("color", None), MotionProperty::Opacity)]).as_deref(),
+            source
+        );
+        for bad in ["", "two words", &"w".repeat(65)] {
+            assert_eq!(
+                field_of(&[with(target(bad, None), MotionProperty::Source)]).as_deref(),
+                source,
+                "{bad:?}"
+            );
+        }
+        for bad in ["", &"m".repeat(129)] {
+            assert_eq!(
+                field_of(&[with(target("color", Some(bad)), MotionProperty::Source)]).as_deref(),
+                source,
+                "{bad:?}"
+            );
+        }
+        assert!(!MotionProperty::ALL.contains(&MotionProperty::Source));
     }
 
     /// #1125 review N2: a value from a newer server parses as `Unknown`, so an older

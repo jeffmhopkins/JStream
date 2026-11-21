@@ -342,7 +342,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
 <a id="contents-motion"></a>
 ## Contents: motion, scenes and timelines
 <!-- @section
-covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/aim.rs", "crates/jstream-core/src/driven.rs", "crates/jstream-core/src/engine.rs", "crates/jstream-core/src/follow.rs", "crates/jstream-core/src/motion.rs", "crates/jstream-core/src/reactive.rs", "crates/jstream-core/src/sourced.rs", "crates/jstream-core/src/studio.rs", "crates/jstream-core/src/timelines.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
@@ -359,6 +359,12 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   modifier adding to a number or colour setting of one of its item's effects each
   frame, within the setting's range, by the path a Move's blend uses, with the layer padded for the
   most and the least it reaches.
+- **Driven source settings** (`sourced.rs`,
+  [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4): a
+  `source` modifier adding to a live setting of its item's own source as that item draws
+  it, each frame: a light's colour, intensity, range, cone and softness as it lights the
+  scene, and a model's colour, metallic and roughness, or by material its glow, as it
+  draws it. Nothing is stored.
 - **Camera moves** (`follow.rs`,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)): a 3D scene's
   camera motion and follow camera, planned with the shot. A follow camera holds its
@@ -1988,7 +1994,12 @@ motion applied, at the centre of its box and shining out of its back
 (`ItemGeometry::light_pose_seen` through the scene camera's view, so a billboard light
 turns with its box to face the camera and shines away from it,
 [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 2), at its
-intensity times its opacity. The renderer lights the
+intensity times its opacity, with its item's `source` modifiers changing its colour,
+intensity, range, cone and softness that frame
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4,
+`sourced.rs`, `Shot::sourced`). A model's item's `source` modifiers change its materials
+as that item draws it (`ModelDraw::materials`,
+`source_modifiers_drive_a_lights_and_a_models_settings`). The renderer lights the
 model with the first 8 point, spot and directional ones and every ambient one; a scene
 with more is logged once (`Chains::lights_warned`). A light placed without a box has no
 position and is left out. In a 2D scene a `scene`-lit model is studio-lit

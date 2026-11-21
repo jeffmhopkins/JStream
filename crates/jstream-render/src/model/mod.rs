@@ -84,6 +84,109 @@ struct GpuPrimitive {
 struct GpuMaterial {
     bind: wgpu::BindGroup,
     blended: bool,
+    /// Its name in the file, which a [`MaterialDrive`] names it by.
+    name: String,
+    /// Its uniform as uploaded, which a draw that drives it changes and a later one
+    /// that doesn't puts back.
+    values: [f32; MATERIAL_VALUES],
+    uniform: wgpu::Buffer,
+    /// Whether its uniform holds a drive's values instead of `values`.
+    driven: std::sync::atomic::AtomicBool,
+}
+
+/// How many `f32`s a material's uniform holds.
+const MATERIAL_VALUES: usize = 20;
+
+/// How one placement of a model changes some of its materials as it draws them, by
+/// motion modifiers on its source's settings (ADR-0171 decision 4). Nothing is stored:
+/// the next draw that doesn't drive a material draws it as the file has it. Each value
+/// is added: colours as a fraction of full to each of their sRGB red, green and blue,
+/// kept within 0 and full, the rest kept within their ranges.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct MaterialDrive<'a> {
+    /// The materials it changes, by their name in the file; `None` for every material.
+    pub material: Option<&'a str>,
+    /// Added to the base colour (its alpha stays).
+    pub color: f32,
+    /// Added to metalness, kept within 0 and 1.
+    pub metallic: f32,
+    /// Added to roughness, kept within 0 and 1.
+    pub roughness: f32,
+    /// Added to the glow's colour, at its own brightness.
+    pub emissive: f32,
+    /// Added to the glow's strength, a multiplier that is 1 at rest, kept within 0 and
+    /// [`MAX_EMISSIVE_STRENGTH`].
+    pub emissive_strength: f32,
+}
+
+/// The most a [`MaterialDrive`] multiplies a material's glow by.
+pub const MAX_EMISSIVE_STRENGTH: f32 = 64.0;
+
+impl MaterialDrive<'_> {
+    /// Whether it changes `name`.
+    fn reaches(&self, name: &str) -> bool {
+        self.material.is_none_or(|m| m == name)
+    }
+}
+
+/// `values`, a material's uniform, with `drives`' sums applied, or `None` when they
+/// add nothing to it.
+fn driven_values(
+    values: &[f32; MATERIAL_VALUES],
+    name: &str,
+    drives: &[MaterialDrive<'_>],
+) -> Option<[f32; MATERIAL_VALUES]> {
+    let mut add = MaterialDrive::default();
+    for d in drives.iter().filter(|d| d.reaches(name)) {
+        add.color += d.color;
+        add.metallic += d.metallic;
+        add.roughness += d.roughness;
+        add.emissive += d.emissive;
+        add.emissive_strength += d.emissive_strength;
+    }
+    if add == MaterialDrive::default() {
+        return None;
+    }
+    let mut out = *values;
+    // Base colour, linear: lightened in sRGB, as a colour setting is.
+    for v in &mut out[0..3] {
+        *v = srgb_to_linear((linear_to_srgb(*v) + add.color).clamp(0.0, 1.0));
+    }
+    // Emission may exceed 1: lightened at its own brightness, then scaled.
+    let peak = out[4..7].iter().copied().fold(0.0f32, f32::max).max(1.0);
+    for v in &mut out[4..7] {
+        let lifted = srgb_to_linear((linear_to_srgb(*v / peak) + add.emissive).clamp(0.0, 1.0));
+        *v = lifted * peak * (1.0 + add.emissive_strength).clamp(0.0, MAX_EMISSIVE_STRENGTH);
+    }
+    out[8] = (out[8] + add.metallic).clamp(0.0, 1.0);
+    out[9] = (out[9] + add.roughness).clamp(0.0, 1.0);
+    out.iter().all(|v| v.is_finite()).then_some(out)
+}
+
+fn srgb_to_linear(c: f32) -> f32 {
+    if c <= 0.04045 {
+        c / 12.92
+    } else {
+        ((c + 0.055) / 1.055).powf(2.4)
+    }
+}
+
+fn linear_to_srgb(c: f32) -> f32 {
+    let c = c.clamp(0.0, 1.0);
+    if c <= 0.003_130_8 {
+        c * 12.92
+    } else {
+        1.055 * c.powf(1.0 / 2.4) - 0.055
+    }
+}
+
+/// `values` as the bytes of a uniform, on the stack.
+fn material_bytes(values: &[f32; MATERIAL_VALUES]) -> [u8; MATERIAL_VALUES * 4] {
+    let mut out = [0u8; MATERIAL_VALUES * 4];
+    for (chunk, v) in out.chunks_exact_mut(4).zip(values) {
+        chunk.copy_from_slice(&v.to_le_bytes());
+    }
+    out
 }
 
 impl GpuModel {
@@ -140,6 +243,9 @@ pub struct ModelDraw<'a> {
     /// depth, so a scene drawn mirrored in its floor shows only what stands above it.
     /// `None` draws all of it; ignored without a `camera`.
     pub floor: Option<f32>,
+    /// How this placement changes the model's materials as it draws them (ADR-0171
+    /// decision 4); empty draws them as the file has them.
+    pub materials: &'a [MaterialDrive<'a>],
 }
 
 /// The bounds of the quad a lit card is shaded on: a unit square, flat.
@@ -601,7 +707,7 @@ impl ModelRuntime {
                 AlphaMode::Mask { cutoff } => (1.0, cutoff),
                 AlphaMode::Blend => (2.0, 0.0),
             };
-            let values: [f32; 20] = [
+            let values: [f32; MATERIAL_VALUES] = [
                 m.base_color[0],
                 m.base_color[1],
                 m.base_color[2],
@@ -627,7 +733,8 @@ impl ModelRuntime {
             let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
                 label: Some("jstream-render-model-material"),
                 contents: &f32_bytes(&values),
-                usage: wgpu::BufferUsages::UNIFORM,
+                // Written again when a draw drives it (ADR-0171 decision 4).
+                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
             });
             let views = [
                 view(m.base_color_texture, &self.white),
@@ -660,6 +767,10 @@ impl ModelRuntime {
             materials.push(GpuMaterial {
                 bind,
                 blended: matches!(m.alpha_mode, AlphaMode::Blend),
+                name: m.name.clone(),
+                values,
+                uniform,
+                driven: std::sync::atomic::AtomicBool::new(false),
             });
         }
         let rest = model.rig().map(|r| r.rest()).unwrap_or_default();
@@ -900,6 +1011,10 @@ impl ModelRuntime {
                     bind,
                     // Drawn as it is: its texels replace the cleared layer's.
                     blended: false,
+                    name: String::new(),
+                    values,
+                    uniform,
+                    driven: std::sync::atomic::AtomicBool::new(false),
                 }],
                 pose: None,
             }),
@@ -918,6 +1033,7 @@ impl ModelRuntime {
             shadows: card.shadows,
             environment: card.environment,
             floor: None,
+            materials: &[],
         };
         self.draw_as(gpu, owner, &draw, target, true)
     }
@@ -1093,6 +1209,24 @@ impl ModelRuntime {
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
         gpu.queue.write_buffer(&self.frame, 0, &frame);
+        // This draw's material drives (ADR-0171 decision 4), and the last draw's put
+        // back: each draw submits on its own, so a write lands before its draw only.
+        for m in &model.materials {
+            use std::sync::atomic::Ordering;
+            match driven_values(&m.values, &m.name, draw.materials) {
+                Some(values) => {
+                    gpu.queue
+                        .write_buffer(&m.uniform, 0, &material_bytes(&values));
+                    m.driven.store(true, Ordering::Relaxed);
+                }
+                None => {
+                    if m.driven.swap(false, Ordering::Relaxed) {
+                        gpu.queue
+                            .write_buffer(&m.uniform, 0, &material_bytes(&m.values));
+                    }
+                }
+            }
+        }
         let mut encoder = gpu
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {

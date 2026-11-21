@@ -64,6 +64,7 @@ mod runtime;
 mod session;
 mod slot;
 mod snapshot;
+mod sourced;
 mod still;
 mod studio;
 mod tempo;

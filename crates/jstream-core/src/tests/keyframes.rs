@@ -1234,6 +1234,7 @@ fn drift_x(
             modifier_id: "drift".into(),
             property: jstream_protocol::MotionProperty::X,
             effect: None,
+            source: None,
             kind: jstream_protocol::MotionKind::Drift {
                 rate_per_s: Finite32::new(rate).expect("finite"),
                 wrap: None,
@@ -1361,6 +1362,7 @@ fn pulse(item: &str, scene: Option<&str>) -> Edit {
             modifier_id: "pulse".into(),
             property: jstream_protocol::MotionProperty::Opacity,
             effect: None,
+            source: None,
             kind: jstream_protocol::MotionKind::Audio {
                 audio: None,
                 audio_source: None,
@@ -1523,6 +1525,7 @@ fn jolt_and_drift() -> Edit {
                 modifier_id: "jolt".into(),
                 property: MotionProperty::Y,
                 effect: None,
+                source: None,
                 kind: MotionKind::Impulse {
                     amplitude: f(40.0),
                     frequency_hz: f(2.0),
@@ -1536,6 +1539,7 @@ fn jolt_and_drift() -> Edit {
                 modifier_id: "drift".into(),
                 property: MotionProperty::X,
                 effect: None,
+                source: None,
                 kind: MotionKind::Drift {
                     rate_per_s: f(100.0),
                     wrap: None,
@@ -1981,6 +1985,7 @@ fn pulse_halo(param: &str, amplitude: f32) -> Edit {
                 filter_id: jstream_protocol::FilterId::new("halo"),
                 param: param.into(),
             }),
+            source: None,
             kind: jstream_protocol::MotionKind::Oscillate {
                 shape: jstream_protocol::MotionShape::Sine,
                 amplitude: Finite32::new(amplitude).expect("finite"),
