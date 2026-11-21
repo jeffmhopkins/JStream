@@ -6480,7 +6480,7 @@ stamp = { hash = "b3:bbf2925cc8840e51", by = "agent:ui-keyframes", note = "Whole
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read Scenes and sources: the panels are Scenes and Sources (the prototype's Scene objects), each with ToolBar (add, remove, properties, filters, up, down) sticky at the foot; dock list says Sources; the rest holds against the diff." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/plugins.rs"]
-stamp = { hash = "b3:826ffdc5139639f8", by = "agent:plugin-uninstall", note = "re-read: the Remove button lost data-primary so Enter doesn't remove (round 1 N1), as Delete output; the bullet doesn't claim Enter behaviour" }
+stamp = { hash = "b3:1235321499507e68", by = "agent:plugin-uninstall", note = "re-read: the row's Remove… is now danger secondary per UI-DESIGN after #1585, with the solid danger only on the dialog's Remove; the Plugins bullet still holds" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/project.rs"]
 stamp = { hash = "b3:8d6f0103497728f1", by = "agent:release-thread", note = "Re-read against Open's Browse… starting in the open project's folder; the section doesn't describe the project dialog's folders and still holds." }
@@ -6705,7 +6705,7 @@ stamp = { hash = "b3:bbf2925cc8840e51", by = "agent:ui-keyframes", note = "Whole
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: Panels now names tree.rs's tool bar and the arrows' edits tested natively in scenes.rs; icons.rs gains the tool bars' icons; the panel is Sources everywhere (dock title, labels, clipboard docs)." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/plugins.rs"]
-stamp = { hash = "b3:826ffdc5139639f8", by = "agent:plugin-uninstall", note = "re-read: plugins.rs's remove dialog lost data-primary (round 1 N1); the module description still holds" }
+stamp = { hash = "b3:1235321499507e68", by = "agent:plugin-uninstall", note = "re-read: the row's Remove… button class follows #1585's danger secondary; the plugins.rs description still holds" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/project.rs"]
 stamp = { hash = "b3:8d6f0103497728f1", by = "agent:release-thread", note = "Re-read against Open's Browse… starting in the open project's folder; the section doesn't describe the project dialog's folders and still holds." }
@@ -8142,7 +8142,7 @@ stamp = { hash = "b3:c9ad0e33fff358f4", by = "agent:claude", note = "the Pairing
 stamp = { hash = "b3:8ace88861c8cbeba", by = "agent:frame-probe", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds" }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/plugins.rs"]
-stamp = { hash = "b3:826ffdc5139639f8", by = "agent:plugin-uninstall", note = "re-read: the Remove button lost data-primary (round 1 N1); the plugins bullet still holds" }
+stamp = { hash = "b3:1235321499507e68", by = "agent:plugin-uninstall", note = "re-read: the row's Remove… button class follows #1585's danger secondary; the plugins bullet still holds" }
 
 ["UI-FEATURES#beyond"."file:crates/jstream-ui/src/session.rs"]
 stamp = { hash = "b3:076299ee126c849d", by = "agent:claude-ui-features", note = "session.rs: connect and open with hello and engine_url_for_page back the connect form; host.rs: desktop() hands the desktop app's engine for the automatic connection and desktop_vcam its camera; pairing.rs: start, devices and revoke back the pairing panel per ADR-0044." }

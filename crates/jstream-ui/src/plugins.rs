@@ -594,7 +594,7 @@ pub fn Plugins() -> impl IntoView {
                             {(!enabled).then(|| view! {
                                 <button on:click=move |_| section.enable(enable_id.clone())>"Turn on"</button>
                             })}
-                            <button class="danger" on:click=move |_| section.open_remove(&remove_id)>
+                            <button class="danger secondary" on:click=move |_| section.open_remove(&remove_id)>
                                 "Remove…"
                             </button>
                         </div>
