@@ -13,6 +13,7 @@ use serde::{Deserialize, Serialize};
 
 mod camera;
 mod drawn;
+mod group;
 mod solid;
 
 pub use camera::{
@@ -20,6 +21,7 @@ pub use camera::{
     SceneCamera, Vec3,
 };
 pub use drawn::{DrawnPolygon, DrawnVertex, LocalPoint, MAX_DRAWN_PX, NEAR_W};
+pub use group::GroupPose;
 pub use solid::{Solid, SolidBounds};
 
 /// How the cropped source fills the item's box.
