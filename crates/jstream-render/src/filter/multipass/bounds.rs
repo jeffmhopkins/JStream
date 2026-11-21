@@ -1,6 +1,6 @@
-//! Room around a frame, in whole pixels: a drop shadow and a glow blur their input's
-//! shape in a scratch frame grown by the blur radius on every side, so the blur fades
-//! out before that frame's edge. Their output is the input's size (ADR-0065 §5).
+//! Room around a frame, in whole pixels: a drop shadow blurs its input's shape in a
+//! scratch frame grown by the blur radius on every side, so the blur fades out before
+//! that frame's edge. Its output is the input's size (ADR-0065 §5).
 
 /// Pixels added on each side of the frame.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

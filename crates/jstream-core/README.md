@@ -69,7 +69,8 @@ covers = ["crates/jstream-core/src/engine.rs", "crates/jstream-core/src/events.r
   hot-reloads the WGSL effect packs (video filter kinds and shader source kinds, below), and
   `HANDLED_PANIC_THREADS` names the pack load thread, whose panics the engine catches,
   for the apps' crash hook to leave out (#999);
-  `connect()` opens a session; `rev()`; `set_source_frame` stores the latest RGBA8
+  `connect()` opens a session, and `handles()` counts the handles and sessions that keep
+  the engine alive; `rev()`; `set_source_frame` stores the latest RGBA8
   frame of a source; `output_stats` reads a running output's pipeline counters
   (`output_stats_of` names the output); `output_kind` reads a
   collection output's target. `output.set_key` and `output.clear_key` go to the
@@ -906,7 +907,8 @@ the queue to the snapshot thread. The drop ledger is a second mutex, outside tha
 `Arc`. Cloning it shares the engine, so a
 host can give one clone to the server's connector and another to an MCP session.
 `Engine::connect()` opens an `InProcessControl`, which holds a clone too: the engine
-lives as long as any handle or session does.
+lives as long as any handle or session does. `Engine::handles` counts them, so a host
+shutting down can log whether its own drop is the one that stops the engine.
 
 A session follows the protocol's envelope
 ([jstream-protocol › Design](../jstream-protocol/README.md#design)) exactly as the
@@ -1629,8 +1631,9 @@ shown still costs its texture and no decoded copy (#1139, ADR-0117 §2). That ca
 keeps the still's upload while no mix draws it, for as long as the still is shown
 (`ResourceCache::keep_while` on `ShownStill::alive`, which turns false when the source
 is deleted or rebuilt), so a cut back to it draws it at once. A program-stage draw that
-needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none)
-until the thread has decoded the file again (`jstream_sources::Still::frame`); the
+needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none, which it logs once
+per shown still: #1562) until the thread has decoded the file again
+(`jstream_sources::Still::frame`, logged at info); the
 render thread only reads atomics and unparks the thread, never decodes, and never frees
 the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). The
 decode takes the still's own decode lock, never the one `frame_if_held` takes, so a
@@ -2708,7 +2711,9 @@ program's frame itself, drawn once for every consumer. The render thread reads i
 without waiting and pushes it to the session. A `jstream-preview-send` thread per stream
 sends each packet as it comes, timed from the stream's first one, with the collection's
 `rev` at that moment. The hub only opens the session again when the picture size
-changes, passes keyframe requests on, and lets go of it when the stream closes. So the
+changes (logging at info each stream the stage starts drawing, with its channel, scene,
+codec and size, so a wrong picture can be matched to its stream: #1562), passes keyframe
+requests on, and lets go of it when the stream closes. So the
 preview shows what goes out, and costs no second composite, no second device and no
 second capture of the program's displays. Outputs that start while the preview holds the
 stage share it, as they share each other's. A stage only the hub holds is let go of
@@ -4193,7 +4198,9 @@ encoder that ends up on the CPU path is opening.
 
 The render loop drops the held frames, the compositor and the capture streams before
 the context, at a fallback and at the end, so the platform's state goes first as
-`GpuContext` requires.
+`GpuContext` requires. A pipeline thread being stopped is a `debug` line, and one that
+takes 250 ms or more to stop an `info` line naming it and how long it took, so a slow
+exit's log says which thread it waited on (#1564).
 
 **Captures** (`runtime/captures.rs`). Opening the program stage starts no capture. Each tick the
 render thread compares what the snapshot captures (`Shot::captures`, one key per

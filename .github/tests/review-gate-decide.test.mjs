@@ -65,6 +65,16 @@ eq('same: file order ignored', sameChange([f('a.rs', P1), f('b.rs', '+b')], [f('
 eq('differ: added line changed', sameChange([f('a.rs', P1)], [f('a.rs', P1.replace('+more', '+other'))]), false);
 eq('differ: extra file', sameChange([f('a.rs', P1)], [f('a.rs', P1), f('c.rs', '+c')]), false);
 eq('differ: status', sameChange([f('a.rs', P1)], [f('a.rs', P1, 'added')]), false);
+const bin = (filename, sha, status = 'added') => ({ filename, status, sha });
+const S1 = '1'.repeat(40), S2 = '2'.repeat(40);
+eq('same: added binary, same blob (#1544)', sameChange([f('a.rs', P1), bin('t.opus', S1)], [f('a.rs', P1moved), bin('t.opus', S1)]), true);
+eq('differ: added binary, other blob', sameChange([bin('t.opus', S1)], [bin('t.opus', S2)]), false);
+eq('differ: added binary, other path', sameChange([bin('t.opus', S1)], [bin('u.opus', S1)]), false);
+eq('differ: added binary vs a text patch', sameChange([bin('t.opus', S1)], [f('t.opus', `+blob ${S1}`, 'added')]), false);
+eq('closed: modified binary', sameChange([bin('t.opus', S1, 'modified')], [bin('t.opus', S1, 'modified')]), false);
+eq('closed: removed binary', sameChange([bin('t.opus', S1, 'removed')], [bin('t.opus', S1, 'removed')]), false);
+eq('closed: renamed binary', sameChange([bin('t.opus', S1, 'renamed')], [bin('t.opus', S1, 'renamed')]), false);
+eq('closed: added, no patch, no sha', sameChange([f('a.png', undefined, 'added')], [f('a.png', undefined, 'added')]), false);
 eq('closed: no patch', sameChange([f('a.png', undefined)], [f('a.png', undefined)]), false);
 eq('closed: 300 files', sameChange(Array.from({ length: 300 }, (_, i) => f(`f${i}`, '+x')), Array.from({ length: 300 }, (_, i) => f(`f${i}`, '+x'))), false);
 eq('closed: files missing', sameChange(null, null), false);
