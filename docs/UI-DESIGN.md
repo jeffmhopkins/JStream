@@ -71,7 +71,7 @@ The header's menus and the right-click menus are one family:
   a `›`.
 - Section heads are the [eyebrow](#type) style.
 - An item that deletes is marked with `Entry::danger`, reads red, and sits in the last
-  group.
+  group. The Scenes and Sources panels' menus are left as they are.
 - Menus hold commands. Information belongs in dialogs and status UI.
 
 <a id="type"></a>

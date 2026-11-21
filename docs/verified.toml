@@ -6435,13 +6435,13 @@ stamp = { hash = "b3:9cd292ac092df3b7", by = "agent:camera-controls", note = "Re
 stamp = { hash = "b3:656ceb0bbeacce1c", by = "agent:claude", note = "added Keep warm to the scene row menu and the scene Properties dialog for keeping a scene warm (ADR-0149, #1468: SceneOptions.keep_warm, protocol 0.116, collection schema 15) | kept from the merged side: merged main's #1341 Properties & filters dialog, #1345 AxisRow number rows and #1373 Outputs follow-ups with the wave's follow-pointer-as-filter note, curve editor, keyframe timing fields and pairing toggle; the scene dialog keeps only camera motion as a draft (no set_camera_follow on the wave) | kept from the merged side: Re-read; the Inspector's box and crop fields moved into AxisRow rows, the camera rows share the axis-row class; nothing the design section states changes | merge: Merged main: #1341 brought the one Properties & filters dialog (filters.rs PropertiesAndFilters, source and scene properties, dialog CSS, properties and scene-filters specs) plus #1365 and #1379; independent of this branch's axis rows, both sides hold | kept from the merged side: The Properties dialog design bullet now describes the list and pane, the mounted draft pane and Cancel putting back filter edits through FilterUndo; checked against the code" }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:7229940633edc983", by = "agent:ui-design", note = "Added that menus, dialogs and secondary panels follow docs/UI-DESIGN.md and that a deleting menu item uses Entry::danger; rest of the section (connecting, session, events, styles via classes) unaffected by the CSS restyle." }
+stamp = { hash = "b3:ff5414ad51a9d1d4", by = "agent:ui-design", note = "Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The design-language paragraph still holds: Entry::danger is the builder, now used by an output's Delete…." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:e67ab2ae67f77a6e", by = "agent:claude", note = "Re-read against #1497: Studio::source_descriptor and the Properties dialog fetching a model's own descriptor; still holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:eae64f94611b4a07", by = "agent:ui-design", note = "Added that menus, dialogs and secondary panels follow docs/UI-DESIGN.md and that a deleting menu item uses Entry::danger; rest of the section (connecting, session, events, styles via classes) unaffected by the CSS restyle." }
+stamp = { hash = "b3:e751d33e13968298", by = "agent:ui-design", note = "Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The design-language paragraph still holds: Entry::danger is the builder, now used by an output's Delete…." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/stats.rs"]
 stamp = { hash = "b3:54357d1364a498b3", by = "agent:claude", note = "same changes; the design section names no default rate or preview state, still holds" }
@@ -6660,13 +6660,13 @@ stamp = { hash = "b3:9cd292ac092df3b7", by = "agent:camera-controls", note = "Re
 stamp = { hash = "b3:656ceb0bbeacce1c", by = "agent:claude", note = "re-read against keeping a scene warm (ADR-0149, #1468: SceneOptions.keep_warm, protocol 0.116, collection schema 15): warm.rs's note now names Keep warm and hotkey scenes; the Warm scenes entry holds | kept from the merged side: merged main's #1341 Properties & filters dialog, #1345 AxisRow number rows and #1373 Outputs follow-ups with the wave's follow-pointer-as-filter note, curve editor, keyframe timing fields and pairing toggle; the scene dialog keeps only camera motion as a draft (no set_camera_follow on the wave) | kept from the merged side: Added NumberField's inline and bare forms and AxisRow to the number.rs entry; matches number.rs and their use in inspector.rs and scene_properties.rs | merge: Merged main: #1341 brought the one Properties & filters dialog (filters.rs PropertiesAndFilters, source and scene properties, dialog CSS, properties and scene-filters specs) plus #1365 and #1379; independent of this branch's axis rows, both sides hold | kept from the merged side: Properties dialog and filters.rs entries now describe the one Properties & filters dialog (PropertiesAndFilters, FilterUndo); matches source_properties.rs, scene_properties.rs and filters.rs" }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:7229940633edc983", by = "agent:ui-design", note = "Re-read the contents list against the design-language change: menu items gained Entry::danger, View/Layout show checks, info dialogs' Close is secondary; no module, menu entry or component listed here changed, so it holds." }
+stamp = { hash = "b3:ff5414ad51a9d1d4", by = "agent:ui-design", note = "Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/source_properties.rs"]
 stamp = { hash = "b3:e67ab2ae67f77a6e", by = "agent:claude", note = "Re-read against #1497: Studio::source_descriptor and the Properties dialog fetching a model's own descriptor; still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:eae64f94611b4a07", by = "agent:ui-design", note = "Re-read the contents list against the design-language change: menu items gained Entry::danger, View/Layout show checks, info dialogs' Close is secondary; no module, menu entry or component listed here changed, so it holds." }
+stamp = { hash = "b3:e751d33e13968298", by = "agent:ui-design", note = "Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The contents list holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/stats.rs"]
 stamp = { hash = "b3:54357d1364a498b3", by = "agent:claude", note = "8000/12000 kbps form fallback, stats test numbers, and the canvas keeping a live picture across a re-subscribe (#1205); none named in purpose, still holds" }
@@ -7440,7 +7440,7 @@ stamp = { hash = "b3:75bbcb7432ab1b4b", by = "agent:ui-design", note = "Walkthro
 stamp = { hash = "b3:98829677b4d2f194", by = "agent:claude", note = "The inspector row gained the lit and hidden-back checkboxes; the getting-started scene walkthrough doesn't need them | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). Re-read after UI-FEATURES' restamp; still holds. | kept from the merged side: the inspector's 3D fold gains a checkbox; the getting-started scene steps still hold" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#menus"]
-stamp = { hash = "b3:d6926f0f69aa7270", by = "agent:ui-design", note = "Walkthrough names menus and commands only (New scene, Add source…, Video settings…); none renamed by the check-mark and danger-colour changes in UI-FEATURES header/menus." }
+stamp = { hash = "b3:52c99a1146b7267f", by = "agent:ui-design", note = "UI-FEATURES CM-01 only changed which delete items read red; the walkthrough names no menu colours, so it holds." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#mixer"]
 stamp = { hash = "b3:15f728c24aa44db0", by = "agent:claude", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it. | merge: Main's #1261 and #1275 changed the UI-FEATURES areas this section depends on (header gained the Settings dialog pages, dialogs and beyond were reworded); re-read, the steps still hold. | merge: main's #1289 added FL-12 Custom shader and the merge regenerated the ui-summary block; this walkthrough's narrowed UI-FEATURES deps still match its steps | merge: main's UI-FEATURES rows moved the generated summary to 139 rows; this branch makes the summary @generated; the getting-started steps name no counts and still match the areas they depend on" }
@@ -8088,7 +8088,7 @@ stamp = { hash = "b3:a91aa605b17e2a5f", by = "agent:ui-design", note = "New sect
 stamp = { hash = "b3:2e461cd2b554b4d3", by = "agent:ui-design", note = "New section. Checked the Shared controls block of style.css: select:not([multiple]) with SVG chevron, 14px checkbox/radio filling with --accent, .switch toggle, hover --menu-hover vs --selected, filter-name truncating after the summary." }
 
 ["UI-DESIGN#menus"."body"]
-stamp = { hash = "b3:a7cf84af1399db7a", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
+stamp = { hash = "b3:c5f869e2983e0c15", by = "agent:ui-design", note = "Added that the Scenes and Sources panels' menus are left as they are; Entry::danger is used by outputs.rs only." }
 
 ["UI-DESIGN#menus"."file:crates/jstream-ui/src/menu.rs"]
 stamp = { hash = "b3:34a5e95e178f2c60", by = "agent:ui-design", note = "New section. Checked against style.css and menu.rs: 28px .menuitem, 30px label start in dropdowns and context menus (check slot), sans .hint, › arrow, .menu-head eyebrow, Entry::danger -> .danger red, used on the five delete items, each in the last group." }
@@ -8256,7 +8256,7 @@ stamp = { hash = "b3:6815581f86e0828c", by = "agent:claude-crop-ui", note = "Re-
 stamp = { hash = "b3:ed345193cf43757c", by = "agent:claude", note = "KB-07 combines #1450's macOS keys and wheel text with this branch's Wayland GlobalShortcuts portal (desktop prompt, decline) and Wayland's focus-only wheel chip. | kept from the merged side: Edited KB-07: macOS keys are global, wheel chords once Accessibility is granted, else the chip says focus only (chord_note, wheelFocusOnly)." }
 
 ["UI-FEATURES#menus"."body"]
-stamp = { hash = "b3:d6926f0f69aa7270", by = "agent:ui-design", note = "CM-01 now says the swatch draws only when set and that deleting items read red (Entry::danger in menu.rs), listing the five items marked; arrow and check slot match menu.rs." }
+stamp = { hash = "b3:52c99a1146b7267f", by = "agent:ui-design", note = "CM-01 now names only an output's Delete… as an Entry::danger item and says the Scenes and Sources menus keep their prototype styling, matching the revert." }
 
 ["UI-FEATURES#menus"."file:crates/jstream-ui/src/item_menu.rs"]
 stamp = { hash = "b3:fd9cbcf48c8db842", by = "agent:claude", note = "Ungroup's disabled reasons now list facing the camera and a surface, matching item_menu.rs | merge: Merged wave/alpha5: #1492 environment (this PR's base, squashed), the earlier 3D PRs, PTZ #1486/#1496 and #1499 (0.121). The item menu's reset counts surface beside billboard; still holds. | kept from the merged side: ungroup treats a billboard group like a 3D one and keeps its look; the menus row holds" }
@@ -8277,7 +8277,7 @@ stamp = { hash = "b3:6551816373d1f02c", by = "agent:claude", note = "Ungroup's d
 stamp = { hash = "b3:21a5c4917636a8f5", by = "agent:claude", note = "labels.rs gained the Actions view and its edits (ADR-0133). The Sources rows re-read describe the tree, references and groups and say nothing about the label manager, which SC-08 covers, so they hold." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:eae64f94611b4a07", by = "agent:ui-design", note = "sources.rs only marks Delete source everywhere… with .danger(); the object rows hold." }
+stamp = { hash = "b3:e751d33e13968298", by = "agent:ui-design", note = "Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The object rows hold." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: heading is Sources panel with the rename's reason; OB-09 adds the tool bar route; OB-10 describes the bar as built, matching sources.rs." }
@@ -8295,7 +8295,7 @@ stamp = { hash = "b3:8103b1183d12f484", by = "agent:ui-design", note = "outputs.
 stamp = { hash = "b3:366910dd6694f84d", by = "agent:claude", note = "Edited SC-10 for B1: a mouse press with Shift, Ctrl or Meta, a touch and a pen pick on the click; a plain mouse press picks at once." }
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/scenes.rs"]
-stamp = { hash = "b3:7229940633edc983", by = "agent:ui-design", note = "scenes.rs only marks Delete scene, Delete keyframe and Delete folder with .danger(); the rows' wording and behaviour hold." }
+stamp = { hash = "b3:ff5414ad51a9d1d4", by = "agent:ui-design", note = "Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The scenes rows hold." }
 
 ["UI-FEATURES#scenes"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: SC-11 describes the Scenes tool bar as built (add in the folder, delete with plan or keyframe at once, properties off for keyframes, filters, arrows within the folder via scene.reorder, the empty hint)." }
