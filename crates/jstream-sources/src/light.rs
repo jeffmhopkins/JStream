@@ -1,6 +1,7 @@
 //! The `light` source (ADR-0143 decision 1): a light the item that places it puts in a
 //! 3D scene, for the models there that are lit by their scene. It draws nothing itself.
-//! An `environment` light (ADR-0151 decision 9) is the sky around the whole scene.
+//! An `environment` light (ADR-0151 decision 9) is the sky around the whole scene, which
+//! a 3D scene can also draw behind its items as a backdrop (ADR-0167).
 
 use crate::color::{parse_color, rgba_frame};
 use crate::describe::{kind, param};
@@ -20,6 +21,9 @@ const MAX_INTENSITY: f64 = 64.0;
 const SKY: &str = "#9cc2e8";
 const HORIZON: &str = "#ffffff";
 const GROUND: &str = "#3a3a3a";
+
+/// The most an environment backdrop's stars are brightened (ADR-0167).
+const MAX_STAR_BRIGHTNESS: f32 = 8.0;
 
 /// The farthest a light's range reaches, in scene pixels.
 const MAX_RANGE_PX: f64 = 1_000_000.0;
@@ -84,6 +88,12 @@ pub struct ShownEnvironment {
     pub ground: [f32; 3],
     /// The source whose picture is the sky instead, when one is set.
     pub image: Option<SourceId>,
+    /// Whether a 3D scene draws the sky behind its items, infinitely far away (ADR-0167).
+    pub backdrop: bool,
+    /// How many stars the backdrop scatters over the sky, 0 (none) to 1.
+    pub stars: f32,
+    /// How bright the backdrop's stars are, 0 to 8.
+    pub star_brightness: f32,
 }
 
 /// The `light` kind.
@@ -225,6 +235,32 @@ impl LightKind {
                      display, window or camera capture lights the sky only while an item \
                      also shows it.",
                 )),
+                sky(p(
+                    "backdrop",
+                    "Draw as backdrop",
+                    ParamType::Bool,
+                    json!(false),
+                    "Draw the sky behind everything in a 3D scene, infinitely far away: it \
+                     turns as the camera looks around but never moves as the camera moves. \
+                     Its intensity sets its brightness and the item's opacity fades it over \
+                     the scene's background. A scene without a camera draws no backdrop.",
+                )),
+                sky(p(
+                    "stars",
+                    "Stars",
+                    number(0.0, 1.0, 0.05, None),
+                    json!(0.0),
+                    "How many stars the backdrop scatters over the sky, fixed in it, \
+                     each a point a pixel or two wide at any resolution; 0 draws none. \
+                     Stars show in the backdrop only, not in what the sky lights.",
+                )),
+                sky(p(
+                    "star_brightness",
+                    "Star brightness",
+                    number(0.0, f64::from(MAX_STAR_BRIGHTNESS), 0.05, None),
+                    json!(1.0),
+                    "How bright the backdrop's stars are, before the intensity.",
+                )),
             ],
             ..kind("light", "Light", true, false)
         })
@@ -353,11 +389,35 @@ fn environment(settings: &Settings) -> Result<ShownEnvironment, SourceError> {
             });
         }
     };
+    // Settings saved before the backdrop had none: no backdrop, no stars.
+    let backdrop = match settings.get("backdrop") {
+        None => false,
+        Some(value) => value.as_bool().ok_or_else(|| SourceError::Setting {
+            param: "backdrop".into(),
+            reason: "must be true or false".into(),
+        })?,
+    };
+    let number = |id: &str, max: f32, default: f32| -> Result<f32, SourceError> {
+        match settings.get(id) {
+            None => Ok(default),
+            Some(value) => value
+                .as_f64()
+                .filter(|v| (0.0..=f64::from(max)).contains(v))
+                .map(|v| v as f32)
+                .ok_or_else(|| SourceError::Setting {
+                    param: id.into(),
+                    reason: format!("must be a number from 0 to {max}"),
+                }),
+        }
+    };
     Ok(ShownEnvironment {
         sky: colour("sky_color", SKY)?,
         horizon: colour("horizon_color", HORIZON)?,
         ground: colour("ground_color", GROUND)?,
         image,
+        backdrop,
+        stars: number("stars", 1.0, 0.0)?,
+        star_brightness: number("star_brightness", MAX_STAR_BRIGHTNESS, 1.0)?,
     })
 }
 

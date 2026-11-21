@@ -361,7 +361,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   the sky instead, as an equirectangular panorama; null for none; a capture lights it
   only while an item also shows it), which
   `ShownLight::environment` carries as a `ShownEnvironment` (settings saved without
-  them read as their defaults). Its frame is one transparent pixel: it
+  them read as their defaults). With `backdrop` on, a 3D scene also draws that sky
+  behind its items, and `stars` (0 to 1) and `star_brightness` (0 to 8, default 1)
+  scatter stars over it ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md);
+  settings saved without them read as no backdrop and no stars). Its frame is one transparent pixel: it
   draws nothing, and `Source::light` hands the engine its settings, which the item that
   places it gives a position, an aim and a strength (`jstream-core`'s README).
 - `audio_input` (a `device` ID; empty follows the system's default input),

@@ -2282,6 +2282,48 @@ source: crates/jstream-core/src/kinds.rs
           "equals": "environment"
         },
         "live": true
+      },
+      {
+        "id": "backdrop",
+        "type": "bool",
+        "default": false,
+        "label": "Draw as backdrop",
+        "description": "Draw the sky behind everything in a 3D scene, infinitely far away: it turns as the camera looks around but never moves as the camera moves. Its intensity sets its brightness and the item's opacity fades it over the scene's background. A scene without a camera draws no backdrop.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "stars",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.0,
+        "label": "Stars",
+        "description": "How many stars the backdrop scatters over the sky, fixed in it, each a point a pixel or two wide at any resolution; 0 draws none. Stars show in the backdrop only, not in what the sky lights.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "star_brightness",
+        "type": "float",
+        "min": 0.0,
+        "max": 8.0,
+        "step": 0.05,
+        "default": 1.0,
+        "label": "Star brightness",
+        "description": "How bright the backdrop's stars are, before the intensity.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
       }
     ]
   },

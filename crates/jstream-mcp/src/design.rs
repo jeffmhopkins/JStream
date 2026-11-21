@@ -10,7 +10,8 @@
 //! group, scroll and animate, how to use 3D placement and blend modes, how to layer
 //! light by role, use the light and framing filters (bloom, glow, vignette, scanlines) and
 //! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
-//! set with a scene camera (ADR-0094) and its depth of field (ADR-0108), which
+//! set with a scene camera (ADR-0094), its depth of field (ADR-0108) and a sky backdrop
+//! (ADR-0167), which
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
@@ -230,6 +231,15 @@ To reframe a 3D scene live without an edit, `scene.aim_camera` pans and tilts it
 camera in degrees from the stored view and zooms it (1-8), gliding there; the aim \
 `{pan_deg: 0, tilt_deg: 0, zoom: 1}` is the stored camera, and `scene.camera_aim` \
 reads it. \
+A sky all around a 3D set (open sky, a city, space) is a `light` source of `type` \
+`environment` placed in the scene with `backdrop` on: it fills everything behind the \
+items, infinitely far away, so it turns as the camera looks around and never shifts \
+as the camera moves, and its `image` takes an equirectangular panorama (2:1, centre \
+straight ahead) or any live source in its place. `stars` (0-1, about 0.3-0.6 for a \
+clear night or deep space, on dark sky colours) scatters fixed points of light over \
+it, `star_brightness` sets how bright, the item's `turn_deg` spins the sky, and the \
+same sky lights scene-lit models. A flat photo stretched as a panorama smears toward \
+the top and bottom, so prefer a real panorama or stars. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \

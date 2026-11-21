@@ -1295,7 +1295,12 @@ spot, directional and ambient, up to 8 shading lights, placed in the camera's fr
 soft disc of taps, [ADR-0151](adr/0151-the-rest-of-richer-3d-scenes.md); and the first
 environment light's sky, a gradient or a source's picture as a panorama, in place of the
 studio gradient); the layer is then placed flat
-(`Placement::Layer`) and sorts with the scene's cards at the model's centre. Its
+(`Placement::Layer`) and sorts with the scene's cards at the model's centre. That
+environment can also be the scene's backdrop
+([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
+each pixel's ray from the camera, ignoring its position, into the gradient or panorama,
+with procedural stars hashed over the faces of a cube, and its layer is placed under
+every item, through no camera, so it sorts with nothing and has no view depth. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
 ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)

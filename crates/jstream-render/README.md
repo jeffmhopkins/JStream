@@ -50,6 +50,14 @@ and calls this crate.
   into a canvas-sized layer with its own depth test. The engine runs filters over that layer and places it with
   `Placement::Layer`, which draws it flat over the canvas and sorts it, in a 3D scene,
   at the model's centre.
+- A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
+  `Compositor::draw_sky(sky, target)` draws a scene's environment sky (`SkyDraw`: the
+  `Environment`, the camera, the stars and an opacity) into a canvas-sized layer, every
+  texel written by one triangle (`sky.wgsl`). Each pixel looks along its ray from the
+  camera (its axes, principal point and focal length, never its position) into the
+  gradient or the panorama spun by the turn, and adds stars hashed per square of a cube
+  around the camera, a Gaussian about 0.6 px wide each. The engine places the layer
+  under the scene's items with no camera. The pipeline is made on the first draw.
 - A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
   draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
   nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
@@ -531,6 +539,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
+| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per draw |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
 | `Nv12Converter` pipelines and layout | The converter |

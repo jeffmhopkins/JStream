@@ -664,6 +664,9 @@ pub(crate) struct Chains {
     /// The scenes whose extra environment lights were logged, once each (ADR-0151
     /// decision 9).
     pub(crate) environments_warned: BTreeSet<jstream_protocol::SceneId>,
+    /// The cache frame each 3D scene's sky backdrop (ADR-0167) was last drawn in: a
+    /// scene places its [`GpuKey::Sky`] layer only in the frame that drew it.
+    pub(crate) skies: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, u64>>,
     /// Each 3D scene's view depth (ADR-0143 decision 4), as its composite last drew it,
     /// with the frame of the chains' run that drew it: a scene's depth-reading filters
     /// read it only in that run. Kept, like a scene layer a filter reads, to tell when
@@ -1045,13 +1048,19 @@ impl Chains {
     /// Whether the chains' passes drew scene layer `key` this frame, so a mix's pass
     /// for it reads that layer as it is instead of drawing it again.
     pub(crate) fn reuse(&self, key: &GpuKey) -> bool {
-        let drawn = self.drawn.contains(key);
+        let drawn = self.holds_layer(key);
         #[cfg(test)]
         if drawn {
             self.reused
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         }
         drawn
+    }
+
+    /// [`Self::reuse`] without counting a read: whether the chains' passes drew scene
+    /// layer `key` this frame.
+    pub(crate) fn holds_layer(&self, key: &GpuKey) -> bool {
+        self.drawn.contains(key)
     }
 
     pub(crate) fn drew_box(&mut self, owner: &ChainOwner) {
@@ -3050,6 +3059,9 @@ mod tests {
                 horizon: blue,
                 ground: blue,
                 image: image.map(SourceId::new),
+                backdrop: false,
+                stars: 0.0,
+                star_brightness: 1.0,
             }),
         };
         let Some(tinted) = lit_centre(&graph, sky(None)) else {
@@ -3112,6 +3124,117 @@ mod tests {
             pixel[0] > 60 && pixel[0] > pixel[2] + 40,
             "the picture lights the plane red: {pixel:?}"
         );
+    }
+
+    /// ADR-0167: an environment light drawn as a backdrop fills a 3D scene's background
+    /// with its sky, under its cards; turned off, or in a scene without a camera, the
+    /// background shows; and it stays while a transition runs.
+    #[test]
+    fn an_environment_backdrop_draws_the_sky_behind_a_3d_scene() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (16.0, 8.0), 0.0)]);
+        let main = SceneId::new("main");
+        let camera = Edit::SceneSetCamera {
+            scene_id: main.clone(),
+            camera: Some(jstream_protocol::SceneCamera::framing(
+                jstream_protocol::Canvas {
+                    width: CANVAS.0,
+                    height: CANVAS.1,
+                },
+            )),
+        };
+        let blue = [0.0, 0.0, 1.0];
+        let sky = |backdrop: bool| jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Environment,
+            color: [1.0; 3],
+            intensity: 1.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.3,
+            environment: Some(jstream_sources::ShownEnvironment {
+                sky: blue,
+                horizon: blue,
+                ground: blue,
+                image: None,
+                backdrop,
+                stars: 0.0,
+                star_brightness: 1.0,
+            }),
+        };
+        let white = Frame::new(4, 4, &[255; 4 * 4 * 4], 2).expect("invariant: 4x4 RGBA8");
+        let draw = |graph: &Graph,
+                    light: jstream_sources::ShownLight,
+                    running: Option<&crate::transition::Running>| {
+            let lamp = Frame::new(1, 1, &[0; 4], 3)
+                .expect("invariant: 1x1 RGBA8")
+                .with_light(Some(light));
+            let shot = snapshot::plan_with(
+                graph,
+                Some(&main),
+                running.map(|running| (running, running.start)),
+                &mut |id| {
+                    Some(Look::frame(
+                        if id.as_str() == "cam" {
+                            white.clone()
+                        } else {
+                            lamp.clone()
+                        },
+                        None,
+                    ))
+                },
+                &FilterAssets::default(),
+            )
+            .shot;
+            let _gpu = crate::tests::one_gpu_test_at_a_time();
+            let mut compositor = gpu()?;
+            let mut cache = ResourceCache::new();
+            let mut chains = Chains::default();
+            Some(draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &LiveParams::default()),
+                &[(2, 2), (32, 18)],
+            ))
+        };
+        // Without a camera there is no backdrop.
+        let Some(flat) = draw(&graph, sky(true), None) else {
+            return;
+        };
+        assert_eq!(flat[0][..3], [0, 0, 0], "a 2D scene: {flat:?}");
+        apply(&mut graph, vec![camera]);
+        let shown = draw(&graph, sky(true), None).expect("an adapter");
+        assert_eq!(shown[0], [0, 0, 255, 255], "the sky behind: {shown:?}");
+        assert_eq!(
+            shown[1],
+            [255, 255, 255, 255],
+            "the card over it: {shown:?}"
+        );
+        let off = draw(&graph, sky(false), None).expect("an adapter");
+        assert_eq!(off[0][..3], [0, 0, 0], "no backdrop: {off:?}");
+        let running = crate::transition::Running {
+            from: crate::transition::From::Scene(main.clone()),
+            to: main.clone(),
+            start: MediaTime::zero(Timebase::MILLIS),
+            run: crate::transition::Run {
+                preset_id: jstream_protocol::TransitionPresetId::new("move"),
+                pairs: true,
+                duration_ms: 500,
+                easing: jstream_protocol::Easing::Linear,
+                unmatched: jstream_protocol::TransitionEffect::None,
+                stagger_ms: 0,
+                stinger: None,
+            },
+            by_item: true,
+            from_camera: crate::transition::camera_of(&graph, &main),
+        };
+        let switching = draw(&graph, sky(true), Some(&running)).expect("an adapter");
+        assert_eq!(
+            switching[0],
+            [0, 0, 255, 255],
+            "while switching: {switching:?}"
+        );
+        assert_eq!(switching[1], [255, 255, 255, 255], "{switching:?}");
     }
 
     /// ADR-0143 decisions 2 and 3: a `scene`-lit model in a 3D scene is lit by the light

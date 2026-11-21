@@ -1584,6 +1584,15 @@ sources holds *k* such textures. The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
 draws nothing.
 
+**Sky backdrops.** A 3D scene whose first environment light has `backdrop` on
+([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)) has its sky drawn
+before each of its colour passes, through the camera that pass's items are seen
+through, into a canvas-sized `GpuKey::Sky` layer (`draw_sky`), which `under_sky` puts
+under its items, flat and seen through no camera, only in the cache frame that drew it.
+Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
+`draw_transition_skies` draws each end's sky through that end's camera, the shown
+scene's fading in, and `fill_tracks` puts them under the tracks.
+
 **The render snapshot.** `snapshot::plan` copies the program scene, the scene each
 `scene` video mix shows, the scenes they reach, the frames they place and the passes
 that draw them (`schedule`, made once here, once per root scene) into an immutable
