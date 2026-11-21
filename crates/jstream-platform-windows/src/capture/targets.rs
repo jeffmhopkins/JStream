@@ -6,7 +6,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use jstream_platform::PlatformError;
 use jstream_platform::media::FrameSize;
-use windows::Win32::Foundation::{HWND, LPARAM, RECT};
+use windows::Win32::Foundation::{CloseHandle, HANDLE, HWND, LPARAM, RECT};
 use windows::Win32::Graphics::Dwm::{
     DWMWA_CLOAKED, DWMWA_EXTENDED_FRAME_BOUNDS, DwmGetWindowAttribute,
 };
@@ -14,14 +14,18 @@ use windows::Win32::Graphics::Gdi::{
     DEVMODEW, ENUM_CURRENT_SETTINGS, EnumDisplayMonitors, EnumDisplaySettingsW, GetMonitorInfoW,
     HDC, HMONITOR, MONITORINFO, MONITORINFOEXW,
 };
-use windows::Win32::System::Threading::GetCurrentProcessId;
+use windows::Win32::System::Threading::{
+    GetCurrentProcessId, OpenProcess, PROCESS_NAME_WIN32, PROCESS_QUERY_LIMITED_INFORMATION,
+    QueryFullProcessImageNameW,
+};
 use windows::Win32::UI::WindowsAndMessaging::{
-    EnumWindows, GW_OWNER, GWL_EXSTYLE, GetWindow, GetWindowLongW, GetWindowRect,
-    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindowVisible,
+    EnumWindows, GW_OWNER, GWL_EXSTYLE, GetClassNameW, GetWindow, GetWindowLongW, GetWindowRect,
+    GetWindowTextLengthW, GetWindowTextW, GetWindowThreadProcessId, IsWindow, IsWindowVisible,
     MONITORINFOF_PRIMARY, WS_EX_TOOLWINDOW,
 };
-use windows::core::{BOOL, PCWSTR};
+use windows::core::{BOOL, PCWSTR, PWSTR};
 
+use super::id::WindowKey;
 use crate::com::OsResult;
 
 /// A display.
@@ -40,6 +44,8 @@ pub(crate) struct Window {
     pub(crate) title: String,
     /// The window's bounds as DWM draws them, which is what WGC captures.
     pub(crate) size: Option<FrameSize>,
+    /// What finds it again once it has closed and opened again.
+    pub(crate) key: WindowKey,
 }
 
 /// The displays, in the order Windows enumerates them.
@@ -175,9 +181,7 @@ fn capturable(hwnd: HWND, own_pid: u32) -> Option<Window> {
         if len == 0 {
             return None;
         }
-        let mut buf = vec![0u16; len + 1];
-        let n = usize::try_from(GetWindowTextW(hwnd, &mut buf)).ok()?;
-        let title = String::from_utf16_lossy(&buf[..n.min(len)]);
+        let title = window_title(hwnd, len)?;
         if title.trim().is_empty() {
             return None;
         }
@@ -190,8 +194,94 @@ fn capturable(hwnd: HWND, own_pid: u32) -> Option<Window> {
         )
         .or_else(|_| GetWindowRect(hwnd, &raw mut r));
         let size = bounds.ok().and_then(|()| rect_size(&r));
-        Some(Window { hwnd, title, size })
+        let key = window_key(hwnd, pid, &title);
+        Some(Window {
+            hwnd,
+            title,
+            size,
+            key,
+        })
     }
+}
+
+/// The key of the window `hwnd` names now, whether or not a user would pick it, or
+/// `None` when it names no window.
+pub(crate) fn key_of(hwnd: HWND) -> Option<WindowKey> {
+    // SAFETY: each call takes a window handle, which may be stale; user32 fails such calls
+    // safely. The out-pointer describes a valid local.
+    unsafe {
+        if !IsWindow(Some(hwnd)).as_bool() {
+            return None;
+        }
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, Some(&raw mut pid));
+        let len = usize::try_from(GetWindowTextLengthW(hwnd)).unwrap_or(0);
+        let title = window_title(hwnd, len).unwrap_or_default();
+        Some(window_key(hwnd, pid, &title))
+    }
+}
+
+/// The window's title, at most `len` UTF-16 units of it.
+fn window_title(hwnd: HWND, len: usize) -> Option<String> {
+    let mut buf = vec![0u16; len + 1];
+    // SAFETY: the buffer is a valid local; a stale handle fails the call safely.
+    let n = usize::try_from(unsafe { GetWindowTextW(hwnd, &mut buf) }).ok()?;
+    Some(String::from_utf16_lossy(&buf[..n.min(len)]))
+}
+
+/// The key of window `hwnd`, of process `pid`, titled `title`.
+fn window_key(hwnd: HWND, pid: u32, title: &str) -> WindowKey {
+    let program = program_name(pid);
+    let class = class_name(hwnd);
+    WindowKey::new(program.as_deref(), class.as_deref(), Some(title))
+}
+
+/// The window's class name, if Windows says it.
+fn class_name(hwnd: HWND) -> Option<String> {
+    // Class names are at most 256 characters.
+    let mut buf = [0u16; 257];
+    // SAFETY: the buffer is a valid local; a stale handle fails the call safely.
+    let n = usize::try_from(unsafe { GetClassNameW(hwnd, &mut buf) }).ok()?;
+    (n > 0).then(|| String::from_utf16_lossy(&buf[..n.min(buf.len())]))
+}
+
+/// A process handle, closed when dropped.
+struct Process(HANDLE);
+
+impl Drop for Process {
+    fn drop(&mut self) {
+        // SAFETY: the handle is open and owned by this value alone.
+        let _ = unsafe { CloseHandle(self.0) };
+    }
+}
+
+/// The file name of process `pid`'s program, such as `notepad.exe`, if Windows says it:
+/// it doesn't for a process this one may not query (an elevated one, for a JStream that
+/// isn't, or a protected one).
+fn program_name(pid: u32) -> Option<String> {
+    if pid == 0 {
+        return None;
+    }
+    // SAFETY: plain call; the handle it returns is owned by `Process` and closed there.
+    let process =
+        Process(unsafe { OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, false, pid) }.ok()?);
+    // Long paths can exceed MAX_PATH; 32 767 is the longest Windows allows.
+    let mut buf = vec![0u16; 32_768];
+    let mut len = u32::try_from(buf.len()).ok()?;
+    // SAFETY: `buf` holds `len` units and outlives the call; `len` is a valid in/out
+    // pointer to a local; the process handle is open.
+    unsafe {
+        QueryFullProcessImageNameW(
+            process.0,
+            PROCESS_NAME_WIN32,
+            PWSTR(buf.as_mut_ptr()),
+            &raw mut len,
+        )
+    }
+    .ok()?;
+    let path = String::from_utf16_lossy(&buf[..usize::try_from(len).ok()?.min(buf.len())]);
+    let name = path.rsplit(['\\', '/']).next().unwrap_or(&path);
+    (!name.is_empty()).then(|| name.to_owned())
 }
 
 /// A rectangle's size, if it isn't empty.

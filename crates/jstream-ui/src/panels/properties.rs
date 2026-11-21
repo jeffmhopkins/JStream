@@ -558,8 +558,11 @@ fn reference_select(
 
 /// The choices of a capture target list, as (value, label): the empty value first (the
 /// primary display, or no window), then each target of `kind` that `targets` lists, in
-/// its order. A `current` value it doesn't list (a window closed since, or a display
-/// unplugged) stays a choice, so the list still shows what the source names.
+/// its order. A `current` value it doesn't list as is but that names a listed target (the
+/// same key, else the same part before the key, `TARGET_KEY`) takes that target's place,
+/// so a window found again after it was opened again shows as itself. Any other
+/// `current` value (a window closed since, or a display unplugged) stays a choice, so the
+/// list still shows what the source names.
 pub fn target_choices(
     kind: CaptureTargetKind,
     targets: &[CaptureTargetInfo],
@@ -584,6 +587,12 @@ pub fn target_choices(
         choices.push((target.target.clone(), label));
     }
     if !current.is_empty() && !choices.iter().any(|(value, _)| value == current) {
+        let by_key = choices.iter().position(|(v, _)| same_key(v, current));
+        let by_now = || choices.iter().position(|(v, _)| same_now(v, current));
+        if let Some(i) = by_key.or_else(by_now) {
+            current.clone_into(&mut choices[i].0);
+            return choices;
+        }
         let gone = match kind {
             CaptureTargetKind::Display => "Display not connected",
             CaptureTargetKind::Device => "Device not connected",
@@ -592,6 +601,29 @@ pub fn target_choices(
         choices.push((current.to_owned(), format!("{gone} ({current})")));
     }
     choices
+}
+
+/// Between a capture target ID's part that names the target now and its key, which names
+/// it again after it went and came back (a window closed and opened again: on Windows,
+/// `hwnd:0x1a2b;w1.…`). An ID without one has no key. The engine finds a target by its
+/// key; the list only needs to tell which listed target that is.
+const TARGET_KEY: char = ';';
+
+/// Whether the IDs `a` and `b` have the same key.
+fn same_key(a: &str, b: &str) -> bool {
+    match (a.split_once(TARGET_KEY), b.split_once(TARGET_KEY)) {
+        (Some((_, a)), Some((_, b))) => !a.is_empty() && a == b,
+        _ => false,
+    }
+}
+
+/// Whether the IDs `a` and `b` name the same target now, with keys that differ (a window
+/// whose title has changed since it was picked).
+fn same_now(a: &str, b: &str) -> bool {
+    match (a.split_once(TARGET_KEY), b.split_once(TARGET_KEY)) {
+        (Some((a, _)), Some((b, _))) => !a.is_empty() && a == b,
+        _ => false,
+    }
 }
 
 /// The `capture.targets` answer the capture fields of one form share: `None` until the
@@ -1872,6 +1904,46 @@ mod tests {
         assert_eq!(
             pairs(target_choices(CaptureTargetKind::Display, &listed, "")),
             ["=Primary display", "d1=Display 1"]
+        );
+        // A window opened again takes its listed place: by its key first, so a reused
+        // handle doesn't win over it, then by its handle, for a title that has changed.
+        let again = [
+            target(
+                CaptureTargetKind::Window,
+                "hwnd:0x10;w1.a.b.z",
+                "Reused handle",
+            ),
+            target(
+                CaptureTargetKind::Window,
+                "hwnd:0x30;w1.a.b.c",
+                "Opened again",
+            ),
+        ];
+        let pick = |current| pairs(target_choices(CaptureTargetKind::Window, &again, current));
+        assert_eq!(
+            pick("hwnd:0x10;w1.a.b.c"),
+            [
+                "=None",
+                "hwnd:0x10;w1.a.b.z=Reused handle",
+                "hwnd:0x10;w1.a.b.c=Opened again"
+            ]
+        );
+        assert_eq!(
+            pick("hwnd:0x30;w1.a.b.y"),
+            [
+                "=None",
+                "hwnd:0x10;w1.a.b.z=Reused handle",
+                "hwnd:0x30;w1.a.b.y=Opened again"
+            ]
+        );
+        // A key-less ID is matched as it is.
+        assert_eq!(
+            pick("hwnd:0x30")[1..],
+            [
+                "hwnd:0x10;w1.a.b.z=Reused handle",
+                "hwnd:0x30;w1.a.b.c=Opened again",
+                "hwnd:0x30=Window not open (hwnd:0x30)"
+            ]
         );
         // A window closed since stays the selected choice.
         assert_eq!(
