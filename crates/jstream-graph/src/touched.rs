@@ -372,6 +372,7 @@ impl Touched {
             }
             Edit::SceneSetCamera { scene_id, .. }
             | Edit::SceneSetCameraMotion { scene_id, .. }
+            | Edit::SceneSetCameraAnchor { scene_id, .. }
             | Edit::SceneSetCameraFollow { scene_id, .. } => {
                 self.prop(Object::Scene(scene_id.clone()), Prop::Camera);
             }

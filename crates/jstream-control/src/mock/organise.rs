@@ -62,6 +62,9 @@ impl Collection {
             Edit::SceneSetCameraMotion { scene_id, motion } => {
                 self.set_camera_motion(scene_id, motion, at)
             }
+            Edit::SceneSetCameraAnchor { scene_id, anchor } => {
+                self.set_camera_anchor(scene_id, anchor.as_ref(), at)
+            }
             Edit::SceneSetCameraFollow { scene_id, follow } => {
                 self.set_camera_follow(scene_id, follow.as_ref(), at)
             }
@@ -410,10 +413,10 @@ impl Collection {
                 format!(
                     "keyframe scene `{scene_id}` draws its parent `{parent}`'s camera {}; set it \
                      on `{parent}`",
-                    if field == "motion" {
-                        "motion"
-                    } else {
-                        "follow"
+                    match field {
+                        "motion" => "motion",
+                        "anchor" => "anchor",
+                        _ => "follow",
                     }
                 ),
             ));
@@ -453,6 +456,23 @@ impl Collection {
         Ok(vec![Edit::SceneSetCameraMotion {
             scene_id: scene_id.clone(),
             motion: old,
+        }])
+    }
+
+    /// `scene.set_camera_anchor` (ADR-0164 §5), as the engine applies it: refused only on
+    /// a keyframe scene, whose family's anchor it is.
+    fn set_camera_anchor(
+        &mut self,
+        scene_id: &SceneId,
+        anchor: Option<&jstream_protocol::ItemId>,
+        at: usize,
+    ) -> Result<Vec<Edit>, ProtocolError> {
+        // Any anchor is kept, and one that names no 3D group is ignored (ADR-0164 §5).
+        let si = self.family_scene(scene_id, at, "anchor")?;
+        let old = std::mem::replace(&mut self.scenes[si].camera_anchor, anchor.cloned());
+        Ok(vec![Edit::SceneSetCameraAnchor {
+            scene_id: scene_id.clone(),
+            anchor: old,
         }])
     }
 

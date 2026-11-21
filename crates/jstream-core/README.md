@@ -190,7 +190,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-sources"></a>
 ## Contents: live sources and snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
@@ -334,7 +334,22 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   A scene with a camera ([ADR-0094](../../docs/adr/0094-scene-cameras.md)) is planned
   with it on its pass (`Pass.camera`, the variant's override or its parent's, a live
   value winning), and every item it draws carries it to the compositor; a Move between
-  two 3D scenes moves the camera too (*Transitions* in [Design](#design)).
+  two 3D scenes moves the camera too (*Transitions* in [Design](#design)). A group
+  that shares a 3D scene's space
+  ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md),
+  `snapshot/groups.rs`) has no layer there: `Planner::collect` plans each of its
+  children (nested sharing groups in turn, up to `MAX_NESTING`) into the scene's own
+  pass, in the group item's place in stacking order, with its boxes and lights keyed by
+  that scene and the chain of group items (`GroupLink`s) it is placed through. As each
+  frame is drawn, every link is resolved as any item is (live values, then motion) and
+  the child's own resolved geometry is placed through them with
+  `jstream_protocol::GroupPose`, its opacity multiplied by theirs, so the scene's sort,
+  lights, models and focus take it as an item of the scene. A transition's ends place
+  each child through the links as planned, so it glides as a track of its own. A
+  scene whose family anchors its camera to such a group item (`PassCamera.anchor`) has
+  its camera, after camera motion and the live aim, placed through that item the same
+  way; `placed_camera` is that camera as committed, where a transition from the scene
+  starts. A family with a follow camera ignores its anchor.
   `Shot::chain_cost` is what its
   scene chains, item effects and, for the running outputs, output stage add to each
   frame, for `stats.tick`'s `chains`.
@@ -394,7 +409,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   which preset a switch runs (`resolve`), and the plan that pairs what is on screen
   with the new scene's items, one `jstream-render` `Track` per item (`plan`), and for
   a group that moves as one item within a family its children's tracks inside its
-  layer (`Inside`, ADR-0049 §3).
+  layer (`Inside`, ADR-0049 §3). A 3D group's children are tracks of their own, at
+  their placed geometries, and an end's camera is placed through its anchor
+  (`camera_of`, ADR-0164).
 
 <a id="contents-media"></a>
 ## Contents: the pipeline, outputs and stats
@@ -605,7 +622,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
 - **Tests** (`tests.rs`, `src/tests/history.rs`, `src/tests/live_values.rs`,
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
-  `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`, `tests/mcp.rs`,
+  `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
+  `src/tests/groups3d.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -622,7 +640,10 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   sheet that hears a loud mix, the
   limits and the cap on sheets at once, in `tests/frames.rs`; the layout, tiling and
   downscale in `frames.rs`), nested-scene scheduling (order, depth
-  bound, cycles) and its pixels through two levels in `snapshot.rs`, the render
+  bound, cycles) and its pixels through two levels in `snapshot.rs`, 3D groups drawn
+  through `video.snapshot` (a sharing group's child sorting in front of a scene item a
+  flat group sits under, moving and fading with the group item, and a camera anchored to
+  the group riding with it, in `src/tests/groups3d.rs`), the render
   thread's output size (the primary display's capture filling the canvas with no
   scene, the program fitted from the canvas, a `display` source showing its capture,
   the same for a GPU capture of another size), a mix of another aspect ratio
@@ -1588,7 +1609,11 @@ Data model states it for clients. Width is not bounded: each distinct `(scene, d
 keeps its own canvas-sized FP16 layer, so a program with *k* distinct nested scene
 sources holds *k* such textures. The graph already rejects cycles at every
 edit that adds nesting; if a copied shot had one, the scene source that closes it
-draws nothing.
+draws nothing. A group that shares its 3D scene's space
+([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)) is the exception:
+it has no pass or layer, and its children are drawn in the scene's own pass, each placed
+through the group item's pose (*Contents: live sources and snapshots*). Its nesting
+counts toward the same limit, and a deeper one draws flat.
 
 **The render snapshot.** `snapshot::plan` copies the program scene, the scene each
 `scene` video mix shows, the scenes they reach, the frames they place and the passes

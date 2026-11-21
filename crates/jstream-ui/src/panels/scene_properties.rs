@@ -26,8 +26,9 @@ use crate::panels::filters::{FilterUndo, PropertiesAndFilters, scene_owner};
 use crate::panels::inspector::transition_options;
 use crate::store::{Collection, Studio, apply};
 use jstream_control::protocol::{
-    Action, CameraMotionModifier, Chord, Edit, FilterId, FilterOwner, Finite32, SceneCamera,
-    SceneId, TransitionPresetId, check_camera_motion, parse_rgba,
+    Action, CameraMotionModifier, Chord, Edit, FilterId, FilterOwner, Finite32, ItemId,
+    SceneCamera, SceneId, SceneRole, SourceKind, TransitionPresetId, check_camera_motion,
+    parse_rgba,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -78,6 +79,11 @@ pub struct SceneDraft {
     pub camera: Option<SceneCamera>,
     /// Its camera's motion modifiers (ADR-0113); a keyframe scene draws its parent's.
     pub camera_motion: Vec<CameraMotionModifier>,
+    /// For a group, whether it shares a 3D scene's space (ADR-0164 §1).
+    pub share_space: bool,
+    /// The group item its camera rides with (ADR-0164 §5); a keyframe scene's is its
+    /// parent's.
+    pub camera_anchor: Option<ItemId>,
 }
 
 impl SceneDraft {
@@ -95,6 +101,8 @@ impl SceneDraft {
             keep_warm: scene.options.keep_warm,
             camera: scene.camera,
             camera_motion: scene.camera_motion.clone(),
+            share_space: scene.options.share_space,
+            camera_anchor: scene.camera_anchor.clone(),
         })
     }
 }
@@ -108,6 +116,34 @@ pub fn camera_start(collection: &Collection, scene_id: &SceneId) -> Option<Scene
         Some(_) => Some(collection.parent_of(scene_id)?.camera.unwrap_or(framing)),
         None => Some(framing),
     }
+}
+
+/// The items of `scene_id` a camera can ride with (ADR-0164 §5): each that places a
+/// group, with the group's name, in stacking order. The anchor works once the group
+/// shares the space; one that doesn't yet is listed so it can be picked first.
+pub fn anchor_choices(collection: &Collection, scene_id: &SceneId) -> Vec<(ItemId, String)> {
+    let Some(scene) = collection.scene(scene_id) else {
+        return Vec::new();
+    };
+    scene
+        .items
+        .iter()
+        .filter_map(|item| {
+            let SourceKind::Scene { scene_id: group } = &collection.source(&item.source_id)?.kind
+            else {
+                return None;
+            };
+            let group = collection.scene(group)?;
+            (group.role == SceneRole::Group).then(|| {
+                let name = if group.options.share_space {
+                    group.name.clone()
+                } else {
+                    format!("{} (flat)", group.name)
+                };
+                (item.item_id.clone(), name)
+            })
+        })
+        .collect()
 }
 
 /// The edits that turn `before` into `draft` for `scene_id`, in one batch: a rename
@@ -159,13 +195,17 @@ pub fn scene_edits(
     if background.is_some_and(|b| parse_rgba(b).is_none()) {
         return Err("The background color must be #rrggbb or #rrggbbaa.".into());
     }
-    if (draft.include_audio, background, draft.keep_warm)
-        != (
-            before.include_audio,
-            before.background.as_deref(),
-            before.keep_warm,
-        )
-    {
+    if (
+        draft.include_audio,
+        background,
+        draft.keep_warm,
+        draft.share_space,
+    ) != (
+        before.include_audio,
+        before.background.as_deref(),
+        before.keep_warm,
+        before.share_space,
+    ) {
         let mut options = collection
             .scene(scene_id)
             .map(|s| s.options.clone())
@@ -173,6 +213,7 @@ pub fn scene_edits(
         options.include_audio = draft.include_audio;
         options.background = background.map(str::to_owned);
         options.keep_warm = draft.keep_warm;
+        options.share_space = draft.share_space;
         edits.push(Edit::SceneSetOptions {
             scene_id: scene_id.clone(),
             options,
@@ -199,6 +240,13 @@ pub fn scene_edits(
         edits.push(Edit::SceneSetCameraMotion {
             scene_id: scene_id.clone(),
             motion: draft.camera_motion.clone(),
+        });
+    }
+    // After the camera, which an anchor needs.
+    if draft.camera_anchor != before.camera_anchor {
+        edits.push(Edit::SceneSetCameraAnchor {
+            scene_id: scene_id.clone(),
+            anchor: draft.camera_anchor.clone(),
         });
     }
     if draft.hotkey != before.hotkey {
@@ -351,6 +399,42 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         })
     });
     let camera_label = if keyframe { "Own camera" } else { "3D camera" };
+    // 3D groups (ADR-0164): a group's switch, and the groups a camera can ride with.
+    let opened_anchor = before.with_value(|b| b.camera_anchor.clone());
+    let (is_group, anchors, follows) = studio.collection.with_untracked(|c| {
+        c.as_ref().map_or((false, Vec::new(), false), |c| {
+            let scene = c.scene(&scene_id);
+            (
+                scene.is_some_and(|s| s.role == SceneRole::Group),
+                anchor_choices(c, &scene_id),
+                scene.is_some_and(|s| s.camera_follow.is_some()),
+            )
+        })
+    });
+    // A stored anchor that names no group item here is kept, and listed so it shows.
+    let kept = opened_anchor.filter(|anchor| anchors.iter().all(|(item, _)| item != anchor));
+    let flat: Vec<ItemId> = anchors
+        .iter()
+        .filter(|(_, name)| name.ends_with(" (flat)"))
+        .map(|(item, _)| item.clone())
+        .collect();
+    let anchors = StoredValue::new(anchors);
+    let kept = StoredValue::new(kept);
+    let flat = StoredValue::new(flat);
+    let anchor_note = move || {
+        let anchor = draft.with(|d| d.camera_anchor.clone());
+        match anchor {
+            _ if follows => "Ignored while the camera follows the pointer.",
+            Some(a) if kept.with_value(|k| k.as_ref() == Some(&a)) => {
+                "Kept but ignored: it names no group placed in this scene."
+            }
+            Some(a) if flat.with_value(|f| f.contains(&a)) => {
+                "Ignored until that group shares the 3D space."
+            }
+            Some(_) => "Its position and target are in the group's space and move with it.",
+            None => "Fixed in the scene. Pick a group that shares the 3D space to ride with it.",
+        }
+    };
     let start = studio
         .collection
         .with_untracked(|c| c.as_ref().map(|c| camera_start(c, &scene_id)));
@@ -454,6 +538,38 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             <span class="unit">"°"</span>
                         </div>
                     </div>
+                    {(!keyframe && !(anchors.with_value(Vec::is_empty) && kept.with_value(Option::is_none))).then(|| view! {
+                        <div class="axis-row camera-row">
+                            <span class="label">"Moves with"</span>
+                            <select
+                                aria-label="Moves with"
+                                on:change=move |event| {
+                                    let value = event_target_value(&event);
+                                    draft.update(|d| {
+                                        d.camera_anchor = (!value.is_empty()).then(|| ItemId::new(value));
+                                    });
+                                }
+                            >
+                                <option value="" selected=move || draft.with(|d| d.camera_anchor.is_none())>"Nothing"</option>
+                                {anchors.get_value().into_iter().map(|(item, name)| {
+                                    let value = item.to_string();
+                                    view! {
+                                        <option
+                                            value=value
+                                            selected=move || draft.with(|d| d.camera_anchor.as_ref() == Some(&item))
+                                        >
+                                            {name}
+                                        </option>
+                                    }
+                                }).collect_view()}
+                                {kept.get_value().map(|item| {
+                                    let name = format!("{item} (ignored)");
+                                    view! { <option value=item.to_string() selected=true>{name}</option> }
+                                })}
+                            </select>
+                        </div>
+                        <span class="field-note">{anchor_note}</span>
+                    })}
                     <h3 class="camera-head">"Rendering"</h3>
                     <div class="camera-line">
                         <label class="camera-check">
@@ -766,6 +882,25 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                         <span class="field-note">"Its videos, pages and cameras keep running while it's off program, so showing it starts nothing. It counts toward Settings › General › Warm scenes."</span>
                     </label>
                 </Show>
+                <Show when=move || is_group>
+                    <label class="field">
+                        <span class="label">"Share the 3D space"</span>
+                        <input
+                            type="checkbox"
+                            aria-label="Share the 3D space"
+                            prop:checked=move || draft.with(|d| d.share_space)
+                            on:change=move |event| {
+                                let on = event_target_checked(&event);
+                                draft.update(|d| d.share_space = on);
+                            }
+                        />
+                        <span class="field-note">{move || if draft.with(|d| d.share_space) {
+                            "In a 3D scene its items are drawn in that scene's space, each sorted, focused and lit on its own, and move with this group's item. Its own filters, effects, crop and blend don't apply, and a stretched group keeps its proportions."
+                        } else {
+                            "Drawn as one flat card, in a 3D scene too."
+                        }}</span>
+                    </label>
+                </Show>
                 <div class="camera-field">
                     <label class="camera-check">
                         <input
@@ -1074,8 +1209,91 @@ mod tests {
                     include_audio: false,
                     background: None,
                     keep_warm: true,
+                    share_space: false,
                 },
             }])
+        );
+    }
+
+    /// ADR-0164: a group's "Share the 3D space" switch sends `scene.set_options`, and
+    /// "Moves with" sends `scene.set_camera_anchor` after the camera it needs; only
+    /// items placing a group are offered.
+    #[test]
+    fn sharing_the_space_and_riding_a_group_send_their_edits() {
+        use jstream_control::protocol::{Crop, ItemInfo, ItemTransform, PlacementForm};
+        let item = |item: &str, source: &str| ItemInfo {
+            motion: Default::default(),
+            item_id: item.into(),
+            source_id: source.into(),
+            placement: PlacementForm::Legacy,
+            transform: ItemTransform::IDENTITY,
+            geometry: None,
+            crop: Crop::NONE,
+            visible: true,
+            effects: Vec::new(),
+            opacity: Finite32::ONE,
+            blend: Default::default(),
+            transition: jstream_control::protocol::ItemTransition::default(),
+            locked: false,
+            effects_space: jstream_protocol::EffectsSpace::Box,
+        };
+        let mut scenes: Vec<SceneInfo> = serde_json::from_value(serde_json::json!([
+            {"scene_id": "main", "name": "Main", "items": []},
+            {"scene_id": "rig", "name": "Rig", "role": "group", "items": []},
+        ]))
+        .expect("scenes");
+        scenes[0].items = vec![item("card", "pic"), item("rig_item", "rig_src")];
+        let sources = serde_json::from_value(serde_json::json!([
+            {"source_id": "pic", "name": "Pic", "kind": {"type": "builtin", "kind": "color"}},
+            {"source_id": "rig_src", "name": "Rig", "kind": {"type": "scene", "scene_id": "rig"}},
+        ]))
+        .expect("sources");
+        let c = Collection {
+            scenes,
+            sources,
+            ..Collection::default()
+        };
+        let (main, rig) = (SceneId::new("main"), SceneId::new("rig"));
+        assert_eq!(
+            anchor_choices(&c, &main),
+            vec![(ItemId::new("rig_item"), "Rig (flat)".to_owned())]
+        );
+
+        let before = SceneDraft::of(&c, &rig).expect("the group");
+        let shared = SceneDraft {
+            share_space: true,
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &rig, &before, &shared),
+            Ok(vec![Edit::SceneSetOptions {
+                scene_id: rig,
+                options: SceneOptions {
+                    share_space: true,
+                    ..SceneOptions::default()
+                },
+            }])
+        );
+
+        let before = SceneDraft::of(&c, &main).expect("the scene");
+        let camera = SceneCamera::framing(c.canvas);
+        let riding = SceneDraft {
+            camera: Some(camera),
+            camera_anchor: Some(ItemId::new("rig_item")),
+            ..before.clone()
+        };
+        assert_eq!(
+            scene_edits(&c, &main, &before, &riding),
+            Ok(vec![
+                Edit::SceneSetCamera {
+                    scene_id: main.clone(),
+                    camera: Some(camera),
+                },
+                Edit::SceneSetCameraAnchor {
+                    scene_id: main,
+                    anchor: Some(ItemId::new("rig_item")),
+                },
+            ])
         );
     }
 
@@ -1108,6 +1326,7 @@ mod tests {
                     include_audio: false,
                     background: None,
                     keep_warm: false,
+                    share_space: false,
                 },
             }])
         );
@@ -1143,6 +1362,7 @@ mod tests {
                     include_audio: false,
                     background: Some("#0F111580".into()),
                     keep_warm: false,
+                    share_space: false,
                 },
             }])
         );
@@ -1154,6 +1374,7 @@ mod tests {
                     include_audio: false,
                     background: None,
                     keep_warm: false,
+                    share_space: false,
                 },
             }])
         );
