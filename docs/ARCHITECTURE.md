@@ -228,7 +228,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
   horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
-  turn, depth and per-item perspective, drawn in stacking order with no depth buffer.
+  turn, depth and per-item perspective, drawn in stacking order with no depth buffer (only a 3D model writes depth, below).
   A scene with a `camera` (`SceneCamera`: position, target, field of view, roll,
   `depth_sort`, and a depth of field's `focus_px` and `blur_px`,
   [ADR-0108](adr/0108-camera-depth-of-field.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
@@ -1284,7 +1284,14 @@ camera and always takes that path: the same polygon, built through the camera's 
 (`w = D / f`), so a set shares one vanishing point. The compositor sorts each run of
 consecutive items that share a camera with `depth_sort` on (and a `depth_run`, which
 keeps a stinger's items over the scenes under them), far to near by the depth of their
-centre, stacking order breaking ties; there is still no depth buffer. In a Fade between
+centre, stacking order breaking ties; cards have no depth buffer of their own. A 3D
+model's layer carries the model's view depth ([ADR-0107](adr/0107-3d-models.md)
+decision 7): a scene pass that places one gets a reversed `Depth32Float` target, the
+model writes `NEAR_W / w` there where it covers a pixel (before its filters), and every
+item drawn after it tests against that, so a card that sorts in front of a model but
+passes behind it is hidden where the model is nearer. A model's own layer isn't
+tested, so models still order among themselves by their centres; a scene with no model
+has no depth target. In a Fade between
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had. A camera with a depth of field

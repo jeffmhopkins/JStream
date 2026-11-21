@@ -2043,6 +2043,13 @@ and a reflection whose picture isn't there leaves the environment. The graph ref
 map that reaches a scene showing the model as it refuses any reference cycle
 (`golden_a_model_shows_another_sources_picture_as_its_texture`,
 `a_models_texture_reaching_its_own_scene_is_a_cycle`).
+A model in a scene with a camera also gets a depth layer (`GpuKey::ModelDepth`, decision 7):
+`draw_model` clears it and draws the model's view depth into it with
+`Compositor::draw_model_depth`, and `layer_item` hands it to the scene pass as the
+model's `Item::depth` while the model is at least half opaque, so a card that stacks in
+front of the model but sits behind it is hidden where the model is nearer
+(`golden_a_card_behind_a_model_is_hidden_where_the_model_is_nearer`). A floor
+reflection's and a shadow's items carry none.
 A lit card ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
 10): a box in a 3D scene whose `ItemGeometry::surface` is `lit` and which shows its
 source's own frame, with its effects in its box, is boxed (`Boxed::lit`) even without a

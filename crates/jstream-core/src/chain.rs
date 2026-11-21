@@ -3156,6 +3156,96 @@ mod tests {
         );
     }
 
+    /// ADR-0107 decision 7: in a 3D scene a card drawn after a model but behind it is
+    /// hidden where the model is nearer; without a camera there is no depth, and the
+    /// card is drawn over the model as stacking says.
+    #[test]
+    fn golden_a_card_behind_a_model_is_hidden_where_the_model_is_nearer() {
+        let mut graph = placed(&[
+            ("cam", (32.0, 18.0), (16.0, 16.0), 0.0),
+            ("logo", (32.0, 18.0), (64.0, 36.0), 0.0),
+        ]);
+        let mut near = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(16.0, 16.0).expect("positive"),
+        )
+        .expect("valid");
+        near.fit_mode = jstream_protocol::FitMode::Stretch;
+        near.depth_px = jstream_protocol::Finite32::new(10.0).expect("finite");
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("cam"),
+                    geometry: near,
+                },
+                Edit::ItemReorder {
+                    item_id: ItemId::new("cam"),
+                    index: 0,
+                },
+                Edit::FilterAdd {
+                    owner: FilterOwner::Source {
+                        source_id: SourceId::new("logo"),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("blue"),
+                    kind: "color_correction".into(),
+                    settings: [("multiply", serde_json::json!("#0000ff"))]
+                        .into_iter()
+                        .collect(),
+                    enabled: Some(true),
+                    index: None,
+                },
+            ],
+        );
+        // The model is under the card in stacking order.
+        let flat = "
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            ";
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            flat,
+            "2D: the card is over the model",
+        );
+        let mut camera = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas {
+            width: CANVAS.0,
+            height: CANVAS.1,
+        });
+        // Stacking order, so only the model's depth can put it in front.
+        camera.depth_sort = false;
+        apply(
+            &mut graph,
+            vec![Edit::SceneSetCamera {
+                scene_id: SceneId::new("main"),
+                camera: Some(camera),
+            }],
+        );
+        assert_golden(
+            &model_shot(&graph, "plane"),
+            "
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBWWWWWBBBBBB
+            BBBBBWWWWWBBBBBB
+            BBBBBWWWWWBBBBBB
+            BBBBBWWWWWBBBBBB
+            BBBBBWWWWWBBBBBB
+            BBBBBBBBBBBBBBBB
+            BBBBBBBBBBBBBBBB
+            ",
+            "3D: the nearer model hides the card behind it",
+        );
+    }
+
     /// ADR-0107 decision 5: a model whose `texture` or `reflection` reaches a scene that
     /// shows the model is a cycle, refused as a scene source's is; another scene is not.
     #[test]

@@ -1799,3 +1799,78 @@ fn golden_model_a_reflection_replaces_the_studio_environment() {
     let unlit = seen(compositor, Lighting::Unlit, Some(&green));
     assert_near(unlit, [255, 255, 255], (80, 50));
 }
+
+/// ADR-0107 decision 7: a card drawn after a model, but behind it, is hidden where the
+/// model is nearer once the model's layer carries its depth; without the depth the card
+/// is drawn over it, as before. Where the model isn't, the card shows either way.
+#[test]
+fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = SceneCamera {
+        depth_sort: false,
+        ..SceneCamera::framing(canvas())
+    };
+    let white = compositor
+        .upload_rgba8(1, 1, &[255, 255, 255, 255])
+        .expect("a pixel uploads");
+    let cube = compositor.upload_model(&coloured_cube()).expect("uploads");
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let mut geometry = boxed(80.0, 50.0, 30.0);
+    geometry.depth_px = finite(40.0);
+    let draw = ModelDraw {
+        model: &cube,
+        geometry,
+        camera: Some(camera),
+        lighting: Lighting::Unlit,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        texture: None,
+        reflection: None,
+    };
+    compositor
+        .draw_model(&draw, &layer)
+        .expect("the model draws");
+    compositor
+        .render_into(
+            &Scene {
+                canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+                background: Color::TRANSPARENT,
+                items: &[],
+            },
+            &depth,
+        )
+        .expect("the depth clears");
+    compositor
+        .draw_model_depth(&draw, &depth)
+        .expect("the model's depth draws");
+    for with_depth in [false, true] {
+        // The card is last in stacking order and the camera doesn't sort, so only the
+        // model's depth can hide it.
+        let items = [
+            Item {
+                camera: Some(camera),
+                depth: with_depth.then_some(&depth),
+                ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+            },
+            Item {
+                camera: Some(camera),
+                ..crate::tests::item(
+                    &white,
+                    Placement::Geometry(boxed(80.0, 50.0, 90.0)),
+                    Crop::NONE,
+                    1.0,
+                )
+            },
+        ];
+        let shot = render(compositor, &items);
+        let want = if with_depth { FRONT } else { [255, 255, 255] };
+        assert_near(rgb(&shot, 80, 50), want, (80, 50));
+        assert_near(rgb(&shot, 120, 50), [255, 255, 255], (120, 50));
+    }
+}

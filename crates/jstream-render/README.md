@@ -430,7 +430,16 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    texels its polygon's bounding box covers (a texel of margin, clipped) are copied
    into the backdrop, a grow-only `Rgba16Float` texture, and a new pass draws the item,
    whose `fs_<mode>` loads the backdrop at its own pixel and writes the W3C composite
-   with blending off, and the items after it (ADR-0082). No depth buffer:
+   with blending off, and the items after it (ADR-0082). No depth buffer, unless an
+   item carries a model's depth (`Item::depth`, ADR-0107 decision 7): then `load` sets
+   `depth_on`, makes the scene depth target (`Depth32Float`, kept per canvas size) and,
+   the first time, `DepthPipelines` (every blend pipeline in both spaces again, tested
+   `GreaterEqual` or `Always`, and `depth_writer`). The pass clears it to 0 (it starts
+   cleared rather than wiped then), the model's layer draws untested and then
+   `fs_write_depth` writes `NEAR_W` times its depth image's `1 / w` where that isn't 0,
+   loaded texel for texel, and every other item tests its own `NEAR_W / w` (the vertex
+   shader's clip z, `min(NEAR_W, w)`) against it without writing
+   (`golden_model_a_card_behind_a_model_is_hidden_by_its_depth`). Otherwise
    stacking order is draw order, except that `prepare` sorts each run of consecutive
    items that share one camera with `depth_sort` on and one `Item.depth_run` (a
    transition gives a stinger's items their own), far to near by the depth of their
