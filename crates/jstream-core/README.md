@@ -1589,6 +1589,11 @@ draws nothing.
 before each of its colour passes, through the camera that pass's items are seen
 through, into a canvas-sized `GpuKey::Sky` layer (`draw_sky`), which `under_sky` puts
 under its items, flat and seen through no camera, only in the cache frame that drew it.
+`Chains::skies` keeps each scene's `SkyState`: the frame that drew it, the warp it
+streams at now, which moves toward the setting at its ramp's pace, and how far its
+stars have travelled, advanced once a frame by the warp's mean rate times the media
+time since the last (a step back or of over a second jumps to the setting and moves
+nothing).
 Its view depth, shadow maps and floor reflection leave it out. While a transition runs,
 `draw_transition_skies` draws each end's sky through that end's camera, the shown
 scene's fading in, and `fill_tracks` puts them under the tracks.

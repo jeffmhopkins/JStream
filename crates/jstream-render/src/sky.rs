@@ -33,6 +33,57 @@ pub struct SkyDraw<'a> {
     pub star_brightness: f32,
     /// How opaque the backdrop is, 0 to 1: its item's opacity.
     pub opacity: f32,
+    /// The deep sky: nebulae, a galaxy band and the layout's seed.
+    pub deep: DeepSky,
+    /// How fast the sky streams past, 0 (still) to 1: the streaks' length.
+    pub warp: f32,
+    /// How far the stars have moved away from the direction of travel, in the log-tan
+    /// units [`SkyDraw::travel_rate`] advances: the engine adds the rate times each
+    /// frame's time, so a warp that ramps up and down moves them smoothly.
+    pub travel: f64,
+}
+
+/// A backdrop's nebulae and galaxy band (ADR-0167), drawn over its sky, under its stars.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct DeepSky {
+    /// How much nebula, 0 (none) to 1.
+    pub nebula: f32,
+    /// The nebulae's two colours, straight sRGB. Alpha is ignored.
+    pub nebula_colors: [Color; 2],
+    /// How bright the galaxy band is, 0 (none) to 1.
+    pub galaxy: f32,
+    /// Which sky: each seed lays out the stars, nebulae and band's texture anew.
+    pub seed: u32,
+}
+
+impl DeepSky {
+    /// No nebula and no galaxy band.
+    pub const NONE: Self = Self {
+        nebula: 0.0,
+        nebula_colors: [Color::BLACK, Color::BLACK],
+        galaxy: 0.0,
+        seed: 0,
+    };
+}
+
+/// The streaks' length at warp 1, in log-tan units: about 70 degrees at right angles to
+/// the travel.
+const WARP_STREAK: f32 = 1.2;
+
+/// How fast the stars move at warp 1, in log-tan units a second.
+const WARP_SPEED: f64 = 6.0;
+
+/// Columns of faint and bright stars around the travel, as `sky.wgsl` has them.
+const FAINT_COLUMNS: f64 = 640.0;
+const BRIGHT_COLUMNS: f64 = 280.0;
+
+impl SkyDraw<'_> {
+    /// How fast the stars move away from the direction of travel at `warp`, in the
+    /// units of [`SkyDraw::travel`] a second: none at 0, rising with its square.
+    pub fn travel_rate(warp: f32) -> f64 {
+        let warp = f64::from(finite(warp, 0.0, 1.0));
+        WARP_SPEED * warp * warp
+    }
 }
 
 /// The backdrop's pipeline, its sampler and the stand-in picture of a sky without one.
@@ -265,7 +316,7 @@ fn sky_values(
     sky: &SkyDraw<'_>,
     image: Option<&Image>,
     view: &jstream_protocol::CameraView,
-) -> [f32; 28] {
+) -> [f32; 44] {
     let environment = &sky.environment;
     let intensity = finite(environment.intensity, 0.0, f32::MAX);
     let linear = |color: Color| {
@@ -277,6 +328,11 @@ fn sky_values(
     let turn = finite(environment.turn_deg, -1.0e6, 1.0e6).to_radians();
     let [right, down, forward] = view.axes().map(|axis| axis.map(|c| c as f32));
     let [cx, cy] = view.principal();
+    let deep = &sky.deep;
+    let [nebula_a, nebula_b] = deep.nebula_colors.map(linear);
+    let warp = finite(sky.warp, 0.0, 1.0);
+    let bright = cells(sky.travel, BRIGHT_COLUMNS);
+    let faint = cells(sky.travel, FAINT_COLUMNS);
     [
         right[0],
         right[1],
@@ -305,8 +361,34 @@ fn sky_values(
         finite(sky.stars, 0.0, 1.0),
         finite(sky.star_brightness, 0.0, MAX_STAR_BRIGHTNESS) * intensity,
         intensity,
+        WARP_STREAK * warp * warp,
+        nebula_a[0],
+        nebula_a[1],
+        nebula_a[2],
+        finite(deep.nebula, 0.0, 1.0),
+        nebula_b[0],
+        nebula_b[1],
+        nebula_b[2],
+        finite(deep.galaxy, 0.0, 1.0),
+        bright.1,
+        f32::from_bits(bright.0),
+        faint.1,
+        f32::from_bits(faint.0),
+        f32::from_bits(deep.seed),
+        0.0,
+        0.0,
         0.0,
     ]
+}
+
+/// `travel` in cells of a layer of `columns`: its whole cells, wrapped to 32 bits, and
+/// its fraction, so a long journey keeps every cell exact.
+fn cells(travel: f64, columns: f64) -> (u32, f32) {
+    let travel = if travel.is_finite() { travel } else { 0.0 };
+    let cells = travel / (std::f64::consts::TAU / columns);
+    let whole = cells.floor();
+    let wrapped = whole.rem_euclid(4_294_967_296.0) as u32;
+    (wrapped, (cells - whole) as f32)
 }
 
 #[cfg(test)]

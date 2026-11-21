@@ -217,7 +217,8 @@ light that adds evenly, chosen before tuning opacities, ADR-0126), 3D sets throu
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
 [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a sky all around a 3D set as an
-environment light with `backdrop` on, with `stars` or a panorama `image`
+environment light with `backdrop` on, with `stars`, `nebula`, a `galaxy` band or a
+panorama `image`, and a `warp` that ramps itself over `warp_ramp_s`
 ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)), a camera that moves on its
 own (`scene.set_camera_motion`, a slow wiggle as a hand-held camera) or follows the
 pointer over a screen capture (a `follow_pointer` filter on the capture item, which

@@ -2324,6 +2324,107 @@ source: crates/jstream-core/src/kinds.rs
           "equals": "environment"
         },
         "live": true
+      },
+      {
+        "id": "nebula",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.0,
+        "label": "Nebula",
+        "description": "How much glowing gas cloud the backdrop draws over the sky, in the two nebula colours; 0 draws none.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "nebula_color",
+        "type": "color",
+        "alpha": false,
+        "default": "#8c2e9e",
+        "label": "Nebula colour",
+        "description": "The nebulae's first colour.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "nebula_color_2",
+        "type": "color",
+        "alpha": false,
+        "default": "#2471a8",
+        "label": "Nebula colour 2",
+        "description": "The nebulae's second colour, which they shade into.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "galaxy",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.05,
+        "default": 0.0,
+        "label": "Galaxy band",
+        "description": "How bright a band of galaxy light across the backdrop is, with dark dust lanes and more stars along it; 0 draws none.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "sky_seed",
+        "type": "int",
+        "min": 0,
+        "max": 9999,
+        "default": 0,
+        "label": "Sky seed",
+        "description": "Which sky: each number lays the stars, nebulae and band out anew.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "warp",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.0,
+        "label": "Warp",
+        "description": "How fast the backdrop streams past, as if travelling toward the sky's centre ahead (the item's turn sets where that is): the stars move away from it and stretch into streaks, at any angle the camera looks; 0 is still. A change ramps over the warp ramp, so setting it jumps in and setting 0 drops out.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
+      },
+      {
+        "id": "warp_ramp_s",
+        "type": "float",
+        "min": 0.0,
+        "max": 10.0,
+        "step": 0.1,
+        "unit": "s",
+        "default": 1.5,
+        "label": "Warp ramp",
+        "description": "How long the backdrop takes to speed up from still to full warp, or slow from full warp to still, when Warp changes; 0 changes at once.",
+        "visible_if": {
+          "param": "type",
+          "equals": "environment"
+        },
+        "live": true
       }
     ]
   },

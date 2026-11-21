@@ -625,6 +625,50 @@ struct Running {
     warned: bool,
 }
 
+/// A scene's sky backdrop from frame to frame (ADR-0167).
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub(crate) struct SkyState {
+    /// The cache frame that last drew it.
+    pub(crate) drawn: Option<u64>,
+    /// The cache frame its travel last advanced in, and the media time then.
+    pub(crate) stepped: Option<(u64, f64)>,
+    /// The warp it streams at now, moving toward its setting at its ramp's pace.
+    pub(crate) warp: f32,
+    /// How far its stars have moved away from the direction of travel
+    /// ([`jstream_render::SkyDraw::travel`]).
+    pub(crate) travel: f64,
+}
+
+impl SkyState {
+    /// Advances the sky to `at_s` seconds, once per cache `frame`: its warp moves toward
+    /// `target` by one over `ramp_s` seconds (at once for a ramp of 0), and its travel by
+    /// [`jstream_render::SkyDraw::travel_rate`] of that warp. The first step starts at
+    /// `target`; a step back in time or of over a second, a seek or a pause, takes the
+    /// warp to `target` and moves nothing.
+    pub(crate) fn step(&mut self, frame: u64, at_s: f64, (target, ramp_s): (f32, f32)) {
+        match self.stepped {
+            Some((stepped, _)) if stepped == frame => return,
+            Some((_, last)) if at_s - last > 0.0 && at_s - last <= 1.0 => {
+                let dt = (at_s - last) as f32;
+                let before = self.warp;
+                self.warp = if ramp_s > 0.0 {
+                    let most = dt / ramp_s;
+                    before + (target - before).clamp(-most, most)
+                } else {
+                    target
+                };
+                // The mean of the two speeds over the step.
+                let rate = (jstream_render::SkyDraw::travel_rate(before)
+                    + jstream_render::SkyDraw::travel_rate(self.warp))
+                    * 0.5;
+                self.travel += rate * f64::from(dt);
+            }
+            _ => self.warp = target,
+        }
+        self.stepped = Some((frame, at_s));
+    }
+}
+
 /// The filters one compositor runs, by owner, kept from frame to frame.
 #[derive(Default)]
 pub(crate) struct Chains {
@@ -664,9 +708,10 @@ pub(crate) struct Chains {
     /// The scenes whose extra environment lights were logged, once each (ADR-0151
     /// decision 9).
     pub(crate) environments_warned: BTreeSet<jstream_protocol::SceneId>,
-    /// The cache frame each 3D scene's sky backdrop (ADR-0167) was last drawn in: a
-    /// scene places its [`GpuKey::Sky`] layer only in the frame that drew it.
-    pub(crate) skies: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, u64>>,
+    /// Each 3D scene's sky backdrop (ADR-0167): the frame it was last drawn in, as a
+    /// scene places its [`GpuKey::Sky`] layer only in the frame that drew it, and how
+    /// far its stars have travelled at warp.
+    pub(crate) skies: std::cell::RefCell<BTreeMap<jstream_protocol::SceneId, SkyState>>,
     /// Each 3D scene's view depth (ADR-0143 decision 4), as its composite last drew it,
     /// with the frame of the chains' run that drew it: a scene's depth-reading filters
     /// read it only in that run. Kept, like a scene layer a filter reads, to tell when
@@ -3062,6 +3107,12 @@ mod tests {
                 backdrop: false,
                 stars: 0.0,
                 star_brightness: 1.0,
+                nebula: 0.0,
+                nebula_colors: [[0.0; 3]; 2],
+                galaxy: 0.0,
+                sky_seed: 0,
+                warp: 0.0,
+                warp_ramp_s: 0.0,
             }),
         };
         let Some(tinted) = lit_centre(&graph, sky(None)) else {
@@ -3126,6 +3177,44 @@ mod tests {
         );
     }
 
+    /// ADR-0167: a backdrop's travel advances by its rate times the media time between
+    /// frames, once per cache frame, and a seek or a long pause moves nothing.
+    #[test]
+    fn a_sky_travels_at_its_rate_once_a_frame() {
+        let rate = jstream_render::SkyDraw::travel_rate;
+        let mut sky = crate::chain::SkyState::default();
+        sky.step(1, 10.0, (1.0, 0.0));
+        assert_eq!(
+            (sky.travel, sky.warp),
+            (0.0, 1.0),
+            "the first frame starts at its warp"
+        );
+        sky.step(2, 10.5, (1.0, 0.0));
+        assert!((sky.travel - rate(1.0) * 0.5).abs() < 1e-9);
+        sky.step(2, 10.9, (1.0, 0.0));
+        assert!(
+            (sky.travel - rate(1.0) * 0.5).abs() < 1e-9,
+            "once per frame"
+        );
+        let before = sky.travel;
+        sky.step(3, 30.0, (0.0, 2.0));
+        assert_eq!(
+            (sky.travel, sky.warp),
+            (before, 0.0),
+            "a jump moves nothing"
+        );
+        // Ramping from 0 toward 1 over 2 s: half a second in, the warp is a quarter.
+        sky.step(4, 30.5, (1.0, 2.0));
+        assert!((sky.warp - 0.25).abs() < 1e-6, "{}", sky.warp);
+        let ramped = before + (rate(0.0) + rate(0.25)) * 0.5 * 0.5;
+        assert!((sky.travel - ramped).abs() < 1e-6);
+        sky.step(5, 29.0, (1.0, 2.0));
+        assert!(
+            (sky.travel - ramped).abs() < 1e-6,
+            "back in time moves nothing"
+        );
+    }
+
     /// ADR-0167: an environment light drawn as a backdrop fills a 3D scene's background
     /// with its sky, under its cards; turned off, or in a scene without a camera, the
     /// background shows; and it stays while a transition runs.
@@ -3160,6 +3249,12 @@ mod tests {
                 backdrop,
                 stars: 0.0,
                 star_brightness: 1.0,
+                nebula: 0.0,
+                nebula_colors: [[0.0; 3]; 2],
+                galaxy: 0.0,
+                sky_seed: 0,
+                warp: 0.0,
+                warp_ramp_s: 0.0,
             }),
         };
         let white = Frame::new(4, 4, &[255; 4 * 4 * 4], 2).expect("invariant: 4x4 RGBA8");

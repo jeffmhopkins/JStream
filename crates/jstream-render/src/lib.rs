@@ -50,7 +50,7 @@ pub use model::{
 };
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
-pub use sky::{MAX_STAR_BRIGHTNESS, SkyDraw};
+pub use sky::{DeepSky, MAX_STAR_BRIGHTNESS, SkyDraw};
 
 #[cfg(test)]
 mod tests;

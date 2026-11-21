@@ -52,12 +52,18 @@ and calls this crate.
   at the model's centre.
 - A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
   `Compositor::draw_sky(sky, target)` draws a scene's environment sky (`SkyDraw`: the
-  `Environment`, the camera, the stars and an opacity) into a canvas-sized layer, every
+  `Environment`, the camera, the stars, the deep sky, the warp and travel, and an opacity) into a canvas-sized layer, every
   texel written by one triangle (`sky.wgsl`). Each pixel looks along its ray from the
   camera (its axes, principal point and focal length, never its position) into the
-  gradient or the panorama spun by the turn, and adds stars hashed per square of a cube
-  around the camera, a Gaussian about 0.6 px wide each. The engine places the layer
-  under the scene's items with no camera. The pipeline is made on the first draw.
+  gradient or the panorama spun by the turn. Over it go nebulae and a galaxy band
+  (`DeepSky`: warped fractal value noise on the direction) and stars hashed per cell of a
+  grid about the direction of travel (`-z`): columns around it by the log-tan of half the
+  angle from it, so cells are square and a star moving away from it at any angle moves at
+  one speed. At `warp` each star streaks behind it over up to 64 cells and the deep sky
+  blurs over 5 taps; `travel`, which the engine accumulates at
+  `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
+  about 0.6 px wide. The engine places the layer under the scene's items with no camera.
+  The pipeline is made on the first draw.
 - A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
   draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
   nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and

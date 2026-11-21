@@ -78,6 +78,9 @@ fn sky(environment: Environment<'_>, camera: SceneCamera) -> SkyDraw<'_> {
         stars: 0.0,
         star_brightness: 1.0,
         opacity: 1.0,
+        deep: super::DeepSky::NONE,
+        warp: 0.0,
+        travel: 0.0,
     }
 }
 
@@ -283,4 +286,120 @@ fn golden_sky_its_opacity_fades_it_over_the_background() {
         (100..=200).contains(&got[0]) && got[1] < 5,
         "half the red background: {got:?}"
     );
+}
+
+fn night() -> Environment<'static> {
+    Environment {
+        sky: BLACK,
+        horizon: BLACK,
+        ground: BLACK,
+        ..gradient()
+    }
+}
+
+/// Pixels brighter than a dim threshold in `shot`.
+fn lit(shot: &Snapshot) -> usize {
+    shot.rgba()
+        .chunks(4)
+        .filter(|p| p[0].max(p[1]).max(p[2]) > 30)
+        .count()
+}
+
+/// Nebulae and a galaxy band light a black sky where there were no stars; another seed
+/// lays them out differently.
+#[test]
+fn golden_sky_nebulae_and_a_galaxy_band_light_the_sky() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let camera = SceneCamera::framing(canvas());
+    let deep = |nebula: f32, galaxy: f32, seed: u32| SkyDraw {
+        deep: super::DeepSky {
+            nebula,
+            nebula_colors: [Color::rgb(1.0, 0.2, 0.8), Color::rgb(0.2, 0.5, 1.0)],
+            galaxy,
+            seed,
+        },
+        ..sky(night(), camera)
+    };
+    let total = |shot: &Snapshot| -> u64 {
+        shot.rgba()
+            .chunks(4)
+            .map(|p| u64::from(p[0]) + u64::from(p[1]) + u64::from(p[2]))
+            .sum()
+    };
+    let clouds = shot(&mut opened.compositor, &deep(1.0, 0.0, 1));
+    assert!(
+        total(&clouds) > 50_000,
+        "the nebulae glow: {}",
+        total(&clouds)
+    );
+    let other = shot(&mut opened.compositor, &deep(1.0, 0.0, 2));
+    assert_ne!(clouds.rgba(), other.rgba(), "another seed, another sky");
+    // The band crosses the sky somewhere: look along a few directions for it.
+    let band: u64 = [
+        [0.0, 0.0, -1.0],
+        [1.0, 0.0, 0.0],
+        [0.0, -1.0, 0.0],
+        [0.0, 0.0, 1.0],
+    ]
+    .into_iter()
+    .map(|aim| {
+        total(&shot(
+            &mut opened.compositor,
+            &SkyDraw {
+                camera: looking([0.0; 3], aim),
+                ..deep(0.0, 1.0, 1)
+            },
+        ))
+    })
+    .sum();
+    assert!(band > 20_000, "the galaxy band glows: {band}");
+    let none = shot(&mut opened.compositor, &deep(0.0, 0.0, 1));
+    assert_eq!(total(&none), 0);
+}
+
+/// Warp stretches each star into a streak, so more of the sky is lit, looking ahead or
+/// to the side; and travel moves the stars.
+#[test]
+fn golden_sky_warp_streaks_the_stars_at_any_angle() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let narrow = |aim| SceneCamera {
+        fov_deg: Finite32::new(20.0).expect("finite"),
+        ..looking([0.0; 3], aim)
+    };
+    for aim in [[0.3, 0.2, -1.0], [1.0, 0.1, 0.0]] {
+        let still = shot(
+            &mut opened.compositor,
+            &SkyDraw {
+                stars: 1.0,
+                ..sky(night(), narrow(aim))
+            },
+        );
+        let warp = shot(
+            &mut opened.compositor,
+            &SkyDraw {
+                stars: 1.0,
+                warp: 0.5,
+                ..sky(night(), narrow(aim))
+            },
+        );
+        assert!(
+            lit(&warp) > lit(&still) * 2,
+            "looking {aim:?}: {} lit at warp, {} still",
+            lit(&warp),
+            lit(&still)
+        );
+        let moved = shot(
+            &mut opened.compositor,
+            &SkyDraw {
+                stars: 1.0,
+                travel: 0.05,
+                ..sky(night(), narrow(aim))
+            },
+        );
+        assert_ne!(still.rgba(), moved.rgba(), "travel moves the stars");
+    }
 }

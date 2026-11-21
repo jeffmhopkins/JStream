@@ -25,6 +25,16 @@ const GROUND: &str = "#3a3a3a";
 /// The most an environment backdrop's stars are brightened (ADR-0167).
 const MAX_STAR_BRIGHTNESS: f32 = 8.0;
 
+/// A backdrop's default nebula colours, a violet and a blue.
+const NEBULA: &str = "#8c2e9e";
+const NEBULA_2: &str = "#2471a8";
+
+/// The longest a backdrop's warp takes to change from still to full, in seconds.
+const MAX_WARP_RAMP_S: f64 = 10.0;
+
+/// The highest sky seed.
+const MAX_SEED: u32 = 9999;
+
 /// The farthest a light's range reaches, in scene pixels.
 const MAX_RANGE_PX: f64 = 1_000_000.0;
 
@@ -94,6 +104,19 @@ pub struct ShownEnvironment {
     pub stars: f32,
     /// How bright the backdrop's stars are, 0 to 8.
     pub star_brightness: f32,
+    /// How much nebula the backdrop draws, 0 (none) to 1.
+    pub nebula: f32,
+    /// The nebulae's two colours, straight sRGB, 0 to 1.
+    pub nebula_colors: [[f32; 3]; 2],
+    /// How bright the backdrop's galaxy band is, 0 (none) to 1.
+    pub galaxy: f32,
+    /// Which sky the stars, nebulae and band lay out, 0 to 9999.
+    pub sky_seed: u32,
+    /// How fast the backdrop streams past toward the sky's centre ahead, 0 (still) to 1.
+    pub warp: f32,
+    /// How many seconds the backdrop takes to go from still to full warp, or back, when
+    /// `warp` changes, 0 to 10; 0 changes at once.
+    pub warp_ramp_s: f32,
 }
 
 /// The `light` kind.
@@ -261,6 +284,68 @@ impl LightKind {
                     json!(1.0),
                     "How bright the backdrop's stars are, before the intensity.",
                 )),
+                sky(p(
+                    "nebula",
+                    "Nebula",
+                    number(0.0, 1.0, 0.05, None),
+                    json!(0.0),
+                    "How much glowing gas cloud the backdrop draws over the sky, in the \
+                     two nebula colours; 0 draws none.",
+                )),
+                sky(p(
+                    "nebula_color",
+                    "Nebula colour",
+                    ParamType::Color { alpha: false },
+                    json!(NEBULA),
+                    "The nebulae's first colour.",
+                )),
+                sky(p(
+                    "nebula_color_2",
+                    "Nebula colour 2",
+                    ParamType::Color { alpha: false },
+                    json!(NEBULA_2),
+                    "The nebulae's second colour, which they shade into.",
+                )),
+                sky(p(
+                    "galaxy",
+                    "Galaxy band",
+                    number(0.0, 1.0, 0.05, None),
+                    json!(0.0),
+                    "How bright a band of galaxy light across the backdrop is, with dark \
+                     dust lanes and more stars along it; 0 draws none.",
+                )),
+                sky(p(
+                    "sky_seed",
+                    "Sky seed",
+                    ParamType::Int {
+                        min: Some(0),
+                        max: Some(MAX_SEED.into()),
+                        step: None,
+                        unit: None,
+                    },
+                    json!(0),
+                    "Which sky: each number lays the stars, nebulae and band out anew.",
+                )),
+                sky(p(
+                    "warp",
+                    "Warp",
+                    number(0.0, 1.0, 0.01, None),
+                    json!(0.0),
+                    "How fast the backdrop streams past, as if travelling toward the \
+                     sky's centre ahead (the item's turn sets where that is): the stars \
+                     move away from it and stretch into streaks, at any angle the camera \
+                     looks; 0 is still. A change ramps over the warp ramp, so setting \
+                     it jumps in and setting 0 drops out.",
+                )),
+                sky(p(
+                    "warp_ramp_s",
+                    "Warp ramp",
+                    number(0.0, MAX_WARP_RAMP_S, 0.1, Some("s")),
+                    json!(1.5),
+                    "How long the backdrop takes to speed up from still to full warp, \
+                     or slow from full warp to still, when Warp changes; 0 changes at \
+                     once.",
+                )),
             ],
             ..kind("light", "Light", true, false)
         })
@@ -418,6 +503,25 @@ fn environment(settings: &Settings) -> Result<ShownEnvironment, SourceError> {
         backdrop,
         stars: number("stars", 1.0, 0.0)?,
         star_brightness: number("star_brightness", MAX_STAR_BRIGHTNESS, 1.0)?,
+        nebula: number("nebula", 1.0, 0.0)?,
+        nebula_colors: [
+            colour("nebula_color", NEBULA)?,
+            colour("nebula_color_2", NEBULA_2)?,
+        ],
+        galaxy: number("galaxy", 1.0, 0.0)?,
+        sky_seed: match settings.get("sky_seed") {
+            None => 0,
+            Some(value) => value
+                .as_u64()
+                .filter(|seed| *seed <= u64::from(MAX_SEED))
+                .map(|seed| seed as u32)
+                .ok_or_else(|| SourceError::Setting {
+                    param: "sky_seed".into(),
+                    reason: format!("must be a whole number from 0 to {MAX_SEED}"),
+                })?,
+        },
+        warp: number("warp", 1.0, 0.0)?,
+        warp_ramp_s: number("warp_ramp_s", MAX_WARP_RAMP_S as f32, 1.5)?,
     })
 }
 

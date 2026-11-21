@@ -238,8 +238,16 @@ as the camera moves, and its `image` takes an equirectangular panorama (2:1, cen
 straight ahead) or any live source in its place. `stars` (0-1, about 0.3-0.6 for a \
 clear night or deep space, on dark sky colours) scatters fixed points of light over \
 it, `star_brightness` sets how bright, the item's `turn_deg` spins the sky, and the \
-same sky lights scene-lit models. A flat photo stretched as a panorama smears toward \
-the top and bottom, so prefer a real panorama or stars. \
+same sky lights scene-lit models. For deep space add `nebula` (0.4-0.8) in two colours \
+(`nebula_color`, `nebula_color_2`; keep them deep and saturated, the clouds glow over \
+black) and a `galaxy` band (0.3-0.7); `sky_seed` picks another layout. `warp` (0-1) \
+streams the sky past toward its centre ahead: stars stretch into streaks that burst \
+out ahead, slide past at the sides and converge behind, right from any camera angle. \
+One `source.set_settings` of `warp` jumps: the sky accelerates to it over \
+`warp_ramp_s` (default 1.5 s) by itself, and setting 0 slows back out; 0.6-1 is a \
+jump, about 0.05-0.15 a slow cruise. Add a brief white flash card or `bloom` at the \
+jump for punch. A flat photo stretched as a panorama smears toward \
+the top and bottom, so prefer a real panorama or the procedural sky. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \

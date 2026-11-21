@@ -6820,6 +6820,14 @@ fn draw_sky_of(
         return Ok(());
     };
     let (environment, opacity) = environment_at((shot, cache), (placed, light, sky), at, live);
+    let travel = {
+        let mut skies = chains.skies.borrow_mut();
+        let state = skies.entry(scene.clone()).or_default();
+        state.step(cache.frame(), at.as_secs_f64(), (sky.warp, sky.warp_ramp_s));
+        (state.warp, state.travel)
+    };
+    let (warp, travel) = travel;
+    let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
     compositor.draw_sky(
         &jstream_render::SkyDraw {
             environment,
@@ -6827,13 +6835,20 @@ fn draw_sky_of(
             stars: sky.stars,
             star_brightness: sky.star_brightness,
             opacity: opacity * fade,
+            deep: jstream_render::DeepSky {
+                nebula: sky.nebula,
+                nebula_colors: sky.nebula_colors.map(colour),
+                galaxy: sky.galaxy,
+                seed: sky.sky_seed,
+            },
+            warp,
+            travel,
         },
         target,
     )?;
-    chains
-        .skies
-        .borrow_mut()
-        .insert(scene.clone(), cache.frame());
+    if let Some(state) = chains.skies.borrow_mut().get_mut(scene) {
+        state.drawn = Some(cache.frame());
+    }
     Ok(())
 }
 
@@ -6952,7 +6967,12 @@ fn under_sky<'a>(
     canvas: FrameSize,
     camera: Option<SceneCamera>,
 ) {
-    if camera.is_none() || chains.skies.borrow().get(&pass.scene) != Some(&cache.frame()) {
+    let drawn = chains
+        .skies
+        .borrow()
+        .get(&pass.scene)
+        .and_then(|sky| sky.drawn);
+    if camera.is_none() || drawn != Some(cache.frame()) {
         return;
     }
     let Some(image) = cache.get(&GpuKey::Sky(pass.scene.clone())) else {
@@ -7232,7 +7252,7 @@ fn fill_tracks<'a>(
     let drawn = chains.skies.borrow();
     let mut under = 0;
     for scene in skies.into_iter().flatten() {
-        if drawn.get(scene) != Some(&cache.frame()) {
+        if drawn.get(scene).and_then(|sky| sky.drawn) != Some(cache.frame()) {
             continue;
         }
         let Some(image) = cache.get(&GpuKey::Sky(scene.clone())) else {
@@ -7286,12 +7306,13 @@ fn draw_transition_skies(
         return Ok(());
     }
     let elapsed = transition::elapsed_ms(transition.start, at);
+    let cameras = moving_cameras((shot, transition), chains, at, (live, captures));
+    // The fade follows the preset's easing, as the moving camera and the tracks do.
     let progress = if transition.end_ms > 0.0 {
-        (elapsed / transition.end_ms).clamp(0.0, 1.0)
+        cameras.timing.progress(elapsed).clamp(0.0, 1.0)
     } else {
         1.0
     };
-    let cameras = moving_cameras((shot, transition), chains, at, (live, captures));
     let shows = backdrop(to.as_ref());
     if let Some(from) = from {
         let fade = if shows { 1.0 } else { 1.0 - progress };

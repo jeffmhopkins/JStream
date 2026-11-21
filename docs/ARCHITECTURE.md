@@ -1299,8 +1299,10 @@ studio gradient); the layer is then placed flat
 environment can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along
 each pixel's ray from the camera, ignoring its position, into the gradient or panorama,
-with procedural stars hashed over the faces of a cube, and its layer is placed under
-every item, through no camera, so it sorts with nothing and has no view depth. Its
+with procedural nebulae, a galaxy band and stars laid out about the direction of travel,
+which at warp streak away from it as the render thread's per-scene travel advances, and
+its layer is placed under every item, through no camera, so it sorts with nothing and
+has no view depth. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
 ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)
