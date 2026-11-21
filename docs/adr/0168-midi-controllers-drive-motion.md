@@ -47,7 +47,7 @@ a lock.
 <a id="decision"></a>
 ## Decision
 1. **A value binding is a `midi` motion modifier.** `MotionKind` gains `midi`, a minor
-   protocol version (0.125, [R-API-001](../RULES.md#R-API-001)). Its parameters:
+   protocol version (0.131, [R-API-001](../RULES.md#R-API-001)). Its parameters:
 
    | Field | Meaning | Default |
    |---|---|---|

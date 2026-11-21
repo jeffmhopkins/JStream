@@ -2884,7 +2884,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Follows a MIDI controller (ADR-0168, since 0.125): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+          "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
           "properties": {
             "channel": {
               "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -9119,7 +9119,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "MotionMidiControl": {
-      "description": "What a `midi` modifier follows (since 0.125, ADR-0168).",
+      "description": "What a `midi` modifier follows (since 0.131, ADR-0168).",
       "oneOf": [
         {
           "const": "cc",
@@ -9345,7 +9345,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Follows a MIDI controller (ADR-0168, since 0.125): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+          "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
           "properties": {
             "channel": {
               "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -16303,5 +16303,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.125"
+  "title": "JStream protocol 0.131"
 }
