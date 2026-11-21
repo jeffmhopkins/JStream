@@ -216,7 +216,10 @@ light that adds evenly, chosen before tuning opacities, ADR-0126), 3D sets throu
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
 above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), depth of field
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
-[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a rig moved as one by a group
+[ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a sky all around a 3D set as an
+environment light with `backdrop` on, with `stars`, `nebula`, a `galaxy` band or a
+panorama `image`, and a `warp` that ramps itself over `warp_ramp_s`
+([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)), a rig moved as one by a group
 that shares the set's space (`share_space`), and a camera riding with it
 (`scene.set_camera_anchor`, ignored under a follow camera,
 [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), a camera that moves on its
