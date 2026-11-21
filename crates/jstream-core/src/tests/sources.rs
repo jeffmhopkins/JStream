@@ -933,11 +933,17 @@ fn a_timer_is_painted_when_its_text_changes_not_on_every_tick() {
     };
     ticks(5);
     let timer = engine.paints("t");
+    let started = Instant::now();
     ticks(30);
-    // Thirty ticks take about half a second: the stopwatch's second turns once at most,
-    // or twice where a slow machine stretches them.
+    // The stopwatch's second turns once for each second the ticks took, and once more
+    // for the second they started in; a slow machine stretches them, so the bound is
+    // counted from the time they took, not assumed (every tick painted it before).
+    let seconds = started.elapsed().as_secs() + 2;
     let painted = engine.paints("t") - timer;
-    assert!(painted <= 2, "painted {painted} times in 30 ticks");
+    assert!(
+        painted <= seconds && painted < 30,
+        "painted {painted} times in 30 ticks over less than {seconds} s"
+    );
     // Its next second comes: it is painted for it.
     let deadline = Instant::now() + Duration::from_secs(5);
     while Instant::now() < deadline && engine.paints("t") == timer + painted {
