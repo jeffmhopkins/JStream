@@ -178,4 +178,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0164](0164-3d-groups-share-their-scenes-space.md) | 3D groups share their scene's space, and a camera may ride with one | accepted | agent |  |
 | [ADR-0166](0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md) | Moves curve through keyframes, turn as one rotation, and may orbit the camera | accepted | agent |  |
 | [ADR-0167](0167-a-sky-backdrop-for-3d-scenes.md) | A 3D scene can draw its environment's sky behind it: stars, nebulae and warp | accepted | agent |  |
+| [ADR-0171](0171-live-data-from-a-daw-drives-scenes.md) | Live data from a DAW drives scenes: JTunnel state, data bindings, source settings and grids | accepted | agent |  |
 <!-- @generated end adr-index -->
