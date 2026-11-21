@@ -59,8 +59,11 @@ and calls this crate.
   (`DeepSky`: warped fractal value noise on the direction) and stars hashed per cell of a
   grid about the direction of travel (`-z`): columns around it by the log-tan of half the
   angle from it, so cells are square and a star moving away from it at any angle moves at
-  one speed. At `warp` each star streaks behind it over up to 64 cells and the deep sky
-  blurs over 5 taps; `travel`, which the engine accumulates at
+  one speed. The seed also picks the nebulae's style (`Style`: size, cover, churn,
+  wisps, dust, gathering) and tilts the band. At `warp` each star streaks behind it over
+  up to 64 cells, the deep sky blurs over 5 taps and fades out, and the stars are
+  aberrated (a shift in log-tan by the rapidity of `warp` × 0.9 of light's speed) and
+  Doppler shifted (bluer and brighter ahead, redder and dimmer behind); `travel`, which the engine accumulates at
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
   about 0.6 px wide. The engine places the layer under the scene's items with no camera.
   The pipeline is made on the first draw.

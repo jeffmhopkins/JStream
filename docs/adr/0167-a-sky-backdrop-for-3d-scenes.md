@@ -108,8 +108,15 @@ value noise on the direction, warped once by more noise so the clouds stream and
 shading from `nebula_color` to `nebula_color_2`, with brighter filaments where they
 fold. `galaxy` adds a band of light along one great circle of the sky, brighter toward
 one side, broken by dark dust lanes, with up to four times the faint stars along it.
-`sky_seed` lays all of it out anew. They are added to the gradient or the panorama, so
-a panorama can carry them too.
+`sky_seed` lays all of it out anew, tilts the band to another great circle, and picks
+the nebulae's kind: six values hashed from it set how large the clouds are, how much
+of the sky they fill, how much the noise is warped (calm to churning), how strong the
+filaments are (soft clouds to a veil of threads), how much dark dust eats their glow,
+and whether they gather into a few regions with open sky between. So the seeds give
+different kinds of sky, not one sky moved about. They are added to the gradient or the
+panorama, so a panorama can carry them too. A source's settings aren't keyframed, so a
+sky that changes between keyframe scenes is one environment light source per scene,
+each with its own seed or colours, and a transition cross-fades them (decision 7).
 
 **5. Warp.** `warp` above 0 moves the sky past: the stars move away from the direction of
 travel in `v` and leave a streak behind each one, so looking ahead they burst out of
@@ -118,7 +125,17 @@ converge on the point being left, each as the camera sees it. A streak's length 
 rises with the square of `warp`, to 1.2 at 1 (about 70 degrees at right angles to the
 travel), and it fades from its head to its tail; a streak's light is spread along it,
 so a long one is dimmer per pixel. Faint stars dim out as the warp grows. The nebulae and
-the band blur along the same lines, and light ahead is shifted bluer and behind redder.
+the band blur along the same lines as the warp builds and fade out by the time it is at
+speed (out from a tenth of full warp to about two thirds), so at warp only the stars
+are seen.
+- **Aberration and Doppler.** Warp 1 shifts the stars' light as a speed of 0.9 of
+  light's would, a mix of the real effect and the familiar streaks. Aberration crowds
+  the stars toward the direction of travel: in `v` it is exactly a shift by the speed's
+  rapidity, so the stars a pixel sees are the still sky's at its `v` plus that. Their
+  light is shifted by the Doppler factor `γ(1 + β cos θ)`: ahead toward blue, with a
+  blue-white glow for light pushed past it, behind losing its blue and then its green;
+  and brightened by the factor squared, softer than the real cube and held between a
+  fifth and four times, so stars ahead don't burn out and those behind still show red.
 - **Ramp and travel.** A source's settings aren't keyed by keyframe scenes or driven by
   motion, so the sky ramps itself: the render thread keeps, per scene, the warp it
   streams at now and how far the stars have moved. Each frame the warp moves toward the

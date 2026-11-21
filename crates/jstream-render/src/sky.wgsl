@@ -30,7 +30,8 @@ struct Sky {
     // x: the travel's fraction of a bright cell; y: its whole bright cells, as u32 bits;
     // z: the same fraction of a faint cell; w: its whole faint cells, as u32 bits.
     travel: vec4<f32>,
-    // x: the seed, as u32 bits; yzw: unused.
+    // x: the seed, as u32 bits; y: the warp's speed as a fraction of light's, which
+    // crowds the stars ahead and shifts their light; zw: unused.
     seed: vec4<f32>,
 }
 
@@ -126,21 +127,49 @@ fn fbm(p: vec3<f32>, octaves: i32) -> f32 {
     return sum;
 }
 
+// The seed's style for its nebulae, each 0 to 1: how large, how much of the sky, how
+// turbulent, how filamentary, how dusty and how gathered into a few regions they are.
+struct Style {
+    scale: f32,
+    cover: f32,
+    churn: f32,
+    wisps: f32,
+    dust: f32,
+    gather: f32,
+}
+
+fn style() -> Style {
+    let k = hash(seed() ^ 0x5bd1e995u);
+    return Style(unit(k ^ 0x1u), unit(k ^ 0x2u), unit(k ^ 0x3u), unit(k ^ 0x4u), unit(k ^ 0x5u), unit(k ^ 0x6u));
+}
+
 // The nebulae and the galaxy band along `d`: light added to the sky.
 fn deep_sky(d: vec3<f32>) -> vec3<f32> {
     var c = vec3<f32>(0.0);
     let nebula = u.nebula.w;
     if nebula > 0.0 {
-        let p = d * 2.2;
-        // Warped once, so the clouds billow and stream rather than blot.
+        let look = style();
+        // From a few great clouds across the sky to many small knots.
+        let p = d * mix(1.3, 4.2, look.scale * look.scale);
+        // Warped once, so the clouds billow and stream rather than blot; more for a
+        // churning, torn-up sky.
         let q = vec3<f32>(fbm(p + vec3<f32>(1.7, 9.2, 3.1), 4), fbm(p + vec3<f32>(8.3, 2.8, 5.9), 4), fbm(p + vec3<f32>(4.1, 6.6, 0.4), 4));
-        let n = fbm(p + 2.2 * q, 5);
-        let density = smoothstep(0.42, 0.78, n);
-        // Bright filaments where the cloud folds.
-        let fold = pow(1.0 - abs(2.0 * fbm(p * 2.1 + 3.0 * q, 4) - 1.0), 8.0);
+        let n = fbm(p + mix(0.9, 3.6, look.churn) * q, 5);
+        // How much of the sky the gas fills: thin wisps to a full cloudscape.
+        let edge = mix(0.56, 0.36, look.cover);
+        var density = smoothstep(edge, edge + 0.34, n);
+        // Gathered into a few regions, with open sky between, or spread everywhere.
+        let region = smoothstep(0.38, 0.62, fbm(d * 1.1 + vec3<f32>(5.5, 2.2, 8.8), 3));
+        density *= mix(1.0, region * 1.6, look.gather);
+        // Bright filaments where the cloud folds, from soft edges to a veil of threads.
+        let fold = pow(1.0 - abs(2.0 * fbm(p * 2.1 + 3.0 * q, 4) - 1.0), mix(10.0, 5.0, look.wisps));
+        let threads = fold * mix(0.35, 1.4, look.wisps) * max(density, look.wisps * 0.35);
         let tint = mix(u.nebula.rgb, u.nebula_2.rgb, smoothstep(0.3, 0.7, q.x));
-        // Dust that darkens what is behind it and faint glow beneath the clouds.
-        c += tint * (0.6 * density * density + 0.5 * fold * density + 0.05 * n) * nebula;
+        // A hot, paler heart where the gas is thickest.
+        let heart = mix(tint, vec3<f32>(dot(tint, vec3<f32>(0.4))) + tint * 0.6, 0.45 * smoothstep(0.75, 1.0, density));
+        // Dark dust that eats the glow in lanes and blots.
+        let dark = smoothstep(0.5, 0.7, fbm(p * 1.7 + vec3<f32>(9.1, 4.4, 2.6) + q, 4)) * look.dust;
+        c += heart * (0.6 * density * density + 0.5 * threads + 0.05 * n) * nebula * (1.0 - 0.9 * dark);
     }
     let galaxy = u.nebula_2.w;
     if galaxy > 0.0 {
@@ -154,8 +183,11 @@ fn deep_sky(d: vec3<f32>) -> vec3<f32> {
     return c * u.stars.z;
 }
 
+// The band's pole: the seed tilts it, so each sky's band crosses it somewhere else.
 fn galaxy_axis() -> vec3<f32> {
-    return normalize(vec3<f32>(0.32, -0.86, 0.4));
+    let k = hash(seed() ^ 0x27d4eb2du);
+    let tilt = vec3<f32>(unit(k) - 0.5, unit(k ^ 0x9u) - 0.5, unit(k ^ 0x7u) - 0.5) * 1.2;
+    return normalize(vec3<f32>(0.32, -0.86, 0.4) + tilt);
 }
 
 fn galaxy_core() -> vec3<f32> {
@@ -169,6 +201,40 @@ fn in_band(d: vec3<f32>) -> f32 {
 }
 
 // ---- Stars, around the direction of travel. ----
+
+// The warp's speed as a fraction of light's.
+fn beta() -> f32 {
+    return clamp(u.seed.y, 0.0, 0.99);
+}
+
+// Its rapidity, by which aberration shifts the sky in log-tan units.
+fn rapidity() -> f32 {
+    let b = beta();
+    return 0.5 * log((1.0 + b) / (1.0 - b));
+}
+
+// Light seen along `d` at the warp, shifted by its Doppler factor (above 1 ahead, below 1
+// behind): bluer and brighter toward the travel, redder and dimmer away from it. The
+// brightness follows the factor squared, a softened form of the real cube, held between
+// a fifth and four times so a star ahead doesn't burn out and one behind still shows red.
+fn doppler(c: vec3<f32>, d: vec3<f32>) -> vec3<f32> {
+    let b = beta();
+    if b <= 0.0 {
+        return c;
+    }
+    let factor = (1.0 + b * -d.z) / sqrt(1.0 - b * b);
+    let x = clamp(log2(factor), -3.0, 3.0);
+    // Shift the colour: toward blue ahead, losing blue then green behind.
+    var shifted = c;
+    if x > 0.0 {
+        shifted = c * vec3<f32>(exp2(-0.6 * x), exp2(-0.2 * x), 1.0 + 0.25 * x);
+        // Light shifted past the blue still shows as a blue-white glow.
+        shifted += vec3<f32>(0.25, 0.35, 0.6) * dot(c, vec3<f32>(0.33)) * 0.3 * x;
+    } else {
+        shifted = c * vec3<f32>(1.0 + 0.15 * -x, exp2(0.7 * x), exp2(1.6 * x));
+    }
+    return shifted * clamp(factor * factor, 0.2, 4.0);
+}
 
 // `d` around the travel (-z): its angle about the axis and the log of the tangent of half
 // its angle from it, in which a star moving away from the travel at any angle moves at
@@ -207,7 +273,9 @@ fn stars(
     crowd: f32,
 ) -> vec3<f32> {
     let cell = TAU / columns;
-    let at = about_travel(d);
+    // Aberration: a star seen at log-tan v is where the still sky has it at v plus the
+    // warp's rapidity, so the stars crowd toward the direction of travel.
+    let at = about_travel(d) + vec2<f32>(0.0, rapidity());
     let sin_t = max(length(d.xy), 1e-7);
     let col = floor(at.x / cell);
     let g = at.y / cell - frac;
@@ -262,17 +330,19 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
         c = panorama(d);
     }
     let length_v = u.stars.w;
-    // The deep sky blurs along the streaks at warp, over a few taps behind each pixel.
-    if u.nebula.w > 0.0 || u.nebula_2.w > 0.0 {
+    // The deep sky blurs along the streaks as the warp builds, and fades out by the time
+    // it's at speed: at warp only the stars are seen.
+    let deep = 1.0 - smoothstep(0.1, 0.65, beta() / 0.9);
+    if (u.nebula.w > 0.0 || u.nebula_2.w > 0.0) && deep > 0.0 {
         if length_v > 0.01 {
             let at = about_travel(d);
             var sum = vec3<f32>(0.0);
             for (var k = 0; k < 5; k++) {
                 sum += deep_sky(from_travel(at.x, at.y - length_v * f32(k) * 0.25));
             }
-            c += sum / 5.0;
+            c += sum / 5.0 * deep;
         } else {
-            c += deep_sky(d);
+            c += deep_sky(d) * deep;
         }
     }
     let amount = u.stars.x;
@@ -286,10 +356,7 @@ fn fs(@builtin(position) p: vec4<f32>) -> @location(0) vec4<f32> {
         let faint = stars(d, FAINT_COLUMNS, amount * 0.25, 1u, bitcast<u32>(u.travel.w), u.travel.z, faint_streak, pixel, crowd)
             / (1.0 + length_v * 12.0);
         let bright = stars(d, BRIGHT_COLUMNS, amount * 0.3, 2u, bitcast<u32>(u.travel.y), u.travel.x, length_v / bright_cell, pixel, 1.0) * 1.6;
-        // Light ahead is shifted bluer at warp and behind redder.
-        let shift = clamp(-d.z * min(length_v, 1.0), -1.0, 1.0);
-        let tint = mix(vec3<f32>(1.0), select(vec3<f32>(1.15, 0.85, 0.7), vec3<f32>(0.75, 0.9, 1.25), shift > 0.0), abs(shift) * 0.6);
-        c += (faint + bright) * tint * u.stars.y;
+        c += doppler(faint + bright, d) * u.stars.y;
     }
     let a = clamp(u.sky.w, 0.0, 1.0);
     return vec4<f32>(c * a, a);

@@ -365,7 +365,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   behind its items, and `stars` (0 to 1) and `star_brightness` (0 to 8, default 1)
   scatter stars over it, `nebula` (0 to 1) with `nebula_color` and `nebula_color_2`
   (defaults `#8c2e9e` and `#2471a8`) adds gas clouds, `galaxy` (0 to 1) a galaxy band,
-  `sky_seed` (0 to 9999) picks the layout and `warp` (0 to 1) streams the sky past,
+  `sky_seed` (0 to 9999) picks the layout and the kind of nebula, and `warp` (0 to 1)
+  streams the sky past, Doppler shifted, with the nebulae fading out,
   reaching a new value over `warp_ramp_s` (0 to 10 s, default 1.5)
   ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md); settings saved
   without them read as no backdrop, nothing added and still). Its frame is one transparent pixel: it

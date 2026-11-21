@@ -305,28 +305,33 @@ fn lit(shot: &Snapshot) -> usize {
         .count()
 }
 
-/// Nebulae and a galaxy band light a black sky where there were no stars; another seed
-/// lays them out differently.
-#[test]
-fn golden_sky_nebulae_and_a_galaxy_band_light_the_sky() {
-    let Some(mut opened) = open() else {
-        return;
-    };
-    let camera = SceneCamera::framing(canvas());
-    let deep = |nebula: f32, galaxy: f32, seed: u32| SkyDraw {
+/// A black sky with `nebula` and a `galaxy` band laid out by `seed`.
+fn deep(nebula: f32, galaxy: f32, seed: u32) -> SkyDraw<'static> {
+    SkyDraw {
         deep: super::DeepSky {
             nebula,
             nebula_colors: [Color::rgb(1.0, 0.2, 0.8), Color::rgb(0.2, 0.5, 1.0)],
             galaxy,
             seed,
         },
-        ..sky(night(), camera)
-    };
-    let total = |shot: &Snapshot| -> u64 {
-        shot.rgba()
-            .chunks(4)
-            .map(|p| u64::from(p[0]) + u64::from(p[1]) + u64::from(p[2]))
-            .sum()
+        ..sky(night(), SceneCamera::framing(canvas()))
+    }
+}
+
+/// The sum of every pixel's colour channels.
+fn total(shot: &Snapshot) -> u64 {
+    shot.rgba()
+        .chunks(4)
+        .map(|p| u64::from(p[0]) + u64::from(p[1]) + u64::from(p[2]))
+        .sum()
+}
+
+/// Nebulae and a galaxy band light a black sky where there were no stars; another seed
+/// lays them out differently.
+#[test]
+fn golden_sky_nebulae_and_a_galaxy_band_light_the_sky() {
+    let Some(mut opened) = open() else {
+        return;
     };
     let clouds = shot(&mut opened.compositor, &deep(1.0, 0.0, 1));
     assert!(
@@ -402,4 +407,44 @@ fn golden_sky_warp_streaks_the_stars_at_any_angle() {
         );
         assert_ne!(still.rgba(), moved.rgba(), "travel moves the stars");
     }
+}
+
+/// At warp the nebulae fade out, and the stars' light is Doppler shifted: ahead they are
+/// bluer and brighter, behind redder and dimmer.
+#[test]
+fn golden_sky_warp_fades_the_nebulae_and_shifts_the_stars_light() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let gas = |warp| SkyDraw {
+        warp,
+        ..deep(1.0, 0.0, 1)
+    };
+    let still = total(&shot(&mut opened.compositor, &gas(0.0)));
+    let fast = total(&shot(&mut opened.compositor, &gas(0.9)));
+    assert!(still > 20_000, "the nebulae glow when still: {still}");
+    assert!(fast * 20 < still, "they fade at warp: {fast} of {still}");
+
+    let warp = |aim| SkyDraw {
+        stars: 1.0,
+        warp: 0.8,
+        ..sky(night(), looking([0.0; 3], aim))
+    };
+    let channels = |snapshot: &Snapshot| {
+        snapshot.rgba().chunks(4).fold([0u64; 3], |mut sum, p| {
+            for (s, v) in sum.iter_mut().zip(p) {
+                *s += u64::from(*v);
+            }
+            sum
+        })
+    };
+    let ahead = channels(&shot(&mut opened.compositor, &warp([0.0, 0.0, -1.0])));
+    let behind = channels(&shot(&mut opened.compositor, &warp([0.0, 0.0, 1.0])));
+    let sum = |c: [u64; 3]| c.iter().sum::<u64>();
+    assert!(
+        sum(ahead) > sum(behind) * 3,
+        "brighter ahead: {ahead:?} vs {behind:?}"
+    );
+    assert!(ahead[2] > ahead[0], "bluer ahead: {ahead:?}");
+    assert!(behind[0] > behind[2], "redder behind: {behind:?}");
 }

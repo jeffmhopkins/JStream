@@ -70,6 +70,11 @@ impl DeepSky {
 /// the travel.
 const WARP_STREAK: f32 = 1.2;
 
+/// The speed, as a fraction of light's, that warp 1 shifts the sky's light by: how far
+/// stars crowd toward the direction of travel (aberration) and how much bluer and
+/// brighter ahead, redder and dimmer behind (Doppler) they look.
+const MAX_WARP_BETA: f32 = 0.9;
+
 /// How fast the stars move at warp 1, in log-tan units a second.
 const WARP_SPEED: f64 = 6.0;
 
@@ -375,7 +380,7 @@ fn sky_values(
         faint.1,
         f32::from_bits(faint.0),
         f32::from_bits(deep.seed),
-        0.0,
+        warp * MAX_WARP_BETA,
         0.0,
         0.0,
     ]

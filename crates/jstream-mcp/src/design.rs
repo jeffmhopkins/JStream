@@ -240,9 +240,15 @@ clear night or deep space, on dark sky colours) scatters fixed points of light o
 it, `star_brightness` sets how bright, the item's `turn_deg` spins the sky, and the \
 same sky lights scene-lit models. For deep space add `nebula` (0.4-0.8) in two colours \
 (`nebula_color`, `nebula_color_2`; keep them deep and saturated, the clouds glow over \
-black) and a `galaxy` band (0.3-0.7); `sky_seed` picks another layout. `warp` (0-1) \
-streams the sky past toward its centre ahead: stars stretch into streaks that burst \
-out ahead, slide past at the sides and converge behind, right from any camera angle. \
+black) and a `galaxy` band (0.3-0.7); `sky_seed` picks another layout and another kind \
+of nebula (large or small clouds, sparse wisps or a full cloudscape, calm or churning, \
+threaded, dusty, gathered or spread), so try a few seeds. Settings aren't keyframed: \
+for a sky that changes between keyframe scenes, give each scene its own environment \
+light source (another seed or colours), and a transition cross-fades the skies. `warp` \
+(0-1) streams the sky past toward its centre ahead: stars stretch into streaks that \
+burst out ahead, slide past at the sides and converge behind, right from any camera \
+angle; they crowd ahead in bluer, brighter light and thin behind in redder, dimmer \
+light, and the nebulae and band fade out as it builds. \
 One `source.set_settings` of `warp` jumps: the sky accelerates to it over \
 `warp_ramp_s` (default 1.5 s) by itself, and setting 0 slows back out; 0.6-1 is a \
 jump, about 0.05-0.15 a slow cruise. Add a brief white flash card or `bloom` at the \
