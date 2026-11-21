@@ -882,7 +882,7 @@ pub enum Edit {
     /// 0.127). With an anchor, the camera's position and target are points of that
     /// group's own space, and the camera moves with the group item's pose as it is drawn.
     /// It belongs to the scene family: `invalid_argument` on a keyframe scene, which
-    /// rides with its parent's anchor. Any other anchor is stored, and one that names no
+    /// rides with its parent's anchor. Any other anchor is stored (ADR-0169), and one that names no
     /// item of the scene placing a group sharing the space, or is on a scene without a
     /// camera, is kept and ignored. Inverse: `scene.set_camera_anchor` with the previous
     /// anchor.

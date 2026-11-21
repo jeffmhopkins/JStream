@@ -5521,7 +5521,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets or removes the 3D group a scene's camera rides with (ADR-0164 §5, since\n0.127). With an anchor, the camera's position and target are points of that\ngroup's own space, and the camera moves with the group item's pose as it is drawn.\nIt belongs to the scene family: `invalid_argument` on a keyframe scene, which\nrides with its parent's anchor. Any other anchor is stored, and one that names no\nitem of the scene placing a group sharing the space, or is on a scene without a\ncamera, is kept and ignored. Inverse: `scene.set_camera_anchor` with the previous\nanchor.",
+          "description": "Sets or removes the 3D group a scene's camera rides with (ADR-0164 §5, since\n0.127). With an anchor, the camera's position and target are points of that\ngroup's own space, and the camera moves with the group item's pose as it is drawn.\nIt belongs to the scene family: `invalid_argument` on a keyframe scene, which\nrides with its parent's anchor. Any other anchor is stored (ADR-0169), and one that names no\nitem of the scene placing a group sharing the space, or is on a scene without a\ncamera, is kept and ignored. Inverse: `scene.set_camera_anchor` with the previous\nanchor.",
           "properties": {
             "anchor": {
               "anyOf": [

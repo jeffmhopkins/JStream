@@ -1474,7 +1474,8 @@ is omitted when there is none. It is live-adjustable. Since 0.127
 placing a `group`-role scene, that the camera rides with: its position and target are
 then in that group's space, placed through the group item each frame (`GroupPose`,
 [Geometry](#geometry)). It belongs to the family, so it is refused on a keyframe scene
-(`edits.N.anchor`, `invalid_argument`), and only there: an anchor that names no group
+(`edits.N.anchor`, `invalid_argument`), and only there
+([ADR-0169](../../docs/adr/0169-a-camera-anchor-is-kept-whatever-it-names.md)): an anchor that names no group
 sharing the space, on a scene without a camera, set so or left so later, is kept and
 ignored, as it is while the family has a follow camera. `SceneInfo.camera_anchor`
 reports it, omitted when absent, and its inverse is itself with the old value. Other colours are sRGB `#rrggbb`;

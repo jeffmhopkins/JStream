@@ -243,7 +243,9 @@ in one whose centre is on the hinge, and drive the group item's `tilt_deg`, `tur
 or rotation to swing it. `scene.set_camera_anchor` names such a group item to make the \
 scene's camera ride with it: its `position` and `target` are then in the group's \
 pixels, so a camera set inside a moving rig stays there, aimed live from inside it. \
-The anchor belongs to the family, and is ignored while a follow camera is set. \
+The anchor belongs to the family, and is ignored while a follow camera is set, or \
+when it names anything but a sharing group's item: it is stored without an error, so \
+read back `camera_anchor` and look. \
 Put \
 graphics that must stay flat (a lower third, a ticker) in a 2D scene above a `scene` \
 source of the 3D set. \

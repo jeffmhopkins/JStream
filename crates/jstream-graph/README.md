@@ -430,7 +430,8 @@ that does not want to change the graph it has.
   their effects. `scene.set_camera_anchor` (`camera.rs`,
   [ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)) sets or clears
   the item a scene's camera rides with, undone by the old value, and refused only on a
-  keyframe scene (field `anchor`, the family's). Any other anchor is stored, so a file
+  keyframe scene (field `anchor`, the family's). Any other anchor is stored
+  ([ADR-0169](../../docs/adr/0169-a-camera-anchor-is-kept-whatever-it-names.md)), so a file
   and a deleted scene's inverse always write it back: one that names no item of the
   scene placing a `group`-role scene, or is on a scene without a camera, set so or left
   so later, is kept, and the engine ignores it. `camera_anim_modifiers` turns a motion list into
