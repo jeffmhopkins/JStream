@@ -1645,8 +1645,9 @@ shown still costs its texture and no decoded copy (#1139, ADR-0117 §2). That ca
 keeps the still's upload while no mix draws it, for as long as the still is shown
 (`ResourceCache::keep_while` on `ShownStill::alive`, which turns false when the source
 is deleted or rebuilt), so a cut back to it draws it at once. A program-stage draw that
-needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none)
-until the thread has decoded the file again (`jstream_sources::Still::frame`); the
+needs the pixels again (a larger placement, a program stage opened again) finds none, asks for them, and draws the texture it has (or nothing, with none, which it logs once
+per shown still: #1562) until the thread has decoded the file again
+(`jstream_sources::Still::frame`, logged at info); the
 render thread only reads atomics and unparks the thread, never decodes, and never frees
 the pixels, which the thread does once no draw reads them (R-RT-002, R-RT-003). The
 decode takes the still's own decode lock, never the one `frame_if_held` takes, so a
@@ -2718,7 +2719,9 @@ program's frame itself, drawn once for every consumer. The render thread reads i
 without waiting and pushes it to the session. A `jstream-preview-send` thread per stream
 sends each packet as it comes, timed from the stream's first one, with the collection's
 `rev` at that moment. The hub only opens the session again when the picture size
-changes, passes keyframe requests on, and lets go of it when the stream closes. So the
+changes (logging at info each stream the stage starts drawing, with its channel, scene,
+codec and size, so a wrong picture can be matched to its stream: #1562), passes keyframe
+requests on, and lets go of it when the stream closes. So the
 preview shows what goes out, and costs no second composite, no second device and no
 second capture of the program's displays. Outputs that start while the preview holds the
 stage share it, as they share each other's. A stage only the hub holds is let go of
