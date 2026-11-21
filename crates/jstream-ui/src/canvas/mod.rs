@@ -206,6 +206,12 @@ pub fn Canvas() -> impl IntoView {
     let hovered = RwSignal::new(None::<ItemId>);
     let cursor = RwSignal::new("default");
     let stage = NodeRef::<leptos::html::Div>::new();
+    // Whether the session is the desktop app's own engine, whose pictures cross no
+    // network: its stream is then always the full picture (`preview::stage`).
+    let connected = use_context::<crate::host::ConnectedEngine>();
+    let own_engine = move || crate::host::own_engine(connected);
+    // The newest resize's timeout: only it restages, so a long drag opens one stream.
+    let resized = StoredValue::new(0_u64);
     // The canvas area around the frame: it takes the pointer, so a marquee can start on
     // the margin and a handle reaching past the frame can still be grabbed.
     let area = NodeRef::<leptos::html::Div>::new();
@@ -327,10 +333,7 @@ pub fn Canvas() -> impl IntoView {
             });
             let ratio = window().device_pixel_ratio() as f32;
             let mut first = preview::Stream::first(
-                preview::stage(
-                    (width, height, ratio),
-                    crate::host::desktop_host().is_some(),
-                ),
+                preview::stage((width, height, ratio), own_engine()),
                 screen::Screen::supports_h264(),
                 live_fps.get_untracked(),
             );
@@ -425,7 +428,10 @@ pub fn Canvas() -> impl IntoView {
     });
     // The stage resized (the window, or the dock around it): once it holds for
     // `preview::SETTLE`, a stream sized for it, when it differs enough from this one.
-    let restage = move || {
+    let restage = move |generation: u64| {
+        if resized.try_get_value() != Some(generation) {
+            return;
+        }
         let (Some(current), Some(element)) = (
             stream.try_get_value().flatten(),
             stage.try_get_untracked().flatten(),
@@ -438,7 +444,7 @@ pub fn Canvas() -> impl IntoView {
                 element.client_height() as f32,
                 window().device_pixel_ratio() as f32,
             ),
-            crate::host::desktop_host().is_some(),
+            own_engine(),
         );
         if let Some(next) = current.at_stage(size) {
             switch(current, next);
@@ -446,7 +452,13 @@ pub fn Canvas() -> impl IntoView {
     };
     Effect::new(move |_| {
         viewport.track();
-        set_timeout(restage, preview::SETTLE);
+        let Some(generation) = resized.try_update_value(|n| {
+            *n = n.wrapping_add(1);
+            *n
+        }) else {
+            return;
+        };
+        set_timeout(move || restage(generation), preview::SETTLE);
     });
     Effect::new(move |_| {
         let want = wanted.get();
