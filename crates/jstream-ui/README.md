@@ -1361,9 +1361,11 @@ browser, and `mod.rs` is the component.
   again for JPEG only. If the engine refuses or ends the stream, the background says
   why, and the channel is still read for the taps. Showing another scene closes the stream and opens that scene's on the next
   channel number, so a late frame of the old stream is never drawn, once the change has
-  held for 250 ms (`preview::SETTLE`). A scene switch changes the selection before the
-  program, so for that moment the canvas wants the new scene on its own; settling keeps
-  the program stream, with its transition, through the switch (#1205). Until a new
+  held for 250 ms (`preview::SETTLE`). A scene switch from this page shows its scene on
+  program as the selection changes (`Studio::act`), so the canvas never wants the new
+  scene on its own and keeps the program stream, with its transition, through the
+  switch; settling still keeps it through any other moment the selection runs ahead of
+  the program (#1205). Until a new
   stream's first frame, the last picture stays on the canvas; only a canvas that has
   shown no picture yet, or whose stream had ended, says the preview is starting. The
   canvas reports what it did with its pictures as the view `canvas`
