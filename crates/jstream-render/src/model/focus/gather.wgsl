@@ -24,7 +24,7 @@ fn turn(px: vec2<i32>) -> f32 {
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(in.pos.xy);
     let size = vec2<i32>(frame.in_size);
-    let own = textureLoad(input_tex, px, 0);
+    let own = finite(textureLoad(input_tex, px, 0));
     let here = textureLoad(aux_tex, px, 0);
     let inverse_w = here.r;
     let reach = here.g;
@@ -62,7 +62,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
         if d > r {
             continue;
         }
-        let colour = textureLoad(input_tex, at, 0);
+        let colour = finite(textureLoad(input_tex, at, 0));
         sum = sum + colour * (reach * reach / (f32(TAPS) * r * r));
     }
     if inverse_w > 0.0 && r_own >= spacing && hidden > 0u && hidden < TAPS {

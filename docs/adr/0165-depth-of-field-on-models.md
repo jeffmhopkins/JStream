@@ -81,6 +81,9 @@ layer from them in five fullscreen passes:
      part hides.
    - **Empty pixels** are infinitely far, so a soft edge spreads into them and the
      silhouette softens outward.
+   - **Non-finite colours.** A NaN channel reads as 0 and an infinite one as the
+     half-float layer's largest value, in this pass and the next, so one bad pixel stays
+     one pixel instead of marking the whole disc it spreads over.
 
    Where `R` is under half a pixel the pass copies the pixel, so an in-focus model draws as
    it would without depth of field.

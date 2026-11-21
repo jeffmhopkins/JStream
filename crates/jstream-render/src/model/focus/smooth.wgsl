@@ -9,7 +9,7 @@
 fn fs(in: VsOut) -> @location(0) vec4<f32> {
     let px = vec2<i32>(in.pos.xy);
     let size = vec2<i32>(frame.in_size);
-    let own = textureLoad(input_tex, px, 0);
+    let own = finite(textureLoad(input_tex, px, 0));
     let here = textureLoad(aux_tex, px, 0);
     // Empty pixels are softened too where a blur reaches them, so a soft silhouette is
     // smoothed along with what it spreads over.
@@ -31,7 +31,7 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
                 r = there.g;
             }
             let w = clamp((r - 1.5) / 1.5, 0.0, 1.0);
-            sum = sum + textureLoad(input_tex, at, 0) * w;
+            sum = sum + finite(textureLoad(input_tex, at, 0)) * w;
             weight = weight + w;
         }
     }

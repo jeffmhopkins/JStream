@@ -686,6 +686,8 @@ spread over it; taps on a sharp nearer part scale a soft farther pixel's sum up 
 share left. Empty pixels are infinitely far, so a silhouette softens outward. Last,
 `smooth.wgsl` replaces each pixel whose own radius is 1.5 px or more by the mean of its
 5 × 5 neighbours weighted by their own softness, which evens out the gather's grain.
+Both read colours through `finite`, NaN as 0 and infinity as the half-float maximum, so
+one non-finite pixel isn't spread into a disc of dots.
 Where `R`
 is under half a pixel the pixel is copied, so a model in focus draws exactly as without
 depth of field, and a camera without one skips all of it.

@@ -1538,3 +1538,72 @@ fn golden_model_a_near_part_blurs_over_a_far_one_but_never_the_reverse() {
     // Far from the block, the in-focus slab is untouched.
     assert_near(rgb(&on_far, 50, 20), rgb(&plain, 50, 20), (50, 20));
 }
+/// ADR-0165: one non-finite pixel in a model's layer (a NaN from a degenerate normal, or a
+/// channel past the half-float range) stays one pixel. The gather spreads each pixel over
+/// up to 48 others, and the smoothing over 25, so unchecked it would mark a whole disc of
+/// a defocused model with black dots.
+#[test]
+fn golden_model_depth_of_field_keeps_a_non_finite_pixel_to_itself() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let camera = focused_camera(framing_distance() * 4.0, 16.0);
+    let view = camera.view(canvas()).expect("a view");
+    let (cx, cy) = (WIDTH / 2, HEIGHT / 2);
+    let colour = vec![[0.5, 0.5, 0.5, 1.0]; (WIDTH * HEIGHT) as usize];
+    // Every pixel at the framing distance, 1 / w = 1: a circle of confusion of 48 px.
+    let depth = vec![[1.0, 0.0, 0.0, 1.0]; (WIDTH * HEIGHT) as usize];
+    let maker = opened.compositor.maker();
+    let colour =
+        crate::image::upload_unit_f16(&maker, WIDTH, HEIGHT, &colour).expect("the colour uploads");
+    let depth =
+        crate::image::upload_unit_f16(&maker, WIDTH, HEIGHT, &depth).expect("the depth uploads");
+    // The centre texel becomes a half-float NaN in every channel.
+    maker.gpu.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: colour.texture(),
+            mip_level: 0,
+            origin: wgpu::Origin3d { x: cx, y: cy, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        &[0x00, 0x7e].repeat(4),
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(8),
+            rows_per_image: Some(1),
+        },
+        wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+    );
+    let mut focus = crate::filter::VideoFilter::of(
+        super::focus::KIND,
+        Box::new(super::focus::ModelFocus::default()),
+    );
+    focus.set_depth(Some(crate::filter::ViewDepth {
+        view: Some(view),
+        ..crate::filter::ViewDepth::new(std::sync::Arc::new(depth), view.focal_px())
+    }));
+    let out = opened
+        .compositor
+        .apply_filter(&mut focus, &colour, crate::filter::FilterClock::default())
+        .expect("the passes draw");
+    let shot = crate::filter::testing::read(&mut opened, &out);
+    let reference = rgb(&shot, 4, 4);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            if (x, y) == (cx, cy) {
+                continue;
+            }
+            let got = rgb(&shot, x, y);
+            for c in 0..3 {
+                assert!(
+                    got[c].abs_diff(reference[c]) <= 24,
+                    "pixel ({x}, {y}) is {got:?}, the even grey around it {reference:?}"
+                );
+            }
+        }
+    }
+}
