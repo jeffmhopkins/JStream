@@ -325,7 +325,7 @@ fn Field(
         move || value() == default
     };
     view! {
-        <div class="field" title=param.description.clone().unwrap_or_default()>
+        <div class="field prop" title=param.description.clone().unwrap_or_default()>
             <label>
                 <span class="label">{param.label.clone()}</span>
                 <span class="control">

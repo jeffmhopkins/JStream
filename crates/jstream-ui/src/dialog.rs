@@ -2,9 +2,9 @@
 //! backdrop or Escape cancels it, and Enter presses its primary button (one marked
 //! `data-primary`) unless the key was meant for a text area, a button or a select.
 //! A press on the dialog's own header drags it, and that place is remembered for the
-//! page.
+//! page. `Info` is a setting's (i), with the details behind it (UI-DESIGN › Copy).
 //!
-//! Docs: docs/UI-FEATURES.md#dialogs
+//! Docs: docs/UI-FEATURES.md#dialogs, docs/UI-DESIGN.md#dialogs, docs/UI-DESIGN.md#copy
 
 use leptos::ev;
 use leptos::html;
@@ -365,6 +365,22 @@ pub fn Modal(
                 {children()}
             </div>
         </div>
+    }
+}
+
+/// More about a setting, behind an (i) beside its label (UI-DESIGN › Copy): the
+/// details that don't fit the one helper line a setting may have. Hover or focus shows
+/// them, and a screen reader reads them as the mark's name.
+#[component]
+pub fn Info(
+    /// The details, in a sentence or three.
+    text: &'static str,
+) -> impl IntoView {
+    view! {
+        <span class="info" tabindex="0" role="img" aria-label=text>
+            "i"
+            <span class="info-tip" aria-hidden="true">{text}</span>
+        </span>
     }
 }
 

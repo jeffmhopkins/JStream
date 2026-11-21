@@ -721,7 +721,7 @@ fn AddSourceBody(
                     .and_then(|c| c.scene(&scene_id))
                     .map_or_else(|| scene_id.to_string(), |s| s.name.clone())
             });
-            format!("Into “{scene}”")
+            format!("Into scene “{scene}”")
         }
     };
 
