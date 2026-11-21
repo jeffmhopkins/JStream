@@ -2867,8 +2867,12 @@ impl<'a> Planner<'a, '_> {
                 camera,
             },
         );
-        out.audio
-            .record(item.id(), item.motion(), self.assets.motion_heard());
+        out.audio.record(
+            item.id(),
+            item.motion(),
+            self.assets.motion_heard(),
+            self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+        );
         if let Some(chain) = chain {
             self.add_chain(owner, chain, out);
         }
@@ -3013,8 +3017,12 @@ impl<'a> Planner<'a, '_> {
                 seen: Seen::AsPlanned,
                 motion: TrackMotion::same(item.id().clone(), motion::of(item)),
             });
-            out.audio
-                .record(item.id(), item.motion(), self.assets.motion_heard());
+            out.audio.record(
+                item.id(),
+                item.motion(),
+                self.assets.motion_heard(),
+                self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+            );
         }
         path.remove(id);
     }
@@ -3063,8 +3071,12 @@ impl<'a> Planner<'a, '_> {
                     moving: None,
                     motion: TrackMotion::same(item.id().clone(), motion::of(item)),
                 });
-                out.audio
-                    .record(item.id(), item.motion(), self.assets.motion_heard());
+                out.audio.record(
+                    item.id(),
+                    item.motion(),
+                    self.assets.motion_heard(),
+                    self.assets.tempo().map(|tempo| tempo.0.as_ref()),
+                );
             }
         }
         out.scenes.insert(id.clone(), placed);

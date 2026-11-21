@@ -1446,6 +1446,82 @@ fn an_audio_modifier_follows_the_program_mix_and_reads_silence_until_heard() {
     );
 }
 
+/// ADR-0168: a `midi` modifier poses an item from a controller: a preview reads the
+/// control as it is, and the program's follower smooths it, landing on its first tick.
+#[test]
+fn a_midi_modifier_poses_an_item_from_a_controller() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    apply(
+        &control,
+        vec![Edit::ItemSetMotion {
+            item_id: ItemId::new("a1"),
+            scene_id: None,
+            motion: vec![jstream_protocol::MotionModifier {
+                modifier_id: "fader".into(),
+                property: jstream_protocol::MotionProperty::X,
+                effect: None,
+                kind: jstream_protocol::MotionKind::Midi {
+                    control: jstream_protocol::MotionMidiControl::Cc,
+                    controller: Some(7),
+                    channel: Some(1),
+                    input: None,
+                    smoothing_ms: 100,
+                    curve: jstream_protocol::MotionCurve::Linear,
+                    from: f(0.0),
+                    to: f(127.0),
+                },
+                clock: jstream_protocol::MotionClock::Engine,
+                enabled: true,
+            }],
+        }],
+    );
+    let snapshot = engine.render_hub().load();
+    let shot = snapshot.shot();
+    assert!(shot.changes_with_time(), "a MIDI modifier redraws");
+    let a1 = ItemId::new("a1");
+    let x = |at| {
+        moved_x(&engine, "a", at)
+            .into_iter()
+            .find(|(item, _)| item == "a1")
+            .map(|(_, x)| x)
+            .expect("a1 is drawn")
+    };
+    let rest = x(secs(1.0));
+    assert_eq!(
+        shot.audio().level(&a1, "fader"),
+        Some(0.0),
+        "nothing sent yet"
+    );
+
+    let midi = engine.midi_inputs();
+    let cc = |value| jstream_midi::Message::parse(&[0xB0, 7, value]).expect("a CC");
+    midi.push("Faders", 0, &cc(127));
+    // No follower yet (as in a preview): the control as it is, unsmoothed.
+    assert!((x(secs(1.0)) - (rest + 127.0)).abs() < 0.01);
+    let mut follower = crate::reactive::Follower::default();
+    follower.follow(shot.audio(), secs(1.0));
+    assert!(
+        (x(secs(1.0)) - (rest + 127.0)).abs() < 0.01,
+        "the first tick lands"
+    );
+    midi.push("Faders", 1, &cc(0));
+    follower.follow(shot.audio(), secs(1.1));
+    // One time constant on, about 37% of the way back is left.
+    let eased = x(secs(1.1)) - rest;
+    assert!((eased - 127.0 * (-1f32).exp()).abs() < 0.5, "{eased}");
+    // Another channel moves nothing.
+    midi.push(
+        "Faders",
+        2,
+        &jstream_midi::Message::parse(&[0xB1, 7, 127]).expect("a CC"),
+    );
+    follower.follow(shot.audio(), secs(2.0));
+    assert!((x(secs(2.0)) - rest).abs() < 0.5, "settled at the bottom");
+}
+
 /// An item whose effects run over the canvas (ADR-0106) moves inside its layer, which
 /// stays flat over the canvas: in a switch its tracks, which carry that layer, don't
 /// drift with its motion (#1125 review B8, N16).

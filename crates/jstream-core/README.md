@@ -354,6 +354,10 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **Audio-reactive motion** (`reactive.rs`,
   [ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): an `audio`
   modifier hearing the program mix, a bus or a source.
+- **MIDI-driven motion** (`reactive.rs`,
+  [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): a `midi` modifier
+  following a control change, pitch bend or channel pressure on its input's state, read
+  from atomics and smoothed by the same follower; a preview reads it unsmoothed.
 - **Driven effect settings** (`driven.rs`,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
   modifier adding to a number or colour setting of one of its item's effects each
@@ -996,7 +1000,8 @@ scenes, only the values its grant covers and a removal, an update held to the ne
 page frame going out as the clock moves on, nothing more once nothing changes, and nothing at all for a page without the grant; and a page given a bus reading `null`, then its levels and bands while an output runs, then `null` again), `jstream-crash` (the crash redaction's `Secrets` fed by the
 YouTube secret hook, in `src/tests/youtube.rs`), `zune-jpeg` (decoding the preview's JPEG pictures in tests),
 `insta` (the built-in kinds' snapshot, `schema/kinds.snap`), `wat` (the text-format
-test plugins of `src/tests/automation.rs`) and `jstream-mcp`
+test plugins of `src/tests/automation.rs`), `jstream-midi` (the MIDI messages
+`src/reactive.rs`'s tests feed the MIDI modifiers, ADR-0168) and `jstream-mcp`
 (`tests/mcp.rs`); the tests also use `serde_json`
 for settings values and saved collection files. All of them
 are in lower layers
