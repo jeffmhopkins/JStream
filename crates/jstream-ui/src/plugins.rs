@@ -5,10 +5,12 @@
 //! carry them with it.
 //!
 //! - **Calls.** `plugin.list` reads the plugins, `plugin.install` installs a package with
-//!   no grant beyond `read`, `plugin.grant` replaces a grant and `plugin.enable` turns a
-//!   disabled plugin back on. They are a person's calls: no plugin or agent can make
+//!   no grant beyond `read`, `plugin.grant` replaces a grant, `plugin.enable` turns a
+//!   disabled plugin back on and `plugin.uninstall` removes one, after a person confirms
+//!   it in the remove dialog. They are a person's calls: no plugin or agent can make
 //!   them. The section re-reads the list after each of its calls and on every
-//!   `plugin.state_changed`, except while the grant dialog is open ([`ListGate`]).
+//!   `plugin.state_changed` and `plugin.uninstalled`, except while the grant dialog is
+//!   open ([`ListGate`]).
 //! - **The grant dialog** offers exactly what the plugin's manifest asks for, each
 //!   class with what it lets the plugin do, each host, and the folders a person picks
 //!   when it asks for folders. `read` is always granted and can't be unticked. It opens
@@ -286,6 +288,13 @@ pub async fn enable(control: &dyn Control, plugin_id: PluginId) -> Result<(), St
         .map_err(|e| e.to_string())
 }
 
+/// Removes `plugin_id`. Its package folder stays on disk.
+pub async fn uninstall(control: &dyn Control, plugin_id: PluginId) -> Result<(), String> {
+    act(control, Action::PluginUninstall { plugin_id })
+        .await
+        .map_err(|e| e.to_string())
+}
+
 /// When the section may send `plugin.list`, and when the grant dialog's OK may act
 /// (#978, ADR-0090). The engine notes each list as what this client was shown, and a
 /// grant acknowledges the last one. So no list goes out while the grant dialog shows a
@@ -349,6 +358,8 @@ struct Section {
     /// The plugin whose grant dialog is open, as the dialog shows it. Set and cleared
     /// through [`Section::open_grant`] and [`Section::close_grant`], which keep `gate`.
     granting: RwSignal<Option<PluginInfo>>,
+    /// The plugin whose remove dialog is open, as the plugins were last read.
+    removing: RwSignal<Option<PluginInfo>>,
     /// What the grant dialog shows went wrong.
     grant_problem: RwSignal<Option<String>>,
     gate: RwSignal<ListGate>,
@@ -402,7 +413,9 @@ impl Section {
     async fn on_event(self, event: &Event) {
         if matches!(
             event,
-            Event::PluginStateChanged { .. } | Event::EventsDropped { .. }
+            Event::PluginStateChanged { .. }
+                | Event::PluginUninstalled { .. }
+                | Event::EventsDropped { .. }
         ) {
             self.refresh().await;
         }
@@ -468,6 +481,31 @@ impl Section {
         self.close_grant(true).await;
     }
 
+    /// Opens the remove dialog for `plugin_id`, as the plugins were last read.
+    fn open_remove(self, plugin_id: &PluginId) {
+        let plugin = self
+            .plugins
+            .try_with_untracked(|all| all.iter().find(|p| p.plugin_id == *plugin_id).cloned())
+            .flatten();
+        if plugin.is_some() {
+            self.removing.try_set(plugin);
+        }
+    }
+
+    /// The remove dialog's Remove: closes it, removes the plugin and re-reads, showing
+    /// the engine's reason if it refused.
+    fn remove(self, plugin_id: PluginId) {
+        self.removing.try_set(None);
+        let Some(session) = self.session.get() else {
+            return;
+        };
+        spawn_local(async move {
+            let done = uninstall(&*session.control, plugin_id).await;
+            self.problem.try_set(done.err());
+            self.refresh().await;
+        });
+    }
+
     fn enable(self, plugin_id: PluginId) {
         let Some(session) = self.session.get() else {
             return;
@@ -492,6 +530,7 @@ pub fn Plugins() -> impl IntoView {
         problem: RwSignal::new(None),
         installing: RwSignal::new(false),
         granting: RwSignal::new(None),
+        removing: RwSignal::new(None),
         grant_problem: RwSignal::new(None),
         gate: RwSignal::new(ListGate::default()),
     };
@@ -534,6 +573,7 @@ pub fn Plugins() -> impl IntoView {
                 let enabled = plugin.state == PluginState::Enabled;
                 let grant_id = plugin.plugin_id.clone();
                 let enable_id = plugin.plugin_id.clone();
+                let remove_id = plugin.plugin_id.clone();
                 let missing = not_granted(&plugin);
                 view! {
                     <li class="plugin" class:off=!enabled data-plugin=plugin.plugin_id.to_string()>
@@ -554,6 +594,9 @@ pub fn Plugins() -> impl IntoView {
                             {(!enabled).then(|| view! {
                                 <button on:click=move |_| section.enable(enable_id.clone())>"Turn on"</button>
                             })}
+                            <button class="danger" on:click=move |_| section.open_remove(&remove_id)>
+                                "Remove…"
+                            </button>
                         </div>
                     </li>
                 }
@@ -587,6 +630,9 @@ pub fn Plugins() -> impl IntoView {
                 </Show>
                 {move || section.granting.get().map(|plugin| view! {
                     <GrantDialog section=section plugin=plugin />
+                })}
+                {move || section.removing.get().map(|plugin| view! {
+                    <RemoveDialog section=section plugin=plugin />
                 })}
             </Portal>
         </Show>
@@ -728,6 +774,47 @@ fn InstallDialog(section: Section) -> impl IntoView {
                 <button type="button" class="secondary" on:click=move |_| cancel()>"Cancel"</button>
                 <button type="button" class="primary" data-primary disabled=move || busy.get() on:click=ok>
                     "Install"
+                </button>
+            </div>
+        </Modal>
+    }
+}
+
+/// Asks before a plugin is removed: it stops, and its grant is forgotten; its folder
+/// stays.
+#[component]
+fn RemoveDialog(section: Section, plugin: PluginInfo) -> impl IntoView {
+    let close = move || section.removing.set(None);
+    let id = StoredValue::new(plugin.plugin_id.clone());
+    // The title is the app's own, and the plugin's name is quoted under it, as in the
+    // grant dialog (#974 N1).
+    let sub = format!(
+        "“{}” · {} · {}",
+        display_name(&plugin),
+        plugin.plugin_id,
+        plugin.path
+    );
+    view! {
+        <Modal label="Remove plugin" class="confirm-dialog" cancel=close>
+            <div class="modal-header">
+                <div class="modal-titles">
+                    <h2 class="modal-title">"Remove plugin?"</h2>
+                    <span class="modal-sub">{sub}</span>
+                </div>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>
+                    "×"
+                </button>
+            </div>
+            <p class="confirm-body">
+                "The plugin stops and what you granted it is forgotten. Its folder stays on "
+                "disk, so you can install it again."
+            </p>
+            <div class="modal-footer">
+                <button type="button" class="secondary" on:click=move |_| close()>
+                    "Cancel"
+                </button>
+                <button type="button" class="danger" data-primary on:click=move |_| section.remove(id.get_value())>
+                    "Remove"
                 </button>
             </div>
         </Modal>
@@ -1211,6 +1298,7 @@ mod tests {
             problem: RwSignal::new(None),
             installing: RwSignal::new(false),
             granting: RwSignal::new(None),
+            removing: RwSignal::new(None),
             grant_problem: RwSignal::new(None),
             gate: RwSignal::new(ListGate::default()),
         };
@@ -1372,6 +1460,33 @@ mod tests {
         assert_eq!(
             engine.calls(),
             ["plugin.list", "plugin.list", "plugin.grant", "plugin.list"]
+        );
+    }
+
+    /// A plugin removed from another client's UI leaves this one's list too: a
+    /// `plugin.uninstalled` re-reads it.
+    #[test]
+    fn a_removed_plugin_is_read_again() {
+        let engine = NotingEngine::new();
+        let section = section(&engine);
+        let event = Event::PluginUninstalled {
+            plugin_id: PluginId::new("plg_timer"),
+        };
+        now(section.on_event(&event));
+        assert_eq!(engine.calls(), ["plugin.list", "plugin.list"]);
+    }
+
+    /// The remove dialog opens on a listed plugin only.
+    #[test]
+    fn the_remove_dialog_opens_on_a_listed_plugin() {
+        let engine = NotingEngine::new();
+        let section = section(&engine);
+        section.open_remove(&PluginId::new("plg_gone"));
+        assert_eq!(section.removing.get_untracked(), None);
+        section.open_remove(&PluginId::new("plg_timer"));
+        assert_eq!(
+            section.removing.get_untracked().map(|p| p.plugin_id),
+            Some(PluginId::new("plg_timer"))
         );
     }
 

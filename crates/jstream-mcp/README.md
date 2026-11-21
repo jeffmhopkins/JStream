@@ -70,7 +70,8 @@ change here, and a new noun becomes a new tool. The generated list is in the sna
 below; its shape is the following. The protocol's `youtube.*` ops get no tool, and a
 call naming one is an unknown op, so none reaches the engine: YouTube is for people,
 through the UI ([ADR-0058](../../docs/adr/0058-youtube-sign-in-with-a-jstream-client.md) §3).
-So are the `plugin.*` ops (install, grant, re-enable) and `plugin.state_changed`: only a
+So are the `plugin.*` ops (install, grant, re-enable, uninstall) and the `plugin.*`
+events (`plugin.state_changed`, `plugin.uninstalled`): only a
 person installs or grants a plugin (ADR-0069 G1), so an agent can't hand its access to
 code that keeps running after the conversation. So is `effect.enable` (`effect` is
 in `PEOPLE_ONLY`): an agent can't put back on air an effect a GPU device loss, or a
