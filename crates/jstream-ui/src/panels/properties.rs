@@ -587,9 +587,17 @@ pub fn target_choices(
         choices.push((target.target.clone(), label));
     }
     if !current.is_empty() && !choices.iter().any(|(value, _)| value == current) {
-        let by_key = choices.iter().position(|(v, _)| same_key(v, current));
-        let by_now = || choices.iter().position(|(v, _)| same_now(v, current));
-        if let Some(i) = by_key.or_else(by_now) {
+        let windows = kind == CaptureTargetKind::Window;
+        let find = |same: fn(&str, &str) -> bool| {
+            windows
+                .then(|| choices.iter().position(|(v, _)| same(v, current)))
+                .flatten()
+        };
+        let by_key = find(same_key);
+        if let Some(i) = by_key
+            .or_else(|| find(same_now))
+            .or_else(|| find(same_kind))
+        {
             current.clone_into(&mut choices[i].0);
             return choices;
         }
@@ -603,11 +611,15 @@ pub fn target_choices(
     choices
 }
 
-/// Between a capture target ID's part that names the target now and its key, which names
-/// it again after it went and came back (a window closed and opened again: on Windows,
-/// `hwnd:0x1a2b;w1.…`). An ID without one has no key. The engine finds a target by its
-/// key; the list only needs to tell which listed target that is.
+/// Between a window capture target ID's part that names the window now and its key, which
+/// names it again after it closed and opened again (on Windows, `hwnd:0x1a2b;w1.…`). An
+/// ID without one has no key. The engine finds a window by its key; the list only needs
+/// to tell which listed window that is. Only window IDs are matched this way.
 const TARGET_KEY: char = ';';
+
+/// Between a key's fields, the most general first: on Windows its version, the program,
+/// the class, then the title. A field of `-` is unknown.
+const KEY_FIELD: char = '.';
 
 /// Whether the IDs `a` and `b` have the same key.
 fn same_key(a: &str, b: &str) -> bool {
@@ -624,6 +636,23 @@ fn same_now(a: &str, b: &str) -> bool {
         (Some((a, _)), Some((b, _))) => !a.is_empty() && a == b,
         _ => false,
     }
+}
+
+/// Whether the IDs `a` and `b` have keys that differ only in their last field, with every
+/// other field known: a window of the same program and class, under another title (a
+/// program reopened on another document), which is the window the engine takes when no
+/// window has the old title. A key with an unknown field (on Windows, an elevated
+/// program's or a UWP app's) needs its title, so this never matches it.
+fn same_kind(a: &str, b: &str) -> bool {
+    kind_fields(a).is_some_and(|k| kind_fields(b) == Some(k))
+}
+
+/// An ID's key without its last field, when it has two fields or more there, all known.
+fn kind_fields(id: &str) -> Option<&str> {
+    let (_, key) = id.split_once(TARGET_KEY)?;
+    let (kind, _) = key.rsplit_once(KEY_FIELD)?;
+    let known = |f: &str| !f.is_empty() && f != "-";
+    (kind.split(KEY_FIELD).count() >= 2 && kind.split(KEY_FIELD).all(known)).then_some(kind)
 }
 
 /// The `capture.targets` answer the capture fields of one form share: `None` until the
@@ -1935,6 +1964,25 @@ mod tests {
                 "hwnd:0x10;w1.a.b.z=Reused handle",
                 "hwnd:0x30;w1.a.b.y=Opened again"
             ]
+        );
+        // Back under another title and handle, the topmost of the same program and class.
+        assert_eq!(
+            pick("hwnd:0x99;w1.a.b.y")[1..],
+            [
+                "hwnd:0x99;w1.a.b.y=Reused handle",
+                "hwnd:0x30;w1.a.b.c=Opened again"
+            ]
+        );
+        // Not when a field is unknown: such a window needs its title.
+        assert_eq!(
+            pick("hwnd:0x99;w1.-.b.y")[3],
+            "hwnd:0x99;w1.-.b.y=Window not open (hwnd:0x99;w1.-.b.y)"
+        );
+        // Only windows are matched by their parts.
+        let device = [target(CaptureTargetKind::Device, "dev;a", "Webcam")];
+        assert_eq!(
+            pairs(target_choices(CaptureTargetKind::Device, &device, "dev;b"))[2],
+            "dev;b=Device not connected (dev;b)"
         );
         // A key-less ID is matched as it is.
         assert_eq!(
