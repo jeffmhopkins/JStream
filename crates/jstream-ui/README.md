@@ -57,8 +57,11 @@ Contents ([Design](#design) explains the choices):
   rate, 30 or 60 fps, as OBS's Video settings do, and its blending space, Browser-style
   (sRGB) or Linear light (ADR-0126). Apply sends only what changed, as one batch of
   `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
-  undo step. Each
-  output's video mix scales from that picture. Tested natively.
+  undo step. A new size also rescales every scene unless Scale scenes to the new
+  resolution is unchecked: `rescale` adds the placement and camera edits that keep each
+  scene looking as it did, centred when the canvas changes shape. Each
+  output's video mix scales from that picture. Tested natively, the rescale through the
+  mock engine with its undo.
 - **Updates** (`updates.rs`): Help › Check for updates compares the version this UI was
   built as with GitHub's public releases list, pre-releases included, which the desktop
   app fetches for it. It says "You're up to date" or names the newer version and links
