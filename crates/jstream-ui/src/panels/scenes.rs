@@ -1468,6 +1468,7 @@ mod tests {
             items: Vec::new(),
             filters: Default::default(),
             camera: None,
+            camera_anchor: None,
             camera_motion: Vec::new(),
             ptz_shots: Vec::new(),
             camera_follow: None,

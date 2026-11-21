@@ -869,6 +869,9 @@ pub struct Scene {
     /// Its camera (ADR-0094), which makes it a 3D scene. On a keyframe scene, its
     /// override of its parent's; [`State::effective_camera`] gives what it draws through.
     pub(crate) camera: Option<SceneCamera>,
+    /// The 3D group item its camera rides with (ADR-0164 §5); always `None` for a
+    /// keyframe scene, which rides with its parent's.
+    pub(crate) camera_anchor: Option<ItemId>,
     /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
     /// parent's.
     pub(crate) camera_motion: Vec<CameraMotionModifier>,
@@ -933,6 +936,13 @@ impl Scene {
     /// draws through.
     pub fn camera(&self) -> Option<&SceneCamera> {
         self.camera.as_ref()
+    }
+
+    /// The group item its camera rides with (ADR-0164 §5), as stored; always `None` for
+    /// a keyframe scene, which rides with its parent's. It may name no 3D group any more,
+    /// and is then ignored.
+    pub fn camera_anchor(&self) -> Option<&ItemId> {
+        self.camera_anchor.as_ref()
     }
 
     /// Its camera motion (ADR-0113); always empty for a keyframe scene, which draws its
