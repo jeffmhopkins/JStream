@@ -236,9 +236,11 @@ jobs:
             // ADR-0109: whether two PR diffs (compare-API `files`, each against the base branch)
             // are the same change: the same files with the same status and the same added and
             // removed lines, in order. Context lines and hunk positions may differ, since main
-            // moved under them. docs/verified.toml is left out: a merge restamps it. Fails
-            // closed on a file without a patch (binary or too large) or a list of 300 files,
-            // which may be truncated.
+            // moved under them. docs/verified.toml is left out: a merge restamps it. An added
+            // file without a patch (binary or too large) is compared by its blob SHA instead
+            // (ADR-0162): with no base content on either side, the same blob is the same change.
+            // Fails closed on any other file without a patch or a list of 300 files, which may
+            // be truncated.
             // ADR-0109: whether the commits after the reviewed head only merge the base branch
             // in. Each is { inBase, parents, parentInBase, files }. A commit already in the base
             // branch came in through a merge and is skipped. Of the PR's own commits, at least
@@ -260,8 +262,10 @@ jobs:
                 const out = [];
                 for (const f of files) {
                   if (f.filename === ledger) continue;
-                  if (typeof f.patch !== 'string') return null;
-                  const lines = f.patch.split('\n').filter((l) => /^[+-]/.test(l));
+                  let lines;
+                  if (typeof f.patch === 'string') lines = f.patch.split('\n').filter((l) => /^[+-]/.test(l));
+                  else if (f.status === 'added' && typeof f.sha === 'string' && /^[0-9a-f]{40}$/.test(f.sha)) lines = [`blob ${f.sha}`];
+                  else return null;
                   out.push([f.filename, f.previous_filename ?? '', f.status, ...lines].join('\n'));
                 }
                 return out.sort().join('\n\0\n');
