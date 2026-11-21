@@ -28,7 +28,7 @@ use crate::video_settings::VideoSettingsDialog;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
-    DropCounts, EngineLoad, Event, HistoryOp, OutputId, OutputKind, OutputState,
+    Action, DropCounts, EngineLoad, Event, HistoryOp, OutputId, OutputKind, OutputState,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -885,6 +885,15 @@ pub fn Header(
                     let on = !studio.studio_mode.get_untracked();
                     studio.studio_mode.set(on);
                     keep_studio_mode(on);
+                    // The canvas becomes the preview side: the scene it shows goes on
+                    // preview, so the two match from the start.
+                    let shown = studio.selection.with_untracked(|s| s.scene.clone());
+                    if on
+                        && let (Some(open), Some(scene_id)) = (session.get(), shown)
+                        && studio.preview.get_untracked().as_ref() != Some(&scene_id)
+                    {
+                        studio.act(&open, Action::StudioSetPreview { scene_id });
+                    }
                 }
             >
                 "Studio mode"

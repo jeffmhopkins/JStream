@@ -124,8 +124,11 @@ adds, which makes soft glows and veils brighter.
    lower them there.
 5. To show a scene, click its row in **Scenes**: it goes on program, and the red
    "program" badge marks the one that is live. With **Studio mode** on (in the header),
-   a click puts the scene on preview instead, and the button on its row, or
-   **Transition** in the Transitions panel, takes it live.
+   the canvas becomes the preview, with the live program beside it: a click puts a
+   scene on preview, where you can arrange it, and **Transition** or **Cut** between
+   the two takes it live (the button on its row does too). The scene that was live
+   comes back on preview, unless you untick **Swap**. The Transitions panel sets up
+   the presets Transition can use, such as a fade and its length.
 
 Ctrl+C and Ctrl+V (or **Copy** and **Paste** on a source's right-click menu) copy
 sources from one scene to another, and **Duplicate scene** on a scene's right-click menu

@@ -1,52 +1,84 @@
-// The Transitions panel: the studio-mode bar (putting a scene on preview, taking it to
-// program, and swapping the old program scene back onto preview), shown only in studio
-// mode, and the preset editor, with a custom curve's points. The seed puts `Main` on program. The mock engine has only
-// the initial `cut` preset and can't change presets, so the editor's changes are checked
-// by what the page sends.
+// Studio mode and the Transitions panel. In studio mode the canvas is the preview side,
+// with the studio controls and the program monitor beside it: clicking a scene puts it
+// on preview, Transition takes it to program and swaps the old program scene back onto
+// preview, which the canvas then shows. The Transitions panel edits the presets, with a
+// custom curve's points. The seed puts `Main` on program. The mock engine has only the
+// initial `cut` preset, can't change presets and sends no pictures, so the editor's
+// changes are checked by what the page sends.
 import { test, expect, connect, showPanel, recordCalls } from '../fixtures.js';
 
-/** Connects, turns studio mode on and shows the Transitions panel, a tab behind Outputs
- * in the default layout. */
+/** Connects and turns studio mode on; returns the studio controls. */
 async function openStudio(page, daemon) {
   await connect(page, daemon);
   await page.locator('header.app-header').getByRole('button', { name: 'Studio mode' }).click();
-  await showPanel(page, 'Transitions');
-  return page.locator('section.studio');
+  return page.locator('section.studio-controls');
 }
 
-test('a transition takes preview to program and swaps', async ({ page, daemon }) => {
-  const studio = await openStudio(page, daemon);
-  const preview = studio.getByLabel('Scene on preview');
-  const program = studio.locator('.program-name');
-  await expect(program).toHaveText('Main');
-  await expect(studio.getByText('Uses Cut (the default).')).toBeVisible();
+/** Clicks a scene's row in the Scenes panel. */
+async function clickScene(page, name) {
+  await page.locator('.scenes-panel li.row').filter({ hasText: name }).locator('.row-main').click();
+}
 
-  await preview.selectOption({ label: 'Intro' });
-  await expect(preview).toHaveValue('intro');
-  await studio.getByRole('button', { name: 'Transition' }).click();
-  await expect(program).toHaveText('Intro');
-  await expect(preview).toHaveValue('main');
-});
-
-test('the switch is off while preview is the program scene', async ({ page, daemon }) => {
-  const studio = await openStudio(page, daemon);
-  await studio.getByLabel('Scene on preview').selectOption({ label: 'Main' });
-  await expect(studio.getByRole('button', { name: 'Transition' })).toBeDisabled();
-  await expect(studio.getByRole('button', { name: 'Cut' })).toBeDisabled();
-});
-
-test('the studio bar shows only in studio mode', async ({ page, daemon }) => {
+test('studio mode shows preview and program side by side, with the controls between', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await showPanel(page, 'Transitions');
-  const studio = page.locator('section.studio');
-  await expect(studio.getByLabel('Scene on preview')).toHaveCount(0);
-  await expect(studio.getByText('Studio mode is off')).toBeVisible();
+  const row = page.locator('.stage-row');
+  await expect(row).not.toHaveClass(/two-up/);
+  await expect(page.getByRole('region', { name: 'Program' })).toHaveCount(0);
+  await expect(page.locator('section.studio-controls')).toHaveCount(0);
+
   const button = page.locator('header.app-header').getByRole('button', { name: 'Studio mode' });
   await button.click();
-  await expect(studio.getByLabel('Scene on preview')).toBeVisible();
+  await expect(row).toHaveClass(/two-up/);
+  // Turning it on puts the scene the canvas shows on preview.
+  await expect(page.locator('.stage-label').first()).toHaveText('Preview · Main');
+  await expect(page.locator('.stage-label.program')).toHaveText('Program · Main');
+  await expect(page.getByRole('region', { name: 'Program' }).locator('canvas')).toHaveCount(1);
+  const canvas = await page.getByRole('region', { name: 'Canvas' }).boundingBox();
+  const program = await page.getByRole('region', { name: 'Program' }).boundingBox();
+  const controls = await page.locator('section.studio-controls').boundingBox();
+  expect(canvas.x + canvas.width).toBeLessThanOrEqual(controls.x + 1);
+  expect(controls.x + controls.width).toBeLessThanOrEqual(program.x + 1);
+
   await button.click();
-  await expect(button).toHaveAttribute('aria-pressed', 'false');
-  await expect(studio.getByLabel('Scene on preview')).toHaveCount(0);
+  await expect(row).not.toHaveClass(/two-up/);
+  await expect(page.locator('section.studio-controls')).toHaveCount(0);
+});
+
+test('a transition takes preview to program, and the old program comes back to preview', async ({ page, daemon }) => {
+  const studio = await openStudio(page, daemon);
+  await expect(studio.getByText('That scene is already on program.', { exact: false })).toBeVisible();
+  await expect(studio.getByRole('button', { name: 'Transition' })).toBeDisabled();
+  await expect(studio.getByRole('button', { name: 'Cut' })).toBeDisabled();
+
+  await clickScene(page, 'Intro');
+  await expect(page.locator('.stage-label.cued')).toHaveText('Preview · Intro');
+  await expect(studio.getByText('Uses Cut (the default).')).toBeVisible();
+  await studio.getByRole('button', { name: 'Transition' }).click();
+  await expect(page.locator('.stage-label.program')).toHaveText('Program · Intro');
+  // Swapped: Main is on preview, and the canvas shows it.
+  await expect(page.locator('.stage-label.cued')).toHaveText('Preview · Main');
+  await expect(page.locator('.canvas-caption')).toContainText('Main');
+});
+
+test('without swap the scene stays on preview, and Cut takes it too', async ({ page, daemon }) => {
+  const studio = await openStudio(page, daemon);
+  await studio.getByLabel('Swap').uncheck();
+  await clickScene(page, 'Intro');
+  await expect(page.locator('.stage-label.cued')).toHaveText('Preview · Intro');
+  await studio.getByRole('button', { name: 'Cut' }).click();
+  await expect(page.locator('.stage-label.program')).toHaveText('Program · Intro');
+  await expect(page.locator('.stage-label.cued')).toHaveText('Preview · Intro');
+  await expect(studio.getByRole('button', { name: 'Transition' })).toBeDisabled();
+});
+
+test('the Transitions panel points at the controls in studio mode', async ({ page, daemon }) => {
+  await connect(page, daemon);
+  await showPanel(page, 'Transitions');
+  const panel = page.locator('section.studio');
+  await expect(panel.getByText('Studio mode is off')).toBeVisible();
+  await page.locator('header.app-header').getByRole('button', { name: 'Studio mode' }).click();
+  await expect(panel.getByText('Studio mode is on')).toBeVisible();
+  await expect(panel.getByLabel('Transition preset')).toHaveCount(0);
 });
 
 test('the preset picker edits the default and adds a preset', async ({ page, daemon, consoleErrors }) => {

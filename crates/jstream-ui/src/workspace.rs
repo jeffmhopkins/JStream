@@ -1,4 +1,5 @@
-//! The workspace under the header: the preview canvas in the middle and the eight dock
+//! The workspace under the header: the preview canvas in the middle (in studio mode,
+//! beside the program monitor, with the studio controls between them) and the eight dock
 //! zones around it, drawn from the [`Dock`] model. Panels are grouped and tabbed in the
 //! zones, dragged by their tabs to another group, half or zone, resized with the
 //! splitters and dividers, collapsed by their title and closed with a second click on
@@ -10,12 +11,14 @@
 
 use crate::app::SessionContext;
 use crate::canvas::Canvas;
+use crate::canvas::monitor::ProgramMonitor;
 use crate::dock::{Dock, PanelId, Target, Zone};
 use crate::panels::mixer::MixerFlip;
 use crate::panels::{
-    AgentActivity, Filters, Inspector, Mixer, Outputs, Scenes, Sources, StreamStats, StudioMode,
-    Transform,
+    AgentActivity, Filters, Inspector, Mixer, Outputs, Scenes, Side, Sources, StageLabel,
+    StreamStats, StudioControls, StudioMode, Transform,
 };
+use crate::store::Studio;
 use crate::ui_settings::{self, DOCK_KEY, FirstStep, Kept, Theirs};
 use leptos::html;
 use leptos::prelude::*;
@@ -306,6 +309,14 @@ pub fn Workspace() -> impl IntoView {
         dock.with(keep);
         nudge_canvas();
     });
+    // Studio mode puts the program monitor beside the canvas (preview), with the
+    // studio controls between them; the canvas re-fits to its half.
+    let studio = expect_context::<Studio>();
+    let studio_mode = move || studio.studio_mode.get();
+    Effect::new(move |_| {
+        studio.studio_mode.track();
+        nudge_canvas();
+    });
     share(dock);
 
     let end_drag = move |drop: bool| {
@@ -364,7 +375,23 @@ pub fn Workspace() -> impl IntoView {
                     {zone(Zone::Left)}
                     <div class="ws-centre">
                         {zone(Zone::CanvasTop)}
-                        <section class="region canvas" aria-label="Canvas"><Canvas /></section>
+                        <div class="stage-row" class:two-up=studio_mode>
+                            <div class="stage-pane">
+                                <Show when=studio_mode>
+                                    <StageLabel side=Side::Preview />
+                                </Show>
+                                <section class="region canvas" aria-label="Canvas"><Canvas /></section>
+                            </div>
+                            <Show when=studio_mode>
+                                <StudioControls />
+                                <div class="stage-pane">
+                                    <StageLabel side=Side::Program />
+                                    <section class="region monitor" aria-label="Program">
+                                        <ProgramMonitor />
+                                    </section>
+                                </div>
+                            </Show>
+                        </div>
                         {zone(Zone::CanvasBottom)}
                     </div>
                     {zone(Zone::Right)}
