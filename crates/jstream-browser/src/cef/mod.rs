@@ -176,11 +176,19 @@ impl Helper {
     /// Asks the helper to exit, waits up to [`EXIT_GRACE`], then kills it if it is still
     /// there, and waits for the pipe's reader.
     fn stop(&mut self) {
+        let started = Instant::now();
+        tracing::info!(pid = self.child.id(), "asking the browser helper to exit");
         self.link.shutdown();
-        let deadline = Instant::now() + EXIT_GRACE;
+        let deadline = started + EXIT_GRACE;
         loop {
             match self.child.try_wait() {
-                Ok(Some(_)) => break,
+                Ok(Some(_)) => {
+                    tracing::info!(
+                        ms = u64::try_from(started.elapsed().as_millis()).unwrap_or(u64::MAX),
+                        "the browser helper exited"
+                    );
+                    break;
+                }
                 Ok(None) if Instant::now() < deadline => {
                     std::thread::sleep(Duration::from_millis(20));
                 }
