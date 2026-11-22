@@ -393,4 +393,10 @@ kinds instead. \
 Check your work: after each step take a `video.snapshot` and look at it critically \
 (alignment, overlap, legibility, crowding, anything off the safe area) and fix what's \
 wrong before reporting. When a scene is on program, build changes on another scene or \
-on preview (`studio.set_preview`) and switch when they're right.";
+on preview (`studio.set_preview`) and switch when they're right. \
+Rendering motion on a slow machine: when a scene can't be drawn in real time, render it \
+frame by frame on the held clock. `clock.hold` stops the engine's time; then for each \
+frame `clock.step` by the frame time (33 or 34 ms at 30 fps) and take a \
+`video.snapshot`, firing your switches and edits at the frame they're due; then \
+`clock.release`. Moves, motion, timelines and a sky's warp all play at the stepped time. \
+No output can start while the clock is held, nor the clock be held while one runs.";

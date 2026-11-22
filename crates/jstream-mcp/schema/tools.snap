@@ -484,7 +484,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.128, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.136, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -1174,6 +1174,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "timeline_id",
                   "at_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -7302,7 +7348,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.128, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.136, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -7992,6 +8038,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "timeline_id",
                   "at_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -14171,6 +14263,76 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `clock` operation: set `op.type` to one of `clock.hold` (action), `clock.step` (action), `clock.release` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `clock` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "clock"
+    },
+    {
+      "annotations": {
         "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false,
@@ -15902,7 +16064,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.128, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.136, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -16592,6 +16754,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "timeline_id",
                   "at_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -24872,7 +25080,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.128, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.136, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -25562,6 +25770,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "timeline_id",
                   "at_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -33777,7 +34031,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.128, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.136, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -35118,7 +35372,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.128, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.136, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -35808,6 +36062,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "timeline_id",
                   "at_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
