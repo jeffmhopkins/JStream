@@ -26,17 +26,22 @@
 //!   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)): [`Kind::Audio`]
 //!   follows a measure of a bus or a source through an [`Envelope`] the evaluator keeps,
 //!   and [`evaluate_with`] takes each one's level.
+//! - MIDI-driven modifiers
+//!   ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): [`Kind::Midi`]
+//!   follows a controller through a [`Smoothing`] the evaluator keeps, and
+//!   [`evaluate_with`] takes its value as it takes an audio modifier's level.
 //!
 //! The geometry, crop and effects types are type parameters, so this crate doesn't
 //! depend on `jstream-protocol`: the graph instantiates it with the protocol's
 //! `ItemGeometry` and `Crop`, and its own filter chains.
 //!
-//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-anim/README.md#purpose, docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md, docs/adr/0088-keyframe-scenes-override-item-effects.md, docs/adr/0099-native-motion-modifiers-and-timelines.md, docs/adr/0100-audio-reactive-motion-modifiers.md
+//! Docs: docs/ARCHITECTURE.md#crate-map, crates/jstream-anim/README.md#purpose, docs/adr/0049-keyframe-scene-model-and-evaluation.md, docs/adr/0024-scene-structure.md, docs/adr/0088-keyframe-scenes-override-item-effects.md, docs/adr/0099-native-motion-modifiers-and-timelines.md, docs/adr/0100-audio-reactive-motion-modifiers.md, docs/adr/0168-midi-controllers-drive-motion.md
 
 #![forbid(unsafe_code)]
 
 mod audio;
 mod keyframe;
+mod midi;
 mod modifier;
 mod switch;
 mod timeline;
@@ -45,6 +50,7 @@ pub use audio::{Audio, Curve, Envelope, HIGH_HZ, LOW_HZ, MAX_ENVELOPE_MS, MIN_DB
 pub use keyframe::{
     Field, InvalidValue, Inverse, Keyframe, MAX_OPACITY, Override, Props, RestoreConflict, Value,
 };
+pub use midi::{Midi, Smoothing};
 pub use modifier::{
     Clock, InvalidModifier, Kind, MAX_MODIFIERS, Modifier, Offsets, Property, Shape, check_list,
     evaluate, evaluate_with,

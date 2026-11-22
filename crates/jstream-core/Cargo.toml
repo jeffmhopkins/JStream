@@ -99,5 +99,7 @@ jstream-protocol = { workspace = true, features = ["fixtures"] }
 zune-jpeg.workspace = true
 # The built-in kinds' snapshot, reviewed like an API diff (ADR-0025).
 insta.workspace = true
+# `src/reactive.rs`: MIDI messages that MIDI motion modifiers follow (ADR-0168).
+jstream-midi.workspace = true
 # The WASM text format, for the automation plugins the engine tests install.
 wat.workspace = true

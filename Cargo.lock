@@ -2855,6 +2855,7 @@ dependencies = [
  "jstream-jtunnel",
  "jstream-mcp",
  "jstream-media",
+ "jstream-midi",
  "jstream-mux",
  "jstream-outputs",
  "jstream-platform",

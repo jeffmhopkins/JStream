@@ -630,9 +630,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   modifier with what it moves, how (wiggle, oscillate with its shape, drift, shake, a
   one-shot impulse with its length and decay, or audio: what it hears, the program mix or
   a bus (or a source set elsewhere, shown as itself until a bus or the program mix is
-  picked), what it follows, level, peak, beat or a band, and its curve, ADR-0100), that
+  picked), what it follows, level, peak, beat or a band, and its curve, ADR-0100, or
+  MIDI: what it follows, a control change, pitch bend or pressure, its input by name
+  (blank for any) and its curve, with At lowest, At highest, CC, Channel (0 for any) and
+  Smoothing (0 jumps) as its fields, ADR-0168), that
   kind's fields, when its time starts (in step, when shown, or when fired; not for
-  audio), an On check, a Fire button on a row that starts when fired
+  audio or MIDI), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
   in a keyframe its override, ADR-0099). A modifier that drives an effect's setting

@@ -17,7 +17,8 @@
 //! transition to use (including a `stinger`), when to build a graphic as HTML in a
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
-//! `tempo.*` values (ADR-0147), and how to write a custom shader the Filters window's
+//! `tempo.*` values (ADR-0147), how a `midi` motion modifier poses an item from a
+//! controller (ADR-0168), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -340,6 +341,17 @@ a source, `audio_source`) by `level`, `peak`, `onset` or a `band` (`low_hz`..`hi
 such as 40..120 for a kick), with `attack_ms` and `release_ms`, mapped from `floor_db` \
 to `ceiling_db` onto `from`..`to`. On `opacity`, `from` -0.6 and `to` 0 dims a light to \
 40% between beats. It hears only while an output runs. \
+To let a performer pose an item live from a MIDI controller (a fader that slides a \
+panel, a knob that turns a dial, a lever that tilts), use a `midi` modifier: it follows \
+a `control` (`cc` with its `controller` 0 to 127, `pitch_bend` or `pressure`) on a \
+`channel` 1 to 16 (omit for any) from an `input` by name (omit for any), maps the \
+controller's lowest to `from` and its highest to `to` (below `from` to invert) through \
+a `curve`, and glides to each new value over `smoothing_ms` (default 50; 0 jumps at \
+once, which suits a switch or a cut). It works on every property and on an effect \
+setting, rests at `from` until the controller sends, and shows in previews too. It \
+moves a whole item, never a node inside a model, so a part that moves on its own (a \
+lever, a door) is a model file of its own, placed as its own item; a model turns about \
+its bounds' centre. \
 To make an effect itself pulse (a border's `width`, a glow's `radius` or `strength`, a \
 blur's `radius`), give the item a modifier with `property` `effect` and \
 `effect: {filter_id, param}` naming one of its own effects and a number or colour \
