@@ -2173,7 +2173,8 @@ scene's space, `centre_of`) through six 90° cameras along ±x, ±y and ±z
 capped by `max_probe_resolution` (`RenderFeatures::probe_face`). Each model it shows is
 drawn again through each face camera into its `GpuKey::ProbeModel`, lit by the scene's
 lights as that face sees them and its environment, unshadowed and with no probe, so a
-capture never reads itself; cards keep their lit layers, and the compositor sorts them
+capture never reads itself, and with no depth layer, since a model's `Item::depth` is
+seen from the scene's camera rather than a face's; cards keep their lit layers, and the compositor sorts them
 again for each face. `Compositor::resample_probe` turns the six into the probe's
 `GpuKey::ProbeMap`, which every frame keeps while the scene is drawn. A probe is due
 when it has no capture, its box or face size changed, `refresh_frames` have passed
