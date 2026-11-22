@@ -94,6 +94,11 @@ impl Smoothing {
         self.level.unwrap_or(0.0)
     }
 
+    /// Its value once a step has run, or `None` before the first.
+    pub fn followed(&self) -> Option<f32> {
+        self.level
+    }
+
     /// Follows `target` (`0..=1`) for `dt_s` seconds with `midi`'s smoothing time: a
     /// one-pole smoothing whose time constant is that time, so it is about two thirds
     /// of the way there after it. A time of 0 jumps, and so does the first step. A later

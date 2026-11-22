@@ -1230,7 +1230,7 @@ stamp = { hash = "b3:6ad893c8592ec553", by = "agent:claude", note = "Re-read: Fi
 stamp = { hash = "b3:8a09e7689e82b09b", by = "agent:claude", note = "Re-read: notes that a data modifier evaluates as Kind::Midi; matches graph/src/motion.rs." }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/midi.rs"]
-stamp = { hash = "b3:32ef6d671e087fa8", by = "agent:claude", note = "added Kind::Midi, Midi and Smoothing (midi.rs) to the contents and ADR-0168 to depends_on" }
+stamp = { hash = "b3:c0f66d18cf0806b1", by = "agent:claude-daw", note = "Re-read against Smoothing::followed (the value once stepped, None before): the Purpose map's MIDI-driven entry still holds." }
 
 ["CRATE-jstream-anim#purpose"."file:crates/jstream-anim/src/modifier.rs"]
 stamp = { hash = "b3:d864c9fd9396b50f", by = "agent:claude", note = "Re-read: notes that a data modifier evaluates as Kind::Midi; matches graph/src/motion.rs." }
@@ -1938,7 +1938,7 @@ stamp = { hash = "b3:4c313edf233da586", by = "agent:wave-owner", note = "New sec
 stamp = { hash = "b3:7555920d25b26a7d", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-motion"."body"]
-stamp = { hash = "b3:ad2dd7830d3419f1", by = "agent:claude", note = "Re-read: new Data-driven motion bullet matches reactive.rs (DataMap, Input::Data, shared watch, reads 0 when absent)." }
+stamp = { hash = "b3:df9ab3e4b2c9e599", by = "agent:claude-daw", note = "Added that a shot planned after the follower's tick carries the levels followed so far (Follower::carry), so an edit never shows a modifier unsmoothed." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/aim.rs"]
 stamp = { hash = "b3:250c6e6ada6ca966", by = "agent:ptz-builder", note = "#1181 (ADR-0152, 0.118): scene.drive_camera, scene.aim_camera and scene.camera_aim, a live aim per scene family drawn after camera moves, and PTZ controller endpoints (one LAN address, allowlisted, sessions that translate VISCA); also #1423's round 4 nits; added the Live aim bullet (aim.rs) and its covers; then renumbered its ADR from 0151 to 0152, since #1483 takes 0151" }
@@ -1956,7 +1956,7 @@ stamp = { hash = "b3:e247787c7972f83a", by = "agent:hold-zoom", note = "step_hel
 stamp = { hash = "b3:92d785617aa2111d", by = "agent:smooth-paths", note = "Transitions bullet now names check_via and Run::orbit (ADR-0166 decisions 2 and 3); studio and motion changes are constructor fields only" }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/reactive.rs"]
-stamp = { hash = "b3:9a59e97a21889420", by = "agent:claude", note = "Re-read: new Data-driven motion bullet matches reactive.rs (DataMap, Input::Data, shared watch, reads 0 when absent)." }
+stamp = { hash = "b3:d06e9c0e09bd8e52", by = "agent:claude-daw", note = "Added that a shot planned after the follower's tick carries the levels followed so far (Follower::carry), so an edit never shows a modifier unsmoothed." }
 
 ["CRATE-jstream-core#contents-motion"."file:crates/jstream-core/src/sourced.rs"]
 stamp = { hash = "b3:e26d288472242bd8", by = "agent:claude", note = "Added sourced.rs to covers and a Driven source settings bullet for ADR-0171 decision 4; reactive.rs also plans source drives for audio, which the bullet covers." }

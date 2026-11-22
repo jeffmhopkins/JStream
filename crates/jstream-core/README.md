@@ -405,7 +405,9 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   `data` modifier following one field of a sender's live data, a number through its
   `range` or a text through its `states`, read from the engine's `LiveData` (which
   reaches the planner with the loaded assets) by a shared watch, and smoothed by the
-  same follower; it reads 0 while the field is absent.
+  same follower; it reads 0 while the field is absent. A shot planned after the
+  follower's tick (an edit mid-tick, or between a held clock's steps) takes the levels
+  followed so far, so an edit never shows an audio, MIDI or data modifier unsmoothed.
 - **Driven effect settings** (`driven.rs`,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
   modifier adding to a number or colour setting of one of its item's effects each
