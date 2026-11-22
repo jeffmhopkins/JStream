@@ -267,7 +267,7 @@ device, a resolution, a frame rate and a format, then move a camera control (bri
 or white balance).
 **Pass:** each choice takes effect in the picture, and the control changes it live.
 
-**M13. Ask before a new agent connects (#1229).** Close
+**M13. Ask before connecting (#1229).** Close
 `jstream.exe` first; the script starts it again with `--mcp`, then sends an agent's
 hello to `127.0.0.1:4455` twice. Choose Deny the first time and Always allow the second.
 Then open File › Settings… › Devices.
