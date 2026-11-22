@@ -533,9 +533,20 @@ fn a_reflection_probe_counts_its_capture() {
             .find(|(scene, ..)| scene == "a")
             .map(|(_, bytes, _)| bytes)
     };
+    // Before the probe's first frame its size is read as the canvas's, so wait until
+    // it reports its own.
+    let sized = super::audio::eventually(|| {
+        matches!(
+            super::query(&control, Query::SourceSizes),
+            Ok(QueryResult::SourceSizes { sources })
+                if sources
+                    .iter()
+                    .any(|size| size.source_id == SourceId::new("probe") && size.size.is_some())
+        )
+    });
+    assert!(sized, "the probe reports its size");
     // A scene whose surfaces don't reflect captures nothing, so turning its
-    // reflections on adds the capture to what its sources hold (whose size, before
-    // the probe's first frame, may still be read as the canvas's).
+    // reflections on adds the capture to what its sources hold.
     let plain = bytes_of_a(&control).expect("a is warm");
     batch(
         &control,
