@@ -369,7 +369,7 @@ impl SkyRuntime {
             pass.set_bind_group(0, &bind, &[]);
             pass.draw(0..3, 0..1);
         }
-        gpu.queue.submit([encoder.finish()]);
+        gpu.submit_work(encoder.finish());
         target.mark_changed();
         drop(submitting);
         #[cfg(test)]

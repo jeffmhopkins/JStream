@@ -518,7 +518,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    copies the output into one of up to `READBACK_DEPTH` (three) map-read buffers in a
    submit of its own and starts its map, tagged by the caller; `collect` polls the
    device without blocking and hands back, oldest first, every frame whose map has
-   finished, as tightly packed RGBA8, in the order they were recorded. With every
+   finished, as tightly packed RGBA8, in the order they were recorded, each in the
+   caller's buffer, which the caller may swap out to keep the frame, so a call that
+   hands two keeps both. With every
    buffer still on its way (`is_full`) `record` returns `false` for the caller to
    count, and a new size waits until none is out. A ring made `with_copier` leaves the
    copy out of each mapped buffer to a `Copier`'s `jstream-readback` thread: `collect`
@@ -925,7 +927,8 @@ Radeon 780M was Vulkan (a D3D12 device that won't open is logged and skipped, an
 which D3D12 offers when it has no GPU, is skipped too); then, everywhere, the
 high-performance adapter without `force_fallback_adapter`, then the software adapter,
 then `RenderError::NoAdapter`. The device asks for `TIMESTAMP_QUERY` when the adapter
-has it (the pack passes' GPU time, [Filters](#filters)), and no other optional feature.
+has it (the pack passes' and the frame units' GPU time, [Filters](#filters)), and no
+other optional feature.
 A hardware adapter whose device refuses to open (limits
 below the defaults, a removed or hung GPU) falls back to the software adapter too, and
 the error names both when that fails as well. When the pick already was the software
@@ -1096,6 +1099,18 @@ bytes and the bind group's entries live in kept or fixed-size storage, bounded b
 feedback on the pass itself and on a later pass with a restart, images and slots, the
 audio image, and
 `sys`, and a program over the cap, on the test adapter.
+
+**GPU time of a frame's units** (ADR-0103, `profile.get`'s `gpu_ms`, `src/spans.rs`).
+`Compositor::begin_gpu_frame` opens a timed frame (on a device with `TIMESTAMP_QUERY`,
+while one of its 3 frame sets is free), `gpu_unit` names the unit the work that follows
+belongs to, and while one is named each submit of the compositor's own work
+(`Gpu::submit_work`: the model, sky, ingest and compositor passes) carries a command
+buffer before it and one after it, each an empty compute pass writing a timestamp. A
+submit's command buffers run in order, so the span is the GPU running that work, not the
+time it sat waiting for the drawing thread. `end_gpu_frame` resolves the frame's
+timestamps (at most 256 spans) and maps them, and `gpu_units` polls without waiting and
+hands back each unit's GPU time in each frame read since, a frame or two late. Texture
+writes, readbacks and the encoders' conversion carry no timestamps.
 
 **GPU time of pack passes** (#349, `src/timer.rs`). A pack's WGSL is validated, not
 bounded, so `jstream-core` quarantines a kind whose pass runs too long on the GPU

@@ -61,6 +61,8 @@ pub(crate) struct Gpu {
     /// Held from staging a frame through the submit it arms: the context's, which
     /// platform threads that submit on the same queue take too, or one of its own.
     pub submit: SubmitLock,
+    /// The GPU time of the drawer's units of work (`spans.rs`).
+    pub spans: Arc<crate::spans::Spans>,
 }
 
 /// What wgpu reported about a device outside any call's result.
@@ -187,6 +189,20 @@ pub fn adapter_available() -> bool {
 }
 
 impl Gpu {
+    /// Submits `work`, a command buffer of the compositor's own, bracketed by the
+    /// timestamps of a span while the drawer times a unit (`spans.rs`). The caller holds
+    /// the submit lock, as for any submit.
+    pub(crate) fn submit_work(&self, work: wgpu::CommandBuffer) -> wgpu::SubmissionIndex {
+        match self.spans.span() {
+            Some(span) => self.queue.submit([
+                span.stamp(&self.device, 0),
+                work,
+                span.stamp(&self.device, 1),
+            ]),
+            None => self.queue.submit([work]),
+        }
+    }
+
     pub(crate) fn open(options: OpenOptions) -> Result<Self, RenderError> {
         // Debug builds would otherwise require the Khronos validation layer, which CI
         // does not install. `with_env` still honours `WGPU_VALIDATION` and the other
@@ -277,6 +293,7 @@ impl Gpu {
     ) -> Self {
         let limits = device.limits();
         let software = adapter.get_info().device_type == wgpu::DeviceType::Cpu;
+        let spans = Arc::new(crate::spans::Spans::new(&device, &queue));
         Self {
             device,
             queue,
@@ -286,6 +303,7 @@ impl Gpu {
             max_buffer_size: limits.max_buffer_size,
             max_storage_binding: limits.max_storage_buffer_binding_size,
             context: None,
+            spans,
             faults,
             submit: SubmitLock::new(),
         }

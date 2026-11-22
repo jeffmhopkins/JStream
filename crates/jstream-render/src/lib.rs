@@ -24,6 +24,7 @@ mod place;
 mod readback;
 mod scene;
 mod sky;
+mod spans;
 mod timer;
 pub mod transition;
 mod turn;
