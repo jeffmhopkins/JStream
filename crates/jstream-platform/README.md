@@ -230,6 +230,15 @@ Contents:
   (ADR-0117 §7), and `paths::RENDERING_FILE` the one that keeps the 3D rendering
   switches, which both hosts name too
   ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)).
+- **The person's folders** (`paths.rs`,
+  [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
+  `paths::user_folder` finds Documents and Downloads (`UserFolder`), where the desktop app
+  keeps its default project (`paths::PROJECTS_DIR`, `paths::DEFAULT_PROJECT`) and saves
+  screenshots. On macOS they are `~/Documents` and `~/Downloads`; on Linux,
+  `XDG_DOCUMENTS_DIR` and `XDG_DOWNLOAD_DIR` from `user-dirs.dirs`, else those names under
+  home. It answers `None` on Windows, where `jstream-platform-windows` asks the shell for
+  the known folders. `paths::is_portable` tells a portable exe, which keeps its project
+  in its data folder.
 - **Shared backend helpers** (`mailbox.rs`, `nv12.rs`, `yuv.rs`): safe, platform-independent code
   the platform crates share, so it is written and tested once. `mailbox::Mailbox` is the
   capture callbacks' single-slot latest-frame mailbox: `put` swaps a boxed frame in and

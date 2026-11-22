@@ -1289,7 +1289,11 @@ interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had. A camera with a depth of field
 ([ADR-0108](adr/0108-camera-depth-of-field.md)) blurs each fragment of a flat item by its
 distance from the focus plane in the same draw: a disc of taps from the item's mips, its
-edge softened to match, with no extra pass or target. A 3D model's layer isn't blurred.
+edge softened to match, with no extra pass or target. A 3D model is blurred by its own
+depth as its layer is drawn ([ADR-0165](adr/0165-depth-of-field-on-models.md)): its colour
+and view depth are drawn first, then five fullscreen passes gather each pixel's
+neighbours whose circle of confusion reaches it, so a soft near part spreads over a
+sharp far one and the silhouette softens outward.
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
@@ -1630,7 +1634,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
 - **Recent projects:** `recent-collections.json` (version 1) in the data directory, up
   to ten project files, most recent first, which `jstream-core` updates on every open,
   new and save as. The desktop app opens the first at startup if it still loads, and
-  `collection.json` otherwise.
+  its default project otherwise: `Documents\JStream\My project.json`, or
+  `collection.json` in the data folder for a portable app
+  ([ADR-0163](adr/0163-projects-and-screenshots-in-the-persons-folders.md)).
 - **Asset files** named in settings are stored relative to the collection folder or the
   app asset folder when they are under one, so a moved or portable setup still finds them.
   Each stored source, filter and transition preset records its kind's descriptor
@@ -1706,7 +1712,9 @@ Foundation, Direct3D 12).
 
 - **State:** in `%APPDATA%\JStream`, or in a `data` folder beside the exe when a
   `portable` marker file is present. Every host finds it through `jstream-platform`'s
-  `paths` module.
+  `paths` module. The desktop app's default project is the exception: it is in
+  `Documents\JStream`, unless the app is portable
+  ([ADR-0163](adr/0163-projects-and-screenshots-in-the-persons-folders.md)).
 - **Building the zip:** `cargo xtask dist`, on Windows with MSVC, CMake and Ninja. It
   builds the web UI for release with trunk (or takes a built one with `--ui-dir`), builds
   `jstream.exe`, `jstream-daemon.exe`, `jstream-cli.exe` and the virtual-camera DLL for

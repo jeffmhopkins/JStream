@@ -230,6 +230,9 @@ fn ConnectForm(
 /// How long a toast shows, in milliseconds (spec-workspace.md 6.7.1).
 const TOAST_MS: u64 = 4_500;
 
+/// How long a toast with buttons shows, in milliseconds: long enough to reach one.
+const TOAST_ACTIONS_MS: u64 = 10_000;
+
 /// The toast: one confirmation at a time, bottom centre, gone after [`TOAST_MS`]. A new
 /// one replaces it and restarts the time. Failures stay in the problem bar instead,
 /// until dismissed.
@@ -237,28 +240,57 @@ const TOAST_MS: u64 = 4_500;
 fn Toast() -> impl IntoView {
     let studio = expect_context::<Studio>();
     Effect::new(move |_| {
-        let Some((shown, _)) = studio.toast.get() else {
+        let Some((shown, buttons)) = studio
+            .toast
+            .with(|t| t.as_ref().map(|t| (t.n, !t.actions.is_empty())))
+        else {
             return;
         };
         set_timeout(
             move || {
                 if studio
                     .toast
-                    .try_with_untracked(|t| t.as_ref().map(|(n, _)| *n))
+                    .try_with_untracked(|t| t.as_ref().map(|t| t.n))
                     .flatten()
                     == Some(shown)
                 {
                     studio.toast.set(None);
                 }
             },
-            std::time::Duration::from_millis(TOAST_MS),
+            std::time::Duration::from_millis(if buttons { TOAST_ACTIONS_MS } else { TOAST_MS }),
         );
     });
     // The live region stays in the page and only its text changes, so screen readers
     // announce each toast.
     view! {
         <div class="toast-region" role="status">
-            {move || studio.toast.get().map(|(_, text)| view! { <div class="toast">{text}</div> })}
+            {move || {
+                studio
+                    .toast
+                    .get()
+                    .map(|toast| {
+                        let buttons = toast
+                            .actions
+                            .into_iter()
+                            .map(|action| {
+                                let run = action.run;
+                                view! {
+                                    <button
+                                        type="button"
+                                        class="toast-action"
+                                        on:click=move |_| {
+                                            run();
+                                            studio.toast.set(None);
+                                        }
+                                    >
+                                        {action.label}
+                                    </button>
+                                }
+                            })
+                            .collect_view();
+                        view! { <div class="toast">{toast.text}{buttons}</div> }
+                    })
+            }}
         </div>
     }
 }
