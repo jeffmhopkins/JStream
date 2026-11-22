@@ -111,7 +111,7 @@ adds, which makes soft glows and veils brighter.
    backdrop, generated), a shape (a plate, pill or circle, with an optional gradient),
    a timer (a countdown, stopwatch or clock), or an audio visualiser. Name it and press
    **Create**
-   (or pick an existing source to reuse it); its properties open, so you can choose the
+   (or choose **Existing** and pick a source to reuse it); its properties open, so you can choose the
    display or window from the list of those open now, the device (and, for a webcam,
    its resolution, frame rate and video format, or Auto, and under **Camera** its
    brightness, exposure, white balance and the other controls the camera offers, each
