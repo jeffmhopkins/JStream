@@ -278,10 +278,11 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("clock.release", N),
     // Deprecated (ADR-0080): the engine refuses it anyway.
     ("privacy.set", N),
-    // A person installs, grants and re-enables plugins; a plugin never does (G1).
+    // A person installs, grants, re-enables and removes plugins; a plugin never does (G1).
     ("plugin.install", N),
     ("plugin.grant", N),
     ("plugin.enable", N),
+    ("plugin.uninstall", N),
     // A person rescans the CLAP plugins and reads the scan, which names files on the
     // machine (ADR-0035); a plugin never does.
     ("plugin.clap_rescan", N),

@@ -319,12 +319,12 @@ Contents ([Design](#design) explains the choices):
   `asking`, answered `unsupported` elsewhere). The calls behind them and the texts are
   tested natively; the flow end to end in `tests/e2e/specs/agents.spec.js`.
 - **Plugins** (`plugins.rs`): `Plugins`, the WASM automation plugins section on the
-  Settings dialog's Plugins page, with its install and grant dialogs (drawn over it at the
+  Settings dialog's Plugins page, with its install, grant and remove dialogs (drawn over it at the
   page's top level), the calls behind
   them, and `GrantForm`, `ListGate` (no `plugin.list` while the grant dialog is open,
   and no grant while a list is on its way), `suggested_id`, `not_granted` and the row
-  texts, tested natively, the section's re-reads and grants against a fake engine that
-  notes each list, or fails one.
+  texts, tested natively, the section's re-reads (on `plugin.uninstalled` too), grants
+  and remove dialog against a fake engine that notes each list, or fails one.
 - **Canvas** (`canvas/`): the canvas editor. It draws the selected scene's item boxes
   over that scene's live picture (the program mix while it is on program), edits their geometry with the pointer and the keyboard, and undoes and
   redoes ([Canvas](#canvas)); `ProgramMonitor` (`monitor.rs`), the live program beside
@@ -1224,8 +1224,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
 - **Plugins** (WA1, [ADR-0069](../../docs/adr/0069-wasm-plugin-limits-and-capabilities.md),
   [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). The
   Plugins section reads `plugin.list` when it opens and shows once that answers; it
-  re-reads after each of its calls and on `plugin.state_changed` and `events.dropped`,
-  except while the grant dialog is open (`ListGate`). The engine takes a grant to
+  re-reads after each of its calls and on `plugin.state_changed`, `plugin.uninstalled`
+  and `events.dropped`, except while the grant dialog is open (`ListGate`). The engine takes a grant to
   acknowledge the request this client was last listed
   ([ADR-0090](../../docs/adr/0090-a-grant-acknowledges-the-request-its-client-saw.md)),
   and the section makes that the request the dialog shows: a re-read waits until the
@@ -1238,7 +1238,12 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   with the engine's reason.
   Each plugin shows its manifest's name (the plugin's own text, shown as data), its
   state with why it is off, its ID and package path, what its manifest asks for that
-  isn't granted, Permissions…, and Turn on (`plugin.enable`) when it is off. Install
+  isn't granted, Permissions…, Turn on (`plugin.enable`) when it is off, and Remove…,
+  which opens a dialog titled "Remove plugin?" with the name quoted under it beside its
+  ID and path, says the plugin stops, its grant is forgotten and its folder stays on
+  disk, and sends `plugin.uninstall` only on Remove; a refusal shows above the list.
+  The list is read again on `plugin.uninstalled` too, so a plugin another client
+  removed goes. Install
   plugin asks for the package folder (in the desktop app, a Browse… button opens a
   folder dialog) and an ID, suggested from the folder's name
   (`plg_<name>`, numbered when taken) until it is typed, and sends `plugin.install`
