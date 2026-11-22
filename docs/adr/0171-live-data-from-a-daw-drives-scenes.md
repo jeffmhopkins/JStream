@@ -186,16 +186,28 @@ shows flat or a model takes as `texture` or `emissive_texture` (decision 6):
 - **Where the cells are.** `input`, a `columns_key` with `{column}` in it (`track/{column}`),
   a `cells_field` that is a list in each column's message (`slots`), and `columns` and
   `rows` (1 to 64) from a `column_offset` and `row_offset`. Each cell reads a
-  `state_field` and a `color_field` from its list entry.
+  `state_field` and a `color_field` from its list entry. `state_field` may name several
+  fields, separated by commas: the first whose text has a look decides, so
+  `queued,state` blinks a queued clip over its state.
 - **What a cell looks like.** `looks`: a table from the cell's state text to a look:
-  a colour or the cell's own colour, a brightness, and a blink rate. Defaults name nothing
-  but an `absent` look, so a grid shows plain cells until a look is set. `cell_px`,
-  `gap` and `radius` set the pads' shape, and `dim` the brightness of a cell with no look.
-- **Bars.** `mode = "bars"` reads a list of numbers instead (a field such as
-  `tracks`), one bar per column, for meters and levels.
-- **Drawing.** The receive thread writes the cells into a triple buffer per grid source;
-  the render thread draws them with one small pass, blinking on the media clock. Nothing
-  allocates there.
+  a colour or the cell's own colour, a brightness, and a blink rate. It is a parameter
+  type of its own, `ParamType::Looks` (protocol 0.156), so a UI edits it as a table.
+  Defaults name nothing but an `absent` look (a cell the data doesn't have), so a grid
+  shows plain cells until a look is set; the Properties panel offers the clip launcher
+  looks for the states JTunnel's state documents as a preset. `width` and `height` set
+  the picture, which the cells share evenly; `gap` and `radius` set the pads' shape,
+  `pad` the colour of a cell without its own, and `dim` the brightness of a cell whose
+  state has no look.
+- **Bars.** `mode = "bars"` reads a list of numbers instead (a `key` and a `field` such
+  as `meters` and `tracks`), one bar per column, for meters and levels, from `low` to
+  `high`. An entry that is itself a list of numbers draws side by side (a stereo
+  meter). The bar runs from `color_low` at its foot to `color_high` at its top,
+  smooth or in `segments` steps.
+- **Drawing.** The source's painter reads its keys' messages from the live data on the
+  engine's paint thread, 30 times a second, and draws on the CPU, as the MIDI kinds
+  do (ADR-0137): only when the data changed (one atomic load says so) or a look blinks,
+  blinking on the media clock. The render thread only takes the painted frame, as it
+  takes any painter's, so nothing locks or allocates there.
 
 **10. Pages.** The `browser` kind gains `page_api_data` (off by default, shown while
 `page_api` is on, with ADR-0124's warning) and `page_api_data_input`. A granted page gets

@@ -358,7 +358,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.151 because a motion modifier can follow MIDI: `MotionKind`'s
+`PROTOCOL_VERSION` is 0.156 because a kind's parameter can be a table of looks:
+`ParamType::Looks`, with `MAX_LOOKS`, `MAX_LOOK_NAME`, `MAX_BLINK_HZ`, `LOOK_ABSENT` and
+`LOOK_CELL_COLOR`, which the `grid` source kind's `looks` uses
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 9);
+0.151 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
 ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md));
@@ -1037,7 +1041,12 @@ never a type per kind.
   letters, digits and `_`, at most `MAX_CAMERA_CONTROL_NAME` bytes) set to a 32-bit
   integer or `CAMERA_CONTROL_AUTO` (`"auto"`), a UI offering the controls
   `capture.targets` lists for that device; a control the object doesn't name keeps what
-  the device has), a
+  the device has; `looks`, since 0.156: an object of at most `MAX_LOOKS` entries, each a
+  state's text (1 to `MAX_LOOK_NAME` bytes, no control characters) set to a look,
+  `{"color", "brightness", "blink_hz"}`, each optional: `color` a `#rrggbb` or
+  `LOOK_CELL_COLOR` (`"cell"`, the cell's own colour), `brightness` 0 to 1 and `blink_hz`
+  0 to `MAX_BLINK_HZ`, any other field refused; `LOOK_ABSENT` (`"absent"`) names the look
+  of a cell the data doesn't have, for the `grid` kind's cells), a
   `default`, a `label`, an
   optional `description`, an optional `warning` (since 0.93: one line a client shows
   beside the control, not only in a tooltip, saying what the setting gives away), the UI

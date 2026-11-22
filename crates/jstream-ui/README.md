@@ -193,7 +193,8 @@ Contents ([Design](#design) explains the choices):
   blending, scene switches and hotkeys in the tabs `Tab` lists, with the stored tab and the
   arrow keys' steps tested natively, or the selected scene's objects, uses and transitions, in
   sections whose folds `Folds` remembers by title), the
-  properties form the Properties dialog and a filter's settings draw (`properties.rs`), the Add source dialog (`add_source.rs`:
+  properties form the Properties dialog and a filter's settings draw (`properties.rs`, with a
+  `looks` table in `looks.rs`), the Add source dialog (`add_source.rs`:
   `AddSource` and the `AddSourceDialog` context that opens it, with its type list and
   the edits it sends, tested natively), the Properties dialog (`source_properties.rs`:
   `SourceProperties` and the `PropertiesDialog` context that opens it, its live values
@@ -708,7 +709,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   clicked; focusing a control asks again too. The rows are keyed on each control's identity
   (`control_identity`: everything but the value and auto state the device reports, which
   each row reads from the latest list), so a re-list after a set redraws none and a
-  slider keeps its focus; only another device or another set of controls does. A font setting (an `asset` that takes
+  slider keeps its focus; only another device or another set of controls does. A `looks`
+  (a `grid`'s, protocol 0.156) is a table drawn by `looks.rs` (`looks_input`): a row per
+  state, with its text, an "Own" box for the cell's own colour or a colour picker, its
+  brightness and its blink rate, a remove button, "Add a state" and "Clip launcher
+  looks" (`clip_launcher`, the states a JTunnel clip slot sends). Each change sends the
+  whole object, refused in the form while a state is empty or the table is over 32
+  rows; `rows` and `value` turn the object into rows and back, tested natively. A font setting (an `asset` that takes
   `ttf` or `otf` and only font types, `takes_fonts`) is a list from `font.list`
   ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)): "Bundled font" (none), each installed font by family and style
   (stored as an `absolute` asset of its path), and "Other file…", which shows the
