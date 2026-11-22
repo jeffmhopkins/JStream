@@ -2373,3 +2373,9 @@ input[type="checkbox"].toggle:checked::after { left: 14px; background: #fff; }
 .callout { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 6px; background: var(--menu); color: var(--text-soft); font-size: 12px; line-height: 16px; }
 .callout .icon { flex: none; margin-top: 0; color: var(--accent); }
 .callout.warn .icon { color: var(--warn); }
+.looks { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.looks-head, .looks-row { display: grid; grid-template-columns: 1.4fr 1.2fr 0.8fr 0.8fr auto; gap: 4px; align-items: center; }
+.looks-head { color: var(--muted); font-size: 0.8rem; }
+.looks-row input[type="text"], .looks-row input[type="number"] { min-width: 0; width: 100%; }
+.looks-color { display: flex; gap: 4px; align-items: center; }
+.looks-actions { display: flex; gap: 6px; flex-wrap: wrap; }

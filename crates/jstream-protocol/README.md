@@ -261,7 +261,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
-  `plugin.uninstalled` (0.153),
+  `plugin.uninstalled` (0.158),
   `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
@@ -359,8 +359,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.153 because a person can remove a WASM plugin: `plugin.uninstall`
+`PROTOCOL_VERSION` is 0.158 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
+0.156 because a kind's parameter can be a table of looks:
+`ParamType::Looks`, with `MAX_LOOKS`, `MAX_LOOK_NAME`, `MAX_BLINK_HZ`, `LOOK_ABSENT` and
+`LOOK_CELL_COLOR`, which the `grid` source kind's `looks` uses
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 9);
 0.151 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
@@ -1040,7 +1044,12 @@ never a type per kind.
   letters, digits and `_`, at most `MAX_CAMERA_CONTROL_NAME` bytes) set to a 32-bit
   integer or `CAMERA_CONTROL_AUTO` (`"auto"`), a UI offering the controls
   `capture.targets` lists for that device; a control the object doesn't name keeps what
-  the device has), a
+  the device has; `looks`, since 0.156: an object of at most `MAX_LOOKS` entries, each a
+  state's text (1 to `MAX_LOOK_NAME` bytes, no control characters) set to a look,
+  `{"color", "brightness", "blink_hz"}`, each optional: `color` a `#rrggbb` or
+  `LOOK_CELL_COLOR` (`"cell"`, the cell's own colour), `brightness` 0 to 1 and `blink_hz`
+  0 to `MAX_BLINK_HZ`, any other field refused; `LOOK_ABSENT` (`"absent"`) names the look
+  of a cell the data doesn't have, for the `grid` kind's cells), a
   `default`, a `label`, an
   optional `description`, an optional `warning` (since 0.93: one line a client shows
   beside the control, not only in a tooltip, saying what the setting gives away), the UI
@@ -2364,7 +2373,7 @@ After `welcome`, the server pushes every event to every client.
   broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
   [YouTube](#youtube).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) and
-  `plugin.uninstalled {plugin_id}` (0.153) are described under [Plugins](#plugins).
+  `plugin.uninstalled {plugin_id}` (0.158) are described under [Plugins](#plugins).
 - `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) and
   `gpu.effect_slow {kind_id, took_us, limit_us, quarantined}` (0.102) are described under
   [Effect quarantine](#quarantine).
@@ -2516,7 +2525,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
-- **`plugin.uninstall {plugin_id}`** (0.153) removes an installed plugin, for a person
+- **`plugin.uninstall {plugin_id}`** (0.158) removes an installed plugin, for a person
   like the other plugin actions. A running plugin stops once the invocation it is in
   returns, holding only `read` from the moment it is removed, and the engine forgets it
   and its grant: `plugin.list` no longer
@@ -2542,7 +2551,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
-- **`plugin.uninstalled {plugin_id}`** (0.153) reports a plugin a person removed with
+- **`plugin.uninstalled {plugin_id}`** (0.158) reports a plugin a person removed with
   `plugin.uninstall`. Like `plugin.state_changed`, it is a person's: the MCP feed drops it.
 
 CLAP audio plugins ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) are

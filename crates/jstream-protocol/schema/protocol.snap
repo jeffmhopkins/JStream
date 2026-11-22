@@ -1350,7 +1350,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an installed plugin (0.153): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+          "description": "Removes an installed plugin (0.158): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
           "properties": {
             "plugin_id": {
               "$ref": "#/$defs/PluginId",
@@ -7463,7 +7463,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A person removed a plugin with `plugin.uninstall` (0.153): it no longer runs and\nis no longer listed. A client that shows the plugins drops it, or reads\n`plugin.list` again.",
+          "description": "A person removed a plugin with `plugin.uninstall` (0.158): it no longer runs and\nis no longer listed. A client that shows the plugins drops it, or reads\n`plugin.list` again.",
           "properties": {
             "plugin_id": {
               "$ref": "#/$defs/PluginId",
@@ -10672,6 +10672,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "How a `grid` source draws a cell in each state it reads (ADR-0171 decision 9), so a\nUI can offer a table of them. Since 0.156. Its value is an object from a state's\ntext (1 to [`MAX_LOOK_NAME`] bytes, no control characters) to a look:\n`{\"color\": \"#rrggbb\" | \"cell\", \"brightness\": 0..1, \"blink_hz\": 0..16}`, where\n`\"cell\"` is the cell's own colour from the data, `brightness` defaults to 1 and\n`blink_hz` to 0 (steady). At most [`MAX_LOOKS`] entries; [`LOOK_ABSENT`] names the\nlook of a cell the data doesn't have. Its default names only that one.",
+          "properties": {
+            "type": {
+              "const": "looks",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -16676,5 +16689,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.153"
+  "title": "JStream protocol 0.158"
 }

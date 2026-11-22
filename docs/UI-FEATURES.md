@@ -284,7 +284,10 @@ a webcam's resolution, frame rate and video format are picked from what that dev
 lists, each with "Auto" for the engine's choice, and its camera controls (brightness,
 exposure, white balance, focus and the others the device offers) are sliders with an
 Auto box where the device can set the control itself, applied as they move without
-restarting the camera (#1196). Beyond the prototype, as in OBS, a
+restarting the camera (#1196). A data grid's Looks are a table, one row a state: its
+text, its colour or the cell's own ("Own"), its brightness and its blink rate, with a
+row to add a state, a remove button on each, and "Clip launcher looks", which replaces the
+table with the states a JTunnel clip slot sends; each state may appear once (ADR-0171 decision 9). Beyond the prototype, as in OBS, a
 text source's Font is picked by name from the fonts installed on the engine's machine
 (`font.list`, [ADR-0092](adr/0092-installed-fonts-query.md)), with the bundled font
 first and "Other file…" for any other file. In the desktop app, an asset path whose
@@ -540,7 +543,7 @@ not remove them; they move into the prototype's look.
   off and what it asks for that isn't granted, installs one from its package folder
   (a folder dialog in the desktop app), and
   turns a disabled one back on, and removes one after its remove dialog is confirmed
-  (`plugin.uninstall`, protocol 0.153; its folder stays on disk). Its grant dialog offers only what the plugin's manifest
+  (`plugin.uninstall`, protocol 0.158; its folder stays on disk). Its grant dialog offers only what the plugin's manifest
   asks for: `read`, always on, the other classes with what each lets it do, the hosts,
   and folders when it asks for them. It opens after an install that asks for more than
   `read`, and grants and turns on, in one step, a plugin whose update needs a grant.

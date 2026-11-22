@@ -1450,7 +1450,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an installed plugin (0.153): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "description": "Removes an installed plugin (0.158): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
                 "properties": {
                   "plugin_id": {
                     "$ref": "#/$defs/PluginId",
@@ -8563,7 +8563,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an installed plugin (0.153): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "description": "Removes an installed plugin (0.158): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
                 "properties": {
                   "plugin_id": {
                     "$ref": "#/$defs/PluginId",
@@ -17586,7 +17586,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an installed plugin (0.153): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "description": "Removes an installed plugin (0.158): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
                 "properties": {
                   "plugin_id": {
                     "$ref": "#/$defs/PluginId",
@@ -26974,7 +26974,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an installed plugin (0.153): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "description": "Removes an installed plugin (0.158): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
                 "properties": {
                   "plugin_id": {
                     "$ref": "#/$defs/PluginId",
@@ -37643,7 +37643,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Removes an installed plugin (0.153): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+                "description": "Removes an installed plugin (0.158): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
                 "properties": {
                   "plugin_id": {
                     "$ref": "#/$defs/PluginId",

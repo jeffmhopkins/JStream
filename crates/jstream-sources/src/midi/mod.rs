@@ -595,17 +595,17 @@ fn clock_ms(clock: &dyn MediaClock) -> u64 {
 }
 
 /// The frame tick `at` falls in, at [`FPS`].
-fn tick(at: MediaTime) -> u64 {
+pub(crate) fn tick(at: MediaTime) -> u64 {
     millis(at).saturating_mul(FPS) / 1000
 }
 
 /// When frame tick `tick` starts.
-fn tick_start(tick: u64) -> MediaTime {
+pub(crate) fn tick_start(tick: u64) -> MediaTime {
     at_millis(tick.saturating_mul(1000).div_ceil(FPS))
 }
 
 /// The next frame tick's start after `at`.
-fn next_tick(at: MediaTime) -> MediaTime {
+pub(crate) fn next_tick(at: MediaTime) -> MediaTime {
     tick_start(tick(at).saturating_add(1))
 }
 
@@ -623,6 +623,11 @@ impl Canvas<'_> {
 
     pub(crate) fn height(&self) -> u32 {
         self.height
+    }
+
+    /// Row `y`'s pixels, straight sRGB RGBA; `None` past the last row.
+    pub(crate) fn row(&mut self, y: u32) -> Option<&mut [u8]> {
+        self.frame.row_mut(0, y)
     }
 
     /// Fills the whole frame with `color`.
@@ -652,7 +657,7 @@ impl Canvas<'_> {
 /// The frames a MIDI source draws into. A frame handed out stays valid, so a new one is
 /// drawn into a frame no one else holds any more, and only when all are held is another
 /// made.
-struct Frames {
+pub(crate) struct Frames {
     size: FrameSize,
     pool: Vec<Arc<VideoFrame>>,
     last: usize,
@@ -662,7 +667,7 @@ struct Frames {
 const POOL: usize = 4;
 
 impl Frames {
-    fn new(size: FrameSize) -> Result<Self, SourceError> {
+    pub(crate) fn new(size: FrameSize) -> Result<Self, SourceError> {
         Ok(Self {
             size,
             pool: vec![Arc::new(blank(size)?)],
@@ -670,12 +675,12 @@ impl Frames {
         })
     }
 
-    fn current(&self) -> Arc<VideoFrame> {
+    pub(crate) fn current(&self) -> Arc<VideoFrame> {
         Arc::clone(&self.pool[self.last])
     }
 
     /// Draws a frame with `paint`, into a frame no one holds.
-    fn draw(&mut self, pts: MediaTime, paint: impl FnOnce(&mut Canvas<'_>)) {
+    pub(crate) fn draw(&mut self, pts: MediaTime, paint: impl FnOnce(&mut Canvas<'_>)) {
         let free = (0..self.pool.len())
             .filter(|&i| i != self.last)
             .find(|&i| Arc::get_mut(&mut self.pool[i]).is_some());
@@ -725,7 +730,7 @@ fn blank(size: FrameSize) -> Result<VideoFrame, SourceError> {
 }
 
 /// The `width` and `height` settings, within `limits`.
-fn frame_size(settings: &Settings, limits: &Limits) -> Result<FrameSize, SourceError> {
+pub(crate) fn frame_size(settings: &Settings, limits: &Limits) -> Result<FrameSize, SourceError> {
     let side = |id: &str| {
         setting(settings, id)?
             .as_u64()
