@@ -257,7 +257,7 @@ Contents ([Design](#design) explains the choices):
   hover and choice of output are tested natively.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
   Settings…, Video settings… and Plugins… open, with its pages (`SettingsPage`: General,
-  Video, Audio, Plugins, Devices)
+  Video, 3D rendering, Audio, Plugins, Devices)
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
   The window keeps the Video page's draft, and its footer reads Cancel and Save while
   Video is shown or holds a change, and Close otherwise: every other page applies each
@@ -273,6 +273,15 @@ Contents ([Design](#design) explains the choices):
   0.117, which reports no `warm_gpu_mib`. Setting the count alone leaves `gpu_mib` out,
   so the limit holds. `budget`, `read`, `set_budget`, `choice_label` and `gpu_label`
   are tested natively.
+- **3D rendering** (`rendering.rs`,
+  [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 1): `RenderingSettings`, the 3D rendering page, one toggle per `Switch`
+  (Shadows, Ambient occlusion, Volumetric fog, Floor reflections) in a property grid
+  under Effects, each with one help line and an (i). It reads the switches with
+  `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
+  switch changed, putting back only that switch with an error if the engine refuses; an
+  engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
+  `read`, `set` and each `Switch`'s change are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Audio plugins section of
   the Settings dialog's Audio page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with

@@ -1095,10 +1095,12 @@ fn startup_collection(
 ) -> anyhow::Result<Engine> {
     let recent = data.join(jstream_platform::paths::RECENT_COLLECTIONS_FILE);
     let warm = data.join(jstream_platform::paths::WARM_SCENES_FILE);
+    let rendering = data.join(jstream_platform::paths::RENDERING_FILE);
     let engine = || {
         Engine::new()
             .with_audit(Arc::clone(audit))
             .with_warm_file(&warm)
+            .with_rendering_file(&rendering)
     };
     if let Some(last) = jstream_core::recent_collections(&recent).into_iter().next()
         && last.is_file()

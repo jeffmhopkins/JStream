@@ -749,6 +749,12 @@ folder another process is using, so the daemon couldn't start pages while the ap
   (`studio.set_warm`, ADR-0117 §7) in `warm-scenes.json` in the data directory
   (`jstream_platform::paths::WARM_SCENES_FILE`, `Engine::with_warm_file`), the file the
   desktop app names too. With no data directory it lives in memory.
+- **The 3D rendering file** (`serve.rs`). The engine keeps the 3D rendering switches
+  (`studio.set_rendering`,
+  [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)) in
+  `rendering.json` in the data directory (`jstream_platform::paths::RENDERING_FILE`,
+  `Engine::with_rendering_file`), the file the desktop app names too. With no data
+  directory they live in memory.
 - **The token** ([ARCH › Persistence](../../docs/ARCHITECTURE.md#persistence): a random
   token in a user-only file). New tokens are 32 bytes from the OS's random source
   (`getrandom`), written as 64 lowercase hex characters, so they fit an `Authorization`

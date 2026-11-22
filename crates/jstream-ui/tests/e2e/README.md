@@ -183,7 +183,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row then names what is asked for and not granted. A plugin off as `needs_grant` is
   granted a class and a folder and turned on in one step. The Inspector holds neither
   plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
-  between General, Video, Audio, Plugins and Devices, and the install dialog opens
+  between General, Video, 3D rendering, Audio, Plugins and Devices, and the install dialog opens
   centred over a moved Settings dialog and closes alone on Escape.
 - **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
   answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter

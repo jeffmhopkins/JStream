@@ -117,7 +117,13 @@ fn an_mcp_agent_drives_the_engine_in_process() {
             "program_scene": "scn_1",
             "preview_scene": "scn_1",
             "warm_scenes": 3,
-            "warm_gpu_mib": 0
+            "warm_gpu_mib": 0,
+            "rendering": {
+                "shadows": true,
+                "ambient_occlusion": true,
+                "volumetric_fog": true,
+                "floor_reflections": true
+            }
         })
     );
     let switched = call_tool(
