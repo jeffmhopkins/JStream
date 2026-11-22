@@ -93,7 +93,8 @@ test('a keyframe nests under its scene and overrides only its own placements', a
   await keyframe.locator('.row-main').click();
   await backdrop(page).locator('.row-main').click({ button: 'right' });
   await expect(menu(page).getByRole('menuitem', { name: 'Remove from scene' })).toBeDisabled();
-  await expect(menu(page).getByRole('menuitem', { name: 'Bring to front' })).toBeDisabled();
+  await menu(page).getByRole('menuitem', { name: 'Order' }).hover();
+  await expect(page.locator('.context-menu.submenu').getByRole('menuitem', { name: 'Bring to front' })).toBeDisabled();
   await page.keyboard.press('Escape');
 
   // Reset to “Main” clears both overrides.
@@ -208,7 +209,8 @@ test('a keyframe overrides a group\'s children from their rows and the Inspector
   // canvas has no box for it), and Clear crop clears the keyframe's crop.
   await child.locator('.row-main').click({ button: 'right' });
   await expect(menu(page).getByRole('menuitem', { name: 'Remove from scene' })).toBeDisabled();
-  await expect(menu(page).getByRole('menuitem', { name: 'Bring to front' })).toBeDisabled();
+  await menu(page).getByRole('menuitem', { name: 'Order' }).hover();
+  await expect(page.locator('.context-menu.submenu').getByRole('menuitem', { name: 'Bring to front' })).toBeDisabled();
   await expect(menu(page).getByRole('menuitem', { name: 'Crop C', exact: true })).toBeDisabled();
   await menu(page).getByRole('menuitem', { name: 'Clear crop' }).click();
   await expect.poll(() => rev(page)).toBe(start + 4);

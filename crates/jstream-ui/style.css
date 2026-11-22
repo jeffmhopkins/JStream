@@ -231,10 +231,14 @@ a.menuitem:focus-visible { outline: none; }
 .dropdown.layouts { min-width: 260px; }
 .menuitem .hint { font-size: 12px; color: var(--dim); white-space: nowrap; }
 .menuitem.danger, .menuitem.danger:hover:not(:disabled) { color: var(--danger-text); }
-.connection { display: grid; grid-template-columns: auto 1fr; gap: 4px 12px; margin: 0 8px 6px; font-size: 12px; }
-.connection dt { color: var(--dim); }
-.connection dd { margin: 0; white-space: nowrap; font-family: "IBM Plex Mono", ui-monospace, monospace; }
-.project-name { margin: 0 8px 6px; font-size: 13px; font-weight: 600; max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* File › Connection details… (a small dialog): the session's facts in the 120 px label
+   column of a property grid, values that are identifiers in mono. */
+.modal.connection-dialog { width: var(--dialog-s); }
+.connection { display: grid; grid-template-columns: 120px minmax(0, 1fr); gap: 10px 12px; margin: 0; padding: 16px 18px; font-size: 13px; }
+.connection dt { color: var(--muted); font-size: 12px; }
+.connection dd { margin: 0; overflow-wrap: anywhere; font-family: "IBM Plex Mono", ui-monospace, monospace; font-size: 12px; }
+/* The File menu's head, the open project's name. */
+.dropdown .menu-head.project-head { max-width: 260px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-button { padding: 8px 14px; background: var(--menu); border-color: var(--border); }
 .header-button.on { background: var(--danger-dark); border-color: #e5484d; }
 .header-button.studio-mode.on { background: var(--selected); border-color: var(--accent); }

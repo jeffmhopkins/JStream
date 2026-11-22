@@ -1310,12 +1310,24 @@ pub fn Canvas() -> impl IntoView {
         let has_scene = scene.is_some();
         let entries = if on_frame {
             let paste_into = scene.clone();
+            let group_into = scene.clone();
             let add = Entry::item("Add source…", move || {
                 if let (Some(adder), Some(scene)) = (adder, scene.clone()) {
                     adder.open(scene, false);
                 }
             })
             .disabled_if(adder.is_none() || !has_scene);
+            // New group, as the Sources panel's menu for an empty spot has it: the
+            // selected items, or an empty group, in the shown scene.
+            let group = Entry::item("New group", move || {
+                if let (Some(cx), Some(scene)) = (item_cx, group_into.as_ref()) {
+                    let items: Vec<ItemId> = studio
+                        .selection
+                        .with_untracked(|s| s.items().cloned().collect());
+                    cx.group(scene, &items);
+                }
+            })
+            .disabled_if(item_cx.is_none() || !has_scene || in_keyframe());
             let paste = Entry::item("Paste", move || {
                 if let (Some(p), Some(scene)) = (pasting, paste_into.as_ref()) {
                     p.paste(scene);
@@ -1323,7 +1335,7 @@ pub fn Canvas() -> impl IntoView {
             })
             .hint("Ctrl+V")
             .disabled_if(!pasting.is_some_and(|p| p.clipboard.has_items()) || in_keyframe());
-            vec![select, snap, Entry::Sep, add, paste]
+            vec![select, snap, Entry::Sep, add, group, paste]
         } else {
             // The scene's transitions and Properties, for the scene the canvas shows.
             let transitions = |into: bool| match (&scene, session) {
