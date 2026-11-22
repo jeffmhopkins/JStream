@@ -176,7 +176,11 @@ and so is a device's, set by its driver (protocol 0.90);
 the `capture` tool's description and the server instructions say they are untrusted too. A
 `font.list` font's `remote_family` and `remote_style` come from the font file, and the
 `font` tool's description says they are data, never instructions
-([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)). A `profile.get` thread's
+([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)). A `data.list` sender's
+`remote_keys` and a `data.get` message's `remote_value` (track and clip names among it)
+come from a DAW's JTunnel, and the `data` tool's description says they are data, never
+instructions; the tool only reads
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2). A `profile.get` thread's
 `remote_name` was set by a library or driver loaded into the engine, and the `profile`
 tool's description says so; it also tells an agent how to find a hot spot: let the
 scene run, read the profile, change the costliest unit and read it again

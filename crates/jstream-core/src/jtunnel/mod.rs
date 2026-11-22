@@ -32,6 +32,18 @@
 //! unplugged device. A stream that changes rate fails the input, which reopens at the
 //! new rate. 24-bit PCM and MIDI-only streams play; Opus is refused and counted until a
 //! decoder is picked (ADR-0122 §6).
+//!
+//! **State** (ADR-0171 decisions 1 and 2). A sender's state packets (JTunnel's side
+//! channel: JSON messages under keys) are taken only from a sender whose "Use this
+//! sender's state" is on ([`AcceptedSender::with_state`]), on by default for an accepted
+//! sender (the maintainer's call: an accepted JTunnel is one the person set up); off,
+//! each is counted and dropped. The thread joins their pieces per key
+//! ([`StateAssembler`]) and puts each whole message in the engine's [`LiveData`] under
+//! the sender's name, where a message that is not one JSON value or is over a bound is
+//! counted and dropped. A new stream ID forgets what the sender sent before, a key it
+//! stops resending goes after 3 s (and comes back with its next resend), and a receiver
+//! that stops forgets its senders' state. A message refused for room is taken again
+//! when it is resent.
 
 use std::io;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, UdpSocket};
@@ -42,14 +54,14 @@ use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use crate::lan::is_lan;
-use jstream_jtunnel::Playout;
 use jstream_jtunnel::dnssd::{self, Directory};
 use jstream_jtunnel::wire::{self, Codec, Packet};
+use jstream_jtunnel::{Playout, StateAssembler, StateStep};
 use jstream_media::{AudioFormat, ChannelLayout, MediaTime, Rounding, SampleFormat, Timebase};
 use jstream_platform::{
     AudioInputHandler, AudioPacket, AudioPacketFlags, AudioStream, MediaClock, PlatformError,
 };
-use jstream_sources::{MidiFeed, MidiInputs};
+use jstream_sources::{DataRefused, LiveData, MidiFeed, MidiInputs};
 
 /// How often a sender is subscribed to again: JTunnel's keepalive.
 const SUBSCRIBE_EVERY: Duration = Duration::from_millis(500);
@@ -91,6 +103,9 @@ pub const MDNS: SocketAddr = SocketAddr::new(
 pub struct AcceptedSender {
     name: String,
     addr: SocketAddr,
+    /// "Use this sender's state" (ADR-0171 decision 1): on once the sender is accepted,
+    /// unless the person turns it off.
+    state: bool,
 }
 
 impl AcceptedSender {
@@ -134,7 +149,22 @@ impl AcceptedSender {
         Ok(Self {
             name: name.to_owned(),
             addr,
+            state: true,
         })
+    }
+
+    /// The same sender with "Use this sender's state" on or off (ADR-0171 decision 1).
+    /// On is the default; off, its state packets are counted and dropped.
+    #[must_use]
+    pub fn with_state(mut self, on: bool) -> Self {
+        self.state = on;
+        self
+    }
+
+    /// Whether its state is used.
+    #[must_use]
+    pub fn uses_state(&self) -> bool {
+        self.state
     }
 
     /// The tunnel name.
@@ -230,6 +260,13 @@ pub struct JtunnelStats {
     pub concealed: u64,
     /// MIDI messages handed to the MIDI inputs.
     pub midi: u64,
+    /// Whole state messages put in the live data (ADR-0171).
+    pub state: u64,
+    /// State packets from a sender whose state isn't used.
+    pub state_off: u64,
+    /// State messages refused: not one JSON value, or over a bound, or forgotten
+    /// part-way because too many others were waiting.
+    pub state_dropped: u64,
 }
 
 /// The receiver's counters, shared with its thread.
@@ -242,6 +279,9 @@ struct JtunnelCounters {
     played: AtomicU64,
     concealed: AtomicU64,
     midi: AtomicU64,
+    state: AtomicU64,
+    state_off: AtomicU64,
+    state_dropped: AtomicU64,
 }
 
 /// One accepted sender, as both sides see it.
@@ -341,6 +381,7 @@ impl Receiver {
         setup: &JtunnelSetup,
         clock: Arc<dyn MediaClock>,
         midi: Option<Arc<MidiInputs>>,
+        data: LiveData,
         changed: Option<SyncSender<()>>,
     ) -> io::Result<Self> {
         let socket = UdpSocket::bind(setup.bind)?;
@@ -370,6 +411,7 @@ impl Receiver {
                 directory: Arc::clone(&directory),
                 discover: setup.discover,
                 changed,
+                data,
                 stop: Arc::clone(&stop),
                 streams: senders
                     .iter()
@@ -409,6 +451,9 @@ impl Receiver {
             played: read(&c.played),
             concealed: read(&c.concealed),
             midi: read(&c.midi),
+            state: read(&c.state),
+            state_off: read(&c.state_off),
+            state_dropped: read(&c.state_dropped),
         }
     }
 
@@ -446,6 +491,9 @@ impl Receiver {
             malformed: stats.malformed,
             unsupported: stats.unsupported,
             midi: stats.midi,
+            state: stats.state,
+            state_off: stats.state_off,
+            state_dropped: stats.state_dropped,
         }
     }
 
@@ -602,6 +650,10 @@ struct Stream {
     /// Where its MIDI goes: its own input's state and the every-input one, looked up
     /// once so the thread takes no lock per message, and its clock's tempo (ADR-0142).
     midi: Option<MidiFeed>,
+    /// Its state messages part-way (ADR-0171).
+    state: StateAssembler,
+    /// How many of `state`'s part-way messages were forgotten, as last counted.
+    evicted: u64,
 }
 
 struct Handler {
@@ -616,6 +668,8 @@ impl Stream {
             playout: Playout::new(u64::from(jstream_sources::LATENCY_MS.2) * 1_000_000),
             handler: None,
             midi: midi.map(|inputs| inputs.feed(name)),
+            state: StateAssembler::new(),
+            evicted: 0,
         }
     }
 }
@@ -630,6 +684,8 @@ struct Run {
     directory: Arc<Mutex<Directory>>,
     discover: Option<SocketAddr>,
     changed: Option<SyncSender<()>>,
+    /// Where state messages go.
+    data: LiveData,
     stop: Arc<AtomicBool>,
     streams: Vec<Stream>,
 }
@@ -672,6 +728,10 @@ impl Run {
             self.play();
         }
         self.send_all(|out, _| wire::write_bye(out));
+        // What it no longer receives reads as absent at once, not after 3 s.
+        for sender in self.senders.iter() {
+            self.data.restart(&sender.accepted.name);
+        }
         // A receiver stopped or replaced (the host started JTunnel again) leaves no
         // source recording silently: each reopens on the receiver now running. Opens
         // still queued count too.
@@ -707,6 +767,7 @@ impl Run {
     /// Forgets the senders not heard lately, and says so if any went.
     fn expire(&self) {
         let now = self.now_ms();
+        self.data.expire(now);
         let mut directory = self
             .directory
             .lock()
@@ -864,10 +925,17 @@ impl Run {
             counters.malformed.fetch_add(1, Ordering::Relaxed);
             return;
         }
-        let Ok(Packet::Audio { header, frames }) = wire::parse(datagram) else {
+        let (header, frames) = match wire::parse(datagram) {
+            Ok(Packet::Audio { header, frames }) => (header, frames),
+            Ok(Packet::State(piece)) => {
+                self.state(index, &piece);
+                return;
+            }
             // A subscribe or bye is a receiver's, never a sender's.
-            counters.malformed.fetch_add(1, Ordering::Relaxed);
-            return;
+            _ => {
+                counters.malformed.fetch_add(1, Ordering::Relaxed);
+                return;
+            }
         };
         if header.codec == Codec::Opus {
             counters.unsupported.fetch_add(1, Ordering::Relaxed);
@@ -887,6 +955,51 @@ impl Run {
             stream
                 .playout
                 .push(&header, frame, &samples[..decoded], arrival);
+        }
+    }
+
+    /// Takes one state piece from the sender at `index` (ADR-0171 decision 1).
+    fn state(&mut self, index: usize, piece: &wire::StatePiece<'_>) {
+        let counters = &self.counters;
+        let sender = &self.senders[index].accepted;
+        if !sender.state {
+            counters.state_off.fetch_add(1, Ordering::Relaxed);
+            return;
+        }
+        let now = self.now_ms();
+        let stream = &mut self.streams[index];
+        let mut pushed = stream.state.push(piece);
+        if pushed.restarted {
+            self.data.restart(&sender.name);
+        }
+        if pushed.step == StateStep::Repeat && !self.data.touch(&sender.name, piece.key, now) {
+            // A resend of a message the live data no longer has (it expired after a gap,
+            // or a stopped receiver forgot it): take it again, at once for one piece and
+            // from the next resend round for more (#1597 review B1).
+            stream.state.forget(piece.key);
+            pushed = stream.state.push(piece);
+        }
+        if let StateStep::Whole(json) = pushed.step {
+            match self.data.put(&sender.name, piece.key, &json, now) {
+                Ok(()) => {
+                    counters.state.fetch_add(1, Ordering::Relaxed);
+                }
+                Err(refused) => {
+                    counters.state_dropped.fetch_add(1, Ordering::Relaxed);
+                    // Refused for room, it may fit on a later resend once room frees up;
+                    // a message that isn't JSON never will.
+                    if matches!(refused, DataRefused::TooManyKeys | DataRefused::TooLarge) {
+                        stream.state.forget(piece.key);
+                    }
+                }
+            }
+        }
+        let evicted = stream.state.evicted();
+        if evicted != stream.evicted {
+            counters
+                .state_dropped
+                .fetch_add(evicted - stream.evicted, Ordering::Relaxed);
+            stream.evicted = evicted;
         }
     }
 

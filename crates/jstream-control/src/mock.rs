@@ -1526,6 +1526,9 @@ impl State {
                 on: false,
                 senders: Vec::new(),
             },
+            // Nor any live data, which only the receiver fills (ADR-0171).
+            Query::DataList => QueryResult::DataList { inputs: Vec::new() },
+            Query::DataGet { .. } => QueryResult::DataGet { remote_value: None },
             Query::PtzList => QueryResult::PtzList {
                 cameras: Vec::new(),
             },

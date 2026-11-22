@@ -91,6 +91,10 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("scene.camera_aim", Class(R)),
     // LAN addresses of the senders on the person's network (ADR-0123).
     ("jtunnel.senders", N),
+    // A DAW's state from the person's network (ADR-0171) is theirs: a page reads it only
+    // once they grant it (decision 10), and a plugin never does.
+    ("data.list", N),
+    ("data.get", N),
     // Font paths, so a `read` plugin learns the user's home folder (ADR-0096 §4).
     ("font.list", Class(R)),
     ("profile.get", Class(R)),

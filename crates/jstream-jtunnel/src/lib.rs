@@ -9,10 +9,12 @@
 //! opens no socket and starts no thread, so the engine's receive thread, the tests and
 //! the fuzzer all drive the same code.
 //!
-//! - [`wire`]: audio, subscribe and bye packets (version 2), their frames and events
+//! - [`wire`]: audio, subscribe, bye and state packets (version 2), their frames and events
 //!   (MIDI messages as [`jstream_midi::Message`], SysEx pieces, note expressions), and
 //!   24-bit PCM.
 //! - [`SysexAssembler`]: whole SysEx messages from their pieces, all or nothing.
+//! - [`StateAssembler`]: a sender's whole state messages from their pieces, per key, all
+//!   or nothing, with a resend told apart and a new stream ID seen (ADR-0171).
 //! - [`SeqTracker`]: which frames are new, which are redundant copies, and how many never
 //!   came.
 //! - [`SenderClock`]: the sender's clock against the media clock, from the earliest
@@ -36,10 +38,12 @@ mod clock;
 pub mod dnssd;
 mod playout;
 mod seq;
+mod state;
 mod sysex;
 pub mod wire;
 
 pub use clock::{DRIFT_AFTER_S, SenderClock};
 pub use playout::{Due, MAX_JUMP_NS, Playout, PlayoutStats, Pushed, SLEW, SLOTS, SNAP_NS};
 pub use seq::{SEQ_WINDOW, SeqTracker, SeqVerdict};
+pub use state::{MAX_PARTIAL_STATE, MAX_STATE_KEYS, StateAssembler, StatePush, StateStep};
 pub use sysex::SysexAssembler;

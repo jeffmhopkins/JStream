@@ -2063,6 +2063,11 @@ pub(crate) fn queries() -> Vec<Query> {
             },
             scene_id: Some(SceneId::new("scn_1")),
         },
+        Query::DataList,
+        Query::DataGet {
+            input: "Bitwig".into(),
+            key: "track/0".into(),
+        },
     ]
 }
 
@@ -2279,6 +2284,9 @@ fn profile_info() -> ProfileInfo {
             malformed: 0,
             unsupported: 0,
             midi: 640,
+            state: 1_800,
+            state_off: 0,
+            state_dropped: 1,
         }),
         warm: vec![
             crate::WarmSceneProfile {
@@ -3390,6 +3398,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 hardware_encoder: false,
             }],
         },
+        QueryResult::DataList {
+            inputs: vec![crate::DataInputInfo {
+                input: "Bitwig".into(),
+                remote_keys: vec!["clock".into(), "track/0".into(), "transport".into()],
+            }],
+        },
+        QueryResult::DataGet {
+            remote_value: Some(serde_json::json!({
+                "name": "Drums",
+                "volume": 0.8,
+                "slots": [{"state": "playing", "queued": false}],
+            })),
+        },
+        QueryResult::DataGet { remote_value: None },
     ]
 }
 

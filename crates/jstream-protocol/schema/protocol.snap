@@ -3578,6 +3578,27 @@ source: crates/jstream-protocol/src/fixtures.rs
       ],
       "type": "object"
     },
+    "DataInputInfo": {
+      "description": "One sender with live data, as `data.list` answers it.",
+      "properties": {
+        "input": {
+          "description": "The sender's name on this machine's accepted list, as `data.get`'s `input` names\nit.",
+          "type": "string"
+        },
+        "remote_keys": {
+          "description": "Its keys with a current message, in order: 1 to 63 of ASCII letters, digits,\n`/`, `_`, `.` and `-`, chosen by the sender.",
+          "items": {
+            "type": "string"
+          },
+          "type": "array"
+        }
+      },
+      "required": [
+        "input",
+        "remote_keys"
+      ],
+      "type": "object"
+    },
     "DeleteTarget": {
       "description": "What a `delete.plan` deletes: a scene, a source, (since 0.24) a bus, a folder or a\nlabel.",
       "oneOf": [
@@ -9685,6 +9706,27 @@ source: crates/jstream-protocol/src/fixtures.rs
           "minimum": 0,
           "type": "integer"
         },
+        "state": {
+          "default": 0,
+          "description": "Whole state messages it put in the live data (0.140, ADR-0171).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state_dropped": {
+          "default": 0,
+          "description": "State messages it refused (0.140): not one JSON value, over a bound, or\nforgotten part-way while too many others waited.",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "state_off": {
+          "default": 0,
+          "description": "State packets from a sender whose \"Use this sender's state\" is off (0.140).",
+          "format": "uint64",
+          "minimum": 0,
+          "type": "integer"
+        },
         "unaccepted": {
           "default": 0,
           "description": "Datagrams from a LAN address it doesn't subscribe to.",
@@ -12287,6 +12329,42 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Lists the JTunnel senders with live data (0.140, ADR-0171 decision 2), by name,\neach with its keys that hold a current message: only senders whose \"Use this\nsender's state\" is on send any. A key the sender stops resending goes after 3 s,\nand everything a sender sent goes when it starts again or the receiver stops.\nRuntime state, so no `rev`; empty while the receiver is off, which is the default.",
+          "properties": {
+            "type": {
+              "const": "data.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Reads one sender's newest message for one key (0.140, ADR-0171 decision 2): the\nJSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left\nout when that sender has no current message for that key.",
+          "properties": {
+            "input": {
+              "description": "The sender's name, as `data.list` gives it.",
+              "type": "string"
+            },
+            "key": {
+              "description": "The key, as `data.list` gives it.",
+              "type": "string"
+            },
+            "type": {
+              "const": "data.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "input",
+            "key"
+          ],
+          "type": "object"
+        },
+        {
           "description": "A scene camera's live aim now (ADR-0152, since 0.118): the pan, tilt and zoom\n`scene.drive_camera` and `scene.aim_camera` gave its family's camera, and whether\none is moving it. Runtime state, so no `rev`; a camera nobody aimed answers its\nhome, `{pan_deg: 0, tilt_deg: 0, zoom: 1}`. Fails as `scene.drive_camera` does.",
           "properties": {
             "scene_id": {
@@ -13496,6 +13574,43 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "on",
             "senders"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `data.list` (0.140).",
+          "properties": {
+            "inputs": {
+              "description": "The senders with live data, ordered by name.",
+              "items": {
+                "$ref": "#/$defs/DataInputInfo"
+              },
+              "type": "array"
+            },
+            "type": {
+              "const": "data.list",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "inputs"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "The result of `data.get` (0.140).",
+          "properties": {
+            "remote_value": {
+              "description": "The message: any JSON value the sender sent, at most 76,800 bytes of it, so\n`remote_` (ADR-0059). Left out when there is none."
+            },
+            "type": {
+              "const": "data.get",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         },
