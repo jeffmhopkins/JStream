@@ -4,7 +4,8 @@
 // D along the view. Its normal comes from its neighbours, each side taking the nearer
 // in depth so an edge doesn't bend it. `samples` points of a hemisphere of `radius`
 // about the normal, nearer ones more often, rotated per pixel over a 4 x 4 tile, are
-// projected back to the screen: one counts as occluded when the depth there is nearer
+// projected back to the screen. The points and the tile's 16 rotations are made once on
+// the CPU (`occlusion.rs`), so no pixel pays for a sine and a cosine per sample. Each: one counts as occluded when the depth there is nearer
 // than the point by more than a small bias, fading out where the occluder is much
 // farther away than the radius. Output red is the occluded share (0 where nothing was
 // drawn), green the pixel's own 1 / w, for the second pass.
@@ -13,6 +14,11 @@ struct Params {
     radius: f32,
     focal: f32,
     samples: u32,
+    // Sample `i`'s point in the unit hemisphere about +z, already scaled by how far of
+    // the radius it reaches; w unused.
+    kernel: array<vec4<f32>, 16>,
+    // The tile's rotation `i`, as (cos, sin): `turns[i / 2].xy` or `.zw`.
+    turns: array<vec4<f32>, 8>,
 }
 
 @group(0) @binding(4) var<uniform> p: Params;
@@ -48,11 +54,16 @@ fn nearer(o: vec3<f32>, a: vec3<f32>, b: vec3<f32>) -> vec3<f32> {
 }
 
 // A 4 x 4 ordered pattern, 0 to 15, so the blur over the tile meets every rotation.
-fn tile(px: vec2<i32>) -> f32 {
-    let bayer = array<f32, 16>(0.0, 8.0, 2.0, 10.0, 12.0, 4.0, 14.0, 6.0, 3.0, 11.0, 1.0, 9.0,
-        15.0, 7.0, 13.0, 5.0);
+fn tile(px: vec2<i32>) -> i32 {
+    let bayer = array<i32, 16>(0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5);
     let i = (px.y & 3) * 4 + (px.x & 3);
     return bayer[i];
+}
+
+// The (cos, sin) of the tile's rotation `i`, a sixteenth of a turn each.
+fn turn(i: i32) -> vec2<f32> {
+    let two = p.turns[i / 2];
+    return select(two.xy, two.zw, i % 2 == 1);
 }
 
 @fragment
@@ -75,23 +86,18 @@ fn fs(in: VsOut) -> @location(0) vec4<f32> {
     if n.z > 0.0 {
         n = -n;
     }
-    let angle = tile(px) / 16.0 * 6.2831853;
+    let spin = turn(tile(px));
     let helper = select(vec3<f32>(0.0, 1.0, 0.0), vec3<f32>(1.0, 0.0, 0.0), abs(n.y) > 0.9);
     let t0 = normalize(cross(helper, n));
     let b0 = cross(n, t0);
-    let t = t0 * cos(angle) + b0 * sin(angle);
+    let t = t0 * spin.x + b0 * spin.y;
     let b = cross(n, t);
     let bias = max(0.03 * p.radius, 0.004 * o.z);
-    let count = max(p.samples, 1u);
+    let count = min(max(p.samples, 1u), 16u);
     var occluded = 0.0;
     for (var i = 0u; i < count; i = i + 1u) {
-        let u = (f32(i) + 0.5) / f32(count);
-        let phi = f32(i) * 2.3999632;
-        let r = sqrt(u);
-        let k = vec3<f32>(r * cos(phi), r * sin(phi), sqrt(1.0 - u));
-        let s = f32(i + 1u) / f32(count);
-        let reach = p.radius * mix(0.1, 1.0, s * s);
-        let at = o + (t * k.x + b * k.y + n * k.z) * reach;
+        let k = p.kernel[i].xyz;
+        let at = o + (t * k.x + b * k.y + n * k.z) * p.radius;
         if at.z <= 1.0 {
             continue;
         }

@@ -240,6 +240,94 @@ fn a_scene_light_lights_the_fog() {
     near(&shot, W / 2, H / 2, BLACK, 1);
 }
 
+/// A point light with a range lights the rays that come within it and no other: a ray
+/// that never does skips the light at every step, and loses nothing by it.
+#[test]
+fn a_light_with_a_range_lights_only_the_rays_that_come_near_it() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let input = solid(&opened.compositor, W, H, BLACK);
+    let camera = view().position();
+    let f = f64::from(view().focal_px());
+    // On the centre ray, 500 px into the scene: the rays through the frame's left and
+    // right edges, half the canvas from the centre at the canvas plane, are well over
+    // 120 px from it wherever they pass.
+    let light = |range_px| SceneLight {
+        kind: LightKind::Point,
+        position: [camera[0], camera[1], camera[2] - f - 500.0],
+        aim: [0.0, 0.0, -1.0],
+        color: Color {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        },
+        intensity: 4.0,
+        range_px,
+        cone_deg: 60.0,
+        softness: 0.3,
+    };
+    let black = json!({"color": "#000000ff", "density": 0.5, "scattering": 1.0});
+    let shot = |opened: &mut Opened, range_px| {
+        let mut fog = even(black.clone());
+        fog.set_depth(Some(depth(opened, (f + 1000.0) as f32, &[light(range_px)])));
+        apply(opened, &mut fog, &input)
+    };
+    // A range that takes in every ray: all of them are lit, the centre's most.
+    let wide = shot(&mut opened, 400.0);
+    let (centre, edge) = (
+        wide.pixel(W / 2, H / 2).expect("inside")[0],
+        wide.pixel(0, H / 2).expect("inside")[0],
+    );
+    assert!(centre > 40 && edge > 10, "{centre} and {edge}");
+    // A range the edge rays stay outside of: the centre is still lit, they are not.
+    let narrow = shot(&mut opened, 120.0);
+    let centre = narrow.pixel(W / 2, H / 2).expect("inside")[0];
+    assert!(
+        centre > 10,
+        "the centre ray passes through the light: {centre}"
+    );
+    near(&narrow, 0, H / 2, BLACK, 0);
+    near(&narrow, W - 1, H / 2, BLACK, 0);
+}
+
+/// A directional light with no shadow map gives every step of a ray the same light,
+/// taken once for the ray: even fog of optical depth 1 scatters `1 - 1 / e` of it,
+/// times the phase toward the viewer.
+#[test]
+fn a_directional_light_lights_every_step_alike() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let input = solid(&opened.compositor, W, H, BLACK);
+    let f = f64::from(view().focal_px());
+    // Shining away from the viewer, along the centre ray: its light scatters straight
+    // back, where the phase of g = 0.4 is (1 - g^2) / (1 + g^2 + 2 g)^1.5.
+    let light = SceneLight {
+        kind: LightKind::Directional,
+        position: [0.0; 3],
+        aim: [0.0, 0.0, -1.0],
+        color: Color {
+            r: 1.0,
+            g: 1.0,
+            b: 1.0,
+            a: 1.0,
+        },
+        intensity: 2.0,
+        range_px: 0.0,
+        cone_deg: 60.0,
+        softness: 0.0,
+    };
+    let black = json!({"color": "#000000ff", "density": 1.0, "scattering": 1.0});
+    let mut fog = even(black);
+    fog.set_depth(Some(depth(&opened, (f + 1000.0) as f32, &[light])));
+    let shot = apply(&mut opened, &mut fog, &input);
+    let phase = (1.0 - 0.16) / 1.96f32.powf(1.5);
+    let through = (-(f as f32 + 1000.0) / 1000.0).exp();
+    near(&shot, W / 2, H / 2, grey(2.0 * phase * (1.0 - through)), 2);
+}
+
 /// ADR-0151 decisions 3 and 6: a light that casts shadows lights only the fog its map
 /// sees. A map holding a caster just past the light leaves the fog beyond it dark,
 /// where an empty map leaves it as lit as no map does.
