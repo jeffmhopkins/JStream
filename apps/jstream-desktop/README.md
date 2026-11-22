@@ -60,10 +60,17 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   public releases list, or a short error. The page cannot choose the address. The
   request sends no body, token or version. Tested without the network.
 - **Bootstrap script** (`bootstrap.rs`): hands the page the engine's URL and token,
-  the virtual camera's status, the data folder (so a picked file under it can be
-  stored relative to the collection), whether "Allow devices on my network" is on,
+  the virtual camera's status, the default project's folder (so a picked file under it
+  can be stored relative to the collection), whether "Allow devices on my network" is on,
   `browse`, which opens a native dialog, and `allowNetwork`, which saves that setting,
-  and the JTunnel setting as it was at start with `setJtunnel`, which saves it.
+  the JTunnel setting as it was at start with `setJtunnel`, which saves it, and
+  `saveScreenshot`, `openSaved` and `showSaved`, the screenshot commands.
+- **The person's folders** (`folders.rs`, `screenshots.rs`;
+  [ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)):
+  the default project in `Documents\JStream`, which `host::startup_project` moves the
+  old `collection.json` from the data folder to once, and screenshots saved in
+  Downloads, never replacing a file, with the commands that open a saved one or show it
+  in its folder.
 - **Browser sources** (`browser.rs`, Windows, macOS and 64-bit Linux with the `cef`
   feature): the CEF backend the engine opens `browser` sources' pages in; on macOS its
   helper is in the app bundle ([ADR-0157](../../docs/adr/0157-browser-sources-on-macos.md)),
@@ -71,10 +78,12 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
 - **Window** (`shell.rs`, Windows, macOS, and Linux with `webkitgtk`): the Tauri window, its navigation guard, the
   projector windows the UI opens, the links it hands to the system browser (the
   project's pages, and Cisco's OpenH264 licence; `links.rs`, which builds and is
-  tested everywhere), shutdown, and the three commands the page may call: a native file,
+  tested everywhere), shutdown, and the commands the page may call: a native file,
   save or folder dialog (`pick.rs`; on Linux the FileChooser portal's, on macOS AppKit's
   panels), saving the
-  network setting (`network.rs`) and saving the JTunnel setting (`jtunnel.rs`).
+  network setting (`network.rs`), the JTunnel setting (`jtunnel.rs`) and the PTZ
+  controller setting (`ptz.rs`), and saving, opening and showing a screenshot
+  (`screenshots.rs`).
 - **Log file** (`logs.rs`), in the data folder `jstream-platform`'s `paths` module finds:
   a new user-only file at each start, through `create_private_file` on Windows and
   `jstream-crash`'s `create_new` elsewhere.
@@ -89,8 +98,10 @@ Contents (the window runs on Windows, on WebView2, on macOS, on WKWebView
   replies it gives a releases list, a rate limit and a malformed message, the network
   setting (off until saved on, user-only, off when malformed), the JTunnel setting (off
   until turned on, user-only, a refused sender never saved, off when malformed), the network listener and
-  pairing it turns on, the UI folder inside a macOS app, and the control token registered
-  for redaction; the crash hook's own
+  pairing it turns on, the UI folder inside a macOS app, the control token registered
+  for redaction, the default project's path, its move from the data folder with its
+  stream keys and recent-list place, and a screenshot's name, its never-replacing save
+  and the files Open and Show in folder accept; the crash hook's own
   tests are `jstream-crash`'s), and one integration test, `tests/delay_load.rs` (Windows MSVC
   only), which reads the built `jstream.exe`'s PE headers to check that each Media
   Foundation DLL `build.rs` delay-loads is delay-loaded and none is a load-time import,
@@ -203,13 +214,26 @@ folder, and its log `logs\cef.log`.
   hosts find it through `jstream-platform`'s `paths` module
   ([jstream-platform › Purpose](../../crates/jstream-platform/README.md#purpose)).
 - **The collection** is the project opened most recently, from
-  `recent-collections.json` in the data folder, if it still loads, and otherwise
-  `collection.json` there, created the first time with nothing in it but the
-  prototype's four sample labels. It is saved on every change, so the next start opens
+  `recent-collections.json` in the data folder, if it still loads, and otherwise the
+  default project, `Documents\JStream\My project.json` (`~/Documents/JStream` on macOS
+  and Linux), created the first time with nothing in it but the prototype's four sample
+  labels ([ADR-0163](../../docs/adr/0163-projects-and-screenshots-in-the-persons-folders.md)).
+  A portable app, or one with no Documents folder, keeps `collection.json` in the data
+  folder instead. An app that saved there before moves that file to the default
+  project's path the first time it starts, with its stream keys and its place in the
+  recent list, and keeps the old file as `collection.json.moved`
+  (`host::startup_project`, `Engine::move_collection_file`). New project… and Save
+  project as… start beside the open project, so in Documents too. It is saved on every change, so the next start opens
   where the last one stopped. A client switches projects with `collection.open`,
   `collection.new` and `collection.save_as`
   ([ADR-0121](../../docs/adr/0121-projects-open-new-and-save-as.md)); the publish opener
   reads a stream key under the open project's name for it (`Engine::stream_key_name`).
+- **Screenshots** (Screenshot (scene) and Screenshot (source)) are saved by the app in
+  Downloads, never replacing a file (`name (2).png` when the name is taken), and the
+  toast says where, with Open and Show in folder (`folders.rs`, `screenshots.rs`). The
+  window's `save_screenshot`, `open_saved` and `show_saved` commands, granted by the
+  `screenshots` capability to the main window only, do it; the last two open only a file
+  the app saved in this run.
 - **Effect packs** are the pack folders in the data folder's `effects`, the folder the
   daemon watches by default: the engine loads them at start and reloads them when they
   change (`Engine::watch_effect_packs`,
@@ -492,8 +516,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   `url`, `token` and `vcam`, the virtual camera's status as the app read it at start:
   `registered`, `not_registered`, `outdated`, `off` (`--no-vcam`) or `unavailable`
   (not Windows: on Linux the camera finds its device only when it starts). The UI uses `vcam` only to say whether the camera can start (its
-  outputs panel); the engine still decides. It also carries `collection`, the data
-  folder, `network`, whether "Allow devices on my network" was on at start,
+  outputs panel); the engine still decides. It also carries `collection`, the default
+  project's folder (ADR-0163), `network`, whether "Allow devices on my network" was on at start,
   `networkOpen`, whether its listener then opened, `wheelFocusOnly`, whether wheel
   chords were heard only while the window had the focus (macOS without Accessibility,
   Wayland, or no listener that hears the wheel),
@@ -503,6 +527,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   saved, false when the command fails too (see *Network access*). `jtunnel` is the
   JTunnel setting as the app read it at start, and `setJtunnel(setting)` calls
   `set_jtunnel` and resolves to null when it was saved, or why not (see *JTunnel*).
+  `saveScreenshot(png, name)` sends the PNG's bytes as the raw body of
+  `save_screenshot`, with the name percent-encoded in its `x-jstream-name` header, and
+  resolves to the path saved in Downloads, or rejects with why not; `openSaved(path)` and
+  `showSaved(path)` call `open_saved` and `show_saved`, which act only on a path
+  `save_screenshot` answered in this run (`folders::Saved`): Open hands it to Explorer,
+  `open` or `xdg-open` as one argument, and Show in folder runs Explorer's `/select`,
+  `open -R`, or `xdg-open` on its folder.
 - **The virtual camera.** On Windows the engine's backends carry `WindowsVcam` unless
   the app was started with `--no-vcam`; creating it opens nothing, and its `start`
   refuses an unregistered camera. `vcam_status` reads the registration with no
@@ -535,12 +566,14 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   URLs only; the Cisco URL is that one string, and no comma,
   backslash, quote, space or percent escape can reach its command line. Every
   other new window is refused, and a
-  projector can open none. The page gets two Tauri commands, `pick_path` (`pick.rs`)
-  and `set_network` (`network.rs`), and no other. `build.rs` declares them to
-  `tauri-build`, which writes `allow-pick-path` and `allow-set-network` under
-  `permissions/autogenerated/` (gitignored, as `gen/` is). The capabilities `browse`
-  and `network` grant those permissions to the main window only, and do not grant
-  `core:default`. A projector has no path fields or settings, so it is granted neither.
+  projector can open none. The page gets the Tauri commands `pick_path` (`pick.rs`),
+  `set_network` (`network.rs`), `set_jtunnel`, `set_ptz_controllers`, and
+  `save_screenshot`, `open_saved` and `show_saved` (`screenshots.rs`), and no other.
+  `build.rs` declares them to `tauri-build`, which writes an `allow-` permission for
+  each under `permissions/autogenerated/` (gitignored, as `gen/` is). The capabilities
+  `browse`, `network`, `jtunnel`, `ptz` and `screenshots` grant those permissions to the
+  main window only, and do not grant `core:default`. A projector has no path fields,
+  settings or screenshot menus, so it is granted none.
   On Windows the command opens a
   common-item dialog owned by the calling window and returns the path the person
   picked. On Linux it asks the FileChooser portal (`jstream_platform_linux::portal_pick_path`)
