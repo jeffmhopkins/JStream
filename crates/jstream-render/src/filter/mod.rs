@@ -15,7 +15,7 @@ mod external;
 mod multipass;
 pub(crate) use multipass::pad;
 mod pack;
-mod params;
+pub(crate) mod params;
 mod pass;
 mod program;
 #[cfg(test)]

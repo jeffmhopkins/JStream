@@ -175,7 +175,9 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0160](0160-aac-lc-decoder-patent-check.md) | AAC-LC decoder patent check: may Linux decode AAC-LC through symphonia? | accepted | maintainer |  |
 | [ADR-0161](0161-follow-camera-holds-its-zoom.md) | A follow camera holds its zoom, and only pans at the edges | accepted | agent |  |
 | [ADR-0162](0162-a-carried-pass-compares-added-binaries-by-blob.md) | A carried review pass compares an added file without a patch by its blob | accepted | agent |  |
+| [ADR-0163](0163-projects-and-screenshots-in-the-persons-folders.md) | The desktop app saves projects and screenshots in the person's own folders | accepted | agent |  |
 | [ADR-0164](0164-3d-groups-share-their-scenes-space.md) | 3D groups share their scene's space, and a camera may ride with one | accepted | agent |  |
+| [ADR-0165](0165-depth-of-field-on-models.md) | Depth of field on 3D models | accepted | agent |  |
 | [ADR-0166](0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md) | Moves curve through keyframes, turn as one rotation, and may orbit the camera | accepted | agent |  |
 | [ADR-0167](0167-a-sky-backdrop-for-3d-scenes.md) | A 3D scene can draw its environment's sky behind it: stars, nebulae and warp | accepted | agent |  |
 | [ADR-0169](0169-a-camera-anchor-is-kept-whatever-it-names.md) | A camera anchor is kept whatever it names | accepted | agent |  |

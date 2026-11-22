@@ -4,6 +4,7 @@
 //! Docs: apps/jstream-desktop/README.md#usage, apps/jstream-desktop/README.md#design
 
 use crate::bootstrap;
+use crate::folders;
 use crate::host::{self, Host};
 use crate::jtunnel;
 use crate::logs::LogFile;
@@ -23,8 +24,8 @@ use tracing_subscriber::util::SubscriberInitExt;
 /// [`bundled_ui_dir`]), when `--ui-dir` doesn't name one.
 pub const UI_DIR: &str = "ui";
 
-/// The collection file in the data folder.
-pub const COLLECTION: &str = "collection.json";
+/// The collection file in the data folder ([`folders::COLLECTION`]).
+pub use crate::folders::COLLECTION;
 
 /// The command line.
 #[derive(Debug, Default, PartialEq)]
@@ -134,17 +135,16 @@ pub fn start(
     if let Err(error) = jstream_platform_windows::check_media_foundation() {
         return problem(anyhow::Error::from(error));
     }
+    // The default project, in Documents (ADR-0163), moved there from the data folder the
+    // first time.
+    let documents = folders::user_folder(jstream_platform::paths::UserFolder::Documents);
+    let default = folders::default_project(exe_dir, data, documents.as_deref());
+    let project = host::startup_project(&default, &data.join(COLLECTION), data, secrets);
     let host = (|| {
         let logs = data.join("logs");
         let audit = jstream_core::AuditFile::open(&logs)
             .with_context(|| format!("could not open the audit log in `{}`", logs.display()))?;
-        let engine = host::engine(
-            &data.join(COLLECTION),
-            data,
-            Arc::new(audit),
-            !options.no_vcam,
-            secrets,
-        )?;
+        let engine = host::engine(&project, data, Arc::new(audit), !options.no_vcam, secrets)?;
         // After the backends, which `host::engine` sets: arrivals are stamped on the
         // media clock (ADR-0123 §1).
         jtunnel::start(&engine, &jtunnel::setting_file(data));
@@ -203,7 +203,9 @@ pub fn start(
         host.stop();
         return Startup::problem(message);
     }
-    let collection = data.to_string_lossy();
+    // The default project's folder, where the File menu's dialogs start before the
+    // engine names the open project.
+    let collection = project.parent().unwrap_or(data).to_string_lossy();
     let script = bootstrap::script(
         ui::ORIGIN,
         host.ws_url(),

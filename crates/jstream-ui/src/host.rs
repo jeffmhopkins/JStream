@@ -3,14 +3,16 @@
 //!
 //! The desktop app (`apps/jstream-desktop`) runs a script before the UI's own that
 //! defines [`DESKTOP_GLOBAL`] as a frozen `{ url, token, vcam, collection, network,
-//! networkOpen, browse, allowNetwork, jtunnel, setJtunnel, ptz, setPtz }`: its in-process
-//! engine's WebSocket URL and control token,
-//! whether its virtual camera can be used, the data folder `collection` asset paths are
-//! relative to, whether "Allow devices on my network" was on at start and its listener
+//! networkOpen, browse, allowNetwork, jtunnel, setJtunnel, ptz, setPtz, saveScreenshot,
+//! openSaved, showSaved }`: its in-process engine's WebSocket URL and control token,
+//! whether its virtual camera can be used, the default project's folder `collection`
+//! asset paths are relative to, whether "Allow devices on my network" was on at start and its listener
 //! opened, `browse`, which
 //! opens a native file dialog, and `allowNetwork`, which saves that setting; `jtunnel` and
 //! `ptz` are the JTunnel and PTZ controller settings as the app read them, and
-//! `setJtunnel` and `setPtz` save them. In a browser the global is absent and the UI shows
+//! `setJtunnel` and `setPtz` save them. `saveScreenshot` saves a screenshot in Downloads and
+//! answers its path, and `openSaved` and `showSaved` open such a file or show it in its
+//! folder (ADR-0163 §3). In a browser the global is absent and the UI shows
 //! the connect form.
 //!
 //! A projector window the app opens for `window.open` (`projector.rs`) may not run that
@@ -452,6 +454,81 @@ async fn allow_network_js(allow: bool) -> bool {
         .ok()
         .and_then(|value| value.as_bool())
         == Some(true)
+}
+
+/// Whether the desktop app saves screenshots itself (the global's `saveScreenshot`,
+/// ADR-0163 §3), in Downloads, and says where. A browser saves one as a download.
+pub fn saves_screenshots() -> bool {
+    global()
+        .and_then(|global| Reflect::get(&global, &JsValue::from_str("saveScreenshot")).ok())
+        .is_some_and(|value| value.is_function())
+}
+
+/// Asks the desktop app to save `png` under the file name `name` in Downloads. Resolves
+/// to the path it saved, or why it didn't.
+pub async fn save_screenshot(png: &[u8], name: &str) -> Result<String, String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        save_screenshot_js(png, name).await
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (png, name);
+        Err("only the desktop app saves screenshots itself".to_owned())
+    }
+}
+
+/// Calls `saveScreenshot` on the desktop global and awaits its promise.
+#[cfg(target_arch = "wasm32")]
+async fn save_screenshot_js(png: &[u8], name: &str) -> Result<String, String> {
+    use leptos::wasm_bindgen::JsCast;
+    use leptos::web_sys::js_sys::{Function, Promise, Uint8Array};
+
+    let failed = || "the app could not save it".to_owned();
+    let function = global()
+        .and_then(|global| Reflect::get(&global, &JsValue::from_str("saveScreenshot")).ok())
+        .and_then(|value| value.dyn_into::<Function>().ok())
+        .ok_or_else(failed)?;
+    let promise = function
+        .call2(
+            &JsValue::UNDEFINED,
+            &Uint8Array::from(png),
+            &JsValue::from_str(name),
+        )
+        .ok()
+        .and_then(|value| value.dyn_into::<Promise>().ok())
+        .ok_or_else(failed)?;
+    match wasm_bindgen_futures::JsFuture::from(promise).await {
+        Ok(path) => path
+            .as_string()
+            .filter(|path| !path.is_empty())
+            .ok_or_else(failed),
+        Err(reason) => Err(reason.as_string().unwrap_or_else(failed)),
+    }
+}
+
+/// Asks the desktop app to open a file it saved this run (`openSaved`), or, with
+/// `reveal`, to show it in its folder (`showSaved`). The app refuses any other file.
+pub fn open_saved(path: &str, reveal: bool) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use leptos::wasm_bindgen::JsCast;
+        use leptos::web_sys::js_sys::Function;
+        let name = if reveal { "showSaved" } else { "openSaved" };
+        if let Some((global, function)) = global().and_then(|global| {
+            let function = Reflect::get(&global, &JsValue::from_str(name))
+                .ok()?
+                .dyn_into::<Function>()
+                .ok()?;
+            Some((global, function))
+        }) {
+            let _called = function.call1(&global, &JsValue::from_str(path));
+        }
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        let _ = (path, reveal);
+    }
 }
 
 /// Asks the desktop app to open a dialog. `kind` is `open`, `save` or `folder`.
