@@ -6597,7 +6597,7 @@ stamp = { hash = "b3:96e5edd02c6b8e52", by = "agent:studio-two-up", note = "Stud
 stamp = { hash = "b3:4b50413958d9d37c", by = "agent:ui-design", note = "Updated: the theme paragraph names the dialog shell, the .field.prop / .prop-grid property grid and dialog::Info; Video settings' checkbox is now Scale existing scenes to fit, General's settings are Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit; checked against updates.rs, agents.rs, warm.rs, video_settings.rs." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/number.rs"]
-stamp = { hash = "b3:7638245dc57808da", by = "agent:ui-design", note = "Added the two tab levels (.segmented in the Inspector and the Filters window, the 32 px Settings rail), the Inspector's 88 px label column and segmented control, number fields without steppers but the mixer's gain, the caption inside the box that scrubs, and the Arrange panel's name; checked against style.css, inspector.rs, number.rs and transform.rs." }
+stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:0432f3ec2a2b6130", by = "agent:ui-design", note = "Updated: the theme paragraph names the dialog shell, the .field.prop / .prop-grid property grid and dialog::Info; Video settings' checkbox is now Scale existing scenes to fit, General's settings are Check for updates, Global hotkeys, Ask before connecting, Keep ready and Memory limit; checked against updates.rs, agents.rs, warm.rs, video_settings.rs." }
@@ -6624,7 +6624,7 @@ stamp = { hash = "b3:54357d1364a498b3", by = "agent:claude", note = "same change
 stamp = { hash = "b3:01e30e26ad2d0cc7", by = "agent:studio-two-up", note = "Studio mode rewritten for the two-up: canvas as preview, program monitor (tapped program-mix stream), StudioControls between them sharing one Panel state with the Transitions panel via provide_transitions; Selection notes the canvas follows the preview scene in studio mode; style.css adds the stage-row, stage-label, monitor and studio-controls rules." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/transform.rs"]
-stamp = { hash = "b3:ece0c046aada988b", by = "agent:ui-design", note = "Added the two tab levels (.segmented in the Inspector and the Filters window, the 32 px Settings rail), the Inspector's 88 px label column and segmented control, number fields without steppers but the mixer's gain, the caption inside the box that scrubs, and the Arrange panel's name; checked against style.css, inspector.rs, number.rs and transform.rs." }
+stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read Scenes and sources: the panels are Scenes and Sources (the prototype's Scene objects), each with ToolBar (add, remove, properties, filters, up, down) sticky at the foot; dock list says Sources; the rest holds against the diff." }
@@ -6822,7 +6822,7 @@ stamp = { hash = "b3:96e5edd02c6b8e52", by = "agent:studio-two-up", note = "Stud
 stamp = { hash = "b3:4b50413958d9d37c", by = "agent:ui-design", note = "Re-read the contents list: Settings/General now groups Updates, Hotkeys, Agents and Performance as prop-grid sections, dialog.rs gains Info, icons.rs an info icon; no module or component named here changed name or job, so it holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/number.rs"]
-stamp = { hash = "b3:7638245dc57808da", by = "agent:ui-design", note = "Renamed the Transform panel to Arrange in the module list and the keyframe-children note (PanelId::Transform keeps its key); NumberField now has no steppers unless asked (the mixer's gain fields); the Filters window's scope switcher is segmented with counts; checked against dock.rs, number.rs, transform.rs, filters.rs and inspector.rs." }
+stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/outputs.rs"]
 stamp = { hash = "b3:0432f3ec2a2b6130", by = "agent:ui-design", note = "Re-read the contents list: Settings/General now groups Updates, Hotkeys, Agents and Performance as prop-grid sections, dialog.rs gains Info, icons.rs an info icon; no module or component named here changed name or job, so it holds." }
@@ -6849,7 +6849,7 @@ stamp = { hash = "b3:54357d1364a498b3", by = "agent:claude", note = "8000/12000 
 stamp = { hash = "b3:01e30e26ad2d0cc7", by = "agent:studio-two-up", note = "Studio two-up: Workspace, Store (followed_preview), the Transitions panel's StudioControls and StageLabel, and canvas/monitor.rs's ProgramMonitor listed in Contents; app.rs provides the shared transitions state, header turns studio mode on with the shown scene on preview." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/transform.rs"]
-stamp = { hash = "b3:ece0c046aada988b", by = "agent:ui-design", note = "Renamed the Transform panel to Arrange in the module list and the keyframe-children note (PanelId::Transform keeps its key); NumberField now has no steppers unless asked (the mixer's gain fields); the Filters window's scope switcher is segmented with counts; checked against dock.rs, number.rs, transform.rs, filters.rs and inspector.rs." }
+stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: Panels now names tree.rs's tool bar and the arrows' edits tested natively in scenes.rs; icons.rs gains the tool bars' icons; the panel is Sources everywhere (dock title, labels, clipboard docs)." }
@@ -8517,7 +8517,7 @@ stamp = { hash = "b3:67cb3de4e6103ee0", by = "agent:help-about", note = "Re-read
 stamp = { hash = "b3:4dc24b8738f93064", by = "agent:ui-design", note = "WS-09 moved after WS-08 (#1585 N4) and now also lists the dialog shell, property grid, toggles, one helper line with an (i) and callouts; icons.rs gained the info icon. Status stays 🟡 with more PRs to come." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/src/panels/number.rs"]
-stamp = { hash = "b3:7638245dc57808da", by = "agent:ui-design", note = "WS-05 now says number fields have no steppers but the mixer's gain, with captions inside the box that scrub; checked against number.rs and style.css." }
+stamp = { hash = "b3:29193c5b74ae7a2f", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#theme"."file:crates/jstream-ui/style.css"]
 stamp = { hash = "b3:6f23dec082e569da", by = "agent:ui-design", note = "WS-05 now says number fields have no steppers but the mixer's gain, with captions inside the box that scrub; checked against number.rs and style.css." }
@@ -8526,7 +8526,7 @@ stamp = { hash = "b3:6f23dec082e569da", by = "agent:ui-design", note = "WS-05 no
 stamp = { hash = "b3:debc1228d9f2cecd", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
 
 ["UI-FEATURES#transform"."file:crates/jstream-ui/src/panels/transform.rs"]
-stamp = { hash = "b3:ece0c046aada988b", by = "agent:ui-design", note = "Heading now Arrange panel (anchor and layout key stay transform); added the layout: icon rows for Align and Distribute with Select 3 or more, small-button rows under Fit, Match, Rotate and Crop with full names as tooltips; checked against transform.rs." }
+stamp = { hash = "b3:0958cbbabfe67a9a", by = "agent:ui-design", note = "cargo fmt reflowed number.rs and transform.rs after the earlier stamp (no code change); re-read: the section still holds." }
 
 ["UI-FEATURES#transitions"."body"]
 stamp = { hash = "b3:29070b54aeb8d3f8", by = "agent:studio-two-up", note = "TR-06 rewritten for the two-up (canvas as preview, live program monitor, labels, controls between with Transition, Cut, preset, Swap; stacking under 800 px; no T-bar without an engine call); intro, TR-01 and TR-04 say studio controls instead of the studio bar." }
