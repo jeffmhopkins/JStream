@@ -85,7 +85,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
-  `collection.save_as`), with
+  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104),
   which every implementation uses to check and follow a hotkey's action, and
@@ -211,7 +211,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and `MotionCurve`, follows a bus or a source
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
   `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
-  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.131
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.135
   `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
   ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
@@ -353,10 +353,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.131 because a motion modifier can follow MIDI: `MotionKind`'s
+`PROTOCOL_VERSION` is 0.135 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
 ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md));
+0.134 because a client can hold and step the engine's media clock
+to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
 0.127 because a group can share its 3D scene's space and a camera
 can ride with one: `SceneOptions`' `share_space`, `SceneInfo`'s `camera_anchor` and
 `scene.set_camera_anchor`
@@ -2392,7 +2395,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
   `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
-  physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
+  physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
+  client's animation), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` (an application setting), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2718,11 +2722,11 @@ after 1.0:
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, `MotionMeasure` and
-  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.131): a later kind or property won't break a 0.81 client's
+  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.135): a later kind or property won't break a 0.81 client's
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86) and a `midi` one (0.131) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86) and a `midi` one (0.135) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2783,7 +2787,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   and so is everything the engine doesn't hear: while no output runs the program mix
   is silent, and a preview reads every audio modifier as silence. Its `clock` is
   ignored.
-- **`midi`** (since 0.131,
+- **`midi`** (since 0.135,
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)) follows a MIDI
   controller instead of a clock, the value binding of ADR-0122: `control` is `cc` (the
   default, with its `controller` 0 to 127, which only `cc` takes), `pitch_bend` or
@@ -2894,6 +2898,29 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+
+<a id="media-clock"></a>
+## Holding the media clock
+<!-- @section
+depends_on = ["docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md"]
+-->
+
+Since 0.134 a client can hold the engine's media clock and step it by hand, to render a
+scene frame by frame on a machine that can't draw it in real time
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)). The clock
+is what transitions, Moves, motion, timelines, keyframe tracks, a sky's warp, animated
+sources, `video.snapshot` and `video.frames` read. None of the three actions changes
+`rev`, is undone or is saved, and none can be bound or granted to a plugin.
+- **`clock.hold`** stops the clock where it is; holding it again keeps the held time.
+  It fails with `action_failed` while an output runs.
+- **`clock.step {ms}`** moves the held time on by `ms`, 1 to 10000
+  (`invalid_argument` on `ms` otherwise, or when the held time can't move that far). It
+  fails with `action_failed` when the clock isn't held. A timeline cue the step passes
+  has fired by the time it returns.
+- **`clock.release`** lets the clock run again, never backward: it waits at the held
+  time until real time passes it. Releasing a clock that runs does nothing.
+- While the clock is held, or released but still ahead of real time, `output.start`
+  fails with `action_failed`, saying how far ahead it is.
 
 <a id="keyframe-tracks"></a>
 ## Keyframe tracks

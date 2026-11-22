@@ -1164,6 +1164,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
@@ -2051,7 +2097,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -5486,7 +5532,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.131, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.135, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -5712,7 +5758,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -8122,6 +8168,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
@@ -9009,7 +9101,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -12444,7 +12536,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.131, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.135, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -12670,7 +12762,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -14448,6 +14540,76 @@ source: crates/jstream-mcp/src/tests.rs
         "type": "object"
       },
       "name": "capture"
+    },
+    {
+      "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `clock` operation: set `op.type` to one of `clock.hold` (action), `clock.step` (action), `clock.release` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `clock` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "clock"
     },
     {
       "annotations": {
@@ -16862,6 +17024,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
@@ -17749,7 +17957,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -21184,7 +21392,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.131, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.135, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -21410,7 +21618,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -23349,7 +23557,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.131, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.135, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -23575,7 +23783,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -26059,6 +26267,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
@@ -26946,7 +27200,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -30377,7 +30631,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.131, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.135, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -30603,7 +30857,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -33559,7 +33813,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -33833,7 +34087,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.131, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.135, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -36518,6 +36772,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
@@ -37405,7 +37705,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -40840,7 +41140,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.131, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.135, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -41066,7 +41366,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.131): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.135): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",

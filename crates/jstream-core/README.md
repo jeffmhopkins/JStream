@@ -191,9 +191,12 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-sources"></a>
 ## Contents: live sources and snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
+- **The media clock** (`clock.rs`): `HeldClock` wraps the injected media clock so that
+  `clock.hold`, `clock.step` and `clock.release` can hold it and step it by hand
+  (ADR-0172). The sources, the engine's state and MIDI read it. See *Live sources*.
 - **Live sources** (`live.rs`): a running `jstream-sources` source for every source
   in the collection, built when it is created, rebuilt when its settings change and
   dropped when it is deleted, on the engine's `jstream-sources` thread. Sources are
@@ -628,7 +631,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
-  `src/tests/groups3d.rs`, `tests/mcp.rs`,
+  `src/tests/groups3d.rs`, `src/tests/clock.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -1043,6 +1046,10 @@ depends_on = ["docs/adr/0013-command-model.md", "docs/RULES.md#R-API-004", "crat
 Batches and the collection queries run under the collection lock, so those calls
 are serialized across sessions and their events are queued in the order the changes
 happened. Placeholder output actions do too: they only step the state machine.
+`clock.hold`, `clock.step` and `clock.release` (ADR-0172) do too: they hold or step the
+media clock, wake the sources' thread and run the timelines' tick, so a cue a step
+passed fires before it returns; an `output.start` while the clock is held or still
+ahead of real time, or a hold while an output runs, is `action_failed`.
 `video.snapshot` reads `rev`, the published render snapshot, the live values and the
 media clock's time under that lock and hands them to the snapshot thread after
 releasing it (see *Snapshots*). A frame sheet's thread reads the same once per picture
@@ -1498,7 +1505,9 @@ preset changed in one batch that one undo takes back.
   itself, at 0), the next tick waits at least `CAPPED_WAIT_NS` (a frame at 60 fps), so
   such a cycle fires at most 16 cues a frame instead of spinning the ticker.
   `timeline.play` and `timeline.seek` from a client run a tick before they return and
-  start the ticker while a timeline plays (`start_ticker`).
+  start the ticker while a timeline plays (`start_ticker`). So do `clock.hold`,
+  `clock.step` and `clock.release` (ADR-0172): the ticker sleeps in real time, so on a
+  held clock a cue a step passed fires in that step's call, before the next snapshot.
 - **A cue** runs through `State::action`, as the call would (with no audit or activity
   entry of its own, and nothing logged), credited to the client and request that
   started the timeline, with `cue_at` set to its exact time:
@@ -2544,7 +2553,14 @@ warm scene draws never rests, and is cued when nothing draws it (`LiveSources::s
 streams*). Sources run on the media clock of the backends the host
 injects (`with_backends`), else on a monotonic clock of the engine's own. A clock swap
 restarts every running source's timing and drops the re-plan timed on the old clock:
-the thread re-plans at once on the new one. `media` sources play through the injected
+the thread re-plans at once on the new one. That clock is the engine's own holdable
+one (`clock.rs`, `HeldClock`, [ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)),
+wrapping the injected clock, and the engine's state and MIDI read it too:
+`clock.hold` stops it, `clock.step` moves the held time on and wakes the sources thread
+(`LiveSources::clock_moved`), and `clock.release` lets it run again, never below the
+time it was held at. A clock swap releases it. The output pipeline keeps the injected
+clock, so `clock.hold` fails while an output runs and `output.start` while it is held.
+`media` sources play through the injected
 backends' media files (`Backends::media`); before any are injected a `media` source
 fails to build (`NoBackend`), and injecting them rebuilds every source. `collection` asset
 references resolve in the collection file's folder; without a collection file, and
@@ -3807,7 +3823,10 @@ video and the audio subscription's; the stop latches the output's drop source, t
 the drop ledger, under it. A stopping program stage detaches its mixer from the
 audio routing under the collection lock, which is why it is never dropped while that
 lock is held, as its final `stats.tick` already requires. The master's meters are
-atomics the mixer thread writes and the sampler reads, with no lock. The `jstream-sources`
+atomics the mixer thread writes and the sampler reads, with no lock. The media clock's
+hold (`HeldClock`, ADR-0172) is a leaf mutex, with nothing taken under it: a reader
+holds it only for the moment it reads (the sources' thread under its queue lock), and
+`clock.hold`, `clock.step` and `clock.release` take it under the collection lock. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
 each live source for a frame it already has, apart from one catch-up paint of a painter

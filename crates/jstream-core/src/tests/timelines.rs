@@ -885,3 +885,34 @@ fn a_late_tick_sends_an_end_before_a_later_restart() {
     );
     assert!(playing_ids(&control).iter().any(|id| id == "b"));
 }
+
+/// On a held clock (ADR-0172), a step that passes a cue fires it before `clock.step`
+/// returns, so the next snapshot of a frame-by-frame render shows it.
+#[test]
+fn a_clock_step_past_a_cue_fires_it_before_it_returns() {
+    let (engine, control) = engine_with_scenes();
+    let clock = FakeClock::new(Timebase::MILLIS);
+    engine.set_source_clock(Arc::new(clock.clone()));
+    apply(
+        &control,
+        vec![timeline(
+            "t",
+            10_000,
+            TimelineLoop::Once,
+            vec![cue(2_000, value("cued", 1))],
+        )],
+    );
+    act(&control, Action::ClockHold).expect("hold");
+    act(&control, play("t")).expect("play");
+    let cued = |control: &dyn Control| match query(control, Query::ValuesList { prefix: None }) {
+        Ok(QueryResult::ValuesList { values }) => values.iter().any(|v| v.name == "cued"),
+        other => panic!("not values.list: {other:?}"),
+    };
+    for _ in 0..60 {
+        act(&control, Action::ClockStep { ms: 33 }).expect("step");
+    }
+    assert!(!cued(&control), "1980 ms: not yet");
+    act(&control, Action::ClockStep { ms: 33 }).expect("step");
+    assert!(cued(&control), "2013 ms: fired by the step that passed it");
+    act(&control, Action::ClockRelease).expect("release");
+}
