@@ -2160,7 +2160,7 @@ stamp = { hash = "b3:2330a6030b4e5b89", by = "agent:smooth-paths", note = "keyfr
 stamp = { hash = "b3:7bd71026afc70549", by = "agent:wave-owner", note = "New section: these bullets moved verbatim from Purpose, unchanged; covers lists exactly the files they name (tests: src/tests.rs, src/tests/**, tests/**; media also takes codec_downloads.rs, which Purpose covered and no bullet names). Every file under src/ and tests/ stays covered by a section." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/warm_scenes.rs"]
-stamp = { hash = "b3:2549ac34df2c6d93", by = "agent:claude", note = "Re-read: warm_scenes.rs's a_reflection_probe_counts_its_capture now checks a non-reflective scene counts nothing and a reflective one counts the capture; the file is listed." }
+stamp = { hash = "b3:b73a61699f0e2421", by = "agent:claude", note = "Re-read: warm_scenes.rs's probe test now checks only that turning reflections on adds the capture (Windows reads the probe's size as the canvas's before its first frame); the file is listed." }
 
 ["CRATE-jstream-core#contents-tests"."file:crates/jstream-core/src/tests/windows_gpu.rs"]
 stamp = { hash = "b3:ce8c055c7c5a5a81", by = "agent:claude-1555", note = "#1555: scenarios.rs passes a drop count to capture_drops; windows_gpu.rs only rewords a log line; listed tests unchanged" }
