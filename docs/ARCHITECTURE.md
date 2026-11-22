@@ -228,7 +228,7 @@ Collection (JSON on disk, schema_version, rev: u64, canvas: { width, height }, b
   scales it to its `resolution`. An item's `geometry` is its box: the centre and size in
   canvas pixels, a fit mode for the source inside the box, a rotation about the centre,
   horizontal and vertical flips that mirror the content inside the box, and 3D tilt,
-  turn, depth and per-item perspective, drawn in stacking order with no depth buffer.
+  turn, depth and per-item perspective, drawn in stacking order with no depth buffer (only a 3D model writes depth, below).
   A scene with a `camera` (`SceneCamera`: position, target, field of view, roll,
   `depth_sort`, and a depth of field's `focus_px` and `blur_px`,
   [ADR-0108](adr/0108-camera-depth-of-field.md)) is a **3D scene** ([ADR-0094](adr/0094-scene-cameras.md)): the
@@ -1008,7 +1008,8 @@ The wire format, versioning, error codes and compatibility policy are designed i
   `camera_controls` setting sets on them; `font.list` (protocol 0.68,
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
   and absolute path; `source.sizes` (protocol 0.40) → each source's current
-  size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4);
+  size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4), and a
+  3D model's depth (0.157, [ADR-0107](adr/0107-3d-models.md) decision 8);
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
   `profile.get` (protocol 0.73, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
@@ -1299,7 +1300,14 @@ camera and always takes that path: the same polygon, built through the camera's 
 (`w = D / f`), so a set shares one vanishing point. The compositor sorts each run of
 consecutive items that share a camera with `depth_sort` on (and a `depth_run`, which
 keeps a stinger's items over the scenes under them), far to near by the depth of their
-centre, stacking order breaking ties; there is still no depth buffer. In a Fade between
+centre, stacking order breaking ties; cards have no depth buffer of their own. A 3D
+model's layer carries the model's view depth ([ADR-0107](adr/0107-3d-models.md)
+decision 7): a scene pass that places one gets a reversed `Depth32Float` target, the
+model writes `NEAR_W / w` there where it covers a pixel (before its filters), and every
+item drawn after it tests against that, so a card that sorts in front of a model but
+passes behind it is hidden where the model is nearer. A model's own layer isn't
+tested, so models still order among themselves by their centres; a scene with no model
+has no depth target. In a Fade between
 two scenes each side's items keep their own camera, a Move between two 3D scenes
 interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had. A camera with a depth of field

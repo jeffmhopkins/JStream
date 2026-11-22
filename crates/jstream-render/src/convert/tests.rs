@@ -226,6 +226,7 @@ fn compositor_output_converts_like_its_readback() {
         visible: true,
         camera: None,
         depth_run: 0,
+        depth: None,
     }];
     let scene = Scene {
         canvas: size(w, h),

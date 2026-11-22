@@ -1168,6 +1168,11 @@ pub struct SourceSize {
     /// started, it has no video (an audio-only kind), or it failed.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub size: Option<PixelSize>,
+    /// Its depth, in the same pixels as `size`, for a source with depth: a 3D model's
+    /// bounds, front to back, at the scale its width and height are reported at
+    /// (ADR-0107 decision 8, 0.157). Omitted for every other source and while `size` is.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub depth: Option<u32>,
 }
 
 /// One scene in a `scene.list` result.

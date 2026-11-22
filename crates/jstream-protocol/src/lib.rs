@@ -100,7 +100,7 @@ pub use geometry::{
     DrawnVertex, FitMode, Focus, GeometryError, GroupPose, ItemGeometry, LegacyBox, LegacyQuad,
     LocalPoint, MAX_BLUR_PX, MAX_DRAWN_PX, MAX_FOV_DEG, MIN_CAMERA_DISTANCE, MIN_FOV_DEG, NEAR_W,
     Placed, PlacementForm, ProjectedQuad, SceneCamera, Size, Solid, SolidBounds, Surface, Vec3,
-    legacy_quad,
+    legacy_quad, outline_contains,
 };
 pub use history::{HistoryCall, HistoryDirection, HistoryOp};
 pub use hotkey::{Chord, HotkeyBinding};

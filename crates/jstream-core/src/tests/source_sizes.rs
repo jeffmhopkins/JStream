@@ -38,6 +38,7 @@ fn changed(id: &str, size: Option<PixelSize>) -> Event {
     Event::SourceSizeChanged {
         source_id: SourceId::new(id),
         size,
+        depth: None,
     }
 }
 
@@ -83,14 +84,17 @@ fn sizes_follow_live_sources_stored_frames_and_deletes() {
             SourceSize {
                 source_id: SourceId::new("fill"),
                 size: size(4, 2),
+                depth: None,
             },
             SourceSize {
                 source_id: SourceId::new("spare"),
                 size: size(8, 6),
+                depth: None,
             },
             SourceSize {
                 source_id: SourceId::new("webcam"),
                 size: None,
+                depth: None,
             },
         ]
     );
@@ -157,5 +161,50 @@ fn sizes_follow_live_sources_stored_frames_and_deletes() {
             .map(|entry| entry.source_id)
             .collect::<Vec<_>>(),
         vec![SourceId::new("spare"), SourceId::new("webcam")]
+    );
+}
+
+/// A 3D model's size is its bounds at 512 px for the larger of width and height, and it
+/// reports its depth in the same pixels (ADR-0107 decision 8); a flat source has none.
+#[test]
+fn a_model_reports_its_depth_beside_its_size() {
+    let engine = Engine::new();
+    let control = connected(&engine);
+    let mut events = control.events();
+    let cube = Edit::SourceCreate {
+        source_id: SourceId::new("cube"),
+        name: "cube".into(),
+        kind: SourceKind::Builtin {
+            kind: "model".into(),
+        },
+        settings: Settings([("shape".to_owned(), json!("cube"))].into_iter().collect()),
+        duplicated_from: None,
+    };
+    batch(&control, edits(vec![cube, color("fill", 4, 2)])).expect("created");
+    assert!(engine.settle_sources(), "the sources were built in time");
+    let mut reported = sizes(&control);
+    reported.sort_by(|a, b| a.source_id.as_str().cmp(b.source_id.as_str()));
+    assert_eq!(
+        reported,
+        vec![
+            SourceSize {
+                source_id: SourceId::new("cube"),
+                size: size(512, 512),
+                depth: Some(512),
+            },
+            SourceSize {
+                source_id: SourceId::new("fill"),
+                size: size(4, 2),
+                depth: None,
+            },
+        ]
+    );
+    assert!(
+        size_events(drain(&mut events)).contains(&Event::SourceSizeChanged {
+            source_id: SourceId::new("cube"),
+            size: size(512, 512),
+            depth: Some(512),
+        }),
+        "the model's first size carries its depth"
     );
 }
