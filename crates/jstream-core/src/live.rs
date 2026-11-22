@@ -367,6 +367,12 @@ impl LiveSources {
         self.ctx.midi = Some(midi);
     }
 
+    /// The live data `data` motion modifiers watch (ADR-0171 decision 3), which the
+    /// JTunnel receiver fills.
+    pub(crate) fn set_data(&mut self, data: jstream_sources::LiveData) {
+        self.loaded = Arc::new((*self.loaded).clone().with_data(data));
+    }
+
     /// The MIDI inputs the `midi_*` sources draw.
     pub(crate) fn midi(&self) -> Option<Arc<jstream_sources::MidiInputs>> {
         self.ctx.midi.clone()

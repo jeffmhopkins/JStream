@@ -194,7 +194,16 @@ fn kind(k: &MotionKind) -> Option<Kind> {
             from: f64::from(from.get()),
             to: f64::from(to.get()),
         }),
+        // A data modifier (ADR-0171 decision 3) follows as a MIDI one does: what it
+        // reads is the engine's.
         MotionKind::Midi {
+            smoothing_ms,
+            curve,
+            from,
+            to,
+            ..
+        }
+        | MotionKind::Data {
             smoothing_ms,
             curve,
             from,
@@ -334,6 +343,17 @@ mod tests {
                 frequency_hz: f(f32::MIN_POSITIVE),
                 decay_per_s: f(0.0),
                 duration_ms: 1,
+            },
+            MotionKind::Data {
+                input: Some("x".repeat(64)),
+                key: "k".repeat(63),
+                field: "f".repeat(255),
+                range: [f(100_000.0), f(-100_000.0)],
+                states: [("s".repeat(100), f(1.0))].into_iter().collect(),
+                smoothing_ms: 10_000,
+                curve: MotionCurve::EaseIn,
+                from: f(100_000.0),
+                to: f(-100_000.0),
             },
         ];
         // More kinds than a list may hold, so they are checked as two lists.

@@ -30,12 +30,18 @@
 //! the clock: the controller's value is mapped onto 0 to 1, smoothed over
 //! `smoothing_ms`, bent by `curve` and mapped onto `from..to`, so a fader or a knob
 //! poses an item live, as ADR-0122 decision 1's value bindings describe.
+//!
+//! A `data` modifier ([ADR-0171](../../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
+//! decision 3, since 0.155) follows one field of a JTunnel sender's live data the same
+//! way: a number through its `range`, `true` and `false` as 1 and 0, and a text through
+//! its `states` table, so a DAW's transport, clips and meters pose an item.
 
 use crate::binding::MAX_INPUT_NAME_LEN;
 use crate::finite::Finite32;
 use crate::{BusId, FilterId, SourceId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
+use std::collections::BTreeMap;
 
 /// The most motion modifiers one item holds.
 pub const MAX_MOTION_MODIFIERS: usize = 8;
@@ -337,6 +343,46 @@ pub enum MotionKind {
         #[serde(default = "default_to")]
         to: Finite32,
     },
+    /// Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since
+    /// 0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,
+    /// followed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number
+    /// reads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and
+    /// an absent field 0, so the item rests at `from` until the sender says otherwise.
+    Data {
+        /// The sender, a JTunnel sender by name, or omitted for whichever sent the key
+        /// last.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input: Option<String>,
+        /// The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.
+        key: String,
+        /// A dotted path of object names and list indexes from 0 inside the key's
+        /// message (`playing`, `slots.2.state`), at most 255 bytes; empty for the
+        /// message itself. Default empty.
+        #[serde(default)]
+        field: String,
+        /// A number at the first reads 0 and at the second 1, clamped between; the
+        /// first may be the larger, to invert. They must differ. Default `[0, 1]`.
+        #[serde(default = "default_range")]
+        range: [Finite32; 2],
+        /// What a text reads, 0 to 1, by the text: `{"recording": 1, "playing": 0.5}`.
+        /// At most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.
+        /// Default none.
+        #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+        states: BTreeMap<String, Finite32>,
+        /// How long it takes to follow a new value, in milliseconds, `0..=10000`, as a
+        /// `midi` modifier's. Default 50; 0 jumps, which suits an on and off.
+        #[serde(default = "default_smoothing_ms")]
+        smoothing_ms: u32,
+        /// How the 0 to 1 value is bent. Default `linear`.
+        #[serde(default)]
+        curve: MotionCurve,
+        /// Its value at 0, in the property's unit, within `-100000..=100000`. Default 0.
+        #[serde(default)]
+        from: Finite32,
+        /// Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1.
+        #[serde(default = "default_to")]
+        to: Finite32,
+    },
     /// A one-shot decaying shake, since 0.84 (#1107):
     /// `amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from
     /// the start of its clock, until `duration_ms`, and 0 after. Usually on the
@@ -384,6 +430,19 @@ fn default_smoothing_ms() -> u32 {
 fn default_to() -> Finite32 {
     Finite32::ONE
 }
+
+fn default_range() -> [Finite32; 2] {
+    [Finite32::ZERO, Finite32::ONE]
+}
+
+/// The longest key a `data` modifier names, in bytes: JTunnel's.
+pub const MAX_DATA_KEY_LEN: usize = 63;
+/// The longest field path a `data` modifier names, in bytes.
+pub const MAX_DATA_FIELD_LEN: usize = 255;
+/// The most entries in a `data` modifier's `states`.
+pub const MAX_DATA_STATES: usize = 32;
+/// The longest text in a `data` modifier's `states`, in bytes.
+pub const MAX_DATA_STATE_LEN: usize = 100;
 
 /// Where a modifier's time starts.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize, JsonSchema)]
@@ -672,6 +731,25 @@ impl MotionKind {
                 curve,
                 (from, to),
             ),
+            MotionKind::Data {
+                ref input,
+                ref key,
+                ref field,
+                range,
+                ref states,
+                smoothing_ms,
+                curve,
+                from,
+                to,
+            } => data_problem(
+                input.as_deref(),
+                key,
+                field,
+                range,
+                states,
+                (smoothing_ms, curve),
+                (from, to),
+            ),
             MotionKind::Wiggle {
                 amplitude,
                 frequency_hz,
@@ -835,6 +913,72 @@ fn midi_problem(
         Some(("smoothing_ms", "must be within 0..=10000"))
     } else if curve == MotionCurve::Unknown {
         Some(("curve", unknown))
+    } else if !end(from) {
+        Some(("from", "must be within -100000..=100000"))
+    } else if !end(to) {
+        Some(("to", "must be within -100000..=100000"))
+    } else {
+        None
+    }
+}
+
+/// A `data` modifier's first parameter out of range (ADR-0171 decision 3).
+fn data_problem(
+    input: Option<&str>,
+    key: &str,
+    field: &str,
+    range: [Finite32; 2],
+    states: &BTreeMap<String, Finite32>,
+    (smoothing_ms, curve): (u32, MotionCurve),
+    (from, to): (Finite32, Finite32),
+) -> Option<(&'static str, &'static str)> {
+    let end = |v: Finite32| v.get().abs() <= MAX_MAGNITUDE;
+    let controls = |text: &str| text.chars().any(char::is_control);
+    if let Some(name) = input {
+        if name.is_empty() {
+            return Some(("input", "must not be empty: leave it out for any sender"));
+        }
+        if name.len() > MAX_INPUT_NAME_LEN {
+            return Some(("input", "must be at most 64 bytes"));
+        }
+        if controls(name) {
+            return Some(("input", "must not hold control characters"));
+        }
+    }
+    if key.is_empty() || key.len() > MAX_DATA_KEY_LEN || controls(key) {
+        return Some(("key", "must be 1 to 63 bytes, with no control characters"));
+    }
+    if field.len() > MAX_DATA_FIELD_LEN || controls(field) {
+        return Some((
+            "field",
+            "must be at most 255 bytes, with no control characters",
+        ));
+    }
+    if !end(range[0]) || !end(range[1]) {
+        return Some(("range", "must be within -100000..=100000"));
+    }
+    if range[0] == range[1] {
+        return Some(("range", "its two ends must differ"));
+    }
+    if states.len() > MAX_DATA_STATES {
+        return Some(("states", "must hold at most 32 entries"));
+    }
+    if states
+        .keys()
+        .any(|t| t.is_empty() || t.len() > MAX_DATA_STATE_LEN || controls(t))
+    {
+        return Some((
+            "states",
+            "each text must be 1 to 100 bytes, with no control characters",
+        ));
+    }
+    if states.values().any(|v| !(0.0..=1.0).contains(&v.get())) {
+        return Some(("states", "each value must be within 0..=1"));
+    }
+    if smoothing_ms > MAX_ENVELOPE_MS {
+        Some(("smoothing_ms", "must be within 0..=10000"))
+    } else if curve == MotionCurve::Unknown {
+        Some(("curve", "is not one this version of the protocol knows"))
     } else if !end(from) {
         Some(("from", "must be within -100000..=100000"))
     } else if !end(to) {
@@ -1328,5 +1472,91 @@ mod tests {
                 "{extra}"
             );
         }
+    }
+
+    /// ADR-0171 decision 3: a `data` modifier parses with its defaults and checks each
+    /// parameter.
+    #[test]
+    fn a_data_modifier_takes_defaults_and_checks_each_parameter() {
+        let parse = |json: serde_json::Value| -> MotionModifier {
+            serde_json::from_value(json).expect("parses")
+        };
+        let lamp = parse(serde_json::json!({
+            "modifier_id": "play", "property": "opacity", "kind": "data",
+            "key": "transport", "field": "playing", "from": -1.0, "to": 0.0,
+            "smoothing_ms": 0
+        }));
+        assert_eq!(
+            lamp.kind,
+            MotionKind::Data {
+                input: None,
+                key: "transport".into(),
+                field: "playing".into(),
+                range: [Finite32::ZERO, Finite32::ONE],
+                states: BTreeMap::new(),
+                smoothing_ms: 0,
+                curve: MotionCurve::Linear,
+                from: Finite32::new(-1.0).expect("finite"),
+                to: Finite32::ZERO,
+            }
+        );
+        assert_eq!(check_motion(std::slice::from_ref(&lamp)), Ok(()));
+        assert_eq!(
+            serde_json::to_value(&lamp).expect("serializes"),
+            serde_json::json!({
+                "modifier_id": "play", "property": "opacity", "kind": "data",
+                "key": "transport", "field": "playing", "range": [0.0, 1.0],
+                "smoothing_ms": 0, "curve": "linear", "from": -1.0, "to": 0.0,
+                "clock": "engine"
+            })
+        );
+
+        let field = |json: serde_json::Value| field_of(&[parse(json)]);
+        let data = |extra: serde_json::Value| {
+            let mut json = serde_json::json!({
+                "modifier_id": "a", "property": "x", "kind": "data", "key": "meters"
+            });
+            for (k, v) in extra.as_object().expect("object") {
+                json[k] = v.clone();
+            }
+            json
+        };
+        let many: serde_json::Map<String, serde_json::Value> = (0..33)
+            .map(|n| (format!("s{n}"), serde_json::json!(1.0)))
+            .collect();
+        let cases = [
+            (serde_json::json!({ "input": "" }), "input"),
+            (serde_json::json!({ "input": "x".repeat(65) }), "input"),
+            (serde_json::json!({ "key": "" }), "key"),
+            (serde_json::json!({ "key": "k".repeat(64) }), "key"),
+            (serde_json::json!({ "key": "a\tb" }), "key"),
+            (serde_json::json!({ "field": "f".repeat(256) }), "field"),
+            (serde_json::json!({ "range": [0.5, 0.5] }), "range"),
+            (serde_json::json!({ "range": [0.0, 100_001.0] }), "range"),
+            (serde_json::json!({ "states": many }), "states"),
+            (serde_json::json!({ "states": { "": 1.0 } }), "states"),
+            (serde_json::json!({ "states": { "on": 1.5 } }), "states"),
+            (
+                serde_json::json!({ "smoothing_ms": 10_001 }),
+                "smoothing_ms",
+            ),
+            (serde_json::json!({ "curve": "spring" }), "curve"),
+            (serde_json::json!({ "from": -100_001.0 }), "from"),
+            (serde_json::json!({ "to": 100_001.0 }), "to"),
+        ];
+        for (extra, param) in cases {
+            assert_eq!(
+                field(data(extra.clone())),
+                Some(format!("motion.0.{param}")),
+                "{extra}"
+            );
+        }
+        // An inverted range, a text table and every default but the key are fine.
+        assert_eq!(
+            field(data(serde_json::json!({
+                "range": [-60.0, 6.0], "states": { "recording": 1.0, "stopped": 0.0 }
+            }))),
+            None
+        );
     }
 }

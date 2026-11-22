@@ -218,7 +218,11 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MAX_MOTION_MATERIAL_LEN` (128)
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
   Since 0.151 `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
-  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)).
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)). Since 0.155
+  `MotionKind::Data` follows one field of a JTunnel sender's live data, within
+  `MAX_DATA_KEY_LEN` (63), `MAX_DATA_FIELD_LEN` (255), `MAX_DATA_STATES` (32) and
+  `MAX_DATA_STATE_LEN` (100)
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -358,7 +362,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.151 because a motion modifier can follow MIDI: `MotionKind`'s
+`PROTOCOL_VERSION` is 0.155 because a motion modifier can follow a DAW's live data:
+`MotionKind`'s `data` reads one field of a JTunnel sender's state through a `range` or a
+`states` table, smoothed as a `midi` one is
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3);
+0.151 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
 ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md));
@@ -2789,7 +2797,7 @@ after 1.0:
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86) and a `midi` one (0.151) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86), a `midi` one (0.151) and a `data` one (0.155) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2865,6 +2873,18 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
   preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
   camera's motion refuses it.
+- **`data`** (since 0.155,
+  [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3)
+  follows one field of a JTunnel sender's live data the same way: `field` (a dotted path
+  of names and list indexes, `slots.2.state`; empty for the whole message) of the latest
+  message for `key` (1 to 63 bytes) from `input`, a sender by name (omitted for whichever
+  sent the key last). A number reads 0 at `range`'s first end and 1 at its second
+  (default `[0, 1]`, ends that differ, the first larger to invert), clamped between;
+  `true` reads 1 and `false` 0; a text reads its entry in `states` (at most 32 texts of 1
+  to 100 bytes, each to a value within 0 to 1) or 0; and a missing sender, key or field,
+  or one that went stale, reads 0. That is smoothed, bent and mapped onto `from..to` as a
+  `midi` modifier's is, with the same defaults. A preview reads the field as it is,
+  unsmoothed. Its `clock` is ignored, and a scene camera's motion refuses it.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.

@@ -1098,6 +1098,27 @@ fn reactive() -> Vec<MotionModifier> {
                 to: f(0.5),
             },
         ),
+        // A clip's state from a DAW (ADR-0171 decision 3): recording full, playing half.
+        modifier(
+            "clip",
+            MotionProperty::Opacity,
+            MotionKind::Data {
+                input: Some("Studio DAW".into()),
+                key: "track/1".into(),
+                field: "slots.0.state".into(),
+                range: [Finite32::ZERO, Finite32::ONE],
+                states: [
+                    ("recording".to_owned(), Finite32::ONE),
+                    ("playing".to_owned(), f(0.5)),
+                ]
+                .into_iter()
+                .collect(),
+                smoothing_ms: 0,
+                curve: MotionCurve::Linear,
+                from: f(-1.0),
+                to: Finite32::ZERO,
+            },
+        ),
     ]
 }
 

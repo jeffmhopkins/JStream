@@ -56,7 +56,15 @@ pub fn property_unit(property: MotionProperty) -> &'static str {
 }
 
 /// The kinds a row can switch between, by name.
-pub const KINDS: [&str; 6] = ["Wiggle", "Oscillate", "Drift", "Shake", "Audio", "MIDI"];
+pub const KINDS: [&str; 7] = [
+    "Wiggle",
+    "Oscillate",
+    "Drift",
+    "Shake",
+    "Audio",
+    "MIDI",
+    "DAW data",
+];
 
 /// What a MIDI modifier can follow, by name (ADR-0168).
 pub const CONTROLS: [(MotionMidiControl, &str); 3] = [
@@ -98,6 +106,7 @@ pub fn kind_name(kind: &MotionKind) -> &'static str {
         MotionKind::Impulse { .. } => "Shake",
         MotionKind::Audio { .. } => "Audio",
         MotionKind::Midi { .. } => "MIDI",
+        MotionKind::Data { .. } => "DAW data",
         _ => "Other",
     }
 }
@@ -131,6 +140,29 @@ pub fn default_kind(name: &str, property: MotionProperty) -> Option<MotionKind> 
             ceiling_db: Finite32::ZERO,
             attack_ms: 10,
             release_ms: 250,
+            curve: MotionCurve::Linear,
+            from: finite(from),
+            to: finite(to),
+        });
+    }
+    if name == "DAW data" {
+        // The transport's play state, on or off at once: a light that is lit while the
+        // song plays, or a panel that moves while it does (ADR-0171 decision 3).
+        let (from, to) = match property {
+            MotionProperty::Opacity => (-1.0, 0.0),
+            _ => match property_unit(property) {
+                "°" => (0.0, 45.0),
+                "×" => (0.0, 1.0),
+                _ => (0.0, 200.0),
+            },
+        };
+        return Some(MotionKind::Data {
+            input: None,
+            key: "transport".into(),
+            field: "playing".into(),
+            range: [Finite32::ZERO, Finite32::ONE],
+            states: std::collections::BTreeMap::new(),
+            smoothing_ms: 0,
             curve: MotionCurve::Linear,
             from: finite(from),
             to: finite(to),
@@ -259,6 +291,10 @@ pub enum Param {
     Channel,
     /// How long it takes to follow a new value; 0 jumps.
     Smoothing,
+    /// A data modifier's number that reads 0.
+    RangeLow,
+    /// Its number that reads 1.
+    RangeHigh,
 }
 
 impl Param {
@@ -315,6 +351,13 @@ impl Param {
                 Param::Smoothing,
             ],
             MotionKind::Midi { .. } => &[Param::From, Param::To, Param::Channel, Param::Smoothing],
+            MotionKind::Data { .. } => &[
+                Param::From,
+                Param::To,
+                Param::RangeLow,
+                Param::RangeHigh,
+                Param::Smoothing,
+            ],
             _ => &[],
         }
     }
@@ -343,6 +386,8 @@ impl Param {
             Param::Controller => ("CC", 1.0, 0, 0.0, 127.0),
             Param::Channel => ("Channel", 1.0, 0, 0.0, 16.0),
             Param::Smoothing => ("Smoothing", 10.0, 0, 0.0, 10_000.0),
+            Param::RangeLow => ("Number at 0", 1.0, 2, -100_000.0, 100_000.0),
+            Param::RangeHigh => ("Number at 1", 1.0, 2, -100_000.0, 100_000.0),
         }
     }
 
@@ -352,6 +397,8 @@ impl Param {
         match (kind, self) {
             (MotionKind::Midi { .. }, Param::From) => "At lowest",
             (MotionKind::Midi { .. }, Param::To) => "At highest",
+            (MotionKind::Data { .. }, Param::From) => "At 0 (off)",
+            (MotionKind::Data { .. }, Param::To) => "At 1 (on)",
             _ => self.field().0,
         }
     }
@@ -388,7 +435,14 @@ pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
         (MotionKind::Midi { to, .. }, Param::To) => f(to),
         (MotionKind::Midi { controller, .. }, Param::Controller) => controller.map(f64::from),
         (MotionKind::Midi { channel, .. }, Param::Channel) => Some(channel.map_or(0.0, f64::from)),
-        (MotionKind::Midi { smoothing_ms, .. }, Param::Smoothing) => Some(f64::from(smoothing_ms)),
+        (MotionKind::Midi { smoothing_ms, .. }, Param::Smoothing)
+        | (MotionKind::Data { smoothing_ms, .. }, Param::Smoothing) => {
+            Some(f64::from(smoothing_ms))
+        }
+        (MotionKind::Data { from, .. }, Param::From) => f(from),
+        (MotionKind::Data { to, .. }, Param::To) => f(to),
+        (MotionKind::Data { range, .. }, Param::RangeLow) => f(range[0]),
+        (MotionKind::Data { range, .. }, Param::RangeHigh) => f(range[1]),
         _ => None,
     }
 }
@@ -441,9 +495,15 @@ pub fn with_param(kind: &MotionKind, param: Param, value: f64) -> Option<MotionK
             let c = value.clamp(0.0, 16.0) as u8;
             *channel = (c > 0).then_some(c);
         }
-        (MotionKind::Midi { smoothing_ms, .. }, Param::Smoothing) => {
+        (MotionKind::Midi { smoothing_ms, .. }, Param::Smoothing)
+        | (MotionKind::Data { smoothing_ms, .. }, Param::Smoothing) => {
             *smoothing_ms = value.clamp(0.0, 10_000.0) as u32
         }
+        (MotionKind::Data { from, .. }, Param::From) => *from = v,
+        (MotionKind::Data { to, .. }, Param::To) => *to = v,
+        // The two ends must differ: one set onto the other is refused.
+        (MotionKind::Data { range, .. }, Param::RangeLow) if v != range[1] => range[0] = v,
+        (MotionKind::Data { range, .. }, Param::RangeHigh) if v != range[0] => range[1] = v,
         _ => return None,
     }
     Some(next)
@@ -539,11 +599,11 @@ pub fn with_control(kind: &MotionKind, next: MotionMidiControl) -> Option<Motion
     Some(kind)
 }
 
-/// A MIDI `kind` reading only the input named `name`, or any input when it is blank.
-/// `None` when it isn't MIDI or already reads that.
+/// A MIDI or data `kind` reading only the input named `name`, or any input when it is
+/// blank. `None` when it isn't MIDI or data, or already reads that.
 pub fn with_input(kind: &MotionKind, name: &str) -> Option<MotionKind> {
     let mut kind = kind.clone();
-    let MotionKind::Midi { input, .. } = &mut kind else {
+    let (MotionKind::Midi { input, .. } | MotionKind::Data { input, .. }) = &mut kind else {
         return None;
     };
     let name = name.trim();
@@ -555,10 +615,67 @@ pub fn with_input(kind: &MotionKind, name: &str) -> Option<MotionKind> {
     Some(kind)
 }
 
+/// A data `kind` reading `key`'s message at `field` instead, each trimmed. `None` when
+/// it isn't data, the key is blank, or it already reads that.
+pub fn with_data_path(kind: &MotionKind, next_key: &str, next_field: &str) -> Option<MotionKind> {
+    let mut kind = kind.clone();
+    let MotionKind::Data { key, field, .. } = &mut kind else {
+        return None;
+    };
+    let (next_key, next_field) = (next_key.trim(), next_field.trim());
+    if next_key.is_empty() || (key.as_str(), field.as_str()) == (next_key, next_field) {
+        return None;
+    }
+    *key = next_key.to_owned();
+    *field = next_field.to_owned();
+    Some(kind)
+}
+
+/// A data `kind`'s `states` as the States field shows them: `text=value` pairs, comma
+/// separated, `recording=1, playing=0.5`.
+pub fn states_text(kind: &MotionKind) -> String {
+    let MotionKind::Data { states, .. } = kind else {
+        return String::new();
+    };
+    states
+        .iter()
+        .map(|(text, value)| format!("{text}={}", value.get()))
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+/// A data `kind` with the States field's `text` as its table: each `text=value` pair, a
+/// value kept within 0 and 1 and a bare text reading 1. `None` when it isn't data or
+/// the table is the same.
+pub fn with_states(kind: &MotionKind, text: &str) -> Option<MotionKind> {
+    let mut kind = kind.clone();
+    let MotionKind::Data { states, .. } = &mut kind else {
+        return None;
+    };
+    let next: std::collections::BTreeMap<String, Finite32> = text
+        .split(',')
+        .filter_map(|pair| {
+            let (name, value) = match pair.split_once('=') {
+                Some((name, value)) => (name.trim(), value.trim().parse::<f32>().ok()?),
+                None => (pair.trim(), 1.0),
+            };
+            (!name.is_empty()).then(|| (name.to_owned(), finite(value.clamp(0.0, 1.0))))
+        })
+        .take(jstream_protocol::MAX_DATA_STATES)
+        .collect();
+    if *states == next {
+        return None;
+    }
+    *states = next;
+    Some(kind)
+}
+
 /// `kind`'s curve, when it is audio or MIDI.
 fn curve_of(kind: &MotionKind) -> Option<MotionCurve> {
     match kind {
-        MotionKind::Audio { curve, .. } | MotionKind::Midi { curve, .. } => Some(*curve),
+        MotionKind::Audio { curve, .. }
+        | MotionKind::Midi { curve, .. }
+        | MotionKind::Data { curve, .. } => Some(*curve),
         _ => None,
     }
 }
@@ -949,6 +1066,110 @@ pub fn MotionSection(
                             />
                         </label>
                     </Show>
+                    <Show when=move || at().is_some_and(|m| matches!(m.kind, MotionKind::Data { .. }))>
+                        <label class="select-field">
+                            <span class="field-label">"Sender"</span>
+                            <input
+                                type="text"
+                                aria-label="Which data sender"
+                                placeholder="Any sender"
+                                title="A JTunnel sender by name; blank for any"
+                                maxlength="64"
+                                prop:value=move || at().and_then(|m| match m.kind {
+                                    MotionKind::Data { input, .. } => input,
+                                    _ => None,
+                                }).unwrap_or_default()
+                                on:change=move |event| {
+                                    let name = event_target_value(&event);
+                                    change(n, &|m| match with_input(&m.kind, &name) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            />
+                        </label>
+                        <label class="select-field">
+                            <span class="field-label">"Key"</span>
+                            <input
+                                type="text"
+                                aria-label="Which data message"
+                                placeholder="transport"
+                                title="The message's key, as the sender names it: transport, track/1"
+                                maxlength="63"
+                                prop:value=move || at().map(|m| match m.kind {
+                                    MotionKind::Data { key, .. } => key,
+                                    _ => String::new(),
+                                }).unwrap_or_default()
+                                on:change=move |event| {
+                                    let next = event_target_value(&event);
+                                    change(n, &|m| {
+                                        let MotionKind::Data { field, .. } = &m.kind else {
+                                            return false;
+                                        };
+                                        match with_data_path(&m.kind, &next, &field.clone()) {
+                                            Some(kind) => {
+                                                m.kind = kind;
+                                                true
+                                            }
+                                            None => false,
+                                        }
+                                    });
+                                }
+                            />
+                        </label>
+                        <label class="select-field">
+                            <span class="field-label">"Field"</span>
+                            <input
+                                type="text"
+                                aria-label="Which field of the message"
+                                placeholder="The whole message"
+                                title="A dotted path into the message: playing, slots.0.state; blank for the whole message"
+                                maxlength="255"
+                                prop:value=move || at().map(|m| match m.kind {
+                                    MotionKind::Data { field, .. } => field,
+                                    _ => String::new(),
+                                }).unwrap_or_default()
+                                on:change=move |event| {
+                                    let next = event_target_value(&event);
+                                    change(n, &|m| {
+                                        let MotionKind::Data { key, .. } = &m.kind else {
+                                            return false;
+                                        };
+                                        match with_data_path(&m.kind, &key.clone(), &next) {
+                                            Some(kind) => {
+                                                m.kind = kind;
+                                                true
+                                            }
+                                            None => false,
+                                        }
+                                    });
+                                }
+                            />
+                        </label>
+                        <label class="select-field">
+                            <span class="field-label">"States"</span>
+                            <input
+                                type="text"
+                                aria-label="What each text reads"
+                                placeholder="recording=1, playing=0.5"
+                                title="For a field that is text: each text and the level it reads, 0 to 1. A text not listed reads 0; a number goes through the range"
+                                prop:value=move || at().map(|m| states_text(&m.kind)).unwrap_or_default()
+                                on:change=move |event| {
+                                    let text = event_target_value(&event);
+                                    change(n, &|m| match with_states(&m.kind, &text) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            />
+                        </label>
+                    </Show>
                     <Show when=move || at().is_some_and(|m| curve_of(&m.kind).is_some())>
                         <label class="select-field">
                             <span class="field-label">"Curve"</span>
@@ -969,7 +1190,8 @@ pub fn MotionSection(
                                     };
                                     change(n, &|m| match &mut m.kind {
                                         MotionKind::Audio { curve, .. }
-                                        | MotionKind::Midi { curve, .. } if *curve != next => {
+                                        | MotionKind::Midi { curve, .. }
+                                        | MotionKind::Data { curve, .. } if *curve != next => {
                                             *curve = next;
                                             true
                                         }
@@ -1251,6 +1473,82 @@ mod tests {
         let wiggle = default_kind("Wiggle", MotionProperty::X).expect("a kind");
         assert_eq!(with_control(&wiggle, MotionMidiControl::Pressure), None);
         assert_eq!(with_input(&wiggle, "x"), None);
+    }
+
+    /// ADR-0171: a data modifier's fields, its path, its states table and its
+    /// defaults, all of which the wire accepts.
+    #[test]
+    fn a_data_row_reads_and_writes_its_fields() {
+        let light = default_kind("DAW data", MotionProperty::Opacity).expect("a kind");
+        assert_eq!(kind_name(&light), "DAW data");
+        assert_eq!(param_value(&light, Param::From), Some(-1.0));
+        assert_eq!(param_value(&light, Param::To), Some(0.0));
+        assert_eq!(param_value(&light, Param::RangeLow), Some(0.0));
+        assert_eq!(param_value(&light, Param::RangeHigh), Some(1.0));
+        assert_eq!(param_value(&light, Param::Smoothing), Some(0.0));
+        assert_eq!(Param::To.label_for(&light), "At 1 (on)");
+        assert!(
+            matches!(&light, MotionKind::Data { key, field, .. } if key == "transport" && field == "playing")
+        );
+        for param in Param::of(&light) {
+            let next = with_param(&light, *param, 5.0).expect("its field");
+            assert_eq!(param_value(&next, *param), Some(5.0), "{param:?}");
+        }
+        assert_eq!(
+            with_param(&light, Param::RangeLow, 1.0),
+            None,
+            "the ends must differ"
+        );
+        assert_eq!(with_param(&light, Param::Controller, 1.0), None);
+
+        let clip = with_data_path(&light, " track/1 ", " slots.0.state ").expect("moved");
+        assert!(
+            matches!(&clip, MotionKind::Data { key, field, .. } if key == "track/1" && field == "slots.0.state")
+        );
+        assert_eq!(with_data_path(&clip, "track/1", "slots.0.state"), None);
+        assert_eq!(with_data_path(&clip, " ", "x"), None, "a key is needed");
+        let whole = with_data_path(&clip, "track/1", "").expect("the whole message");
+        assert!(matches!(&whole, MotionKind::Data { field, .. } if field.is_empty()));
+
+        let states =
+            with_states(&clip, "recording=1, playing = 0.5, queued, =3, loud=9").expect("a table");
+        assert_eq!(
+            states_text(&states),
+            "loud=1, playing=0.5, queued=1, recording=1"
+        );
+        assert_eq!(
+            with_states(&states, "recording=1, playing=0.5, queued, loud=1"),
+            None
+        );
+        let none = with_states(&states, "").expect("cleared");
+        assert_eq!(states_text(&none), "");
+
+        let named = with_input(&light, "Studio DAW").expect("named");
+        assert!(matches!(&named, MotionKind::Data { input: Some(i), .. } if i == "Studio DAW"));
+
+        let row = |kind| MotionModifier {
+            kind,
+            ..with_added(&[]).expect("room")[0].clone()
+        };
+        for kind in [light.clone(), clip, whole, states, none, named] {
+            assert_eq!(
+                jstream_control::protocol::check_motion(&[row(kind.clone())]),
+                Ok(()),
+                "{kind:?}"
+            );
+        }
+        for property in MotionProperty::ALL {
+            let kind = default_kind("DAW data", property).expect("a kind");
+            assert_eq!(
+                jstream_control::protocol::check_motion(&[row(kind)]),
+                Ok(()),
+                "{property:?}"
+            );
+        }
+        let wiggle = default_kind("Wiggle", MotionProperty::X).expect("a kind");
+        assert_eq!(with_data_path(&wiggle, "a", "b"), None);
+        assert_eq!(with_states(&wiggle, "a=1"), None);
+        assert_eq!(states_text(&wiggle), "");
     }
 
     #[test]

@@ -2219,6 +2219,78 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -5876,6 +5948,78 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
                 ],
                 "type": "object"
               },
@@ -9314,6 +9458,78 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -12971,6 +13187,78 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
                 ],
                 "type": "object"
               },
@@ -18319,6 +18607,78 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -21980,6 +22340,78 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -24177,6 +24609,78 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
                 ],
                 "type": "object"
               },
@@ -27689,6 +28193,78 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -31346,6 +31922,78 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -34334,6 +34982,78 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
                 ],
                 "type": "object"
               },
@@ -38340,6 +39060,78 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -41997,6 +42789,78 @@ source: crates/jstream-mcp/src/tests.rs
                 },
                 "required": [
                   "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows one field of a JTunnel sender's live data (ADR-0171 decision 3, since\n0.155): `field` of the latest message for `key` from `input`, read as 0 to 1,\nfollowed over `smoothing_ms`, bent by `curve` and mapped onto `from..to`. A number\nreads through `range`, `true` 1 and `false` 0, a text its `states` entry or 0, and\nan absent field 0, so the item rests at `from` until the sender says otherwise.",
+                "properties": {
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "field": {
+                    "default": "",
+                    "description": "A dotted path of object names and list indexes from 0 inside the key's\nmessage (`playing`, `slots.2.state`), at most 255 bytes; empty for the\nmessage itself. Default empty.",
+                    "type": "string"
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at 0, in the property's unit, within `-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The sender, a JTunnel sender by name, or omitted for whichever sent the key\nlast.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "key": {
+                    "description": "The key, 1 to 63 bytes, as the sender names it: `transport`, `track/3`.",
+                    "type": "string"
+                  },
+                  "kind": {
+                    "const": "data",
+                    "type": "string"
+                  },
+                  "range": {
+                    "default": [
+                      0.0,
+                      1.0
+                    ],
+                    "description": "A number at the first reads 0 and at the second 1, clamped between; the\nfirst may be the larger, to invert. They must differ. Default `[0, 1]`.",
+                    "items": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "maxItems": 2,
+                    "minItems": 2,
+                    "type": "array"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`, as a\n`midi` modifier's. Default 50; 0 jumps, which suits an on and off.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "states": {
+                    "additionalProperties": {
+                      "$ref": "#/$defs/Finite32"
+                    },
+                    "description": "What a text reads, 0 to 1, by the text: `{\"recording\": 1, \"playing\": 0.5}`.\nAt most 32 entries, each text 1 to 100 bytes; a text not listed reads 0.\nDefault none.",
+                    "type": "object"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at 1, within `-100000..=100000`; below `from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind",
+                  "key"
                 ],
                 "type": "object"
               },

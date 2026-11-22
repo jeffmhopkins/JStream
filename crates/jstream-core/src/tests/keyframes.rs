@@ -1449,6 +1449,64 @@ fn an_audio_modifier_follows_the_program_mix_and_reads_silence_until_heard() {
     );
 }
 
+/// ADR-0171 decision 3: a `data` modifier poses an item from a sender's live data: the
+/// transport's `playing` moves it, a preview reading it as it is.
+#[test]
+fn a_data_modifier_poses_an_item_from_live_data() {
+    let engine = family();
+    let control = connected(&engine);
+    switch(&control, "a", None);
+    let f = |v: f32| Finite32::new(v).expect("finite");
+    apply(
+        &control,
+        vec![Edit::ItemSetMotion {
+            item_id: ItemId::new("a1"),
+            scene_id: None,
+            motion: vec![jstream_protocol::MotionModifier {
+                modifier_id: "play".into(),
+                property: jstream_protocol::MotionProperty::X,
+                effect: None,
+                source: None,
+                kind: jstream_protocol::MotionKind::Data {
+                    input: None,
+                    key: "transport".into(),
+                    field: "playing".into(),
+                    range: [f(0.0), f(1.0)],
+                    states: std::collections::BTreeMap::new(),
+                    smoothing_ms: 0,
+                    curve: jstream_protocol::MotionCurve::Linear,
+                    from: f(0.0),
+                    to: f(100.0),
+                },
+                clock: jstream_protocol::MotionClock::Engine,
+                enabled: true,
+            }],
+        }],
+    );
+    let snapshot = engine.render_hub().load();
+    let shot = snapshot.shot();
+    assert!(shot.changes_with_time(), "a data modifier redraws");
+    let x = |at| {
+        moved_x(&engine, "a", at)
+            .into_iter()
+            .find(|(item, _)| item == "a1")
+            .map(|(_, x)| x)
+            .expect("a1 is drawn")
+    };
+    let rest = x(secs(1.0));
+    let data = engine.live_data();
+    data.put("DAW", "transport", br#"{"playing": true}"#, 0)
+        .expect("taken");
+    assert!((x(secs(1.0)) - (rest + 100.0)).abs() < 0.01, "playing");
+    let mut follower = crate::reactive::Follower::default();
+    follower.follow(shot.audio(), secs(1.0));
+    assert!((x(secs(1.0)) - (rest + 100.0)).abs() < 0.01, "followed");
+    data.put("DAW", "transport", br#"{"playing": false}"#, 10)
+        .expect("taken");
+    follower.follow(shot.audio(), secs(1.1));
+    assert!((x(secs(1.1)) - rest).abs() < 0.01, "stopped, at once");
+}
+
 /// ADR-0168: a `midi` modifier poses an item from a controller: a preview reads the
 /// control as it is, and the program's follower smooths it, landing on its first tick.
 #[test]

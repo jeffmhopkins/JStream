@@ -633,9 +633,13 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   picked), what it follows, level, peak, beat or a band, and its curve, ADR-0100, or
   MIDI: what it follows, a control change, pitch bend or pressure, its input by name
   (blank for any) and its curve, with At lowest, At highest, CC, Channel (0 for any) and
-  Smoothing (0 jumps) as its fields, ADR-0168), that
+  Smoothing (0 jumps) as its fields, ADR-0168, or DAW data: its Sender by name (blank
+  for any), the message's Key, the Field within it (a dotted path, blank for the whole
+  message), its States (`recording=1, playing=0.5`, for a field that is text) and its
+  curve, with At 0 (off), At 1 (on), Number at 0, Number at 1 and Smoothing as its
+  fields, starting on the transport's `playing`, ADR-0171; not on a camera), that
   kind's fields, when its time starts (in step, when shown, or when fired; not for
-  audio or MIDI), an On check, a Fire button on a row that starts when fired
+  audio, MIDI or data), an On check, a Fire button on a row that starts when fired
   (`item.trigger_motion` for that modifier, #1107) and Remove,
   and "+ Add motion" up to 8; each change sends `item.set_motion` with the whole list,
   in a keyframe its override, ADR-0099). A modifier that drives an effect's setting
