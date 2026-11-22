@@ -133,6 +133,9 @@ struct Shared {
     /// collection lock: `studio.set_warm` holds it while it sets the budget and then
     /// writes the file with the collection lock released, so writes land in order.
     warm_file: Mutex<Option<PathBuf>>,
+    /// The 3D rendering switches' file (ADR-0170 decision 1), once the host names it.
+    /// Taken before the collection lock, as the warm budget's file is.
+    rendering_file: Mutex<Option<PathBuf>>,
     /// The open collection file's stream-key scope (ADR-0121 §5), derived from its path,
     /// or `None` without a file. Set whenever the file changes; a leaf lock, taken alone
     /// or last.
@@ -236,6 +239,7 @@ impl Default for Engine {
                     collection_file: Mutex::new(None),
                     recent: Mutex::new(None),
                     warm_file: Mutex::new(None),
+                    rendering_file: Mutex::new(None),
                     key_scope: Mutex::new(None),
                     audio_scopes,
                     youtube: Mutex::new(None),
@@ -350,6 +354,49 @@ impl Engine {
         }
         *lock(&self.shared.warm_file) = Some(path);
         self
+    }
+
+    /// Keeps the 3D rendering switches (`studio.set_rendering`, ADR-0170 decision 1) in
+    /// the file at `path`: the switches it holds apply now, and every change is saved
+    /// there. A file that can't be read is logged and replaced on the next change.
+    #[must_use]
+    pub fn with_rendering_file(self, path: impl Into<PathBuf>) -> Self {
+        let path = path.into();
+        if let Some(features) = crate::rendering_file::load(&path) {
+            let mut state = lock(&self.shared.state);
+            if state.live.set_features(features) {
+                state.publish_render();
+            }
+        }
+        *lock(&self.shared.rendering_file) = Some(path);
+        self
+    }
+
+    /// `studio.set_rendering` (0.147, ADR-0170 decision 1), or `None` for any other
+    /// call.
+    fn rendering_call(&self, call: &Call) -> Option<Result<CallResult, ProtocolError>> {
+        let Call::Action {
+            action: Action::StudioSetRendering { change },
+        } = call
+        else {
+            return None;
+        };
+        let file = lock(&self.shared.rendering_file);
+        let saved = {
+            let mut state = lock(&self.shared.state);
+            let features = state.live.filter_assets().features().with(change);
+            let changed = state.live.set_features(features);
+            if changed {
+                state.publish_render();
+            }
+            changed.then_some(features)
+        };
+        if let Some(features) = saved
+            && let Some(path) = file.as_ref()
+        {
+            crate::rendering_file::save(path, features);
+        }
+        Some(Ok(CallResult::action()))
     }
 
     /// `studio.set_warm` (0.115, ADR-0117 §7; `gpu_mib` since 0.117, ADR-0150), or
@@ -2259,6 +2306,8 @@ impl Engine {
         } else if let Some(result) = self.clap_call(&call) {
             result
         } else if let Some(result) = self.warm_call(&call) {
+            result
+        } else if let Some(result) = self.rendering_call(&call) {
             result
         } else if let Some(result) = self.collection_call(client_id, request_id, &call, previews) {
             result
@@ -5913,7 +5962,7 @@ impl State {
             }
             // `Engine::execute` answers it before taking the collection lock, so it
             // only gets here from a path that isn't a client's call, which can't set it.
-            other @ Action::StudioSetWarm { .. } => {
+            other @ (Action::StudioSetWarm { .. } | Action::StudioSetRendering { .. }) => {
                 return Err(ProtocolError::Unsupported {
                     call: other.name().into(),
                 });
@@ -6037,6 +6086,7 @@ impl State {
                             .expect("invariant: the budget is at most MAX_WARM_SCENES"),
                     ),
                     warm_gpu_mib: Some(self.studio.gpu_mib()),
+                    rendering: Some(self.live.filter_assets().features()),
                     timelines: self
                         .timelines
                         .report(crate::timelines::ns(self.live.now()), |id| {

@@ -61,6 +61,7 @@ mod projects;
 mod ptz;
 mod quality;
 mod reactive;
+mod rendering_file;
 mod runtime;
 mod session;
 mod slot;

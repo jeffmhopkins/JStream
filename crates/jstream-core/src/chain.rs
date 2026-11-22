@@ -307,6 +307,9 @@ impl Chain {
             .filter(|filter| filter.enabled())
             // A follow camera drives its scene's camera and draws nothing (ADR-0120).
             .filter(|filter| filter.kind() != jstream_protocol::FOLLOW_POINTER_KIND)
+            // A 3D rendering switch that is off leaves its filter out (ADR-0170 decision 1),
+            // so it passes its input through and nothing it reads is drawn for it.
+            .filter(|filter| assets.features().draws_filter(filter.kind()))
             .filter_map(|filter| {
                 let effect = assets.effects().get(filter.kind()).cloned();
                 let drawn = effect.is_some()
@@ -1732,6 +1735,27 @@ mod tests {
         let pixel = draw(&mut compositor, (&mut cache, &mut chains), &reloaded, 1);
         assert_eq!(pixel, [0, 0, 255, 255], "the reloaded shader");
         assert_eq!(chains.len(), 1, "the filter was made again, not added");
+    }
+
+    /// A 3D rendering switch that is off leaves its filter out of the plan (ADR-0170
+    /// decision 1), and on again puts it back; a filter no switch names stays.
+    #[test]
+    fn a_rendering_switch_that_is_off_leaves_its_filter_out() {
+        let graph = graph_with(&[
+            ("logo", "ambient_occlusion", Settings::default(), true),
+            ("cam", "color_correction", Settings::default(), true),
+        ]);
+        assert_eq!(shot(&graph).chain_count(), 2, "every switch on");
+        let off = jstream_protocol::RenderFeatures {
+            ambient_occlusion: false,
+            ..jstream_protocol::RenderFeatures::ALL
+        };
+        let planned = shot_with(&graph, &FilterAssets::new().with_features(off));
+        assert_eq!(
+            planned.chain_count(),
+            1,
+            "only the color correction is left"
+        );
     }
 
     /// A shader source (ADR-0093) draws its program as its picture, keeping its
