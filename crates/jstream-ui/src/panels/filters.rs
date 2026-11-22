@@ -4579,7 +4579,10 @@ mod tests {
             shown_by(&collection, &scene_chain),
             Some(Shows::Scene(middle.clone()))
         );
-        assert_eq!(shown_by(&collection, &cam), Some(Shows::Scene(middle.clone())));
+        assert_eq!(
+            shown_by(&collection, &cam),
+            Some(Shows::Scene(middle.clone()))
+        );
         assert_eq!(shown_by(&collection, &mic_source), None);
         assert_eq!(shown_by(&collection, &FilterOwner::Master), None);
     }
