@@ -86,6 +86,8 @@ fn the_kind_has_video_and_audio_and_only_css_is_live() {
             ("page_api_tempo", false),
             ("page_api_midi", false),
             ("page_api_midi_input", false),
+            ("page_api_data", false),
+            ("page_api_data_input", false),
         ]
     );
 }
@@ -354,6 +356,7 @@ fn the_page_api_is_opt_in_and_sends_only_what_the_grant_covers() {
             values: true,
             levels: false,
             midi: false,
+            data: false,
         })
     );
     granted.page_view(&view(&values, 1000));

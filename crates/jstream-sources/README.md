@@ -213,7 +213,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   render thread reads it without a lock or an allocation. `true` reads 1 and `false` 0;
   an object, a list, `null` or a missing field read absent. One watch asked for twice
   shares a cell, a watch nobody holds is forgotten, and past 4,096 a cell reads absent.
-  `changes()` counts every change to any sender's messages (a put, an expired key, a
+  `entries(input)` reads every key's message from a sender, or from whichever has each
+  key, for a page granted the data. `changes()` counts every change to any sender's messages (a put, an expired key, a
   forgotten sender), so a reader of many keys tells that nothing changed with one atomic
   load, and `get_from(input, key)` reads one message from a sender or from the first
   sender by name that has the key.
@@ -692,10 +693,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   controllers, bend and pressure, with channels 1 to 16, and the last two seconds'
   note-ons as `[at, channel, key, velocity]`, times on `jstream.clock`; at most 128
   notes, 256 controllers and 32 recent notes. Never raw bytes or SysEx.
+  `page_api_data` adds `jstream.data()` and a `data` event for the JTunnel sender that
+  `page_api_data_input` names (empty for whichever sender has each key; read only while
+  the checkbox is on), as [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
+  decision 10 decides: `data()` is every key's newest message, `{key: message}`, and
+  each key that changes is one `data` event, `{key, value}`, with `value` `null` for a
+  key that went. The source reads `LiveData` (`Context::data`, `entries`) only when its
+  `changes()` moved, and sends a key only when its message is another one.
 
   The source sends its page only what changed (`page_api.rs`, `Feed`):
   the visibility with the clock time each part last became true, the scenes, the
-  levels, the MIDI reading, and the
+  levels, the MIDI reading, the live data keys that changed, and the
   covered values, with a removal for one that went or left the grant's cover; and a
   clock anchor first, every 250 ms after that, and at once when the clock goes back or
   jumps more than a second. The anchor's lead is one frame of `fps` plus the mean age of
@@ -706,7 +714,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   is always due, so the page reads the bus every frame. While the granted MIDI input
   moves (a message since the last look, or, with the tempo granted, a song playing) the
   next page frame is due too; while it rests, the source looks again every quarter
-  second, unless the engine gave it no MIDI state. `youtube_chat` never sets any
+  second, unless the engine gave it no MIDI state. A page granted live data is looked
+  at every page frame, since data lands at any time. `youtube_chat` never sets any
   of it. Where the backend paints on the GPU (Windows), the page's picture is only there
   (`gpu_frame`), so `frame` is a transparent frame of the page's size and never changes.
   Where it paints on the CPU (CEF on Linux,

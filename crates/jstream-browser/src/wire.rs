@@ -264,6 +264,7 @@ impl ToHelper {
                             | (u8::from(api.values) << 2)
                             | (u8::from(api.levels) << 3)
                             | (u8::from(api.midi) << 4)
+                            | (u8::from(api.data) << 5)
                     }
                 });
             }
@@ -311,6 +312,11 @@ impl ToHelper {
                     out.str(name)?;
                     out.opt_str(value.as_deref())?;
                 }
+                out.len(data.data.len())?;
+                for (key, value) in &data.data {
+                    out.str(key)?;
+                    out.opt_str(value.as_deref())?;
+                }
             }
         }
         Ok(())
@@ -346,11 +352,12 @@ impl ToHelper {
                 };
                 let page_api = match body.u8()? {
                     0 => None,
-                    flags if flags & !0b1_1111 == 0 && flags & 1 == 1 => Some(PageApi {
+                    flags if flags & !0b11_1111 == 0 && flags & 1 == 1 => Some(PageApi {
                         scenes: flags & 0b10 != 0,
                         values: flags & 0b100 != 0,
                         levels: flags & 0b1000 != 0,
                         midi: flags & 0b1_0000 != 0,
+                        data: flags & 0b10_0000 != 0,
                     }),
                     _ => return Err(WireError::Malformed("a page API's flags are unknown")),
                 };
@@ -414,6 +421,16 @@ impl ToHelper {
                 for _ in 0..count {
                     values.push((body.string()?, body.opt_string()?));
                 }
+                let count = body.len()?;
+                if count > body.0.len() / 5 {
+                    return Err(WireError::Malformed(
+                        "more data keys than the message holds",
+                    ));
+                }
+                let mut data = Vec::with_capacity(count);
+                for _ in 0..count {
+                    data.push((body.string()?, body.opt_string()?));
+                }
                 Self::PageData {
                     page,
                     data: PageData {
@@ -423,6 +440,7 @@ impl ToHelper {
                         levels,
                         midi,
                         values,
+                        data,
                     },
                 }
             }
@@ -712,6 +730,7 @@ mod tests {
                         values: false,
                         levels: true,
                         midi: true,
+                        data: true,
                     }),
                     ..spec(PageLocation::Web("https://example.com/".into()))
                 },
@@ -734,6 +753,10 @@ mod tests {
                     values: vec![
                         ("status.text".into(), Some(r#""On air""#.into())),
                         ("counter.a".into(), None),
+                    ],
+                    data: vec![
+                        ("track/0".into(), Some(r#"{"name":"Bass"}"#.into())),
+                        ("meters".into(), None),
                     ],
                 },
             },
