@@ -1,6 +1,7 @@
 //! The Inspector's Motion section (ADR-0099): the selected item's motion modifiers,
 //! each a row with what it moves, how (wiggle, oscillate, drift or shake, with that
-//! kind's parameters, or audio: what it hears and measures, ADR-0100), its clock and
+//! kind's parameters, audio: what it hears and measures, ADR-0100, or MIDI: which
+//! controller it follows, its range and smoothing, ADR-0168), its clock and
 //! whether it is on, and Add and Remove. A row on the trigger clock has a Fire button,
 //! which sends `item.trigger_motion` for it (#1107). Every change sends
 //! `item.set_motion` with the whole list, addressed to the shown scene, so in a keyframe
@@ -15,7 +16,8 @@ use crate::app::SessionContext;
 use crate::store::Studio;
 use jstream_control::protocol::{
     Action, BusId, Edit, Finite32, ItemId, MAX_MOTION_MODIFIERS, MotionClock, MotionCurve,
-    MotionKind, MotionMeasure, MotionModifier, MotionProperty, MotionShape, SceneId, SourceId,
+    MotionKind, MotionMeasure, MotionMidiControl, MotionModifier, MotionProperty, MotionShape,
+    SceneId, SourceId,
 };
 use leptos::prelude::*;
 
@@ -54,7 +56,14 @@ pub fn property_unit(property: MotionProperty) -> &'static str {
 }
 
 /// The kinds a row can switch between, by name.
-pub const KINDS: [&str; 5] = ["Wiggle", "Oscillate", "Drift", "Shake", "Audio"];
+pub const KINDS: [&str; 6] = ["Wiggle", "Oscillate", "Drift", "Shake", "Audio", "MIDI"];
+
+/// What a MIDI modifier can follow, by name (ADR-0168).
+pub const CONTROLS: [(MotionMidiControl, &str); 3] = [
+    (MotionMidiControl::Cc, "Control change"),
+    (MotionMidiControl::PitchBend, "Pitch bend"),
+    (MotionMidiControl::Pressure, "Pressure"),
+];
 
 /// What an audio modifier can measure, by name.
 pub const MEASURES: [(MotionMeasure, &str); 4] = [
@@ -88,6 +97,7 @@ pub fn kind_name(kind: &MotionKind) -> &'static str {
         MotionKind::Drift { .. } => "Drift",
         MotionKind::Impulse { .. } => "Shake",
         MotionKind::Audio { .. } => "Audio",
+        MotionKind::Midi { .. } => "MIDI",
         _ => "Other",
     }
 }
@@ -121,6 +131,28 @@ pub fn default_kind(name: &str, property: MotionProperty) -> Option<MotionKind> 
             ceiling_db: Finite32::ZERO,
             attack_ms: 10,
             release_ms: 250,
+            curve: MotionCurve::Linear,
+            from: finite(from),
+            to: finite(to),
+        });
+    }
+    if name == "MIDI" {
+        // A fader or knob across a range big enough to see: a lever's swing, a slide
+        // across part of the canvas, a fade from nothing, or up to twice the size.
+        let (from, to) = match property {
+            MotionProperty::Opacity => (-1.0, 0.0),
+            _ => match property_unit(property) {
+                "°" => (0.0, 45.0),
+                "×" => (0.0, 1.0),
+                _ => (0.0, 200.0),
+            },
+        };
+        return Some(MotionKind::Midi {
+            control: MotionMidiControl::Cc,
+            controller: Some(1),
+            channel: None,
+            input: None,
+            smoothing_ms: 50,
             curve: MotionCurve::Linear,
             from: finite(from),
             to: finite(to),
@@ -221,6 +253,12 @@ pub enum Param {
     LowHz,
     /// A band's highest frequency.
     HighHz,
+    /// A MIDI modifier's controller number.
+    Controller,
+    /// Its channel, 1 to 16; 0 for any.
+    Channel,
+    /// How long it takes to follow a new value; 0 jumps.
+    Smoothing,
 }
 
 impl Param {
@@ -266,6 +304,17 @@ impl Param {
                 Param::Decay,
                 Param::Duration,
             ],
+            MotionKind::Midi {
+                control: MotionMidiControl::Cc,
+                ..
+            } => &[
+                Param::From,
+                Param::To,
+                Param::Controller,
+                Param::Channel,
+                Param::Smoothing,
+            ],
+            MotionKind::Midi { .. } => &[Param::From, Param::To, Param::Channel, Param::Smoothing],
             _ => &[],
         }
     }
@@ -291,6 +340,19 @@ impl Param {
             Param::Ceiling => ("Ceiling", 1.0, 0, -89.0, 0.0),
             Param::LowHz => ("Low", 10.0, 0, 20.0, 19_999.0),
             Param::HighHz => ("High", 10.0, 0, 21.0, 20_000.0),
+            Param::Controller => ("CC", 1.0, 0, 0.0, 127.0),
+            Param::Channel => ("Channel", 1.0, 0, 0.0, 16.0),
+            Param::Smoothing => ("Smoothing", 10.0, 0, 0.0, 10_000.0),
+        }
+    }
+
+    /// Its label on a row of `kind`: a MIDI modifier's range is at the controller's
+    /// lowest and highest rather than at silence and the loudest.
+    pub fn label_for(self, kind: &MotionKind) -> &'static str {
+        match (kind, self) {
+            (MotionKind::Midi { .. }, Param::From) => "At lowest",
+            (MotionKind::Midi { .. }, Param::To) => "At highest",
+            _ => self.field().0,
         }
     }
 }
@@ -322,6 +384,11 @@ pub fn param_value(kind: &MotionKind, param: Param) -> Option<f64> {
         (MotionKind::Audio { ceiling_db, .. }, Param::Ceiling) => f(ceiling_db),
         (MotionKind::Audio { low_hz, .. }, Param::LowHz) => low_hz.and_then(f),
         (MotionKind::Audio { high_hz, .. }, Param::HighHz) => high_hz.and_then(f),
+        (MotionKind::Midi { from, .. }, Param::From) => f(from),
+        (MotionKind::Midi { to, .. }, Param::To) => f(to),
+        (MotionKind::Midi { controller, .. }, Param::Controller) => controller.map(f64::from),
+        (MotionKind::Midi { channel, .. }, Param::Channel) => Some(channel.map_or(0.0, f64::from)),
+        (MotionKind::Midi { smoothing_ms, .. }, Param::Smoothing) => Some(f64::from(smoothing_ms)),
         _ => None,
     }
 }
@@ -365,6 +432,18 @@ pub fn with_param(kind: &MotionKind, param: Param, value: f64) -> Option<MotionK
         (MotionKind::Audio { ceiling_db, .. }, Param::Ceiling) => *ceiling_db = v,
         (MotionKind::Audio { low_hz, .. }, Param::LowHz) => *low_hz = Some(v),
         (MotionKind::Audio { high_hz, .. }, Param::HighHz) => *high_hz = Some(v),
+        (MotionKind::Midi { from, .. }, Param::From) => *from = v,
+        (MotionKind::Midi { to, .. }, Param::To) => *to = v,
+        (MotionKind::Midi { controller, .. }, Param::Controller) => {
+            *controller = Some(value.clamp(0.0, 127.0) as u8)
+        }
+        (MotionKind::Midi { channel, .. }, Param::Channel) => {
+            let c = value.clamp(0.0, 16.0) as u8;
+            *channel = (c > 0).then_some(c);
+        }
+        (MotionKind::Midi { smoothing_ms, .. }, Param::Smoothing) => {
+            *smoothing_ms = value.clamp(0.0, 10_000.0) as u32
+        }
         _ => return None,
     }
     Some(next)
@@ -437,6 +516,51 @@ pub fn with_measure(kind: &MotionKind, next: MotionMeasure) -> Option<MotionKind
         *high_hz = None;
     }
     Some(kind)
+}
+
+/// A MIDI `kind` following `next` instead: a control change gets controller 1 (the
+/// modulation wheel) to start from, and the others drop the controller. `None` when it
+/// isn't MIDI or already follows that.
+pub fn with_control(kind: &MotionKind, next: MotionMidiControl) -> Option<MotionKind> {
+    let mut kind = kind.clone();
+    let MotionKind::Midi {
+        control,
+        controller,
+        ..
+    } = &mut kind
+    else {
+        return None;
+    };
+    if *control == next {
+        return None;
+    }
+    *control = next;
+    *controller = (next == MotionMidiControl::Cc).then(|| controller.unwrap_or(1));
+    Some(kind)
+}
+
+/// A MIDI `kind` reading only the input named `name`, or any input when it is blank.
+/// `None` when it isn't MIDI or already reads that.
+pub fn with_input(kind: &MotionKind, name: &str) -> Option<MotionKind> {
+    let mut kind = kind.clone();
+    let MotionKind::Midi { input, .. } = &mut kind else {
+        return None;
+    };
+    let name = name.trim();
+    let next = (!name.is_empty()).then(|| name.to_owned());
+    if *input == next {
+        return None;
+    }
+    *input = next;
+    Some(kind)
+}
+
+/// `kind`'s curve, when it is audio or MIDI.
+fn curve_of(kind: &MotionKind) -> Option<MotionCurve> {
+    match kind {
+        MotionKind::Audio { curve, .. } | MotionKind::Midi { curve, .. } => Some(*curve),
+        _ => None,
+    }
 }
 
 /// `kind` switched to the kind named `name`, keeping its size where both have one.
@@ -539,7 +663,8 @@ pub fn MotionSection(
                     .iter()
                     .map(|param| {
                         let param = *param;
-                        let (label, step, decimals, min, max) = param.field();
+                        let (_, step, decimals, min, max) = param.field();
+                        let label = param.label_for(&kind);
                         let unit = match param {
                             Param::Amplitude | Param::Rate | Param::Wrap => {
                                 at().map_or("", |m| property_unit(m.property))
@@ -548,7 +673,9 @@ pub fn MotionSection(
                                 at().map_or("", |m| property_unit(m.property))
                             }
                             Param::Frequency | Param::LowHz | Param::HighHz => "Hz",
-                            Param::Period | Param::Attack | Param::Release => "ms",
+                            Param::Period | Param::Attack | Param::Release | Param::Smoothing => {
+                                "ms"
+                            }
                             Param::Floor | Param::Ceiling => "dB",
                             _ => "",
                         };
@@ -759,17 +886,78 @@ pub fn MotionSection(
                                     .collect_view()}
                             </select>
                         </label>
+                    </Show>
+                    <Show when=move || at().is_some_and(|m| matches!(m.kind, MotionKind::Midi { .. }))>
+                        <label class="select-field">
+                            <span class="field-label">"Follows"</span>
+                            <select
+                                aria-label="What MIDI it follows"
+                                title="A control change (a fader, knob or pedal), the pitch bend wheel, or channel pressure"
+                                prop:value=move || at().and_then(|m| match m.kind {
+                                    MotionKind::Midi { control, .. } => CONTROLS
+                                        .iter()
+                                        .find(|(c, _)| *c == control)
+                                        .map(|(_, name)| *name),
+                                    _ => None,
+                                }).unwrap_or("")
+                                on:change=move |event| {
+                                    let name = event_target_value(&event);
+                                    let Some(next) = CONTROLS
+                                        .iter()
+                                        .find(|(_, n)| *n == name)
+                                        .map(|(c, _)| *c)
+                                    else {
+                                        return;
+                                    };
+                                    change(n, &|m| match with_control(&m.kind, next) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            >
+                                {CONTROLS
+                                    .iter()
+                                    .map(|(_, name)| view! { <option value=*name>{*name}</option> })
+                                    .collect_view()}
+                            </select>
+                        </label>
+                        <label class="select-field">
+                            <span class="field-label">"Input"</span>
+                            <input
+                                type="text"
+                                aria-label="Which MIDI input"
+                                placeholder="Any input"
+                                title="A MIDI port or JTunnel sender by name; blank for any"
+                                maxlength="64"
+                                prop:value=move || at().and_then(|m| match m.kind {
+                                    MotionKind::Midi { input, .. } => input,
+                                    _ => None,
+                                }).unwrap_or_default()
+                                on:change=move |event| {
+                                    let name = event_target_value(&event);
+                                    change(n, &|m| match with_input(&m.kind, &name) {
+                                        Some(kind) => {
+                                            m.kind = kind;
+                                            true
+                                        }
+                                        None => false,
+                                    });
+                                }
+                            />
+                        </label>
+                    </Show>
+                    <Show when=move || at().is_some_and(|m| curve_of(&m.kind).is_some())>
                         <label class="select-field">
                             <span class="field-label">"Curve"</span>
                             <select
                                 aria-label="Curve"
-                                prop:value=move || at().and_then(|m| match m.kind {
-                                    MotionKind::Audio { curve, .. } => CURVES
+                                prop:value=move || at().and_then(|m| curve_of(&m.kind)).and_then(|curve| CURVES
                                         .iter()
                                         .find(|(c, _)| *c == curve)
-                                        .map(|(_, name)| *name),
-                                    _ => None,
-                                }).unwrap_or("")
+                                        .map(|(_, name)| *name)).unwrap_or("")
                                 on:change=move |event| {
                                     let name = event_target_value(&event);
                                     let Some(next) = CURVES
@@ -780,7 +968,8 @@ pub fn MotionSection(
                                         return;
                                     };
                                     change(n, &|m| match &mut m.kind {
-                                        MotionKind::Audio { curve, .. } if *curve != next => {
+                                        MotionKind::Audio { curve, .. }
+                                        | MotionKind::Midi { curve, .. } if *curve != next => {
                                             *curve = next;
                                             true
                                         }
@@ -796,7 +985,8 @@ pub fn MotionSection(
                         </label>
                     </Show>
                     {fields}
-                    <Show when=move || !at().is_some_and(|m| matches!(m.kind, MotionKind::Audio { .. }))>
+                    // Audio and MIDI follow their input, never a clock.
+                    <Show when=move || !at().is_some_and(|m| curve_of(&m.kind).is_some())>
                     <label class="select-field">
                         <span class="field-label">"Starts"</span>
                         <select
@@ -985,6 +1175,82 @@ mod tests {
         assert_eq!(with_hears(&wiggle, "bus_music"), None);
         let pushed = with_kind(&wiggle, "Audio", MotionProperty::X).expect("switched");
         assert_eq!(kind_name(&pushed), "Audio");
+    }
+
+    /// ADR-0168: a MIDI modifier's fields, its control switch, its input and its
+    /// defaults, all of which the wire accepts.
+    #[test]
+    fn a_midi_row_reads_and_writes_its_fields() {
+        let lever = default_kind("MIDI", MotionProperty::Tilt).expect("a kind");
+        assert_eq!(kind_name(&lever), "MIDI");
+        assert_eq!(param_value(&lever, Param::From), Some(0.0));
+        assert_eq!(param_value(&lever, Param::To), Some(45.0));
+        assert_eq!(param_value(&lever, Param::Controller), Some(1.0));
+        assert_eq!(
+            param_value(&lever, Param::Channel),
+            Some(0.0),
+            "any channel"
+        );
+        assert_eq!(param_value(&lever, Param::Smoothing), Some(50.0));
+        assert_eq!(Param::From.label_for(&lever), "At lowest");
+        assert_eq!(
+            Param::From.label_for(&default_kind("Audio", MotionProperty::X).expect("a kind")),
+            "At silence"
+        );
+        let instant = with_param(&lever, Param::Smoothing, 0.0).expect("its field");
+        assert_eq!(
+            param_value(&instant, Param::Smoothing),
+            Some(0.0),
+            "0 jumps"
+        );
+        let on_ten = with_param(&lever, Param::Channel, 10.0).expect("its field");
+        assert!(matches!(
+            on_ten,
+            MotionKind::Midi {
+                channel: Some(10),
+                ..
+            }
+        ));
+        let any = with_param(&on_ten, Param::Channel, 0.0).expect("its field");
+        assert!(matches!(any, MotionKind::Midi { channel: None, .. }));
+        let cc7 = with_param(&lever, Param::Controller, 7.0).expect("its field");
+        assert_eq!(param_value(&cc7, Param::Controller), Some(7.0));
+
+        let bend = with_control(&cc7, MotionMidiControl::PitchBend).expect("switched");
+        assert_eq!(param_value(&bend, Param::Controller), None, "no controller");
+        assert!(!Param::of(&bend).contains(&Param::Controller));
+        assert_eq!(with_control(&bend, MotionMidiControl::PitchBend), None);
+        let back = with_control(&bend, MotionMidiControl::Cc).expect("switched");
+        assert_eq!(param_value(&back, Param::Controller), Some(1.0));
+
+        let named = with_input(&lever, " Launch Control ").expect("named");
+        assert!(matches!(&named, MotionKind::Midi { input: Some(i), .. } if i == "Launch Control"));
+        assert_eq!(with_input(&named, "Launch Control"), None);
+        let unnamed = with_input(&named, "").expect("any again");
+        assert!(matches!(unnamed, MotionKind::Midi { input: None, .. }));
+
+        let row = |kind| MotionModifier {
+            kind,
+            ..with_added(&[]).expect("room")[0].clone()
+        };
+        for kind in [lever.clone(), instant, on_ten, bend, named] {
+            assert_eq!(
+                jstream_control::protocol::check_motion(&[row(kind.clone())]),
+                Ok(()),
+                "{kind:?}"
+            );
+        }
+        for property in MotionProperty::ALL {
+            let kind = default_kind("MIDI", property).expect("a kind");
+            assert_eq!(
+                jstream_control::protocol::check_motion(&[row(kind)]),
+                Ok(()),
+                "{property:?}"
+            );
+        }
+        let wiggle = default_kind("Wiggle", MotionProperty::X).expect("a kind");
+        assert_eq!(with_control(&wiggle, MotionMidiControl::Pressure), None);
+        assert_eq!(with_input(&wiggle, "x"), None);
     }
 
     #[test]
