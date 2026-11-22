@@ -354,24 +354,26 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   drag putting it above Sharpen as one more, and × removing Sharpen; Edit filters… in
   an item's menu selecting the item and showing the panel behind the Arrange tab; the
   Add filter dialog from the panel and over the Properties dialog, which Escape leaves
-  open; and the Filters window on a double-click, with the prototype's hint for
-  Blur, whose switch applies at once, Cancel puts back and OK keeps; from the panel's
-  head it opens on the first filter with Source, This item and Scene tabs, a row's click
-  shows that filter, the Scene tab shows its empty chain, and Remove deletes the filter
-  shown and shows the next, the window staying open.
-  With three kinds described, Cancel in the window putting back what its own list did
-  (an eye on a filter never shown, × on Sharpen) and dropping a Blur added from the
-  window, which the Add filter dialog opened over and which the window then showed,
-  keeping those earlier changes; then a Blur added from the panel, which opens the
-  window on it, whose changed size and switch Cancel puts back, keeping the filter.
+  open; and the Filters window on a double-click, named for the Backdrop, with the
+  prototype's hint for Blur, the source's picture, and one footer of a note and Close:
+  its switch applies at once, Ctrl+Z from the window undoes it and Ctrl+Shift+Z redoes
+  it, and Close keeps it; from the panel's head it opens on the first filter with
+  Source, This item and Scene tabs, a row's click shows that filter, the Scene tab shows
+  its empty chain with the bar's Remove off, the bar's Move down puts Sharpen below Blur
+  and is then off, the ⋯ menu lists Defaults and Remove (Escape closing the menu, not
+  the window), its Remove deletes the filter shown and shows the next, and the bar's
+  Remove takes the last, the window staying open.
+  With three kinds described, the window keeping what its own list did (an eye on a
+  filter never shown, × on Sharpen) and a Blur added from its bar's Add filter…, which
+  the window then shows; then a Blur added from the panel, which opens the window on
+  it, whose switch Escape keeps.
   With three kinds described (`describeKinds`): the rows' summaries and carets, a click
-  on a filter with four settings opening the dialog, Cancel pressed straight after a
-  change there still putting the filter back (the change and its restore as two
-  edits), the Add filter dialog offering
+  on a filter with four settings opening the dialog, a change there one edit at once
+  that Escape keeps, the Add filter dialog offering
   only the video kinds under their group, its search, the picked kind's details, and
   Add as one edit, the new filter opening in place, where a changed setting is one more
   edit and updates the summary. With one setting refused late: a refusal that arrives
-  after its row was closed, and one after the Filters window was cancelled,
+  after its row was closed, and one after the Filters window was closed,
   each in the problem bar.
 - **Scene filters** (`scene-filters.spec.js`): with no item selected the panel showing
   Main's empty video chain with the scene note; with Sharpen and Gain described, Add
@@ -413,7 +415,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   under the source's; with Vignette (the core kind's four settings), Sharpen and Gain
   described, "+ Add effect…" offering the two video kinds, Vignette under Video · Style
   with its hint, for this item, with the item's foot; Add as one edit on the item, which
-  opens the Filters window on it, "Effect on “Backdrop”", once the collection
+  opens the Filters window on it, its name's tooltip "Effect on “Backdrop”", once the collection
   holds it, while the source keeps its own two; Sharpen added as a second effect, and
   dragged above the vignette as one reorder of the item's chain; the row's eye and × as
   one edit each; and selecting the scene again leaving the effects section out. In a
@@ -432,8 +434,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the first video filter's cost note, then its own Gain, counted on its FX button
   alone, whose eye and × edit the output's chain, not the master's; and the master's
   filter in the Filters window on a real double-click, which opens it even
-  though the first click's toggle scrolls the taller panel (#984), with no scope tabs,
-  and whose Remove deletes it.
+  though the first click's toggle scrolls the taller panel (#984), with no scope tabs
+  and no picture, and whose bar's Remove filter deletes it.
 - **Mixer** (`mixer.spec.js`, on the Audio mixer tab): the master card counting the
   seed's two channels, its Hear button enabled, its "FX 0" showing the program
   output's chain in the Filters panel, and its button (with its tooltip) unfolding the

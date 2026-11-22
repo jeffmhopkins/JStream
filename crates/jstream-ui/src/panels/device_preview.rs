@@ -7,7 +7,8 @@
 //! the capture for the stream alone, sharing a webcam already open; the picture never
 //! reaches program. Any other source with a picture shows the source itself
 //! (`source_id`, 0.56), with its filters, so a live setting's live value shows as it is
-//! edited and the rest once OK saves it.
+//! edited and the rest once OK saves it. The Filters window shows the chain's owner the
+//! same way: a source by its ID, or a scene by its (`scene_id`), as it is drawn.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -15,7 +16,9 @@ use crate::app::SessionContext;
 use crate::canvas::screen::Screen;
 use crate::canvas::taps::{Handler, PreviewTaps};
 use jstream_control::Control;
-use jstream_control::protocol::{Action, Call, PreviewCodec, PreviewDraft, Settings, SourceId};
+use jstream_control::protocol::{
+    Action, Call, PreviewCodec, PreviewDraft, SceneId, Settings, SourceId,
+};
 use leptos::html::Canvas;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -75,6 +78,8 @@ pub enum Shows {
     },
     /// The saved source, with its filters.
     Source(SourceId),
+    /// A scene, as it is drawn.
+    Scene(SceneId),
 }
 
 /// The `preview.subscribe` for `shows` on `channel`.
@@ -84,15 +89,17 @@ pub fn subscribe(channel: u32, shows: &Shows, h264: bool) -> Action {
     } else {
         vec![PreviewCodec::Jpeg]
     };
-    let (source, source_id) = match shows {
+    let (source, source_id, scene_id) = match shows {
         Shows::Draft { kind, settings } => (
             Some(PreviewDraft {
                 kind: kind.clone(),
                 settings: settings.clone(),
             }),
             None,
+            None,
         ),
-        Shows::Source(id) => (None, Some(id.clone())),
+        Shows::Source(id) => (None, Some(id.clone()), None),
+        Shows::Scene(id) => (None, None, Some(id.clone())),
     };
     Action::PreviewSubscribe {
         channel,
@@ -100,7 +107,7 @@ pub fn subscribe(channel: u32, shows: &Shows, h264: bool) -> Action {
         max_height: Some(MAX.1),
         fps: Some(FPS),
         codecs,
-        scene_id: None,
+        scene_id,
         source,
         source_id,
     }
@@ -153,34 +160,45 @@ pub fn SourcePreview(
     /// The settings the dialog is editing.
     draft: RwSignal<Settings>,
 ) -> impl IntoView {
+    let draft_kind = shows(&kind_id);
+    let wanted = Memo::new(move |_| {
+        if draft_kind {
+            Shows::Draft {
+                kind: kind_id.clone(),
+                settings: draft.with(|d| captured(&kind_id, d)),
+            }
+        } else {
+            Shows::Source(source_id.clone())
+        }
+    });
+    view! { <Picture wanted=wanted /> }
+}
+
+/// The picture of a saved source or a scene, which doesn't change while it shows, as
+/// the Filters window shows the chain's owner (FL-04).
+#[component]
+pub fn SavedPreview(
+    /// What it shows.
+    shows: Shows,
+) -> impl IntoView {
+    let wanted = Memo::new(move |_| shows.clone());
+    view! { <Picture wanted=wanted /> }
+}
+
+/// The picture of `wanted`, reopened on a new channel whenever it changes.
+#[component]
+fn Picture(wanted: Memo<Shows>) -> impl IntoView {
     let session = expect_context::<SessionContext>();
     let shared_taps = use_context::<PreviewTaps>();
     let taps = shared_taps.and_then(|taps| taps.get());
     let control: Option<Weak<dyn Control>> = session.get().map(|s| Rc::downgrade(&s.control));
     let canvas = NodeRef::<Canvas>::new();
     let shown = RwSignal::new(Shown::Starting);
-    let wanted = {
-        let kind_id = kind_id.clone();
-        let draft_kind = shows(&kind_id);
-        Memo::new(move |_| {
-            if draft_kind {
-                Shows::Draft {
-                    kind: kind_id.clone(),
-                    settings: draft.with(|d| captured(&kind_id, d)),
-                }
-            } else {
-                Shows::Source(source_id.clone())
-            }
+    let hint = move || {
+        wanted.with(|w| match w {
+            Shows::Draft { kind, settings } => hint(kind, settings),
+            Shows::Source(_) | Shows::Scene(_) => None,
         })
-    };
-    let hint = {
-        let kind_id = kind_id.clone();
-        move || {
-            wanted.with(|w| match w {
-                Shows::Draft { settings, .. } => hint(&kind_id, settings),
-                Shows::Source(_) => None,
-            })
-        }
     };
     // The open stream's channel, and whether H.264 is still asked for.
     let open = StoredValue::new_local(None::<u32>);
@@ -330,7 +348,9 @@ mod tests {
     use super::{
         FPS, MAX, Shown, Shows, after_picture, captured, hint, shows, still_open, subscribe,
     };
-    use jstream_control::protocol::{Action, PreviewCodec, PreviewDraft, Settings, SourceId};
+    use jstream_control::protocol::{
+        Action, PreviewCodec, PreviewDraft, SceneId, Settings, SourceId,
+    };
     use serde_json::json;
 
     fn settings(value: serde_json::Value) -> Settings {
@@ -455,5 +475,16 @@ mod tests {
         assert_eq!(source, None);
         assert_eq!(scene_id, None);
         assert_eq!(source_id, Some(SourceId::new("logo")));
+        let Action::PreviewSubscribe {
+            source,
+            source_id,
+            scene_id,
+            ..
+        } = subscribe(4, &Shows::Scene(SceneId::new("main")), true)
+        else {
+            panic!("a subscribe");
+        };
+        assert_eq!((source, source_id), (None, None));
+        assert_eq!(scene_id, Some(SceneId::new("main")));
     }
 }
