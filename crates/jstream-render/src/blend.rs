@@ -51,8 +51,18 @@ pub(crate) struct Layouts<'a> {
     pub(crate) encoded: bool,
 }
 
+/// The depth format of a scene pass with a model's depth (ADR-0107 decision 7): reversed,
+/// larger nearer, as the model draw's own.
+pub(crate) const SCENE_DEPTH_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Depth32Float;
+
 impl BlendPipelines {
-    pub(crate) fn new(device: &wgpu::Device, layouts: &Layouts<'_>) -> Self {
+    /// The pipelines for a pass without a depth target, or, with `depth`, for one with a
+    /// scene depth target that each draw tests with that function and never writes.
+    pub(crate) fn new(
+        device: &wgpu::Device,
+        layouts: &Layouts<'_>,
+        depth: Option<wgpu::CompareFunction>,
+    ) -> Self {
         let over = component(wgpu::BlendFactor::One, wgpu::BlendFactor::OneMinusSrcAlpha);
         let fixed = |label: &str, color: wgpu::BlendComponent, alpha: wgpu::BlendComponent| {
             pipeline(
@@ -61,6 +71,7 @@ impl BlendPipelines {
                 label,
                 "fs",
                 Some(wgpu::BlendState { color, alpha }),
+                depth,
             )
         };
         // Multiply, premultiplied: s·d + d·(1 − αs) + s·(1 − αd). The first draw writes
@@ -83,6 +94,7 @@ impl BlendPipelines {
                 &format!("jstream-render-{}", mode.as_str()),
                 entry,
                 None,
+                depth,
             )
         });
         let largest = wgpu::BlendComponent {
@@ -99,6 +111,7 @@ impl BlendPipelines {
                 color: largest,
                 alpha: largest,
             }),
+            depth,
         );
         Self {
             depth,
@@ -150,6 +163,21 @@ impl BlendPipelines {
     }
 }
 
+/// The pipeline that writes a model's view depth, an item's image, into a scene pass's
+/// depth target (ADR-0107 decision 7): `fs_write_depth`, keeping the nearer value, with
+/// no colour written.
+pub(crate) fn depth_writer(device: &wgpu::Device, layouts: &Layouts<'_>) -> wgpu::RenderPipeline {
+    pipeline_with(
+        device,
+        layouts,
+        "jstream-render-scene-depth",
+        "fs_write_depth",
+        Some(wgpu::BlendState::REPLACE),
+        Some((wgpu::CompareFunction::GreaterEqual, true)),
+        wgpu::ColorWrites::empty(),
+    )
+}
+
 /// Whether `mode` is drawn by reading the backdrop.
 pub(crate) fn reads_backdrop(mode: BlendMode) -> bool {
     BACKDROP_MODES.iter().any(|(m, _)| *m == mode)
@@ -169,6 +197,27 @@ fn pipeline(
     label: &str,
     entry: &str,
     blend: Option<wgpu::BlendState>,
+    depth: Option<wgpu::CompareFunction>,
+) -> wgpu::RenderPipeline {
+    pipeline_with(
+        device,
+        layouts,
+        label,
+        entry,
+        blend,
+        depth.map(|compare| (compare, false)),
+        wgpu::ColorWrites::ALL,
+    )
+}
+
+fn pipeline_with(
+    device: &wgpu::Device,
+    layouts: &Layouts<'_>,
+    label: &str,
+    entry: &str,
+    blend: Option<wgpu::BlendState>,
+    depth: Option<(wgpu::CompareFunction, bool)>,
+    write_mask: wgpu::ColorWrites,
 ) -> wgpu::RenderPipeline {
     let attributes = wgpu::vertex_attr_array![
         0 => Float32x2,
@@ -214,7 +263,13 @@ fn pipeline(
             cull_mode: None,
             ..Default::default()
         },
-        depth_stencil: None,
+        depth_stencil: depth.map(|(compare, write)| wgpu::DepthStencilState {
+            format: SCENE_DEPTH_FORMAT,
+            depth_write_enabled: Some(write),
+            depth_compare: Some(compare),
+            stencil: wgpu::StencilState::default(),
+            bias: wgpu::DepthBiasState::default(),
+        }),
         multisample: Default::default(),
         fragment: Some(wgpu::FragmentState {
             module: layouts.shader,
@@ -226,7 +281,7 @@ fn pipeline(
             targets: &[Some(wgpu::ColorTargetState {
                 format: wgpu::TextureFormat::Rgba16Float,
                 blend,
-                write_mask: wgpu::ColorWrites::ALL,
+                write_mask,
             })],
         }),
         multiview_mask: None,

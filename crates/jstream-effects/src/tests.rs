@@ -754,6 +754,7 @@ pub(crate) fn read(
         visible: true,
         camera: None,
         depth_run: 0,
+        depth: None,
     }];
     let scene = Scene {
         canvas: jstream_media::FrameSize::new(image.width(), image.height()).expect("non-zero"),

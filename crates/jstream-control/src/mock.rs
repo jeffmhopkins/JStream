@@ -1440,6 +1440,7 @@ impl State {
                     .map(|source_id| SourceSize {
                         source_id: source_id.clone(),
                         size: None,
+                        depth: None,
                     })
                     .collect(),
             },

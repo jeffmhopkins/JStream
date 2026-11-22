@@ -976,6 +976,18 @@ impl LiveSources {
         self.entries.get(source_id)?.running.as_ref()?.size
     }
 
+    /// The depth of `source_id`'s running instance at [`Self::size`], for a source with
+    /// depth: a 3D model (ADR-0107 decision 8).
+    pub(crate) fn depth(&self, source_id: &SourceId) -> Option<u32> {
+        let running = self.entries.get(source_id)?.running.as_ref()?;
+        let size = running.size?;
+        let shown = running.source.model()?;
+        Some(crate::snapshot::model_depth(
+            &shown,
+            [size.width(), size.height()],
+        ))
+    }
+
     /// Whether a mix (the program's, a video mix's or a preview's) looked at
     /// `source_id`'s running instance in the latest plan: it is drawn anyway, so a warm
     /// scene that draws it holds nothing more for it (ADR-0150).

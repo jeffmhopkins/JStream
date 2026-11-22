@@ -196,6 +196,15 @@ pub struct Item<'a> {
     /// their own, so they stay over the scenes under them through an equal camera.
     /// `0` otherwise.
     pub depth_run: u32,
+    /// A 3D model's own view depth (ADR-0107 decision 7), for the item that places its
+    /// layer: a layer of the image's size whose red holds `1 / w` where the model covers
+    /// the pixel and 0 elsewhere, as [`crate::Compositor::draw_model_depth`] draws it.
+    /// When a scene has one, its pass gets a depth target: this item writes the model's
+    /// depth there after drawing, and every item seen through a camera that draws after
+    /// it is hidden where the model is nearer. A model's layer itself isn't tested, so
+    /// models still order among themselves by their centres. `None` for every other
+    /// item, and in a scene with none of them nothing changes.
+    pub depth: Option<&'a Image>,
 }
 
 /// One scene: a canvas, its clear colour, and items bottom-first.

@@ -421,6 +421,8 @@ fn capture(
             seen.push(Item {
                 image,
                 camera: Some(*camera),
+                // A model's depth is drawn through the scene's camera, not this face's.
+                depth: None,
                 ..*item
             });
         }

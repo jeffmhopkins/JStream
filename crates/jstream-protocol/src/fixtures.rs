@@ -3075,10 +3075,20 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                         width: 1920,
                         height: 1080,
                     }),
+                    depth: None,
                 },
                 SourceSize {
                     source_id: SourceId::new("mic"),
                     size: None,
+                    depth: None,
+                },
+                SourceSize {
+                    source_id: SourceId::new("teapot"),
+                    size: Some(PixelSize {
+                        width: 512,
+                        height: 256,
+                    }),
+                    depth: Some(320),
                 },
             ],
         },
@@ -3839,10 +3849,20 @@ pub(crate) fn events() -> Vec<Event> {
             width: 1280,
             height: 720,
         }),
+        depth: None,
     });
     events.push(Event::SourceSizeChanged {
         source_id: SourceId::new("window"),
         size: None,
+        depth: None,
+    });
+    events.push(Event::SourceSizeChanged {
+        source_id: SourceId::new("teapot"),
+        size: Some(PixelSize {
+            width: 512,
+            height: 512,
+        }),
+        depth: Some(400),
     });
     events.push(Event::YoutubeStats {
         stats: AudienceStatsInfo {

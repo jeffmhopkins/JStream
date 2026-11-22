@@ -24,6 +24,17 @@ pub struct SolidBounds {
 const FLAT: f64 = 1e-9;
 
 impl SolidBounds {
+    /// The bounds of a source `width` by `height` by `depth` pixels, centred on its
+    /// origin: what an editor knows of a model from `source.sizes` (ADR-0107 decision 8),
+    /// which places it as its own bounds do, since a fit only reads their proportions.
+    pub fn of_size(width: f32, height: f32, depth: f32) -> Self {
+        let half = [width, height, depth].map(|v| v.max(0.0) * 0.5);
+        Self {
+            min: half.map(|v| -v),
+            max: half,
+        }
+    }
+
     fn size(&self) -> [f64; 3] {
         [0, 1, 2].map(|i| f64::from(self.max[i]) - f64::from(self.min[i]))
     }
@@ -177,6 +188,82 @@ impl ItemGeometry {
             center,
         })
     }
+}
+
+impl ItemGeometry {
+    /// The outline of a model's bounds as this item places them and `view` (or the item's
+    /// own viewer) sees them (ADR-0107 decision 8): the convex hull of the eight projected
+    /// corners, clockwise on the canvas (y down), what an editor outlines and hits a
+    /// model's item by. `None` when a corner is behind the viewer, the placement isn't
+    /// valid, or the hull has no area (a flat model seen edge-on).
+    pub fn solid_outline(
+        self,
+        bounds: SolidBounds,
+        view: Option<&CameraView>,
+    ) -> Option<Vec<CanvasPoint>> {
+        let solid = self.solid(bounds, view).ok()?;
+        let mut points = Vec::with_capacity(8);
+        for corner in solid.corners(bounds) {
+            match corner {
+                Placed::At(at) if at.x.is_finite() && at.y.is_finite() => points.push(at),
+                _ => return None,
+            }
+        }
+        let hull = convex_hull(points);
+        (hull.len() >= 3).then_some(hull)
+    }
+}
+
+/// Whether `at` is inside a convex `outline` (either winding), edges included: how an
+/// editor hits an outline from [`ItemGeometry::solid_outline`].
+pub fn outline_contains(outline: &[CanvasPoint], at: CanvasPoint) -> bool {
+    if outline.len() < 3 {
+        return false;
+    }
+    let side = |a: CanvasPoint, b: CanvasPoint| {
+        (f64::from(b.x) - f64::from(a.x)) * (f64::from(at.y) - f64::from(a.y))
+            - (f64::from(b.y) - f64::from(a.y)) * (f64::from(at.x) - f64::from(a.x))
+    };
+    let sides = (0..outline.len()).map(|i| side(outline[i], outline[(i + 1) % outline.len()]));
+    let (mut above, mut below) = (false, false);
+    for s in sides {
+        above |= s > 0.0;
+        below |= s < 0.0;
+    }
+    !(above && below)
+}
+
+/// The convex hull of `points` by Andrew's monotone chain, clockwise in a y-down frame,
+/// with no collinear points.
+fn convex_hull(mut points: Vec<CanvasPoint>) -> Vec<CanvasPoint> {
+    points.sort_by(|a, b| a.x.total_cmp(&b.x).then(a.y.total_cmp(&b.y)));
+    points.dedup();
+    if points.len() < 3 {
+        return points;
+    }
+    let cross = |o: CanvasPoint, a: CanvasPoint, b: CanvasPoint| {
+        (f64::from(a.x) - f64::from(o.x)) * (f64::from(b.y) - f64::from(o.y))
+            - (f64::from(a.y) - f64::from(o.y)) * (f64::from(b.x) - f64::from(o.x))
+    };
+    let mut hull: Vec<CanvasPoint> = Vec::with_capacity(points.len() * 2);
+    for pass in [false, true] {
+        let start = hull.len();
+        let ordered: Box<dyn Iterator<Item = &CanvasPoint>> = if pass {
+            Box::new(points.iter().rev())
+        } else {
+            Box::new(points.iter())
+        };
+        for &p in ordered {
+            while hull.len() >= start + 2
+                && cross(hull[hull.len() - 2], hull[hull.len() - 1], p) <= 0.0
+            {
+                hull.pop();
+            }
+            hull.push(p);
+        }
+        hull.pop();
+    }
+    hull
 }
 
 impl Solid {
@@ -483,5 +570,67 @@ mod tests {
         // A diagonal face's normal (1, 1, 0) leans toward y after a 4:1 stretch.
         let out = [0, 1, 2].map(|r| n[0][r] + n[1][r]);
         assert!(out[1] > out[0] * 3.9, "{out:?}");
+    }
+
+    fn extent(outline: &[CanvasPoint]) -> (f32, f32, f32, f32) {
+        outline.iter().fold(
+            (f32::MAX, f32::MAX, f32::MIN, f32::MIN),
+            |(l, t, r, b), p| (l.min(p.x), t.min(p.y), r.max(p.x), b.max(p.y)),
+        )
+    }
+
+    #[test]
+    fn a_models_outline_is_its_box_face_on_and_widens_as_it_turns() {
+        let cube = SolidBounds::of_size(512.0, 512.0, 512.0);
+        let mut g = item(200.0, 200.0, 100.0, 100.0);
+        let face_on = g.solid_outline(cube, None).expect("in view");
+        assert_eq!(
+            face_on.len(),
+            4,
+            "the front and back faces coincide: {face_on:?}"
+        );
+        let (l, t, r, b) = extent(&face_on);
+        near((l, t), (150.0, 150.0));
+        near((r, b), (250.0, 250.0));
+        g.turn_deg = Finite32::new(45.0).unwrap();
+        let turned = g.solid_outline(cube, None).expect("in view");
+        let (l, _, r, _) = extent(&turned);
+        // The cube's diagonal, 100·√2, faces the viewer now; a card would narrow.
+        near(
+            (l, r),
+            (200.0 - 50.0 * 2f32.sqrt(), 200.0 + 50.0 * 2f32.sqrt()),
+        );
+        let inside = |x: f32, y: f32| outline_contains(&turned, CanvasPoint { x, y });
+        assert!(inside(200.0, 200.0) && inside(135.0, 200.0));
+        assert!(!inside(125.0, 200.0) && !inside(200.0, 260.0));
+    }
+
+    #[test]
+    fn a_flat_model_has_no_depth_to_outline_beyond_its_box() {
+        let flat = SolidBounds::of_size(512.0, 256.0, 0.0);
+        let g = item(100.0, 100.0, 200.0, 100.0);
+        let (l, t, r, b) = extent(&g.solid_outline(flat, None).expect("in view"));
+        near((l, t), (0.0, 50.0));
+        near((r, b), (200.0, 150.0));
+    }
+
+    #[test]
+    fn a_model_reaching_behind_the_camera_has_no_outline() {
+        let canvas = Canvas {
+            width: 1920,
+            height: 1080,
+        };
+        let camera = SceneCamera::framing(canvas);
+        let view = camera.view(canvas).unwrap();
+        let mut g = item(960.0, 540.0, 100.0, 100.0);
+        assert!(
+            g.solid_outline(SolidBounds::of_size(1.0, 1.0, 1.0), Some(&view))
+                .is_some()
+        );
+        g.depth_px = Finite32::new(camera.target_distance()).unwrap();
+        assert!(
+            g.solid_outline(SolidBounds::of_size(1.0, 1.0, 1.0), Some(&view))
+                .is_none()
+        );
     }
 }

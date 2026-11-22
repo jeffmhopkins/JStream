@@ -177,6 +177,23 @@ fn model_key(model: Option<&ShownModel>) -> Option<(u64, Lighting, bool, Option<
     })
 }
 
+/// A model's depth in the pixels of `extent`, the size its stand-in is placed at: its
+/// bounds front to back, at the scale its width and height are (ADR-0107 decision 8). A
+/// model with no width or height but some depth takes the extent's larger side.
+pub(crate) fn model_depth(shown: &ShownModel, extent: [u32; 2]) -> u32 {
+    let [w, h, d] = shown.model.bounds().size();
+    let longest = w.max(h);
+    let side = extent[0].max(extent[1]) as f32;
+    let depth = if longest > 0.0 {
+        d.max(0.0) / longest * side
+    } else if d > 0.0 {
+        side
+    } else {
+        0.0
+    };
+    depth.round() as u32
+}
+
 impl Frame {
     pub(crate) fn new(
         width: u32,
@@ -272,6 +289,13 @@ impl Frame {
     /// The size it is placed at, which `source.sizes` reports (ADR-0073).
     pub(crate) fn extent(&self) -> Option<FrameSize> {
         FrameSize::new(self.extent[0], self.extent[1]).ok()
+    }
+
+    /// The depth of a source with depth, in the pixels of [`Self::extent`]: a model's
+    /// bounds front to back, at the scale its width and height are placed at (ADR-0107
+    /// decision 8), which `source.sizes` reports. `None` for any other frame.
+    pub(crate) fn depth(&self) -> Option<u32> {
+        Some(model_depth(self.model.as_ref()?, self.extent))
     }
 
     /// The same frame placed as if it were `extent`: a frame its source drew at a
@@ -3631,6 +3655,9 @@ pub(crate) enum GpuKey {
     ProbeFace(SceneId, u8),
     /// A model item drawn through a probe's face camera, for that face.
     ProbeModel(SceneId, ItemId),
+    /// A 3D model item's own view depth, through its scene's camera (ADR-0107 decision
+    /// 7): what the scene's pass tests the items after it against.
+    ModelDepth(SceneId, ItemId),
 }
 
 /// A shadow map drawn for a scene in this run of the chains (ADR-0151 decision 3).
@@ -5830,6 +5857,7 @@ pub(crate) fn compose_metered(
                             visible: true,
                             camera: None,
                             depth_run: 0,
+                            depth: None,
                         }
                     })
                     .collect();
@@ -6330,6 +6358,7 @@ fn draw_box(
         visible: true,
         camera: None,
         depth_run: 0,
+        depth: None,
     }];
     let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
         what: "item box",
@@ -6451,6 +6480,7 @@ fn light_card(
                 visible: true,
                 camera: None,
                 depth_run: 0,
+                depth: None,
             }];
             let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
                 what: "item box",
@@ -6545,6 +6575,17 @@ fn draw_model(
         (view.as_ref().filter(|_| lit), shown.receives_shadows),
         (live, captures),
     );
+    // In a 3D scene the model's depth is drawn too, for the items after it to test
+    // against (ADR-0107 decision 7): before its filters run, so a blur doesn't move it.
+    let depth_key = match (owner, camera) {
+        (ChainOwner::Item(scene, item), Some(_)) => {
+            let key = GpuKey::ModelDepth(scene.clone(), item.clone());
+            let [width, height] = boxed.boxed.layer;
+            cache.layer(compositor, &key, width, height)?;
+            Some(key)
+        }
+        _ => None,
+    };
     let maps = if lit && shown.receives_shadows {
         shadow_maps(&*cache, chains, scene_id)
     } else {
@@ -6573,8 +6614,8 @@ fn draw_model(
         })
         .flatten();
     let drawn = match (chains.model(source), cache.get(key)) {
-        (Some(model), Some(layer)) => Some(compositor.draw_model(
-            &jstream_render::ModelDraw {
+        (Some(model), Some(layer)) => {
+            let draw = jstream_render::ModelDraw {
                 model,
                 geometry,
                 camera,
@@ -6587,9 +6628,17 @@ fn draw_model(
                 texture,
                 reflection,
                 probe,
-            },
-            layer,
-        )),
+            };
+            Some(compositor.draw_model(&draw, layer).and_then(|()| {
+                match depth_key.as_ref().and_then(|key| cache.get(key)) {
+                    Some(depth) => {
+                        clear(compositor, depth)?;
+                        compositor.draw_model_depth(&draw, depth)
+                    }
+                    None => Ok(()),
+                }
+            }))
+        }
         _ => None,
     };
     drop(maps);
@@ -6602,6 +6651,19 @@ fn draw_model(
             Ok(())
         }
     }
+}
+
+/// Makes `layer` transparent all over.
+///
+/// # Errors
+/// What the compositor reports for the pass.
+fn clear(compositor: &mut Compositor, layer: &jstream_render::Image) -> Result<(), RenderError> {
+    let (width, height) = (layer.width(), layer.height());
+    let size = FrameSize::new(width, height).map_err(|_| RenderError::Invalid {
+        what: "layer",
+        detail: format!("a layer of {width}x{height}"),
+    })?;
+    compositor.render_into(&scene(size, Color::TRANSPARENT, &[]), layer)
 }
 
 /// What model `source`, as `shown`, shows on its surfaces and reflects this frame
@@ -6850,6 +6912,7 @@ fn draw_shadows(
         cast.clear();
         cast.extend(items.iter().map(|item| Item {
             camera: item.camera.map(|_| from),
+            depth: None,
             ..*item
         }));
         let seen = scene(map_canvas, Color::TRANSPARENT, &cast);
@@ -7045,9 +7108,11 @@ fn draw_reflection(
             })
             .and_then(|(_, reflected)| cache.get(reflected))
             .unwrap_or(item.image);
+        // The model's depth was drawn through the scene's camera, not the mirrored one.
         mirror.push(Item {
             image,
             camera: Some(mirrored),
+            depth: None,
             ..*item
         });
     }
@@ -7516,6 +7581,14 @@ pub(crate) fn claim_layers(
                         width,
                         height,
                     );
+                    if boxed.boxed.model && boxed.camera.is_some() {
+                        let _ = cache.layer(
+                            compositor,
+                            &GpuKey::ModelDepth(scene.clone(), item.clone()),
+                            width,
+                            height,
+                        );
+                    }
                 }
             }
             ChainStep::Run(_) => {}
@@ -7606,6 +7679,7 @@ fn under_sky<'a>(
             visible: true,
             camera: None,
             depth_run: 0,
+            depth: None,
         },
     );
 }
@@ -7642,6 +7716,7 @@ fn layer_item<'a>(
                 visible: true,
                 camera,
                 depth_run: 0,
+                depth: None,
             });
         }
         let (placement, crop) = live.apply(layer);
@@ -7649,6 +7724,18 @@ fn layer_item<'a>(
         let (item, modifiers) = &layer.motion.to;
         let by = shot.motion_at(item, modifiers, at);
         let (placement, crop, opacity) = motion::apply(&by, placement, crop, layer.opacity);
+        // A model's own depth, in a 3D scene, when it is at least half opaque, as the
+        // view depth takes it (ADR-0107 decision 7).
+        let depth = match (&layer.boxed, &layer.image, camera) {
+            (
+                Some(boxed),
+                GpuKey::ItemBox(scene, item) | GpuKey::Filtered(ChainOwner::Item(scene, item)),
+                Some(_),
+            ) if boxed.model && opacity >= 0.5 => {
+                cache.get(&GpuKey::ModelDepth(scene.clone(), item.clone()))
+            }
+            _ => None,
+        };
         let (placement, crop) = match &layer.boxed {
             // A model's layer is in the canvas's pixels; it sorts by the model's pose.
             Some(boxed) if boxed.model => match placement {
@@ -7673,6 +7760,7 @@ fn layer_item<'a>(
             visible: true,
             camera,
             depth_run: 0,
+            depth,
         })
     }
 }
@@ -7868,6 +7956,7 @@ fn fill_tracks<'a>(
                     camera: cameras.camera(track, *seen, elapsed),
                     // A stinger's items sort on their own, over the scenes under them.
                     depth_run: transition.cameras.depth_run(track, *seen),
+                    depth: None,
                 })
             }),
     );
@@ -7901,6 +7990,7 @@ fn fill_tracks<'a>(
                 visible: true,
                 camera: None,
                 depth_run: 0,
+                depth: None,
             },
         );
         under += 1;
@@ -8032,6 +8122,7 @@ fn fitted(image: &jstream_render::Image, from: FrameSize, into: FrameSize) -> It
         visible: true,
         camera: None,
         depth_run: 0,
+        depth: None,
     }
 }
 
