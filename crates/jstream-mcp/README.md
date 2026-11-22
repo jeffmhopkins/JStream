@@ -260,7 +260,8 @@ modifier for an item a performer poses live from a fader, knob, wheel or pedal, 
 `from`..`to` range and `smoothing_ms`, 0 to jump, and a moving part of a model as a model
 of its own, [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md); a `data`
 modifier for an item that follows a sender's live data, a number through its `range` or
-a text through its `states`, found with `data.list` and `data.get`,
+a text through its `states`, found with `data.list` and `data.get`, which on a colour
+setting can set the colour from a `#rrggbb` field or a `palette` (`color_from`),
 [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), a timed
 sequence as a `timeline` rather than in a page, with `timeline.cue_fired` read after a
 first play for a cue whose item is gone

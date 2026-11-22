@@ -23,6 +23,9 @@
 //! `emissive_strength` (a multiplier of the glow, 1 at rest, within 0 and 64). A setting
 //! the source's kind doesn't drive, an `emissive` one with no material, and a material
 //! the model doesn't have add nothing. An environment light's `intensity` follows too.
+//! A `data` modifier that paints (ADR-0171 decision 5) sets a light's `color`, or a
+//! model's `color` or a material's `emissive`, to its field's colour while it has one,
+//! before the others on it add theirs; it adds nothing to any setting.
 //!
 //! Docs: docs/adr/0171-live-data-from-a-daw-drives-scenes.md
 
@@ -36,6 +39,10 @@ use jstream_sources::ShownLight;
 
 /// An item's modifiers on its source's settings, each with the setting it drives.
 pub(crate) type SourceDrives = Arc<[(MotionSetting, Modifier)]>;
+
+/// For a modifier: `Some` when it paints a colour (ADR-0171 decision 5), with the colour
+/// it sets now, straight sRGB 0 to 1, if any; `None` when it adds its value instead.
+pub(crate) type Tint = Option<Option<[f32; 3]>>;
 
 /// `item`'s modifiers on its source's settings, or `None` when it has none.
 pub(crate) fn of(item: &GraphItem) -> Option<SourceDrives> {
@@ -64,11 +71,13 @@ const MAX_INTENSITY: f32 = 64.0;
 /// The largest range a light reaches, as its kind keeps it.
 const MAX_RANGE_PX: f32 = 1_000_000.0;
 
-/// `light` as `drives` change it, each modifier's value given by `value`.
+/// `light` as `drives` change it, each modifier's value given by `value`, and whether
+/// it paints by `tint`.
 pub(crate) fn light(
     light: &ShownLight,
     drives: &[(MotionSetting, Modifier)],
     value: impl Fn(&Modifier) -> f64,
+    tint: impl Fn(&Modifier) -> Tint,
 ) -> LightLook {
     let mut look = LightLook {
         color: light.color,
@@ -93,6 +102,12 @@ pub(crate) fn light(
             "shadow_softness" => Some(4),
             _ => continue,
         };
+        if let Some(color) = tint(modifier) {
+            if let (None, Some(color)) = (slot, color) {
+                look.color = color.map(|c| c.clamp(0.0, 1.0));
+            }
+            continue;
+        }
         let v = value(modifier) as f32;
         if !v.is_finite() {
             continue;
@@ -113,15 +128,17 @@ pub(crate) fn light(
     look
 }
 
-/// An environment light's intensity as `drives` change it.
+/// An environment light's intensity as `drives` change it; a painting modifier adds
+/// nothing.
 pub(crate) fn environment_intensity(
     intensity: f32,
     drives: &[(MotionSetting, Modifier)],
     value: impl Fn(&Modifier) -> f64,
+    tint: impl Fn(&Modifier) -> Tint,
 ) -> f32 {
     let add: f32 = drives
         .iter()
-        .filter(|(s, _)| s.material.is_none() && s.param == "intensity")
+        .filter(|(s, m)| s.material.is_none() && s.param == "intensity" && tint(m).is_none())
         .map(|(_, m)| value(m) as f32)
         .filter(|v| v.is_finite())
         .sum();
@@ -129,10 +146,13 @@ pub(crate) fn environment_intensity(
 }
 
 /// How `drives` change a model's materials as its item draws it, at most one drive a
-/// modifier, on the stack: the drives and how many of them there are.
+/// modifier, on the stack: the drives and how many of them there are. A painting
+/// modifier (`tint`) sets a `color` or an `emissive` while it has a colour, and adds
+/// nothing.
 pub(crate) fn materials(
     drives: &[(MotionSetting, Modifier)],
     value: impl Fn(&Modifier) -> f64,
+    tint: impl Fn(&Modifier) -> Tint,
 ) -> ([MaterialDrive<'_>; MAX_MOTION_MODIFIERS], usize) {
     let mut out = [MaterialDrive::default(); MAX_MOTION_MODIFIERS];
     let mut n = 0;
@@ -141,6 +161,23 @@ pub(crate) fn materials(
             break;
         }
         let material = setting.material.as_deref();
+        if let Some(color) = tint(modifier) {
+            let Some(color) = color else {
+                continue;
+            };
+            let mut drive = MaterialDrive {
+                material,
+                ..MaterialDrive::default()
+            };
+            match (setting.param.as_str(), material) {
+                ("color", _) => drive.set_color = Some(color),
+                ("emissive", Some(_)) => drive.set_emissive = Some(color),
+                _ => continue,
+            }
+            out[n] = drive;
+            n += 1;
+            continue;
+        }
         let v = value(modifier) as f32;
         if !v.is_finite() || v == 0.0 {
             continue;
@@ -221,7 +258,7 @@ mod tests {
             (setting("metallic", None), modifier("1")),
             (setting("intensity", Some("glass")), modifier("9")),
         ];
-        let look = light(&lamp(), &drives, by_id);
+        let look = light(&lamp(), &drives, by_id, |_| None);
         assert_eq!(look.intensity, 4.0);
         assert_eq!(look.color, [0.75; 3]);
         assert_eq!(look.cone_deg, 170.0);
@@ -230,14 +267,19 @@ mod tests {
         assert_eq!(look.shadow_softness, 0.3);
         // Never past 64, never below 0, and a light no modifier drives is as it is.
         let bright = [(setting("intensity", None), modifier("1000"))];
-        assert_eq!(light(&lamp(), &bright, by_id).intensity, 64.0);
+        assert_eq!(light(&lamp(), &bright, by_id, |_| None).intensity, 64.0);
         let dark = [(setting("color", None), modifier("-2"))];
-        assert_eq!(light(&lamp(), &dark, by_id).color, [0.0; 3]);
-        let still = light(&lamp(), &[], by_id);
+        assert_eq!(light(&lamp(), &dark, by_id, |_| None).color, [0.0; 3]);
+        let still = light(&lamp(), &[], by_id, |_| None);
         assert_eq!(still.color, lamp().color);
         assert_eq!(still.intensity, lamp().intensity);
         assert_eq!(
-            environment_intensity(1.0, &[(setting("intensity", None), modifier("-5"))], by_id),
+            environment_intensity(
+                1.0,
+                &[(setting("intensity", None), modifier("-5"))],
+                by_id,
+                |_| None
+            ),
             0.0
         );
     }
@@ -254,7 +296,7 @@ mod tests {
             (setting("metallic", None), modifier("0")),
             (setting("lighting", None), modifier("1")),
         ];
-        let (out, n) = materials(&drives, by_id);
+        let (out, n) = materials(&drives, by_id, |_| None);
         let got = &out[..n];
         assert_eq!(
             got,
@@ -280,6 +322,63 @@ mod tests {
                 },
             ]
         );
-        assert_eq!(materials(&[], by_id).1, 0);
+        assert_eq!(materials(&[], by_id, |_| None).1, 0);
+    }
+
+    /// ADR-0171 decision 5: a painting modifier sets a light's colour, a model's colour
+    /// or a material's glow while it has a colour, before the others add, and never adds
+    /// itself.
+    #[test]
+    fn a_painting_modifier_sets_a_colour_and_adds_nothing() {
+        let tint = |m: &Modifier| match m.id.as_str() {
+            "red" => Some(Some([1.0, 0.0, 0.0])),
+            "none" => Some(None),
+            _ => None,
+        };
+        let mut red = modifier("9");
+        red.id = "red".into();
+        let mut none = modifier("9");
+        none.id = "none".into();
+        let drives = [
+            (setting("color", None), red.clone()),
+            (setting("color", None), modifier("-0.5")),
+            (setting("intensity", None), red.clone()),
+        ];
+        let look = light(&lamp(), &drives, by_id, tint);
+        assert_eq!(look.color, [0.5, 0.0, 0.0], "set red, then darkened");
+        assert_eq!(look.intensity, 1.0, "it adds nothing to a number");
+        let unset = [(setting("color", None), none.clone())];
+        assert_eq!(light(&lamp(), &unset, by_id, tint).color, lamp().color);
+        assert_eq!(
+            environment_intensity(
+                1.0,
+                &[(setting("intensity", None), red.clone())],
+                by_id,
+                tint
+            ),
+            1.0
+        );
+        let drives = [
+            (setting("color", None), red.clone()),
+            (setting("emissive", Some("led")), red.clone()),
+            (setting("emissive", None), red.clone()),
+            (setting("metallic", None), red),
+            (setting("color", None), none),
+        ];
+        let (out, n) = materials(&drives, by_id, tint);
+        assert_eq!(
+            &out[..n],
+            &[
+                MaterialDrive {
+                    set_color: Some([1.0, 0.0, 0.0]),
+                    ..MaterialDrive::default()
+                },
+                MaterialDrive {
+                    material: Some("led"),
+                    set_emissive: Some([1.0, 0.0, 0.0]),
+                    ..MaterialDrive::default()
+                },
+            ]
+        );
     }
 }

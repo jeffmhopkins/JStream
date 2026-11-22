@@ -354,6 +354,8 @@ mod tests {
                 curve: MotionCurve::EaseIn,
                 from: f(100_000.0),
                 to: f(-100_000.0),
+                color_from: None,
+                palette: std::collections::BTreeMap::new(),
             },
         ];
         // More kinds than a list may hold, so they are checked as two lists.

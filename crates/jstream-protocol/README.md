@@ -222,7 +222,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MotionKind::Data` follows one field of a JTunnel sender's live data, within
   `MAX_DATA_KEY_LEN` (63), `MAX_DATA_FIELD_LEN` (255), `MAX_DATA_STATES` (32) and
   `MAX_DATA_STATE_LEN` (100)
-  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3),
+  and since 0.164 sets a colour from its field with `MotionColorFrom` (decision 5).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -366,7 +367,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.160 because a motion modifier can follow a DAW's live data:
+`PROTOCOL_VERSION` is 0.164 because a `data` motion modifier can set a colour setting
+from its field: `MotionKind::Data`'s `color_from` (`MotionColorFrom`: a `#rrggbb` text, or
+a pick from its `palette`)
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 5);
+0.160 because a motion modifier can follow a DAW's live data:
 `MotionKind`'s `data` reads one field of a JTunnel sender's state through a `range` or a
 `states` table, smoothed as a `midi` one is
 ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3);
@@ -2906,6 +2911,14 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   or one that went stale, reads 0. That is smoothed, bent and mapped onto `from..to` as a
   `midi` modifier's is, with the same defaults. A preview reads the field as it is,
   unsmoothed. Its `clock` is ignored, and a scene camera's motion refuses it.
+  Since 0.164 (decision 5), on a colour setting (`property` `effect` or `source`; any
+  other property refuses it, `motion.N.color_from`) it can set the colour rather than
+  add to it: `color_from` `field` takes a `#rrggbb` (or `#rrggbbaa`, alpha ignored) text
+  from the field, and `palette` picks one from `palette` by the field's text (1 to 32
+  entries, texts of 1 to 100 bytes, each `#rrggbb`; a `palette` without `color_from`
+  `palette` is refused). While the field gives a colour it replaces the setting's own,
+  before the other modifiers on it add to theirs, blended in sRGB over `smoothing_ms`;
+  otherwise, and on a setting that isn't a colour, it changes nothing.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.

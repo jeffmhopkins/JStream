@@ -1319,6 +1319,12 @@ impl Shot {
         f64::from(self.motion_at(item, std::slice::from_ref(modifier), at).x)
     }
 
+    /// Whether `item`'s modifier `modifier` paints a colour setting, with the colour it
+    /// sets now (ADR-0171 decision 5).
+    fn tint(&self, item: &ItemId, modifier: &jstream_anim::Modifier) -> crate::sourced::Tint {
+        self.audio.tint(item, &modifier.id)
+    }
+
     /// The modifiers `item` drives its source's settings with (ADR-0171 decision 4);
     /// empty for none.
     fn source_drives(
@@ -1347,15 +1353,18 @@ impl Shot {
                         .x,
                 )
             };
+            let tint = |modifier: &jstream_anim::Modifier| self.tint(&driven.item, modifier);
             match blended.iter_mut().find(|(o, _)| *o == owner) {
                 Some((_, settings)) => {
-                    if let Some(moved) = driven.settings(settings, |s| s, value) {
+                    if let Some(moved) = driven.settings(settings, |s| s, value, tint) {
                         *settings = moved;
                     }
                 }
                 // Read in place: settings are cloned only on a frame that moves one.
                 None => {
-                    if let Some(moved) = driven.settings(&chain.filters, |f| &f.settings, value) {
+                    if let Some(moved) =
+                        driven.settings(&chain.filters, |f| &f.settings, value, tint)
+                    {
                         blended.push((owner, moved));
                     }
                 }
@@ -6528,9 +6537,11 @@ fn draw_model(
         None
     };
     // Its materials as its item's modifiers drive them (ADR-0171 decision 4).
-    let (drives, driving) = crate::sourced::materials(shot.source_drives(&boxed.item), |m| {
-        shot.source_value(&boxed.item, m, at)
-    });
+    let (drives, driving) = crate::sourced::materials(
+        shot.source_drives(&boxed.item),
+        |m| shot.source_value(&boxed.item, m, at),
+        |m| shot.tint(&boxed.item, m),
+    );
     let (texture, reflection) = model_maps(shot, &*cache, source, shown);
     let drawn = match (chains.model(source), cache.get(key)) {
         (Some(model), Some(layer)) => {
@@ -6916,9 +6927,11 @@ fn draw_reflection(
             continue;
         };
         pose(compositor, model, shown);
-        let (drives, driving) = crate::sourced::materials(shot.source_drives(item_id), |m| {
-            shot.source_value(item_id, m, at)
-        });
+        let (drives, driving) = crate::sourced::materials(
+            shot.source_drives(item_id),
+            |m| shot.source_value(item_id, m, at),
+            |m| shot.tint(item_id, m),
+        );
         let source = shot
             .boxes
             .iter()
@@ -7189,9 +7202,12 @@ fn scene_lights(
         };
         let (position, aim) = geometry.light_pose_seen(view);
         // Its settings as its item's modifiers drive them (ADR-0171 decision 4).
-        let look = crate::sourced::light(light, shot.source_drives(&placed.item), |m| {
-            shot.source_value(&placed.item, m, at)
-        });
+        let look = crate::sourced::light(
+            light,
+            shot.source_drives(&placed.item),
+            |m| shot.source_value(&placed.item, m, at),
+            |m| shot.tint(&placed.item, m),
+        );
         let [r, g, b] = look.color;
         lights.push(jstream_render::SceneLight {
             kind: match light.kind {
@@ -7307,6 +7323,7 @@ fn environment_at<'c>(
             light.intensity,
             shot.source_drives(&placed.item),
             |m| shot.source_value(&placed.item, m, at),
+            |m| shot.tint(&placed.item, m),
         ),
         turn_deg,
         image: sky
