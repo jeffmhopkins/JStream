@@ -162,7 +162,8 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
   under it.
 - **Footer**, 56 px with 32 px buttons, one per dialog: Defaults, Delete… and similar on
   the left (`.footer-left`), Cancel and the primary on the right.
-- **Commit model.** A setting that applies at once leaves a Close footer. One that is
+- **Commit model.** A setting that applies at once leaves a Close footer, as the
+  Filters window's does, with a note on its left that Ctrl+Z undoes. One that is
   heavy to change waits in a draft for Save, with Cancel beside it; Save closes the
   dialog, and no dialog has Apply. In Settings only the Video page is a draft: the
   footer reads Cancel and Save while it is shown or holds a change, and Close otherwise.

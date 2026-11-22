@@ -212,11 +212,13 @@ Contents ([Design](#design) explains the choices):
   `CameraMoves`, with the followable items, the Follow pointer note and adding a camera
   modifier tested natively), the Filters
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
-  Properties dialogs' list and pane, and `FilterUndo`, what the Filters window and the
-  Properties dialogs opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
+  Properties dialogs' list and pane, and `FilterUndo`, what the Properties dialogs
+  opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
   them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
-  effects too), the window's scope tabs (`window_scopes`) and Cancel's restore (`window_restore`, `restore_patch`) tested natively), the
+  effects too), the window's scope tabs (`window_scopes`), its picture (`shown_by`),
+  its bar's steps (`stepped`), its undo keys (`history_key`) and the Properties
+  dialogs' restore (`window_restore`, `restore_patch`) tested natively), the
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
   `// @name` and `// @param` lines, the `effect.toml` they make (a source's too), the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
@@ -757,8 +759,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   filter chains (the Filters panel's rows, whose click picks a filter, the first picked
   on entering) and Add filter beside the picked filter's pane, as the Filters window
   draws it. The draft's pane stays mounted while Filters shows, so nothing typed is
-  lost. Filter edits apply at once and the dialog keeps a `FilterUndo`, the Filters
-  window's log, so Cancel puts back each one it sent and OK keeps them. OK sends only what the user changed since the dialog
+  lost. Filter edits apply at once and the dialog keeps a `FilterUndo`, a log of
+  each one it sends, so Cancel puts back each one it sent and OK keeps them. OK sends only what the user changed since the dialog
   opened, so another client's edit meanwhile stays: a rename (unless the name is blank
   or as it opened) and one `source.set_settings` with each changed value and `null` for
   each one the draft dropped (`draft_patch`), as one batch, and closes once the engine
@@ -845,37 +847,40 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its settings come from the kind's descriptor, read once per kind and kept; a kind the
   engine doesn't describe shows its name alone. A filter with three settings or fewer
   opens the properties form under its row, any other opens the Filters window (the
-  segmented scope switcher from `window_scopes`, each scope with its filter count, the chain on the left and the selected filter's
-  settings on the right, over an undimmed canvas, Cancel putting back what it did),
+  segmented scope switcher from `window_scopes`, each scope with its filter count, the chain on the left over a bar of
+  Add filter…, Remove filter, Move up and Move down, and on the right the owner's
+  picture (`SavedPreview` of `shown_by`: the source, or the scene of a scene's or an
+  item's chain) over the selected filter's settings, with its switch and a ⋯ menu of
+  Defaults and Remove, over an undimmed canvas, with only Close),
   as the panel's head button does, and a double-click always does: in the
   Filters panel, the panel opens the window on
   the row the double-click's first click landed on (`double_click_target`, within
   800 ms), as that click's fold can scroll the row from under the second, which
   toggles nothing, and a first click anywhere else in the panel forgets that row (#984);
   each field's change is a one-parameter
-  `filter.set_settings`. The window applies every change at once and notes each filter
-  edit sent while it is open (`FilterDialogs::sent`: its rows' eyes, × and drags, its
-  pane, and the Add filter dialog over it, whose new filter the window then shows,
-  keeping its notes). On Cancel, Escape or the backdrop it sends one batch
-  (`window_restore`) from those notes and each scope's chains as it opened: a filter it
-  added removed, one it removed added back where it was, a chain it reordered put back
-  in order, each setting it sent and each switch it pressed put back, including those
-  whose change the engine hasn't reported yet; what another client changed stays, but
-  for the settings of a filter the window also edited. An item's effects in a keyframe
-  that followed the item's own as the window opened (`following_keyframes`, ADR-0088)
-  are not put back filter by filter: the window's first edit there gave the keyframe its
-  own effects, so the batch clears that override (`item.clear_override` of `effects`),
-  which drops every edit made there meanwhile, and the keyframe follows the item again
-  (#1028). A keyframe whose override came from an add made just before the window
-  opened, which the window adopts, keeps it. An
+  `filter.set_settings`. The window applies every change at once, each an undo step,
+  and Close, Escape, × and the backdrop only close it: Ctrl+Z and Ctrl+Shift+Z (or
+  Ctrl+Y) send `history.undo` and `history.redo` from it, but in a text, number or
+  select field, which keeps its own, and the footer says so. The Add filter dialog over
+  it adds a filter the window then shows (`landed`). The Properties dialogs, whose
+  Cancel does put filter edits back, note each one they send (`FilterDialogs::sent`)
+  and on Cancel send one batch (`window_restore`) from those notes and each chain as it
+  opened: a filter added removed, one removed added back where it was, a chain
+  reordered put back in order, each setting sent and each switch pressed put back,
+  including those whose change the engine hasn't reported yet; what another client
+  changed stays, but for the settings of a filter the dialog also edited. An item's
+  effects in a keyframe that followed the item's own as it opened
+  (`following_keyframes`, ADR-0088) are not put back filter by filter: the first edit
+  there gave the keyframe its own effects, so the batch clears that override
+  (`item.clear_override` of `effects`), which drops every edit made there meanwhile, and
+  the keyframe follows the item again (#1028). An
   edit that fails after the window, or the row edited in place, has closed shows in the
   problem bar. Defaults resets each setting but a scene input's scene. The Add filter
   dialog offers `kind.list`'s filter kinds for the source's chains under the prototype's
   groups, names and hints for the kinds it knows, and sends `filter.add` with an ID from
   `fresh_id`; the new filter opens in place, or in the Filters window when it has more
-  than three settings or isn't described yet, the window adding it to what it opened
-  with once the store holds it (`adopt`), so Cancel puts it back as added. Added from
-  the open window, any filter is selected there instead (`landed`). Edit filters… in the item menus selects the item and shows the
+  than three settings or isn't described yet. Added from the open window, any filter
+  is selected there instead (`landed`). Edit filters… in the item menus selects the item and shows the
   panel. Names come from the prototype's catalogue, then `kind.list`, then the kind's ID.
   A filter whose kind `kind.list` marks quarantined (ADR-0087: an effect-pack kind a GPU
   device loss was blamed on, bypassed) shows a "quarantined" badge and a Re-enable
@@ -904,9 +909,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   change unsaid (`closing`): Done, × or Escape sends a change still waiting and closes
   once it loads, and text that doesn't compile keeps the editor open with Close anyway.
   It shows a quarantine (ADR-0087) with Re-enable, since a new version doesn't lift it.
-  The Filters window's Cancel fits each settings patch to the kind as described now
+  A Properties dialog's Cancel fits each settings patch to the kind as described now
   (`fit_restore`, `fit_settings`), since the shader can drop or retype a setting the
-  window sent and the engine refuses a batch with one such key. Cancel doesn't reach
+  dialog sent and the engine refuses a batch with one such key. Cancel doesn't reach
   the disk: a written pack stays. Each `// @renamed <old> <new>` line raises the
   manifest's version by one and adds the pair to `renames` (`Declared::version`,
   ADR-0025). The engine moves every filter of the pack's kind through the renames when
