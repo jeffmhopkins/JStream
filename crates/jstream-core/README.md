@@ -273,7 +273,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   senders' state. `data.list` and `data.get` (protocol 0.140) answer from `LiveData` on
   its own lock, outside the collection lock; `profile.get`'s `network` carries the three
   counters. The live sources hold the same `LiveData` in their build `Context`
-  (`LiveSources::set_data`), so a `grid` source draws from it.
+  (`LiveSources::set_data`), so a `grid` source draws from it, and the same call hands
+  it to every plan in their `FilterAssets` for the `data` motion modifiers.
   Each sender's frames go through a `Playout` (jitter buffer, sequence tracking, clock
   estimate) held for the source's `latency_ms`, and each one due is handed to the
   source's mixer input as a device packet: the stream position as the device position,
