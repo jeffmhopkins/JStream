@@ -508,7 +508,13 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current
    change count only, so any later write forgets them. `apply_filter_into` counts its
    write of each layer it drew into, then sets that layer's bounds: for its output, a
-   bounded filter's reach past its input's, or unknown ([Filters](#filters)). A scene placing the layer as a 2D item
+   bounded filter's reach past its input's, or unknown ([Filters](#filters)).
+   `draw_model` sets its layer's too: the box, on the layer, of the eight corners of
+   the model's bounds (`drawn_box`, a texel of margin), and `draw_model_depth` adds
+   that box to what its target held. So a small model's layer, its depth and its
+   effects cost the model's box, not the canvas. A rigged model, whose pose can leave
+   its bounds, and a model whose bounds reach behind the viewer have no box and are
+   drawn whole (`a_models_layer_is_bounded_by_its_models_box`). A scene placing the layer as a 2D item
    in `normal`, `additive` or `screen`, at a size that needs no chain, draws only the
    part of its quad whose UVs are inside those bounds (`Shape::trim_to`, the same
    affine map cut down). Outside them every bilinear tap reads only transparent

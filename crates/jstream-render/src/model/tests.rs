@@ -245,6 +245,75 @@ fn golden_model_through_a_camera_the_near_faces_hide_the_far_ones() {
     assert_near(rgb(&shot, at.0, at.1), FRONT, at);
 }
 
+/// A model's layer knows the box its model can cover (#1070), and so does the depth
+/// layer drawn beside it, so a scene placing them draws only there: the box is well
+/// inside the layer for a small model, and the scene looks as it does when the layer
+/// is drawn whole. A model whose bounds reach behind the viewer has no box.
+#[test]
+fn a_models_layer_is_bounded_by_its_models_box() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let camera = Some(SceneCamera::framing(canvas()));
+    let geometry = boxed(80.0, 50.0, 30.0);
+    let uploaded = compositor
+        .upload_model(&coloured_cube())
+        .expect("the model uploads");
+    let model_draw = |geometry| ModelDraw {
+        model: &uploaded,
+        geometry,
+        camera,
+        lighting: Lighting::Studio,
+        lights: None,
+        shadows: &[],
+        environment: None,
+        floor: None,
+        materials: &[],
+        texture: None,
+        reflection: None,
+    };
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model(&model_draw(geometry), &layer)
+        .expect("the model draws");
+    let content = layer.content().expect("the model's box is known");
+    assert!(
+        content.width > 20 && content.width < WIDTH / 2 && content.height < HEIGHT,
+        "{content:?}"
+    );
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    let bounded = render(compositor, &items);
+    // Forgetting the box draws the whole layer.
+    layer.mark_changed();
+    assert_eq!(layer.content(), None);
+    let whole = render(compositor, &items);
+    assert_eq!(bounded.rgba(), whole.rgba());
+    assert!(count(&bounded, FRONT) > 300, "the cube shows");
+
+    // Its depth, over a cleared layer, has the same box.
+    let depth = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let empty = Scene {
+        canvas: FrameSize::new(WIDTH, HEIGHT).expect("non-zero"),
+        background: Color::TRANSPARENT,
+        items: &[],
+    };
+    compositor.render_into(&empty, &depth).expect("it clears");
+    compositor
+        .draw_model_depth(&model_draw(geometry), &depth)
+        .expect("the depth draws");
+    assert_eq!(depth.content(), Some(content));
+
+    // Large enough to reach past the viewer, the model's bounds have no box.
+    compositor
+        .draw_model(&model_draw(boxed(80.0, 50.0, 5000.0)), &layer)
+        .expect("the model draws");
+    assert_eq!(layer.content(), None);
+}
+
 /// ADR-0107 decision 3: a flipped placement mirrors the model but still draws its front.
 #[test]
 fn golden_model_a_mirrored_cube_still_shows_its_front() {

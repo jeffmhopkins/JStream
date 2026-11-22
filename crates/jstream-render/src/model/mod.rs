@@ -15,6 +15,7 @@ use wgpu::util::DeviceExt;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
 use crate::image::{Image, LAYER_FORMAT, Owner};
+use crate::mips::Region;
 use crate::scene::Color;
 
 /// The depth format: reversed, so `f32`'s precision near 0 is spent far away.
@@ -206,6 +207,62 @@ fn material_bytes(values: &[f32; MATERIAL_VALUES]) -> [u8; MATERIAL_VALUES * 4] 
         chunk.copy_from_slice(&v.to_le_bytes());
     }
     out
+}
+
+/// The texels of a `size` target that a model with `bounds` can cover when drawn through
+/// `clip` (a model-to-clip matrix, column-major), with a texel of margin, clipped: the
+/// box of its bounds' eight corners. `None` when a corner is at or behind the viewer,
+/// where the box has no end, or isn't finite. Empty for a model off the target.
+fn drawn_box(clip: &[[f32; 4]; 4], bounds: SolidBounds, size: (u32, u32)) -> Option<Region> {
+    let (width, height) = (f64::from(size.0), f64::from(size.1));
+    let (mut x0, mut y0, mut x1, mut y1) = (f64::MAX, f64::MAX, f64::MIN, f64::MIN);
+    for corner in 0..8 {
+        let pick = |bit: usize, axis: usize| {
+            f64::from(if corner & (1 << bit) == 0 {
+                bounds.min[axis]
+            } else {
+                bounds.max[axis]
+            })
+        };
+        let at = [pick(0, 0), pick(1, 1), pick(2, 2), 1.0];
+        let row = |r: usize| (0..4).map(|c| f64::from(clip[c][r]) * at[c]).sum::<f64>();
+        let (x, y, w) = (row(0), row(1), row(3));
+        if !(w > 1e-6 && x.is_finite() && y.is_finite()) {
+            return None;
+        }
+        let (px, py) = ((x / w * 0.5 + 0.5) * width, (0.5 - y / w * 0.5) * height);
+        x0 = x0.min(px);
+        y0 = y0.min(py);
+        x1 = x1.max(px);
+        y1 = y1.max(py);
+    }
+    let low = |v: f64, side: f64| (v.floor() - 1.0).clamp(0.0, side) as u32;
+    let high = |v: f64, side: f64| (v.ceil() + 1.0).clamp(0.0, side) as u32;
+    let (x0, y0) = (low(x0, width), low(y0, height));
+    let (x1, y1) = (high(x1, width), high(y1, height));
+    Some(Region {
+        x: x0,
+        y: y0,
+        width: x1.saturating_sub(x0),
+        height: y1.saturating_sub(y0),
+    })
+}
+
+/// The smallest region holding `a` and `b`; an empty one adds nothing.
+fn union(a: Region, b: Region) -> Region {
+    if a.width == 0 || a.height == 0 {
+        return b;
+    }
+    if b.width == 0 || b.height == 0 {
+        return a;
+    }
+    let (x, y) = (a.x.min(b.x), a.y.min(b.y));
+    Region {
+        x,
+        y,
+        width: (a.x + a.width).max(b.x + b.width) - x,
+        height: (a.y + a.height).max(b.y + b.height) - y,
+    }
 }
 
 /// Which uploaded model a [`GpuModel`] was ([`GpuModel::seen`]). It doesn't keep the
@@ -1510,6 +1567,12 @@ impl ModelRuntime {
         }
         gpu.submit_work(encoder.finish());
         target.mark_changed();
+        // Outside the model's box on the target the layer is transparent: what places
+        // or filters it draws only over the rest (#1070).
+        let content = (!in_texture && model.pose.is_none())
+            .then(|| drawn_box(&clip, model.bounds, (width, height)))
+            .flatten();
+        target.set_content(content);
         drop(submitting);
         Ok(())
     }
@@ -1600,7 +1663,17 @@ impl ModelRuntime {
             }
         }
         gpu.submit_work(encoder.finish());
+        // The target holds what it held and the model's box more.
+        let prior = target.content();
         target.mark_changed();
+        let content = match (prior, model.pose.is_none()) {
+            (Some(prior), true) => {
+                drawn_box(&clip, model.bounds, (target.width(), target.height()))
+                    .map(|drawn| union(prior, drawn))
+            }
+            _ => None,
+        };
+        target.set_content(content);
         drop(submitting);
         Ok(())
     }
