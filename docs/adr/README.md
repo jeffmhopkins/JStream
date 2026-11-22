@@ -181,4 +181,5 @@ ADR's `@doc` block by `cargo xtask docs generate`; never edit it by hand
 | [ADR-0166](0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md) | Moves curve through keyframes, turn as one rotation, and may orbit the camera | accepted | agent |  |
 | [ADR-0167](0167-a-sky-backdrop-for-3d-scenes.md) | A 3D scene can draw its environment's sky behind it: stars, nebulae and warp | accepted | agent |  |
 | [ADR-0169](0169-a-camera-anchor-is-kept-whatever-it-names.md) | A camera anchor is kept whatever it names | accepted | agent |  |
+| [ADR-0172](0172-a-media-clock-a-client-can-hold-and-step.md) | A media clock a client can hold and step | accepted | agent |  |
 <!-- @generated end adr-index -->

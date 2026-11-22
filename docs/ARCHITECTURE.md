@@ -831,6 +831,15 @@ The wire format, versioning, error codes and compatibility policy are designed i
   cue inert and its firing reports the error in `timeline.cue_fired`;
   `timeline.changed` reports starts, seeks, loops, ends, stops and removals.
   `source.restart` reloads a page or plays a file from its start.
+- **A media clock a client can hold** (protocol 0.134,
+  [ADR-0172](adr/0172-a-media-clock-a-client-can-hold-and-step.md)): `clock.hold`
+  stops the engine's media clock, the one every animation and snapshot reads,
+  `clock.step {ms}` moves it on by hand, and `clock.release` lets it run again, never
+  backward. A client renders a scene too slow to draw in real time frame by frame: a
+  step and a `video.snapshot` per frame. It is studio state (no `rev`, never undone or
+  saved), can't be bound or granted to a plugin, and excludes outputs: `clock.hold`
+  fails while one runs, and `output.start` while the clock is held or still ahead of real
+  time.
 - **Keyframe tracks** (protocol 0.88, a placeholder,
   [ADR-0116](adr/0116-keyframe-tracks.md), building ADR-0099's keyframe tracks):
   `scene.set_keyframe` switches the keyframe scene a scene is drawn through wherever
@@ -1122,7 +1131,7 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
 -->
 
 - **Tools are grouped by noun**, not one per command: one tool per protocol noun
-  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
+  (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video` and `video_mix` so far), plus `batch` and later `script`. Each takes an `op` argument whose
   schema is generated from the protocol. The protocol's `youtube.*` ops get no tool, an
   output edit with a `youtube` target is refused, and `youtube.*` events stay out of
   the `events` feed: YouTube is for people, through
