@@ -78,9 +78,11 @@ the key, data length (2, at most 1,200) and the data.
   receive thread. A sender holds at most 1,024 keys and 4 MiB of state, and at most 128
   messages part-way assembled. Anything over a bound, malformed, or from an address
   JStream didn't subscribe to is dropped and counted, as audio and MIDI are.
-- **Opt-in per sender.** An accepted sender gains **Use this sender's state**, off by
-  default, beside "Use this sender's MIDI". Off, its state packets are counted and
-  dropped.
+- **A switch per sender, on once it is accepted.** An accepted sender gains **Use this
+  sender's state** beside "Use this sender's MIDI". It is on by default, at the
+  maintainer's request, because accepting a sender is the consent: a sender JStream
+  hasn't accepted reaches nothing, as before. The person can turn it off. Off, the
+  sender's state packets are counted and dropped.
 
 **2. Live data.** The engine keeps each sender's newest message per key: not collection
 state, not saved, not an edit.
@@ -203,9 +205,12 @@ draws is still possible.
 
 **11. Within ADR-0123.** The JTunnel sockets, what JStream sends, the accepted-senders
 list and the subscribed-address check are unchanged. A sender's state reaches only what
-its MIDI reaches, and only once its own switch is on: bindings (decisions 3 to 7), `event_text` and `grid`
+its MIDI reaches, and only while its own switch is on: bindings (decisions 3 to 7), `event_text` and `grid`
 sources, and pages the person granted. It never runs a protocol command; protocol clients,
 who are already authorised, may read it. The parser is fuzzed with the other packets.
+The consent is accepting the sender: that list, unchanged, is what the threat model's
+LAN inputs rely on, and a sender's state, on by default once it is accepted, reaches no
+more than that sender's MIDI could.
 
 **12. People map it without typing paths.** The Motion section offers **DAW data** beside
 MIDI, and the Bindings list offers a data trigger beside a key chord and a MIDI message.
