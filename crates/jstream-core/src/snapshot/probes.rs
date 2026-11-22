@@ -9,7 +9,8 @@
 //! scene six times, through 90-degree cameras on square faces at the probe's resolution
 //! (capped by the switch's `max_probe_resolution`), shaded by its lights and
 //! environment only: no probe, no shadows, no filters, so a capture never reads itself.
-//! At most one probe captures a frame, so a scene with many spreads their cost.
+//! At most one probe captures a frame: the due one that has waited longest since it last
+//! tried, so a scene with many spreads their cost and none is starved.
 //!
 //! A probe captures when it is first drawn, when its box or settings change, and every
 //! `refresh_frames` after that; a probe that captures once also captures again
@@ -130,16 +131,20 @@ pub(super) fn lookup<'c>(
     }
     boxes(shot, id, at, live)
         .into_iter()
-        .filter(|(item, bounds, _)| {
-            bounds.contains(point) && chains.probes.contains_key(&(id.clone(), (*item).clone()))
+        .filter(|(_, bounds, _)| bounds.contains(point))
+        .filter_map(|(item, bounds, _)| {
+            let state = chains.probes.get(&(id.clone(), item.clone()))?;
+            Some((item, bounds, state))
         })
         .min_by(|a, b| a.1.volume().total_cmp(&b.1.volume()))
-        .and_then(|(item, bounds, _)| {
+        .and_then(|(item, _, state)| {
+            // The box it was captured from, which the panorama's projection needs.
+            let captured = state.bounds;
             Some(jstream_render::ProbeLookup {
                 image: cache.get(&GpuKey::ProbeMap(id.clone(), item.clone()))?,
-                centre: bounds.centre,
-                half: bounds.half,
-                fade: bounds.fade,
+                centre: captured.centre,
+                half: captured.half,
+                fade: captured.fade,
             })
         })
 }
@@ -197,6 +202,7 @@ pub(super) fn draw_probes(
     });
     if !shot.features.reflection_probes {
         chains.probes.clear();
+        chains.probe_tries.clear();
         return Ok(());
     }
     let frame = cache.frame();
@@ -232,11 +238,29 @@ pub(super) fn draw_probes(
             }
         }
     }
-    // The first due probe that can be drawn.
+    // Forget the tries of probes no longer drawn or due.
+    chains.probe_tries.retain(|key, _| {
+        chains.probes.contains_key(key)
+            || due
+                .iter()
+                .any(|(scene_id, item, ..)| key.0 == **scene_id && key.1 == **item)
+    });
+    // The due probe that has waited longest goes first: one never tried before any
+    // other, then the one whose last try is oldest, so a probe due every frame can't
+    // keep the frame's one capture from the rest.
+    due.sort_by_key(|(scene_id, item, ..)| {
+        chains
+            .probe_tries
+            .get(&((*scene_id).clone(), (*item).clone()))
+            .map_or(0, |frame| frame + 1)
+    });
     for (scene_id, item, bounds, probe, face) in due {
+        let key = (scene_id.clone(), item.clone());
+        // A try counts whether or not it draws, so one that can't keeps no slot.
+        chains.probe_tries.insert(key.clone(), frame);
         let settled = chains
             .probes
-            .get(&(scene_id.clone(), item.clone()))
+            .get(&key)
             .is_some_and(|state| state.bounds == bounds && state.face == face);
         if capture(
             compositor,
@@ -246,7 +270,7 @@ pub(super) fn draw_probes(
             (live, captures),
         )? {
             chains.probes.insert(
-                (scene_id.clone(), item.clone()),
+                key,
                 ProbeState {
                     bounds,
                     face,

@@ -1993,12 +1993,6 @@ fn sees_front(solid: &Solid) -> bool {
     n[0] * to_viewer[0] + n[1] * to_viewer[1] + n[2] * to_viewer[2] > 0.0
 }
 
-/// How far past its floor (ADR-0151 decision 4) a viewing-frame point `s` is, as the
-/// shader reads it: `dot(xyz, s) + w`, at or above 0 at or below `y = floor` of the
-/// scene's space, less half a pixel so the floor itself is cut. A camera's frame is
-/// `s = (rel · right, rel · down, focal − rel · forward)` of `rel` from its position, so
-/// the scene's `y` of `s` is `position.y + right.y s.x + down.y s.y + forward.y (focal −
-/// s.z)`. No floor, or no camera, never cuts.
 /// `probe` in the shader's terms (`model.wgsl`'s `Probe`) as `view` sees it: its box's
 /// centre in the viewing frame and the scene's axes there, each with the box's half size
 /// along it, then its fade and how its picture stores alpha.
@@ -2045,6 +2039,12 @@ fn probe_values(probe: &ProbeLookup<'_>, view: &jstream_protocol::CameraView) ->
     ]
 }
 
+/// How far past its floor (ADR-0151 decision 4) a viewing-frame point `s` is, as the
+/// shader reads it: `dot(xyz, s) + w`, at or above 0 at or below `y = floor` of the
+/// scene's space, less half a pixel so the floor itself is cut. A camera's frame is
+/// `s = (rel · right, rel · down, focal − rel · forward)` of `rel` from its position, so
+/// the scene's `y` of `s` is `position.y + right.y s.x + down.y s.y + forward.y (focal −
+/// s.z)`. No floor, or no camera, never cuts.
 fn floor_cut(floor: Option<f32>, view: Option<&jstream_protocol::CameraView>) -> [f32; 4] {
     let (Some(floor), Some(view)) = (floor.filter(|floor| floor.is_finite()), view) else {
         return [0.0, 0.0, 0.0, -1.0];

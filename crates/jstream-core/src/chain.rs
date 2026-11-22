@@ -750,6 +750,9 @@ pub(crate) struct Chains {
         (jstream_protocol::SceneId, jstream_protocol::ItemId),
         crate::snapshot::ProbeState,
     >,
+    /// The frame each reflection probe last tried to capture in, whether or not it drew,
+    /// so the one capture a frame goes to the probe that has waited longest.
+    pub(crate) probe_tries: BTreeMap<(jstream_protocol::SceneId, jstream_protocol::ItemId), u64>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -3473,6 +3476,102 @@ mod tests {
             plain, before,
             "a scene without reflections reflects the environment"
         );
+    }
+
+    /// ADR-0170 decision 3: the frame's one capture goes to the due probe that has
+    /// waited longest, so a probe due every frame, first in its scene, can't keep the
+    /// probe after it from ever capturing.
+    #[test]
+    fn a_probe_due_every_frame_starves_no_other() {
+        let mut graph = placed(&[
+            ("logo", (32.0, 18.0), (4.0, 4.0), 0.0),
+            ("cam", (20.0, 18.0), (4.0, 4.0), 0.0),
+        ]);
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+                Edit::SceneSetOptions {
+                    scene_id: SceneId::new("main"),
+                    options: jstream_protocol::SceneOptions {
+                        reflections: true,
+                        ..jstream_protocol::SceneOptions::default()
+                    },
+                },
+            ],
+        );
+        let probe = |refresh_frames: u32| {
+            Frame::new(1, 1, &[0; 4], 3)
+                .expect("invariant: 1x1 RGBA8")
+                .with_probe(Some(jstream_sources::ShownProbe {
+                    size_px: [1_000.0; 3],
+                    fade_px: 0.0,
+                    resolution: 128,
+                    refresh_frames,
+                }))
+        };
+        // `logo` is first in stacking order and due every frame.
+        let (every, once) = (probe(1), probe(0));
+        let assets = FilterAssets::default();
+        let shot = snapshot::plan_with(
+            &graph,
+            Some(&SceneId::new("main")),
+            None,
+            &mut |id| {
+                Some(Look::frame(
+                    if id.as_str() == "logo" {
+                        every.clone()
+                    } else {
+                        once.clone()
+                    },
+                    None,
+                ))
+            },
+            &assets,
+        )
+        .shot;
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else {
+            return;
+        };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let live = LiveParams::default();
+        let mut captured = Vec::new();
+        for _ in 0..4 {
+            draw_points(
+                &mut compositor,
+                (&mut cache, &mut chains),
+                (&shot, &live),
+                &[(32, 18)],
+            );
+            captured.push(
+                chains
+                    .probes
+                    .keys()
+                    .map(|(_, item)| item.as_str().to_owned())
+                    .collect::<Vec<_>>(),
+            );
+        }
+        assert_eq!(
+            captured[0],
+            ["logo"],
+            "the first frame captures the first probe"
+        );
+        assert_eq!(
+            captured[1],
+            ["cam", "logo"],
+            "the second goes to the one that hasn't tried"
+        );
+        assert_eq!(captured[3], ["cam", "logo"], "both stay captured");
     }
 
     /// ADR-0151 decision 9: an environment light lights a `scene`-lit model with its sky

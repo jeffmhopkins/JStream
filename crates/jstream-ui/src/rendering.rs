@@ -3,8 +3,9 @@
 //! from `studio.get` each time the page opens and sets each one with
 //! `studio.set_rendering`; the engine keeps them on its machine, whatever collection is
 //! open. Since 0.154 it also has the reflection probes' switch and the face size they
-//! capture at, at most (ADR-0170 decision 3), shown only by an engine that has them. An
-//! engine older than 0.147 reports none, and the page says it has none.
+//! capture at, at most (ADR-0170 decision 3). An engine from 0.147 to 0.153 reports
+//! neither, so they read as on and 512 and changing them does nothing there. An engine
+//! older than 0.147 reports no switches, and the page says it has none.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 

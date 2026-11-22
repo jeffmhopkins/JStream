@@ -2157,7 +2157,9 @@ decisions 2 and 3, `snapshot/probes.rs`): planning notes each item that places a
 `reflections` option is on (`Shot::reflective`, a keyframe scene's its parent's). Once
 the chains have run, so every item's layer holds this frame's picture, `draw_probes`
 captures at most one due probe of those scenes while the `reflection_probes` switch is
-on: the scene's pass drawn from the probe's box's centre (its item's centre in the
+on, the one that has waited longest since it last tried (`Chains::probe_tries`: one
+never tried first, and a try counts whether or not it drew), so a probe due every frame
+starves no other (`a_probe_due_every_frame_starves_no_other`): the scene's pass drawn from the probe's box's centre (its item's centre in the
 scene's space, `centre_of`) through six 90° cameras along ±x, ±y and ±z
 (`face_cameras`), into square `GpuKey::ProbeFace` layers at the probe's `resolution`
 capped by `max_probe_resolution` (`RenderFeatures::probe_face`). Each model it shows is
@@ -2171,11 +2173,13 @@ since its last, or, set to capture once, `SETTLE_FRAMES` (60) after its first, w
 what it sees has loaded; `Chains::probes` keeps what each was captured with. A
 `scene`-lit model whose source has `reflections` on, and a lit card, then reads the
 smallest box holding its centre among the captured probes of its scene (`lookup`, as
-`ModelDraw::probe` and `CardDraw::probe`), so a probe shows from the frame after its
+`ModelDraw::probe` and `CardDraw::probe`, projected through the box it was captured
+from), so a probe shows from the frame after its
 first capture (`a_mirror_inside_a_probe_reflects_what_is_behind_the_camera`). With the
 switch or the scene's option off nothing captures or reads a probe, and a capture the
-cache let go captures again. The warm scenes' estimate counts a probe's capture
-(`probe_bytes`, its panorama and faces in half-float RGBA,
+cache let go captures again. The warm scenes' estimate counts a probe's capture in a
+warm scene whose `reflections` is on while the switch is (`probe_bytes`, its panorama and
+faces in half-float RGBA at its capped face size,
 `a_reflection_probe_counts_its_capture`).
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
 A rigged model ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)

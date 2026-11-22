@@ -500,7 +500,8 @@ fn the_gpu_limit_evicts_from_the_bottom_but_keeps_preview() {
 }
 
 /// A reflection probe (ADR-0170 decision 3) counts its capture toward the warm scenes'
-/// GPU memory: its panorama and six faces at the face size it is set to.
+/// GPU memory, its panorama and six faces at the face size it is set to, in a scene
+/// whose surfaces reflect, and only there.
 #[test]
 fn a_reflection_probe_counts_its_capture() {
     let engine = Engine::new().with_cpu_compositor();
@@ -526,11 +527,26 @@ fn a_reflection_probe_counts_its_capture() {
     .expect("a probe");
     preview(&control, "a");
     let capture = 128 * 128 * 14 * 8;
-    let profile = warm_profile(&control);
-    assert!(
-        profile
-            .iter()
-            .any(|(scene, bytes, _)| scene == "a" && *bytes >= capture),
-        "{profile:?}"
-    );
+    let bytes_of_a = |control: &dyn Control| {
+        warm_profile(control)
+            .into_iter()
+            .find(|(scene, ..)| scene == "a")
+            .map(|(_, bytes, _)| bytes)
+    };
+    // A scene whose surfaces don't reflect captures nothing.
+    let plain = bytes_of_a(&control).expect("a is warm");
+    assert!(plain < capture, "{plain}");
+    batch(
+        &control,
+        edits(vec![Edit::SceneSetOptions {
+            scene_id: SceneId::new("a"),
+            options: jstream_protocol::SceneOptions {
+                reflections: true,
+                ..jstream_protocol::SceneOptions::default()
+            },
+        }]),
+    )
+    .expect("reflections");
+    let reflective = bytes_of_a(&control).expect("a is warm");
+    assert!(reflective >= plain + capture, "{reflective} after {plain}");
 }

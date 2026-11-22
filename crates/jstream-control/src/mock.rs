@@ -5904,6 +5904,51 @@ mod tests {
         assert_eq!(engine.rev(), Rev(1));
     }
 
+    /// A keyframe scene can't turn its own reflections on (ADR-0170 decision 2), and
+    /// `studio.set_rendering` takes only a probe size of `PROBE_RESOLUTIONS`, as the
+    /// engine does.
+    #[test]
+    fn reflections_and_the_probe_cap_are_refused_as_the_engine_does() {
+        let engine = MockEngine::new();
+        let control = connected(&engine);
+        let reflective = |scene: &str| Edit::SceneSetOptions {
+            scene_id: SceneId::new(scene),
+            options: jstream_protocol::SceneOptions {
+                reflections: true,
+                ..jstream_protocol::SceneOptions::default()
+            },
+        };
+        let setup = Batch {
+            edits: vec![
+                create("a"),
+                Edit::SceneCreateVariant {
+                    scene_id: SceneId::new("k"),
+                    variant_of: SceneId::new("a"),
+                    name: "K".into(),
+                },
+                reflective("a"),
+            ],
+            expected_rev: None,
+            idempotency_key: None,
+            ends_gesture: None,
+        };
+        assert_eq!(batch(&*control, setup), Ok(Rev(1)));
+        let refused = batch(&*control, Batch::single(reflective("k"))).expect_err("a keyframe");
+        assert!(
+            matches!(refused.protocol(), Some(ProtocolError::InvalidArgument { field, .. }) if field.ends_with("reflections")),
+            "{refused:?}"
+        );
+        let cap = |size: u32| Action::StudioSetRendering {
+            change: jstream_protocol::RenderFeaturesChange {
+                max_probe_resolution: Some(size),
+                ..jstream_protocol::RenderFeaturesChange::default()
+            },
+        };
+        let refused = action(&*control, cap(300)).expect_err("not a face size");
+        assert_eq!(code(&refused), Some("invalid_argument"));
+        assert!(action(&*control, cap(256)).is_ok());
+    }
+
     #[test]
     fn a_stale_expected_rev_conflicts() {
         let engine = MockEngine::new();
