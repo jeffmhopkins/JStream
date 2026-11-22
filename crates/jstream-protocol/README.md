@@ -85,7 +85,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
-  `collection.save_as`), with
+  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104),
   which every implementation uses to check and follow a hotkey's action, and
@@ -254,7 +254,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
-  `plugin.uninstalled` (0.132),
+  `plugin.uninstalled` (0.135),
   `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
@@ -352,8 +352,11 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.132 because a person can remove a WASM plugin: `plugin.uninstall`
+`PROTOCOL_VERSION` is 0.135 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
+0.134 because a client can hold and step the engine's media clock
+to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
 0.127 because a group can share its 3D scene's space and a camera
 can ride with one: `SceneOptions`' `share_space`, `SceneInfo`'s `camera_anchor` and
 `scene.set_camera_anchor`
@@ -2292,7 +2295,7 @@ After `welcome`, the server pushes every event to every client.
   broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
   [YouTube](#youtube).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) and
-  `plugin.uninstalled {plugin_id}` (0.132) are described under [Plugins](#plugins).
+  `plugin.uninstalled {plugin_id}` (0.135) are described under [Plugins](#plugins).
 - `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) and
   `gpu.effect_slow {kind_id, took_us, limit_us, quarantined}` (0.102) are described under
   [Effect quarantine](#quarantine).
@@ -2389,7 +2392,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
   `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
-  physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
+  physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
+  client's animation), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` (an application setting), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2443,7 +2447,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
-- **`plugin.uninstall {plugin_id}`** (0.132) removes an installed plugin, for a person
+- **`plugin.uninstall {plugin_id}`** (0.135) removes an installed plugin, for a person
   like the other plugin actions. A running plugin stops once the invocation it is in
   returns, holding only `read` from the moment it is removed, and the engine forgets it
   and its grant: `plugin.list` no longer
@@ -2469,7 +2473,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
-- **`plugin.uninstalled {plugin_id}`** (0.132) reports a plugin a person removed with
+- **`plugin.uninstalled {plugin_id}`** (0.135) reports a plugin a person removed with
   `plugin.uninstall`. Like `plugin.state_changed`, it is a person's: the MCP feed drops it.
 
 CLAP audio plugins ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) are
@@ -2887,6 +2891,29 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+
+<a id="media-clock"></a>
+## Holding the media clock
+<!-- @section
+depends_on = ["docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md"]
+-->
+
+Since 0.134 a client can hold the engine's media clock and step it by hand, to render a
+scene frame by frame on a machine that can't draw it in real time
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)). The clock
+is what transitions, Moves, motion, timelines, keyframe tracks, a sky's warp, animated
+sources, `video.snapshot` and `video.frames` read. None of the three actions changes
+`rev`, is undone or is saved, and none can be bound or granted to a plugin.
+- **`clock.hold`** stops the clock where it is; holding it again keeps the held time.
+  It fails with `action_failed` while an output runs.
+- **`clock.step {ms}`** moves the held time on by `ms`, 1 to 10000
+  (`invalid_argument` on `ms` otherwise, or when the held time can't move that far). It
+  fails with `action_failed` when the clock isn't held. A timeline cue the step passes
+  has fired by the time it returns.
+- **`clock.release`** lets the clock run again, never backward: it waits at the held
+  time until real time passes it. Releasing a clock that runs does nothing.
+- While the clock is held, or released but still ahead of real time, `output.start`
+  fails with `action_failed`, saying how far ahead it is.
 
 <a id="keyframe-tracks"></a>
 ## Keyframe tracks

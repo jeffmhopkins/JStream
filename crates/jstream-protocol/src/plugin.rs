@@ -266,6 +266,11 @@ pub const PLUGIN_SCOPES: &[(&str, PluginScope)] = &[
     ("timeline.stop", N),
     ("timeline.seek", N),
     ("source.restart", Class(L)),
+    // Holding the media clock stops every animation for every client (ADR-0172); a
+    // plugin never does.
+    ("clock.hold", N),
+    ("clock.step", N),
+    ("clock.release", N),
     // Deprecated (ADR-0080): the engine refuses it anyway.
     ("privacy.set", N),
     // A person installs, grants, re-enables and removes plugins; a plugin never does (G1).
