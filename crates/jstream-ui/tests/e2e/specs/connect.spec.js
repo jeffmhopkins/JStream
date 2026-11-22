@@ -1,7 +1,7 @@
 // Connecting to the engine that served the page, and leaving it.
 import { test, expect, connect, disconnect, rev } from '../fixtures.js';
 
-test('the form offers the serving engine and connects with the browser credentials', async ({ page, daemon }) => {
+test('the form offers the serving engine and connects with the browser credentials, and Connection details shows it', async ({ page, daemon }) => {
   await page.goto(daemon.url);
   const host = new URL(daemon.url).host;
   await expect(page.getByLabel('Engine URL')).toHaveValue(`ws://${host}/api/v1/ws`);
@@ -13,10 +13,15 @@ test('the form offers the serving engine and connects with the browser credentia
   await header.getByRole('button', { name: 'File' }).click();
   const menu = page.getByRole('menu', { name: 'File' });
   await expect(menu.getByRole('menuitem', { name: 'Disconnect' })).toBeVisible();
-  await expect(menu).toContainText(`ws://${host}/api/v1/ws`);
-  await expect(menu).toContainText(/Protocol\s*\d+\.\d+/);
-  await page.keyboard.press('Escape');
+  // The menu holds commands only; Connection details… shows the session's facts.
+  await expect(menu).not.toContainText(`ws://${host}/api/v1/ws`);
+  await menu.getByRole('menuitem', { name: 'Connection details…' }).click();
   await expect(menu).toHaveCount(0);
+  const details = page.getByRole('dialog', { name: 'Connection details' });
+  await expect(details).toContainText(`ws://${host}/api/v1/ws`);
+  await expect(details).toContainText(/Protocol\s*\d+\.\d+/);
+  await page.keyboard.press('Escape');
+  await expect(details).toBeHidden();
   // The seed is one batch and one scene switch.
   expect(await rev(page)).toBeGreaterThan(0);
 });

@@ -30,8 +30,9 @@ Contents ([Design](#design) explains the choices):
   events. `SessionContext` gives components the open
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
-  (the connection's details, the open project with New project…, Open project…, Save
-  project as… and Open recent, Settings…, Video settings…, Plugins… and Disconnect), the Edit menu (Undo, Redo), the View menu
+  (headed by the open project's name: New project…, Open project…, Save project as…
+  and Open recent, Settings…, Video settings…, Plugins…, Connection details…, a small
+  dialog of the engine's URL, protocol, client ID and revision, and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
   Help menu (the project's pages, Check for updates, and About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
@@ -476,15 +477,16 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   overrides), makes another keyframe of the parent (`scene.create_variant`) and deletes
   it: a plain `scene.delete`, since it holds no items, or the delete plan after a
   confirmation when anything refers to it. A right-click on an item, on the canvas or its row, selects it
-  unless it was selected and opens `item_menu.rs`'s menu for the selection: Properties
+  unless it was selected and opens `item_menu.rs`'s menu for the selection, in groups
+  (open it; its state; the clipboard; its arrangement; other views; removal): Properties
   (the Properties dialog), for one item a Labels submenu (each label checked while the
   source carries it, with its colour as the swatch, then Edit labels…), the Audio check
-  (`source.set_audio`), the Visible check (`item.set_visible`), Copy and Paste, layer order
-  (`item.reorder`s that keep the selected items' order), a Transform submenu of Center,
+  (`source.set_audio`), the Visible check (`item.set_visible`), Copy and Paste, an Order
+  submenu of the layer order (`item.reorder`s that keep the selected items' order), a Transform submenu of Center,
   Fit and Stretch to canvas and Reset rotation (`item.set_geometry`), a Blending submenu
   (`item.set_blend`, then its amount as `item.set_opacity` at 100, 75, 50 or 25%), Clear crop (`item.set_crop`, with
   each item's uncropped extent as its box while its source's size is known), Crop
-  (crop mode, for one item), Duplicate as reference
+  (crop mode, for one item), a Duplicate submenu of Duplicate as reference
   (`item.add` of the same source, 40 pixels down and right, just above the original)
   or as clone (`source.duplicate` first), also Ctrl+D and Ctrl+Shift+D, each confirmed by a
   toast, and Remove from scene, each one batch. Ctrl+C copies the selection (on a scene
