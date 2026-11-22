@@ -214,7 +214,9 @@ space (`canvas.set_blending`: `srgb` to match a browser or design tool, `linear`
 light that adds evenly, chosen before tuning opacities, ADR-0126), 3D sets through
 `scene.set_camera` (starting from the framing camera, floors and walls by tilt, turn and
 `depth_px`, camera moves animated by keyframe scenes, and flat overlays in a 2D scene
-above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), a camera move through
+above the set, [ADR-0094](../../docs/adr/0094-scene-cameras.md)), 3D models (built-in shapes or a glTF
+file, studio, unlit or scene lighting, a live `texture` on a named material and a
+`reflection` of a scene source, [ADR-0107](../../docs/adr/0107-3d-models.md)), a camera move through
 several shots as one switch with `via`, an orbiting `move` preset (`camera_path`
 `orbit`) and turns in more than one angle as one rotation
 ([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)), depth of field

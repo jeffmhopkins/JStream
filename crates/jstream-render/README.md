@@ -46,7 +46,8 @@ and calls this crate.
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
   scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md),
-  and their shadow maps, ADR-0151)
+  and their shadow maps, ADR-0151, and maybe another source's picture as its texture
+  and one it reflects, `LiveTexture` and `reflection`, ADR-0107 decision 5)
   into a canvas-sized layer with its own depth test, blurred by its own depth when the
   camera has a depth of field ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
   The engine runs filters over that layer and places it with
@@ -760,6 +761,22 @@ blended primitive sorts by the middle of its rest pose
 (`golden_model_a_pose_turns_a_rigged_model_on_the_gpu`). `model.wgsl`
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
+
+**Live textures and reflections** (ADR-0107 decision 5). `ModelDraw::texture` replaces
+the base-colour texture of the material it names (by its glTF name), or of every
+material, with another image: `draw_model` samples it through a mip chain of the whole
+image (`Region::whole`, kept on the image like a 3D item's and rebuilt only when the
+image changed), bound with the material's own repeating anisotropic sampler, and the
+material's uniform marks it a premultiplied linear picture (`card.y`), which the shader
+divides by its alpha before multiplying. The material bind groups that carry it are
+kept on the `GpuModel` while the chain's texture and the material stay the same, so a
+steady frame makes none. A texture with no image binds a transparent 1x1. A
+`reflection` image takes the environment's slot (`reflection_values`: no gradient,
+intensity 1, the camera's axes, or the viewing frame's in a 2D scene), so it is read as a
+scene's sky picture is, blurred by roughness over the same ring of taps, with or
+without scene lights; an unlit model ignores it
+(`golden_model_a_live_texture_replaces_the_base_colour`,
+`golden_model_a_reflection_replaces_the_studio_environment`).
 
 **Scene lights** (ADR-0143 decision 3). With `ModelDraw::lights` set and a camera, the
 rig is replaced by the scene's lights. `SceneLight` holds a light in the scene's space
