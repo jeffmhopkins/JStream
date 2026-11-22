@@ -722,8 +722,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   state, with its text, an "Own" box for the cell's own colour or a colour picker, its
   brightness and its blink rate, a remove button, "Add a state" and "Clip launcher
   looks" (`clip_launcher`, the states a JTunnel clip slot sends). Each change sends the
-  whole object, refused in the form while a state is empty or the table is over 32
-  rows; `rows` and `value` turn the object into rows and back, tested natively. A font setting (an `asset` that takes
+  whole object, refused in the form while a state is empty or over 63 bytes, two rows
+  share a state, or the table is over 32 rows (the preset replaces the whole table); `rows` and `value` turn the object into rows and back, tested natively. A font setting (an `asset` that takes
   `ttf` or `otf` and only font types, `takes_fonts`) is a list from `font.list`
   ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)): "Bundled font" (none), each installed font by family and style
   (stored as an `absolute` asset of its path), and "Other file…", which shows the

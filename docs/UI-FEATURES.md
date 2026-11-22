@@ -286,8 +286,8 @@ exposure, white balance, focus and the others the device offers) are sliders wit
 Auto box where the device can set the control itself, applied as they move without
 restarting the camera (#1196). A data grid's Looks are a table, one row a state: its
 text, its colour or the cell's own ("Own"), its brightness and its blink rate, with a
-row to add a state, a remove button on each, and "Clip launcher looks", which fills the
-states a JTunnel clip slot sends (ADR-0171 decision 9). Beyond the prototype, as in OBS, a
+row to add a state, a remove button on each, and "Clip launcher looks", which replaces the
+table with the states a JTunnel clip slot sends; each state may appear once (ADR-0171 decision 9). Beyond the prototype, as in OBS, a
 text source's Font is picked by name from the fonts installed on the engine's machine
 (`font.list`, [ADR-0092](adr/0092-installed-fonts-query.md)), with the bundled font
 first and "Other file…" for any other file. In the desktop app, an asset path whose

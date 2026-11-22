@@ -210,8 +210,8 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   shares a cell, a watch nobody holds is forgotten, and past 4,096 a cell reads absent.
   `changes()` counts every change to any sender's messages (a put, an expired key, a
   forgotten sender), so a reader of many keys tells that nothing changed with one atomic
-  load, and `get_from(input, key)` reads one message from a sender or from whichever has
-  the key.
+  load, and `get_from(input, key)` reads one message from a sender or from the first
+  sender by name that has the key.
 - `MidiState` and `MidiInputs` (`midi/`, [ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)):
   what the `midi_*` kinds draw. A `MidiState` holds one input's held velocity per
   channel and key, its controllers, pitch bend and channel pressure, and a log of the
@@ -322,12 +322,13 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   with no look shows its colour (or `pad`) at `dim`. In `bars` mode one message's
   (`key`) list (`field`) gives a level per column, from `low` to `high`, a list of
   numbers drawing side by side, from `color_low` at the foot to `color_high` at the
-  top, smooth or in `segments` steps. `input` names the sender, empty for whichever has
-  the key; everything but the size is live. The cells share the picture evenly with
+  top, smooth or in `segments` steps. `input` names the sender, empty for the first sender
+  by name that has the key; everything but the size is live. The cells share the picture evenly with
   `gap` around and between them, rounded by `radius` and anti-aliased. It paints at
   30 fps through a `Painter` from the MIDI kinds' pool of four frames, reading its keys
   under the store's lock on the paint thread, and draws only when `changes()` moved or a
-  look blinks (on the media clock); with no `LiveData` it draws once and is never due.
+  look blinks (on the media clock, so while the clock is held new data waits for the next
+  step; any change, to any key, redraws every grid); with no `LiveData` it draws once and is never due.
   Tests put messages and read the pixels: each look, the queued blink and its off half,
   absent cells, offsets, a named sender, redrawing only on new data, smooth, side by side
   and segmented bars, and a bad look or level range refused.
