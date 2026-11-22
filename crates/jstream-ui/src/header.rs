@@ -1,7 +1,7 @@
 //! The header bar along the top of the shell (docs/UI-FEATURES.md#header): the brand,
 //! the File, Edit, View, Layout and Help menus (Help's links and About dialog are in
-//! `about.rs`; Check for updates is in `updates.rs`, and File › Settings… and Plugins… open
-//! the Settings dialog in `settings.rs`), the stats readout (frame rate, dropped frames
+//! `about.rs`; Check for updates is in `updates.rs`, on in the desktop app only, and File ›
+//! Settings…, Video settings… and Plugins… open the Settings dialog in `settings.rs`), the stats readout (frame rate, dropped frames
 //! and CPU), Studio mode,
 //! Record, and Go Live / End stream. The View and Layout menus change the workspace's
 //! dock (`workspace.rs`), and the View menu opens the program and multiview projectors
@@ -25,7 +25,6 @@ use crate::projector::{self, Request, Target};
 use crate::settings::{SettingsDialog, SettingsPage};
 use crate::store::Studio;
 use crate::updates::UpdateDialog;
-use crate::video_settings::VideoSettingsDialog;
 use crate::workspace::DockState;
 use futures_util::StreamExt;
 use jstream_control::protocol::{
@@ -350,9 +349,9 @@ pub fn Header(
     let open = RwSignal::new(None::<Menu>);
     let about_open = RwSignal::new(false);
     let settings = use_context::<SettingsDialog>();
-    let video_open = RwSignal::new(false);
     let connection_open = RwSignal::new(false);
     let update_open = RwSignal::new(false);
+    let in_desktop = crate::host::desktop().is_some();
     // The project dialog, with the path its field starts with.
     let project_ask = RwSignal::new(None::<(ProjectAsk, String, String)>);
     let project = use_context::<OpenProject>().unwrap_or_default().0;
@@ -637,7 +636,11 @@ pub fn Header(
                                 title=move || project.with(|p| p.as_ref().map(|p| p.path.clone()).unwrap_or_default())
                             >
                                 "Project · "
-                                {move || project.with(|p| p.as_ref().map(|p| project_name(&p.path)).unwrap_or_default())}
+                                // The name is a file's, so it keeps its own case under the
+                                // eyebrow head.
+                                <span class="project-name">
+                                    {move || project.with(|p| p.as_ref().map(|p| project_name(&p.path)).unwrap_or_default())}
+                                </span>
                             </p>
                             <button class="menuitem" role="menuitem" on:click=move |_| ask_project(ProjectAsk::New)>
                                 "New project…"
@@ -687,16 +690,18 @@ pub fn Header(
                                 "Settings…"
                             </button>
                         })}
-                        <button
-                            class="menuitem"
-                            role="menuitem"
-                            on:click=move |_| {
-                                open.set(None);
-                                video_open.set(true);
-                            }
-                        >
-                            "Video settings…"
-                        </button>
+                        {settings.map(|settings| view! {
+                            <button
+                                class="menuitem"
+                                role="menuitem"
+                                on:click=move |_| {
+                                    open.set(None);
+                                    settings.open(SettingsPage::Video);
+                                }
+                            >
+                                "Video settings…"
+                            </button>
+                        })}
                         {settings.map(|settings| view! {
                             <button
                                 class="menuitem"
@@ -863,9 +868,14 @@ pub fn Header(
                     <div class="dropdown" role="menu" aria-label="Help" on:keydown=dropdown_keys(Menu::Help)>
                         {Link::MENU.into_iter().map(|link| about::menu_link(link, move || open.set(None))).collect_view()}
                         <div class="menu-sep"></div>
+                        // Only the desktop app can ask for releases, so in a browser the
+                        // item is off and says where it works, rather than open a dialog
+                        // that says so.
                         <button
                             class="menuitem"
                             role="menuitem"
+                            disabled=!in_desktop
+                            title=(!in_desktop).then_some("Available in the desktop app")
                             on:click=move |_| {
                                 open.set(None);
                                 update_open.set(true);
@@ -891,9 +901,6 @@ pub fn Header(
             </Show>
             <Show when=move || connection_open.get()>
                 <ConnectionDialog info=info close=move || connection_open.set(false) />
-            </Show>
-            <Show when=move || video_open.get()>
-                <VideoSettingsDialog close=move || video_open.set(false) />
             </Show>
             <Show when=move || update_open.get()>
                 <UpdateDialog close=move || update_open.set(false) />

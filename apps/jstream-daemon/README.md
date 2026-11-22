@@ -502,7 +502,7 @@ depends_on = ["crates/jstream-server/README.md#design", "crates/jstream-core/REA
   `jstream-plugin-host.exe` beside the daemon every file fails to scan, and is logged.
   When the hosts can't be set up, the daemon tells the engine why
   (`Engine::set_clap_unavailable`), and `plugin.clap_scan` reports it. On macOS and
-  Linux the daemon tells the engine CLAP plugins are hosted on Windows only so far.
+  Linux the daemon tells the engine "CLAP audio plugins are available on Windows."
 - **Live on macOS** (`serve.rs`). Under `cfg(target_os = "macos")` the engine gets
   the `jstream-platform-macos` backends built so far (`macos_backends`):
   - `MachClock`, `ScreenCaptureKitCapture`, `AvFoundationVideoDevices`, `CoreAudioIo`,

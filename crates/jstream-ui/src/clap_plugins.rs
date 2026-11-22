@@ -1,21 +1,37 @@
-//! The Settings dialog's Audio plugins page (ADR-0035, protocol 0.106): where the engine
+//! The Settings dialog's Audio page's Audio plugins section (ADR-0035, protocol 0.106): where the engine
 //! looks for CLAP audio effects, the ones its last scan found, the files it couldn't
 //! scan and why, and Rescan, which scans again without a restart.
 //!
 //! - **Calls.** `plugin.clap_scan` reads the scan when the page opens and after a
 //!   rescan; `plugin.clap_rescan` scans again, and answers once the scan ends. A rescan
 //!   re-reads `kind.list` too, so a plugin it found is offered in Add filter at once.
-//! - **An engine that hosts no CLAP plugins** says so, with the engine's reason.
+//! - **An engine that hosts no CLAP plugins** says so in one line, the engine's reason
+//!   as a sentence in an info callout.
 //! - **Names and paths** are the plugin's and the machine's text, shown as data.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#beyond
 
 use crate::app::SessionContext;
+use crate::icons::Icon;
 use crate::store::Studio;
 use jstream_control::Control;
 use jstream_control::protocol::{Action, Call, CallResult, ClapScanInfo, Query, QueryResult};
 use leptos::prelude::*;
 use leptos::task::spawn_local;
+
+/// The engine's reason as a sentence: a capital first letter and a full stop.
+pub fn sentence(reason: &str) -> String {
+    let reason = reason.trim();
+    let mut chars = reason.chars();
+    let mut out: String = chars
+        .next()
+        .map(|c| c.to_uppercase().chain(chars).collect())
+        .unwrap_or_default();
+    if !out.is_empty() && !out.ends_with(['.', '!', '?']) {
+        out.push('.');
+    }
+    out
+}
 
 /// The scan (`plugin.clap_scan`).
 pub async fn scan(control: &dyn Control) -> Result<ClapScanInfo, String> {
@@ -68,7 +84,7 @@ pub fn install_folder(scan: &ClapScanInfo) -> Option<&str> {
     scan.folders.first().map(|f| f.path.as_str())
 }
 
-/// The Audio plugins page.
+/// The Audio page's Audio plugins section.
 #[component]
 pub fn ClapPlugins() -> impl IntoView {
     let Some(session) = use_context::<SessionContext>() else {
@@ -124,10 +140,14 @@ pub fn ClapPlugins() -> impl IntoView {
             let reason = scan
                 .reason
                 .clone()
-                .unwrap_or_else(|| "This engine doesn't host CLAP plugins.".into());
+                .unwrap_or_else(|| "This engine doesn't host CLAP audio plugins.".into());
+            // One line, the engine's own sentence, as a callout rather than a page.
             return Some(
                 view! {
-                    <p class="placeholder">"CLAP audio plugins aren't available here: " {reason}</p>
+                    <p class="callout clap-unavailable" role="note">
+                        <Icon name="info" size=16 />
+                        <span>{sentence(&reason)}</span>
+                    </p>
                 }
                 .into_any(),
             );
@@ -227,7 +247,17 @@ pub fn ClapPlugins() -> impl IntoView {
 
 #[cfg(test)]
 mod tests {
-    use super::{install_folder, summary};
+    use super::{install_folder, sentence, summary};
+
+    #[test]
+    fn a_reason_reads_as_a_sentence() {
+        assert_eq!(
+            sentence("CLAP audio plugins are available on Windows"),
+            "CLAP audio plugins are available on Windows."
+        );
+        assert_eq!(sentence("the host failed: x."), "The host failed: x.");
+        assert_eq!(sentence("  "), "");
+    }
     use jstream_control::protocol::{ClapFailed, ClapFolder, ClapFound, ClapScanInfo};
 
     fn scan(found: usize, failed: usize) -> ClapScanInfo {

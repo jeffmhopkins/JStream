@@ -175,10 +175,10 @@ test('plugins and devices live in the Settings dialog, not the Inspector', async
   const tab = (name) => settings.getByRole('tab', { name, exact: true });
   await expect(tab('General')).toHaveAttribute('aria-selected', 'true');
   await expect(settings.getByRole('checkbox', { name: 'Check for updates at launch' })).toBeVisible();
-  await tab('Plugins').click();
-  await expect(settings.locator('section.plugins').getByText('No plugins installed.')).toBeVisible();
+  await tab('Audio').click();
   await page.keyboard.press('ArrowDown');
-  await expect(tab('Audio plugins')).toHaveAttribute('aria-selected', 'true');
+  await expect(tab('Plugins')).toHaveAttribute('aria-selected', 'true');
+  await expect(settings.locator('section.plugins').getByText('No plugins installed.')).toBeVisible();
   await page.keyboard.press('ArrowDown');
   await expect(tab('Devices')).toHaveAttribute('aria-selected', 'true');
   await expect(tab('Devices')).toBeFocused();

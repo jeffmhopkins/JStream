@@ -6,12 +6,14 @@
 //!   `device.revoke` revokes one. The server in front of the engine answers them; a
 //!   session with no listener behind it, such as the desktop app's, answers
 //!   `unsupported`, and the page then says no device can pair with this session.
-//! - **The code** is shown, large, with the time it has left, and how a device uses it:
-//!   a browser opens `/pair` on the host's TLS address and types it; a native client
-//!   posts it to `POST /api/v1/pair`. It is shown until the countdown ends or a device
-//!   pairs: while it is open the panel re-reads `device.list` every few seconds, and a
-//!   device that wasn't there when the code was drawn means the code was used. The code
-//!   is never logged or stored by the page (R-SEC-001).
+//! - **The code** is shown in its own small dialog, Pair a device: large, with the time
+//!   it has left, and how a device uses it as numbered steps: a browser opens `/pair` on
+//!   the host's TLS address and types it; a native client posts it to
+//!   `POST /api/v1/pair`. It is shown until the countdown ends or a device pairs, and the
+//!   dialog then says which: while it is open the panel re-reads `device.list` every few
+//!   seconds, and a device that wasn't there when the code was drawn means the code was
+//!   used. New code replaces it and Done closes the dialog. The code is never logged or
+//!   stored by the page (R-SEC-001).
 //! - **Allow devices on my network** (ADR-0104), in the desktop app only: a switch above
 //!   the panel that asks the app to save the setting (`host::allow_network`, the app's own
 //!   command, which no engine client reaches). It applies when the app next starts, and
@@ -26,6 +28,8 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/adr/0047-browser-pairing-page-and-device-cookie.md
 
 use crate::app::SessionContext;
+use crate::dialog::Modal;
+use crate::icons::Icon;
 use jstream_control::protocol::{
     Action, ActionResult, Call, CallResult, DeviceId, DeviceInfo, NetworkAccess, ProtocolError,
     Query, QueryResult,
@@ -173,9 +177,20 @@ struct Panel {
     /// Bumped by each new code, so an older countdown stops.
     codes: StoredValue<u64>,
     problem: RwSignal<Option<String>>,
+    /// How the last code ended, while none is open.
+    ended: RwSignal<Option<Ended>>,
 }
 
 impl Panel {
+    /// Stops the open code's countdown and hides it. The engine keeps it open until it
+    /// runs out, but nothing here shows it again.
+    fn stop(self) {
+        self.codes.update_value(|n| *n += 1);
+        self.code.set(None);
+        self.ended.set(None);
+        self.problem.set(None);
+    }
+
     /// Re-reads the devices. Returns them, or `None` when the read failed or isn't
     /// served (and hides the panel's controls then).
     async fn reload(self) -> Option<Vec<DeviceInfo>> {
@@ -220,6 +235,7 @@ impl Panel {
                     };
                     let left = code.expires_in_secs;
                     self.code.try_set(Some((code, left)));
+                    self.ended.try_set(None);
                     self.problem.try_set(None);
                     self.tick(mine);
                 }
@@ -253,6 +269,7 @@ impl Panel {
                     .unwrap_or(0);
                 if left == 0 {
                     self.code.try_set(None);
+                    self.ended.try_set(Some(Ended::Expired));
                     return;
                 }
                 if left % POLL_EVERY_SECS != 0 {
@@ -267,6 +284,7 @@ impl Panel {
                     let known = self.known.try_get_value().unwrap_or_default();
                     if listed.is_some_and(|devices| newly_paired(&known, &devices)) {
                         self.code.try_set(None);
+                        self.ended.try_set(Some(Ended::Paired));
                     } else {
                         self.tick(mine);
                     }
@@ -366,8 +384,18 @@ pub fn NetworkAccessSetting() -> impl IntoView {
     .into_any()
 }
 
-/// The pairing panel. Shows nothing until `device.list` answers, and nothing at all on
-/// a session that doesn't serve the pairing calls.
+/// How the open code's dialog ends when no code is showing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Ended {
+    /// A device paired with the code.
+    Paired,
+    /// The code ran out.
+    Expired,
+}
+
+/// The Devices page's Paired devices section: the devices with Revoke, and Pair a
+/// device…, which opens `PairDialog`. Shows nothing until `device.list` answers, and
+/// a one-line note on a session that doesn't serve the pairing calls.
 #[component]
 pub fn Pairing() -> impl IntoView {
     let Some(session) = use_context::<SessionContext>() else {
@@ -382,26 +410,18 @@ pub fn Pairing() -> impl IntoView {
         known: StoredValue::new(Vec::new()),
         codes: StoredValue::new(0),
         problem: RwSignal::new(None),
+        ended: RwSignal::new(None),
     };
     spawn_local(async move {
         panel.reload().await;
         panel.read.try_set(true);
     });
-
-    let code_view = move || {
-        panel.code.get().map(|(code, left)| {
-            view! {
-                <div class="pairing-open" role="status">
-                    <p class="pairing-code">{code.code}</p>
-                    <p class="pairing-help">
-                        "Open for " {countdown(left)} ". In a browser, open "
-                        <code>"/pair"</code> " on this host's HTTPS address and type the code."
-                    </p>
-                    {code.network.map(network_view)}
-                </div>
-            }
-        })
+    let pairing = RwSignal::new(false);
+    let pair = move || {
+        pairing.set(true);
+        panel.start();
     };
+
     let ids = move || {
         panel.devices.with(|devices| {
             devices
@@ -423,10 +443,10 @@ pub fn Pairing() -> impl IntoView {
                     <li class="device">
                         <span class="device-name">{device.name.clone()}</span>
                         <span class="device-dates">
-                            "paired " {utc_date(device.paired_at)} ", last used "
+                            "Paired " {utc_date(device.paired_at)} " · last used "
                             {utc_date(device.last_used_at)}
                         </span>
-                        <button on:click=move |_| panel.revoke(id.clone())>"Revoke"</button>
+                        <button class="sm" on:click=move |_| panel.revoke(id.clone())>"Revoke"</button>
                     </li>
                 }
             })
@@ -437,21 +457,27 @@ pub fn Pairing() -> impl IntoView {
         <Show
             when=move || panel.served.get()
             fallback=move || panel.read.get().then(|| view! {
-                <p class="placeholder">
-                    "No device can pair with this session. Pairing is offered when the engine runs behind the JStream server, which other browsers connect to."
-                </p>
-                {move || panel.problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })}
+                <section class="prop-section pairing">
+                    <h4 class="eyebrow">"Paired devices"</h4>
+                    <p class="callout" role="note">
+                        <Icon name="info" size=16 />
+                        <span>
+                            "No device can pair with this session. Pairing is offered when the engine runs behind the JStream server, which other browsers connect to."
+                        </span>
+                    </p>
+                    {move || panel.problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })}
+                </section>
             })
         >
-            <section class="pairing">
-                <button class="primary" on:click=move |_| panel.start()>
-                    {move || if panel.code.with(Option::is_some) { "New code" } else { "Pair a device" }}
-                </button>
-                {code_view}
+            <section class="prop-section pairing">
+                <div class="section-head">
+                    <h4 class="eyebrow">"Paired devices"</h4>
+                    <button class="sm" on:click=move |_| pair()>"Pair a device…"</button>
+                </div>
                 {move || {
-                    panel
-                        .problem
-                        .get()
+                    (!pairing.get())
+                        .then(|| panel.problem.get())
+                        .flatten()
                         .map(|problem| view! { <p class="problem" role="alert">{problem}</p> })
                 }}
                 <Show
@@ -465,9 +491,84 @@ pub fn Pairing() -> impl IntoView {
                     </ul>
                 </Show>
             </section>
+            <Show when=move || pairing.get()>
+                <PairDialog panel=panel close=move || {
+                    panel.stop();
+                    pairing.set(false);
+                } />
+            </Show>
         </Show>
     }
     .into_any()
+}
+
+/// Pair a device: the open code, large, with the time it has left and how a device uses
+/// it, New code and Done. It says so when a device paired or the code ran out.
+#[component]
+fn PairDialog(panel: Panel, close: impl Fn() + Copy + Send + Sync + 'static) -> impl IntoView {
+    let card = move || match (panel.code.get(), panel.ended.get()) {
+        (Some((code, left)), _) => view! {
+            <div class="pairing-card" role="status">
+                <p class="pairing-code">{code.code}</p>
+                <p class="pairing-expires">"Expires in " {countdown(left)}</p>
+            </div>
+        }
+        .into_any(),
+        (None, Some(Ended::Paired)) => view! {
+            <div class="pairing-card" role="status">
+                <p class="pairing-ended">"A device paired."</p>
+            </div>
+        }
+        .into_any(),
+        (None, Some(Ended::Expired)) => view! {
+            <div class="pairing-card" role="status">
+                <p class="pairing-ended">"The code expired. Press New code for another."</p>
+            </div>
+        }
+        .into_any(),
+        // A refused `pairing.start` shows its reason below, not a code on its way.
+        (None, None) if panel.problem.with(Option::is_some) => view! {
+            <div class="pairing-card" role="status">
+                <p class="pairing-ended">"No code. Press New code to try again."</p>
+            </div>
+        }
+        .into_any(),
+        (None, None) => view! {
+            <div class="pairing-card" role="status">
+                <p class="pairing-ended">"Asking for a code…"</p>
+            </div>
+        }
+        .into_any(),
+    };
+    let network = move || {
+        panel
+            .code
+            .with(|c| c.as_ref().and_then(|(c, _)| c.network.clone()))
+    };
+    view! {
+        <Modal label="Pair a device" class="pair-dialog" cancel=close>
+            <div class="modal-header">
+                <div class="modal-titles">
+                    <h2 class="modal-title">"Pair a device"</h2>
+                </div>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
+            </div>
+            <div class="pair-body">
+                {card}
+                <ol class="pairing-steps">
+                    <li>"On the other device, open a browser."</li>
+                    <li>"Go to " <code>"/pair"</code> " on this computer's HTTPS address."</li>
+                    <li>"Type the code."</li>
+                </ol>
+                {move || network().map(network_view)}
+                {move || panel.problem.get().map(|problem| view! { <p class="problem" role="alert">{problem}</p> })}
+            </div>
+            <div class="modal-footer">
+                <button type="button" on:click=move |_| panel.start()>"New code"</button>
+                <button type="button" class="primary" data-primary on:click=move |_| close()>"Done"</button>
+            </div>
+        </Modal>
+    }
 }
 
 #[cfg(test)]

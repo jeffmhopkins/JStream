@@ -183,16 +183,23 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row then names what is asked for and not granted. A plugin off as `needs_grant` is
   granted a class and a folder and turned on in one step. The Inspector holds neither
   plugins nor pairing; File › Settings… opens on General, a click or Up and Down move
-  between General, Plugins, Audio plugins and Devices, and the install dialog opens
+  between General, Video, 3D rendering, Audio, Plugins and Devices, and the install dialog opens
   centred over a moved Settings dialog and closes alone on Escape.
 - **Audio plugins** (`clap-plugins.spec.js`): the spec routes the page's WebSocket and
   answers `plugin.clap_scan`, `plugin.clap_rescan` and `kind.list` itself. Add filter
   on the program output's chain shows Plugins with "No CLAP audio plugins found." (gone
-  while a search is typed, the dialog keeping its height), whose link opens Settings on Audio plugins: the install
+  while a search is typed, the dialog keeping its height), whose link opens Settings on Audio: the install
   folder, each folder searched or missing, the summary and the file that failed. Rescan
   sends one `plugin.clap_rescan`, then lists the plugin it found, Escape still closes
   the dialog, and Add filter offers the plugin under Plugins. Against the mock engine
-  itself, the page gives its reason and no Rescan.
+  itself, the section gives its reason as one sentence and no Rescan.
+- **Pairing** (`pairing.spec.js`): the mock engine has no server in front, so the spec
+  routes the page's WebSocket and answers `device.list` and `pairing.start` itself.
+  Settings › Devices heads its list Paired devices, with "No paired devices."; Pair a
+  device… opens its own dialog with the code, its time left and the three numbered
+  steps, and New code and Done; New code shows the next code, a device listed since ends
+  it with "A device paired.", and Done closes the dialog alone, the list naming the
+  device and its dates.
 - **Header stats** (`header-stats.spec.js`): the readout shows the dropped count from
   the first `stats.tick`, the CPU share ("<1%") from the second while the program draws
   nothing, and "60 fps · 2 dropped · CPU 3%" once the load says it drew 60 frames in a
@@ -239,8 +246,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   W % and H % read the size against the source's, set it, follow `source.size_changed`
   and go disabled without a size.
 - **Menus and Add source** (`menus.spec.js`): the canvas's right-click menu on the
-  frame (its items, Paste disabled, turning snapping off and Select all) and on the
-  margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
+  frame (its items, Paste disabled, turning snapping off, Select all, and New group, which
+  groups the selection into "Group 1") and on the margin, which Escape closes; the arrow keys move through a menu, skipping a disabled
   item and wrapping, Enter chooses, and a press outside closes it; the Sources
   panel's menu opens the Add source dialog, whose types start with the seed's audio
   inputs, and its Color type places the seed's Backdrop again as a reference 40 px
@@ -259,7 +266,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   appends two more and Paste filters, replacing leaves two, each one edit, and Paste
   transform gives a stretched second placement the Backdrop's 640 × 360 box; on the canvas the menu
   has Select all after Paste and ends with Remove from scene, Duplicate's as clone adds "Backdrop copy" selected, two selected
-  items get a counted head with the duplicates disabled, and Remove from scene removes
+  items get a counted head with Duplicate disabled, and Remove from scene removes
   both; a placement of a shared source switches, from the Reference or clone submenu, to an independent clone and back to a
   reference in one edit each, its menu's head and checks following, and the original,
   placed once, has no switch; Ctrl+D and Ctrl+Shift+D duplicate on the canvas and in a
@@ -277,8 +284,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   page in a new tab with `noopener noreferrer`, then Check for updates and About
   JStream. About shows
   the icon, the version, the build, the engine's protocol and the licence with its
-  links, and closes on Escape and on Close. Check for updates, on this page, says the
-  check runs in the desktop app. File's first item is Settings…, and its "Check for
+  links, and closes on Escape and on Close. Check for updates, on this page, is off with
+  the tooltip "Available in the desktop app". File's first item is Settings…, and its "Check for
   updates at launch" checkbox starts off and is kept in the page's storage. Arriving at
   File from the keyboard focuses Settings….
 - **Copy and paste** (`clipboard.spec.js`): Ctrl+C and Ctrl+V on the canvas paste the
@@ -477,7 +484,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   was. With the Backdrop and a second colour grouped in Main, the keyframe lists the
   group's children: a child's eye hides it there as one edit, a click selects it in
   the keyframe, whose X field writes its override, a Left crop is written there, its row's
-  menu has Remove from scene, Bring to front and Crop disabled and its Clear crop clears
+  menu has Remove from scene, the Order submenu's Bring to front and Crop disabled and its Clear crop clears
   that crop as one edit, leaving the keyframe selected, Main still shows it as it was (where
   a click opens the group's scene at its own box), and Reset to “Main” brings it back.
   The Inspector's Hotkey row binds F1 to Intro (which a second client
@@ -543,15 +550,19 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   program captioned with Main, no preview outside studio mode, and Intro and Main below
   it, Main framed as on program, and turns to studio mode when the workspace does. The mock engine sends no preview streams, so no test
   checks a picture: the engine's tests check the frames.
-- **Video settings** (`video-settings.spec.js`): File › Video settings… opens on
-  1920×1080 at 30 fps with Browser-style blending; a preset fills both sides, a typed
-  side of 0 turns the preset to Custom and is refused in the dialog; 1280×720 at 60 fps
-  in Linear light applies as one revision and reopens with those values; Apply with
+- **Video settings** (`video-settings.spec.js`): File › Video settings… opens Settings
+  on Video, at 1920×1080 at 30 fps with Browser-style blending; a preset fills both sides, a typed
+  side of 0 turns the preset to Custom and is refused on Save; 1280×720 at 60 fps
+  in Linear light saves as one revision and reopens with those values; Save with
   nothing changed sends nothing; and one Undo takes back all three. Scale existing scenes
   to fit starts ticked: 1280×720 then sends, in the batch with
   `canvas.set_size`, the seed's box a third smaller and still centred, and one Undo
   takes both back; unticked, 3840×2160 sends the size alone. 1080×1080 scales the box by
-  9/16 and keeps it at the centre.
+  9/16 and keeps it at the centre. The footer reads Cancel and Save on Video and while
+  another page is shown with a change kept, which Video still shows; Cancel sends nothing
+  and the next opening reads the collection again; General with no change has Close
+  alone, and keeps it while another window saves 1280×720, which the untouched Video
+  page then shows.
 
 <a id="running"></a>
 ## Running them
