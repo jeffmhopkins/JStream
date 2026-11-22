@@ -356,7 +356,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.139 because a source with depth reports it: `SourceSize`'s and
+`PROTOCOL_VERSION` is 0.142 because a source with depth reports it: `SourceSize`'s and
 `source.size_changed`'s optional `depth`, a 3D model's front-to-back bounds
 ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8);
 0.138 because a Move may pass through keyframes and orbit its
@@ -1864,7 +1864,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). With
   `source.size_changed` it is what a client needs to draw a legacy placement's box, crop
   handles and a size in % of the source's own (ADR-0022 §4). Runtime state, so no
-  `rev`. Added in 0.40. Since 0.139 a source with depth also reports `depth`, in the
+  `rev`. Added in 0.40. Since 0.142 a source with depth also reports `depth`, in the
   pixels of its `size`: a 3D model's bounds front to back, at the scale its width and
   height are reported at (the larger 512), so an editor can outline and hit it by its 3D
   bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
@@ -2224,7 +2224,7 @@ After `welcome`, the server pushes every event to every client.
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
-  `depth`, as `source.sizes` reports it, since 0.139.
+  `depth`, as `source.sizes` reports it, since 0.142.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

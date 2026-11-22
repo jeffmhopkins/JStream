@@ -59,7 +59,7 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         size: Option<PixelSize>,
         /// Its depth, as [`SourceSize::depth`](crate::SourceSize::depth) reports it
-        /// (0.139): a change of depth alone is a size change too.
+        /// (0.142): a change of depth alone is a size change too.
         #[serde(default, skip_serializing_if = "Option::is_none")]
         depth: Option<u32>,
     },
