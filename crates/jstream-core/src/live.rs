@@ -637,6 +637,16 @@ impl LiveSources {
         loads
     }
 
+    /// Sets the 3D rendering switches plans draw with (`studio.set_rendering`, ADR-0170
+    /// decision 1). Returns whether they changed, so the caller re-plans.
+    pub(crate) fn set_features(&mut self, features: jstream_protocol::RenderFeatures) -> bool {
+        if self.loaded.features() == features {
+            return false;
+        }
+        self.loaded = Arc::new((*self.loaded).clone().with_features(features));
+        true
+    }
+
     /// Installs a loaded asset if it is still the one wanted. Returns whether a plan
     /// may draw differently, so the caller re-plans. A failed load is logged, and its
     /// filters pass their input through until the setting changes.

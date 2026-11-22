@@ -323,6 +323,9 @@ struct State {
     warm_scenes: Option<u32>,
     /// The GPU-byte limit in MiB `studio.set_warm` set (ADR-0150), 0 for none.
     warm_gpu_mib: u32,
+    /// The 3D rendering switches `studio.set_rendering` set (ADR-0170 decision 1). The
+    /// mock draws nothing, so it only reports them.
+    rendering: jstream_protocol::RenderFeatures,
     /// The shared values `values.set` set (ADR-0102 decision 7), by name: runtime state,
     /// like the studio, and checked by the engine's rules.
     values: BTreeMap<String, SharedValue>,
@@ -1237,6 +1240,10 @@ impl State {
                 }
                 return Ok(CallResult::action());
             }
+            Action::StudioSetRendering { change } => {
+                self.rendering = self.rendering.with(&change);
+                return Ok(CallResult::action());
+            }
             Action::ValuesSet { name, value } => {
                 let set = value.map(|value| SharedValue {
                     name: name.clone(),
@@ -1511,6 +1518,7 @@ impl State {
                         .unwrap_or(jstream_protocol::DEFAULT_WARM_SCENES),
                 ),
                 warm_gpu_mib: Some(self.warm_gpu_mib),
+                rendering: Some(self.rendering),
             },
             Query::EncoderList => QueryResult::EncoderList {
                 rev: self.collection.rev,
