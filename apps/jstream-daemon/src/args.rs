@@ -76,6 +76,10 @@ Options:
                        sends from (repeatable). Off without it: no socket is
                        open. A `network_audio` source naming the sender then
                        records its audio
+  --jtunnel-no-state <name>
+                       ignore the DAW state the accepted JTunnel sender <name>
+                       sends (ADR-0171): its transport, tracks and clips, which
+                       data.list and data.get read otherwise (repeatable)
   --ui-dir <dir>       serve the web UI's built files from this directory at
                        http://127.0.0.1:<port>/ (the browser asks for the token
                        as a password)
@@ -190,6 +194,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut lan_renew = false;
     let mut register_vcam = false;
     let mut unregister_vcam = false;
+    let mut jtunnel_no_state: Vec<String> = Vec::new();
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || rest.next().ok_or_else(|| format!("`{arg}` needs a value"));
@@ -283,6 +288,15 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 jstream_core::JtunnelSetup::new(options.jtunnel.clone())
                     .map_err(|err| format!("`--jtunnel-accept`: {err}"))?;
             }
+            "--jtunnel-no-state" => {
+                let name = value()?;
+                if jtunnel_no_state.contains(name) {
+                    return Err(format!(
+                        "`--jtunnel-no-state` names the sender `{name}` twice"
+                    ));
+                }
+                jtunnel_no_state.push(name.clone());
+            }
             "--log-dir" => {
                 let dir = value()?;
                 if options.log_dir.replace(dir.clone()).is_some() {
@@ -342,6 +356,16 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
         return Ok(Invocation::UnregisterVcam);
     }
     options.port = port.unwrap_or(0);
+    // "Use this sender's state" (ADR-0171 decision 1) is on for an accepted sender;
+    // this turns it off, only for a sender accepted here.
+    for name in jtunnel_no_state {
+        let Some(sender) = options.jtunnel.iter_mut().find(|s| s.name() == name) else {
+            return Err(format!(
+                "`--jtunnel-no-state` names `{name}`, which no `--jtunnel-accept` accepts"
+            ));
+        };
+        *sender = sender.clone().with_state(false);
+    }
     if lan {
         options.lan = Some(Lan {
             port: lan_port.unwrap_or(LAN_PORT),
@@ -406,6 +430,20 @@ mod tests {
                 .contains("both send from")
         );
         assert!(error("--jtunnel-accept A@[::1]:9000").contains("IPv4 only"));
+        // ADR-0171 decision 1: state is on unless named, and only for an accepted sender.
+        let options = serve(
+            "--jtunnel-no-state Live --jtunnel-accept Bitwig@192.168.1.5:9000 --jtunnel-accept Live@10.0.0.2:9000",
+        );
+        let used: Vec<bool> = options.jtunnel.iter().map(|s| s.uses_state()).collect();
+        assert_eq!(used, [true, false]);
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-no-state B")
+                .contains("no `--jtunnel-accept`")
+        );
+        assert!(
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-no-state A --jtunnel-no-state A")
+                .contains("twice")
+        );
     }
 
     /// ADR-0104 §1: network access is off unless `--lan` turns it on, on a fixed port.

@@ -1403,6 +1403,7 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .device { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; }
 .jtunnel-setting { display: grid; gap: 0.6rem; margin: 14px 0; }
 .jtunnel-add { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+.jtunnel-state { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 12px; color: var(--muted); }
 .jtunnel-add input { flex: 1 1 10rem; width: auto; }
 .ptz-controller-setting { display: grid; gap: 0.6rem; margin: 14px 0; }
 .ptz-controller-add { display: flex; flex-wrap: wrap; gap: 0.4rem; }

@@ -743,6 +743,19 @@ somewhere it shouldn't.
   `network_audio` source that names it, and its MIDI only to the MIDI state of its own
   name and the every-input one, which only the `midi_*` sources draw: MIDI from the LAN
   doesn't trigger bindings (ADR-0142 §2).
+- A sender's state packets (JTunnel's side channel, a DAW's JSON messages under keys,
+  [ADR-0171](../adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2) are
+  taken only from an accepted sender, and counted and dropped while the person has
+  "Use this sender's state" off for it (the desktop app's checkbox, the daemon's
+  `--jtunnel-no-state`). It is on by default once a sender is accepted, the
+  maintainer's call: accepting a sender by name and address is the person's consent to
+  what it sends, and its state can only be read, never run. Taken, they are bounded: a key of 1 to 63 of `[A-Za-z0-9/_.-]`, a message of
+  at most 64 pieces and 76,800 bytes that must be one JSON value nested no deeper than
+  32, at most 128 messages part-way, 1,024 keys and 4 MiB of JSON per sender (counted
+  as sent; the parsed values take several times that in memory), and a key not resent
+  for 3 s goes until its next resend. They land in the engine's live data, which protocol clients only
+  read (`data.list`, `data.get`, the sender's text marked `remote_`) and plugins can't;
+  nothing in them runs a command.
 - An mDNS answer from a LAN address's port 5353 only lists a sender in
   `jtunnel.senders` (its name as `remote_name`, text from the LAN): listing trusts it
   with nothing, since only accepted senders are subscribed to and only their datagrams
