@@ -73,7 +73,7 @@ test('the panel lists the chains, and rows turn filters on, reorder and remove t
 
 test('Edit filters… selects the item and shows the Filters panel', async ({ page, daemon }) => {
   await connect(page, daemon);
-  await showPanel(page, 'Transform');
+  await showPanel(page, 'Arrange');
   await expect(page.getByRole('tabpanel', { name: 'Filters' })).toBeHidden();
   await page.locator('.sources-panel li.row').first().click({ button: 'right' });
   await page.getByRole('menu', { name: 'Context menu' }).getByRole('menuitem', { name: 'Edit filters…' }).click();
@@ -142,7 +142,8 @@ test('the Filters window applies at once, Cancel puts the filter back, and its c
   // The panel's head opens the window on the first filter, with the source's, the
   // item's and the scene's chains one tab apart; a click on a row shows its settings.
   await panel(page).getByRole('button', { name: 'Open the Filters window' }).click();
-  await expect(dialog.getByRole('tab')).toHaveText(['Source', 'This item', 'Scene']);
+  // Each scope names how many filters it holds.
+  await expect(dialog.getByRole('tab')).toHaveText([/^Source\s*\d+$/, /^This item\s*\d+$/, /^Scene\s*\d+$/]);
   await expect(dialog.getByRole('tab', { name: 'Source' })).toHaveAttribute('aria-selected', 'true');
   await expect(dialog.locator('.filter-pane-title')).toHaveText('Sharpen');
   const rows = dialog.locator('.filters-window-list li.filter');

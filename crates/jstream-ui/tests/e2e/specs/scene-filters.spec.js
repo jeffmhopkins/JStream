@@ -70,7 +70,7 @@ test('Edit filters… on a scene row and Edit scene filters… on the canvas mar
   await connect(page, daemon);
   // An item is selected, and another panel is in front.
   await page.locator('.sources-panel li.row .row-main').first().click();
-  await showPanel(page, 'Transform');
+  await showPanel(page, 'Arrange');
   await sceneRow(page, 'Intro').click({ button: 'right' });
   await menu(page).getByRole('menuitem', { name: 'Edit filters…' }).click();
   await expect(page.getByRole('tabpanel', { name: 'Filters' })).toBeVisible();
@@ -85,7 +85,7 @@ test('Edit filters… on a scene row and Edit scene filters… on the canvas mar
   // From the Backdrop's chains, so only the pick can bring Main's back.
   await page.locator('.sources-panel li.row .row-main').first().click();
   await expect(panel(page).locator('.filters-title')).toHaveText('Backdrop');
-  await showPanel(page, 'Transform');
+  await showPanel(page, 'Arrange');
   const m = await page.locator('svg.stage-overlay').evaluate((svg) => {
     const { a, d, e, f } = svg.getScreenCTM();
     return { a, d, e, f };

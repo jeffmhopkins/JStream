@@ -334,16 +334,24 @@ pub fn is_shared(collection: &Collection, item: &ItemInfo) -> bool {
 }
 
 /// The header's kind tag for an item's source: its kind's name once the descriptor is
-/// read, else its kind's ID; "Scene" for a nested scene.
+/// read, else its kind's ID with a capital ("Color"); "Scene" for a nested scene.
 pub fn kind_tag(studio: Studio, kind: &SourceKind) -> String {
     match kind {
         SourceKind::Builtin { kind } => studio
             .descriptors
             .with(|d| d.get(kind).map(|k| k.name.clone()))
-            .unwrap_or_else(|| kind.clone()),
+            .unwrap_or_else(|| sentence_case(kind)),
         SourceKind::Scene { .. } => "Scene".into(),
         _ => "Unknown".into(),
     }
+}
+
+/// `id` with its first letter a capital, for a kind with no name yet.
+fn sentence_case(id: &str) -> String {
+    let mut chars = id.chars();
+    chars.next().map_or_else(String::new, |first| {
+        first.to_uppercase().chain(chars).collect()
+    })
 }
 
 /// The Transition in and out options: "Default (<the default's name>)" for no override,
@@ -571,7 +579,7 @@ const TAB_KEY: &str = "jstream.inspector.tab";
 /// one short list at a time instead of one long scroll.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Tab {
-    /// Parameters, 3D, Crop and Blending.
+    /// Position and size, 3D, Crop and Blending.
     Transform,
     /// The motion modifiers.
     Motion,
@@ -704,7 +712,7 @@ fn TabStrip(tab: RwSignal<Tab>, scene: SceneId, item: ItemId) -> impl IntoView {
         })
         .collect_view();
     view! {
-        <div class="tabs inspector-tabs" role="tablist" aria-label="Inspector" on:keydown=on_key>
+        <div class="segmented full inspector-tabs" role="tablist" aria-label="Inspector" on:keydown=on_key>
             {tabs}
         </div>
     }
@@ -759,15 +767,13 @@ pub fn parse_folds(text: &str) -> HashMap<String, bool> {
     serde_json::from_str(text).unwrap_or_default()
 }
 
-/// A foldable section: an uppercase title, a hint shown while folded, an optional
-/// control at the right of its title row, and its body. `open` is how it starts the
+/// A foldable section: an uppercase title, a hint shown while folded, and its body. `open` is how it starts the
 /// first time; after that it is as it was last left ([`Folds`]).
 #[component]
 pub(crate) fn Fold(
     title: &'static str,
     open: bool,
     #[prop(optional, into)] hint: Signal<String>,
-    #[prop(optional)] extra: Option<AnyView>,
     children: Children,
 ) -> impl IntoView {
     let kept = use_context::<Folds>();
@@ -796,7 +802,6 @@ pub(crate) fn Fold(
                     {title}
                     {hint_text}
                 </button>
-                {extra}
             </div>
             <div class="fold-body" hidden=folded>{children()}</div>
         </section>
@@ -1095,7 +1100,8 @@ fn Placement(
             Param::W | Param::H => (MIN_SIZE, MAX_SIZE),
             Param::Rotation => (-360.0, 360.0),
         };
-        // Rotation stands alone in the grid; the rest are an axis row's fields.
+        // Rotation is a row of its own, its label in the row's label column; the rest
+        // are an axis row's fields, each captioned inside its box.
         let inline = param != Param::Rotation;
         view! {
             <NumberField label unit value step decimals fixed inline=inline min=f64::from(min)
@@ -1105,8 +1111,10 @@ fn Placement(
 
     let link_button = view! {
         <button
+            type="button"
             class="link-toggle"
             class:on=move || linked.get()
+            aria-label="Link width and height"
             aria-pressed=move || linked.get().to_string()
             title=move || if linked.get() {
                 "Width and height are linked (keeps the aspect ratio). Click to unlink."
@@ -1121,7 +1129,6 @@ fn Placement(
                 // The chain's middle link: gone when the sides are independent.
                 <path d="M6.5 9.5l3-3" visibility=move || if linked.get() { "visible" } else { "hidden" } />
             </svg>
-            "W/H"
         </button>
     }
     .into_any();
@@ -1307,7 +1314,7 @@ fn Placement(
         };
         view! {
             <NumberField label caption unit="px" value step=1.0 decimals=0 min=0.0
-                max=f64::from(MAX_CROP) inline=true bare=true send=commit />
+                max=f64::from(MAX_CROP) inline=true send=commit />
         }
     };
     let crop_hint = Signal::derive(move || {
@@ -1438,7 +1445,7 @@ fn Placement(
     view! {
         <div class="tab-panel" role="tabpanel" aria-label="Transform"
             hidden=move || tab.get() != Tab::Transform>
-        <Fold title="Parameters" open=true extra=link_button>
+        <Fold title="Position and size" open=true>
             <Show when=move || geometry.get().is_none()>
                 <p class="note">
                     "This item is still placed in the old form, whose box depends on its \
@@ -1446,7 +1453,7 @@ fn Placement(
                 </p>
             </Show>
             <AxisRow label="Position">{field(Param::X)} {field(Param::Y)}</AxisRow>
-            <AxisRow label="Size">{field(Param::W)} {field(Param::H)}</AxisRow>
+            <AxisRow label="Size">{field(Param::W)} {link_button} {field(Param::H)}</AxisRow>
             <AxisRow label="Scale">{percent_field(true)} {percent_field(false)}</AxisRow>
             <div class="field-grid">
                 {field(Param::Rotation)}
@@ -1496,8 +1503,30 @@ fn Placement(
                             .collect_view()}
                     </select>
                 </label>
-                <NumberField label="Opacity" unit="%" value=opacity step=1.0 decimals=0
-                    min=0.0 max=400.0 send=send_opacity />
+                // A slider over 0 to 100 %, beside the field that also takes the boost
+                // above it; the slider sends once, on release.
+                <div class="slider-field">
+                    <span class="field-label">"Opacity"</span>
+                    <div class="slider-number">
+                        <input
+                            type="range"
+                            min="0"
+                            max="100"
+                            step="1"
+                            aria-label="Opacity"
+                            disabled=move || opacity.with(Option::is_none)
+                            prop:value=move || opacity.get().map_or(100.0, |v| v.min(100.0)).to_string()
+                            on:change=move |event| {
+                                if let Ok(v) = event_target_value(&event).parse::<f64>() {
+                                    send_opacity(v);
+                                }
+                            }
+                        />
+                        <NumberField named=Signal::stored("Opacity".to_owned()) unit="%"
+                            value=opacity step=1.0 decimals=0 min=0.0 max=400.0
+                            send=send_opacity />
+                    </div>
+                </div>
             </div>
         </Fold>
         </div>
@@ -1871,6 +1900,13 @@ mod tests {
             Size::try_new(w, h).expect("positive"),
         )
         .expect("a valid box")
+    }
+
+    #[test]
+    fn a_kind_with_no_name_yet_reads_with_a_capital() {
+        assert_eq!(sentence_case("color"), "Color");
+        assert_eq!(sentence_case("image_slideshow"), "Image_slideshow");
+        assert_eq!(sentence_case(""), "");
     }
 
     #[test]
