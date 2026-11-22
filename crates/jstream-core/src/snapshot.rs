@@ -5633,6 +5633,7 @@ pub(crate) fn compose_metered(
             continue;
         };
         let started = Instant::now();
+        meter.gpu_unit_upload(compositor, source);
         match &frame.pixels {
             // Sampled where it is, on the context it was painted on. Another compositor
             // (`video.snapshot`'s, or a program stage opened since) can't read it.
@@ -5723,6 +5724,7 @@ pub(crate) fn compose_metered(
         }
         meter.upload(source, started);
     }
+    meter.gpu_unit_none(compositor);
     meter.phase_since(Phase::Uploads, uploads);
     let passes = shot.passes_of(view.mix);
     let tracks = shot
@@ -5736,6 +5738,7 @@ pub(crate) fn compose_metered(
             continue;
         };
         let started = Instant::now();
+        meter.gpu_unit_capture(compositor, spec);
         let key = GpuKey::Capture(spec.clone());
         match capture.image {
             CaptureImage::Rgba { size, rgba } => cache.upload(
@@ -5755,6 +5758,7 @@ pub(crate) fn compose_metered(
         meter.capture(spec, started);
         fallback = Some(key);
     }
+    meter.gpu_unit_none(compositor);
     meter.phase_since(Phase::Captures, capturing);
     let chaining = Instant::now();
     let ran = run_chains(
@@ -5764,6 +5768,7 @@ pub(crate) fn compose_metered(
         (live, captures),
         (at, beat),
     );
+    meter.gpu_unit_none(compositor);
     meter.phase_since(Phase::Chains, chaining);
     ran?;
     let stage = view
@@ -5830,7 +5835,9 @@ pub(crate) fn compose_metered(
                         detail: format!("no image for {:?}", stage.mixed),
                     })?;
                 let started = Instant::now();
+                meter.gpu_unit_composite(compositor);
                 compositor.render_into(&shown, layer)?;
+                meter.gpu_unit_none(compositor);
                 let took = meter.phase_since(Phase::Passes, started);
                 meter.composite(took);
             }
@@ -5859,6 +5866,7 @@ pub(crate) fn compose_metered(
     };
     for pass in nested.iter().chain(root_pass) {
         if !chains.holds_layer(&pass.key) {
+            meter.gpu_unit_pass(compositor, &pass.scene);
             draw_sky(
                 compositor,
                 (&mut *cache, &*chains),
@@ -5868,6 +5876,7 @@ pub(crate) fn compose_metered(
             )?;
         }
     }
+    meter.gpu_unit_none(compositor);
     if let Some(transition) = tracks {
         draw_transition_skies(
             compositor,
@@ -5895,6 +5904,7 @@ pub(crate) fn compose_metered(
                 continue;
             }
             let started = Instant::now();
+            meter.gpu_unit_pass(compositor, &pass.scene);
             let camera = fill_items(
                 &mut items,
                 (cache, chains),
@@ -5908,6 +5918,7 @@ pub(crate) fn compose_metered(
             meter.pass(&pass.scene, took);
         }
         let started = Instant::now();
+        meter.gpu_unit_composite(compositor);
         // Where the mix shows a transparent pixel, the output is black (ADR-0024 §4).
         let clear = match (root, tracks) {
             (_, Some(transition)) => {
@@ -5941,6 +5952,7 @@ pub(crate) fn compose_metered(
         match &stage {
             Some(stage) => {
                 compositor.render_into(&scene(canvas, clear, &items), image(&stage.mixed)?)?;
+                meter.gpu_unit_none(compositor);
                 let took = meter.phase_since(Phase::Passes, started);
                 meter.composite(took);
             }
@@ -5996,7 +6008,9 @@ fn finish_stage(
         let key = GpuKey::Filtered(owner.clone());
         if chains.stage(&key) {
             let running = Instant::now();
+            meter.gpu_unit_chain(compositor, owner);
             chains.run_one(compositor, cache, (owner, chain), (at, beat));
+            meter.gpu_unit_none(compositor);
             meter.chain(owner, running);
         }
         failed |= chains.failed(&key);
@@ -6028,7 +6042,9 @@ fn composite_from(
     readback: bool,
     started: Instant,
 ) -> Result<Output, RenderError> {
+    meter.gpu_unit_composite(compositor);
     let drawn = compositor.render(shown, readback);
+    meter.gpu_unit_none(compositor);
     let took = started.elapsed();
     let waited = compositor.readback_wait().min(took);
     meter.phase(Phase::Finish, waited);
@@ -6081,12 +6097,14 @@ fn run_chains(
         match step {
             ChainStep::Run(source) => {
                 if let Some(chain) = shot.chains.get(source) {
+                    meter.gpu_unit_chain(compositor, source);
                     chains.run_one(compositor, cache, (source, chain), (at, beat));
                     meter.chain(source, started);
                 }
             }
             ChainStep::Box(owner) => {
                 if let Some(boxed) = shot.boxes.get(owner) {
+                    meter.gpu_unit_chain(compositor, owner);
                     // A layer too large for the adapter blanks its item, not the frame.
                     match draw_box(
                         compositor,
@@ -6104,6 +6122,7 @@ fn run_chains(
                 }
             }
             ChainStep::Pass(pass) => {
+                meter.gpu_unit_pass(compositor, &pass.scene);
                 cache.layer(compositor, &pass.key, canvas.width(), canvas.height())?;
                 if let Some(depth) = &pass.view_depth {
                     cache.layer(compositor, depth, canvas.width(), canvas.height())?;
