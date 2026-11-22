@@ -78,8 +78,8 @@ test('an item\'s effects are its own: added, reordered, turned off and removed u
   // Four settings: it opens the Filters window, on the item's effect.
   const settings = page.getByRole('dialog', { name: 'Filters', exact: true });
   await expect(settings.locator('.filter-pane-title')).toHaveText('Vignette');
-  await expect(settings.locator('.filter-pane-sub')).toHaveText('Effect on “Backdrop”');
-  await settings.getByRole('button', { name: 'OK' }).click();
+  await expect(settings.locator('.filter-pane-title')).toHaveAttribute('title', 'Effect on “Backdrop”');
+  await settings.getByRole('button', { name: 'Close', exact: true }).last().click();
   await expect(settings).toBeHidden();
   await expect(effectRows(page).locator('.filter-name')).toHaveText(['Vignette']);
   await expect(effects(page).locator('.filter-chain-count')).toHaveText('1 effect');
