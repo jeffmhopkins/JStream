@@ -16,7 +16,8 @@ test('a duplicate shows a toast that hides by itself', async ({ page, daemon }) 
   await connect(page, daemon);
   await page.locator('.sources-panel li.row').first().click({ button: 'right' });
   const before = await rev(page);
-  await page.getByRole('menu', { name: 'Context menu' }).getByRole('menuitem', { name: 'Duplicate as clone' }).click();
+  await page.getByRole('menu', { name: 'Context menu' }).getByRole('menuitem', { name: /^Duplicate/ }).hover();
+  await page.locator('.context-menu.submenu').getByRole('menuitem', { name: /^Duplicate as clone/ }).click();
   await expect.poll(() => rev(page)).toBe(before + 1);
   const toast = page.locator('.toast');
   await expect(toast).toHaveText("Added a clone. Changes to it don't affect the original.");

@@ -42,9 +42,10 @@ const DUPLICATE_OFFSET: f32 = 40.0;
 /// Where the menu opened, which decides its last lines.
 #[derive(Clone)]
 pub enum Scope {
-    /// On the canvas: the menu ends with Select all, which runs this.
+    /// On the canvas: the clipboard group adds Select all, which runs this.
     Canvas(Rc<dyn Fn()>),
-    /// In the Sources panel: it ends with Add source and New group.
+    /// In the Sources panel. Add source and New group are in the panel's and the
+    /// canvas's menus for an empty spot, not here.
     Objects,
 }
 
@@ -1022,9 +1023,10 @@ fn labels_entry(cx: Context, source_id: &SourceId) -> Entry {
     Entry::submenu("Labels", lines)
 }
 
-/// The reference ↔ clone block for the one selected item (spec-workspace.md 5.2.10): a
-/// head, then "Reference to original" and "Independent clone", the current one checked.
-/// Each switch is confirmed by the prototype's toast (spec-workspace.md 6.7.2).
+/// The reference ↔ clone choice for the one selected item (spec-workspace.md 5.2.10), as
+/// a "Reference or clone" submenu showing the current one: a head, then "Reference to
+/// original" and "Independent clone", the current one checked. Each switch is confirmed
+/// by the prototype's toast (spec-workspace.md 6.7.2).
 fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
     let item = facts.items[0].clone();
     let source = facts.source_id.clone();
@@ -1070,7 +1072,13 @@ fn sharing_entries(cx: Context, facts: &Facts) -> Vec<Entry> {
         .checked(clone)
         .disabled_if(keyframe)
     };
-    vec![Entry::Head(head), reference, independent, Entry::Sep]
+    vec![
+        Entry::submenu(
+            "Reference or clone",
+            vec![Entry::Head(head), reference, independent],
+        )
+        .hint(if clone { "Clone" } else { "Reference" }),
+    ]
 }
 
 /// Copy (the `items` of `scene_id`) and Paste (into the shown scene), as Ctrl+C and
@@ -1324,41 +1332,40 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                 None => entry.disabled_if(keyframe),
             })
         });
-        let mut list = vec![visible, lock, properties, filters];
-        list.extend(filter_clip);
-        list.extend([labels, pop_out]);
-        list.extend(screenshot);
-        list.push(Entry::Sep);
-        list.extend(clip);
-        list.push(Entry::Sep);
+        // The groups of a visual item's menu, with the nested scene's own commands
+        // (open it, add into it, ungroup) in place of its arrangement.
+        let mut list = vec![properties, filters, Entry::Sep];
         list.extend(audio);
+        list.extend([visible, lock, labels, Entry::Sep]);
+        list.extend(clip);
+        list.extend(filter_clip);
         list.extend([
-            Entry::item("Add source…", move || cx.add_source(into.clone()))
-                .disabled_if(cx.adder.is_none()),
             Entry::Sep,
             Entry::item("Open nested scene", move || {
                 studio.select_scene(open.clone())
             }),
+            Entry::item("Add source…", move || cx.add_source(into.clone()))
+                .disabled_if(cx.adder.is_none()),
         ]);
         list.extend(ungroup);
-        list.push(remove);
+        list.extend([Entry::Sep, pop_out]);
+        list.extend(screenshot);
+        list.extend([Entry::Sep, remove]);
         return list;
     }
     // A source with no picture (5.2.9).
     if !many && !facts.picture {
-        let mut list = vec![properties, filters];
-        list.extend(filter_clip);
+        let mut list = vec![properties, filters, Entry::Sep];
+        list.extend(audio);
         list.extend([labels, Entry::Sep]);
         list.extend(clip);
-        list.push(Entry::Sep);
-        if let Some(audio) = audio {
-            list.extend([audio, Entry::Sep]);
-        }
-        list.push(remove);
+        list.extend(filter_clip);
+        list.extend([Entry::Sep, remove]);
         return list;
     }
 
-    // One or more visual items (5.2.10, 5.2.11).
+    // One or more visual items (5.2.10, 5.2.11), in the groups of docs/UI-DESIGN.md#menus:
+    // open it, its state, the clipboard, its arrangement, other views, removal.
     let mut list = Vec::new();
     if many {
         list.extend([
@@ -1370,23 +1377,19 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
             Entry::Sep,
             visible,
             lock,
-            Entry::Sep,
         ]);
-        list.extend(filter_clip);
-        list.push(Entry::Sep);
     } else {
-        if let Some(audio) = audio {
-            list.extend([audio, Entry::Sep]);
-        }
-        list.extend([visible, lock, properties, filters]);
-        list.extend(filter_clip);
-        list.extend([labels, pop_out]);
-        list.extend(screenshot);
-        list.push(Entry::Sep);
-        list.extend(sharing_entries(cx, &facts));
+        list.extend([properties, filters, Entry::Sep]);
+        list.extend(audio);
+        list.extend([visible, lock, labels]);
     }
-    list.extend(clip);
     list.push(Entry::Sep);
+    list.extend(clip);
+    if let Scope::Canvas(select_all) = &scope {
+        let select_all = Rc::clone(select_all);
+        list.push(Entry::item("Select all", move || select_all()).hint("Ctrl+A"));
+    }
+    list.extend(filter_clip);
     let layer = |label: &str, layer: Layer| {
         let facts = Rc::clone(&facts);
         Entry::item(label, move || {
@@ -1486,12 +1489,28 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         Entry::item(label, move || cx.duplicate(scene.clone(), &facts, clone))
             .disabled_if(many || keyframe)
     };
+    list.push(Entry::submenu(
+        "Duplicate",
+        vec![
+            duplicate("Duplicate as reference", false).hint("Ctrl+D"),
+            duplicate("Duplicate as clone", true).hint("Ctrl+Shift+D"),
+        ],
+    ));
+    if !many {
+        list.extend(sharing_entries(cx, &facts));
+    }
+    // OBS groups the layer order into one Order submenu; so does this menu.
     list.extend([
-        layer("Bring to front", Layer::Front),
-        layer("Bring forward", Layer::Forward),
-        layer("Send backward", Layer::Backward),
-        layer("Send to back", Layer::Back),
         Entry::Sep,
+        Entry::submenu(
+            "Order",
+            vec![
+                layer("Bring to front", Layer::Front),
+                layer("Bring forward", Layer::Forward),
+                layer("Send backward", Layer::Backward),
+                layer("Send to back", Layer::Back),
+            ],
+        ),
         Entry::submenu(
             "Transform",
             transform_clip
@@ -1506,28 +1525,15 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
                 .collect(),
         ),
         blending,
-        clear_crop,
-        Entry::Sep,
         crop,
-        duplicate("Duplicate as reference", false).hint("Ctrl+D"),
-        duplicate("Duplicate as clone", true).hint("Ctrl+Shift+D"),
-        remove,
+        clear_crop,
     ]);
-    match scope {
-        Scope::Canvas(select_all) => {
-            list.push(Entry::item("Select all", move || select_all()).hint("Ctrl+A"));
-        }
-        Scope::Objects => {
-            let scene = scene_id.clone();
-            let (into, ids) = (scene_id.clone(), facts.items.clone());
-            list.extend([
-                Entry::Sep,
-                Entry::item("Add source…", move || cx.add_source(scene.clone()))
-                    .disabled_if(cx.adder.is_none() || keyframe),
-                Entry::item("New group", move || cx.group(&into, &ids)).disabled_if(keyframe),
-            ]);
-        }
+    if !many {
+        list.push(Entry::Sep);
+        list.push(pop_out);
+        list.extend(screenshot);
     }
+    list.extend([Entry::Sep, remove]);
     list
 }
 
