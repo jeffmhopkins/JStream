@@ -1350,6 +1350,24 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Removes an installed plugin (0.163): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+          "properties": {
+            "plugin_id": {
+              "$ref": "#/$defs/PluginId",
+              "description": "The plugin."
+            },
+            "type": {
+              "const": "plugin.uninstall",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugin_id"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Re-enables an effect-pack kind the engine quarantined after a GPU device loss was\nblamed on it (0.61, #349; `gpu.device_lost`) or after it ran too long on the GPU\n(0.102, `gpu.effect_slow`), and the whole pack when the pack\nwas quarantined. Its filters draw again from the next frame. The engine never\nlifts a quarantine by itself, nor when the pack's files change. Succeeds for a\nkind that isn't quarantined. Fails with `invalid_argument` on `kind_id`, as\n`kind.describe` does, for a kind that no loaded pack has and no quarantine names. For a person only, like\n`plugin.enable`.",
           "properties": {
             "kind_id": {
@@ -7522,6 +7540,24 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "plugin_id",
             "state"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "A person removed a plugin with `plugin.uninstall` (0.163): it no longer runs and\nis no longer listed. A client that shows the plugins drops it, or reads\n`plugin.list` again.",
+          "properties": {
+            "plugin_id": {
+              "$ref": "#/$defs/PluginId",
+              "description": "The plugin."
+            },
+            "type": {
+              "const": "plugin.uninstalled",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "plugin_id"
           ],
           "type": "object"
         },
@@ -16815,5 +16851,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.160"
+  "title": "JStream protocol 0.163"
 }

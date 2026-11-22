@@ -6,9 +6,14 @@
 //!
 //! **Threads.** One reader thread per link reads everything the helper sends. It stamps
 //! frames and audio on the media clock as they arrive (the pipe carries no times),
-//! imports each frame through the page's [`PageFrames`] before telling the helper the
-//! texture is free, and pushes audio into the page's [`PageAudio`]. Requests go out
-//! from the caller's thread under a lock.
+//! starts importing each frame through the page's [`PageFrames`], and pushes audio into
+//! the page's [`PageAudio`]. A release thread per link finishes the imports in the order
+//! they started: it waits until the engine no longer reads the helper's texture, makes
+//! the frame the page's latest, and only then tells the helper the texture is free. So a
+//! slow import (a GPU copy queued behind a heavy frame) holds back neither the pipe's
+//! other messages, nor another page's paint, nor anyone reading a page's latest frame:
+//! no lock is held while it waits. Requests go out from the caller's thread under a
+//! lock.
 //!
 //! **A helper that stops** (it crashed, or its pipe broke) ends the link: every page's
 //! audio fails, so the engine's input sees the stream end, frames stop, and every later
@@ -84,9 +89,9 @@ pub(crate) trait Frames: Send + Sync {
 
 /// One page's frames on the engine's device.
 pub(crate) trait PageFrames: Send + Sync {
-    /// Takes `paint`, which arrived at `pts`, as the page's latest frame. Returns once
-    /// the engine no longer reads the helper's texture, which the helper then reuses.
-    fn paint(&self, paint: &Paint, pts: MediaTime);
+    /// Starts taking `paint`, which arrived at `pts`, without waiting for it: the
+    /// [`Import`] it returns finishes it, on the link's release thread.
+    fn import(&self, paint: &Paint, pts: MediaTime) -> Box<dyn Import>;
     /// The latest frame on the GPU, if any.
     fn latest(&self) -> Option<GpuFrame>;
     /// The latest frame in CPU memory, for an importer that reads paints into it (Linux);
@@ -94,6 +99,37 @@ pub(crate) trait PageFrames: Send + Sync {
     fn latest_cpu(&self) -> Option<Arc<VideoFrame>> {
         None
     }
+}
+
+/// One paint being imported ([`PageFrames::import`]).
+pub(crate) trait Import: Send {
+    /// Returns once the engine no longer reads the helper's texture, which the helper
+    /// then reuses: whether the paint was taken, and so may be shown. Holds no lock
+    /// that a reader of the page's latest frame takes.
+    fn wait(&mut self) -> bool;
+    /// Makes the paint the page's latest frame.
+    fn publish(self: Box<Self>);
+}
+
+/// An import with nothing to show: a paint that couldn't be taken.
+#[cfg(feature = "cef")]
+pub(crate) struct Skipped;
+
+#[cfg(feature = "cef")]
+impl Import for Skipped {
+    fn wait(&mut self) -> bool {
+        false
+    }
+
+    fn publish(self: Box<Self>) {}
+}
+
+/// A paint the reader thread started importing, for the release thread to finish.
+struct Pending {
+    page: u32,
+    slot: u8,
+    /// The page's, unless it was closed or is reloading.
+    import: Option<(Arc<PageLink>, u64, Box<dyn Import>)>,
 }
 
 /// The engine's end of one helper's pipe.
@@ -138,16 +174,34 @@ struct Hold {
     /// document's first paint, so the page is transparent rather than showing the end
     /// of its previous run (`restart_on_show`).
     showing: bool,
+    /// Reloads asked for so far: a paint whose import started before one is the old
+    /// document's, and is never shown.
+    epoch: u64,
 }
 
 impl PageLink {
-    /// Takes one paint, unless it is the old document's while a reload is pending.
-    fn paint(&self, paint: &Paint, pts: MediaTime) {
+    /// Starts importing one paint, with the reload epoch it started in, unless it is
+    /// the old document's while a reload is pending.
+    fn import(&self, paint: &Paint, pts: MediaTime) -> Option<(u64, Box<dyn Import>)> {
+        let epoch = {
+            let hold = lock(&self.hold);
+            if hold.reloads > 0 {
+                return None;
+            }
+            hold.epoch
+        };
+        Some((epoch, self.frames.import(paint, pts)))
+    }
+
+    /// Shows an import that finished, unless a reload was asked for since it started.
+    /// The hold is held while the frame is stored, so a reload can't slip between the
+    /// check and the frame.
+    fn publish(&self, epoch: u64, import: Box<dyn Import>) {
         let mut hold = lock(&self.hold);
-        if hold.reloads > 0 {
+        if hold.reloads > 0 || hold.epoch != epoch {
             return;
         }
-        self.frames.paint(paint, pts);
+        import.publish();
         hold.showing = true;
     }
 
@@ -155,6 +209,7 @@ impl PageLink {
     fn reload(&self) {
         let mut hold = lock(&self.hold);
         hold.reloads += 1;
+        hold.epoch += 1;
         hold.showing = false;
     }
 
@@ -199,10 +254,21 @@ impl Link {
             next_page: AtomicU32::new(1),
             ready: Mutex::new(Some(ready_rx)),
         });
+        let (pending_tx, pending_rx) = mpsc::channel();
+        let releaser = Arc::clone(&link);
+        let release = std::thread::Builder::new()
+            .name("jstream-browser-release".into())
+            .spawn(move || releaser.release(&pending_rx))
+            .map_err(|e| start(format!("starting the browser helper's releaser: {e}")))?;
         let reader = Arc::clone(&link);
         let thread = std::thread::Builder::new()
             .name("jstream-browser-link".into())
-            .spawn(move || reader.read(from_helper, ready_tx))
+            .spawn(move || {
+                reader.read(from_helper, ready_tx, &pending_tx);
+                // The release thread ends once it has finished every import started.
+                drop(pending_tx);
+                let _ = release.join();
+            })
             .map_err(|e| start(format!("starting the browser helper's reader: {e}")))?;
         Ok((link, thread))
     }
@@ -268,6 +334,7 @@ impl Link {
             hold: Mutex::new(Hold {
                 reloads: 0,
                 showing: true,
+                epoch: 0,
             }),
         });
         {
@@ -333,7 +400,12 @@ impl Link {
 
     /// The reader thread: the helper's answer to the start, then everything it sends
     /// until its stream ends or breaks.
-    fn read(&self, mut from_helper: impl Read, ready: SyncSender<Result<(), String>>) {
+    fn read(
+        &self,
+        mut from_helper: impl Read,
+        ready: SyncSender<Result<(), String>>,
+        pending: &mpsc::Sender<Pending>,
+    ) {
         let started = match wire::receive::<ToEngine>(&mut from_helper) {
             Ok(Some(ToEngine::Ready)) => Ok(()),
             Ok(Some(ToEngine::StartFailed { reason })) => Err(reason),
@@ -347,7 +419,7 @@ impl Link {
         let ended = if ok {
             loop {
                 match wire::receive::<ToEngine>(&mut from_helper) {
-                    Ok(Some(message)) => self.handle(message),
+                    Ok(Some(message)) => self.handle(message, pending),
                     Ok(None) => break None,
                     Err(e) => break Some(e.to_string()),
                 }
@@ -358,7 +430,21 @@ impl Link {
         self.end(ended);
     }
 
-    fn handle(&self, message: ToEngine) {
+    /// The release thread: finishes each import the reader started, in order, then
+    /// hands the helper its texture back, until the reader ends.
+    fn release(&self, pending: &Receiver<Pending>) {
+        for Pending { page, slot, import } in pending {
+            if let Some((state, epoch, mut import)) = import
+                && import.wait()
+            {
+                state.publish(epoch, import);
+            }
+            // Even for a page closed meanwhile: the helper waits for every slot.
+            self.send(&ToHelper::Released { page, slot });
+        }
+    }
+
+    fn handle(&self, message: ToEngine, pending: &mpsc::Sender<Pending>) {
         match message {
             ToEngine::Opened { page } => self.answer(page, Ok(())),
             ToEngine::OpenFailed { page, reason } => self.answer(page, Err(reason)),
@@ -370,17 +456,22 @@ impl Link {
                 height,
             } => {
                 let pts = self.clock.now();
-                if let Some(state) = self.page(page) {
-                    let paint = Paint {
-                        slot,
-                        handle,
-                        width,
-                        height,
-                    };
-                    state.paint(&paint, pts);
+                let paint = Paint {
+                    slot,
+                    handle,
+                    width,
+                    height,
+                };
+                let import = self.page(page).and_then(|state| {
+                    let (epoch, import) = state.import(&paint, pts)?;
+                    Some((state, epoch, import))
+                });
+                let finish = Pending { page, slot, import };
+                if let Err(mpsc::SendError(Pending { page, slot, .. })) = pending.send(finish) {
+                    // No release thread: its slot goes back at once, as the helper waits
+                    // for every slot.
+                    self.send(&ToHelper::Released { page, slot });
                 }
-                // Even for a page closed meanwhile: the helper waits for every slot.
-                self.send(&ToHelper::Released { page, slot });
             }
             ToEngine::Audio { page, samples } => {
                 let arrived = self.clock.now();
@@ -580,12 +671,23 @@ mod tests {
     }
 
     impl PageFrames for Recorder {
-        fn paint(&self, paint: &Paint, pts: MediaTime) {
+        fn import(&self, paint: &Paint, pts: MediaTime) -> Box<dyn Import> {
             lock(&self.0).push((*paint, pts));
+            Box::new(Taken)
         }
         fn latest(&self) -> Option<GpuFrame> {
             None
         }
+    }
+
+    /// An import that finished at once.
+    struct Taken;
+
+    impl Import for Taken {
+        fn wait(&mut self) -> bool {
+            true
+        }
+        fn publish(self: Box<Self>) {}
     }
 
     /// A scripted helper: what the engine sent it, and its end of the pipes.
@@ -836,6 +938,125 @@ mod tests {
         assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 4 });
         assert_eq!(lock(&paints).len(), 3);
         assert!(page.page.showing());
+
+        drop(page);
+        assert_eq!(helper.expect(), ToHelper::Close { page: 1 });
+        link.shutdown();
+        assert_eq!(helper.expect(), ToHelper::Shutdown);
+        drop(helper);
+        thread.join().expect("reader");
+    }
+
+    /// Imports whose wait blocks until the test lets it go, each page's first.
+    struct Stalled {
+        paints: Paints,
+        go: Arc<(Mutex<bool>, std::sync::Condvar)>,
+        latest: Arc<Mutex<Option<u8>>>,
+    }
+
+    impl Frames for Stalled {
+        fn page(&self, _size: FrameSize) -> Box<dyn PageFrames> {
+            Box::new(Stalled {
+                paints: Arc::clone(&self.paints),
+                go: Arc::clone(&self.go),
+                latest: Arc::new(Mutex::new(None)),
+            })
+        }
+    }
+
+    impl PageFrames for Stalled {
+        fn import(&self, paint: &Paint, pts: MediaTime) -> Box<dyn Import> {
+            lock(&self.paints).push((*paint, pts));
+            Box::new(StalledImport {
+                slot: paint.slot,
+                go: Arc::clone(&self.go),
+                latest: Arc::clone(&self.latest),
+            })
+        }
+        fn latest(&self) -> Option<GpuFrame> {
+            // Reading the latest frame takes the same lock a publish does, as the D3D12
+            // import's does: never one a wait holds.
+            drop(lock(&self.latest));
+            None
+        }
+    }
+
+    struct StalledImport {
+        slot: u8,
+        go: Arc<(Mutex<bool>, std::sync::Condvar)>,
+        latest: Arc<Mutex<Option<u8>>>,
+    }
+
+    impl Import for StalledImport {
+        fn wait(&mut self) -> bool {
+            let (gone, wake) = &*self.go;
+            let mut gone = lock(gone);
+            while !*gone {
+                gone = wake.wait(gone).unwrap_or_else(PoisonError::into_inner);
+            }
+            true
+        }
+        fn publish(self: Box<Self>) {
+            *lock(&self.latest) = Some(self.slot);
+        }
+    }
+
+    /// A paint whose import waits (a GPU copy queued behind a heavy frame) holds back
+    /// neither reading the page's frame (a plan does, under the collection lock) nor
+    /// the next paints and audio on the pipe: only its own slot's release waits.
+    #[test]
+    fn a_slow_import_holds_back_no_reader_and_no_other_paint() {
+        let (from_engine, to_helper) = std::io::pipe().expect("pipe");
+        let (from_helper, to_engine) = std::io::pipe().expect("pipe");
+        let paints = Paints::default();
+        let go = Arc::new((Mutex::new(false), std::sync::Condvar::new()));
+        let frames = Stalled {
+            paints: Arc::clone(&paints),
+            go: Arc::clone(&go),
+            latest: Arc::new(Mutex::new(None)),
+        };
+        let (link, thread) =
+            Link::connect(from_helper, to_helper, Arc::new(frames), Arc::new(Fixed))
+                .expect("connect");
+        let helper = start(
+            &link,
+            Helper {
+                from_engine,
+                to_engine,
+            },
+        );
+        let (page, mut helper) = open(&link, helper);
+        let heard = Arc::new(Mutex::new(Heard::default()));
+        let _stream = page.audio().open(Box::new(Listener(Arc::clone(&heard))));
+        let frame = |slot| ToEngine::Frame {
+            page: 1,
+            slot,
+            handle: 0x44,
+            width: 640,
+            height: 360,
+        };
+        helper.say(&frame(0));
+        helper.say(&frame(1));
+        helper.say(&ToEngine::Audio {
+            page: 1,
+            samples: vec![0.25; 4],
+        });
+        // Both paints are imported and the audio delivered while the first still waits.
+        eventually(|| lock(&paints).len() == 2);
+        eventually(|| lock(&heard).samples.len() == 4);
+        // Reading the page's frame doesn't wait for it either.
+        let read = std::time::Instant::now();
+        assert!(page.frame().is_none());
+        assert!(read.elapsed() < Duration::from_secs(1));
+
+        // Let go, the slots come back in the order they were painted.
+        {
+            let (gone, wake) = &*go;
+            *lock(gone) = true;
+            wake.notify_all();
+        }
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 0 });
+        assert_eq!(helper.expect(), ToHelper::Released { page: 1, slot: 1 });
 
         drop(page);
         assert_eq!(helper.expect(), ToHelper::Close { page: 1 });

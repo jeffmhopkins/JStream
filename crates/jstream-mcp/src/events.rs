@@ -502,6 +502,9 @@ mod tests {
             reason: None,
             remote_name: None,
         });
+        buffer.push(Event::PluginUninstalled {
+            plugin_id: jstream_protocol::PluginId::new("plg_1"),
+        });
         buffer.push(changed(2));
         let page = buffer.read(0, 10).expect("a valid cursor");
         assert_eq!(seqs(&page.events), [1, 2]);
