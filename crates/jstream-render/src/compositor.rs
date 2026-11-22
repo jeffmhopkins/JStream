@@ -743,19 +743,47 @@ impl Compositor {
     /// # Errors
     /// [`RenderError::Invalid`] when the model or the layer came from another compositor
     /// or the target is not a layer, or when the placement or camera can't be drawn.
+    ///
+    /// A live `texture` (ADR-0107 decision 5) is sampled through a mip chain of its
+    /// whole picture, kept on its image and rebuilt here only when the image changed
+    /// since, as a 3D item's is; a `reflection` is read as a scene's sky picture is.
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
         let errors = self.errors();
-        let drawn = self.draw_model_focused(draw, target);
+        let chain = draw
+            .texture
+            .and_then(|texture| texture.image)
+            .filter(|image| image.owner().is(&self.owner))
+            .map(|image| {
+                let chain = self.chain_of(image, Region::whole(image.width(), image.height()), 0);
+                if chain.claim(image) {
+                    let lock = self.gpu.submit.clone();
+                    let submitting = lock.lock();
+                    let mut encoder =
+                        self.gpu
+                            .device
+                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                                label: Some("jstream-render-model-texture"),
+                            });
+                    chain.record(&mut encoder, &self.mip_pipelines, image);
+                    self.gpu.queue.submit([encoder.finish()]);
+                    drop(submitting);
+                }
+                chain
+            });
+        let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
+        let drawn = self.draw_model_focused(draw, target, live);
         errors.close(drawn)
     }
 
     /// [`Self::draw_model`], its errors not yet collected. When the model's camera has
     /// depth of field (ADR-0165), the model and its view depth are drawn into layers of
-    /// their own first, and the model's focus passes blur them into `target`.
+    /// their own first, and the model's focus passes blur them into `target`. `live` is
+    /// the live texture's mip chain, as [`Self::draw_model`] made it.
     fn draw_model_focused(
         &mut self,
         draw: &ModelDraw<'_>,
         target: &Image,
+        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
     ) -> Result<(), RenderError> {
         let canvas = jstream_protocol::Canvas {
             width: target.width(),
@@ -766,10 +794,11 @@ impl Compositor {
             .and_then(|camera| camera.view(canvas).ok())
             .filter(|view| view.focus().is_some());
         let Some(view) = view else {
-            return self.models.draw(&self.gpu, &self.owner, draw, target);
+            return self.models.draw(&self.gpu, &self.owner, draw, target, live);
         };
         let (colour, depth) = self.model_focus_layers(canvas.width, canvas.height)?;
-        self.models.draw(&self.gpu, &self.owner, draw, &colour)?;
+        self.models
+            .draw(&self.gpu, &self.owner, draw, &colour, live)?;
         let empty = Scene {
             canvas: jstream_media::FrameSize::new(canvas.width, canvas.height).map_err(|_| {
                 RenderError::Invalid {

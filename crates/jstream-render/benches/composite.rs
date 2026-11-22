@@ -309,6 +309,8 @@ fn three_d(c: &mut Criterion) {
             environment: None,
             floor: None,
             materials: &[],
+            texture: None,
+            reflection: None,
         };
         group.bench_function(BenchmarkId::new("shape", shape.name()), |b| {
             b.iter(|| {
@@ -393,6 +395,8 @@ fn three_d(c: &mut Criterion) {
                         environment: None,
                         floor: None,
                         materials: &[],
+                        texture: None,
+                        reflection: None,
                     },
                     &map,
                 )
@@ -409,6 +413,8 @@ fn three_d(c: &mut Criterion) {
                         environment: None,
                         floor: None,
                         materials: &[],
+                        texture: None,
+                        reflection: None,
                     },
                     &layer,
                 )

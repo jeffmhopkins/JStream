@@ -3024,6 +3024,216 @@ mod tests {
         );
     }
 
+    /// A model's `texture` (ADR-0107 decision 5) shows another source's picture on its
+    /// surfaces, after that source's own filters, though no item shows the source; a
+    /// texture for another material leaves it as it was, and one naming a source that
+    /// shows nothing reads transparent.
+    #[test]
+    fn golden_a_model_shows_another_sources_picture_as_its_texture() {
+        let mut graph = placed(&[("cam", (16.0, 18.0), (32.0, 36.0), 0.0)]);
+        apply(
+            &mut graph,
+            vec![
+                hide("logo"),
+                Edit::FilterAdd {
+                    owner: FilterOwner::Source {
+                        source_id: SourceId::new("logo"),
+                    },
+                    chain: FilterChain::Video,
+                    filter_id: FilterId::new("blue"),
+                    kind: "color_correction".into(),
+                    settings: [("multiply", serde_json::json!("#0000ff"))]
+                        .into_iter()
+                        .collect(),
+                    enabled: Some(true),
+                    index: None,
+                },
+            ],
+        );
+        let textured = |source: &'static str, material: Option<&'static str>| {
+            move |shown: jstream_sources::ShownModel| jstream_sources::ShownModel {
+                texture: Some(SourceId::new(source)),
+                texture_material: material.map(str::to_owned),
+                ..shown
+            }
+        };
+        // Drawn once: the texture's chain must run before the model's layer is drawn.
+        let shot = model_shot_with(&graph, "plane", textured("logo", None));
+        assert_golden(
+            &shot,
+            "
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            ",
+            "the plane shows the filtered source",
+        );
+        assert_golden(
+            &model_shot_with(&graph, "plane", textured("logo", Some("not-a-material"))),
+            "
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            WWWWWWWW........
+            ",
+            "a texture for another material leaves the shape's own",
+        );
+        assert_golden(
+            &model_shot_with(&graph, "plane", textured("missing", None)),
+            "
+            ................
+            ................
+            ................
+            ................
+            ................
+            ................
+            ................
+            ................
+            ................
+            ",
+            "a missing source reads transparent: the opaque plane is black",
+        );
+        // A scene source's scene, drawn though nothing else shows it.
+        let mut cover = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(64.0, 36.0).expect("positive"),
+        )
+        .expect("valid");
+        cover.fit_mode = jstream_protocol::FitMode::Stretch;
+        apply(
+            &mut graph,
+            vec![
+                Edit::SceneCreate {
+                    scene_id: SceneId::new("inner"),
+                    name: "Inner".into(),
+                    role: None,
+                },
+                Edit::ItemAdd {
+                    scene_id: SceneId::new("inner"),
+                    item_id: ItemId::new("inner-logo"),
+                    source_id: SourceId::new("logo"),
+                    transform: None,
+                    geometry: Some(cover),
+                    opacity: None,
+                    blend: None,
+                },
+                Edit::SourceCreate {
+                    source_id: SourceId::new("inner-view"),
+                    name: "Inner".into(),
+                    kind: SourceKind::Scene {
+                        scene_id: SceneId::new("inner"),
+                    },
+                    settings: Default::default(),
+                    duplicated_from: None,
+                },
+            ],
+        );
+        assert_golden(
+            &model_shot_with(&graph, "plane", textured("inner-view", None)),
+            "
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            BBBBBBBB........
+            ",
+            "the plane shows the scene source's scene",
+        );
+    }
+
+    /// ADR-0107 decision 5: a model whose `texture` or `reflection` reaches a scene that
+    /// shows the model is a cycle, refused as a scene source's is; another scene is not.
+    #[test]
+    fn a_models_texture_reaching_its_own_scene_is_a_cycle() {
+        let reference = |id: &str| {
+            jstream_protocol::Reference::Source {
+                source_id: SourceId::new(id),
+            }
+            .to_value()
+        };
+        let mut graph = Graph::new().with_kinds(crate::kinds::builtin());
+        let scene = |id: &str| Edit::SceneCreate {
+            scene_id: SceneId::new(id),
+            name: id.into(),
+            role: None,
+        };
+        let source = |id: &str, kind: SourceKind, settings: Settings| Edit::SourceCreate {
+            source_id: SourceId::new(id),
+            name: id.into(),
+            kind,
+            settings,
+            duplicated_from: None,
+        };
+        graph
+            .apply(
+                &[
+                    scene("main"),
+                    scene("other"),
+                    source(
+                        "model",
+                        SourceKind::Builtin {
+                            kind: "model".into(),
+                        },
+                        [("shape", serde_json::json!("cube"))].into_iter().collect(),
+                    ),
+                    Edit::ItemAdd {
+                        scene_id: SceneId::new("main"),
+                        item_id: ItemId::new("m"),
+                        source_id: SourceId::new("model"),
+                        transform: None,
+                        geometry: None,
+                        opacity: None,
+                        blend: None,
+                    },
+                    source(
+                        "main-view",
+                        SourceKind::Scene {
+                            scene_id: SceneId::new("main"),
+                        },
+                        Settings::default(),
+                    ),
+                    source(
+                        "other-view",
+                        SourceKind::Scene {
+                            scene_id: SceneId::new("other"),
+                        },
+                        Settings::default(),
+                    ),
+                ],
+                None,
+            )
+            .expect("the sources are made");
+        for param in ["texture", "reflection"] {
+            let set = |to: &str| Edit::SourceSetSettings {
+                source_id: SourceId::new("model"),
+                patch: [(param, reference(to))].into_iter().collect(),
+            };
+            let refused = graph.apply(&[set("main-view")], None);
+            assert!(
+                matches!(&refused, Err(jstream_protocol::ProtocolError::InvalidArgument { reason, .. }) if reason.contains("cycle")),
+                "{param}: {refused:?}"
+            );
+            graph
+                .apply(&[set("other-view")], None)
+                .expect("another scene is no cycle");
+        }
+    }
+
     /// The centre pixel of `graph` with `cam` a white `scene`-lit plane (ADR-0143
     /// decision 3) and `logo` the light `light`, or `None` without an adapter.
     fn lit_centre(graph: &Graph, light: jstream_sources::ShownLight) -> Option<[u8; 4]> {

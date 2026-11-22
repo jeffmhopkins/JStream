@@ -46,8 +46,9 @@ and calls this crate.
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
   scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md),
-  and their shadow maps, ADR-0151, and how this placement changes its materials,
-  `ModelDraw::materials`)
+  and their shadow maps, ADR-0151, maybe another source's picture as its texture and
+  one it reflects, `LiveTexture` and `reflection`, ADR-0107 decision 5, and how this
+  placement changes its materials, `ModelDraw::materials`)
   into a canvas-sized layer with its own depth test, blurred by its own depth when the
   camera has a depth of field ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
   The engine runs filters over that layer and places it with
@@ -754,6 +755,22 @@ blended primitive sorts by the middle of its rest pose
 shades glTF's metallic-roughness model (GGX, Smith, Schlick; Karis's environment fit)
 under the studio rig, fixed to the viewing frame, or unlit.
 
+**Live textures and reflections** (ADR-0107 decision 5). `ModelDraw::texture` replaces
+the base-colour texture of the material it names (by its glTF name), or of every
+material, with another image: `draw_model` samples it through a mip chain of the whole
+image (`Region::whole`, kept on the image like a 3D item's and rebuilt only when the
+image changed), bound with the material's own repeating anisotropic sampler, and the
+material's uniform marks it a premultiplied linear picture (`card.y`), which the shader
+divides by its alpha before multiplying. The material bind groups that carry it are
+kept on the `GpuModel` while the chain's texture and the material stay the same, so a
+steady frame makes none. A texture with no image binds a transparent 1x1. A
+`reflection` image takes the environment's slot (`reflection_values`: no gradient,
+intensity 1, the camera's axes, or the viewing frame's in a 2D scene), so it is read as a
+scene's sky picture is, blurred by roughness over the same ring of taps, with or
+without scene lights; an unlit model ignores it
+(`golden_model_a_live_texture_replaces_the_base_colour`,
+`golden_model_a_reflection_replaces_the_studio_environment`).
+
 **Scene lights** (ADR-0143 decision 3). With `ModelDraw::lights` set and a camera, the
 rig is replaced by the scene's lights. `SceneLight` holds a light in the scene's space
 (position and aim, `f64`), and the draw takes each into the viewing frame through
@@ -777,7 +794,8 @@ to metallic and roughness, each within 0 and 1; and by name to the glow's colour
 by its own brightness, and its strength, a multiplier 1 at rest within 0 and
 `MAX_EMISSIVE_STRENGTH` (64). The draw writes each changed material's uniform before it
 encodes, and a later draw that doesn't change it restores it, so another placement of
-the same model draws it as it is
+the same model draws it as it is. A material with a live texture binds a uniform of its
+own, which is driven the same way
 (`golden_model_a_draw_drives_its_materials_by_name_and_only_for_itself`).
 
 **Shadows** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
