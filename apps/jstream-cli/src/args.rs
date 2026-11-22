@@ -323,10 +323,12 @@ fn parse_command(args: &[String]) -> Result<Command, CliError> {
         ["scene", "switch", id] => Command::Action(Action::SceneSwitch {
             scene_id: SceneId::new(*id),
             preset_id: None,
+            via: Vec::new(),
         }),
         ["scene", "switch", id, "--preset", preset] => Command::Action(Action::SceneSwitch {
             scene_id: SceneId::new(*id),
             preset_id: Some(TransitionPresetId::new(*preset)),
+            via: Vec::new(),
         }),
         ["studio", "get"] => Command::Query(Query::StudioGet),
         ["studio", "set-preview", id] => Command::Action(Action::StudioSetPreview {
@@ -844,6 +846,7 @@ fn hotkey_action(name: &str, id: &str) -> Result<Action, CliError> {
         "scene.switch" => Action::SceneSwitch {
             scene_id: SceneId::new(id),
             preset_id: None,
+            via: Vec::new(),
         },
         "output.start" => Action::OutputStart {
             output_id: output_id(),
@@ -1040,6 +1043,7 @@ mod tests {
             Command::Action(Action::SceneSwitch {
                 scene_id: SceneId::new("s"),
                 preset_id: None,
+                via: Vec::new(),
             })
         );
         assert_eq!(
@@ -1047,6 +1051,7 @@ mod tests {
             Command::Action(Action::SceneSwitch {
                 scene_id: SceneId::new("s"),
                 preset_id: Some(TransitionPresetId::new("fade")),
+                via: Vec::new(),
             })
         );
         assert_eq!(
@@ -1502,6 +1507,7 @@ mod tests {
                 action: Action::SceneSwitch {
                     scene_id: SceneId::new("s"),
                     preset_id: None,
+                    via: Vec::new(),
                 },
             }
         );

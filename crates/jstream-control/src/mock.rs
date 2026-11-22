@@ -1091,8 +1091,32 @@ impl State {
             Action::SceneSwitch {
                 scene_id,
                 preset_id,
+                via,
             } => {
                 self.collection.existing_scene(&scene_id)?;
+                // The mock only cuts, so a path's stops are only checked as the engine
+                // checks them (ADR-0166 decision 2), but for family membership.
+                if via.len() > jstream_protocol::MAX_VIA {
+                    return Err(ProtocolError::invalid_argument(
+                        "via",
+                        format!("at most {} keyframes", jstream_protocol::MAX_VIA),
+                    ));
+                }
+                for (index, id) in via.iter().enumerate() {
+                    self.collection.existing_scene(id)?;
+                    if *id == scene_id {
+                        return Err(ProtocolError::invalid_argument(
+                            format!("via.{index}"),
+                            "the scene the switch ends on",
+                        ));
+                    }
+                    if index > 0 && via[index - 1] == *id {
+                        return Err(ProtocolError::invalid_argument(
+                            format!("via.{index}"),
+                            "the same as the stop before it",
+                        ));
+                    }
+                }
                 // The only preset the mock knows is the initial `cut`.
                 let initial = TransitionPresetId::new(INITIAL_PRESET);
                 if let Some(id) = preset_id.filter(|id| *id != initial) {
@@ -5422,6 +5446,7 @@ mod tests {
         let refused = bind(Action::SceneSwitch {
             scene_id: SceneId::new("missing"),
             preset_id: None,
+            via: Vec::new(),
         })
         .expect_err("a switch takes no steps");
         assert!(

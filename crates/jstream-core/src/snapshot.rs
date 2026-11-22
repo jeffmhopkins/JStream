@@ -35,7 +35,7 @@ use jstream_protocol::{
     FilterChain, Glide, ItemGeometry, ItemId, ItemTransition, OutputId, OutputKind, ProtocolError,
     QueryResult, Rev, SceneCamera, SceneId, SceneRole, Settings, SourceId, SourceKind, VideoMixId,
 };
-use jstream_render::transition::{Endpoint, Timing, Track, lerp_camera};
+use jstream_render::transition::{Endpoint, Stops, Timing, Track, Via, move_camera};
 use jstream_render::{
     Color, Compositor, Crop, Item, LegacyTransform, OpenOptions, Output, Placement, RenderError,
     ResourceCache, Scene,
@@ -945,6 +945,11 @@ struct TrackCameras {
     /// The depth run a stinger's items sort in: one past every run held from the
     /// screen, so a stinger's never sort with those of one it cut short.
     overlay_run: u32,
+    /// The cameras of the keyframes a Move passes through on its way (ADR-0166
+    /// decision 2), a 2D one seen through the framing camera.
+    via: Via<SceneCamera>,
+    /// Whether the moving camera circles its target (ADR-0166 decision 3).
+    orbit: bool,
 }
 
 impl TrackCameras {
@@ -971,9 +976,9 @@ impl TrackCameras {
             };
         }
         match (from, to) {
-            (Some(from), Some(to)) if from != to => {
+            (Some(from), Some(to)) if from != to || self.via.iter().any(|c| c != to) => {
                 let k = self.timing.progress(elapsed_ms);
-                Some(lerp_camera(&from, &to, k))
+                Some(move_camera(&from, &self.via, &to, k, self.orbit))
             }
             _ => to,
         }
@@ -991,8 +996,9 @@ impl TrackCameras {
             return if leaving { from } else { to };
         }
         match (from, to) {
-            (Some(from), Some(to)) if from != to => {
-                Some(lerp_camera(&from, &to, self.timing.progress(elapsed_ms)))
+            (Some(from), Some(to)) if from != to || self.via.iter().any(|c| c != to) => {
+                let k = self.timing.progress(elapsed_ms);
+                Some(move_camera(&from, &self.via, &to, k, self.orbit))
             }
             _ => to,
         }
@@ -1491,9 +1497,12 @@ impl Shot {
     /// tests.
     #[cfg(test)]
     pub(crate) fn tracks(&self) -> Option<Vec<Track>> {
-        self.transition
-            .as_ref()
-            .map(|t| t.tracks.iter().map(|(_, track, _, _)| *track).collect())
+        self.transition.as_ref().map(|t| {
+            t.tracks
+                .iter()
+                .map(|(_, track, _, _)| track.clone())
+                .collect()
+        })
     }
 
     /// The layers a transition moves inside a group's layer (ADR-0049 §3), each item
@@ -1503,7 +1512,7 @@ impl Shot {
         self.scenes
             .values()
             .flatten()
-            .filter_map(|p| p.moving.map(|(_, track)| (p.item.clone(), track)))
+            .filter_map(|p| p.moving.clone().map(|(_, track)| (p.item.clone(), track)))
             .collect()
     }
 
@@ -1843,6 +1852,7 @@ fn plan_inner(
         look,
         assets,
         wake: None,
+        quiet: false,
     };
     let mut finished = running.is_some();
     let mut end_ms = None;
@@ -2073,6 +2083,7 @@ pub(crate) fn on_screen(
         look,
         assets,
         wake: None,
+        quiet: false,
     };
     let (planned, pairs) = planner.transition(running, &mut shot);
     let cameras = planner.track_cameras(running, pairs);
@@ -2228,6 +2239,10 @@ struct Planner<'a, 'f> {
     assets: &'a FilterAssets,
     /// The earliest time a frame in the shot is replaced.
     wake: Option<MediaTime>,
+    /// Plans without reaching any source (ADR-0166 decision 2): set while a Move's
+    /// `via` stops are planned, which are read only for their values, so a source only
+    /// a stop shows isn't shown, heard or woken by `look`.
+    quiet: bool,
 }
 
 impl<'a> Planner<'a, '_> {
@@ -2387,6 +2402,20 @@ impl<'a> Planner<'a, '_> {
             }
             ends => ends,
         };
+        // A path's stops (ADR-0166 decision 2), only where the Move moves within a
+        // family and has a camera to move.
+        let via = if pairs && running.by_item && ends.0.is_some() && ends.1.is_some() {
+            let framing = SceneCamera::framing(self.state.canvas());
+            Via::new(
+                running
+                    .via
+                    .iter()
+                    .filter(|id| self.drawn(id).is_some())
+                    .map(|id| committed(id).unwrap_or(framing)),
+            )
+        } else {
+            Via::NONE
+        };
         TrackCameras {
             ends,
             overlay: running
@@ -2412,6 +2441,8 @@ impl<'a> Planner<'a, '_> {
                     .map_or(1, |run| run.saturating_add(1)),
                 From::Scene(_) => 1,
             },
+            via,
+            orbit: running.run.orbit,
         }
     }
 
@@ -2511,6 +2542,7 @@ impl<'a> Planner<'a, '_> {
         let (mut planned, partners) = transition::plan(&from, &to, run, running.by_item, into);
         if running.by_item && pairs {
             self.move_inside(&mut planned, &from, &partners, run, out);
+            self.pass_through(&mut planned, running, flatten);
         }
         // Each group with children inside it gets a scene of the shot that draws them.
         let tracks = std::mem::take(&mut planned.tracks);
@@ -2558,6 +2590,38 @@ impl<'a> Planner<'a, '_> {
         (planned, pairs)
     }
 
+    /// Gives each pair of `planned` the stops of `running`'s path (ADR-0166 decision 2):
+    /// its values in each `via` scene that shows it, in order, so it follows one curve
+    /// through them. A stop that doesn't show the item is passed by. The stops are only
+    /// read for their values: they are planned quietly, without reaching a source, into
+    /// a shot of their own, which is dropped, so nothing they alone show is drawn, heard,
+    /// shown or woken.
+    fn pass_through(&mut self, planned: &mut Planned, running: &Running, flatten: bool) {
+        if running.via.is_empty() {
+            return;
+        }
+        let mut scratch = Shot::default();
+        let mut stops: Vec<Vec<Visual>> = Vec::with_capacity(running.via.len());
+        let (quiet, wake) = (self.quiet, self.wake);
+        self.quiet = true;
+        for id in &running.via {
+            if self.drawn(id).is_some() {
+                stops.push(self.endpoint(id, flatten, &mut scratch));
+            }
+        }
+        (self.quiet, self.wake) = (quiet, wake);
+        for (visual, track) in &mut planned.tracks {
+            let Track::Pair { via, .. } = track else {
+                continue;
+            };
+            *via = Stops::new(stops.iter().filter_map(|side| {
+                side.iter()
+                    .find(|stop| stop.item_id == visual.item_id)
+                    .map(|stop| stop.at)
+            }));
+        }
+    }
+
     /// Gives each pair of `planned` that moves a group as one image, between two views
     /// of it through members of a family, its children's tracks inside the group's
     /// layer: planned by item from their values on the `from` side to the new side's,
@@ -2572,7 +2636,7 @@ impl<'a> Planner<'a, '_> {
         out: &mut Shot,
     ) {
         for ((visual, track), partner) in planned.tracks.iter_mut().zip(partners) {
-            let (Some(partner), Track::Pair { timing, .. }) = (partner, *track) else {
+            let (Some(partner), Track::Pair { timing, .. }) = (partner, &*track) else {
                 continue;
             };
             let outgoing = &from[*partner];
@@ -2608,7 +2672,7 @@ impl<'a> Planner<'a, '_> {
             let (mut inner, inner_partners) =
                 transition::plan(&children, &arriving, run, true, None);
             for (_, track) in &mut inner.tracks {
-                *track = transition::with_timing(*track, timing);
+                *track = transition::with_timing(track.clone(), *timing);
             }
             inner.end_ms = timing.end_ms();
             self.move_inside(&mut inner, &children, &inner_partners, run, out);
@@ -2676,11 +2740,11 @@ impl<'a> Planner<'a, '_> {
                 opacity: child.at.opacity,
                 blend: child.at.blend,
                 effects: None,
-                moving: Some((start, *track)),
+                moving: Some((start, track.clone())),
                 motion: child.motion.clone(),
                 groups: None,
             });
-            tracks.push((child, *track));
+            tracks.push((child, track.clone()));
         }
         out.scenes.insert(id.clone(), placed);
         if let Some(group) = state.scene(&inside.group)
@@ -3370,7 +3434,7 @@ impl<'a> Planner<'a, '_> {
 
     /// What `source_id` shows. Its frame goes in `out`, asked for once per shot.
     fn look(&mut self, source_id: &SourceId, out: &mut Shot) -> Option<SourceRef> {
-        if out.frames.contains_key(source_id) {
+        if out.frames.contains_key(source_id) || self.quiet {
             return Some(SourceRef::Frame(source_id.clone()));
         }
         match (self.look)(source_id)? {
@@ -4234,7 +4298,7 @@ fn visit_into(
             opacity: placed.opacity,
             blend: placed.blend,
             boxed: placed.effects,
-            moving: placed.moving,
+            moving: placed.moving.clone(),
             motion: placed.motion.clone(),
             groups: placed.groups.clone(),
         });
@@ -8648,6 +8712,8 @@ pub(crate) mod tests {
             timing,
             pairs: true,
             overlay_run: 1,
+            via: jstream_render::transition::Via::NONE,
+            orbit: false,
         };
         let planned = Seen::AsPlanned;
         let halfway = cameras.camera(&leaving, planned, 500.0).expect("3D");
@@ -8776,6 +8842,8 @@ pub(crate) mod tests {
                 },
                 pairs: false,
                 overlay_run: 1,
+                via: jstream_render::transition::Via::NONE,
+                orbit: false,
             },
             moves: (None, None),
             families: (None, None),
@@ -9521,6 +9589,7 @@ pub(crate) mod tests {
                 easing: jstream_protocol::Easing::Linear,
             },
             source: None,
+            via: jstream_render::transition::Stops::NONE,
         };
         let moving = Placed {
             moving: Some((zero(), track)),

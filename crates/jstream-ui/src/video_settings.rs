@@ -15,7 +15,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
 use crate::app::SessionContext;
-use crate::dialog::Modal;
+use crate::dialog::{Info, Modal};
 use crate::store::Studio;
 use jstream_control::ControlError;
 use jstream_control::protocol::ProtocolError;
@@ -445,109 +445,113 @@ pub fn VideoSettingsDialog(
                 <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
             </div>
             <div class="settings-body">
-                <label class="settings-field">
-                    <span class="settings-check-label">"Base (canvas) resolution"</span>
-                    <select
-                        aria-label="Base resolution"
-                        prop:value=preset
-                        on:change=move |event| {
-                            if let Some(&(w, h)) = event_target_value(&event)
-                                .parse::<usize>()
-                                .ok()
-                                .and_then(|i| PRESETS.get(i))
-                            {
-                                width.set(w.to_string());
-                                height.set(h.to_string());
-                                error.set(None);
-                            }
-                        }
-                    >
-                        {PRESETS.iter().enumerate().map(|(i, &(w, h))| view! {
-                            <option value=i.to_string()>{label(w, h)}</option>
-                        }).collect_view()}
-                        <option value="custom">"Custom"</option>
-                    </select>
-                </label>
-                <div class="settings-size">
-                    <input
-                        type="number"
-                        min="1"
-                        max=MAX_SIDE.to_string()
-                        aria-label="Width"
-                        prop:value=move || width.get()
-                        on:input=move |event| {
-                            width.set(event_target_value(&event));
-                            error.set(None);
-                        }
-                    />
-                    <span>"×"</span>
-                    <input
-                        type="number"
-                        min="1"
-                        max=MAX_SIDE.to_string()
-                        aria-label="Height"
-                        prop:value=move || height.get()
-                        on:input=move |event| {
-                            height.set(event_target_value(&event));
-                            error.set(None);
-                        }
-                    />
+                <div class="prop-grid">
+                    <div class="prop-row">
+                        <span class="prop-label">"Canvas size"</span>
+                        <div class="prop-control">
+                            <select
+                                aria-label="Base resolution"
+                                prop:value=preset
+                                on:change=move |event| {
+                                    if let Some(&(w, h)) = event_target_value(&event)
+                                        .parse::<usize>()
+                                        .ok()
+                                        .and_then(|i| PRESETS.get(i))
+                                    {
+                                        width.set(w.to_string());
+                                        height.set(h.to_string());
+                                        error.set(None);
+                                    }
+                                }
+                            >
+                                {PRESETS.iter().enumerate().map(|(i, &(w, h))| view! {
+                                    <option value=i.to_string()>{label(w, h)}</option>
+                                }).collect_view()}
+                                <option value="custom">"Custom"</option>
+                            </select>
+                            <span class="settings-size">
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max=MAX_SIDE.to_string()
+                                    aria-label="Width"
+                                    prop:value=move || width.get()
+                                    on:input=move |event| {
+                                        width.set(event_target_value(&event));
+                                        error.set(None);
+                                    }
+                                />
+                                <span aria-hidden="true">"×"</span>
+                                <input
+                                    type="number"
+                                    min="1"
+                                    max=MAX_SIDE.to_string()
+                                    aria-label="Height"
+                                    prop:value=move || height.get()
+                                    on:input=move |event| {
+                                        height.set(event_target_value(&event));
+                                        error.set(None);
+                                    }
+                                />
+                            </span>
+                            <p class="help">"Every scene is laid out on it; outputs scale from it."</p>
+                        </div>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label check"></span>
+                        <div class="prop-control">
+                            <label class="inline-check">
+                                <input
+                                    type="checkbox"
+                                    prop:checked=move || scale_scenes.get()
+                                    on:change=move |event| scale_scenes.set(event_target_checked(&event))
+                                />
+                                <span>"Scale existing scenes to fit"</span>
+                            </label>
+                            <Info text="Every item and scene camera grows or shrinks with the canvas, so each scene looks as it did, and a canvas of another shape centres them. Off, items keep their pixel positions. Either way the change is one undo step." />
+                        </div>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">"Frame rate"</span>
+                        <div class="prop-control">
+                            <select
+                                aria-label="Frame rate"
+                                prop:value=move || rate.get().to_string()
+                                on:change=move |event| {
+                                    if let Ok(fps) = event_target_value(&event).parse::<u32>() {
+                                        rate.set(fps);
+                                    }
+                                }
+                            >
+                                {RATES.iter().map(|fps| view! {
+                                    <option value=fps.to_string()>{format!("{fps} fps")}</option>
+                                }).collect_view()}
+                            </select>
+                            <Info text="Outputs run at this rate, or at a share of it set by their video mix. 60 fps doubles every mix's rate and the work per second." />
+                            <p class="help">"A live output takes a new rate once every output has stopped."</p>
+                        </div>
+                    </div>
+                    <div class="prop-row">
+                        <span class="prop-label">"Blending"</span>
+                        <div class="prop-control">
+                            <select
+                                aria-label="Blending"
+                                prop:value=move || blending.get().as_str()
+                                on:change=move |event| {
+                                    if let Some(space) = Blending::from_name(&event_target_value(&event)) {
+                                        blending.set(space);
+                                    }
+                                }
+                            >
+                                {Blending::ALL.iter().map(|space| view! {
+                                    <option value=space.as_str()>{blending_label(*space)}</option>
+                                }).collect_view()}
+                            </select>
+                            <Info text="Browser-style matches CSS and design tools, so a design made there keeps its look. Linear light mixes light as it adds, for even glows and fades, but makes a faint veil brighter than a browser draws it." />
+                            <p class="help">"How semi-transparent layers and blend modes mix."</p>
+                        </div>
+                    </div>
                 </div>
-                <p class="settings-check-note">
-                    "Every scene is laid out on this canvas, and the program and preview show it at this size. Each output's video mix scales from it."
-                </p>
-                <label class="settings-check">
-                    <input
-                        type="checkbox"
-                        aria-label="Scale scenes to the new resolution"
-                        prop:checked=move || scale_scenes.get()
-                        on:change=move |event| scale_scenes.set(event_target_checked(&event))
-                    />
-                    <span>
-                        <span class="settings-check-label">"Scale scenes to the new resolution"</span>
-                        <span class="settings-check-note">
-                            "Every item and scene camera grows or shrinks with the canvas, so each scene looks as it did. A canvas of another shape keeps the scenes' proportions and centres them. Off, items keep their pixel positions. Either way the change is one undo step."
-                        </span>
-                    </span>
-                </label>
-                <label class="settings-field">
-                    <span class="settings-check-label">"Frame rate"</span>
-                    <select
-                        aria-label="Frame rate"
-                        prop:value=move || rate.get().to_string()
-                        on:change=move |event| {
-                            if let Ok(fps) = event_target_value(&event).parse::<u32>() {
-                                rate.set(fps);
-                            }
-                        }
-                    >
-                        {RATES.iter().map(|fps| view! {
-                            <option value=fps.to_string()>{format!("{fps} fps")}</option>
-                        }).collect_view()}
-                    </select>
-                </label>
-                <p class="settings-check-note">
-                    "Outputs run at this rate, or at a share of it set by their video mix. 60 fps doubles every mix's rate and the work per second. While an output is live, a new rate applies once every output has stopped."
-                </p>
-                <label class="settings-field">
-                    <span class="settings-check-label">"Blending"</span>
-                    <select
-                        aria-label="Blending"
-                        prop:value=move || blending.get().as_str()
-                        on:change=move |event| {
-                            if let Some(space) = Blending::from_name(&event_target_value(&event)) {
-                                blending.set(space);
-                            }
-                        }
-                    >
-                        {Blending::ALL.iter().map(|space| view! {
-                            <option value=space.as_str()>{blending_label(*space)}</option>
-                        }).collect_view()}
-                    </select>
-                </label>
-                <p class="settings-check-note">
-                    "How every blend mode mixes colours, in every scene. Browser-style matches CSS and design tools, so a design made there keeps its look. Linear light mixes light as it adds, for even glows and fades, but makes a faint veil brighter than a browser draws it."
-                </p>
                 {move || error.get().map(|why| view! { <p class="settings-error" role="alert">{why}</p> })}
             </div>
             <div class="modal-footer">

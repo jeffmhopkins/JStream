@@ -889,6 +889,7 @@ mod tests {
         let switch = bind(Action::SceneSwitch {
             scene_id: SceneId::new("a"),
             preset_id: None,
+            via: Vec::new(),
         });
         assert_eq!(
             plugin_classes(&switch),

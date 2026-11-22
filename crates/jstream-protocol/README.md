@@ -71,7 +71,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
+  `scene.switch` with its optional `preset_id` and `via` (0.138, with `MAX_VIA`),
+  `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
@@ -355,9 +356,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.135 because a source with depth reports it: `SourceSize`'s and
+`PROTOCOL_VERSION` is 0.139 because a source with depth reports it: `SourceSize`'s and
 `source.size_changed`'s optional `depth`, a 3D model's front-to-back bounds
 ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8);
+0.138 because a Move may pass through keyframes and orbit its
+camera: `scene.switch`'s and `scene.switch_and_watch`'s `via` and the `move` kind's
+`camera_path` setting
+([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md));
 0.134 because a client can hold and step the engine's media clock
 to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
 ([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
@@ -1308,8 +1313,8 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
-  (`Action::named_objects`; today scenes, outputs, the preset a `scene.switch`
-  names, the scene, keyframe scene and preset a `scene.set_keyframe` names, and the
+  (`Action::named_objects`; today scenes, outputs, the preset and `via` scenes a
+  `scene.switch` names, the scene, keyframe scene and preset a `scene.set_keyframe` names, and the
   item an `item.*` action names), and any edit that takes an item away
   (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
   the item (ADR-0101). A binding goes with its labels. Their inverses restore the
@@ -1545,6 +1550,11 @@ kind `kind.list` reports (category `transition`: `cut`, `fade`, `move` and `stin
 far) and `settings` are checked against its descriptor as a source's are (`unmatched`,
 the effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
 stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
+A `move` also takes `camera_path` (0.138, `line` by default, or `orbit`,
+`CAMERA_ORBIT`): an orbit circles a 3D scene's camera around its target, keeping its
+distance on a curve, where a line moves it straight
+([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+decision 3).
 A `stinger` takes the `scene` it plays over the switch (a scene reference, or `null` to
 cut), `cut_ms`, when the picture under it cuts (default 500, at most the duration), and
 `stagger_ms`, which staggers the stinger scene's items by stacking order.
@@ -1580,7 +1590,13 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
-  transition runs starts the new one from what is on screen.
+  transition runs starts the new one from what is on screen. Its `via` (0.138, up to
+  `MAX_VIA`, 8) names keyframes of the destination's family that a Move within the
+  family passes through on its way, in order: each value follows one smooth curve
+  through every stop, at equal shares of the preset's timing (ADR-0166 decision 2). A
+  stop outside the family, the destination itself, a repeat of the stop before it or a
+  ninth is `invalid_argument` on `via` or `via.<index>`; a missing one is `not_found`.
+  A Fade, a cut, a stinger or a switch from outside the family ignores it.
 - `studio.set_preview {scene_id}` puts a scene on preview, studio mode's next scene.
   Like a switch it changes no `rev` and is never undone; a switch leaves preview where
   it is.
@@ -1848,7 +1864,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). With
   `source.size_changed` it is what a client needs to draw a legacy placement's box, crop
   handles and a size in % of the source's own (ADR-0022 §4). Runtime state, so no
-  `rev`. Added in 0.40. Since 0.135 a source with depth also reports `depth`, in the
+  `rev`. Added in 0.40. Since 0.139 a source with depth also reports `depth`, in the
   pixels of its `size`: a 3D model's bounds front to back, at the scale its width and
   height are reported at (the larger 512), so an editor can outline and hit it by its 3D
   bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
@@ -1938,7 +1954,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   takes at least `delay_ms + (count - 1) × interval_ms`, at most 10 s; each is what that
   mix or scene shows then, as `video.snapshot` draws it (a capture draws nothing). A
   scene off program shows what its preview stream would.
-  `scene.switch_and_watch {scene_id, preset_id?, count, interval_ms, delay_ms?}` is
+  `scene.switch_and_watch {scene_id, preset_id?, via?, count, interval_ms, delay_ms?}` is
   `scene.switch` followed by a sheet of the program mix counted from the switch, in one
   call, so an agent sees a transition play: a stinger's cover at its `cut_ms`, or a
   600 ms move. It is an action (it switches), answering with an `ActionResult`
@@ -2208,7 +2224,7 @@ After `welcome`, the server pushes every event to every client.
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
-  `depth`, as `source.sizes` reports it, since 0.135.
+  `depth`, as `source.sizes` reports it, since 0.139.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

@@ -391,6 +391,7 @@ fn program_and_preview_targets_follow_the_studio() {
             Action::SceneSwitch {
                 scene_id: SceneId::new("b"),
                 preset_id: None,
+                via: Vec::new(),
             },
             (),
         ),
@@ -694,6 +695,7 @@ fn a_drive_left_moving_before_a_cut_still_stops() {
         action: Action::SceneSwitch {
             scene_id: SceneId::new("c"),
             preset_id: None,
+            via: Vec::new(),
         },
     }))
     .expect("cut");

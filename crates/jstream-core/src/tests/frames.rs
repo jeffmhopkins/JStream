@@ -106,6 +106,7 @@ fn switch_and_watch(
         scene_id: SceneId::new(scene),
         preset_id: preset.map(TransitionPresetId::new),
         strip,
+        via: Vec::new(),
     };
     match block_on(control.call(Call::Action { action }))?.result {
         CallResult::Action {
@@ -532,6 +533,7 @@ fn two_keyframes_stagger_three_items_in_opposite_orders_in_a_frame_strip() {
         let action = Action::SceneSwitch {
             scene_id: SceneId::new(scene),
             preset_id: Some(TransitionPresetId::new(preset)),
+            via: Vec::new(),
         };
         block_on(control.call(Call::Action { action })).expect("switch");
     };

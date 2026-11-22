@@ -473,6 +473,7 @@ mod tests {
             action: Action::SceneSwitch {
                 scene_id: "s2".into(),
                 preset_id: None,
+                via: Vec::new(),
             },
         }))
         .expect("switch");

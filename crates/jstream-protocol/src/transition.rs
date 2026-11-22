@@ -43,6 +43,15 @@ pub const MAX_STAGGER_MS: i64 = 10_000;
 /// `[-MAX_BEZIER_OVERSHOOT, 1 + MAX_BEZIER_OVERSHOOT]` (ADR-0129).
 pub const MAX_BEZIER_OVERSHOOT: f32 = 2.0;
 
+/// The most keyframes a Move may pass through on its way (`scene.switch`'s `via`,
+/// [ADR-0166](../../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+/// decision 2).
+pub const MAX_VIA: usize = 8;
+
+/// The `move` kind's `camera_path` setting that circles the camera around its target
+/// (ADR-0166 decision 3); the default, `line`, moves it straight.
+pub const CAMERA_ORBIT: &str = "orbit";
+
 /// The ID of the preset every new collection starts with, which is its default.
 pub const INITIAL_PRESET: &str = "cut";
 
@@ -458,7 +467,8 @@ pub struct TransitionStarted {
 
 /// The built-in transition kinds, ordered by ID: `cut`, `fade`, `move` and `stinger`
 /// ([ADR-0037](../../../docs/adr/0037-kind-descriptors-for-transitions-and-plugins.md)
-/// §1). `fade` and `move` take `unmatched` and `stagger_ms`; `stinger` takes the
+/// §1). `fade` and `move` take `unmatched` and `stagger_ms`, and `move` its
+/// `camera_path` (ADR-0166 decision 3); `stinger` takes the
 /// `scene` it plays, its `cut_ms` and `stagger_ms`; `cut` takes nothing.
 pub fn builtin_kinds() -> Vec<KindDescriptor> {
     let kind = |id: &str, name: &str, params: Vec<ParamDescriptor>| KindDescriptor {
@@ -569,10 +579,38 @@ pub fn builtin_kinds() -> Vec<KindDescriptor> {
         params.extend(per_item().into_iter().filter(|p| p.id == "stagger_ms"));
         params
     };
+    let mut moving = per_item();
+    moving.push(ParamDescriptor {
+        warning: None,
+        id: "camera_path".into(),
+        ty: ParamType::Enum {
+            options: vec![
+                EnumOption {
+                    value: "line".into(),
+                    label: "Straight".into(),
+                },
+                EnumOption {
+                    value: CAMERA_ORBIT.into(),
+                    label: "Orbit the target".into(),
+                },
+            ],
+        },
+        default: json!("line"),
+        label: "Camera path".into(),
+        description: Some(
+            "How a 3D scene's camera moves: straight from one position to the next, or \
+             around what it looks at, keeping its distance on a curve (ADR-0166)."
+                .into(),
+        ),
+        group: None,
+        advanced: false,
+        visible_if: None,
+        live: true,
+    });
     vec![
         kind(CUT, "Cut", vec![]),
         kind(FADE, "Fade", per_item()),
-        kind(MOVE, "Move", per_item()),
+        kind(MOVE, "Move", moving),
         kind(STINGER, "Stinger", stinger),
     ]
 }

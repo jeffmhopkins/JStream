@@ -1650,6 +1650,7 @@ mod property {
                             scene_id: SceneId::new(scene(rng)),
                             preset_id: (rng.below(2) == 0)
                                 .then(|| TransitionPresetId::new(preset(rng))),
+                            via: Vec::new(),
                         }
                     } else {
                         Action::OutputStart {
@@ -4634,6 +4635,7 @@ mod hotkeys {
         Action::SceneSwitch {
             scene_id: SceneId::new(scene),
             preset_id: None,
+            via: Vec::new(),
         }
     }
 
@@ -5006,6 +5008,7 @@ mod hotkeys {
         let with_preset = Action::SceneSwitch {
             scene_id: SceneId::new("a"),
             preset_id: Some(TransitionPresetId::new("wipe")),
+            via: Vec::new(),
         };
         assert_eq!(
             apply_err(&mut graph, vec![set("F5", with_preset.clone())]),

@@ -60,7 +60,7 @@ test('a new resolution scales the scenes with it, in the same undo step, unless 
   const calls = await recordCalls(page);
   await connect(page, daemon);
   let dialog = await openVideoSettings(page);
-  const scale = dialog.getByRole('checkbox', { name: 'Scale scenes to the new resolution' });
+  const scale = dialog.getByRole('checkbox', { name: 'Scale existing scenes to fit' });
   await expect(scale).toBeChecked();
   await dialog.getByRole('combobox', { name: 'Base resolution' }).selectOption({ label: '1280 × 720 (16:9)' });
   const before = await rev(page);
@@ -85,7 +85,7 @@ test('a new resolution scales the scenes with it, in the same undo step, unless 
   // Unchecked, the size changes alone.
   dialog = await openVideoSettings(page);
   await expect(dialog.getByRole('spinbutton', { name: 'Width' })).toHaveValue('1920');
-  await dialog.getByRole('checkbox', { name: 'Scale scenes to the new resolution' }).uncheck();
+  await dialog.getByRole('checkbox', { name: 'Scale existing scenes to fit' }).uncheck();
   await dialog.getByRole('combobox', { name: 'Base resolution' }).selectOption({ label: '3840 × 2160 (16:9)' });
   const sent = calls.sent('item.set_geometry').length;
   await dialog.getByRole('button', { name: 'Apply' }).click();

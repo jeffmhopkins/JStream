@@ -384,7 +384,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+          "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
           "properties": {
             "preset_id": {
               "anyOf": [
@@ -404,6 +404,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type": {
               "const": "scene.switch",
               "type": "string"
+            },
+            "via": {
+              "description": "Keyframes of the same family the Move passes through first, in order.",
+              "items": {
+                "$ref": "#/$defs/SceneId"
+              },
+              "type": "array"
             }
           },
           "required": [
@@ -451,6 +458,13 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type": {
               "const": "scene.switch_and_watch",
               "type": "string"
+            },
+            "via": {
+              "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+              "items": {
+                "$ref": "#/$defs/SceneId"
+              },
+              "type": "array"
             }
           },
           "required": [
@@ -6771,7 +6785,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "A source's size changed (ADR-0022 §4, 0.40), including when it became known (its\nfirst frame) or unknown (it stopped, failed, or was deleted). Runtime state, so it\ncarries no `rev`. The size is the one `source.sizes` reports.",
           "properties": {
             "depth": {
-              "description": "Its depth, as [`SourceSize::depth`](crate::SourceSize::depth) reports it\n(0.135): a change of depth alone is a size change too.",
+              "description": "Its depth, as [`SourceSize::depth`](crate::SourceSize::depth) reports it\n(0.139): a change of depth alone is a size change too.",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -14814,7 +14828,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "One source's current size, in a `source.sizes` result.",
       "properties": {
         "depth": {
-          "description": "Its depth, in the same pixels as `size`, for a source with depth: a 3D model's\nbounds, front to back, at the scale its width and height are reported at\n(ADR-0107 decision 8, 0.135). Omitted for every other source and while `size` is.",
+          "description": "Its depth, in the same pixels as `size`, for a source with depth: a 3D model's\nbounds, front to back, at the scale its width and height are reported at\n(ADR-0107 decision 8, 0.139). Omitted for every other source and while `size` is.",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -16261,5 +16275,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.135"
+  "title": "JStream protocol 0.139"
 }
