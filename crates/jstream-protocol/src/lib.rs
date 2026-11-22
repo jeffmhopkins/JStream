@@ -15,6 +15,7 @@ mod camera_aim;
 mod camera_motion;
 mod clap;
 mod command;
+mod data;
 mod encoder;
 mod envelope;
 mod error;
@@ -74,6 +75,7 @@ pub use command::{
     EffectsSpace, ItemTransform, MAX_LEGACY_SCALE, MAX_OPACITY, MAX_WARM_GPU_MIB, MAX_WARM_SCENES,
     SceneRole, SourceKind, Vec2,
 };
+pub use data::DataInputInfo;
 pub use encoder::{
     AudioCodec, AudioEncoding, CodecDownloadInfo, EncoderProfile, EncoderProfileInfo,
     EncoderSessionInfo, HardwarePreference, RateControl, VideoCodec, VideoEncoding,

@@ -5,7 +5,9 @@
 //! - **The switch** turns the JTunnel receiver on for this machine. Off until the person
 //!   turns it on.
 //! - **The accepted senders** are listed by tunnel name and the address and port they
-//!   send from, each with Remove. The add row takes a name and an `address:port`; the
+//!   send from, each with **Use this sender's state** (ADR-0171 decision 1, on once
+//!   the sender is accepted, until the person unticks it: the DAW's transport, tracks and clips become live data that
+//!   bindings and sources may read) and Remove. The add row takes a name and an `address:port`; the
 //!   app checks the sender as the engine would (a private IPv4 address, a name no other
 //!   sender has) and the page shows why it refused one.
 //! - **Senders on this network** (protocol 0.114): while the app's receiver runs, the
@@ -23,7 +25,7 @@
 //! Docs: crates/jstream-ui/README.md#design
 
 use crate::app::SessionContext;
-use crate::host::JtunnelSetting;
+use crate::host::{JtunnelSender, JtunnelSetting};
 use crate::store::Studio;
 use jstream_control::Control;
 use jstream_control::protocol::{Call, CallResult, JtunnelSenderInfo, Query, QueryResult};
@@ -54,7 +56,7 @@ pub fn accepts(setting: &JtunnelSetting, name: &str, address: &str) -> bool {
     setting
         .accepted
         .iter()
-        .any(|(known, at)| known == name && at == address)
+        .any(|sender| sender.name == name && sender.address == address)
 }
 
 /// The setting with one more sender, or why the page won't ask the app to add it. The
@@ -72,11 +74,15 @@ pub fn with_sender(
     if address.is_empty() {
         return Err("Type the address and port it sends from, such as 192.168.1.5:9000.");
     }
-    if setting.accepted.iter().any(|(known, _)| known == name) {
+    if setting.accepted.iter().any(|sender| sender.name == name) {
         return Err("A sender with that name is already accepted.");
     }
     let mut next = setting.clone();
-    next.accepted.push((name.to_owned(), address.to_owned()));
+    next.accepted.push(JtunnelSender {
+        name: name.to_owned(),
+        address: address.to_owned(),
+        state: true,
+    });
     Ok(next)
 }
 
@@ -116,7 +122,16 @@ pub fn JtunnelSettingView() -> impl IntoView {
     };
     let remove = move |gone: String| {
         let mut next = setting.get_untracked();
-        next.accepted.retain(|(known, _)| *known != gone);
+        next.accepted.retain(|sender| sender.name != gone);
+        save(next, false);
+    };
+    let use_state = move |name: String, on: bool| {
+        let mut next = setting.get_untracked();
+        for sender in &mut next.accepted {
+            if sender.name == name {
+                sender.state = on;
+            }
+        }
         save(next, false);
     };
     let add = move || match with_sender(
@@ -242,7 +257,7 @@ pub fn JtunnelSettingView() -> impl IntoView {
                 <span>
                     <span class="settings-check-label">"Receive from JTunnel senders"</span>
                     <span class="settings-check-note">
-                        "When on, JStream takes audio and MIDI from the JTunnel senders below, over UDP on this network. Only the senders you accept here get in, each from the address and port it sends from. Off until you turn it on."
+                        "When on, JStream takes audio and MIDI from the JTunnel senders below, over UDP on this network, and the DAW's state from each sender unless you untick it. Only the senders you accept here get in, each from the address and port it sends from. Off until you turn it on."
                     </span>
                 </span>
             </label>
@@ -253,12 +268,23 @@ pub fn JtunnelSettingView() -> impl IntoView {
                 }
                 view! {
                     <ul class="device-list">
-                        {list.into_iter().map(|(sender, from)| {
-                            let gone = sender.clone();
+                        {list.into_iter().map(|sender| {
+                            let gone = sender.name.clone();
+                            let named = sender.name.clone();
+                            let label = format!("Use the state of {}", sender.name);
                             view! {
                                 <li class="device">
-                                    <span class="device-name">{sender}</span>
-                                    <span class="device-dates">{from}</span>
+                                    <span class="device-name">{sender.name}</span>
+                                    <span class="device-dates">{sender.address}</span>
+                                    <label class="jtunnel-state" title="Take the DAW's state from this sender (its transport, tracks and clips), for bindings and sources to read. On once the sender is accepted.">
+                                        <input
+                                            type="checkbox"
+                                            aria-label=label
+                                            prop:checked=sender.state
+                                            on:change=move |event| use_state(named.clone(), event_target_checked(&event))
+                                        />
+                                        "Use this sender's state"
+                                    </label>
                                     <button type="button" on:click=move |_| remove(gone.clone())>"Remove"</button>
                                 </li>
                             }
@@ -298,18 +324,28 @@ pub fn JtunnelSettingView() -> impl IntoView {
 #[cfg(test)]
 mod tests {
     use super::with_sender;
-    use crate::host::JtunnelSetting;
+    use crate::host::{JtunnelSender, JtunnelSetting};
+
+    fn sender(name: &str, address: &str, state: bool) -> JtunnelSender {
+        JtunnelSender {
+            name: name.to_owned(),
+            address: address.to_owned(),
+            state,
+        }
+    }
 
     #[test]
     fn the_setting_reads_and_writes_the_apps_json() {
-        let text =
-            r#"{"on":true,"accepted":[{"name":"Bitwig","address":"192.168.1.5:9000"},{"name":7}]}"#;
+        let text = r#"{"on":true,"accepted":[{"name":"Bitwig","address":"192.168.1.5:9000"},{"name":"Live","address":"10.0.0.2:9000","state":false},{"name":7}]}"#;
         let setting = JtunnelSetting::parse(text);
         assert!(setting.on);
         assert_eq!(
             setting.accepted,
-            vec![("Bitwig".to_owned(), "192.168.1.5:9000".to_owned())],
-            "an entry it can't read is left out"
+            vec![
+                sender("Bitwig", "192.168.1.5:9000", true),
+                sender("Live", "10.0.0.2:9000", false),
+            ],
+            "an entry it can't read is left out, and state is on unless it says off"
         );
         assert_eq!(JtunnelSetting::parse(&setting.to_json()), setting);
         assert_eq!(JtunnelSetting::parse("not json"), JtunnelSetting::default());
@@ -331,7 +367,8 @@ mod tests {
         let one = with_sender(&none, " Bitwig ", " 192.168.1.5:9000 ").expect("added");
         assert_eq!(
             one.accepted,
-            vec![("Bitwig".to_owned(), "192.168.1.5:9000".to_owned())]
+            vec![sender("Bitwig", "192.168.1.5:9000", true)],
+            "a new sender's state is on"
         );
         assert!(with_sender(&none, "  ", "192.168.1.5:9000").is_err());
         assert!(with_sender(&none, "Bitwig", "").is_err());
