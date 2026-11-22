@@ -207,7 +207,7 @@ impl PanelId {
             PanelId::Mixer => "Audio mixer",
             PanelId::Outputs => "Outputs",
             PanelId::Transitions => "Transitions",
-            PanelId::Transform => "Transform",
+            PanelId::Transform => "Arrange",
             PanelId::Filters => "Filters",
             PanelId::Chat => "Live chat",
             PanelId::Stats => "Stream stats",
@@ -312,7 +312,7 @@ pub struct Layout {
 const SIZES: [f64; 8] = [260.0, 140.0, 300.0, 140.0, 170.0, 340.0, 190.0, 280.0];
 
 /// The default layout: Scenes over Sources on the left, the inspector with the Filters
-/// and Transform panels as tabs of one full-height group on the right, and the mixer and
+/// and Arrange panels as tabs of one full-height group on the right, and the mixer and
 /// the outputs (with Transitions as a second tab) along the bottom.
 pub fn editing() -> Arrangement {
     use PanelId::*;
