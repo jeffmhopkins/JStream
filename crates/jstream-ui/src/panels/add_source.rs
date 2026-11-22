@@ -942,9 +942,9 @@ fn AddSourceBody(
         } else {
             ""
         };
-        let rows = list
-            .into_iter()
-            .map(|(id, label)| {
+        let rows =
+            move || {
+                existing_list.get().into_iter().map(|(id, label)| {
                 let on = {
                     let id = id.clone();
                     move || choice() == Some(Choice::Existing(id.clone()))
@@ -961,44 +961,74 @@ fn AddSourceBody(
                     </label>
                 }
             })
-            .collect_view();
+            .collect_view()
+            };
+        // New or one already in the collection (C15): a segmented control when both
+        // are possible, else whichever is.
+        let both = t.creatable && count > 0 && !is_scene;
+        let existing_on = move || matches!(choice(), Some(Choice::Existing(_)));
+        let first = existing_list.with_untracked(|l| l.first().map(|(id, _)| id.clone()));
+        let modes = both.then(|| {
+            view! {
+                <div class="segmented add-modes" role="group" aria-label="Add as">
+                    <button
+                        type="button"
+                        aria-pressed=move || (!existing_on()).to_string()
+                        on:click=move |_| chosen.set(Some(Choice::New))
+                    >
+                        "New"
+                    </button>
+                    <button
+                        type="button"
+                        aria-pressed=move || existing_on().to_string()
+                        on:click=move |_| {
+                            if !existing_on() {
+                                chosen.set(first.clone().map(Choice::Existing));
+                            }
+                        }
+                    >
+                        "Existing"
+                        <span class="count">{count}</span>
+                    </button>
+                </div>
+            }
+        });
+        let creatable = t.creatable;
+        let new_shown = move || creatable && !existing_on();
+        let existing_shown = move || count > 0 && (!creatable || existing_on());
+        let titled = existing_title.clone();
         Some(view! {
-            <div class="add-head">
-                <Icon name=t.icon size=22 />
-                <div class="add-head-text">
-                    <span class="add-type-title">{t.name.clone()}</span>
-                    <span class="add-desc">{t.description.clone()}</span>
+            <div class="picker-head">
+                <span class="picker-tile"><Icon name=t.icon size=22 /></span>
+                <div class="picker-titles">
+                    <span class="picker-title add-type-title">{t.name.clone()}</span>
+                    <span class="picker-meta add-desc">{t.description.clone()}</span>
                 </div>
             </div>
-            {t.creatable.then(|| view! {
+            {modes}
+            <Show when=new_shown>
                 <label class="add-new">
+                    <span class="add-new-label">"Name"</span>
                     <input
-                        type="radio"
-                        name="addmode"
-                        prop:checked=move || choice() == Some(Choice::New)
-                        on:change=move |_| chosen.set(Some(Choice::New))
+                        class="add-name"
+                        placeholder=default_label
+                        prop:value=move || name.get()
+                        on:input=move |event| {
+                            name.set(event_target_value(&event));
+                            chosen.set(Some(Choice::New));
+                        }
                     />
-                    "Create new"
                 </label>
-                <input
-                    class="add-name"
-                    aria-label="Name"
-                    placeholder=default_label
-                    prop:value=move || name.get()
-                    on:input=move |event| {
-                        name.set(event_target_value(&event));
-                        chosen.set(Some(Choice::New));
-                    }
-                    on:focus=move |_| chosen.set(Some(Choice::New))
-                />
-            })}
-            {(count > 0).then(|| view! {
-                <div class="add-existing-list">
-                    <span class="add-existing-title">{existing_title}</span>
+            </Show>
+            <Show when=existing_shown>
+                <div class="add-existing-list" role="radiogroup" aria-label=titled.clone()>
+                    <span class="add-existing-title">{existing_title.clone()}</span>
                     {rows}
                 </div>
+            </Show>
+            {(!note.is_empty()).then(|| view! {
+                <p class="callout"><Icon name="info" size=14 />{note}</p>
             })}
-            {(!note.is_empty()).then(|| view! { <span class="add-note">{note}</span> })}
         })
     };
 

@@ -214,7 +214,7 @@ Contents ([Design](#design) explains the choices):
   panel and its dialogs (`filters.rs`: `Filters`, `Chains`, `PropertiesAndFilters`, the
   Properties dialogs' list and pane, and `FilterUndo`, what the Properties dialogs
   opened with, so their Cancel puts back each filter edit, `AddFilter`, `FilterSettings` (the Filters window) and the `FilterDialogs` context that opens
-  them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins), the row summaries,
+  them and holds the chain an FX button picked, with the catalogue (a scanned CLAP plugin's `clap/` kind under Plugins) and its groups' icons (`group_icon`), the row summaries,
   the choice of in place or dialog, each owner's chains, name and note (an item's
   own filters too, with their "Video" chain head and counts), the window's scope tabs (`window_scopes`), its picture (`shown_by`),
   its bar's steps (`stepped`), its undo keys (`history_key`) and the Properties
@@ -563,7 +563,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
-  it is shown, else the first match. "Create new" sends `source.create` and
+  it is shown, else the first match. It shares Add filter's picker layout (C15): the
+  `.picker-head` tile, name and one line, then the Name field, with a "New | Existing n"
+  segmented control (`Add as`) when the type can be both created and placed again.
+  Creating new sends `source.create` and
   `item.add` as one batch (a new `text` or `timer` starting bold with a soft shadow,
   `starting_settings`, over its kind's plain defaults), with a box of the prototype's native size for the type
   (Shape 400 × 120 and Timer 300 × 90, which the prototype doesn't have),
