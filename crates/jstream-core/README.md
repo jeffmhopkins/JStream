@@ -191,7 +191,7 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 <a id="contents-sources"></a>
 ## Contents: live sources and snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/transition.rs"]
+covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/jtunnel/**", "crates/jstream-core/src/frames.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/clock.rs", "crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/groups.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/transition.rs"]
 -->
 
 - **The media clock** (`clock.rs`): `HeldClock` wraps the injected media clock so that
@@ -323,7 +323,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   one that isn't JSON counted, a new stream ID forgetting the old keys and a stopped
   receiver forgetting them all; and through the engine `data.list` empty before the
   receiver starts, then the sender's key listed and `data.get` reading it.
-- **Snapshot** (`snapshot.rs`): the program mix and the video mixes as the render
+- **Snapshot** (`snapshot.rs`, its reflection probes' capture and lookup in
+  `snapshot/probes.rs`, see *Snapshots*): the program mix and the video mixes as the render
   thread draws them, and the program mix as the preview thread and `video.snapshot`
   draw it (`plan`, `compose`, each with the live values), and `video.snapshot`, the program mix
   read back as a PNG on the engine's own snapshot thread, which owns the snapshot
@@ -1636,7 +1637,7 @@ The engine keeps the keyframe each placed scene is switched to
 <a id="snapshots"></a>
 ## Snapshots
 <!-- @section
-covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
+covers = ["crates/jstream-core/src/snapshot.rs", "crates/jstream-core/src/snapshot/probes.rs", "crates/jstream-core/src/chain.rs", "crates/jstream-core/src/effect_packs.rs", "crates/jstream-core/src/pack_store.rs", "crates/jstream-core/src/pack_source.rs", "crates/jstream-core/src/filter_assets.rs", "crates/jstream-core/src/live.rs", "crates/jstream-core/src/audio_sources.rs", "crates/jstream-core/src/forget.rs", "crates/jstream-core/src/kinds.rs"]
 depends_on = ["crates/jstream-protocol/README.md#filters", "crates/jstream-protocol/README.md#geometry"]
 -->
 

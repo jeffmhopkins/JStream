@@ -75,7 +75,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
-  `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`),
+  `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
+  cap since 0.154, with `PROBE_RESOLUTIONS`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -1656,7 +1657,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   `studio.set_warm`: no `rev`, never undone, no event, whatever collection is open, and
   kept across restarts when the engine's host names a file for it. It can't be bound to
   a hotkey, and no plugin is granted it. A switch an older file or server leaves out
-  reads as on.
+  reads as on, and a cap it leaves out as 512.
 
 An `Easing` is `ease_in_out`, `ease_out`, `linear` or `spring`, and since 0.99
 ([ADR-0129](../../docs/adr/0129-keyframe-timing-and-more-easings.md)) `ease_in` (cubic),
@@ -1771,7 +1772,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
-  sets.
+  sets, and since 0.154 the probe switch and face-size cap.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
