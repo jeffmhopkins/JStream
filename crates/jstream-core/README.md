@@ -656,7 +656,7 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   `src/tests/audio.rs`, `src/tests/audio_routing.rs`, `src/tests/sources.rs`,
   `src/tests/transitions.rs`, `src/tests/fonts.rs`, `src/tests/cameras.rs`,
   `src/tests/timelines.rs`, `src/tests/ptz.rs`, `src/tests/warm_scenes.rs`,
-  `src/tests/groups3d.rs`, `src/tests/clock.rs`, `tests/mcp.rs`,
+  `src/tests/rendering.rs`, `src/tests/groups3d.rs`, `src/tests/clock.rs`, `tests/mcp.rs`,
   `tests/scenarios.rs`):
   the protocol rules through `InProcessControl`, undo and redo across two clients
   (conflicts, `expected_rev`, idempotency, the limit, a running output, a session's
@@ -1128,8 +1128,8 @@ takes it, joins outside the lock and settles `stopped`. See *Outputs* and *Locki
   the graph.
 - **Actions**: `output.start` and `output.stop` (see *Outputs* below),
   `output.set_key` and `output.clear_key` (see *Stream keys* below), `scene.switch`
-  and `studio.set_preview` (see *Program scene* below), `studio.set_warm`, answered before
-  the collection lock (see *Program scene*), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
+  and `studio.set_preview` (see *Program scene* below), `studio.set_warm` and
+  `studio.set_rendering`, answered before the collection lock (see *Program scene*), `audio.reset_loudness` (see *Audio routing*), which succeeds whether
   or not the mixer runs, `live.set` and `live.cancel` (see *Live values* below), and
   `values.set` (see [Shared values](#shared-values)), `scene.zoom_camera`
   ([ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md) §4: no `rev` and
@@ -1408,6 +1408,18 @@ beside the count (a file without it has no limit). Their captures stay running (
 *Preview streams*), and their other sources never rest (`LiveSources::set_warm`), so a
 page they show stays loaded and painting, and a `restart_on_show` media file waits at
 its start with its first frame decoded.
+
+The **3D rendering switches** (`studio.set_rendering`,
+[ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+decision 1) are an application setting too, answered before the collection lock
+(`Engine::rendering_call`): each switch the call names takes its value
+(`RenderFeatures::with`), the live sources' `FilterAssets` take them
+(`LiveSources::set_features`), and the engine re-plans when one changed and, with the
+collection lock released, saves them in the file the host named with
+`Engine::with_rendering_file` (`rendering_file.rs`, `rendering.json` in the data folder
+for the desktop app and the daemon), which the next start reads back. A file that can't
+be read is logged and read as none, and a switch it leaves out is on. `studio.get`
+reports them as `rendering`. Every plan reads them (see *Snapshots*).
 
 **Transitions** ([ADR-0029](../../docs/adr/0029-transitions.md)). A switch resolves its
 preset (`transition::resolve`: the preset it names, else the new scene's
@@ -1772,8 +1784,14 @@ from rest, aimed at the box's centre, on the first picture.
 roadmap V0). Planning copies each reached source's video chain into the `Shot`: its
 input (the source's upload or its capture) and its enabled filters of a kind the
 engine draws, in order: a `jstream-render` built-in, or an effect pack's kind whose
-pack is loaded. A disabled filter, or one of a kind it doesn't draw (a pack that isn't
-loaded), is bypassed, and a source with no filter left has no chain. Every
+pack is loaded. A disabled filter, one of a kind it doesn't draw (a pack that isn't
+loaded), or one a 3D rendering switch that is off names (`RenderFeatures::draws_filter`
+on the plan's `FilterAssets::features`, ADR-0170 decision 1: `ambient_occlusion`,
+`volumetric_fog`, `floor_reflection`), is bypassed, and a source with no filter left has
+no chain. So with a switch off nothing that filter reads is drawn for it either: no view
+depth, shadow maps or mirrored scene. The `Shot` keeps the switches too
+(`Shot::features`): with `shadows` off no light is among a scene's shadowed lights, so no
+shadow map is drawn and nothing receives one. Every
 item that places a source with a chain shows the chain's output (`GpuKey::Filtered`)
 instead of its input, in every mix and in a transition's tracks, at the size the chain
 reports. A chain over a capture keeps that capture among the shot's captures. Each
@@ -3869,7 +3887,9 @@ file's; a save never takes the packs' lock.
 The warm budget's file lock (`Shared::warm_file`) comes before the collection lock:
 `studio.set_warm` holds it, takes the collection lock only to set the budget and
 republish the warm scenes, and writes `warm-scenes.json` with it released, so two sets
-land on disk in order; nothing takes it under another engine lock.
+land on disk in order; nothing takes it under another engine lock. The 3D rendering
+switches' file lock (`Shared::rendering_file`) is taken the same way by
+`studio.set_rendering`, never with the warm budget's.
 The sampler and `output.start` take it only to read or register sources, and they
 release it before taking the collection lock. A source must not call back into the
 engine while that mutex is held. An output's two encoder subscriptions each sit

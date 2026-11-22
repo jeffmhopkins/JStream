@@ -246,6 +246,11 @@ folder, and its log `logs\cef.log`.
   ADR-0117 §7) is kept by the engine in `warm-scenes.json` in the data folder
   (`Engine::with_warm_file`, in `startup_collection`), the file the daemon names too, so
   it holds whatever project opens.
+- **The 3D rendering switches** (Settings › 3D rendering, `studio.set_rendering`,
+  [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)) are
+  kept by the engine in `rendering.json` in the data folder
+  (`Engine::with_rendering_file`, in `startup_collection`), the file the daemon names
+  too, so they hold whatever project opens.
 - **Logs.** `logs\jstream-desktop.log` in the data folder, replaced at each start by a
   new, user-only file (a protected DACL for SYSTEM and the user on Windows, mode `0600`
   on Unix, in a folder created `0700`, #780) and capped at 10 MiB, filtered by `RUST_LOG` (default `info`). A debug build also logs to

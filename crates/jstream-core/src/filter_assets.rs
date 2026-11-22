@@ -85,6 +85,9 @@ pub(crate) struct FilterAssets {
     motion_heard: crate::reactive::HeardScopes,
     /// The engine's MIDI inputs, whose clock moves a border's speed in beats (ADR-0148).
     tempo: Option<crate::tempo::Tempo>,
+    /// The 3D rendering switches (`studio.set_rendering`, ADR-0170 decision 1): a plan
+    /// leaves out the effects a switch that is off names.
+    features: jstream_protocol::RenderFeatures,
 }
 
 impl FilterAssets {
@@ -169,6 +172,17 @@ impl FilterAssets {
     pub(crate) fn tempo(&self) -> Option<&crate::tempo::Tempo> {
         self.tempo.as_ref()
     }
+
+    /// These assets with `features` as the 3D rendering switches (ADR-0170 decision 1).
+    #[must_use]
+    pub(crate) fn with_features(self, features: jstream_protocol::RenderFeatures) -> Self {
+        Self { features, ..self }
+    }
+
+    /// The 3D rendering switches plans draw with (ADR-0170 decision 1).
+    pub(crate) fn features(&self) -> jstream_protocol::RenderFeatures {
+        self.features
+    }
 }
 
 impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
@@ -180,6 +194,7 @@ impl FromIterator<(AssetKey, Arc<FilterAsset>)> for FilterAssets {
             heard: Arc::default(),
             motion_heard: Arc::default(),
             tempo: None,
+            features: jstream_protocol::RenderFeatures::ALL,
         }
     }
 }

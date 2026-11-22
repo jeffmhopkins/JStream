@@ -1574,6 +1574,14 @@ pub(crate) fn actions() -> Vec<Action> {
             scenes: 3,
             gpu_mib: None,
         },
+        // The 3D rendering switches (ADR-0170 decision 1).
+        Action::StudioSetRendering {
+            change: crate::RenderFeaturesChange {
+                shadows: Some(false),
+                volumetric_fog: Some(true),
+                ..crate::RenderFeaturesChange::default()
+            },
+        },
         Action::SceneZoomCamera {
             scene_id: SceneId::new("scn_1"),
             steps: -2,
@@ -2983,6 +2991,10 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             }],
             warm_scenes: Some(3),
             warm_gpu_mib: Some(2048),
+            rendering: Some(crate::RenderFeatures {
+                shadows: false,
+                ..crate::RenderFeatures::ALL
+            }),
         },
         QueryResult::StudioGet {
             program_scene: None,
@@ -2991,6 +3003,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
             keyframes: Vec::new(),
             warm_scenes: None,
             warm_gpu_mib: None,
+            rendering: None,
         },
         QueryResult::PrivacyGet { on: true },
         QueryResult::EncoderList {
