@@ -2000,6 +2000,7 @@ fn golden_model_a_card_behind_a_model_is_hidden_by_its_depth() {
         floor: None,
         texture: None,
         reflection: None,
+        materials: &[],
     };
     compositor
         .draw_model(&draw, &layer)
