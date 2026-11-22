@@ -121,6 +121,36 @@ fn the_state_holds_keys_controllers_bend_and_pressure_by_channel() {
     assert_eq!(state.held(9, 36), 90, "another channel keeps its keys");
 }
 
+/// ADR-0168: a `midi` motion modifier on any channel follows the latest value sent on
+/// any of them.
+#[test]
+fn the_state_keeps_each_controls_latest_value_on_any_channel() {
+    let state = MidiState::new();
+    assert_eq!(
+        (
+            state.controller_any(1),
+            state.bend_any(),
+            state.pressure_any()
+        ),
+        (0, 0, 0)
+    );
+    state.push(1, &msg(&[0xB0, 1, 20])); // channel 1
+    state.push(2, &msg(&[0xB3, 1, 90])); // channel 4
+    assert_eq!(state.controller_any(1), 90, "the latest, from channel 4");
+    assert_eq!(state.controller(0, 1), 20, "channel 1 keeps its own");
+    state.push(3, &msg(&[0xB0, 1, 5]));
+    assert_eq!(state.controller_any(1), 5);
+    assert_eq!(
+        state.controller_any(2),
+        0,
+        "another controller is untouched"
+    );
+    state.push(4, &msg(&[0xE5, 0x7F, 0x7F])); // channel 6, bend fully up
+    assert_eq!(state.bend_any(), 8191);
+    state.push(5, &msg(&[0xDA, 77])); // channel 11 pressure
+    assert_eq!(state.pressure_any(), 77);
+}
+
 #[test]
 fn the_log_reads_the_latest_events_oldest_first() {
     let state = MidiState::new();

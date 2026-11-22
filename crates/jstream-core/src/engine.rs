@@ -1782,6 +1782,16 @@ impl Engine {
         Arc::clone(&self.shared.audio_scopes)
     }
 
+    /// The MIDI inputs the engine reads, which a test pushes messages to as an input
+    /// thread would.
+    #[cfg(test)]
+    pub(crate) fn midi_inputs(&self) -> Arc<jstream_sources::MidiInputs> {
+        lock(&self.shared.state)
+            .live
+            .midi()
+            .expect("the engine has MIDI inputs")
+    }
+
     /// The scope the program mix's audio goes to.
     #[cfg(test)]
     pub(crate) fn audio_scope(&self) -> Arc<jstream_sources::AudioScope> {

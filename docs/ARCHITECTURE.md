@@ -706,7 +706,9 @@ The wire format, versioning, error codes and compatibility policy are designed i
   Since 0.86 a modifier can follow a bus or a source's audio
   ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)), and since 0.109 drive a
   number or colour setting of one of its item's effects, `property` `effect`
-  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)).
+  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.151 a `midi`
+  modifier follows a MIDI control change, pitch bend or channel pressure, smoothed, the
+  value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
   outputs (protocol 0.7); the `record` output kind, a file on the engine's machine, is
   0.9, with `output.set_path` to change its file from 0.74, and the `virtual_cam` kind, a webcam other apps on that machine see, is 0.18.
@@ -889,7 +891,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
   with what a person grants it, change the grant and re-enable it, `plugin.uninstall`
-  (0.149) removes it, leaving its package on disk, and the query
+  (0.153) removes it, leaving its package on disk, and the query
   `plugin.list` (0.58) lists the installed plugins with what each manifest asks for and
   what was granted; they are for a person, so no MCP tool, plugin or hotkey carries
   them. The event `plugin.state_changed` reports
@@ -1233,7 +1235,8 @@ depends_on = ["docs/adr/0006-mcp-full-access.md", "docs/RULES.md#R-API-002", "do
   finished (the title-safe area, backdrops, shapes, type, colour, lower-third, ticker,
   countdown and grouping recipes, fitting boxes to text, a custom shader or shader
   source the UI's shader editor opens, animating with keyframe
-  scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound)
+  scenes, continuous motion with `item.set_motion` (an `audio` modifier to follow sound, a
+  `midi` one to follow a controller)
   and one-shot jolts that
   `item.trigger_motion` fires, the light and framing filters (bloom, glow, vignette, scanlines), borders
   and how to stack them, layering light, masks and reflections, which blending space to pick, 3D sets through a scene camera, 3D models with a live

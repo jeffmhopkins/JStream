@@ -210,7 +210,7 @@ fn moved(target: Target, at: &Value, add: f64) -> Option<Value> {
 }
 
 /// The least and the most `modifier`'s value can be: a wave or a shake within its
-/// amplitude, an audio modifier between its `from` and `to`, a drift within its wrap or
+/// amplitude, an audio or MIDI modifier between its `from` and `to`, a drift within its wrap or
 /// without end in its direction, and 0 when it is disabled.
 fn reach(modifier: &Modifier) -> (f64, f64) {
     if !modifier.enabled {
@@ -221,6 +221,7 @@ fn reach(modifier: &Modifier) -> (f64, f64) {
         | Kind::Oscillate { amplitude, .. }
         | Kind::Impulse { amplitude, .. } => (-amplitude, amplitude),
         Kind::Audio(audio) => (audio.from.min(audio.to), audio.from.max(audio.to)),
+        Kind::Midi(midi) => (midi.from.min(midi.to), midi.from.max(midi.to)),
         Kind::Drift {
             wrap: Some(wrap), ..
         } => (0.0, wrap),

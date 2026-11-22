@@ -217,6 +217,8 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MotionProperty::Source` and `MotionSetting`, the source setting one drives, and
   `MAX_MOTION_MATERIAL_LEN` (128)
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
+  Since 0.151 `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -259,7 +261,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
-  `plugin.uninstalled` (0.149),
+  `plugin.uninstalled` (0.153),
   `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
@@ -357,8 +359,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.149 because a person can remove a WASM plugin: `plugin.uninstall`
+`PROTOCOL_VERSION` is 0.153 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
+0.151 because a motion modifier can follow MIDI: `MotionKind`'s
+`midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
+onto an item's property, smoothed over `smoothing_ms`
+([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md));
 0.147 because the costly 3D effects have app-wide switches:
 the action `studio.set_rendering` and `studio.get`'s `rendering` (`RenderFeatures`,
 `RenderFeaturesChange` in `rendering.rs`,
@@ -2358,7 +2364,7 @@ After `welcome`, the server pushes every event to every client.
   broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
   [YouTube](#youtube).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) and
-  `plugin.uninstalled {plugin_id}` (0.149) are described under [Plugins](#plugins).
+  `plugin.uninstalled {plugin_id}` (0.153) are described under [Plugins](#plugins).
 - `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) and
   `gpu.effect_slow {kind_id, took_us, limit_us, quarantined}` (0.102) are described under
   [Effect quarantine](#quarantine).
@@ -2510,7 +2516,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
-- **`plugin.uninstall {plugin_id}`** (0.149) removes an installed plugin, for a person
+- **`plugin.uninstall {plugin_id}`** (0.153) removes an installed plugin, for a person
   like the other plugin actions. A running plugin stops once the invocation it is in
   returns, holding only `read` from the moment it is removed, and the engine forgets it
   and its grant: `plugin.list` no longer
@@ -2536,7 +2542,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
-- **`plugin.uninstalled {plugin_id}`** (0.149) reports a plugin a person removed with
+- **`plugin.uninstalled {plugin_id}`** (0.153) reports a plugin a person removed with
   `plugin.uninstall`. Like `plugin.state_changed`, it is a person's: the MCP feed drops it.
 
 CLAP audio plugins ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) are
@@ -2791,12 +2797,12 @@ after 1.0:
   binding does, so a later action in a cue won't break a 0.87 client's `state.get`. The encoder enums (`VideoCodec`,
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
-  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, and `MotionMeasure` and
-  `MotionCurve`, 0.86): a later kind or property won't break a 0.81 client's
+  `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, `MotionMeasure` and
+  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.151): a later kind or property won't break a 0.81 client's
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86) and a `midi` one (0.151) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2858,6 +2864,20 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   and so is everything the engine doesn't hear: while no output runs the program mix
   is silent, and a preview reads every audio modifier as silence. Its `clock` is
   ignored.
+- **`midi`** (since 0.151,
+  [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)) follows a MIDI
+  controller instead of a clock, the value binding of ADR-0122: `control` is `cc` (the
+  default, with its `controller` 0 to 127, which only `cc` takes), `pitch_bend` or
+  `pressure` (channel pressure), read on `channel` 1 to 16 (omitted for the latest on any
+  channel) from `input`, a MIDI port or JTunnel sender by name as a trigger names one
+  (omitted for any). A control change and pressure map 0 to 127 onto 0 to 1, a pitch bend
+  -8192 to 8191 with its rest at one half. That is followed over `smoothing_ms` (default
+  50, `0..=10000`, a one-pole time constant for rising and falling alike; 0 jumps, and
+  the first frame an item is drawn lands on the value), bent by `curve` as an audio
+  modifier's is, and mapped onto `from` (default 0) to `to` (default 1), each within
+  ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
+  preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
+  camera's motion refuses it.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.
