@@ -388,6 +388,7 @@ fn v6_graph() -> Graph {
                             &Action::SceneSwitch {
                                 scene_id: SceneId::new("b"),
                                 preset_id: None,
+                                via: Vec::new(),
                             },
                         ),
                         TimelineCue::new(
@@ -428,6 +429,7 @@ fn v9_graph() -> Graph {
                 action: Action::SceneSwitch {
                     scene_id: SceneId::new("b"),
                     preset_id: None,
+                    via: Vec::new(),
                 },
             },
             Edit::BindingSet {
@@ -1430,6 +1432,7 @@ fn hotkeys_round_trip() {
                 action: Action::SceneSwitch {
                     scene_id: SceneId::new("a"),
                     preset_id: None,
+                    via: Vec::new(),
                 },
             },
         ],
@@ -2228,7 +2231,7 @@ fn transitions_round_trip() {
                 "kind_version": 1,
                 "duration_ms": 600,
                 "easing": "ease_in_out",
-                "settings": {"stagger_ms": 0, "unmatched": "slide"},
+                "settings": {"camera_path": "line", "stagger_ms": 0, "unmatched": "slide"},
             }],
             "default": "smooth",
         })

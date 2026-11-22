@@ -148,6 +148,7 @@ async fn seed(engine: &MockEngine) -> Result<()> {
             action: Action::SceneSwitch {
                 scene_id: "main".into(),
                 preset_id: None,
+                via: Vec::new(),
             },
         })
         .await?;

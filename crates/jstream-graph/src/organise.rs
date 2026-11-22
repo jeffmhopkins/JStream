@@ -1167,6 +1167,7 @@ mod tests {
         let switch_b = Action::SceneSwitch {
             scene_id: SceneId::new("b"),
             preset_id: None,
+            via: Vec::new(),
         };
         let set_labels = |chord: &str, labels: &[&str]| Edit::HotkeySetLabels {
             chord: Chord::new(chord),

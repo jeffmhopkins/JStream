@@ -10,6 +10,9 @@
 //!   depth and perspective. Angles take the shortest way round: one angle that changes
 //!   on its own, and more than one as one rotation along the shortest arc between the
 //!   two orientations (ADR-0166 decision 1). The rest are linear.
+//! - A pair with **stops on the way** (`via`, ADR-0166 decision 2) follows one smooth
+//!   curve through all of them instead: Catmull-Rom for numbers, its spherical form for
+//!   orientations, each stop at an equal share of the eased progress.
 //! - An item **without a partner** appears or disappears with its effect: `fade`
 //!   (opacity only), `scale` (toward 65% about its centre while fading), `slide` (toward
 //!   the nearest canvas edge until it is off the canvas, while fading) or `none` (at
@@ -107,8 +110,134 @@ impl Timing {
     }
 }
 
-/// One item's movement over a transition.
+/// The most stops a path has: its two ends and [`jstream_protocol::MAX_VIA`] between.
+pub const MAX_STOPS: usize = jstream_protocol::MAX_VIA + 2;
+
+/// The stops a Move passes through between its two ends, in order
+/// ([ADR-0166](../../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+/// decision 2): at most [`jstream_protocol::MAX_VIA`], held inline so a [`Track`] stays
+/// `Copy` and sampling allocates nothing.
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Via<T> {
+    at: [Option<T>; jstream_protocol::MAX_VIA],
+}
+
+impl<T: Copy> Via<T> {
+    /// No stops: the Move goes straight from one end to the other.
+    pub const NONE: Self = Self {
+        at: [None; jstream_protocol::MAX_VIA],
+    };
+
+    /// The first [`jstream_protocol::MAX_VIA`] of `stops`, in order.
+    pub fn new(stops: impl IntoIterator<Item = T>) -> Self {
+        let mut via = Self::NONE;
+        for (slot, stop) in via.at.iter_mut().zip(stops) {
+            *slot = Some(stop);
+        }
+        via
+    }
+
+    /// Whether there are no stops.
+    pub fn is_empty(&self) -> bool {
+        self.at[0].is_none()
+    }
+
+    /// The stops, in order.
+    pub fn iter(&self) -> impl Iterator<Item = T> + '_ {
+        self.at.iter().map_while(|stop| *stop)
+    }
+
+    /// `from`, the stops and `to`, in order, in `out`; how many there are.
+    fn path(&self, from: T, to: T, out: &mut [T; MAX_STOPS]) -> usize {
+        out[0] = from;
+        let mut n = 1;
+        for stop in self.iter() {
+            out[n] = stop;
+            n += 1;
+        }
+        out[n] = to;
+        n + 1
+    }
+}
+
+impl<T: Copy> Default for Via<T> {
+    fn default() -> Self {
+        Self::NONE
+    }
+}
+
+/// The stops a [`Track::Pair`] passes through between its two ends, in order
+/// (ADR-0166 decision 2): none for a straight Move. Shared, so a track clones cheaply.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Stops(Option<std::sync::Arc<[Endpoint]>>);
+
+impl Stops {
+    /// No stops.
+    pub const NONE: Self = Self(None);
+
+    /// The first [`jstream_protocol::MAX_VIA`] of `stops`, in order.
+    pub fn new(stops: impl IntoIterator<Item = Endpoint>) -> Self {
+        let stops: Vec<Endpoint> = stops.into_iter().take(jstream_protocol::MAX_VIA).collect();
+        if stops.is_empty() {
+            Self::NONE
+        } else {
+            Self(Some(stops.into()))
+        }
+    }
+
+    /// Whether there are none.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_none()
+    }
+
+    /// `from`, the stops and `to`, in order, in `out`; how many there are.
+    fn path(&self, from: Endpoint, to: Endpoint, out: &mut [Endpoint; MAX_STOPS]) -> usize {
+        out[0] = from;
+        let mut n = 1;
+        for stop in self.0.iter().flat_map(|stops| stops.iter()) {
+            out[n] = *stop;
+            n += 1;
+        }
+        out[n] = to;
+        n + 1
+    }
+}
+
+/// The uniform Catmull-Rom curve through `points` at `k` of the way, each point at an
+/// equal share of it, in the pyramidal form (Barry and Goldman), whose every step is a
+/// `mix` of two values: so a `mix` that is a slerp gives the spherical curve
+/// (ADR-0166 decision 2). The ends take the one-sided tangent (a phantom point mirrored
+/// past each end), so two points give `mix` itself. `k` outside `[0, 1]` carries on
+/// along the first or last leg. `points` is not empty.
+pub(crate) fn catmull<T: Copy>(points: &[T], k: f32, mix: impl Fn(T, T, f32) -> T) -> T {
+    let legs = points.len().saturating_sub(1);
+    if legs == 0 {
+        return points[0];
+    }
+    let u = k * legs as f32;
+    let i = (u.floor().max(0.0) as usize).min(legs - 1);
+    let t = u - i as f32;
+    let (p1, p2) = (points[i], points[i + 1]);
+    let p0 = if i == 0 {
+        mix(p1, p2, -1.0)
+    } else {
+        points[i - 1]
+    };
+    let p3 = if i + 2 > legs {
+        mix(p2, p1, -1.0)
+    } else {
+        points[i + 2]
+    };
+    let a1 = mix(p0, p1, t + 1.0);
+    let a2 = mix(p1, p2, t);
+    let a3 = mix(p2, p3, t - 1.0);
+    let b1 = mix(a1, a2, (t + 1.0) / 2.0);
+    let b2 = mix(a2, a3, t / 2.0);
+    mix(b1, b2, t)
+}
+
+/// One item's movement over a transition.
+#[derive(Clone, Debug, PartialEq)]
 pub enum Track {
     /// An item that is on screen at both ends: it moves from `from` to `to`.
     Pair {
@@ -120,6 +249,9 @@ pub enum Track {
         timing: Timing,
         /// The source's size in pixels, which bounds the crop, when known.
         source: Option<[u32; 2]>,
+        /// Where it passes on the way, in order (ADR-0166 decision 2): with any, it
+        /// follows one smooth curve through every stop.
+        via: Stops,
     },
     /// An item that comes in without a partner.
     Appear {
@@ -186,7 +318,7 @@ impl Track {
     /// [`Track::Through`] is its appearing half until it starts to leave, and its
     /// disappearing half from then on; every other track is itself.
     fn phase(&self, elapsed_ms: f32) -> Track {
-        match *self {
+        match self.clone() {
             Track::Through {
                 at,
                 appear,
@@ -222,6 +354,18 @@ impl Track {
                 to,
                 timing,
                 source,
+                via,
+            } if !via.is_empty() => {
+                let mut stops = [from; MAX_STOPS];
+                let n = via.path(from, to, &mut stops);
+                path_endpoint(&stops[..n], timing.progress(elapsed_ms), source)
+            }
+            Track::Pair {
+                from,
+                to,
+                timing,
+                source,
+                ..
             } => {
                 let k = timing.progress(elapsed_ms);
                 Endpoint {
@@ -315,6 +459,268 @@ pub fn lerp_camera(from: &SceneCamera, to: &SceneCamera, k: f32) -> SceneCamera 
         camera
     } else {
         *to
+    }
+}
+
+/// A camera `k` of the way from `from` to `to` through the stops `via` (ADR-0166
+/// decisions 2 and 3), along a straight path or, with `orbit`, circling its target. With
+/// no stops and no orbit it is [`lerp_camera`]. Where the way passes a camera the
+/// collection would refuse, it is `to`.
+pub fn move_camera(
+    from: &SceneCamera,
+    via: &Via<SceneCamera>,
+    to: &SceneCamera,
+    k: f32,
+    orbit: bool,
+) -> SceneCamera {
+    if via.is_empty() && !orbit {
+        return lerp_camera(from, to, k);
+    }
+    let mut stops = [*from; MAX_STOPS];
+    let n = via.path(*from, *to, &mut stops);
+    let stops = &stops[..n];
+    let curve = |value: &dyn Fn(&SceneCamera) -> f32| {
+        let mut values = [0.0; MAX_STOPS];
+        for (slot, camera) in values.iter_mut().zip(stops) {
+            *slot = value(camera);
+        }
+        catmull(&values[..n], k, lerp)
+    };
+    let target = [
+        curve(&|c| c.target.x.get()),
+        curve(&|c| c.target.y.get()),
+        curve(&|c| c.target.z.get()),
+    ];
+    let position = if orbit {
+        let offset = |c: &SceneCamera| {
+            [
+                f64::from(c.position.x.get() - c.target.x.get()),
+                f64::from(c.position.y.get() - c.target.y.get()),
+                f64::from(c.position.z.get() - c.target.z.get()),
+            ]
+        };
+        let length = |v: [f64; 3]| (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt();
+        let mut directions = [[0.0, 0.0, 1.0]; MAX_STOPS];
+        for (slot, camera) in directions.iter_mut().zip(stops) {
+            let v = offset(camera);
+            let len = length(v);
+            if len > 0.0 {
+                *slot = v.map(|x| x / len);
+            }
+        }
+        // The picture's up is world −y (ADR-0094 decision 3).
+        let up = [0.0, -1.0, 0.0];
+        let direction = catmull(&directions[..n], k, |a, b, t| {
+            crate::turn::slerp_direction(a, b, f64::from(t), up)
+        });
+        let distance = curve(&|c| length(offset(c)) as f32).max(MIN_ORBIT_PX);
+        [0, 1, 2].map(|i| target[i] + (direction[i] * f64::from(distance)) as f32)
+    } else {
+        [
+            curve(&|c| c.position.x.get()),
+            curve(&|c| c.position.y.get()),
+            curve(&|c| c.position.z.get()),
+        ]
+    };
+    let point = |[x, y, z]: [f32; 3]| Vec3 {
+        x: finite(x),
+        y: finite(y),
+        z: finite(z),
+    };
+    // Roll the short way on each leg: each stop's roll moved by whole turns to within
+    // half a turn of the one before.
+    let mut rolls = [0.0; MAX_STOPS];
+    for i in 0..n {
+        let roll = stops[i].roll_deg.get();
+        rolls[i] = if i == 0 {
+            roll
+        } else {
+            lerp_angle(rolls[i - 1], roll, 1.0)
+        };
+    }
+    let roll = if k == 1.0 {
+        to.roll_deg.get()
+    } else {
+        catmull(&rolls[..n], k, lerp)
+    };
+    // Depth of field (ADR-0108 decision 6): a stop with no focus is focused where the
+    // nearest one with focus is, with no blur, so the blur fades in or out.
+    let focused = stops.iter().any(|c| c.focus_px.is_some());
+    let (focus_px, blur_px) = if focused {
+        let focus_at = |i: usize| {
+            stops[i].focus_px.map(Finite32::get).unwrap_or_else(|| {
+                let before = stops[..i].iter().rev().find_map(|c| c.focus_px);
+                let after = stops[i..].iter().find_map(|c| c.focus_px);
+                before.or(after).map_or(0.0, Finite32::get)
+            })
+        };
+        let mut focus = [0.0; MAX_STOPS];
+        let mut blur = [0.0; MAX_STOPS];
+        for i in 0..n {
+            focus[i] = focus_at(i);
+            blur[i] = if stops[i].focus_px.is_some() {
+                stops[i].blur_px.get()
+            } else {
+                0.0
+            };
+        }
+        (
+            Some(finite(
+                catmull(&focus[..n], k, lerp).clamp(f32::MIN_POSITIVE, MAX_DRAWN_PX),
+            )),
+            catmull(&blur[..n], k, lerp),
+        )
+    } else {
+        (None, curve(&|c| c.blur_px.get()))
+    };
+    let camera = SceneCamera {
+        position: point(position),
+        target: point(target),
+        fov_deg: finite(curve(&|c| c.fov_deg.get()).clamp(MIN_FOV_DEG, MAX_FOV_DEG)),
+        roll_deg: finite(roll),
+        depth_sort: to.depth_sort,
+        focus_px,
+        blur_px: finite(blur_px.clamp(0.0, MAX_BLUR_PX)),
+    };
+    if camera.validate().is_ok() {
+        camera
+    } else {
+        *to
+    }
+}
+
+/// The nearest an orbiting camera comes to its target, in pixels: a camera on its
+/// target is refused.
+const MIN_ORBIT_PX: f32 = 0.01;
+
+/// An item `k` of the way along the path through `stops` (ADR-0166 decision 2): every
+/// number on the Catmull-Rom curve through its stops, the orientation on the spherical
+/// one, and the parts that switch at the path's midpoint, from the first stop to the
+/// last. `stops` holds at least two.
+fn path_endpoint(stops: &[Endpoint], k: f32, source: Option<[u32; 2]>) -> Endpoint {
+    let n = stops.len();
+    let (first, last) = (&stops[0], &stops[n - 1]);
+    let curve_at = |k: f32, value: &dyn Fn(&Endpoint) -> f32| {
+        let mut values = [0.0; MAX_STOPS];
+        for (slot, stop) in values.iter_mut().zip(stops) {
+            *slot = value(stop);
+        }
+        catmull(&values[..n], k, lerp)
+    };
+    let curve = |value: &dyn Fn(&Endpoint) -> f32| curve_at(k, value);
+    let g = |stop: &Endpoint| stop.geometry;
+    let later = k >= 0.5;
+    let (a, b) = (g(first), g(last));
+    let perspective_px = if stops.iter().all(|s| s.geometry.perspective_px.is_some()) {
+        Some(finite(
+            curve(&|s| s.geometry.perspective_px.map_or(0.0, Finite32::get)).max(MIN_PERSPECTIVE),
+        ))
+    } else if later {
+        b.perspective_px
+    } else {
+        a.perspective_px
+    };
+    let surface = if stops.iter().all(|s| s.geometry.surface.is_none()) {
+        None
+    } else {
+        let number = |pick: fn(&jstream_protocol::Surface) -> Finite32| {
+            finite(curve(&|s| {
+                pick(&s.geometry.surface.unwrap_or_default()).get()
+            }))
+        };
+        let switched = if later { b.surface } else { a.surface }.unwrap_or_default();
+        Some(jstream_protocol::Surface {
+            roughness: number(|s| s.roughness),
+            metalness: number(|s| s.metalness),
+            emissive: number(|s| s.emissive),
+            ..switched
+        })
+    };
+    // Each angle unwrapped leg by leg, the short way, as the per-axis hint and as the
+    // answer when only one of them changes along the path.
+    let mut angles = [[0.0; 3]; MAX_STOPS];
+    let mut changes = [false; 3];
+    for i in 0..n {
+        let s = &stops[i].geometry;
+        let raw = [s.rotation_deg, s.turn_deg, s.tilt_deg].map(Finite32::get);
+        for axis in 0..3 {
+            angles[i][axis] = if i == 0 {
+                raw[axis]
+            } else {
+                lerp_angle(angles[i - 1][axis], raw[axis], 1.0)
+            };
+            if i > 0 && angles[i][axis] != angles[0][axis] {
+                changes[axis] = true;
+            }
+        }
+    }
+    let hint = [0, 1, 2].map(|axis| {
+        let mut values = [0.0; MAX_STOPS];
+        for i in 0..n {
+            values[i] = angles[i][axis];
+        }
+        catmull(&values[..n], k, lerp)
+    });
+    let ends = |e: &ItemGeometry| [e.rotation_deg, e.turn_deg, e.tilt_deg].map(Finite32::get);
+    let turned = if k == 0.0 {
+        ends(&a)
+    } else if k == 1.0 {
+        ends(&b)
+    } else if changes.iter().filter(|c| **c).count() <= 1
+        // A billboard draws only its rotation (ADR-0151 decision 2): per axis, as in
+        // a straight Move.
+        || stops.iter().any(|s| s.geometry.billboard)
+    {
+        hint
+    } else {
+        let mut raw = [[0.0; 3]; MAX_STOPS];
+        for i in 0..n {
+            raw[i] = ends(&stops[i].geometry);
+        }
+        crate::turn::path_angles(&raw[..n], k, hint)
+    };
+    let [rotation_deg, turn_deg, tilt_deg] = turned.map(finite);
+    let geometry = ItemGeometry {
+        center: Vec2 {
+            x: finite(curve(&|s| s.geometry.center.x.get())),
+            y: finite(curve(&|s| s.geometry.center.y.get())),
+        },
+        size: Size {
+            width: finite(curve(&|s| s.geometry.size.width.get()).max(0.0)),
+            height: finite(curve(&|s| s.geometry.size.height.get()).max(0.0)),
+        },
+        fit_mode: if later { b.fit_mode } else { a.fit_mode },
+        flip_h: if later { b.flip_h } else { a.flip_h },
+        flip_v: if later { b.flip_v } else { a.flip_v },
+        billboard: if later { b.billboard } else { a.billboard },
+        surface,
+        rotation_deg,
+        tilt_deg,
+        turn_deg,
+        depth_px: finite(curve(&|s| s.geometry.depth_px.get())),
+        perspective_px,
+    };
+    let [width, height] = source.unwrap_or([u32::MAX, u32::MAX]);
+    let side = |pick: fn(&Crop) -> u32, limit: u32| {
+        let v = curve(&|s| pick(&s.crop) as f32).round();
+        if v <= 0.0 {
+            0
+        } else if v >= limit as f32 {
+            limit
+        } else {
+            v as u32
+        }
+    };
+    Endpoint {
+        geometry,
+        crop: Crop {
+            left: side(|c| c.left, width),
+            top: side(|c| c.top, height),
+            right: side(|c| c.right, width),
+            bottom: side(|c| c.bottom, height),
+        },
+        opacity: curve_at(k.clamp(0.0, 1.0), &|s| s.opacity),
+        blend: if later { last.blend } else { first.blend },
     }
 }
 
@@ -663,6 +1069,7 @@ mod tests {
             },
             timing: linear(200.0),
             source: None,
+            via: super::Stops::NONE,
         };
         let start = track.sample(0.0, CANVAS).expect("drawn");
         assert_eq!(centre(&start), (100.0, 100.0));
@@ -686,6 +1093,7 @@ mod tests {
             to,
             timing: linear(0.0),
             source: None,
+            via: super::Stops::NONE,
         };
         let before = track.sample(499.0, CANVAS).expect("drawn");
         assert!(!before.geometry.flip_h && !before.geometry.flip_v);
@@ -777,6 +1185,7 @@ mod tests {
             to,
             timing: linear(0.0),
             source: None,
+            via: super::Stops::NONE,
         };
         let blend = |ms: f32| track.sample(ms, CANVAS).expect("drawn").blend;
         assert_eq!(blend(499.0), BlendMode::Normal);
@@ -809,6 +1218,129 @@ mod tests {
         assert_eq!(lerp_angle(-170.0, 170.0, 0.5), -180.0);
     }
 
+    /// ADR-0166 decision 2: two points give the straight line, and a curve through
+    /// three passes through the middle one at its share with one speed either side.
+    #[test]
+    fn the_curve_is_a_line_through_two_points_and_smooth_through_three() {
+        let mix = |a: f32, b: f32, t: f32| a + (b - a) * t;
+        for k in [-0.2, 0.0, 0.3, 0.5, 1.0, 1.2] {
+            let got = super::catmull(&[10.0, 30.0], k, mix);
+            assert!((got - (10.0 + 20.0 * k)).abs() < 1e-4, "{k}: {got}");
+        }
+        let points = [0.0, 100.0, 400.0];
+        assert!((super::catmull(&points, 0.5, mix) - 100.0).abs() < 1e-4);
+        let h = 1e-3;
+        let left = (super::catmull(&points, 0.5, mix) - super::catmull(&points, 0.5 - h, mix)) / h;
+        let right = (super::catmull(&points, 0.5 + h, mix) - super::catmull(&points, 0.5, mix)) / h;
+        // Tangent (400 - 0) / 2 per leg, a leg being half the path: 400 per unit.
+        assert!((left - 400.0).abs() < 1.0, "{left}");
+        assert!((right - 400.0).abs() < 1.0, "{right}");
+    }
+
+    /// ADR-0166 decision 2: a pair with a stop passes through it, turning on two axes
+    /// along the spherical curve, and ends exactly on its end.
+    #[test]
+    fn a_pair_with_a_stop_passes_through_it() {
+        let from = at(0.0, 500.0, 100.0, 100.0);
+        let mut stop = at(400.0, 300.0, 200.0, 100.0);
+        stop.geometry.turn_deg = Finite32::new(40.0).expect("finite");
+        stop.geometry.tilt_deg = Finite32::new(20.0).expect("finite");
+        let mut to = at(1000.0, 500.0, 100.0, 100.0);
+        to.geometry.turn_deg = Finite32::new(90.0).expect("finite");
+        let track = Track::Pair {
+            from,
+            to,
+            timing: linear(0.0),
+            source: None,
+            via: super::Stops::new([stop]),
+        };
+        let mid = track.sample(500.0, CANVAS).expect("drawn").geometry;
+        assert!((mid.center.x.get() - 400.0).abs() < 1e-3, "{mid:?}");
+        assert!((mid.center.y.get() - 300.0).abs() < 1e-3, "{mid:?}");
+        assert!((mid.size.width.get() - 200.0).abs() < 1e-3, "{mid:?}");
+        assert!((mid.turn_deg.get() - 40.0).abs() < 1e-2, "{mid:?}");
+        assert!((mid.tilt_deg.get() - 20.0).abs() < 1e-2, "{mid:?}");
+        let end = track.sample(1000.0, CANVAS).expect("drawn").geometry;
+        assert_eq!(end, to.geometry);
+    }
+
+    /// ADR-0166 decision 3: an orbit keeps the camera's distance from its target and
+    /// meets both ends; a straight move cuts across, nearer.
+    #[test]
+    fn an_orbit_keeps_its_distance_and_a_line_cuts_across() {
+        use jstream_protocol::Canvas;
+        let a = SceneCamera::framing(Canvas::DEFAULT);
+        let d = a.position.z.get() - a.target.z.get();
+        let b = SceneCamera {
+            position: Vec3 {
+                x: Finite32::new(a.target.x.get() + d).expect("finite"),
+                y: a.target.y,
+                z: a.target.z,
+            },
+            ..a
+        };
+        let dist = |c: &SceneCamera| {
+            let v = [
+                c.position.x.get() - c.target.x.get(),
+                c.position.y.get() - c.target.y.get(),
+                c.position.z.get() - c.target.z.get(),
+            ];
+            (v[0] * v[0] + v[1] * v[1] + v[2] * v[2]).sqrt()
+        };
+        let none = super::Via::NONE;
+        for k in [0.25, 0.5, 0.75] {
+            let orbit = super::move_camera(&a, &none, &b, k, true);
+            assert!((dist(&orbit) - d).abs() < 0.05, "{k}: {orbit:?}");
+        }
+        assert_eq!(
+            super::move_camera(&a, &none, &b, 0.0, true).position,
+            a.position
+        );
+        let end = super::move_camera(&a, &none, &b, 1.0, true).position;
+        assert!((end.x.get() - b.position.x.get()).abs() < 1e-2);
+        assert!((end.z.get() - b.position.z.get()).abs() < 1e-2);
+        let line = super::move_camera(&a, &none, &b, 0.5, false);
+        assert!(dist(&line) < d * 0.75);
+        assert_eq!(line, super::lerp_camera(&a, &b, 0.5));
+        // Swinging round to the back, between opposite directions: it turns about the
+        // picture's up, level with its target and at its distance, with no jump at
+        // halfway.
+        let back = SceneCamera {
+            position: Vec3 {
+                z: Finite32::new(a.target.z.get() - d).expect("finite"),
+                ..a.position
+            },
+            ..a
+        };
+        let offset = |c: &SceneCamera| {
+            [
+                c.position.x.get() - c.target.x.get(),
+                c.position.y.get() - c.target.y.get(),
+                c.position.z.get() - c.target.z.get(),
+            ]
+        };
+        let mut last = offset(&a);
+        for step in 1..=100 {
+            let k = step as f32 / 100.0;
+            let orbit = super::move_camera(&a, &none, &back, k, true);
+            let now = offset(&orbit);
+            assert!((dist(&orbit) - d).abs() < 0.05, "{k}: {orbit:?}");
+            assert!(now[1].abs() < 0.05, "{k}: stays level, {now:?}");
+            let jump = ((now[0] - last[0]).powi(2) + (now[2] - last[2]).powi(2)).sqrt();
+            // One hundredth of a half turn is about 0.0314 of the distance.
+            assert!(
+                jump < d * 0.04,
+                "{k}: jumps {jump} from {last:?} to {now:?}"
+            );
+            last = now;
+        }
+        let half = offset(&super::move_camera(&a, &none, &back, 0.5, true));
+        assert!(
+            (half[0].abs() - d).abs() < 0.05,
+            "halfway beside it: {half:?}"
+        );
+    }
+
     /// ADR-0166 decision 1: a pair that turns and tilts at once moves as one rotation,
     /// so halfway it is the direct turn's halfway, not each angle's.
     #[test]
@@ -822,6 +1354,7 @@ mod tests {
             to,
             timing: linear(0.0),
             source: None,
+            via: super::Stops::NONE,
         };
         let half = track.sample(500.0, CANVAS).expect("drawn").geometry;
         // Per axis it would be (0, 45, 45); one rotation takes another triple. Both
@@ -841,6 +1374,7 @@ mod tests {
             to: turned,
             timing: linear(0.0),
             source: None,
+            via: super::Stops::NONE,
         };
         let half = one.sample(500.0, CANVAS).expect("drawn").geometry;
         assert_eq!(half.turn_deg.get(), 30.0);
@@ -863,6 +1397,7 @@ mod tests {
             to,
             timing: linear(0.0),
             source: None,
+            via: super::Stops::NONE,
         };
         for ms in [250.0, 500.0, 520.0, 521.0, 750.0] {
             let g = track.sample(ms, CANVAS).expect("drawn").geometry;
@@ -889,6 +1424,7 @@ mod tests {
                 easing: Easing::Spring,
             },
             source: Some([32, 32]),
+            via: super::Stops::NONE,
         };
         // At p = 0.25 the spring is 1.206: past the end.
         let over = track.sample(250.0, CANVAS).expect("drawn");

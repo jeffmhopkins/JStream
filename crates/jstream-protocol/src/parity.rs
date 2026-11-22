@@ -1792,6 +1792,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 action: Action::SceneSwitch {
                     scene_id: SceneId::new("ghost"),
                     preset_id: None,
+                    via: Vec::new(),
                 },
             }),
             ProtocolError::NotFound {
@@ -1879,6 +1880,7 @@ pub fn rejected() -> Vec<(Batch, ProtocolError)> {
                 action: Action::SceneSwitch {
                     scene_id: SceneId::new("ghost"),
                     preset_id: None,
+                    via: Vec::new(),
                 },
             }),
             ProtocolError::NotFound {
@@ -2154,6 +2156,7 @@ fn switch_to_a() -> Action {
     Action::SceneSwitch {
         scene_id: SceneId::new("a"),
         preset_id: None,
+        via: Vec::new(),
     }
 }
 

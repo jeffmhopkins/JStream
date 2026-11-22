@@ -536,6 +536,7 @@ fn actions_are_checked_and_refused_for_unknown_cameras() {
             &Action::SceneSwitch {
                 scene_id: SceneId::new("a"),
                 preset_id: None,
+                via: Vec::new()
             }
         )
         .is_none()
