@@ -6,6 +6,11 @@
 //! of the canvas size, which the scene then places under every item. The pipeline is
 //! built the first time a backdrop draws, so a compositor that never draws one pays
 //! nothing for it.
+//!
+//! The nebulae and the galaxy band are dozens of noise octaves a direction, and depend
+//! only on the direction and the sky's seed. So they are baked once per seed into two
+//! cube maps ([`Bake`], ADR-0174), and a frame's sky reads them: a turning camera, a
+//! warp and a change of colour or amount all cost a few texture reads a pixel.
 
 use crate::error::RenderError;
 use crate::gpu::Gpu;
@@ -96,12 +101,251 @@ impl SkyDraw<'_> {
     }
 }
 
-/// The backdrop's pipeline, its sampler and the stand-in picture of a sky without one.
+/// The backdrop's pipeline, its samplers, the stand-in picture of a sky without one,
+/// and the deep skies baked for the seeds drawn lately.
 pub(crate) struct SkyRuntime {
     pipeline: wgpu::RenderPipeline,
     layout: wgpu::BindGroupLayout,
     sampler: wgpu::Sampler,
     blank: wgpu::TextureView,
+    /// Reads a bake: linear, so a view finer than its texels shows no texel.
+    deep_sampler: wgpu::Sampler,
+    /// The stand-in bake of a sky with no nebula and no band: one black texel a face.
+    blank_deep: wgpu::TextureView,
+    /// The bake's pipeline, built the first time a sky with nebulae or a band draws.
+    baker: Option<Baker>,
+    /// The seeds' bakes, most recently drawn first, at most [`MAX_BAKES`].
+    bakes: Vec<Bake>,
+    /// How many skies were drawn: the clock a bake's last use is told by.
+    draws: u64,
+    /// How many bakes were made.
+    #[cfg(test)]
+    pub(crate) baked: u64,
+}
+
+/// A bake's face is this many texels square. A face spans a right angle, so a bake has
+/// about 510 texels a radian at a face's centre and up to twice that toward its edges,
+/// across noise whose finest octave is 5 to 7 texels wide: a 1080-line canvas at a 45
+/// degree view, about 1300 pixels a radian, enlarges it under three times.
+const BAKE_FACE: u32 = 1024;
+
+/// The most seeds whose bakes are kept: a scene has one, a transition between two skies
+/// draws two, and a scene nested in another can add its own.
+const MAX_BAKES: usize = 4;
+
+/// A bake no sky has read for this many draws is let go: about half a minute of one
+/// scene's frames.
+const BAKE_IDLE_DRAWS: u64 = 900;
+
+/// The bake's formats: the nebulae's four weights, and the band's light.
+const NEBULA_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::Rgba16Float;
+const GALAXY_FORMAT: wgpu::TextureFormat = wgpu::TextureFormat::R16Float;
+
+/// The pipeline that bakes a deep sky (`sky_deep.wgsl`).
+struct Baker {
+    pipeline: wgpu::RenderPipeline,
+    layout: wgpu::BindGroupLayout,
+}
+
+/// One seed's nebulae and galaxy band (ADR-0174), as cube maps of [`BAKE_FACE`] read
+/// along a direction of the sky. They hold shapes only: the nebulae's colours and
+/// amount, the band's brightness and the light's intensity scale what is read, so one
+/// bake serves every setting of its seed.
+struct Bake {
+    seed: u32,
+    /// The nebulae: the light of each of the two colours, then of each one's sum of
+    /// channels.
+    nebula: wgpu::TextureView,
+    /// The band's light, in red.
+    galaxy: wgpu::TextureView,
+    /// [`SkyRuntime::draws`] when a sky last read it.
+    used: u64,
+}
+
+/// Each face of a cube map, in layer order (+x, -x, +y, -y, +z, -z): the direction a
+/// step right across it adds, the one a step down adds, and the one at its centre, as
+/// a cube map's lookup places them.
+const FACES: [[[f32; 3]; 3]; 6] = [
+    [[0.0, 0.0, -1.0], [0.0, -1.0, 0.0], [1.0, 0.0, 0.0]],
+    [[0.0, 0.0, 1.0], [0.0, -1.0, 0.0], [-1.0, 0.0, 0.0]],
+    [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0], [0.0, 1.0, 0.0]],
+    [[1.0, 0.0, 0.0], [0.0, 0.0, -1.0], [0.0, -1.0, 0.0]],
+    [[1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, 1.0]],
+    [[-1.0, 0.0, 0.0], [0.0, -1.0, 0.0], [0.0, 0.0, -1.0]],
+];
+
+impl Baker {
+    fn new(gpu: &Gpu) -> Self {
+        let device = &gpu.device;
+        let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("jstream-render-sky-bake"),
+            source: wgpu::ShaderSource::Wgsl(
+                concat!(
+                    include_str!("sky_common.wgsl"),
+                    include_str!("sky_deep.wgsl")
+                )
+                .into(),
+            ),
+        });
+        let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("jstream-render-sky-bake"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
+        });
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("jstream-render-sky-bake"),
+            bind_group_layouts: &[Some(&layout)],
+            immediate_size: 0,
+        });
+        let target = |format| {
+            Some(wgpu::ColorTargetState {
+                format,
+                blend: None,
+                write_mask: wgpu::ColorWrites::ALL,
+            })
+        };
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("jstream-render-sky-bake"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &module,
+                entry_point: Some("vs"),
+                compilation_options: Default::default(),
+                buffers: &[],
+            },
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                cull_mode: None,
+                ..Default::default()
+            },
+            depth_stencil: None,
+            multisample: Default::default(),
+            fragment: Some(wgpu::FragmentState {
+                module: &module,
+                entry_point: Some("fs"),
+                compilation_options: Default::default(),
+                targets: &[target(NEBULA_FORMAT), target(GALAXY_FORMAT)],
+            }),
+            multiview_mask: None,
+            cache: None,
+        });
+        Self { pipeline, layout }
+    }
+
+    /// Bakes `seed`'s deep sky: every face of both cube maps, one pass a face.
+    fn bake(&self, gpu: &Gpu, seed: u32, used: u64) -> Bake {
+        let device = &gpu.device;
+        let cube = |label, format| {
+            device.create_texture(&wgpu::TextureDescriptor {
+                label: Some(label),
+                size: wgpu::Extent3d {
+                    width: BAKE_FACE,
+                    height: BAKE_FACE,
+                    depth_or_array_layers: 6,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT
+                    | wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+        };
+        let nebula = cube("jstream-render-sky-nebula", NEBULA_FORMAT);
+        let galaxy = cube("jstream-render-sky-galaxy", GALAXY_FORMAT);
+        let face_of = |texture: &wgpu::Texture, face: u32| {
+            texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::D2),
+                base_array_layer: face,
+                array_layer_count: Some(1),
+                ..Default::default()
+            })
+        };
+        fn attachment(view: &wgpu::TextureView) -> Option<wgpu::RenderPassColorAttachment<'_>> {
+            Some(wgpu::RenderPassColorAttachment {
+                view,
+                depth_slice: None,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    // The triangle writes every texel.
+                    load: wgpu::LoadOp::Clear(wgpu::Color::TRANSPARENT),
+                    store: wgpu::StoreOp::Store,
+                },
+            })
+        }
+        let lock = gpu.submit.clone();
+        let submitting = lock.lock();
+        let mut encoder = device.create_command_encoder(&wgpu::CommandEncoderDescriptor {
+            label: Some("jstream-render-sky-bake"),
+        });
+        for (face, [right, down, forward]) in (0u32..).zip(FACES) {
+            let values = [
+                right[0],
+                right[1],
+                right[2],
+                2.0 / BAKE_FACE as f32,
+                down[0],
+                down[1],
+                down[2],
+                0.0,
+                forward[0],
+                forward[1],
+                forward[2],
+                f32::from_bits(seed),
+            ];
+            let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("jstream-render-sky-bake"),
+                contents: &values
+                    .iter()
+                    .flat_map(|value| value.to_le_bytes())
+                    .collect::<Vec<u8>>(),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+            let bind = device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("jstream-render-sky-bake"),
+                layout: &self.layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: uniform.as_entire_binding(),
+                }],
+            });
+            let (nebula_face, galaxy_face) = (face_of(&nebula, face), face_of(&galaxy, face));
+            let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("jstream-render-sky-bake"),
+                color_attachments: &[attachment(&nebula_face), attachment(&galaxy_face)],
+                depth_stencil_attachment: None,
+                timestamp_writes: None,
+                occlusion_query_set: None,
+                multiview_mask: None,
+            });
+            pass.set_pipeline(&self.pipeline);
+            pass.set_bind_group(0, &bind, &[]);
+            pass.draw(0..3, 0..1);
+        }
+        gpu.queue.submit([encoder.finish()]);
+        drop(submitting);
+        let whole = |texture: &wgpu::Texture| {
+            texture.create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::Cube),
+                ..Default::default()
+            })
+        };
+        Bake {
+            seed,
+            nebula: whole(&nebula),
+            galaxy: whole(&galaxy),
+            used,
+        }
+    }
 }
 
 impl SkyRuntime {
@@ -110,9 +354,24 @@ impl SkyRuntime {
         let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("jstream-render-sky"),
             source: wgpu::ShaderSource::Wgsl(
-                concat!(include_str!("filter/colour.wgsl"), include_str!("sky.wgsl")).into(),
+                concat!(
+                    include_str!("filter/colour.wgsl"),
+                    include_str!("sky_common.wgsl"),
+                    include_str!("sky.wgsl")
+                )
+                .into(),
             ),
         });
+        let cube = |binding| wgpu::BindGroupLayoutEntry {
+            binding,
+            visibility: wgpu::ShaderStages::FRAGMENT,
+            ty: wgpu::BindingType::Texture {
+                sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                view_dimension: wgpu::TextureViewDimension::Cube,
+                multisampled: false,
+            },
+            count: None,
+        };
         let layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
             label: Some("jstream-render-sky"),
             entries: &[
@@ -138,6 +397,14 @@ impl SkyRuntime {
                 },
                 wgpu::BindGroupLayoutEntry {
                     binding: 2,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
+                cube(3),
+                cube(4),
+                wgpu::BindGroupLayoutEntry {
+                    binding: 5,
                     visibility: wgpu::ShaderStages::FRAGMENT,
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
@@ -204,17 +471,73 @@ impl SkyRuntime {
                 view_formats: &[],
             })
             .create_view(&wgpu::TextureViewDescriptor::default());
+        let deep_sampler = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("jstream-render-sky-deep"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            ..Default::default()
+        });
+        let blank_deep = device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("jstream-render-sky-deep-blank"),
+                size: wgpu::Extent3d {
+                    width: 1,
+                    height: 1,
+                    depth_or_array_layers: 6,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: wgpu::TextureFormat::Rgba8Unorm,
+                usage: wgpu::TextureUsages::TEXTURE_BINDING,
+                view_formats: &[],
+            })
+            .create_view(&wgpu::TextureViewDescriptor {
+                dimension: Some(wgpu::TextureViewDimension::Cube),
+                ..Default::default()
+            });
         Self {
             pipeline,
             layout,
             sampler,
             blank,
+            deep_sampler,
+            blank_deep,
+            baker: None,
+            bakes: Vec::new(),
+            draws: 0,
+            #[cfg(test)]
+            baked: 0,
         }
+    }
+
+    /// The place in [`Self::bakes`] of `seed`'s bake, made now if no kept one is its:
+    /// the first, as the one drawn last. Bakes no sky has read for
+    /// [`BAKE_IDLE_DRAWS`] are let go, and so is the one read longest ago past
+    /// [`MAX_BAKES`].
+    fn bake(&mut self, gpu: &Gpu, seed: u32) {
+        let now = self.draws;
+        self.bakes
+            .retain(|bake| bake.seed == seed || now - bake.used <= BAKE_IDLE_DRAWS);
+        let bake = match self.bakes.iter().position(|bake| bake.seed == seed) {
+            Some(at) => self.bakes.remove(at),
+            None => {
+                #[cfg(test)]
+                {
+                    self.baked += 1;
+                }
+                self.baker
+                    .get_or_insert_with(|| Baker::new(gpu))
+                    .bake(gpu, seed, now)
+            }
+        };
+        self.bakes.truncate(MAX_BAKES - 1);
+        self.bakes.insert(0, Bake { used: now, ..bake });
     }
 
     /// Draws `sky` into `target`, a layer of this compositor, replacing every texel.
     pub(crate) fn draw(
-        &self,
+        &mut self,
         gpu: &Gpu,
         owner: &Owner,
         sky: &SkyDraw<'_>,
@@ -242,6 +565,16 @@ impl SkyRuntime {
             .image
             .filter(|image| image.owner().is(owner));
         let values = sky_values(sky, image, &camera);
+        self.draws += 1;
+        // Only a sky that shows nebulae or a band needs its seed's bake.
+        let deep = sky.deep.nebula > 0.0 || sky.deep.galaxy > 0.0;
+        if deep {
+            self.bake(gpu, sky.deep.seed);
+        }
+        let (nebula, galaxy) = match self.bakes.first().filter(|_| deep) {
+            Some(bake) => (&bake.nebula, &bake.galaxy),
+            None => (&self.blank_deep, &self.blank_deep),
+        };
         let device = &gpu.device;
         let uniform = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
             label: Some("jstream-render-sky"),
@@ -273,6 +606,18 @@ impl SkyRuntime {
                 wgpu::BindGroupEntry {
                     binding: 2,
                     resource: wgpu::BindingResource::Sampler(&self.sampler),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 3,
+                    resource: wgpu::BindingResource::TextureView(nebula),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 4,
+                    resource: wgpu::BindingResource::TextureView(galaxy),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 5,
+                    resource: wgpu::BindingResource::Sampler(&self.deep_sampler),
                 },
             ],
         });
