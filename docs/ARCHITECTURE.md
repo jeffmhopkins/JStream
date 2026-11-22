@@ -1292,7 +1292,11 @@ interpolates the camera, and what a switch takes from the screen mid-Fade or
 mid-stinger leaves through the camera each item had. A camera with a depth of field
 ([ADR-0108](adr/0108-camera-depth-of-field.md)) blurs each fragment of a flat item by its
 distance from the focus plane in the same draw: a disc of taps from the item's mips, its
-edge softened to match, with no extra pass or target. A 3D model's layer isn't blurred.
+edge softened to match, with no extra pass or target. A 3D model is blurred by its own
+depth as its layer is drawn ([ADR-0165](adr/0165-depth-of-field-on-models.md)): its colour
+and view depth are drawn first, then five fullscreen passes gather each pixel's
+neighbours whose circle of confusion reaches it, so a soft near part spreads over a
+sharp far one and the silhouette softens outward.
 A 3D model ([ADR-0107](adr/0107-3d-models.md)) is uploaded once per version and drawn
 per placement into a canvas-sized layer, through the scene's camera or the item's own
 viewer, with its own reversed `Depth32Float` depth test and the metallic-roughness model
