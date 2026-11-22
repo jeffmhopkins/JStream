@@ -31,10 +31,12 @@ Contents ([Design](#design) explains the choices):
   session.
 - **Header** (`header.rs`): `Header`, the bar along the top: the brand, the File menu
   (headed by the open project's name: New project…, Open project…, Save project as…
-  and Open recent, Settings…, Video settings…, Plugins…, Connection details…, a small
+  and Open recent, Settings…, Video settings… and Plugins…, which open Settings on
+  General, Video and Plugins, Connection details…, a small
   dialog of the engine's URL, protocol, client ID and revision, and Disconnect), the Edit menu (Undo, Redo), the View menu
   (show or hide each panel, and open the program or multiview projector), the Layout menu (saved layouts) and the
-  Help menu (the project's pages, Check for updates, and About), the stats
+  Help menu (the project's pages, Check for updates, on in the desktop app only, and
+  About), the stats
   readout (the program's frame rate, the frames dropped since the page connected and the
   engine's CPU use), Studio mode (kept in the browser's storage), Record, and Go
   Live / End stream. `RecordButton`, `Dropped` and `Load` are its logic, tested natively.
@@ -53,10 +55,12 @@ Contents ([Design](#design) explains the choices):
   third-party codec, `codec_downloads::InstalledCodecs`), and `Link`, the
   project's pages on GitHub the Help menu and the dialog link to, all under the
   workspace's `repository`. Tested natively.
-- **Video settings** (`video_settings.rs`): File › Video settings… sets the
-  collection's base resolution (the canvas, from presets or typed) and its base frame
+- **Video settings** (`video_settings.rs`): `VideoPage`, the Settings dialog's Video
+  page (File › Video settings… opens it), sets the collection's base resolution (the canvas, from presets or typed) and its base frame
   rate, 30 or 60 fps, as OBS's Video settings do, and its blending space, Browser-style
-  (sRGB) or Linear light (ADR-0126). Apply sends only what changed, as one batch of
+  (sRGB) or Linear light (ADR-0126). Its `VideoDraft`, kept by the Settings window
+  across its pages and following the collection until it is edited (`differs` from the
+  settings it was read from), is saved by the window's Save, which sends only what changed, as one batch of
   `canvas.set_size`, `canvas.set_frame_rate` and `canvas.set_blending`, so it is one
   undo step. A new size also rescales every scene unless Scale existing scenes to fit
   is unchecked: `rescale` adds the placement and camera edits that keep each
@@ -253,9 +257,12 @@ Contents ([Design](#design) explains the choices):
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
 - **Settings** (`settings.rs`): `Settings`, the application settings dialog File ›
-  Settings… and Plugins… open, with its pages (`SettingsPage`: General, 3D rendering,
-  Plugins, Audio plugins, Devices)
+  Settings…, Video settings… and Plugins… open, with its pages (`SettingsPage`: General,
+  Video, 3D rendering, Audio, Plugins, Devices)
   listed on the left, and `SettingsDialog`, the shell's context that opens it on a page.
+  The window keeps the Video page's draft, and its footer reads Cancel and Save while
+  Video is shown or holds a change, and Close otherwise: every other page applies each
+  change at once.
 - **Warm scenes** (`warm.rs`, ADR-0117 §7): `WarmScenesSetting`, the General page's
   "Keep ready" choice, under Performance, from "Only the Preview scene" to `MAX_WARM_SCENES` scenes. It
   reads the budget with `studio.get` each time the page opens and sets it with
@@ -276,14 +283,15 @@ Contents ([Design](#design) explains the choices):
   switch changed, putting back only that switch with an error if the engine refuses; an
   engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
   `read`, `set` and each `Switch`'s change are tested natively.
-- **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
-  plugins page: the CLAP scan's folders, the effects found and the files that failed
+- **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Audio plugins section of
+  the Settings dialog's Audio page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with
-  its `summary` and `install_folder`, tested natively. Add filter (`panels/filters.rs`)
+  its `summary`, `install_folder` and `sentence` (the engine's reason as a sentence),
+  tested natively. Add filter (`panels/filters.rs`)
   links to it from an audio chain's empty Plugins group.
-- **Pairing** (`pairing.rs`): `Pairing`, the pairing panel on the Settings dialog's
-  Devices page, which says no device can pair unless the server pairs devices (start pairing and show the code, list and
-  revoke devices), `NetworkAccessSetting`, the desktop app's "Allow devices on my
+- **Pairing** (`pairing.rs`): `Pairing`, the Paired devices section on the Settings
+  dialog's Devices page, which says no device can pair unless the server pairs devices
+  (list and revoke devices, and Pair a device…, whose `PairDialog` shows the code), `NetworkAccessSetting`, the desktop app's "Allow devices on my
   network" switch above it, and the calls behind them, tested natively against `MockEngine` and a
   stub that answers them as the server does.
 - **JTunnel** (`jtunnel.rs`): `JtunnelSettingView`, the desktop app's "Receive from
@@ -1053,8 +1061,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   or on a press anywhere outside them. The Help menu's entries are links to the
   project's pages on GitHub, opened in a new tab (the desktop app hands them to the
   system browser), then Check for updates and About JStream. Check for updates is
-  [`updates.rs`](src/updates.rs), File › Settings… and Plugins… open
-  [`settings.rs`](src/settings.rs), and File › Video settings… is
+  [`updates.rs`](src/updates.rs), on only in the desktop app (in a browser it is off,
+  with the tooltip "Available in the desktop app"), File › Settings…, Video settings…
+  and Plugins… open [`settings.rs`](src/settings.rs), whose Video page is
   [`video_settings.rs`](src/video_settings.rs), all described under
   [Purpose](#purpose). The About dialog's version is the workspace's
   (`jstream-ui` takes `version.workspace`, as the apps do), its build the `GITHUB_SHA`
@@ -1181,9 +1190,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   The pairing panel ([ADR-0044](../../docs/adr/0044-pairing-remote-browsers.md))
   calls `device.list` when it opens and shows its controls only if that is served: a
   session with no server in front answers `unsupported`, and the Devices page then says
-  no device can pair with this session. "Pair a device"
-  calls `pairing.start` and shows the code, large, with a countdown from its
-  `expires_in_secs` and how a browser uses it (`/pair` on the host's HTTPS address).
+  no device can pair with this session, in a one-line callout. Its Paired devices
+  section lists the devices, and "Pair a device…" opens a small dialog of its own,
+  calls `pairing.start` and shows the code in 28 px mono on an inset card, with a
+  countdown from its `expires_in_secs`, and how a browser uses it as three numbered
+  steps (`/pair` on the host's HTTPS address), with New code and Done.
   When the answer carries `network` (a server that also listens on the local network,
   [ADR-0130](../../docs/adr/0130-browsers-keep-no-certificate-pin-v2.md)), the panel lists
   the pairing page on each of its addresses (`<url>/pair`) and the certificate's
@@ -1191,7 +1202,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   browser's certificate warning only if the fingerprint matches. The
   code shows until the countdown ends or a device pairs: every 3 seconds the panel
   re-reads `device.list`, and a device ID that wasn't listed when the code was drawn
-  means the code was used. A newer code replaces the shown one. Each device shows its
+  means the code was used; the dialog then says "A device paired.", or that the code
+  expired; a refused `pairing.start` gives its reason under a card that says to try
+  New code again. A newer code replaces the shown one, and Done stops the countdown and
+  closes the dialog. Each device shows its
   name and its paired and last-used dates (UTC), with a button that calls
   `device.revoke` and re-reads the list. The code is never logged or stored by the page,
   and `OpenCode`'s `Debug` form hides it.
@@ -1225,14 +1239,15 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   `plugin.grant` with the ticked choices; for a plugin off as `needs_grant` it reads
   "Grant and turn on" and sends `plugin.enable` after it.
 - **Audio plugins** ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md),
-  protocol 0.106). The Settings dialog's Audio plugins page reads `plugin.clap_scan` each
+  protocol 0.106). The Settings dialog's Audio page's Audio plugins section reads `plugin.clap_scan` each
   time it opens. It names the first folder searched as where to put a `.clap` file, lists
   every folder with whether it exists, the effects found and the files that failed with
   the host's reason (paths and names are shown as data), and a summary line. Rescan
   sends `plugin.clap_rescan`, which answers once the scan ends, then re-reads `kind.list`
   (`Studio::relist_kinds`) and the scan. While it runs the button reads "Scanning…" and
   ignores presses, and it keeps the focus, so Escape still closes the dialog. An engine
-  that hosts no CLAP plugins gets its reason and no Rescan. Add filter shows an audio
+  that hosts no CLAP plugins gets its reason, as one sentence in an info callout, and
+  no Rescan. Add filter shows an audio
   chain's Plugins group even with no CLAP kind, unless a search is typed: "No CLAP audio
   plugins found." with a link that opens the page (`SettingsDialog`).
 - **Studio mode** ([ADR-0029](../../docs/adr/0029-transitions.md)).

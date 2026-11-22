@@ -4,12 +4,16 @@
 //!
 //! - **General** holds "Check for updates" (`updates.rs`), "Ask before connecting" for a
 //!   new agent (`agents.rs`) and "Keep ready" with its memory limit (`warm.rs`).
+//! - **Video** is the canvas size, frame rate and blending (`video_settings.rs`), as
+//!   OBS's Settings has Video. It is the one page that is a draft: the footer reads
+//!   Cancel and Save while it is shown or holds a change, since a new canvas or rate is
+//!   heavy, and every other page applies each change at once, with Close.
 //! - **3D rendering** holds one switch per costly 3D effect, for every scene at once
 //!   (`rendering.rs`, ADR-0170 decision 1).
+//! - **Audio** holds the Audio plugins section: where the engine looks for CLAP audio
+//!   effects, what it found and Rescan (`clap_plugins.rs`).
 //! - **Plugins** is the WASM automation plugins' list, install and permissions
 //!   (`plugins.rs`).
-//! - **Audio plugins** is where the engine looks for CLAP audio effects, what it found
-//!   and Rescan (`clap_plugins.rs`).
 //! - **Devices** pairs remote browsers and lists the paired devices (`pairing.rs`),
 //!   when a server in front of the engine pairs them. In the desktop app it starts with
 //!   "Allow devices on my network", then "Receive from JTunnel senders" (`jtunnel.rs`),
@@ -21,11 +25,14 @@
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
+use crate::app::SessionContext;
 use crate::clap_plugins::ClapPlugins;
 use crate::dialog::Modal;
 use crate::pairing::{NetworkAccessSetting, Pairing};
 use crate::plugins::Plugins;
+use crate::store::Studio;
 use crate::updates::LaunchCheckSetting;
+use crate::video_settings::{VideoDraft, VideoPage};
 use leptos::prelude::*;
 
 /// A page of the Settings dialog.
@@ -33,10 +40,12 @@ use leptos::prelude::*;
 pub enum SettingsPage {
     /// Settings that fit no other page: the launch update check.
     General,
+    /// The canvas size, frame rate and blending.
+    Video,
+    /// Audio: the CLAP audio plugins the engine scans for.
+    Audio,
     /// The WASM automation plugins.
     Plugins,
-    /// The CLAP audio plugins the engine scans for.
-    AudioPlugins,
     /// Pairing remote browsers, and the paired devices.
     Devices,
     /// The 3D rendering switches (ADR-0170 decision 1).
@@ -45,11 +54,12 @@ pub enum SettingsPage {
 
 impl SettingsPage {
     /// Every page, in the order the dialog lists them.
-    pub const ALL: [SettingsPage; 5] = [
+    pub const ALL: [SettingsPage; 6] = [
         SettingsPage::General,
+        SettingsPage::Video,
         SettingsPage::Rendering,
+        SettingsPage::Audio,
         SettingsPage::Plugins,
-        SettingsPage::AudioPlugins,
         SettingsPage::Devices,
     ];
 
@@ -57,8 +67,9 @@ impl SettingsPage {
     pub fn title(self) -> &'static str {
         match self {
             SettingsPage::General => "General",
+            SettingsPage::Video => "Video",
+            SettingsPage::Audio => "Audio",
             SettingsPage::Plugins => "Plugins",
-            SettingsPage::AudioPlugins => "Audio plugins",
             SettingsPage::Devices => "Devices",
             SettingsPage::Rendering => "3D rendering",
         }
@@ -68,8 +79,9 @@ impl SettingsPage {
     pub fn key(self) -> &'static str {
         match self {
             SettingsPage::General => "general",
+            SettingsPage::Video => "video",
+            SettingsPage::Audio => "audio",
             SettingsPage::Plugins => "plugins",
-            SettingsPage::AudioPlugins => "audio-plugins",
             SettingsPage::Devices => "devices",
             SettingsPage::Rendering => "rendering",
         }
@@ -136,6 +148,24 @@ pub fn Settings() -> impl IntoView {
 fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
     let close = move || dialog.close();
     let page = move || dialog.0.get().unwrap_or(SettingsPage::General);
+    // The Video page's draft, read as the window opens and kept across pages.
+    let session = use_context::<SessionContext>();
+    let studio = use_context::<Studio>();
+    let video = studio.map(VideoDraft::new);
+    let drafting =
+        move || video.is_some_and(|draft| page() == SettingsPage::Video || draft.dirty());
+    // Disposed with this window, so a save that answers after the window closed (and
+    // perhaps opened again) closes nothing.
+    let alive = StoredValue::new(());
+    let save = move || {
+        if let (Some(draft), Some(session), Some(studio)) = (video, session, studio) {
+            draft.save(session, studio, move || {
+                if alive.try_get_value().is_some() {
+                    dialog.close();
+                }
+            });
+        }
+    };
     let tab_keys = move |event: leptos::ev::KeyboardEvent| {
         let forward = match event.key().as_str() {
             "ArrowDown" => true,
@@ -191,11 +221,19 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                             <crate::agents::AskAgentsSetting />
                             <crate::warm::WarmScenesSetting />
                         }.into_any(),
+                        SettingsPage::Video => video
+                            .map(|draft| view! { <VideoPage draft=draft /> })
+                            .into_any(),
                         SettingsPage::Rendering => view! {
                             <crate::rendering::RenderingSettings />
                         }.into_any(),
+                        SettingsPage::Audio => view! {
+                            <section class="prop-section">
+                                <h4 class="eyebrow">"Audio plugins"</h4>
+                                <ClapPlugins />
+                            </section>
+                        }.into_any(),
                         SettingsPage::Plugins => view! { <Plugins /> }.into_any(),
-                        SettingsPage::AudioPlugins => view! { <ClapPlugins /> }.into_any(),
                         SettingsPage::Devices => view! {
                             <NetworkAccessSetting />
                             <crate::jtunnel::JtunnelSettingView />
@@ -207,7 +245,23 @@ fn SettingsWindow(dialog: SettingsDialog) -> impl IntoView {
                 </div>
             </div>
             <div class="modal-footer">
-                <button type="button" class="secondary" data-primary on:click=move |_| close()>"Close"</button>
+                <Show
+                    when=drafting
+                    fallback=move || view! {
+                        <button type="button" class="secondary" data-primary on:click=move |_| close()>"Close"</button>
+                    }
+                >
+                    <button type="button" on:click=move |_| close()>"Cancel"</button>
+                    <button
+                        type="button"
+                        class="primary"
+                        data-primary
+                        prop:disabled=move || video.is_some_and(|d| d.busy.get())
+                        on:click=move |_| save()
+                    >
+                        "Save"
+                    </button>
+                </Show>
             </div>
         </Modal>
     }
@@ -230,12 +284,13 @@ mod tests {
 
     #[test]
     fn the_pages_step_in_order_and_wrap() {
-        assert_eq!(SettingsPage::General.step(true), SettingsPage::Rendering);
-        assert_eq!(SettingsPage::Rendering.step(true), SettingsPage::Plugins);
-        assert_eq!(SettingsPage::Plugins.step(true), SettingsPage::AudioPlugins);
+        assert_eq!(SettingsPage::General.step(true), SettingsPage::Video);
+        assert_eq!(SettingsPage::Video.step(true), SettingsPage::Rendering);
+        assert_eq!(SettingsPage::Rendering.step(true), SettingsPage::Audio);
+        assert_eq!(SettingsPage::Audio.step(true), SettingsPage::Plugins);
         assert_eq!(SettingsPage::Devices.step(true), SettingsPage::General);
         assert_eq!(SettingsPage::General.step(false), SettingsPage::Devices);
-        assert_eq!(SettingsPage::Plugins.step(false), SettingsPage::Rendering);
+        assert_eq!(SettingsPage::Plugins.step(false), SettingsPage::Audio);
     }
 
     #[test]

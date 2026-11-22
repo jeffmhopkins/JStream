@@ -1,4 +1,4 @@
-// The Settings dialog's Audio plugins page (#1212): the folders the engine searches for
+// The Settings dialog's Audio page, its Audio plugins section (#1212): the folders the engine searches for
 // CLAP plugins, what its last scan found and couldn't read, and Rescan; and Add filter's
 // Plugins group on an audio chain with no CLAP plugin, which links to the page. The mock
 // engine hosts no CLAP plugins, so the page's WebSocket is routed: `plugin.clap_scan`,
@@ -98,7 +98,7 @@ test('Add filter says where CLAP plugins go, and a rescan offers one installed s
   await add.getByRole('button', { name: 'Where to install them…' }).click();
 
   const settings = page.getByRole('dialog', { name: 'Settings' });
-  await expect(settings.getByRole('tab', { name: 'Audio plugins' })).toHaveAttribute('aria-selected', 'true');
+  await expect(settings.getByRole('tab', { name: 'Audio', exact: true })).toHaveAttribute('aria-selected', 'true');
   const pane = settings.locator('section.clap-plugins');
   await expect(pane.locator('.clap-hint')).toContainText('C:\\Program Files\\Common Files\\CLAP');
   await expect(pane.locator('.clap-folder .clap-tag')).toHaveText(['searched', "doesn't exist yet"]);
@@ -124,9 +124,10 @@ test('an engine without CLAP says why and offers no rescan', async ({ page, daem
   await page.locator('header.app-header .top-menu[data-menu="file"] > .menu-button').click();
   await page.getByRole('menu', { name: 'File' }).getByRole('menuitem', { name: 'Settings…', exact: true }).click();
   const settings = page.getByRole('dialog', { name: 'Settings' });
-  await settings.getByRole('tab', { name: 'Audio plugins' }).click();
-  await expect(settings.locator('section.clap-plugins')).toContainText(
-    "CLAP audio plugins aren't available here: the mock engine hosts no CLAP plugins",
+  await settings.getByRole('tab', { name: 'Audio', exact: true }).click();
+  // One line: the engine's reason, as a sentence.
+  await expect(settings.locator('section.clap-plugins .clap-unavailable')).toHaveText(
+    'The mock engine hosts no CLAP plugins.',
   );
   await expect(settings.getByRole('button', { name: 'Rescan' })).toHaveCount(0);
 });
