@@ -32,18 +32,18 @@ use jstream_platform::{
     VideoDeviceFormat, VideoDeviceInfo, VideoDevices, VideoEncoder, VideoEncoderConfig,
     VideoSurface,
 };
-use jstream_protocol::{Batch, Edit, OutputId, OutputState, Settings, SourceId, SourceKind};
+use jstream_protocol::{Batch, Edit, Event, OutputId, OutputState, Settings, SourceId, SourceKind};
 use jstream_render::{Compositor, OpenOptions};
 use serde_json::json;
 
 use super::{
-    GPU_OPEN_TIMEOUT, add, batch, block_on, connected, create, one_gpu_test_at_a_time, output_call,
-    output_state, switch_call,
+    GPU_OPEN_TIMEOUT, add, batch, block_on, connected, create, drain, one_gpu_test_at_a_time,
+    output_call, output_state, switch_call,
 };
 use crate::audio_sources::Wanted;
 use crate::runtime::{
-    DrawError, DrawFn, DrawHook, MixFrame, OpenDraw, RenderHub, cpu_draw, gpu_draw, gpu_draw_with,
-    open_capture, parts_from, start_capture,
+    DrawError, DrawFn, DrawHook, EncodeFlights, FRAMES_IN_FLIGHT, MixFrame, OpenDraw, RenderHub,
+    cpu_draw, gpu_draw, gpu_draw_flying, gpu_draw_with, open_capture, parts_from, start_capture,
 };
 use crate::snapshot::CaptureImage;
 use crate::{Engine, InProcessControl, RecordingPublish};
@@ -1804,6 +1804,98 @@ fn a_gpu_encoder_gets_nv12_encode_targets_and_no_readback() {
     assert_eq!(stats.readbacks, 0, "a GPU-only program reads nothing back");
     block_on(control.call(output_call("yt", false))).expect("output.stop");
     assert!(engine.output_stats().is_none());
+}
+
+/// A GPU that has not finished the conversions of two earlier ticks gets no more of
+/// them (ADR-0117 §1): the render thread stages no encode target while it is behind,
+/// counts each tick's frame as dropped for the session, and converts again once the
+/// GPU has caught up. Before, it went on submitting a frame a tick, so on a GPU slower
+/// than the frame rate the queue grew without end and the encoder's frames came later
+/// and later.
+#[test]
+fn a_gpu_that_is_behind_is_handed_no_more_encode_targets() {
+    let _gpu = one_gpu_test_at_a_time();
+    if !have_software_gpu() {
+        return;
+    }
+    if let Err(err) = Nv12Gpu::open_context() {
+        let _ = writeln!(
+            std::io::stderr(),
+            "jstream-core: skipping the frames-in-flight test: {err}"
+        );
+        return;
+    }
+    let clock = FakeClock::new(Timebase::MICROS);
+    let stages = Arc::new(AtomicU64::new(0));
+    let gpu = Arc::new(Nv12Gpu {
+        stages: Arc::clone(&stages),
+    });
+    let mut backends = backends(&clock, gpu, GpuMode::Deliver);
+    backends.codecs = Arc::new(GpuCodecs);
+    let flights = EncodeFlights::default();
+    let engine = Engine::new()
+        .with_output(OutputId::new("yt"))
+        .with_backends(backends)
+        .with_open_timeout(GPU_OPEN_TIMEOUT)
+        .with_draw(gpu_draw_flying(flights.clone()))
+        .with_publish(Box::new(RecordingPublish::new()));
+    let control = connected(&engine);
+    let mut events = control.events();
+    block_on(control.call(output_call("yt", true))).expect("output.start");
+    let staged = || stages.load(Ordering::Relaxed);
+    // Ticks until `done`, or 20 s.
+    let run_until = |done: &dyn Fn() -> bool| {
+        let deadline = Instant::now() + Duration::from_secs(20);
+        while Instant::now() < deadline && !done() {
+            clock.advance(50_000);
+            thread::sleep(Duration::from_millis(20));
+        }
+        done()
+    };
+    let mut encode_drops = || {
+        engine.emit_stats_tick();
+        drain(&mut events)
+            .into_iter()
+            .filter_map(|event| match event {
+                Event::StatsTick { drops, .. } => Some(drops.encode_frames),
+                _ => None,
+            })
+            .next_back()
+            .unwrap_or_default()
+    };
+    assert!(run_until(&|| staged() >= 3), "no encode target was staged");
+    assert_eq!(encode_drops(), 0, "a GPU that keeps up drops nothing");
+
+    // Two ticks' conversions that never come back: the GPU is behind.
+    flights
+        .counter()
+        .fetch_add(FRAMES_IN_FLIGHT, Ordering::AcqRel);
+    // The tick under way when the count rose may still stage its target.
+    thread::sleep(Duration::from_millis(200));
+    let held = staged();
+    for _ in 0..20 {
+        clock.advance(50_000);
+        thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        staged(),
+        held,
+        "a target was staged while the GPU was behind"
+    );
+    assert!(
+        encode_drops() >= 10,
+        "the ticks the session missed were not counted"
+    );
+
+    // The GPU catches up, and the frames flow again.
+    flights
+        .counter()
+        .fetch_sub(FRAMES_IN_FLIGHT, Ordering::AcqRel);
+    assert!(
+        run_until(&|| staged() >= held + 3),
+        "no target was staged once the GPU had caught up"
+    );
+    block_on(control.call(output_call("yt", false))).expect("output.stop");
 }
 
 /// [`gpu_draw`], failing draws `from` to `to` (counted from 1) with a composite error.
