@@ -116,7 +116,8 @@ impl ModelKind {
                     ),
                     "A source whose picture, live and after its own filters, replaces the \
                      base-colour texture: a webcam, a browser page, a shader, a scene. \
-                     Missing or not yet drawing, it reads transparent.",
+                     Not another model, whose picture is drawn only where an item places \
+                     it. Missing or not yet drawing, it reads transparent.",
                 )),
                 live(described(
                     param(

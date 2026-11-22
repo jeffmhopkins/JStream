@@ -40,6 +40,9 @@
 // pushed out by z so the soft edge rasterizes. Past the polygon's edge `w` runs on
 // beyond its corners', so without the cap at z the blur there would outgrow the push.
 
+// ADR-0050's near plane, as `jstream-protocol`'s `NEAR_W`.
+const NEAR_W: f32 = 1.0 / 256.0;
+
 struct VsOut {
     @builtin(position) clip: vec4<f32>,
     @location(0) uv: vec2<f32>,
@@ -71,7 +74,10 @@ fn vs(
     @location(11) dof: vec3<f32>,
 ) -> VsOut {
     var out: VsOut;
-    out.clip = vec4<f32>(pos * w, 0.0, w);
+    // z / w is NEAR_W / w, the reversed depth a model writes (ADR-0107 decision 7), so a
+    // scene pass with a depth target tests a card against the models drawn before it;
+    // without one, depth is unused. Capped at w, so it stays inside the clip volume.
+    out.clip = vec4<f32>(pos * w, min(NEAR_W, w), w);
     out.uv = uv;
     out.opacity = opacity;
     out.mode = mode;
@@ -221,6 +227,33 @@ fn fs_depth(in: VsOut) -> @location(0) vec4<f32> {
         discard;
     }
     return vec4<f32>(1.0 / in.depth_w, 0.0, 0.0, 1.0);
+}
+
+struct DepthOut {
+    @location(0) colour: vec4<f32>,
+    @builtin(frag_depth) depth: f32,
+}
+
+// A model's view depth into a scene pass's depth target (ADR-0107 decision 7): the item's
+// image is the model's view depth, red `1 / w` where the model covers the texel and 0
+// elsewhere, written as NEAR_W / w where it covers, read texel for texel so its edge
+// isn't blended with what it doesn't cover. Its colour isn't written.
+@fragment
+fn fs_write_depth(in: VsOut) -> DepthOut {
+    let size = textureDimensions(tex);
+    let at = clamp(
+        vec2<i32>(in.uv * vec2<f32>(size)),
+        vec2<i32>(0),
+        vec2<i32>(size) - vec2<i32>(1),
+    );
+    let inverse_w = textureLoad(tex, at, 0).r;
+    if inverse_w <= 0.0 {
+        discard;
+    }
+    var out: DepthOut;
+    out.colour = vec4<f32>(0.0);
+    out.depth = min(NEAR_W * inverse_w, 1.0);
+    return out;
 }
 
 // The modes that read the backdrop. It is bound only to their pipelines.

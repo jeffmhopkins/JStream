@@ -1138,6 +1138,7 @@ fn golden_camera_items_draw_far_to_near() {
             crate::Item {
                 camera: Some(seen),
                 depth_run: far_run,
+                depth: None,
                 ..item(&far_image, Placement::Geometry(far), Crop::NONE, 1.0)
             },
         ];

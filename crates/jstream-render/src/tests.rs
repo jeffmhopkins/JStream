@@ -121,6 +121,7 @@ pub(crate) fn item<'a>(
         visible: true,
         camera: None,
         depth_run: 0,
+        depth: None,
     }
 }
 

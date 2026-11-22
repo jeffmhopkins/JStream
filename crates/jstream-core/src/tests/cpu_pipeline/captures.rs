@@ -403,6 +403,7 @@ fn capture_sources_report_their_captures_sizes() {
     let changed = |id: &str, size| Event::SourceSizeChanged {
         source_id: SourceId::new(id),
         size,
+        depth: None,
     };
     let size_events = |events: &mut jstream_control::EventStream| {
         let mut out: Vec<Event> = drain(events)

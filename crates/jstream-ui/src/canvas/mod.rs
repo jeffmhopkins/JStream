@@ -41,7 +41,8 @@ use crop::{CropGesture, Picture};
 use futures_util::StreamExt;
 use group::{GROUP_ROTATE_OFFSET, GroupGesture, GroupKind};
 use jstream_control::protocol::{
-    CameraView, Crop, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneCamera, SceneId,
+    CameraView, Crop, GestureId, HistoryOp, ItemGeometry, ItemId, Placed, Rev, SceneCamera,
+    SceneId, SolidBounds,
 };
 use leptos::ev;
 use leptos::prelude::*;
@@ -172,11 +173,11 @@ pub fn Canvas() -> impl IntoView {
         studio.collection.with(|collection| {
             let collection = collection.as_ref()?;
             let scene = studio.selection.with(|s| s.scene.clone());
-            Some(
+            Some(studio.sizes.with(|sizes| {
                 studio
-                    .sizes
-                    .with(|sizes| Layout::sized(collection, scene.as_ref(), sizes)),
-            )
+                    .depths
+                    .with(|depths| Layout::sized(collection, scene.as_ref(), sizes, depths))
+            }))
         })
     });
     // Crop mode, shared with the item menu; switching scenes leaves it (`Studio`).
@@ -630,7 +631,7 @@ pub fn Canvas() -> impl IntoView {
     // draws on top through the camera.
     let hit = move |current: &Layout, point: Point| -> Option<ItemId> {
         match seen_in(current) {
-            Some(view) => camera::topmost_at(current.boxes(), &view, point).cloned(),
+            Some(view) => camera::topmost_at(current.shapes(), &view, point).cloned(),
             None => transform::topmost_at(current.boxes(), point).cloned(),
         }
     };
@@ -990,9 +991,9 @@ pub fn Canvas() -> impl IntoView {
                     match seen_in(l) {
                         Some(view) => {
                             let shown: Vec<(ItemId, ItemGeometry)> = l
-                                .boxes()
-                                .filter_map(|(id, g)| {
-                                    Some((id.clone(), camera::screen_box(g, &view)?))
+                                .shapes()
+                                .filter_map(|(id, g, solid)| {
+                                    Some((id.clone(), camera::screen_box(g, solid, &view)?))
                                 })
                                 .collect();
                             group::marquee(shown.iter().map(|(id, g)| (id, g)), *from, *to)
@@ -1389,7 +1390,9 @@ pub fn Canvas() -> impl IntoView {
     };
 
     // The boxes to draw: the collection's, with the dragged or pending ones replaced.
-    let shown = move || -> Vec<(ItemId, String, ItemGeometry, bool)> {
+    // A model's bounds go with its box (ADR-0107 decision 8).
+    type Shown = (ItemId, String, ItemGeometry, bool, Option<SolidBounds>);
+    let shown = move || -> Vec<Shown> {
         let pending = preview.get();
         layout.with(|l| {
             l.iter()
@@ -1405,6 +1408,7 @@ pub fn Canvas() -> impl IntoView {
                         item.name.clone(),
                         geometry,
                         item.visible,
+                        item.solid(),
                     ))
                 })
                 .collect()
@@ -1416,7 +1420,7 @@ pub fn Canvas() -> impl IntoView {
         chosen
             .get()
             .iter()
-            .filter_map(|id| all.iter().find(|(i, ..)| i == id).map(|(_, _, g, _)| *g))
+            .filter_map(|id| all.iter().find(|(i, ..)| i == id).map(|(_, _, g, ..)| *g))
             .collect()
     };
 
@@ -1492,7 +1496,7 @@ pub fn Canvas() -> impl IntoView {
         let seen = seen_now();
         shown()
             .into_iter()
-            .filter_map(|(id, name, geometry, visible)| {
+            .filter_map(|(id, name, geometry, visible, solid)| {
                 let is_selected = picked.contains(&id);
                 let (stroke, width) = if is_selected {
                     (selection_colour(picked.len(), crop_mode.get()), "2")
@@ -1505,8 +1509,8 @@ pub fn Canvas() -> impl IntoView {
                 // Through the camera in a 3D scene, so the box lies on its picture.
                 let (points, bounds) = match &seen {
                     Some(view) => (
-                        camera::outline(&geometry, view),
-                        camera::screen_box(&geometry, view).map(|b| Bounds::of(&b))?,
+                        camera::outline(&geometry, solid, view),
+                        camera::screen_box(&geometry, solid, view).map(|b| Bounds::of(&b))?,
                     ),
                     None => (outline(&geometry), Bounds::of(&geometry)),
                 };
@@ -2574,7 +2578,7 @@ mod tests {
                 || matches!(quad.corners[1], Placed::BehindViewer),
             "the top edge is in front: {quad:?}"
         );
-        let bounds = Bounds::of(&camera::screen_box(&g, &seen).expect("its front is drawn"));
+        let bounds = Bounds::of(&camera::screen_box(&g, None, &seen).expect("its front is drawn"));
         let label = name_label(&g, Some(&seen), bounds, 4.0, 14.0);
         assert!(label.rotation.is_none());
         assert!((label.x - (bounds.left + 4.0)).abs() < 1e-3);
@@ -2592,7 +2596,7 @@ mod tests {
             matches!(quad.corners[2], Placed::BehindViewer)
                 || matches!(quad.corners[3], Placed::BehindViewer)
         );
-        let bounds = Bounds::of(&camera::screen_box(&g, &seen).expect("its front is drawn"));
+        let bounds = Bounds::of(&camera::screen_box(&g, None, &seen).expect("its front is drawn"));
         let label = name_label(&g, Some(&seen), bounds, 4.0, 14.0);
         let rot = label.rotation.expect("the top edge is in front");
         assert!((rot.cx - c0.x).abs() < 1e-3 && (rot.cy - c0.y).abs() < 1e-3);
@@ -2615,7 +2619,7 @@ mod tests {
         let through = name_label(
             &g,
             Some(&seen),
-            Bounds::of(&camera::screen_box(&g, &seen).expect("in front")),
+            Bounds::of(&camera::screen_box(&g, None, &seen).expect("in front")),
             4.0,
             14.0,
         );
