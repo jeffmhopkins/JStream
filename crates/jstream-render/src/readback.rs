@@ -412,8 +412,10 @@ impl<T> ReadbackRing<T> {
 
     /// Polls the device without waiting, then hands every frame whose map has finished,
     /// oldest first by the order they were recorded in, to `ready`: its tag and its
-    /// tightly packed pixels in the ring's [`format`](Self::format), which are also left
-    /// in `out`. Maps finish in the order their
+    /// tightly packed pixels in the ring's [`format`](Self::format), in `out`. `ready`
+    /// may swap the frame out of `out` to keep it, leaving another buffer there for the
+    /// next frame to land in, so a call that hands two keeps both. Maps finish in the
+    /// order their
     /// submits complete, which is the order they were recorded in on one queue; should a
     /// later one finish first, it is handed first and the earlier one after it, so a
     /// caller that orders by tag drops that one. A map that failed (a lost device) frees
@@ -429,7 +431,7 @@ impl<T> ReadbackRing<T> {
         &mut self,
         compositor: &Compositor,
         out: &mut Vec<u8>,
-        mut ready: impl FnMut(T, &[u8]),
+        mut ready: impl FnMut(T, &mut Vec<u8>),
     ) -> usize {
         if !self.slots.iter().any(|slot| slot.tag.is_some()) {
             return 0;

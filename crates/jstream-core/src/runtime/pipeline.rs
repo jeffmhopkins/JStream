@@ -245,6 +245,17 @@ pub(crate) struct MixFrame {
     pub(crate) out: Vec<u8>,
     /// Whether `out` holds NV12, set with `ready`.
     pub(crate) out_planar: bool,
+    /// Frames read back on the same tick as `out` but drawn before it, oldest first,
+    /// each with the time it was drawn for and whether it is NV12. A readback's latency
+    /// varies, so two can finish in one tick: each still goes out (ADR-0117 §4), the
+    /// older ones just before the newest.
+    pub(crate) earlier: Vec<(MediaTime, Vec<u8>, bool)>,
+    /// How many of `earlier` [`MixFrame::push_time`] dropped, at the front: those at or
+    /// before the last frame pushed, or all of them on a tick that pushes no fresh frame.
+    earlier_dropped: usize,
+    /// The buffer a readback ring copies its next frame into, swapped with `out` as
+    /// each frame lands, so a steady tick allocates nothing.
+    pub(crate) landing: Vec<u8>,
     /// Whether the mix's `shown` frame is NV12: `out_planar`, moved with it.
     pub(crate) shown_planar: bool,
     /// Set by the draw when `out` holds a frame newly read back, to the time it was
@@ -296,6 +307,21 @@ impl MixFrame {
         if !self.due {
             return None;
         }
+        // The frames read back before the newest go first, each past the last pushed;
+        // without a fresh frame to follow, none goes.
+        let pushed = self.pushed;
+        self.earlier_dropped = match fresh {
+            Some(_) if !broken => self
+                .earlier
+                .iter()
+                .take_while(|(pts, ..)| pushed.is_some_and(|pushed| *pts <= pushed))
+                .count(),
+            _ => self.earlier.len(),
+        };
+        self.unread += self.earlier_dropped as u64;
+        if let Some((pts, ..)) = self.earlier[self.earlier_dropped..].last() {
+            self.pushed = Some(*pts);
+        }
         let at = match fresh {
             Some(pts) if !broken => {
                 self.push_fresh = true;
@@ -314,6 +340,26 @@ impl MixFrame {
         }
         self.pushed = Some(at);
         Some(at)
+    }
+
+    /// The frames read back before the newest that go out this tick, oldest first:
+    /// [`MixFrame::earlier`] past those [`MixFrame::push_time`] dropped.
+    fn earlier_pushed(&self) -> impl Iterator<Item = &(MediaTime, Vec<u8>, bool)> {
+        self.earlier.iter().skip(self.earlier_dropped)
+    }
+
+    /// Lets go of this tick's [`MixFrame::earlier`] frames once pushed: a buffer goes
+    /// back to `landing` while that has none, and otherwise to `free`, so the render
+    /// thread frees nothing (R-RT-003).
+    fn recycle_earlier(&mut self, mut free: impl FnMut(Garbage)) {
+        self.earlier_dropped = 0;
+        for (_, pixels, _) in self.earlier.drain(..) {
+            if self.landing.capacity() == 0 {
+                self.landing = pixels;
+            } else {
+                free(Garbage::Pixels(pixels));
+            }
+        }
     }
 
     /// A frame of `mix` not yet drawn or due.
@@ -336,6 +382,9 @@ impl MixFrame {
             planar: false,
             out: Vec::new(),
             out_planar: false,
+            earlier: Vec::new(),
+            earlier_dropped: 0,
+            landing: Vec::new(),
             shown_planar: false,
             ready: None,
             fresh: None,
@@ -1895,6 +1944,9 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                 compositor.gpu_times(|kind, took| guard.measured(kind, took));
                 guard.end_tick();
             }
+            // The units' GPU times that came back, and this tick's timing when it is
+            // one of the timed ones (`profile.get`'s `gpu_ms`).
+            meter.begin_gpu(&mut compositor);
             // One frame of the cache for every mix of the tick, so the uploads and
             // nested-scene layers they share are kept for all of them. A mix not due on
             // this tick claims its layers without drawing, so they aren't retired and
@@ -1974,14 +2026,18 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                     }
                     // Read back without waiting for the GPU (ADR-0117 §4): what has mapped
                     // is collected first, freeing its buffer.
-                    let mut handed: u64 = 0;
                     if frame.readback {
                         let ring = readbacks.ring(frame);
                         let planar = ring.format() == ReadbackFormat::Nv12;
-                        ring.collect(&compositor, &mut frame.out, |pts, _| {
-                            frame.ready = Some(pts);
+                        // Each frame that lands goes to `out`, and the one it replaces to
+                        // `earlier`, so a tick that collects two keeps both.
+                        ring.collect(&compositor, &mut frame.landing, |pts, landed| {
+                            if let Some(before) = frame.ready.replace(pts) {
+                                let pixels = std::mem::take(&mut frame.out);
+                                frame.earlier.push((before, pixels, frame.out_planar));
+                            }
+                            std::mem::swap(&mut frame.out, landed);
                             frame.out_planar = planar;
-                            handed += 1;
                         });
                         // Every buffer still on its way: the GPU is behind. A mix only read
                         // back skips its composite, so the queue doesn't grow, and the tick
@@ -1993,9 +2049,7 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                             if let Some(why) = compositor.lost() {
                                 return Err(DrawError::Lost(why));
                             }
-                            // This tick's collected frames, but the newest, are counted
-                            // here too, as below.
-                            frame.unread += 1 + handed.saturating_sub(1);
+                            frame.unread += 1;
                             frame.awaiting = true;
                             snapshot::claim_layers(
                                 &mut compositor,
@@ -2032,10 +2086,15 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                             // Pushes wait for what is on its way rather than repeat.
                             frame.awaiting = ring.pending() > 0;
                             let planar = ring.format() == ReadbackFormat::Nv12;
-                            ring.collect(&compositor, &mut frame.out, |pts, _| {
-                                frame.ready = Some(pts);
+                            // Each frame that lands goes to `out`, and the one it replaces to
+                            // `earlier`, so a tick that collects two keeps both.
+                            ring.collect(&compositor, &mut frame.landing, |pts, landed| {
+                                if let Some(before) = frame.ready.replace(pts) {
+                                    let pixels = std::mem::take(&mut frame.out);
+                                    frame.earlier.push((before, pixels, frame.out_planar));
+                                }
+                                std::mem::swap(&mut frame.out, landed);
                                 frame.out_planar = planar;
-                                handed += 1;
                             });
                         }
                         let submitted = match &frame.nv12 {
@@ -2047,12 +2106,11 @@ fn open_gpu_draw(hook: Option<DrawHook>, flights: EncodeFlights) -> OpenDraw {
                         meter.phase_since(Phase::Finish, started);
                         submitted
                     });
-                    // Only the newest frame collected this tick goes out; the rest are
-                    // counted.
-                    frame.unread += handed.saturating_sub(1);
                     drawn.map_err(|err| draw_error(&compositor, &err))?;
                 }
             }
+            meter.end_gpu(&mut compositor);
+            // After the tick's last submit, so the count comes down once all of it ran.
             if converted {
                 flights.launch(compositor.queue());
             }
@@ -3589,7 +3647,12 @@ impl Frames {
             let held = self.holds(&self.mixes[at], self.mixes[at].size);
             if self.targets[at].is_empty() && !held {
                 free(Garbage::Inputs(self.targets.swap_remove(at)));
-                free(Garbage::Pixels(self.mixes.swap_remove(at).out));
+                let mut mix = self.mixes.swap_remove(at);
+                mix.recycle_earlier(&mut free);
+                free(Garbage::Pixels(mix.out));
+                if mix.landing.capacity() > 0 {
+                    free(Garbage::Pixels(mix.landing));
+                }
                 free(Garbage::Pixels(self.shown.swap_remove(at)));
                 // `shown` is a clone of one of the ring's targets.
                 let MixEncode { ring, shown, .. } = self.encode.swap_remove(at);
@@ -4234,7 +4297,15 @@ fn render_loop(job: RenderJob) {
                                 push_gpu(input, target, due)
                             }
                             (input, false, _) if !shown.is_empty() => match frame.push_at {
-                                Some(pts) => input.push(frame.size, pts, shown, frame.shown_planar),
+                                // An encoder takes every frame read back; a picture stream
+                                // only the newest.
+                                Some(pts) => {
+                                    (!matches!(input, TapInput::Session(_))
+                                        || frame.earlier_pushed().all(|(at, pixels, planar)| {
+                                            input.push(frame.size, *at, pixels, *planar)
+                                        }))
+                                        && input.push(frame.size, pts, shown, frame.shown_planar)
+                                }
                                 None => true,
                             },
                             _ => true,
@@ -4243,6 +4314,9 @@ fn render_loop(job: RenderJob) {
                     |tap| collector.free(tap.input.into_garbage()),
                 );
             }
+        }
+        for frame in &mut frames.mixes {
+            frame.recycle_earlier(|garbage| collector.free(garbage));
         }
         // A camera whose output is stopping, or whose thread has ended, goes to the
         // collector.
@@ -6125,6 +6199,57 @@ mod tests {
         // A frame not due pushes nothing.
         frame.due = false;
         assert_eq!(frame.push_time(us(266), false), None);
+    }
+
+    /// Two readbacks that land on one tick both go out, the older first, so a readback
+    /// whose latency varies loses no frame; one at or before the last frame pushed is
+    /// dropped and counted, and so is every earlier one on a tick that pushes no fresh
+    /// frame. Their buffers go back to the ring's landing buffer, then to the collector.
+    #[test]
+    fn readbacks_that_land_on_one_tick_all_go_out() {
+        let size = FrameSize::new(4, 4).expect("size");
+        let mut frame = MixFrame::new(None, size, 1, None);
+        frame.due = true;
+        frame.fresh = Some(us(100));
+        assert_eq!(frame.push_time(us(100), false), Some(us(100)));
+        // The next tick's readback is late, and lands with the one after it.
+        frame.awaiting = true;
+        assert_eq!(frame.push_time(us(133), false), None);
+        frame.earlier.push((us(133), vec![1; 4], true));
+        frame.fresh = Some(us(166));
+        assert_eq!(frame.push_time(us(166), false), Some(us(166)));
+        let pushed: Vec<_> = frame.earlier_pushed().map(|(at, ..)| *at).collect();
+        assert_eq!(
+            pushed,
+            [us(133)],
+            "the late frame goes out before the newest"
+        );
+        assert_eq!(frame.unread, 0, "nothing dropped");
+        let mut freed = 0;
+        frame.recycle_earlier(|_| freed += 1);
+        assert!(frame.earlier.is_empty());
+        assert_eq!(frame.landing.len(), 4, "its buffer lands the next frame");
+        assert_eq!(freed, 0);
+        // One already passed by a repeat is dropped; the one after it goes.
+        assert_eq!(frame.push_time(us(200), false), Some(us(200)), "a repeat");
+        frame.earlier.push((us(200), vec![2; 4], true));
+        frame.earlier.push((us(233), vec![3; 4], true));
+        frame.fresh = Some(us(266));
+        assert_eq!(frame.push_time(us(266), false), Some(us(266)));
+        let pushed: Vec<_> = frame.earlier_pushed().map(|(at, ..)| *at).collect();
+        assert_eq!(pushed, [us(233)]);
+        assert_eq!(frame.unread, 1, "the one at the repeat's time is counted");
+        frame.recycle_earlier(|_| freed += 1);
+        assert_eq!(
+            freed, 2,
+            "the landing buffer was full: both to the collector"
+        );
+        // A broken stage pushes none of them.
+        frame.earlier.push((us(300), vec![4; 4], true));
+        frame.fresh = Some(us(333));
+        assert_eq!(frame.push_time(us(333), true), Some(us(333)));
+        assert_eq!(frame.earlier_pushed().count(), 0);
+        assert_eq!(frame.unread, 2);
     }
 
     /// A mix read back only for a probe of a GPU session drops no frame when its
