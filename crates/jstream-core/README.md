@@ -2177,10 +2177,13 @@ decisions 2 and 3, `snapshot/probes.rs`): planning notes each item that places a
 `reflection_probe` source as it notes a light (`Shot::probes`), and the scenes whose
 `reflections` option is on (`Shot::reflective`, a keyframe scene's its parent's). Once
 the chains have run, so every item's layer holds this frame's picture, `draw_probes`
-captures at most one due probe of those scenes while the `reflection_probes` switch is
+captures one due probe of those scenes at a time while the `reflection_probes` switch is
 on, the one that has waited longest since it last tried (`Chains::probe_tries`: one
 never tried first, and a try counts whether or not it drew), so a probe due every frame
-starves no other (`a_probe_due_every_frame_starves_no_other`): the scene's pass drawn from the probe's box's centre (its item's centre in the
+starves no other (`a_probe_due_every_frame_starves_no_other`). A capture draws one face a
+frame (`Chains::probe_run`, which goes on while its probe is due with the same box, face
+size and refresh, and starts again otherwise), so a refresh costs a sixth of a capture
+each frame for six frames rather than all of it in one; each face is the scene's pass drawn from the probe's box's centre (its item's centre in the
 scene's space, `centre_of`) through six 90° cameras along ±x, ±y and ±z
 (`face_cameras`), into square `GpuKey::ProbeFace` layers at the probe's `resolution`
 capped by `max_probe_resolution` (`RenderFeatures::probe_face`). Each model it shows is
@@ -2188,8 +2191,10 @@ drawn again through each face camera into its `GpuKey::ProbeModel`, lit by the s
 lights as that face sees them and its environment, unshadowed and with no probe, so a
 capture never reads itself, and with no depth layer, since a model's `Item::depth` is
 seen from the scene's camera rather than a face's; cards keep their lit layers, and the compositor sorts them
-again for each face. `Compositor::resample_probe` turns the six into the probe's
-`GpuKey::ProbeMap`, which every frame keeps while the scene is drawn. A probe is due
+again for each face. The faces are kept between the frames of a capture, and in the frame
+that draws the sixth `Compositor::resample_probe` turns the six into the probe's
+`GpuKey::ProbeMap`, which every frame keeps while the scene is drawn; until then surfaces
+read its previous capture. A probe is due
 when it has no capture, its box or face size changed, `refresh_frames` have passed
 since its last, or, set to capture once, `SETTLE_FRAMES` (60) after its first, when
 what it sees has loaded; `Chains::probes` keeps what each was captured with. A
@@ -2197,7 +2202,7 @@ what it sees has loaded; `Chains::probes` keeps what each was captured with. A
 smallest box holding its centre among the captured probes of its scene (`lookup`, as
 `ModelDraw::probe` and `CardDraw::probe`, projected through the box it was captured
 from), so a probe shows from the frame after its
-first capture (`a_mirror_inside_a_probe_reflects_what_is_behind_the_camera`). With the
+first capture finishes (`a_mirror_inside_a_probe_reflects_what_is_behind_the_camera`). With the
 switch or the scene's option off nothing captures or reads a probe, and a capture the
 cache let go captures again. The warm scenes' estimate counts a probe's capture in a
 warm scene whose `reflections` is on while the switch is (`probe_bytes`, its panorama and

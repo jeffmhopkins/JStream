@@ -60,7 +60,7 @@ mod probes;
 
 pub(crate) use groups::placed_camera;
 use groups::{GroupLink, Groups};
-pub(crate) use probes::ProbeState;
+pub(crate) use probes::{ProbeRun, ProbeState};
 
 /// Longest side of a returned PNG, in pixels (ARCH › MCP).
 const MAX_EDGE: u32 = 1280;

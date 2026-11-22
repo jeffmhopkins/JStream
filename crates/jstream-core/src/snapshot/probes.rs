@@ -9,8 +9,12 @@
 //! scene six times, through 90-degree cameras on square faces at the probe's resolution
 //! (capped by the switch's `max_probe_resolution`), shaded by its lights and
 //! environment only: no probe, no shadows, no filters, so a capture never reads itself.
-//! At most one probe captures a frame: the due one that has waited longest since it last
-//! tried, so a scene with many spreads their cost and none is starved.
+//! A capture is spread over frames: it draws one face a frame and resamples the six
+//! into the probe's panorama in the frame it draws the last, so a refresh costs a sixth
+//! of a capture each frame rather than all of it in one. Until then surfaces read the
+//! probe's previous capture. One probe captures at a time: the due one that has waited
+//! longest since it last tried, so a scene with many spreads their cost and none is
+//! starved.
 //!
 //! A probe captures when it is first drawn, when its box or settings change, and every
 //! `refresh_frames` after that; a probe that captures once also captures again
@@ -62,6 +66,20 @@ pub(crate) struct ProbeState {
     /// capture or a later one.
     captured: u64,
     settled: bool,
+}
+
+/// A capture under way: which probe, what it is captured with, and how far it got.
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ProbeRun {
+    key: (SceneId, ItemId),
+    bounds: ProbeBox,
+    face: u32,
+    refresh: u32,
+    settled: bool,
+    /// The faces drawn so far.
+    drawn: usize,
+    /// Each drawn face's camera axes.
+    axes: [[[f32; 3]; 3]; 6],
 }
 
 /// The probes scene `id` places now, in stacking order: each item with its box and
@@ -203,6 +221,7 @@ pub(super) fn draw_probes(
     if !shot.features.reflection_probes {
         chains.probes.clear();
         chains.probe_tries.clear();
+        chains.probe_run = None;
         return Ok(());
     }
     let frame = cache.frame();
@@ -254,47 +273,79 @@ pub(super) fn draw_probes(
             .get(&((*scene_id).clone(), (*item).clone()))
             .map_or(0, |frame| frame + 1)
     });
-    for (scene_id, item, bounds, probe, face) in due {
-        let key = (scene_id.clone(), item.clone());
+    // The capture under way goes on while its probe is still due as it started; one
+    // whose probe went or changed starts again.
+    let run = chains.probe_run.take().filter(|run| {
+        due.iter().any(|(scene_id, item, bounds, probe, face)| {
+            run.key.0 == **scene_id
+                && run.key.1 == **item
+                && run.bounds == *bounds
+                && run.face == *face
+                && run.refresh == probe.refresh_frames
+        })
+    });
+    let runs = run.into_iter().chain(due.into_iter().map(
+        |(scene_id, item, bounds, probe, face)| {
+            let key = (scene_id.clone(), item.clone());
+            let settled = chains
+                .probes
+                .get(&key)
+                .is_some_and(|state| state.bounds == bounds && state.face == face);
+            ProbeRun {
+                key,
+                bounds,
+                face,
+                refresh: probe.refresh_frames,
+                settled,
+                drawn: 0,
+                axes: [[[0.0; 3]; 3]; 6],
+            }
+        },
+    ));
+    for mut run in runs.collect::<Vec<_>>() {
         // A try counts whether or not it draws, so one that can't keeps no slot.
-        chains.probe_tries.insert(key.clone(), frame);
-        let settled = chains
-            .probes
-            .get(&key)
-            .is_some_and(|state| state.bounds == bounds && state.face == face);
-        if capture(
+        chains.probe_tries.insert(run.key.clone(), frame);
+        if !capture(
             compositor,
             (cache, chains),
             (shot, at),
-            (scene_id, item, bounds, face),
+            &mut run,
             (live, captures),
         )? {
+            continue;
+        }
+        if run.drawn < 6 {
+            chains.probe_run = Some(run);
+        } else {
             chains.probes.insert(
-                key,
+                run.key,
                 ProbeState {
-                    bounds,
-                    face,
-                    refresh: probe.refresh_frames,
+                    bounds: run.bounds,
+                    face: run.face,
+                    refresh: run.refresh,
                     captured: frame,
-                    settled,
+                    settled: run.settled,
                 },
             );
-            break;
         }
+        break;
     }
     Ok(())
 }
 
-/// Draws scene `scene_id` from probe `item`'s centre into its six faces and resamples
-/// them into its [`GpuKey::ProbeMap`]. Returns `false` when there was nothing to draw:
-/// no pass draws the scene, or it has no camera.
+/// Draws `run`'s next face: its scene from the probe's centre through that face's
+/// camera, and once the sixth is drawn resamples the six into the probe's
+/// [`GpuKey::ProbeMap`]. Returns `false` when there was nothing to draw: no pass draws
+/// the scene, or it has no camera.
 fn capture(
     compositor: &mut Compositor,
     (cache, chains): (&mut ResourceCache<GpuKey>, &mut Chains),
     (shot, at): (&Shot, MediaTime),
-    (scene_id, item, bounds, face): (&SceneId, &ItemId, ProbeBox, u32),
+    run: &mut ProbeRun,
     (live, captures): (&LiveParams, &dyn Captures),
 ) -> Result<bool, RenderError> {
+    let (scene_id, item) = (&run.key.0, &run.key.1);
+    let (bounds, face) = (run.bounds, run.face);
     let Some(pass) = scene_pass(shot, scene_id) else {
         return Ok(false);
     };
@@ -320,7 +371,8 @@ fn capture(
     let Some(cameras) = face_cameras(bounds.centre, main) else {
         return Ok(false);
     };
-    // Every layer first, while the cache can change.
+    // Every layer first, while the cache can change, the faces drawn in earlier frames
+    // kept with them.
     let map = GpuKey::ProbeMap(scene_id.clone(), item.clone());
     cache.layer(compositor, &map, face * 4, face * 2)?;
     let faces: Vec<GpuKey> = (0..6)
@@ -350,16 +402,16 @@ fn capture(
     let environment = scene_environment((shot, cache), scene_id, at, live).0;
     let mut lights = Vec::new();
     let mut shadowed = Vec::new();
-    let mut axes = [[[0.0f32; 3]; 3]; 6];
     let mut seen: Vec<Item<'_>> = Vec::with_capacity(items.len());
-    for (i, camera) in cameras.iter().enumerate() {
+    let i = run.drawn;
+    if let Some(camera) = cameras.get(i) {
         let view = camera
             .view(face_canvas)
             .map_err(|error| RenderError::Invalid {
                 what: "probe face",
                 detail: error.to_string(),
             })?;
-        axes[i] = view.axes().map(|axis| axis.map(|c| c as f32));
+        run.axes[i] = view.axes().map(|axis| axis.map(|c| c as f32));
         lights.clear();
         shadowed.clear();
         scene_lights(
@@ -430,9 +482,13 @@ fn capture(
             return Ok(false);
         };
         compositor.render_into(&scene(face_size, Color::TRANSPARENT, &seen), target)?;
+        run.drawn += 1;
+    }
+    if run.drawn < 6 {
+        return Ok(true);
     }
     let mut drawn = Vec::with_capacity(6);
-    for (key, axes) in faces.iter().zip(axes) {
+    for (key, axes) in faces.iter().zip(run.axes) {
         let Some(image) = cache.get(key) else {
             return Ok(false);
         };

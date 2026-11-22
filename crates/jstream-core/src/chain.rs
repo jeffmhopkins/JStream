@@ -753,6 +753,8 @@ pub(crate) struct Chains {
     /// The frame each reflection probe last tried to capture in, whether or not it drew,
     /// so the one capture a frame goes to the probe that has waited longest.
     pub(crate) probe_tries: BTreeMap<(jstream_protocol::SceneId, jstream_protocol::ItemId), u64>,
+    /// The reflection probe capture under way, which draws one face a frame.
+    pub(crate) probe_run: Option<crate::snapshot::ProbeRun>,
     /// How many frames the chains ran in, for tests.
     #[cfg(test)]
     runs: usize,
@@ -3527,20 +3529,18 @@ mod tests {
             let mut cache = ResourceCache::new();
             let mut chains = Chains::default();
             let live = LiveParams::default();
-            // The first frame captures; the second reads the capture.
-            let first = draw_points(
-                &mut compositor,
-                (&mut cache, &mut chains),
-                (&shot, &live),
-                &[(32, 18)],
-            )[0];
-            let second = draw_points(
-                &mut compositor,
-                (&mut cache, &mut chains),
-                (&shot, &live),
-                &[(32, 18)],
-            )[0];
-            Some((first, second))
+            // The first six frames each draw a face and the sixth resamples them; the
+            // seventh reads the capture.
+            let mut frames = (0..7).map(|_| {
+                draw_points(
+                    &mut compositor,
+                    (&mut cache, &mut chains),
+                    (&shot, &live),
+                    &[(32, 18)],
+                )[0]
+            });
+            let first = frames.next()?;
+            Some((first, frames.last()?))
         };
         let all = jstream_protocol::RenderFeatures::ALL;
         let Some((before, mirrored)) = centre(&graph, all) else {
@@ -3568,7 +3568,7 @@ mod tests {
         );
     }
 
-    /// ADR-0170 decision 3: the frame's one capture goes to the due probe that has
+    /// ADR-0170 decision 3: the one capture under way goes to the due probe that has
     /// waited longest, so a probe due every frame, first in its scene, can't keep the
     /// probe after it from ever capturing.
     #[test]
@@ -3636,7 +3636,7 @@ mod tests {
         let mut chains = Chains::default();
         let live = LiveParams::default();
         let mut captured = Vec::new();
-        for _ in 0..4 {
+        for _ in 0..18 {
             draw_points(
                 &mut compositor,
                 (&mut cache, &mut chains),
@@ -3651,17 +3651,22 @@ mod tests {
                     .collect::<Vec<_>>(),
             );
         }
-        assert_eq!(
-            captured[0],
-            ["logo"],
-            "the first frame captures the first probe"
+        // A capture draws a face a frame, so the first takes frames 0 to 5.
+        assert!(
+            captured[..5].iter().all(Vec::is_empty),
+            "nothing is captured before the sixth face: {captured:?}"
         );
         assert_eq!(
-            captured[1],
+            captured[5],
+            ["logo"],
+            "the first capture is of the first probe"
+        );
+        assert_eq!(
+            captured[11],
             ["cam", "logo"],
             "the second goes to the one that hasn't tried"
         );
-        assert_eq!(captured[3], ["cam", "logo"], "both stay captured");
+        assert_eq!(captured[17], ["cam", "logo"], "both stay captured");
     }
 
     /// ADR-0151 decision 9: an environment light lights a `scene`-lit model with its sky

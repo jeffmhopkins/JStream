@@ -1343,7 +1343,8 @@ and scenes they read. In a scene with `reflections` on
 ([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md)), a lit model or
 card inside a reflection probe's box reads the probe's panorama, box-projected, in place
 of the environment where the probe saw something: six 90° faces of the scene drawn
-from the box's centre after the chains, at most one probe a frame, resampled into an
+from the box's centre after the chains, one face a frame of one probe at a time, so a
+refresh never spikes a frame, resampled into an
 equirectangular panorama that the next frame reads. A rough surface reads the sky's
 panorama and a probe's through mip chains of them, at the level its blur spans, so a
 bright point blurs into a soft glow. The layer is then placed flat
