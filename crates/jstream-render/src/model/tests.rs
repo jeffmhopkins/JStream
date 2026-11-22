@@ -1474,3 +1474,281 @@ fn a_material_drive_adds_within_ranges_and_nothing_when_it_adds_nothing() {
     };
     assert_eq!(super::driven_values(&values, "a", &[other]), None);
 }
+
+/// A framing camera (ADR-0094 decision 3) with depth of field focused `focus_px` along
+/// its axis and `blur_px` far blur (ADR-0108).
+fn focused_camera(focus_px: f32, blur_px: f32) -> SceneCamera {
+    SceneCamera {
+        focus_px: Finite32::new(focus_px),
+        blur_px: finite(blur_px),
+        ..SceneCamera::framing(canvas())
+    }
+}
+
+/// The framing camera's distance to the canvas plane: its focal length in pixels.
+fn framing_distance() -> f32 {
+    SceneCamera::framing(canvas())
+        .view(canvas())
+        .expect("a view")
+        .focal_px()
+}
+
+/// The red channel of row `y`.
+fn red_row(shot: &Snapshot, y: u32) -> Vec<u8> {
+    (0..WIDTH).map(|x| rgb(shot, x, y)[0]).collect()
+}
+
+/// One unlit model of two boxes, each `[centre, half size]` in model units with a colour:
+/// cut from the built-in cube and moved.
+fn two_boxes(boxes: [([f32; 3], [f32; 3], [u8; 3]); 2]) -> Model {
+    let cube = Shape::Cube
+        .model(Material {
+            unlit: true,
+            ..Material::default()
+        })
+        .expect("the cube builds");
+    let primitives = boxes
+        .iter()
+        .map(|&(centre, half, colour)| {
+            let mut primitive = cube.primitives()[0].clone();
+            let linear = colour.map(|c| if c == 0 { 0.0 } else { 1.0 });
+            for v in &mut primitive.vertices {
+                // The built-in cube spans -0.5..0.5 on each axis.
+                v.position = [0, 1, 2].map(|i| centre[i] + v.position[i] * 2.0 * half[i]);
+                v.color = [linear[0], linear[1], linear[2], 1.0];
+            }
+            primitive
+        })
+        .collect();
+    Model::new(primitives, cube.materials().to_vec(), vec![]).expect("the model builds")
+}
+
+/// ADR-0165 decision 2: a model whose surfaces sit at the focus draws as it does with no
+/// depth of field.
+#[test]
+fn golden_model_in_focus_draws_as_without_depth_of_field() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    // A thin slab facing the camera on the canvas plane, where the framing camera's
+    // distance is its focal length.
+    let model = two_boxes([
+        ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]),
+        ([0.0, 0.0, 0.0], [0.5, 0.5, 0.01], [0, 0, 255]),
+    ]);
+    let geometry = boxed(80.0, 50.0, 60.0);
+    let plain = draw(
+        compositor,
+        &model,
+        geometry,
+        Some(SceneCamera::framing(canvas())),
+        Lighting::Unlit,
+    );
+    let focused = draw(
+        compositor,
+        &model,
+        geometry,
+        Some(focused_camera(framing_distance(), 16.0)),
+        Lighting::Unlit,
+    );
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            assert_near(rgb(&focused, x, y), rgb(&plain, x, y), (x, y));
+        }
+    }
+}
+
+/// ADR-0165 decisions 1 and 2: a model far from the focus is soft. Its light is kept,
+/// its silhouette spreads past where it was, and its edge ramps over several pixels.
+#[test]
+fn golden_model_out_of_focus_is_soft_and_keeps_its_light() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    let model = two_boxes([
+        ([0.0, 0.0, 0.0], [1.0, 1.0, 0.01], [255, 0, 0]),
+        ([0.0, 0.0, 0.0], [0.1, 0.1, 0.01], [255, 0, 0]),
+    ]);
+    let geometry = boxed(80.0, 50.0, 40.0);
+    let plain = draw(
+        compositor,
+        &model,
+        geometry,
+        Some(SceneCamera::framing(canvas())),
+        Lighting::Unlit,
+    );
+    // Focused four times as far: the slab blurs by 16 * 3/4 = 12 px.
+    let soft = draw(
+        compositor,
+        &model,
+        geometry,
+        Some(focused_camera(framing_distance() * 4.0, 16.0)),
+        Lighting::Unlit,
+    );
+    let light = |shot: &Snapshot| -> f64 {
+        (0..HEIGHT)
+            .flat_map(|y| (0..WIDTH).map(move |x| (x, y)))
+            .map(|(x, y)| {
+                let c = f64::from(rgb(shot, x, y)[0]) / 255.0;
+                // sRGB to linear, roughly: the light a pixel holds.
+                c.powf(2.2)
+            })
+            .sum()
+    };
+    let (before, after) = (light(&plain), light(&soft));
+    assert!(
+        (after - before).abs() < before * 0.12,
+        "light before {before}, after {after}"
+    );
+    let row = red_row(&plain, 50);
+    let left = row
+        .iter()
+        .position(|&r| r > 128)
+        .expect("the slab is drawn");
+    let soft_row = red_row(&soft, 50);
+    // The silhouette spreads outward: four pixels outside the sharp edge, some red.
+    assert!(
+        soft_row[left - 4] > 20,
+        "outside the edge: {:?}",
+        &soft_row[..left + 8]
+    );
+    // And the edge ramps: at least eight pixels between dark and full red.
+    let ramp = soft_row[..80]
+        .iter()
+        .filter(|&&r| r > 10 && r < 245)
+        .count();
+    assert!(ramp >= 8, "row: {soft_row:?}");
+    // The sharp draw's edge is one pixel.
+    let sharp_ramp = row[..80].iter().filter(|&&r| r > 10 && r < 245).count();
+    assert!(sharp_ramp <= 2, "row: {row:?}");
+}
+
+/// ADR-0165 decision 2, occlusion: within one model, a sharp near part keeps its edge
+/// over a soft far part, and a soft near part spreads over a sharp far part.
+#[test]
+fn golden_model_a_near_part_blurs_over_a_far_one_but_never_the_reverse() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let compositor = &mut opened.compositor;
+    // A wide blue slab at the back, a small red block at the front, both one model. The
+    // box fits the model's 2 units across into 80 px, so a unit is 40 px.
+    let model = two_boxes([
+        ([0.0, 0.0, -0.95], [1.0, 1.0, 0.05], [0, 0, 255]),
+        ([0.0, 0.0, 0.95], [0.25, 0.25, 0.05], [255, 0, 0]),
+    ]);
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let f = framing_distance();
+    let (near, far) = (f - 40.0, f + 36.0);
+    let plain = draw(
+        compositor,
+        &model,
+        geometry,
+        Some(SceneCamera::framing(canvas())),
+        Lighting::Unlit,
+    );
+    let row = red_row(&plain, 50);
+    let edge = row
+        .iter()
+        .position(|&r| r > 128)
+        .expect("the block is drawn");
+    // Focused on the block: the slab is soft, the block's edge stays sharp, and no blue
+    // runs into the block nor red out of it.
+    let on_near = draw(
+        compositor,
+        &model,
+        geometry,
+        Some(focused_camera(near, 24.0)),
+        Lighting::Unlit,
+    );
+    let inside = rgb(&on_near, edge as u32 + 1, 50);
+    assert_near(inside, [255, 0, 0], (edge as u32 + 1, 50));
+    let outside = rgb(&on_near, edge as u32 - 3, 50);
+    assert!(
+        outside[0] < 16,
+        "red ran out of the sharp block: {outside:?}"
+    );
+    // Focused on the slab: the block spreads over it.
+    let on_far = draw(
+        compositor,
+        &model,
+        geometry,
+        Some(focused_camera(far, 24.0)),
+        Lighting::Unlit,
+    );
+    let outside = rgb(&on_far, edge as u32 - 3, 50);
+    assert!(outside[0] > 40, "the soft block didn't spread: {outside:?}");
+    // Far from the block, the in-focus slab is untouched.
+    assert_near(rgb(&on_far, 50, 20), rgb(&plain, 50, 20), (50, 20));
+}
+/// ADR-0165: one non-finite pixel in a model's layer (a NaN from a degenerate normal, or a
+/// channel past the half-float range) stays one pixel. The gather spreads each pixel over
+/// up to 48 others, and the smoothing over 25, so unchecked it would mark a whole disc of
+/// a defocused model with black dots.
+#[test]
+fn golden_model_depth_of_field_keeps_a_non_finite_pixel_to_itself() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let camera = focused_camera(framing_distance() * 4.0, 16.0);
+    let view = camera.view(canvas()).expect("a view");
+    let (cx, cy) = (WIDTH / 2, HEIGHT / 2);
+    let colour = vec![[0.5, 0.5, 0.5, 1.0]; (WIDTH * HEIGHT) as usize];
+    // Every pixel at the framing distance, 1 / w = 1: a circle of confusion of 48 px.
+    let depth = vec![[1.0, 0.0, 0.0, 1.0]; (WIDTH * HEIGHT) as usize];
+    let maker = opened.compositor.maker();
+    let colour =
+        crate::image::upload_unit_f16(&maker, WIDTH, HEIGHT, &colour).expect("the colour uploads");
+    let depth =
+        crate::image::upload_unit_f16(&maker, WIDTH, HEIGHT, &depth).expect("the depth uploads");
+    // The centre texel becomes a half-float NaN in every channel.
+    maker.gpu.queue.write_texture(
+        wgpu::TexelCopyTextureInfo {
+            texture: colour.texture(),
+            mip_level: 0,
+            origin: wgpu::Origin3d { x: cx, y: cy, z: 0 },
+            aspect: wgpu::TextureAspect::All,
+        },
+        &[0x00, 0x7e].repeat(4),
+        wgpu::TexelCopyBufferLayout {
+            offset: 0,
+            bytes_per_row: Some(8),
+            rows_per_image: Some(1),
+        },
+        wgpu::Extent3d {
+            width: 1,
+            height: 1,
+            depth_or_array_layers: 1,
+        },
+    );
+    let mut focus = crate::filter::VideoFilter::of(
+        super::focus::KIND,
+        Box::new(super::focus::ModelFocus::default()),
+    );
+    focus.set_depth(Some(crate::filter::ViewDepth {
+        view: Some(view),
+        ..crate::filter::ViewDepth::new(std::sync::Arc::new(depth), view.focal_px())
+    }));
+    let out = opened
+        .compositor
+        .apply_filter(&mut focus, &colour, crate::filter::FilterClock::default())
+        .expect("the passes draw");
+    let shot = crate::filter::testing::read(&mut opened, &out);
+    let reference = rgb(&shot, 4, 4);
+    for y in 0..HEIGHT {
+        for x in 0..WIDTH {
+            if (x, y) == (cx, cy) {
+                continue;
+            }
+            let got = rgb(&shot, x, y);
+            for c in 0..3 {
+                assert!(
+                    got[c].abs_diff(reference[c]) <= 24,
+                    "pixel ({x}, {y}) is {got:?}, the even grey around it {reference:?}"
+                );
+            }
+        }
+    }
+}
