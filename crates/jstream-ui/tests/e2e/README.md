@@ -102,8 +102,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the suggested id. A page with no desktop global has no Browse button. The native
   dialog itself is not opened: the stub returns the path.
 - **Connecting** (`connect.spec.js`): the form offers the serving engine's URL and
-  connects with the browser's credentials; the header's File menu shows the URL and
-  protocol and closes on Escape, and the header carries the revision; disconnecting returns to the form with the token field empty; a refused
+  connects with the browser's credentials; the header's File menu opens Connection details,
+  which shows the URL and protocol and closes on Escape, and the header carries the revision; disconnecting returns to the form with the token field empty; a refused
   upgrade shows its reason; the token never appears in the page, its storage or its
   cookies. A URL the page's policy refuses shows a reason and re-enables Connect,
   although Chromium sends that socket an `error` event and no `close` (#305). The
@@ -251,8 +251,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   cancels the dialog. Its search box narrows the types by name ("COLOR" leaves Color,
   picked) or description ("nest" leaves Scene), shows "No source type matches." with
   Add disabled when none match, the dialog keeping its height throughout, and an empty
-  search lists them all again. An item row's menu lists the item menu's lines and Delete source everywhere…, Send to back
-  restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
+  search lists them all again. An item row's menu lists the item menu's grouped lines and Delete source everywhere…, Send to back,
+  from the Order submenu, restacks in one edit and Stretch to canvas, from the Transform submenu, fills the
   canvas; the item menu's Rename opens the row's name, Visible hides and shows the item
   with its check following, Screenshot (source) shows a toast (the mock engine streams
   no pictures, so it can't take one), Blending's Multiply replaces the checked Normal, and Paste
@@ -261,9 +261,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   from the Backdrop pastes its two video filters onto a nested Intro, a second paste
   appends two more and Paste filters, replacing leaves two, each one edit, and Paste
   transform gives a stretched second placement the Backdrop's 640 × 360 box; on the canvas the menu
-  ends with Select all, Duplicate as clone adds "Backdrop copy" selected, two selected
+  has Select all after Paste and ends with Remove from scene, Duplicate's as clone adds "Backdrop copy" selected, two selected
   items get a counted head with the duplicates disabled, and Remove from scene removes
-  both; a placement of a shared source switches to an independent clone and back to a
+  both; a placement of a shared source switches, from the Reference or clone submenu, to an independent clone and back to a
   reference in one edit each, its menu's head and checks following, and the original,
   placed once, has no switch; Ctrl+D and Ctrl+Shift+D duplicate on the canvas and in a
   row, and Del removes there; a nested scene's menu opens it; a scene row's Rename
@@ -472,7 +472,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   "Keyframe 1" under it with the diamond, selected, under the canvas banner, and Main's
   caret folds it away and back; in the keyframe, the eye and the X field write its
   overrides while Main's own item stays as it was, the blend mode is locked, the Scene switches section is gone, and the
-  item menu's Remove from scene and layer order are disabled; Reset to “Main” clears
+  item menu's Remove from scene and the Order submenu's layer order are disabled; Reset to “Main” clears
   the overrides, after which the canvas's Ctrl+D and Del change nothing there; Switch
   to it puts it on program, and Delete keyframe removes it and selects Main. A drag on
   a keyframe's canvas sends `live.set` values that name the keyframe (the

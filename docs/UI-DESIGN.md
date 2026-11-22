@@ -78,7 +78,14 @@ The header's menus and the right-click menus are one family:
 - An item that deletes is marked with `Entry::danger`, reads red, and sits in the last
   group. The Scenes and Sources panels' right-click menus share this menu style, but
   their delete items aren't marked.
-- Menus hold commands. Information belongs in dialogs and status UI.
+- Menus hold commands. Information belongs in dialogs and status UI: the File menu's
+  connection details are a dialog of their own, and the open project's name is the
+  menu's head.
+- A long menu is in groups, as OBS's source menu is: open it (Properties, filters);
+  its state (Visible, Lock, Labels); the clipboard (Copy, Paste, Duplicate); its
+  arrangement (an Order submenu for the layer order, Transform, Blending, Crop);
+  other views (Pop out, Screenshot); then removal. A command that adds something new
+  (Add source, New group) is in the menu of an empty spot, not an item's.
 
 <a id="type"></a>
 ## Type

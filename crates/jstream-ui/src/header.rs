@@ -13,6 +13,7 @@
 use crate::about::{self, About, Link};
 use crate::app::{SessionContext, SessionInfo};
 use crate::canvas::model::{history, is_history_empty};
+use crate::dialog::Modal;
 use crate::dock::PanelId;
 use crate::menu::{move_focus, step};
 use crate::panels::outputs::{
@@ -297,6 +298,42 @@ fn focus_button(menu: Menu) {
     }
 }
 
+/// File › Connection details…: the engine the session is connected to, the protocol it
+/// speaks, the client ID this window acts as, and the last revision it heard of.
+#[component]
+fn ConnectionDialog(
+    /// The open session's details.
+    info: RwSignal<SessionInfo>,
+    /// Closes the dialog.
+    close: impl Fn() + Copy + Send + Sync + 'static,
+) -> impl IntoView {
+    view! {
+        <Modal label="Connection details" class="connection-dialog" cancel=close>
+            <div class="modal-header">
+                <div class="modal-titles">
+                    <h2 class="modal-title">"Connection details"</h2>
+                </div>
+                <button type="button" class="modal-close" aria-label="Close" on:click=move |_| close()>"×"</button>
+            </div>
+            <dl class="connection">
+                <dt>"Engine"</dt>
+                <dd>{move || info.with(|i| i.url.clone())}</dd>
+                <dt>"Protocol"</dt>
+                <dd>{move || info.with(|i| i.protocol.clone())}</dd>
+                <dt>"Client"</dt>
+                <dd>{move || info.with(|i| i.client_id.clone())}</dd>
+                <dt>"Revision"</dt>
+                <dd>{move || info.with(|i| i.rev.clone())}</dd>
+            </dl>
+            <div class="modal-footer">
+                <button type="button" class="secondary" data-primary on:click=move |_| close()>
+                    "Close"
+                </button>
+            </div>
+        </Modal>
+    }
+}
+
 /// The header bar.
 #[component]
 pub fn Header(
@@ -314,6 +351,7 @@ pub fn Header(
     let about_open = RwSignal::new(false);
     let settings = use_context::<SettingsDialog>();
     let video_open = RwSignal::new(false);
+    let connection_open = RwSignal::new(false);
     let update_open = RwSignal::new(false);
     // The project dialog, with the path its field starts with.
     let project_ask = RwSignal::new(None::<(ProjectAsk, String, String)>);
@@ -591,24 +629,14 @@ pub fn Header(
                 {menu_button(Menu::File, "File".into_any())}
                 <Show when=move || open.get() == Some(Menu::File)>
                     <div class="dropdown" role="menu" aria-label="File" on:keydown=dropdown_keys(Menu::File)>
-                        <p class="menu-head">"CONNECTION"</p>
-                        <dl class="connection">
-                            <dt>"Engine"</dt>
-                            <dd>{move || info.with(|i| i.url.clone())}</dd>
-                            <dt>"Protocol"</dt>
-                            <dd>{move || info.with(|i| i.protocol.clone())}</dd>
-                            <dt>"Client"</dt>
-                            <dd>{move || info.with(|i| i.client_id.clone())}</dd>
-                            <dt>"Revision"</dt>
-                            <dd>{move || info.with(|i| i.rev.clone())}</dd>
-                        </dl>
+                        // The menu holds commands only: the project's name heads it, and
+                        // the connection's details are a dialog of their own.
                         <Show when=move || project.with(Option::is_some)>
-                            <div class="menu-sep"></div>
-                            <p class="menu-head">"PROJECT"</p>
                             <p
-                                class="project-name"
+                                class="menu-head project-head"
                                 title=move || project.with(|p| p.as_ref().map(|p| p.path.clone()).unwrap_or_default())
                             >
+                                "Project · "
                                 {move || project.with(|p| p.as_ref().map(|p| project_name(&p.path)).unwrap_or_default())}
                             </p>
                             <button class="menuitem" role="menuitem" on:click=move |_| ask_project(ProjectAsk::New)>
@@ -627,7 +655,8 @@ pub fn Header(
                                         .unwrap_or_default()
                                 });
                                 (!recent.is_empty()).then(|| view! {
-                                    <p class="menu-head">"OPEN RECENT"</p>
+                                    <div class="menu-sep"></div>
+                                    <p class="menu-head">"Open recent"</p>
                                     {recent.into_iter().map(|path| {
                                         let title = path.clone();
                                         let name = project_name(&path);
@@ -644,8 +673,8 @@ pub fn Header(
                                     }).collect_view()}
                                 })
                             }}
+                            <div class="menu-sep"></div>
                         </Show>
-                        <div class="menu-sep"></div>
                         {settings.map(|settings| view! {
                             <button
                                 class="menuitem"
@@ -680,6 +709,17 @@ pub fn Header(
                                 "Plugins…"
                             </button>
                         })}
+                        <div class="menu-sep"></div>
+                        <button
+                            class="menuitem"
+                            role="menuitem"
+                            on:click=move |_| {
+                                open.set(None);
+                                connection_open.set(true);
+                            }
+                        >
+                            "Connection details…"
+                        </button>
                         <button class="menuitem" role="menuitem" on:click=move |_| disconnect.with_value(|d| d())>
                             "Disconnect"
                         </button>
@@ -848,6 +888,9 @@ pub fn Header(
             </div>
             <Show when=move || about_open.get()>
                 <About protocol=protocol close=move || about_open.set(false) />
+            </Show>
+            <Show when=move || connection_open.get()>
+                <ConnectionDialog info=info close=move || connection_open.set(false) />
             </Show>
             <Show when=move || video_open.get()>
                 <VideoSettingsDialog close=move || video_open.set(false) />
