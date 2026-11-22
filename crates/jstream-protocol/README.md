@@ -362,9 +362,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.152 because a source with depth reports it: `SourceSize`'s and
+`PROTOCOL_VERSION` is 0.157 because a source with depth reports it: `SourceSize`'s and
 `source.size_changed`'s optional `depth`, a 3D model's front-to-back bounds
 ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8);
+0.156 because a kind's parameter can be a table of looks:
+`ParamType::Looks`, with `MAX_LOOKS`, `MAX_LOOK_NAME`, `MAX_BLINK_HZ`, `LOOK_ABSENT` and
+`LOOK_CELL_COLOR`, which the `grid` source kind's `looks` uses
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 9);
 0.151 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
@@ -1044,7 +1048,12 @@ never a type per kind.
   letters, digits and `_`, at most `MAX_CAMERA_CONTROL_NAME` bytes) set to a 32-bit
   integer or `CAMERA_CONTROL_AUTO` (`"auto"`), a UI offering the controls
   `capture.targets` lists for that device; a control the object doesn't name keeps what
-  the device has), a
+  the device has; `looks`, since 0.156: an object of at most `MAX_LOOKS` entries, each a
+  state's text (1 to `MAX_LOOK_NAME` bytes, no control characters) set to a look,
+  `{"color", "brightness", "blink_hz"}`, each optional: `color` a `#rrggbb` or
+  `LOOK_CELL_COLOR` (`"cell"`, the cell's own colour), `brightness` 0 to 1 and `blink_hz`
+  0 to `MAX_BLINK_HZ`, any other field refused; `LOOK_ABSENT` (`"absent"`) names the look
+  of a cell the data doesn't have, for the `grid` kind's cells), a
   `default`, a `label`, an
   optional `description`, an optional `warning` (since 0.93: one line a client shows
   beside the control, not only in a tooltip, saying what the setting gives away), the UI
@@ -1917,7 +1926,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). With
   `source.size_changed` it is what a client needs to draw a legacy placement's box, crop
   handles and a size in % of the source's own (ADR-0022 §4). Runtime state, so no
-  `rev`. Added in 0.40. Since 0.152 a source with depth also reports `depth`, in the
+  `rev`. Added in 0.40. Since 0.157 a source with depth also reports `depth`, in the
   pixels of its `size`: a 3D model's bounds front to back, at the scale its width and
   height are reported at (the larger 512), so an editor can outline and hit it by its 3D
   bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
@@ -2277,7 +2286,7 @@ After `welcome`, the server pushes every event to every client.
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
-  `depth`, as `source.sizes` reports it, since 0.152.
+  `depth`, as `source.sizes` reports it, since 0.157.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one

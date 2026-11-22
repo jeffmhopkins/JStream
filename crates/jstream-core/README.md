@@ -272,7 +272,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   second keys not kept current for 3 s go, and a receiver that stops forgets its
   senders' state. `data.list` and `data.get` (protocol 0.140) answer from `LiveData` on
   its own lock, outside the collection lock; `profile.get`'s `network` carries the three
-  counters.
+  counters. The live sources hold the same `LiveData` in their build `Context`
+  (`LiveSources::set_data`), so a `grid` source draws from it.
   Each sender's frames go through a `Playout` (jitter buffer, sequence tracking, clock
   estimate) held for the source's `latency_ms`, and each one due is handed to the
   source's mixer input as a device packet: the stream position as the device position,
@@ -3864,8 +3865,10 @@ and reports a change to the list over a one-slot channel that it never waits on;
 MIDI states are looked up (under `MidiInputs`' leaf lock) as it starts, with no engine
 lock held. The live data (`Shared::data`, ADR-0171) is a leaf lock of its own: the
 receiver's thread takes it alone to put a state message and set the watches on its key,
-`data.list` and `data.get` take it alone, outside the collection lock, and the render
-thread never takes it (a watch's cell is one atomic). The `jstream-tempo` thread reads the MIDI state without a lock and takes
+`data.list` and `data.get` take it alone, outside the collection lock, a `grid`
+source's painter takes it under its own drawing lock to read its keys (on the paint
+thread, or in a plan's one catch-up paint under the collection lock, so it is always
+last), and the render thread never takes it (a watch's cell is one atomic). The `jstream-tempo` thread reads the MIDI state without a lock and takes
 the collection lock only to publish a tempo value that changed. The camera controls'
 changes go to the `jstream-camera-controls` thread over a channel, sent under the
 collection lock; that thread takes no engine lock while it sets them on the device. The CLAP scan's locks

@@ -6914,7 +6914,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "A source's size changed (ADR-0022 §4, 0.40), including when it became known (its\nfirst frame) or unknown (it stopped, failed, or was deleted). Runtime state, so it\ncarries no `rev`. The size is the one `source.sizes` reports.",
           "properties": {
             "depth": {
-              "description": "Its depth, as [`SourceSize::depth`](crate::SourceSize::depth) reports it\n(0.152): a change of depth alone is a size change too.",
+              "description": "Its depth, as [`SourceSize::depth`](crate::SourceSize::depth) reports it\n(0.157): a change of depth alone is a size change too.",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -10645,6 +10645,19 @@ source: crates/jstream-protocol/src/fixtures.rs
           "required": [
             "type",
             "target"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "How a `grid` source draws a cell in each state it reads (ADR-0171 decision 9), so a\nUI can offer a table of them. Since 0.156. Its value is an object from a state's\ntext (1 to [`MAX_LOOK_NAME`] bytes, no control characters) to a look:\n`{\"color\": \"#rrggbb\" | \"cell\", \"brightness\": 0..1, \"blink_hz\": 0..16}`, where\n`\"cell\"` is the cell's own colour from the data, `brightness` defaults to 1 and\n`blink_hz` to 0 (steady). At most [`MAX_LOOKS`] entries; [`LOOK_ABSENT`] names the\nlook of a cell the data doesn't have. Its default names only that one.",
+          "properties": {
+            "type": {
+              "const": "looks",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         }
@@ -15211,7 +15224,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       "description": "One source's current size, in a `source.sizes` result.",
       "properties": {
         "depth": {
-          "description": "Its depth, in the same pixels as `size`, for a source with depth: a 3D model's\nbounds, front to back, at the scale its width and height are reported at\n(ADR-0107 decision 8, 0.152). Omitted for every other source and while `size` is.",
+          "description": "Its depth, in the same pixels as `size`, for a source with depth: a 3D model's\nbounds, front to back, at the scale its width and height are reported at\n(ADR-0107 decision 8, 0.157). Omitted for every other source and while `size` is.",
           "format": "uint32",
           "minimum": 0,
           "type": [
@@ -16658,5 +16671,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.152"
+  "title": "JStream protocol 0.157"
 }
