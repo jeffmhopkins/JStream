@@ -1100,10 +1100,13 @@ fn a_warm_scenes_media_file_is_held_at_its_start() {
         super::block_on(control.call(super::switch_call(scene))).expect("switched");
     };
     switch("b");
-    // The sources are built on their own thread, and a file's clock starts when it is
-    // built: wait for it before moving the clock, or a slow build starts it at 450 ms
-    // and frame 4 never comes.
-    assert!(plays(&engine, 0), "on program, its first frame at 0 ms");
+    // The file starts on the source clock at the first plan that shows it, which the
+    // sources thread may build after the switch returns: wait for that frame before
+    // the clock moves, or a slow runner starts it at 450 ms and frame 4 never comes.
+    assert!(
+        plays(&engine, 0),
+        "on program, it starts at its first frame"
+    );
     clock.advance(450);
     assert!(plays(&engine, 4), "on program, frame 4 at 450 ms");
 
