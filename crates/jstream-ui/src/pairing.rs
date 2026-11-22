@@ -394,7 +394,7 @@ enum Ended {
 }
 
 /// The Devices page's Paired devices section: the devices with Revoke, and Pair a
-/// device…, which opens [`PairDialog`]. Shows nothing until `device.list` answers, and
+/// device…, which opens `PairDialog`. Shows nothing until `device.list` answers, and
 /// a one-line note on a session that doesn't serve the pairing calls.
 #[component]
 pub fn Pairing() -> impl IntoView {
