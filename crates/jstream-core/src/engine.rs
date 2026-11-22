@@ -4495,6 +4495,27 @@ fn frame_bytes([width, height]: [u32; 2]) -> u64 {
     u64::from(width) * u64::from(height) * 4
 }
 
+/// The bytes a reflection probe source's capture holds (ADR-0170 decision 3), or
+/// `None` for any other source: its panorama, four faces by two, and its six faces,
+/// each a half-float RGBA layer, at the face size its `resolution` sets.
+fn probe_bytes(graph: &Graph, id: &SourceId) -> Option<u64> {
+    let source = graph.state().source(id)?;
+    let jstream_protocol::SourceKind::Builtin { kind } = source.kind() else {
+        return None;
+    };
+    if kind != "reflection_probe" {
+        return None;
+    }
+    let face = source
+        .settings()
+        .get("resolution")
+        .and_then(serde_json::Value::as_str)
+        .and_then(|size| size.parse::<u64>().ok())
+        .unwrap_or(256);
+    // 8 + 6 faces' worth of texels, 8 bytes each.
+    Some(face * face * 14 * 8)
+}
+
 impl WarmCaptures {
     /// The captures of `scenes` in `graph`, as the running sources of `live` capture
     /// them, and the sources they draw, planned again when what they depend on changed,
@@ -4626,6 +4647,10 @@ impl WarmCaptures {
                         .unwrap_or([canvas.width, canvas.height]),
                 };
                 bytes = bytes.saturating_add(frame_bytes(size));
+                // A probe also holds its capture.
+                if let Some(capture) = probe_bytes(graph, id) {
+                    bytes = bytes.saturating_add(capture);
+                }
             }
             let preview = limit.preview == Some(&scene.id);
             if !preview

@@ -498,3 +498,39 @@ fn the_gpu_limit_evicts_from_the_bottom_but_keeps_preview() {
         "{refused:?}"
     );
 }
+
+/// A reflection probe (ADR-0170 decision 3) counts its capture toward the warm scenes'
+/// GPU memory: its panorama and six faces at the face size it is set to.
+#[test]
+fn a_reflection_probe_counts_its_capture() {
+    let engine = Engine::new().with_cpu_compositor();
+    let control = connected(&engine);
+    batch(&control, edits(vec![create("main"), create("a")])).expect("scenes");
+    batch(
+        &control,
+        edits(vec![
+            Edit::SourceCreate {
+                source_id: SourceId::new("probe"),
+                name: "probe".into(),
+                kind: SourceKind::Builtin {
+                    kind: "reflection_probe".into(),
+                },
+                settings: [("resolution".to_owned(), serde_json::json!("128"))]
+                    .into_iter()
+                    .collect(),
+                duplicated_from: None,
+            },
+            add("a", "a_probe", "probe"),
+        ]),
+    )
+    .expect("a probe");
+    preview(&control, "a");
+    let capture = 128 * 128 * 14 * 8;
+    let profile = warm_profile(&control);
+    assert!(
+        profile
+            .iter()
+            .any(|(scene, bytes, _)| scene == "a" && *bytes >= capture),
+        "{profile:?}"
+    );
+}

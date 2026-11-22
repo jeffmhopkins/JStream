@@ -71,6 +71,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   colour, intensity, range, cone and softness, and whether it casts shadows and how
   softly, which the engine places where an item
   places the source ([ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md)).
+  `probe()` (default `None`) is a `ShownProbe` for the `reflection_probe` kind: its
+  box's size, edge fade, face resolution and refresh, which the engine centres where an
+  item places the source
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 3).
   `capture()` is `Some` for a `display`, `window` or `webcam` source: what the platform
   captures for it (a `CaptureSpec`), and `show_cursor()` whether the pointer shows in it
   (`true`, the default, for a webcam and every other source). Its frames come from the
@@ -349,7 +354,11 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   or `scene`, lit by the `light` sources of its 3D scene), and `casts_shadows` and
   `receives_shadows` (both default on,
   [ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision 3; settings
-  saved without them read as on) are live, and so are `animation` (a clip by its name,
+  saved without them read as on) are live, and so is `reflections` (default on: lit by
+  its scene, it reflects the rest of a scene whose `reflections` option is on through
+  that scene's reflection probes,
+  [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 2; settings saved without it read as on), and so are `animation` (a clip by its name,
   empty for none; a name the file lacks is refused with the names it has),
   `animation_speed` (0 to 8, default 1) and `animation_loop` (default on; off holds the
   last frame), ADR-0151 decision 7, which settings saved without them read as none, 1
@@ -388,6 +397,17 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   without them read as no backdrop, nothing added and still). Its frame is one transparent pixel: it
   draws nothing, and `Source::light` hands the engine its settings, which the item that
   places it gives a position, an aim and a strength (`jstream-core`'s README).
+- `reflection_probe`
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 3): `ProbeKind`, an invisible box in a 3D scene whose surfaces reflect what
+  it sees. `width_px`, `height_px` and `depth_px` (1 to 100,000, default 2000) size the
+  box along the scene's axes, `fade_px` (0 to 100,000, default 100) is how far inside
+  its faces a surface takes all of its reflection, `resolution` (`128`, `256` or `512`,
+  default `256`) is each of its six faces' size in pixels a side, and `refresh_frames`
+  (0 to 600, `MAX_REFRESH_FRAMES`, default 0) captures again every that many frames, 0
+  once. All are live. Its frame is one transparent pixel, and `Source::probe` hands the
+  engine its settings, which the item that places it gives a centre (`jstream-core`'s
+  README).
 - `audio_input` (a `device` ID; empty follows the system's default input),
   `desktop_audio` (what the default output plays) and `app_audio` (an `exe` file name,
   found again when the application restarts) are audio-only: their descriptors have
@@ -819,7 +839,7 @@ by the test, node transforms and mirroring, materials and textures, refused exte
 URLs and overflowing accessors, attributes of another length and VEC3 tangents, a fanning hierarchy with full or empty primitives, an accessor or unindexed primitive past the caps, the texture cap before decoding, one read for a file many buffers name or spell differently, and the cap on all buffers together with a `.glb`'s chunk, and file URIs that would leave the model's folder) and the `model` kind (`model/tests.rs`: shapes, live
 looks, the stand-in's size, buffers read beside a file and not outside its root), the
 `light` kind (`light/tests.rs`: its defaults, every setting changed live, bad values
-refused), reading an audio target from settings and taking a YouTube video
+refused), the `reflection_probe` kind (`probe/tests.rs`: the same), reading an audio target from settings and taking a YouTube video
 ID from an ID or link (`youtube_chat.rs`), and in `source.rs` the
 asset checks refuse a file swapped in from outside the root (Unix) and a junction or
 symbolic link inside the root that leads outside it (Windows, both when the path is

@@ -2,7 +2,9 @@
 //! switch per costly 3D effect, capping what every scene may draw. It reads the switches
 //! from `studio.get` each time the page opens and sets each one with
 //! `studio.set_rendering`; the engine keeps them on its machine, whatever collection is
-//! open. An engine older than 0.147 reports none, and the page says it has none.
+//! open. Since 0.150 it also has the reflection probes' switch and the face size they
+//! capture at, at most (ADR-0170 decision 3), shown only by an engine that has them. An
+//! engine older than 0.147 reports none, and the page says it has none.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
@@ -10,7 +12,8 @@ use crate::app::SessionContext;
 use crate::dialog::Info;
 use jstream_control::Control;
 use jstream_protocol::{
-    Action, Call, CallResult, Query, QueryResult, RenderFeatures, RenderFeaturesChange,
+    Action, Call, CallResult, PROBE_RESOLUTIONS, Query, QueryResult, RenderFeatures,
+    RenderFeaturesChange,
 };
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -26,15 +29,18 @@ pub enum Switch {
     VolumetricFog,
     /// The floor reflection filter.
     FloorReflections,
+    /// Reflection probes.
+    ReflectionProbes,
 }
 
 impl Switch {
     /// Every switch, in the order the page lists them.
-    pub const ALL: [Switch; 4] = [
+    pub const ALL: [Switch; 5] = [
         Switch::Shadows,
         Switch::AmbientOcclusion,
         Switch::VolumetricFog,
         Switch::FloorReflections,
+        Switch::ReflectionProbes,
     ];
 
     /// What the switch reads.
@@ -44,6 +50,7 @@ impl Switch {
             Switch::AmbientOcclusion => "Ambient occlusion",
             Switch::VolumetricFog => "Volumetric fog",
             Switch::FloorReflections => "Floor reflections",
+            Switch::ReflectionProbes => "Reflection probes",
         }
     }
 
@@ -54,6 +61,9 @@ impl Switch {
             Switch::AmbientOcclusion => "The Ambient occlusion filter darkens creases.",
             Switch::VolumetricFog => "The Volumetric fog filter draws light shafts.",
             Switch::FloorReflections => "The Floor reflection filter mirrors its scene.",
+            Switch::ReflectionProbes => {
+                "Surfaces in a reflection probe's box reflect what it sees."
+            }
         }
     }
 
@@ -68,6 +78,9 @@ impl Switch {
             Switch::FloorReflections => {
                 "It draws its scene a second time. Off, it changes nothing in any scene, and the scene is drawn once."
             }
+            Switch::ReflectionProbes => {
+                "Each capture draws its scene six times, as often as the probe refreshes. Off, no probe captures, and surfaces reflect only the environment."
+            }
         }
     }
 
@@ -78,6 +91,7 @@ impl Switch {
             Switch::AmbientOcclusion => "setting-rendering-ambient-occlusion",
             Switch::VolumetricFog => "setting-rendering-volumetric-fog",
             Switch::FloorReflections => "setting-rendering-floor-reflections",
+            Switch::ReflectionProbes => "setting-rendering-reflection-probes",
         }
     }
 
@@ -88,6 +102,7 @@ impl Switch {
             Switch::AmbientOcclusion => features.ambient_occlusion,
             Switch::VolumetricFog => features.volumetric_fog,
             Switch::FloorReflections => features.floor_reflections,
+            Switch::ReflectionProbes => features.reflection_probes,
         }
     }
 
@@ -99,8 +114,17 @@ impl Switch {
             Switch::AmbientOcclusion => change.ambient_occlusion = Some(on),
             Switch::VolumetricFog => change.volumetric_fog = Some(on),
             Switch::FloorReflections => change.floor_reflections = Some(on),
+            Switch::ReflectionProbes => change.reflection_probes = Some(on),
         }
         change
+    }
+}
+
+/// The change that caps the probes' face size at `size` and leaves the switches.
+pub fn probe_cap(size: u32) -> RenderFeaturesChange {
+    RenderFeaturesChange {
+        max_probe_resolution: Some(size),
+        ..RenderFeaturesChange::default()
     }
 }
 
@@ -181,6 +205,24 @@ pub fn RenderingSettings() -> impl IntoView {
             }
         });
     };
+    let cap = move |size: u32| {
+        let Some(was) = features.get_untracked().map(|now| now.max_probe_resolution) else {
+            return;
+        };
+        let change = probe_cap(size);
+        features.update(|now| *now = now.map(|now| now.with(&change)));
+        error.set(None);
+        let Some(control) = control.get_value() else {
+            return;
+        };
+        spawn_local(async move {
+            if let Err(message) = set(&*control, change).await {
+                let back = probe_cap(was);
+                features.try_update(|now| *now = now.map(|now| now.with(&back)));
+                error.try_set(Some(message));
+            }
+        });
+    };
     view! {
         <Show when=move || features.get().is_some()>
             <section class="prop-section">
@@ -203,6 +245,29 @@ pub fn RenderingSettings() -> impl IntoView {
                             </div>
                         </div>
                     }).collect_view()}
+                    <div class="prop-row rendering-probe-cap">
+                        <label class="prop-label" for="setting-rendering-probe-resolution">
+                            "Probe resolution"
+                            <Info text="The most pixels a side each of a probe's six views is captured at. A probe set larger captures at this; lower draws faster and blurs its reflections." />
+                        </label>
+                        <div class="prop-control">
+                            <select
+                                id="setting-rendering-probe-resolution"
+                                aria-label="Probe resolution"
+                                prop:value=move || features.get().map(|now| now.max_probe_resolution.to_string()).unwrap_or_default()
+                                on:change=move |event| {
+                                    if let Ok(chosen) = event_target_value(&event).parse::<u32>() {
+                                        cap(chosen);
+                                    }
+                                }
+                            >
+                                {PROBE_RESOLUTIONS.into_iter().map(|size| view! {
+                                    <option value=size.to_string()>{format!("Up to {size} px")}</option>
+                                }).collect_view()}
+                            </select>
+                            <p class="help">"The sharpest a reflection probe captures."</p>
+                        </div>
+                    </div>
                 </div>
             </section>
         </Show>
@@ -256,5 +321,20 @@ mod tests {
             let on = switch.get(&RenderFeatures::ALL.with(&switch.change(false)));
             assert!(!on, "{switch:?} turns itself off");
         }
+    }
+
+    #[test]
+    fn the_probe_cap_is_one_of_the_sizes() {
+        let control = MockEngine::new().connect();
+        now(control.hello(Hello {
+            protocol: PROTOCOL_VERSION,
+            client_name: "test".into(),
+        }))
+        .expect("hello");
+        now(set(&control, super::probe_cap(128))).expect("set");
+        let read = now(read(&control)).expect("read").expect("reported");
+        assert_eq!(read.max_probe_resolution, 128);
+        assert!(read.reflection_probes, "the switches are kept");
+        assert!(now(set(&control, super::probe_cap(300))).is_err());
     }
 }

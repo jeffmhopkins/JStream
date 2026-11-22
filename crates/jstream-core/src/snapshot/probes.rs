@@ -200,16 +200,24 @@ pub(super) fn draw_probes(
         return Ok(());
     }
     let frame = cache.frame();
-    let mut due = None;
+    let mut due = Vec::new();
     for scene_id in &shot.reflective {
         for (item, bounds, probe) in boxes(shot, scene_id, at, live) {
             let face = shot.features.probe_face(probe.resolution);
             let key = (scene_id.clone(), item.clone());
             let map = GpuKey::ProbeMap(scene_id.clone(), item.clone());
-            let kept = match chains.probes.get(&key) {
-                Some(state) if state.bounds == bounds && state.face == face => {
-                    // Kept for the surfaces that read it.
-                    cache.layer(compositor, &map, face * 4, face * 2)?;
+            let state = chains.probes.get(&key);
+            // The last capture is kept for the surfaces that read it until the next
+            // replaces it.
+            if let Some(state) = state {
+                cache.layer(compositor, &map, state.face * 4, state.face * 2)?;
+            }
+            let kept = match state {
+                Some(state)
+                    if state.bounds == bounds
+                        && state.face == face
+                        && state.refresh == probe.refresh_frames =>
+                {
                     let refresh = match state.refresh {
                         0 if !state.settled => SETTLE_FRAMES,
                         0 => u64::MAX,
@@ -219,35 +227,36 @@ pub(super) fn draw_probes(
                 }
                 _ => false,
             };
-            if !kept && due.is_none() {
-                due = Some((scene_id, item, bounds, probe, face));
+            if !kept {
+                due.push((scene_id, item, bounds, probe, face));
             }
         }
     }
-    let Some((scene_id, item, bounds, probe, face)) = due else {
-        return Ok(());
-    };
-    let settled = chains
-        .probes
-        .get(&(scene_id.clone(), item.clone()))
-        .is_some_and(|state| state.bounds == bounds && state.face == face);
-    if capture(
-        compositor,
-        (cache, chains),
-        (shot, at),
-        (scene_id, item, bounds, face),
-        (live, captures),
-    )? {
-        chains.probes.insert(
-            (scene_id.clone(), item.clone()),
-            ProbeState {
-                bounds,
-                face,
-                refresh: probe.refresh_frames,
-                captured: frame,
-                settled,
-            },
-        );
+    // The first due probe that can be drawn.
+    for (scene_id, item, bounds, probe, face) in due {
+        let settled = chains
+            .probes
+            .get(&(scene_id.clone(), item.clone()))
+            .is_some_and(|state| state.bounds == bounds && state.face == face);
+        if capture(
+            compositor,
+            (cache, chains),
+            (shot, at),
+            (scene_id, item, bounds, face),
+            (live, captures),
+        )? {
+            chains.probes.insert(
+                (scene_id.clone(), item.clone()),
+                ProbeState {
+                    bounds,
+                    face,
+                    refresh: probe.refresh_frames,
+                    captured: frame,
+                    settled,
+                },
+            );
+            break;
+        }
     }
     Ok(())
 }
@@ -274,15 +283,6 @@ fn capture(
         width: face,
         height: face,
     };
-    // Every layer first, while the cache can change.
-    let map = GpuKey::ProbeMap(scene_id.clone(), item.clone());
-    cache.layer(compositor, &map, face * 4, face * 2)?;
-    let faces: Vec<GpuKey> = (0..6)
-        .map(|i| GpuKey::ProbeFace(scene_id.clone(), i))
-        .collect();
-    for key in &faces {
-        cache.layer(compositor, key, face, face)?;
-    }
     let size = [canvas.width() as f32, canvas.height() as f32];
     let Some(main) = super::moved_camera(
         live.camera(pass),
@@ -296,6 +296,15 @@ fn capture(
     let Some(cameras) = face_cameras(bounds.centre, main) else {
         return Ok(false);
     };
+    // Every layer first, while the cache can change.
+    let map = GpuKey::ProbeMap(scene_id.clone(), item.clone());
+    cache.layer(compositor, &map, face * 4, face * 2)?;
+    let faces: Vec<GpuKey> = (0..6)
+        .map(|i| GpuKey::ProbeFace(scene_id.clone(), i))
+        .collect();
+    for key in &faces {
+        cache.layer(compositor, key, face, face)?;
+    }
     let models = pass_models((&*cache, &*chains), shot, pass, (at, size), live, main);
     for shown in &models {
         let key = GpuKey::ProbeModel(shown.scene.clone(), shown.item.clone());

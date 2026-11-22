@@ -74,6 +74,17 @@ and calls this crate.
   `SkyDraw::travel_rate`, is passed as whole cells and a fraction. A star is a Gaussian
   about 0.6 px wide. The engine places the layer under the scene's items with no camera.
   The pipeline is made on the first draw.
+- A **reflection probe's capture**
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 3): `Compositor::resample_probe(faces, target)` turns six square faces
+  (`ProbeFace`: a layer and the right, down and forward axes of the 90° camera it was
+  drawn through, in the scene's space) into one equirectangular panorama four faces wide
+  and two high, every texel written by one triangle (`probe.wgsl`): each texel's
+  direction, laid out as the model shader's `panorama` reads one (its centre along -z,
+  up at its top), picks the face it is most ahead of and reads it there bilinear,
+  clamped, keeping premultiplied linear light and its alpha, so where no face saw
+  anything stays transparent. A face of another size, or a target that isn't four by
+  two of them, is refused. The pipeline is made on the first resample.
 - A **view depth** (ADR-0143 decision 4): `Compositor::render_view_depth(scene, target)`
   draws a scene's depth into a canvas-sized layer, red holding `1 / w` (`f / D`) of the
   nearest thing and 0 where nothing is. It reuses the composite's prepared vertices and
@@ -570,6 +581,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
 | Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per draw |
+| Probe resampling pipeline and clamping sampler | Compositor, made on its first `resample_probe`; a uniform, six views and a bind group per resample |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |
@@ -844,6 +856,21 @@ as an upload of the same colour does,
 taps around the direction for a spread: the reflection at the square of the roughness,
 the diffuse light at 1. An ambient light scales it; with none it lights the model on its
 own (`golden_model_an_environment_lights_a_model_from_its_sky`).
+A reflection probe's capture (`ModelDraw::probe` and `CardDraw::probe`, a
+`ProbeLookup`: the panorama `resample_probe` drew, the box's centre and half size in the
+scene's space and its edge fade, ADR-0170 decisions 3 and 5) is read only with `lights`,
+a camera, `Lighting::Scene` and a panorama of this compositor; anything else draws as
+without one. It is packed after the floor cut (`probe_values`: the centre in the viewing
+frame, the scene's axes there with the half sizes, the fade and how the picture stores
+alpha) and bound at binding 5 (a stand-in without, never read). `probed` replaces the
+environment's reflected light for a fragment inside the box: its reflected direction is
+corrected to the box (`probe_dir`, where the ray from the fragment leaves the box, seen
+from the centre, so nearby walls line up), read with the sky's ring of taps at the same
+spread (`probe_light`), and where the capture saw nothing (its alpha) the environment
+shows through. The box's weight rises from 0 at a face to 1 `fade` inside
+(`probe_weight`) and mixes with the environment, which alone lights anything outside;
+the diffuse light still comes from the environment, and the capture is not scaled by
+the ambient light (`golden_model_a_probe_replaces_the_environment_inside_its_box`).
 
 **Lit cards** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 10). `Compositor::light_card` shades a flat picture by a scene's lights

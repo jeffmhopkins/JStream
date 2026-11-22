@@ -3377,6 +3377,14 @@ source: crates/jstream-core/src/kinds.rs
         "live": true
       },
       {
+        "id": "reflections",
+        "type": "bool",
+        "default": true,
+        "label": "Reflects the scene",
+        "description": "Whether, lit by its scene, it reflects the rest of the scene where the scene's reflections are on and a reflection probe's box holds it; off, it reflects only the environment.",
+        "live": true
+      },
+      {
         "id": "animation",
         "type": "string",
         "multiline": false,
@@ -3649,6 +3657,97 @@ source: crates/jstream-core/src/kinds.rs
         "default": 0.5,
         "label": "Height",
         "group": "Area",
+        "live": true
+      }
+    ]
+  },
+  {
+    "kind_id": "reflection_probe",
+    "category": "source",
+    "name": "Reflection probe",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "width_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 2000.0,
+        "label": "Width",
+        "description": "The box's size along the scene's x axis. A surface inside the box reflects what the probe sees.",
+        "live": true
+      },
+      {
+        "id": "height_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 2000.0,
+        "label": "Height",
+        "description": "The box's size along the scene's y axis. A surface inside the box reflects what the probe sees.",
+        "live": true
+      },
+      {
+        "id": "depth_px",
+        "type": "float",
+        "min": 1.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 2000.0,
+        "label": "Depth",
+        "description": "The box's size along the scene's z axis. A surface inside the box reflects what the probe sees.",
+        "live": true
+      },
+      {
+        "id": "fade_px",
+        "type": "float",
+        "min": 0.0,
+        "max": 100000.0,
+        "step": 10.0,
+        "unit": "px",
+        "default": 100.0,
+        "label": "Edge fade",
+        "description": "How far inside the box's faces its reflection fades in, so a surface moving out of the box loses it gradually; 0 cuts at the faces.",
+        "live": true
+      },
+      {
+        "id": "resolution",
+        "type": "enum",
+        "options": [
+          {
+            "value": "128",
+            "label": "128 px"
+          },
+          {
+            "value": "256",
+            "label": "256 px"
+          },
+          {
+            "value": "512",
+            "label": "512 px"
+          }
+        ],
+        "default": "256",
+        "label": "Resolution",
+        "description": "How many pixels a side each of the six views the probe captures is. Larger is sharper and costs more; the app's 3D rendering settings cap it.",
+        "live": true
+      },
+      {
+        "id": "refresh_frames",
+        "type": "int",
+        "min": 0,
+        "max": 600,
+        "unit": "frames",
+        "default": 0,
+        "label": "Refresh every",
+        "description": "How often the probe captures its scene again, in frames; 0 captures once, when it is first drawn or a setting changes. Each capture draws the scene six times, so a probe that sees live video wants a rate, and a slow machine a long one.",
         "live": true
       }
     ]

@@ -1241,6 +1241,17 @@ impl State {
                 return Ok(CallResult::action());
             }
             Action::StudioSetRendering { change } => {
+                if let Some(size) = change.max_probe_resolution
+                    && !jstream_protocol::PROBE_RESOLUTIONS.contains(&size)
+                {
+                    return Err(ProtocolError::invalid_argument(
+                        "max_probe_resolution",
+                        format!(
+                            "a probe's faces are {:?} pixels a side, not {size}",
+                            jstream_protocol::PROBE_RESOLUTIONS
+                        ),
+                    ));
+                }
                 self.rendering = self.rendering.with(&change);
                 return Ok(CallResult::action());
             }

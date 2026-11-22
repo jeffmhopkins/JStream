@@ -268,13 +268,15 @@ Contents ([Design](#design) explains the choices):
   are tested natively.
 - **3D rendering** (`rendering.rs`,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
-  decision 1): `RenderingSettings`, the 3D rendering page, one toggle per `Switch`
-  (Shadows, Ambient occlusion, Volumetric fog, Floor reflections) in a property grid
-  under Effects, each with one help line and an (i). It reads the switches with
+  decisions 1 and 3): `RenderingSettings`, the 3D rendering page, one toggle per
+  `Switch` (Shadows, Ambient occlusion, Volumetric fog, Floor reflections, Reflection
+  probes) in a property grid under Effects, each with one help line and an (i), then a
+  Probe resolution select (Up to 128, 256 or 512 px, `max_probe_resolution`, sent with
+  `probe_cap`). It reads the switches with
   `studio.get` each time the page opens and sends `studio.set_rendering` naming only the
   switch changed, putting back only that switch with an error if the engine refuses; an
   engine that reports no `rendering` (older than 0.147) gets a line saying it has none.
-  `read`, `set` and each `Switch`'s change are tested natively.
+  `read`, `set`, each `Switch`'s change and the probe cap are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
   plugins page: the CLAP scan's folders, the effects found and the files that failed
   (`plugin.clap_scan`), and Rescan (`plugin.clap_rescan`, then `kind.list` again), with
@@ -544,7 +546,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   source kinds `kind.list` reports, under the prototype's groups, names, icons and
   descriptions (Display capture's says "A whole monitor or screen.", naming no one
   platform's API; the engine's 3D `model`, beyond the prototype, under Media and web
-  with a cube icon, and its `light` after it with the sparkle icon, placed at 64 × 64),
+  with a cube icon, and its `light` and `reflection_probe` after it with the sparkle
+  icon, placed at 64 × 64),
   plus the kinds of placed sources it didn't report, which can be
   placed again but not created, and Scene. A search box above the list narrows it by
   name, description or group (`type_matches`, tested natively), keeping the pick while
@@ -797,7 +800,11 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   (`motion.rs`'s `Param`, `sized_kind`), where + Add camera motion starts a slow wiggle
   on the position's x. The list is a draft field, which OK sends as
   `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
-  A keyframe scene shows neither, since it draws its parent's. A group's dialog has a
+  A keyframe scene shows neither, since it draws its parent's. A scene's own dialog
+  that isn't a group's has a Reflections check, sent in `scene.set_options`, whose note
+  says what reflects what inside a reflection probe's box
+  ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
+  decision 2). A group's dialog has a
   Share the 3D space check, sent in `scene.set_options`, and a scene's own camera, when
   the scene places a group, a Moves with picker under Roll (`anchor_choices`: Nothing,
   or each item placing a group, "(flat)" while it doesn't share the space), sent after
