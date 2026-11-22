@@ -3601,8 +3601,9 @@ pub(crate) enum GpuKey {
     /// A lit card's picture flat in its box, before it is lit into its
     /// [`GpuKey::ItemBox`] (ADR-0151 decision 10).
     UnlitBox(SceneId, ItemId),
-    /// A 3D scene's sky backdrop (ADR-0167), drawn through its camera each frame it is
-    /// drawn, at the canvas size, and placed under its items.
+    /// A 3D scene's sky backdrop (ADR-0167), seen through its camera, at the canvas size,
+    /// and placed under its items. The compositor draws into it only when the sky asked
+    /// for differs from the one it holds.
     Sky(SceneId),
     /// A 3D model item's own view depth, through its scene's camera (ADR-0107 decision
     /// 7): what the scene's pass tests the items after it against.

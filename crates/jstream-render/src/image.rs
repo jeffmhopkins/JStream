@@ -208,6 +208,12 @@ impl Image {
         self.generation.load(Ordering::Relaxed)
     }
 
+    /// What tells this image and its clones from every other: the counter they share.
+    /// A `Weak` to it remembers the image without keeping its texture.
+    pub(crate) fn identity(&self) -> &Arc<AtomicU64> {
+        &self.generation
+    }
+
     /// The mip chain of `region` starting `skip` levels down, made by `make` the first
     /// time it is asked for. The chain stays on the image, and goes when the image does
     /// or when [`MAX_CHAINS`] newer ones pushed it out.

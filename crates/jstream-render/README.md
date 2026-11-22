@@ -57,7 +57,11 @@ and calls this crate.
 - A **sky backdrop** ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)):
   `Compositor::draw_sky(sky, target)` draws a scene's environment sky (`SkyDraw`: the
   `Environment`, the camera, the stars, the deep sky, the warp and travel, and an opacity) into a canvas-sized layer, every
-  texel written by one triangle (`sky.wgsl`). Each pixel looks along its ray from the
+  texel written by one triangle (`sky.wgsl`). A layer that still holds the sky asked for is
+  left as it is: the compositor remembers, for the last 4 layers it drew a sky into, the
+  shader's values, the layer's change count after the draw and the picture's, and draws only
+  when one of them differs, so a camera that holds still pays for its sky once
+  (`a_layer_that_holds_the_sky_is_not_drawn_again`). Each pixel looks along its ray from the
   camera (its axes, principal point and focal length, never its position) into the
   gradient or the panorama spun by the turn. Over it go nebulae and a galaxy band
   (`DeepSky`: warped fractal value noise on the direction) and stars hashed per cell of a
@@ -578,7 +582,7 @@ target the NV12 pass writes is transitioned by `Nv12Converter::submit`.
 | `render_image` texture | The returned `Image`, allocated per call |
 | `layer` texture and its render-target view | The returned `Image`; `render_into` reuses it |
 | Model pipelines (opaque and blended), sampler, frame uniform, 1x1 stand-in textures | Compositor |
-| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per draw |
+| Sky pipeline, sampler and 1x1 stand-in picture | Compositor, made on its first `draw_sky`; a uniform and bind group per sky drawn (none for a call whose layer already holds the sky) |
 | Model depth target (`Depth32Float`) | The size of the last layer a model was drawn into; a layer of another size makes a new one, since a pass's attachments must match |
 | Depth of field on models: the model's colour and view-depth layers, and the passes' filter with its scratch layers (two tile-sized, two canvas-sized) | Compositor, made the first time a model is drawn with depth of field; the layers made again for a layer of another size |
 | `GpuModel` vertex and index buffers, textures with their mips, material uniforms and bind groups | The returned `GpuModel`, shared by its clones; made once per `Model` version |

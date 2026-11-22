@@ -1343,7 +1343,8 @@ each pixel's ray from the camera, ignoring its position, into the gradient or pa
 with procedural nebulae, a galaxy band and stars laid out about the direction of travel,
 which at warp streak away from it as the render thread's per-scene travel advances, and
 its layer is placed under every item, through no camera, so it sorts with nothing and
-has no view depth. Its
+has no view depth. The pass is skipped while the layer still holds the sky asked for, so a
+still camera pays for it once. Its
 model-to-clip map is composed in `f64` relative to the camera, so a far camera doesn't
 jitter, and the GPU's own near clip is ADR-0050's near plane. A scene filter that reads depth
 ([ADR-0143](adr/0143-scene-lights-and-depth-aware-scene-filters.md), `depth_fog` first)

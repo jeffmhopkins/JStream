@@ -884,6 +884,10 @@ impl Compositor {
     /// pixel's ray from `sky.camera`, infinitely far away, with its stars, at
     /// `sky.opacity`. A scene then places the layer under its items.
     ///
+    /// A layer that still holds the same sky from an earlier call (the same values
+    /// through a camera looking the same way, and a picture that hasn't changed) is not
+    /// drawn again, so a still camera pays for its sky once.
+    ///
     /// # Errors
     /// [`RenderError::Invalid`] when `target` is not a layer this compositor made, or the
     /// camera can't be seen on it.
@@ -897,6 +901,13 @@ impl Compositor {
             .sky
             .get_or_insert_with(|| crate::sky::SkyRuntime::new(&self.gpu));
         errors.close(runtime.draw(&self.gpu, &self.owner, sky, target))
+    }
+
+    /// How many skies [`Self::draw_sky`] drew, not counting the calls a layer already
+    /// held the sky of.
+    #[cfg(test)]
+    pub(crate) fn sky_draws(&self) -> u64 {
+        self.sky.as_ref().map_or(0, |sky| sky.draws)
     }
 
     /// Lights a card's picture by its 3D scene (ADR-0151 decision 10): `card.image`, the

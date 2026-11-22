@@ -1702,6 +1702,9 @@ counts toward the same limit, and a deeper one draws flat.
 before each of its colour passes, through the camera that pass's items are seen
 through, into a canvas-sized `GpuKey::Sky` layer (`draw_sky`), which `under_sky` puts
 under its items, flat and seen through no camera, only in the cache frame that drew it.
+The compositor leaves the layer as it is when it still holds the sky asked for (the same
+values, a camera looking the same way), so a scene whose camera and sky hold still pays
+for its sky once, not once a frame.
 `Chains::skies` keeps each scene's `SkyState`: the frame that drew it, the warp it
 streams at now, which moves toward the setting at its ramp's pace (dropping while it
 is above it, which zooms the deep sky back in), and how far its
