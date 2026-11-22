@@ -86,7 +86,7 @@ test('the Sources bar adds, restacks, opens and removes the selected source', as
   // Properties and Filters of the selected source.
   await sources.getByRole('button', { name: 'Properties' }).click();
   const props = page.getByRole('dialog', { name: 'Properties' });
-  await expect(props.locator('.modal-sub')).toHaveText('Backdrop');
+  await expect(props.locator('.modal-title')).toHaveText('Backdrop');
   await props.getByRole('button', { name: 'Cancel' }).click();
   await sources.getByRole('button', { name: 'Filters' }).click();
   await expect(page.locator('.filters-panel .filters-title')).toHaveText('Backdrop');

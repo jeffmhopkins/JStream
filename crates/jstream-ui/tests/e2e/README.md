@@ -303,13 +303,15 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   client follows; the panel's New group groups the selected item, and a row dragged
   onto the group's row goes into it.
 - **Properties dialog** (`properties.spec.js`): opened from an item's menu, it shows
-  the type's title, the source's name, its two filters and an enabled Add filter
-  button; Cancel and Escape drop
+  the source's name as the title and its type as the subtitle, and Settings then
+  Filters (counting 2), whose segment lists the two filters and an enabled Add filter
+  button in place of the name; Cancel and Escape drop
   a changed name, OK renames in one edit, and Enter with a blank name sends nothing.
   Dragging the title moves the dialog, which stays inside the window and opens again
   where it was left; a double-click on the title centres it, and the header's × still
-  closes it. With Sharpen described, a click on its row shows its settings on the
-  right, no Filters window opening, the name and the footer's Defaults hidden; a change
+  closes it. With Sharpen described, Filters picks its row and shows its settings
+  beside the list, no Filters window opening, the name and the footer's Defaults
+  hidden; a change
   there is one edit at once, Enter on Blur's name picks Blur from the keyboard, and
   Cancel puts the change back in one more.
   The mock describes no kinds, so the settings form and the draft patch are covered
@@ -317,7 +319,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   from `describeKinds`, opens the dialog with its live picture: a `preview.subscribe`
   of the draft source on a channel from 2³¹ up, another on a new channel once the
   Device field changes, closing the first with nothing saved, and an unsubscribe when
-  Cancel closes the dialog; a colour source shows no picture. The mock streams no
+  Cancel closes the dialog; a colour source shows a picture of itself, a
+  `preview.subscribe` naming its `source_id` and no draft, closed by Cancel. The mock streams no
   pictures, so what the picture draws is checked by hand. With the `color` kind
   described (its `color` live, ADR-0091), a changed colour goes out as a `live.set`
   of `source.set_settings` with `rev` unchanged; Cancel sends `live.cancel` and saves
@@ -377,9 +380,9 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   row's Edit filters… showing that scene's chain from behind the Arrange tab while
   the item stays selected, selecting a scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
-  dialog listing the scene's chain and adding to it at once, the new filter's settings
-  taking the right side (the footer's Defaults hidden) until the Properties entry brings
-  the scene's back; Cancel puts the add back, and OK keeps another.
+  dialog's Filters segment (counting 0, then 1) listing the scene's chain and adding to
+  it at once, the new filter's settings showing beside it (the footer's Defaults
+  hidden) until Settings brings the scene's back; Cancel puts the add back, and OK keeps another.
 - **Custom shader** (`custom-shader.spec.js`): with `kind.list`, `kind.describe`,
   `pack.list`, `pack.read` and `pack.write` answered by the page's socket from the packs
   the test writes (the mock engine loads no packs), Add filter › Custom shader writes
