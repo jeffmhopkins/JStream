@@ -196,8 +196,8 @@ pub struct JtunnelSender {
     pub name: String,
     /// The address and port it sends from, as `192.168.1.5:9000`.
     pub address: String,
-    /// "Use this sender's state" (ADR-0171 decision 1): off unless the person turns it
-    /// on.
+    /// "Use this sender's state" (ADR-0171 decision 1): on unless the person turns it
+    /// off, and on when the JSON leaves it out.
     pub state: bool,
 }
 
@@ -214,7 +214,7 @@ impl JtunnelSetting {
                         let name = entry.get("name")?.as_str()?;
                         let address = entry.get("address")?.as_str()?;
                         let state =
-                            entry.get("state").and_then(serde_json::Value::as_bool) == Some(true);
+                            entry.get("state").and_then(serde_json::Value::as_bool) != Some(false);
                         Some(JtunnelSender {
                             name: name.to_owned(),
                             address: address.to_owned(),

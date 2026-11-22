@@ -76,10 +76,10 @@ Options:
                        sends from (repeatable). Off without it: no socket is
                        open. A `network_audio` source naming the sender then
                        records its audio
-  --jtunnel-state <name>
-                       use the DAW state the accepted JTunnel sender <name>
-                       sends (ADR-0171): its transport, tracks and clips, read
-                       with data.list and data.get (repeatable). Off without it
+  --jtunnel-no-state <name>
+                       ignore the DAW state the accepted JTunnel sender <name>
+                       sends (ADR-0171): its transport, tracks and clips, which
+                       data.list and data.get read otherwise (repeatable)
   --ui-dir <dir>       serve the web UI's built files from this directory at
                        http://127.0.0.1:<port>/ (the browser asks for the token
                        as a password)
@@ -194,7 +194,7 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
     let mut lan_renew = false;
     let mut register_vcam = false;
     let mut unregister_vcam = false;
-    let mut jtunnel_state: Vec<String> = Vec::new();
+    let mut jtunnel_no_state: Vec<String> = Vec::new();
     let mut rest = args.iter();
     while let Some(arg) = rest.next() {
         let mut value = || rest.next().ok_or_else(|| format!("`{arg}` needs a value"));
@@ -288,12 +288,14 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
                 jstream_core::JtunnelSetup::new(options.jtunnel.clone())
                     .map_err(|err| format!("`--jtunnel-accept`: {err}"))?;
             }
-            "--jtunnel-state" => {
+            "--jtunnel-no-state" => {
                 let name = value()?;
-                if jtunnel_state.contains(name) {
-                    return Err(format!("`--jtunnel-state` names the sender `{name}` twice"));
+                if jtunnel_no_state.contains(name) {
+                    return Err(format!(
+                        "`--jtunnel-no-state` names the sender `{name}` twice"
+                    ));
                 }
-                jtunnel_state.push(name.clone());
+                jtunnel_no_state.push(name.clone());
             }
             "--log-dir" => {
                 let dir = value()?;
@@ -354,14 +356,15 @@ pub fn parse(args: &[String]) -> Result<Invocation, String> {
         return Ok(Invocation::UnregisterVcam);
     }
     options.port = port.unwrap_or(0);
-    // "Use this sender's state" (ADR-0171 decision 1), only for a sender accepted here.
-    for name in jtunnel_state {
+    // "Use this sender's state" (ADR-0171 decision 1) is on for an accepted sender;
+    // this turns it off, only for a sender accepted here.
+    for name in jtunnel_no_state {
         let Some(sender) = options.jtunnel.iter_mut().find(|s| s.name() == name) else {
             return Err(format!(
-                "`--jtunnel-state` names `{name}`, which no `--jtunnel-accept` accepts"
+                "`--jtunnel-no-state` names `{name}`, which no `--jtunnel-accept` accepts"
             ));
         };
-        *sender = sender.clone().with_state(true);
+        *sender = sender.clone().with_state(false);
     }
     if lan {
         options.lan = Some(Lan {
@@ -427,18 +430,18 @@ mod tests {
                 .contains("both send from")
         );
         assert!(error("--jtunnel-accept A@[::1]:9000").contains("IPv4 only"));
-        // ADR-0171 decision 1: state is off unless named, and only for an accepted sender.
+        // ADR-0171 decision 1: state is on unless named, and only for an accepted sender.
         let options = serve(
-            "--jtunnel-state Live --jtunnel-accept Bitwig@192.168.1.5:9000 --jtunnel-accept Live@10.0.0.2:9000",
+            "--jtunnel-no-state Live --jtunnel-accept Bitwig@192.168.1.5:9000 --jtunnel-accept Live@10.0.0.2:9000",
         );
         let used: Vec<bool> = options.jtunnel.iter().map(|s| s.uses_state()).collect();
-        assert_eq!(used, [false, true]);
+        assert_eq!(used, [true, false]);
         assert!(
-            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-state B")
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-no-state B")
                 .contains("no `--jtunnel-accept`")
         );
         assert!(
-            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-state A --jtunnel-state A")
+            error("--jtunnel-accept A@10.0.0.1:1 --jtunnel-no-state A --jtunnel-no-state A")
                 .contains("twice")
         );
     }

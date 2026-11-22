@@ -35,7 +35,8 @@
 //!
 //! **State** (ADR-0171 decisions 1 and 2). A sender's state packets (JTunnel's side
 //! channel: JSON messages under keys) are taken only from a sender whose "Use this
-//! sender's state" is on ([`AcceptedSender::with_state`]), off by default; otherwise
+//! sender's state" is on ([`AcceptedSender::with_state`]), on by default for an accepted
+//! sender (the maintainer's call: an accepted JTunnel is one the person set up); off,
 //! each is counted and dropped. The thread joins their pieces per key
 //! ([`StateAssembler`]) and puts each whole message in the engine's [`LiveData`] under
 //! the sender's name, where a message that is not one JSON value or is over a bound is
@@ -102,8 +103,8 @@ pub const MDNS: SocketAddr = SocketAddr::new(
 pub struct AcceptedSender {
     name: String,
     addr: SocketAddr,
-    /// "Use this sender's state" (ADR-0171 decision 1): off unless the person turns it
-    /// on.
+    /// "Use this sender's state" (ADR-0171 decision 1): on once the sender is accepted,
+    /// unless the person turns it off.
     state: bool,
 }
 
@@ -148,12 +149,12 @@ impl AcceptedSender {
         Ok(Self {
             name: name.to_owned(),
             addr,
-            state: false,
+            state: true,
         })
     }
 
     /// The same sender with "Use this sender's state" on or off (ADR-0171 decision 1).
-    /// Off, the default, its state packets are counted and dropped.
+    /// On is the default; off, its state packets are counted and dropped.
     #[must_use]
     pub fn with_state(mut self, on: bool) -> Self {
         self.state = on;

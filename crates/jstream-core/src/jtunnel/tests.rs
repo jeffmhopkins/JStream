@@ -663,14 +663,17 @@ fn piece<'a>(
     }
 }
 
-/// ADR-0171 decision 1: a sender's state is counted and dropped until "Use this
-/// sender's state" is on for it.
+/// ADR-0171 decision 1: an accepted sender's state is used by default, and counted and
+/// dropped while "Use this sender's state" is off for it.
 #[test]
-fn a_senders_state_is_dropped_until_its_switch_is_on() {
+fn a_senders_state_is_dropped_while_its_switch_is_off() {
     let sender = FakeSender::new();
     let data = LiveData::new();
+    let mut setup = setup("Bitwig", &sender);
+    assert!(setup.accepted[0].uses_state(), "on once accepted");
+    setup.accepted[0] = setup.accepted[0].clone().with_state(false);
     let receiver = Receiver::start(
-        &setup("Bitwig", &sender),
+        &setup,
         Arc::new(Clock(Instant::now())),
         None,
         data.clone(),
@@ -686,15 +689,15 @@ fn a_senders_state_is_dropped_until_its_switch_is_on() {
     assert_eq!(receiver.stats().malformed, 0);
 }
 
-/// ADR-0171 decisions 1 and 2: with the switch on, whole messages reach the live data
+/// ADR-0171 decisions 1 and 2: with the switch on, as it is once a sender is accepted,
+/// whole messages reach the live data
 /// under the sender's name, a piece at a time or at once; a message that isn't JSON is
 /// counted; a new stream forgets the old one; a stopped receiver forgets them all.
 #[test]
 fn a_senders_state_reaches_the_live_data_once_its_switch_is_on() {
     let sender = FakeSender::new();
     let data = LiveData::new();
-    let mut setup = setup("Bitwig", &sender);
-    setup.accepted[0] = setup.accepted[0].clone().with_state(true);
+    let setup = setup("Bitwig", &sender);
     let receiver = Receiver::start(
         &setup,
         Arc::new(Clock(Instant::now())),
@@ -759,8 +762,7 @@ impl MediaClock for Shifted {
 fn an_expired_key_comes_back_with_its_next_resend() {
     let sender = FakeSender::new();
     let data = LiveData::new();
-    let mut setup = setup("Bitwig", &sender);
-    setup.accepted[0] = setup.accepted[0].clone().with_state(true);
+    let setup = setup("Bitwig", &sender);
     let shift = Arc::new(AtomicU64::new(0));
     let receiver = Receiver::start(
         &setup,

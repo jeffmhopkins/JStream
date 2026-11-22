@@ -5,8 +5,8 @@
 //! - **The switch** turns the JTunnel receiver on for this machine. Off until the person
 //!   turns it on.
 //! - **The accepted senders** are listed by tunnel name and the address and port they
-//!   send from, each with **Use this sender's state** (ADR-0171 decision 1, off until
-//!   the person ticks it: the DAW's transport, tracks and clips become live data that
+//!   send from, each with **Use this sender's state** (ADR-0171 decision 1, on once
+//!   the sender is accepted, until the person unticks it: the DAW's transport, tracks and clips become live data that
 //!   bindings and sources may read) and Remove. The add row takes a name and an `address:port`; the
 //!   app checks the sender as the engine would (a private IPv4 address, a name no other
 //!   sender has) and the page shows why it refused one.
@@ -81,7 +81,7 @@ pub fn with_sender(
     next.accepted.push(JtunnelSender {
         name: name.to_owned(),
         address: address.to_owned(),
-        state: false,
+        state: true,
     });
     Ok(next)
 }
@@ -257,7 +257,7 @@ pub fn JtunnelSettingView() -> impl IntoView {
                 <span>
                     <span class="settings-check-label">"Receive from JTunnel senders"</span>
                     <span class="settings-check-note">
-                        "When on, JStream takes audio and MIDI from the JTunnel senders below, over UDP on this network, and the DAW's state from each sender you tick. Only the senders you accept here get in, each from the address and port it sends from. Off until you turn it on."
+                        "When on, JStream takes audio and MIDI from the JTunnel senders below, over UDP on this network, and the DAW's state from each sender unless you untick it. Only the senders you accept here get in, each from the address and port it sends from. Off until you turn it on."
                     </span>
                 </span>
             </label>
@@ -276,7 +276,7 @@ pub fn JtunnelSettingView() -> impl IntoView {
                                 <li class="device">
                                     <span class="device-name">{sender.name}</span>
                                     <span class="device-dates">{sender.address}</span>
-                                    <label class="jtunnel-state" title="Take the DAW's state from this sender (its transport, tracks and clips), for bindings and sources to read. Off until you turn it on.">
+                                    <label class="jtunnel-state" title="Take the DAW's state from this sender (its transport, tracks and clips), for bindings and sources to read. On once the sender is accepted.">
                                         <input
                                             type="checkbox"
                                             aria-label=label
@@ -336,16 +336,16 @@ mod tests {
 
     #[test]
     fn the_setting_reads_and_writes_the_apps_json() {
-        let text = r#"{"on":true,"accepted":[{"name":"Bitwig","address":"192.168.1.5:9000"},{"name":"Live","address":"10.0.0.2:9000","state":true},{"name":7}]}"#;
+        let text = r#"{"on":true,"accepted":[{"name":"Bitwig","address":"192.168.1.5:9000"},{"name":"Live","address":"10.0.0.2:9000","state":false},{"name":7}]}"#;
         let setting = JtunnelSetting::parse(text);
         assert!(setting.on);
         assert_eq!(
             setting.accepted,
             vec![
-                sender("Bitwig", "192.168.1.5:9000", false),
-                sender("Live", "10.0.0.2:9000", true),
+                sender("Bitwig", "192.168.1.5:9000", true),
+                sender("Live", "10.0.0.2:9000", false),
             ],
-            "an entry it can't read is left out, and state is off unless it says so"
+            "an entry it can't read is left out, and state is on unless it says off"
         );
         assert_eq!(JtunnelSetting::parse(&setting.to_json()), setting);
         assert_eq!(JtunnelSetting::parse("not json"), JtunnelSetting::default());
@@ -367,8 +367,8 @@ mod tests {
         let one = with_sender(&none, " Bitwig ", " 192.168.1.5:9000 ").expect("added");
         assert_eq!(
             one.accepted,
-            vec![sender("Bitwig", "192.168.1.5:9000", false)],
-            "a new sender's state is off"
+            vec![sender("Bitwig", "192.168.1.5:9000", true)],
+            "a new sender's state is on"
         );
         assert!(with_sender(&none, "  ", "192.168.1.5:9000").is_err());
         assert!(with_sender(&none, "Bitwig", "").is_err());

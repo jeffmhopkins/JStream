@@ -258,7 +258,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   state packet `jstream-jtunnel` accepts.
   A state packet ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
   decisions 1 and 2) is counted as `state_off` and dropped unless the sender's
-  `AcceptedSender::with_state` is on ("Use this sender's state", off by default). On,
+  `AcceptedSender::with_state` is on ("Use this sender's state", on by default for an
+  accepted sender). On,
   each sender's `StateAssembler` joins its pieces per key and the whole message goes to
   the engine's `LiveData` (`jstream-sources`, one per engine, `Engine::live_data`) under
   the sender's name, counted as `state`, or as `state_dropped` when it isn't one JSON
@@ -313,7 +314,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   answer read whole, the per-host bound and (on Linux, from several loopback addresses)
   the list's bound, and through the engine `jtunnel.senders` off by default, then the sender
   listed and `jtunnel.senders_changed` sent. State tests send pieces on loopback: a
-  sender's state counted and dropped while its switch is off; with it on, whole
+  sender's state counted and dropped while its switch is off; with it on, as it is by
+  default, whole
   messages, one in two pieces sent out of order, reaching the live data and a watch,
   one that isn't JSON counted, a new stream ID forgetting the old keys and a stopped
   receiver forgetting them all; and through the engine `data.list` empty before the

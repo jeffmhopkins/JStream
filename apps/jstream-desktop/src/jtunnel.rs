@@ -4,7 +4,8 @@
 //!
 //! - **The setting** is `jtunnel.json` in the data folder, `{"on": true, "accepted":
 //!   [{"name": "Bitwig", "address": "192.168.1.5:9000", "state": true}]}`, user-only.
-//!   `state` is "Use this sender's state" (ADR-0171 decision 1), off when left out. Only the person
+//!   `state` is "Use this sender's state" (ADR-0171 decision 1), on when left out, as it is for a
+//!   newly accepted sender. Only the person
 //!   changes it, from the app's own window: the page calls `set_jtunnel` through
 //!   `setJtunnel` on `__JSTREAM_DESKTOP__` (`bootstrap.rs`), a Tauri command that no
 //!   engine client (an agent, a plugin or a paired device) can reach. Per machine, never
@@ -36,10 +37,14 @@ pub struct Entry {
     pub name: String,
     /// The address and port it sends from, as `192.168.1.5:9000`.
     pub address: String,
-    /// "Use this sender's state" (ADR-0171 decision 1): off unless the person turns it
-    /// on.
-    #[serde(default)]
+    /// "Use this sender's state" (ADR-0171 decision 1): on unless the person turns it
+    /// off, and on in a file from before it.
+    #[serde(default = "state_on")]
     pub state: bool,
+}
+
+const fn state_on() -> bool {
+    true
 }
 
 /// The setting: whether receiving is on, and the senders this machine accepts.
@@ -196,7 +201,7 @@ mod tests {
         Entry {
             name: name.into(),
             address: address.into(),
-            state: false,
+            state: true,
         }
     }
 
@@ -216,28 +221,34 @@ mod tests {
         let setup = read(&file).setup().expect("valid").expect("a setup");
         assert_eq!(setup.accepted[0].name(), "Bitwig");
         assert!(
-            !setup.accepted[0].uses_state(),
-            "state is off until turned on"
+            setup.accepted[0].uses_state(),
+            "an accepted sender's state is used"
         );
-        // "Use this sender's state" (ADR-0171 decision 1) is saved and reaches the engine;
-        // a file from before it has none, and reads as off.
+        // "Use this sender's state" (ADR-0171 decision 1) turned off is saved and reaches
+        // the engine; a file from before it has none, and reads as on.
         let state = Setting {
             on: true,
             accepted: vec![Entry {
-                state: true,
+                state: false,
                 ..entry("Bitwig", "192.168.1.5:9000")
             }],
         };
         write(&file, &state).expect("saved");
         assert_eq!(read(&file), state);
         assert!(
-            read(&file)
+            !read(&file)
                 .setup()
                 .expect("valid")
                 .expect("a setup")
                 .accepted[0]
                 .uses_state()
         );
+        std::fs::write(
+            &file,
+            r#"{"on":true,"accepted":[{"name":"Bitwig","address":"192.168.1.5:9000"}]}"#,
+        )
+        .expect("an older file");
+        assert_eq!(read(&file), on, "no state reads as on");
         write(&file, &on).expect("saved");
         // Off keeps the list, and opens nothing.
         let off = Setting { on: false, ..on };

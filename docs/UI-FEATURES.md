@@ -507,8 +507,8 @@ not remove them; they move into the prototype's look.
   ([ADR-0104](adr/0104-network-listener-over-tls.md)), saved by the app and applied at
   its next start, then "Receive from JTunnel senders" and the accepted senders
   ([ADR-0123](adr/0123-lan-inputs-jtunnel-and-visca.md), `jtunnel.rs`), each with "Use
-  this sender's state" ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md), off
-  until ticked), saved the same
+  this sender's state" ([ADR-0171](adr/0171-live-data-from-a-daw-drives-scenes.md), on
+  once the sender is accepted, until unticked), saved the same
   way, with the senders heard on the network, each accepted only after a confirmation,
   then "Accept a PTZ controller" with its endpoints and allowed controllers
   ([ADR-0153](adr/0153-ptz-controller-idle-stop-counters-and-setting.md),

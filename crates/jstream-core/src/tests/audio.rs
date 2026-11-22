@@ -1701,8 +1701,8 @@ fn jtunnel_senders_lists_the_senders_that_answer_and_says_when_they_change() {
         .any(|e| matches!(e, Event::JtunnelSendersChanged {}))));
 }
 
-/// ADR-0171 decisions 1 and 2: an accepted sender's state, once "Use this sender's
-/// state" is on, is what `data.list` and `data.get` read.
+/// ADR-0171 decisions 1 and 2: an accepted sender's state ("Use this sender's state" is
+/// on by default) is what `data.list` and `data.get` read.
 #[test]
 fn a_jtunnel_senders_state_is_read_with_data_list_and_data_get() {
     use jstream_jtunnel::wire::{self, StatePiece};
@@ -1712,8 +1712,7 @@ fn a_jtunnel_senders_state_is_read_with_data_list_and_data_get() {
     let sender = jtunnel_sender();
     let mut setup = crate::JtunnelSetup::new(vec![
         crate::AcceptedSender::new("Bitwig", sender.local_addr().expect("an address"))
-            .expect("accepted")
-            .with_state(true),
+            .expect("accepted"),
     ])
     .expect("a setup");
     setup.bind = "127.0.0.1:0".parse().expect("an address");
