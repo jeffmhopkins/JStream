@@ -410,19 +410,21 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Properties, whose Edit shader… opens the editor again on the same text; and Add source
   then lists the written shader by its `@name` beside Shader. A fake kind is a source when
   its manifest has a `[[source]]`.
-- **Item effects** (`effects.spec.js`): no effects section with no item selected; with
-  the Backdrop selected, "This item’s effects" with its note and an empty Effects chain
-  under the source's; with Vignette (the core kind's four settings), Sharpen and Gain
-  described, "+ Add effect…" offering the two video kinds, Vignette under Video · Style
+- **Item filters** (`effects.spec.js`): no "Source | This item" control with no item
+  selected; with the Backdrop selected, Source first with each tab's count, then This
+  item with its note in the header, an empty Video chain ("No item filters.") and the
+  Over the canvas switch off; with Vignette (the core kind's four settings), Sharpen and Gain
+  described, "+ Add filter…" offering the two video kinds, Vignette under Video · Style
   with its hint, for this item, with the item's foot; Add as one edit on the item, which
-  opens the Filters window on it, its name's tooltip "Effect on “Backdrop”", once the collection
-  holds it, while the source keeps its own two; Sharpen added as a second effect, and
+  opens the Filters window on it, its name's tooltip "Item filter on “Backdrop”", once the collection
+  holds it, while the source keeps its own two; Sharpen added as a second one, and
   dragged above the vignette as one reorder of the item's chain; the row's eye and × as
-  one edit each; and selecting the scene again leaving the effects section out. In a
-  new keyframe of Main, the Backdrop's effects "in this keyframe", with the keyframe's
+  one edit each; the switch as one edit; Source showing the source's chains unchanged;
+  and selecting the scene again leaving the control out. In a
+  new keyframe of Main, the Backdrop's filters "in this keyframe", with the keyframe's
   note and the note that they follow the item's; Sharpen added there as one edit, "For
   this item of “Backdrop” in this keyframe", after which the keyframe has its own and
-  Main's item still has none; and Follow the item clearing them as one edit.
+  Main's item, still on This item, has none; and Follow the item clearing them as one edit.
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0", the program filters' note as its tooltip), a recording's
   row under it with its state and FX button, its ID listed only once; the program's FX showing the master chain in the Filters
@@ -529,8 +531,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   direction has no binding isn't and runs nothing. With `Shift+WheelDown` bound, a
   Shift turn reported in `deltaX` runs it, and the unbound way still scrolls. The
   mock has no follow camera, so it refuses each zoom, and the test allows that error.
-  With a display capture placed in Main by another client and a Follow pointer effect
-  added to it (`kind.list` and `kind.describe` answered by the route), the Filters
+  With a display capture placed in Main by another client and a Follow pointer item filter
+  added to it from the panel's This item tab (`kind.list` and `kind.describe` answered by the route), the Filters
   window's keys offer the default `Ctrl+WheelUp`/`Ctrl+WheelDown` zoom (ADR-0112 §4),
   bind both in one click, and drop the offer; Zoom out's Set key ignores a bare turn and
   binds `Alt+WheelDown` from a turn with Alt held.
