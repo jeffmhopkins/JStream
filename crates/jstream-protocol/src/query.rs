@@ -1166,7 +1166,7 @@ pub struct SourceSize {
     pub size: Option<PixelSize>,
     /// Its depth, in the same pixels as `size`, for a source with depth: a 3D model's
     /// bounds, front to back, at the scale its width and height are reported at
-    /// (ADR-0107 decision 8, 0.142). Omitted for every other source and while `size` is.
+    /// (ADR-0107 decision 8, 0.148). Omitted for every other source and while `size` is.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub depth: Option<u32>,
 }

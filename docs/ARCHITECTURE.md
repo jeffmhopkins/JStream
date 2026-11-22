@@ -1004,7 +1004,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   [ADR-0092](adr/0092-installed-fonts-query.md)) → the installed fonts, by family, style
   and absolute path; `source.sizes` (protocol 0.40) → each source's current
   size, runtime state ([ADR-0022](adr/0022-item-transform-and-canvas.md) §4), and a
-  3D model's depth (0.142, [ADR-0107](adr/0107-3d-models.md) decision 8);
+  3D model's depth (0.148, [ADR-0107](adr/0107-3d-models.md) decision 8);
   `activity.list` (protocol 0.51) → the engine's last 100 audit entries, each with a
   sentence saying what it did ([ADR-0083](adr/0083-activity-log-over-the-protocol.md));
   `profile.get` (protocol 0.73, [ADR-0103](adr/0103-per-item-performance-profile.md)) →
@@ -1645,7 +1645,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   effect's setting (`property` `effect` with its `effect` target), with a migration that
   refuses one in an older file. Version 14 (ADR-0146) adds a scene's PTZ `ptz_shots`,
   with a migration that refuses them in an older file. Version 16 (ADR-0164) adds a
-  group's `share_space` and a scene's `camera_anchor`, refused the same way. `jstream-core`
+  group's `share_space` and a scene's `camera_anchor`, refused the same way. Version 17
+  (ADR-0171) adds motion modifiers that drive a setting of their item's source
+  (`property` `source` with its `source` target), refused the same way. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

@@ -310,6 +310,7 @@ fn three_d(c: &mut Criterion) {
             shadows: &[],
             environment: None,
             floor: None,
+            materials: &[],
             texture: None,
             reflection: None,
         };
@@ -396,6 +397,7 @@ fn three_d(c: &mut Criterion) {
                         shadows: &[],
                         environment: None,
                         floor: None,
+                        materials: &[],
                         texture: None,
                         reflection: None,
                     },
@@ -413,6 +415,7 @@ fn three_d(c: &mut Criterion) {
                         shadows: &shadows,
                         environment: None,
                         floor: None,
+                        materials: &[],
                         texture: None,
                         reflection: None,
                     },

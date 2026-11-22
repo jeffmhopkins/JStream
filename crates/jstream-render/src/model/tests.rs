@@ -98,6 +98,7 @@ fn draw_lit(
                 shadows: &[],
                 environment: None,
                 floor: None,
+                materials: &[],
                 texture: None,
                 reflection: None,
             },
@@ -437,6 +438,7 @@ fn golden_model_a_layer_sorts_with_cards_by_the_models_depth() {
                     shadows: &[],
                     environment: None,
                     floor: None,
+                    materials: &[],
                     texture: None,
                     reflection: None,
                 },
@@ -480,6 +482,7 @@ fn a_model_from_another_compositor_is_refused() {
             shadows: &[],
             environment: None,
             floor: None,
+            materials: &[],
             texture: None,
             reflection: None,
         },
@@ -581,6 +584,7 @@ fn a_model_draws_into_layers_of_different_sizes() {
                     shadows: &[],
                     environment: None,
                     floor: None,
+                    materials: &[],
                     texture: None,
                     reflection: None,
                 },
@@ -965,6 +969,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                 shadows: &[],
                 environment: None,
                 floor: None,
+                materials: &[],
                 texture: None,
                 reflection: None,
             },
@@ -1016,6 +1021,7 @@ fn golden_model_a_shadow_map_shadows_a_scene_lit_model() {
                     shadows,
                     environment: None,
                     floor: None,
+                    materials: &[],
                     texture: None,
                     reflection: None,
                 },
@@ -1073,6 +1079,7 @@ fn sky_sphere(
                 shadows: &[],
                 environment: Some(environment),
                 floor: None,
+                materials: &[],
                 texture: None,
                 reflection: None,
             },
@@ -1222,6 +1229,7 @@ fn golden_model_a_floor_cuts_what_is_below_it() {
         shadows: &[],
         environment: None,
         floor: Some(50.0),
+        materials: &[],
         texture: None,
         reflection: None,
     };
@@ -1308,6 +1316,7 @@ fn golden_model_a_pose_turns_a_rigged_model_on_the_gpu() {
                     shadows: &[],
                     environment: None,
                     floor: None,
+                    materials: &[],
                     texture: None,
                     reflection: None,
                 },
@@ -1346,6 +1355,144 @@ fn identity_f32() -> [f32; 16] {
     [
         1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 0.0, 1.0,
     ]
+}
+
+/// Draws `uploaded` unlit, flat at the middle of the canvas, with `materials`' drives,
+/// and reads back the middle pixel.
+fn driven_middle(
+    compositor: &mut Compositor,
+    uploaded: &super::GpuModel,
+    materials: &[super::MaterialDrive<'_>],
+) -> [u8; 3] {
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let layer = compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    compositor
+        .draw_model(
+            &ModelDraw {
+                model: uploaded,
+                geometry,
+                camera: None,
+                lighting: Lighting::Unlit,
+                lights: None,
+                shadows: &[],
+                environment: None,
+                floor: None,
+                materials,
+                texture: None,
+                reflection: None,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [crate::tests::item(
+        &layer,
+        Placement::Layer(geometry),
+        Crop::NONE,
+        1.0,
+    )];
+    rgb(&render(compositor, &items), 80, 50)
+}
+
+/// ADR-0171 decision 4: a draw changes the materials it names, by name or all of them,
+/// lightening the base colour and scaling the glow, and the next draw that doesn't
+/// drive them shows them as the file has them.
+#[test]
+fn golden_model_a_draw_drives_its_materials_by_name_and_only_for_itself() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let plane = Shape::Plane
+        .model(Material::default())
+        .expect("the plane builds");
+    let panel = Material {
+        name: "panel".into(),
+        base_color: [0.05, 0.05, 0.05, 1.0],
+        emissive: [0.2, 0.0, 0.0],
+        unlit: true,
+        ..plane.materials()[0].clone()
+    };
+    let model =
+        Model::new(plane.primitives().to_vec(), vec![panel], vec![]).expect("the plane builds");
+    let compositor = &mut opened.compositor;
+    let uploaded = compositor.upload_model(&model).expect("the model uploads");
+    let rest = driven_middle(compositor, &uploaded, &[]);
+    let lighter = super::MaterialDrive {
+        material: Some("panel"),
+        color: 0.5,
+        ..super::MaterialDrive::default()
+    };
+    let lit = driven_middle(compositor, &uploaded, &[lighter]);
+    assert!(
+        lit.iter().zip(rest).all(|(l, r)| *l > r + 60),
+        "lightened {lit:?} from {rest:?}"
+    );
+    // Another material's name changes nothing.
+    let elsewhere = super::MaterialDrive {
+        material: Some("trim"),
+        ..lighter
+    };
+    assert_near(
+        driven_middle(compositor, &uploaded, &[elsewhere]),
+        rest,
+        (80, 50),
+    );
+    // Every material, with no name: the glow at three times its strength.
+    let glow = super::MaterialDrive {
+        emissive_strength: 2.0,
+        ..super::MaterialDrive::default()
+    };
+    let glowing = driven_middle(compositor, &uploaded, &[glow]);
+    assert!(glowing[0] > rest[0] + 40, "glow {glowing:?} from {rest:?}");
+    assert_near([glowing[1], glowing[2], 0], [rest[1], rest[2], 0], (80, 50));
+    // Nothing stored: an undriven draw is as the file has it.
+    assert_near(driven_middle(compositor, &uploaded, &[]), rest, (80, 50));
+}
+
+#[test]
+fn a_material_drive_adds_within_ranges_and_nothing_when_it_adds_nothing() {
+    let values = [
+        0.5, 0.5, 0.5, 1.0, 2.0, 1.0, 0.0, 0.0, 0.3, 0.6, 1.0, 1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0,
+        0.0, 0.0,
+    ];
+    assert_eq!(super::driven_values(&values, "a", &[]), None);
+    let drive = |d: super::MaterialDrive<'static>| {
+        super::driven_values(&values, "a", &[d]).expect("it drives")
+    };
+    let none = super::MaterialDrive::default();
+    // Metalness and roughness add, within 0 and 1.
+    let rough = drive(super::MaterialDrive {
+        metallic: 0.5,
+        roughness: -2.0,
+        ..none
+    });
+    assert!(
+        (rough[8] - 0.8).abs() < 1e-6 && rough[9] == 0.0,
+        "{rough:?}"
+    );
+    // The glow keeps its brightness above 1 and is scaled, never past 64.
+    let strong = drive(super::MaterialDrive {
+        emissive_strength: 100.0,
+        ..none
+    });
+    assert!((strong[4] - 128.0).abs() < 1e-3, "{strong:?}");
+    let off = drive(super::MaterialDrive {
+        emissive_strength: -1.0,
+        ..none
+    });
+    assert_eq!(&off[4..7], &[0.0, 0.0, 0.0]);
+    // Black is as dark as a colour goes, and alpha stays.
+    let dark = drive(super::MaterialDrive {
+        color: -1.0,
+        ..none
+    });
+    assert_eq!(&dark[0..4], &[0.0, 0.0, 0.0, 1.0]);
+    // A drive for another material adds nothing.
+    let other = super::MaterialDrive {
+        material: Some("b"),
+        color: 1.0,
+        ..none
+    };
+    assert_eq!(super::driven_values(&values, "a", &[other]), None);
 }
 
 /// A framing camera (ADR-0094 decision 3) with depth of field focused `focus_px` along
@@ -1631,6 +1778,15 @@ fn textured_plane(
     compositor: &mut Compositor,
     texture: Option<super::LiveTexture<'_>>,
 ) -> Snapshot {
+    textured_plane_driven(compositor, texture, &[])
+}
+
+/// [`textured_plane`], its materials driven by `materials` (ADR-0171 decision 4).
+fn textured_plane_driven(
+    compositor: &mut Compositor,
+    texture: Option<super::LiveTexture<'_>>,
+    materials: &[super::MaterialDrive<'_>],
+) -> Snapshot {
     let plane = Shape::Plane
         .model(Material {
             unlit: true,
@@ -1652,6 +1808,7 @@ fn textured_plane(
                 environment: None,
                 floor: None,
                 texture,
+                materials,
                 reflection: None,
             },
             &layer,
@@ -1710,6 +1867,16 @@ fn golden_model_a_live_texture_replaces_the_base_colour() {
         }),
     );
     assert_near(rgb(&missing, 80, 50), [0, 0, 0], (80, 50));
+    // A drive reaches a live-textured material too (ADR-0171 decision 4), and the next
+    // draw that doesn't drive it shows the picture as it is.
+    let dark = super::MaterialDrive {
+        color: -1.0,
+        ..super::MaterialDrive::default()
+    };
+    let driven = textured_plane_driven(compositor, Some(live(None)), &[dark]);
+    assert_near(rgb(&driven, 80, 30), [0, 0, 0], (80, 30));
+    let again = textured_plane(compositor, Some(live(None)));
+    assert_near(rgb(&again, 80, 30), [255, 0, 0], (80, 30));
     // A layer drawn again: its mip chain is rebuilt, and the model shows the new picture.
     let layer = compositor.layer(16, 16).expect("a layer");
     for colour in [Color::rgb(0.0, 1.0, 0.0), Color::rgb(1.0, 0.0, 1.0)] {
@@ -1773,6 +1940,7 @@ fn golden_model_a_reflection_replaces_the_studio_environment() {
                     environment: None,
                     floor: None,
                     texture: None,
+                    materials: &[],
                     reflection,
                 },
                 &layer,

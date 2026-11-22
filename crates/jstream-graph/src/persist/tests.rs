@@ -74,10 +74,19 @@ const V13: &str = include_str!("fixtures/v13.json");
 /// its keyframe scene `k` (ADR-0146). It must keep loading as version 1 must.
 const V14: &str = include_str!("fixtures/v14.json");
 
-/// A collection file at schema version 15, the current one: version 14 with scene `b`
-/// kept warm (ADR-0117 §7). The same rule applies once version 16 exists.
+/// A collection file at schema version 15: version 14 with scene `b` kept warm (ADR-0117
+/// §7). It must keep loading as version 1 must.
 const V15: &str = include_str!("fixtures/v15.json");
+
+/// A collection file at schema version 16: version 15 with group `b` sharing scene `a`'s
+/// 3D space and `a`'s camera riding with it (ADR-0164). It must keep loading as version
+/// 1 must.
 const V16: &str = include_str!("fixtures/v16.json");
+
+/// A collection file at schema version 17, the current one: version 16 with a motion
+/// modifier on `i4` that drives a material's glow on its source (ADR-0171). The same
+/// rule applies once version 18 exists.
+const V17: &str = include_str!("fixtures/v17.json");
 
 /// The parity fixture's `webcam`, the follow camera's `follow_pointer` (ADR-0120), and
 /// `color`, whose `follow` parameter refers to
@@ -262,6 +271,7 @@ fn v4_graph() -> Graph {
                         modifier_id: "sway".into(),
                         property: MotionProperty::X,
                         effect: None,
+                        source: None,
                         kind: MotionKind::Wiggle {
                             amplitude: f(3.0),
                             frequency_hz: f(0.5),
@@ -275,6 +285,7 @@ fn v4_graph() -> Graph {
                         modifier_id: "roll".into(),
                         property: MotionProperty::Rotation,
                         effect: None,
+                        source: None,
                         kind: MotionKind::Oscillate {
                             shape: MotionShape::Sine,
                             amplitude: f(0.1),
@@ -293,6 +304,7 @@ fn v4_graph() -> Graph {
                     modifier_id: "scroll".into(),
                     property: MotionProperty::CropLeft,
                     effect: None,
+                    source: None,
                     kind: MotionKind::Drift {
                         rate_per_s: f(-8.0),
                         wrap: Some(f(64.0)),
@@ -609,6 +621,7 @@ fn v12_graph() -> Graph {
             filter_id: FilterId::new("edge"),
             param: "width".into(),
         }),
+        source: None,
         kind: MotionKind::Oscillate {
             shape: MotionShape::Sine,
             amplitude: jstream_protocol::Finite32::new(2.0).expect("finite"),
@@ -721,9 +734,73 @@ fn v16_graph() -> Graph {
     graph
 }
 
+/// [`v16_graph`] with a modifier on `i4` that drives a material's glow on its source
+/// (ADR-0171 decision 4).
+fn v17_graph() -> Graph {
+    use jstream_protocol::{
+        MotionClock, MotionKind, MotionModifier, MotionProperty, MotionSetting, MotionShape,
+    };
+    let mut graph = v16_graph();
+    let mut motion = graph
+        .state()
+        .scenes()
+        .iter()
+        .flat_map(|s| s.items())
+        .find(|i| i.id().as_str() == "i4")
+        .map(|i| i.motion().to_vec())
+        .expect("i4 is in the fixture");
+    motion.push(MotionModifier {
+        modifier_id: "glow".into(),
+        property: MotionProperty::Source,
+        effect: None,
+        source: Some(MotionSetting {
+            param: "emissive_strength".into(),
+            material: Some("led".into()),
+        }),
+        kind: MotionKind::Oscillate {
+            shape: MotionShape::Square,
+            amplitude: jstream_protocol::Finite32::new(1.0).expect("finite"),
+            period_ms: 1000,
+            phase: jstream_protocol::Finite32::ZERO,
+        },
+        clock: MotionClock::Engine,
+        enabled: true,
+    });
+    let applied = graph.apply(
+        &[Edit::ItemSetMotion {
+            item_id: ItemId::new("i4"),
+            scene_id: None,
+            motion,
+        }],
+        None,
+    );
+    assert!(applied.is_ok(), "{applied:?}");
+    graph
+}
+
 #[test]
 fn the_fixture_is_what_the_collection_saves() {
-    assert_eq!(v16_graph().to_collection_json(), V16);
+    assert_eq!(v17_graph().to_collection_json(), V17);
+}
+
+#[test]
+fn the_v17_fixture_loads_exactly() {
+    let expected = v17_graph();
+    let loaded = load(V17);
+    assert_eq!(loaded.as_ref().map(Graph::rev), Ok(Rev(15)));
+    assert_eq!(loaded.as_ref().map(Graph::state), Ok(expected.state()));
+}
+
+/// Version 17 adds motion that drives a source setting (ADR-0171): such a modifier in a
+/// version 16 file is refused, as version 16 refused it.
+#[test]
+fn a_version_16_source_modifier_is_refused() {
+    let mut value: Value = serde_json::from_str(V17).expect("the v17 fixture");
+    value["schema_version"] = json!(16);
+    assert!(matches!(
+        load(&value.to_string()),
+        Err(LoadError::Migration { from: 16, .. })
+    ));
 }
 
 #[test]

@@ -46,8 +46,9 @@ and calls this crate.
   version, and `Compositor::draw_model` draws one placement of it (`ModelDraw`: the
   item's geometry, the scene's camera, the lighting, and for a scene-lit model the
   scene's lights, [ADR-0143](../../docs/adr/0143-scene-lights-and-depth-aware-scene-filters.md),
-  and their shadow maps, ADR-0151, and maybe another source's picture as its texture
-  and one it reflects, `LiveTexture` and `reflection`, ADR-0107 decision 5)
+  and their shadow maps, ADR-0151, maybe another source's picture as its texture and
+  one it reflects, `LiveTexture` and `reflection`, ADR-0107 decision 5, and how this
+  placement changes its materials, `ModelDraw::materials`)
   into a canvas-sized layer with its own depth test, blurred by its own depth when the
   camera has a depth of field ([ADR-0165](../../docs/adr/0165-depth-of-field-on-models.md)).
   The engine runs filters over that layer and places it with
@@ -802,6 +803,17 @@ or spot light by `(1 − (d / range)²)²` (none at range 0) and a spot light by
 `smoothstep` across the outer `softness` of its cone (a hard edge at softness 0), and
 shades each with the studio key light's `light`. Without a camera, or unlit, the lights
 are ignored and the frame is the one ADR-0107 draws.
+
+**Driven materials** ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
+decision 4). `ModelDraw::materials` holds `MaterialDrive`s, each adding to every
+material or to the file's materials of one name: to the base colour, lightened in sRGB;
+to metallic and roughness, each within 0 and 1; and by name to the glow's colour, scaled
+by its own brightness, and its strength, a multiplier 1 at rest within 0 and
+`MAX_EMISSIVE_STRENGTH` (64). The draw writes each changed material's uniform before it
+encodes, and a later draw that doesn't change it restores it, so another placement of
+the same model draws it as it is. A material with a live texture binds a uniform of its
+own, which is driven the same way
+(`golden_model_a_draw_drives_its_materials_by_name_and_only_for_itself`).
 
 **Shadows** ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md) decision
 3). `ModelDraw::shadows` holds up to `MAX_SHADOW_MAPS` (2) `ShadowMap`s: which of the

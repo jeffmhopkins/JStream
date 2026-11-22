@@ -212,7 +212,10 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and `MotionCurve`, follows a bus or a source
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
   `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
-  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)).
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.145
+  `MotionProperty::Source` and `MotionSetting`, the source setting one drives, and
+  `MAX_MOTION_MATERIAL_LEN` (128)
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -356,9 +359,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.142 because a source with depth reports it: `SourceSize`'s and
+`PROTOCOL_VERSION` is 0.148 because a source with depth reports it: `SourceSize`'s and
 `source.size_changed`'s optional `depth`, a 3D model's front-to-back bounds
 ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8);
+0.145 because a motion modifier can drive a live setting of its
+item's source: `MotionProperty::Source` with its `MotionSetting`, a light's colour and
+intensity or a model material's colour and glow by name
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4);
 0.140 because a DAW's JTunnel state is live data: the queries
 `data.list` (`DataInputInfo`) and `data.get`, and `NetworkProfile`'s `state`,
 `state_off` and `state_dropped`
@@ -1886,7 +1893,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   ([ADR-0073](../../docs/adr/0073-sources-drawn-at-their-shown-size.md)). With
   `source.size_changed` it is what a client needs to draw a legacy placement's box, crop
   handles and a size in % of the source's own (ADR-0022 §4). Runtime state, so no
-  `rev`. Added in 0.40. Since 0.142 a source with depth also reports `depth`, in the
+  `rev`. Added in 0.40. Since 0.148 a source with depth also reports `depth`, in the
   pixels of its `size`: a 3D model's bounds front to back, at the scale its width and
   height are reported at (the larger 512), so an editor can outline and hit it by its 3D
   bounds ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8). Omitted for every
@@ -2246,7 +2253,7 @@ After `welcome`, the server pushes every event to every client.
   size is the one `source.sizes` reports, which a client reads once and then follows
   with these events. Runtime state, so no `rev`
   ([ADR-0022](../../docs/adr/0022-item-transform-and-canvas.md) §4). Added in 0.40;
-  `depth`, as `source.sizes` reports it, since 0.142.
+  `depth`, as `source.sizes` reports it, since 0.148.
 - `events.dropped {count}` says that `count` of this connection's events were dropped
   because the client read too slowly. A WebSocket server keeps a bounded event buffer
   per connection; when it overflows, it drops the queued events and sends this one
@@ -2804,7 +2811,8 @@ evaluates as each frame is drawn. A modifier never writes the item's values: `st
 reports the same geometry, crop and opacity whatever it adds. Each modifier has a
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
 the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
-`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`), its
+`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`, or since
+0.145 `source` with its `source`), its
 `kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
@@ -2848,6 +2856,21 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   parameter the item doesn't draw, or one of another type, adds nothing. It never moves the box.
   `effect` is omitted for every other property, and a client before 0.109 reads the
   property as `Unknown`.
+- **Source settings** (since 0.145,
+  [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4):
+  `property` `source` drives a live setting of the item's own source instead, which
+  `source: {param, material}` (`MotionSetting`) names: `param` 1 to 64 bytes of ASCII
+  letters, digits and `_`, and `material`, omitted or 1 to 128 bytes. Only property
+  `source` takes a `source`, and it needs one (`motion.<n>.source`). It changes how this
+  item draws its source, and nothing is stored. A `light` takes `color`, `intensity`
+  (0 to 64), `range_px`, `cone_deg` (1 to 170), `softness` and `shadow_softness` (0 to
+  1). A `model` takes `color` (its base colour), `metallic` and `roughness` (0 to 1) on
+  every material, or with `material` on the file's materials of that name, which also
+  take `emissive` (the glow's colour) and `emissive_strength` (a multiplier of the
+  glow, 1 at rest, kept within 0 to 64). Numbers and colours change as an `effect`
+  setting's do. One naming a setting the source doesn't have, or a material its model
+  doesn't have, adds nothing; it never moves the box. `source` is omitted for every other
+  property, and a client before 0.145 reads the property as `Unknown`.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source
