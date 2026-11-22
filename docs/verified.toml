@@ -3,7 +3,7 @@
 # blank line per entry let parallel PRs that re-verify different inputs usually merge.
 
 ["ARCH#browser-source"."body"]
-stamp = { hash = "b3:a787bf1b25140571", by = "agent:mac-browser", note = "Added the macOS paragraph: macOS does what Linux does (socket pair, OnPaint in software, CPU frames through slot files in a private folder), with the helper in the desktop app's bundle and CEF's framework and helper apps in Contents/Frameworks, and ADR-0157 joined depends_on. Checked against cef/mod.rs and cef/cpu.rs, whose Linux gates now include macOS, and helper/mac.rs's bundle paths. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
+stamp = { hash = "b3:f541352231eaf491", by = "agent:claude", note = "Windows paint import: added that the copy's wait runs on the link's release thread with no lock a frame reader takes, so plans and the pipe never wait on the GPU; the rest (copy, wait before the slot goes back) still holds" }
 
 ["ARCH#browser-source"."dep:docs/adr/0004-wgpu-with-native-interop.md"]
 stamp = { hash = "b3:4dd2ed0785be217e" }
@@ -1482,7 +1482,7 @@ stamp = { hash = "b3:91baf30b25242110", by = "agent:mac-browser", note = "Added 
 stamp = { hash = "b3:15363f095eeadef2", by = "agent:mac-browser", note = "Purpose now says CPU frames on Linux and macOS, adds ADR-0157, widens the cpu_frames, CefBackend and run_helper rows to macOS (run_helper's row names helper/mac.rs's framework loader, sandbox and NSApp class), and says macos-app runs linux_page.rs's a_page_ tests against the bundled helper. Checked against lib.rs's cfgs and after-review.yml. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#browser-source"]
-stamp = { hash = "b3:a787bf1b25140571", by = "agent:mac-browser", note = "ARCH's browser-source section gained the macOS paragraph (Linux's CPU-frame design, helper in the bundle); this README's purpose says the same and links ADR-0157. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
+stamp = { hash = "b3:f541352231eaf491", by = "agent:claude", note = "Re-read against the import split (PageFrames::import + Import wait/publish on a release thread): the seam, use_device and paints_on_cpu text still holds; threads are documented in link.rs rustdoc as it says" }
 
 ["CRATE-jstream-browser#purpose"."dep:docs/ARCHITECTURE.md#crate-map/jstream-browser"]
 stamp = { hash = "b3:f99d1132414287fd", by = "agent:mac-browser", note = "The crate-map row now lists the CEF backend on Windows, Linux and macOS with CPU frames on Linux and macOS, matching this purpose. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
@@ -1497,10 +1497,10 @@ stamp = { hash = "b3:7275770d21e1fcf8", by = "agent:page-api-thread", note = "Re
 stamp = { hash = "b3:c9a4448f881da60a", by = "agent:readme-scrub", note = "#1369 review: the cargo doc pointer passes --document-private-items (N1); the moved Behaviour paragraphs no longer open by naming their own file, and audio.rs's ARCH reference is a resolvable path again (N2). Only doc comments and the pointer changed; the map still holds." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/cpu.rs"]
-stamp = { hash = "b3:20bc771513d19f72", by = "agent:mac-browser", note = "Only the module doc and cfg widen from Linux to Linux and macOS, plus the macOS frames folder note (always the temp folder under /var/folders). The CPU frames row of the README holds. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
+stamp = { hash = "b3:c4cbd04558678324", by = "agent:claude", note = "Re-read against the import split (PageFrames::import + Import wait/publish on a release thread): the seam, use_device and paints_on_cpu text still holds; threads are documented in link.rs rustdoc as it says" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/gpu.rs"]
-stamp = { hash = "b3:f2dca2aa7eacbbd6", by = "agent:readme-scrub", note = "#1369 review: the cargo doc pointer passes --document-private-items (N1); the moved Behaviour paragraphs no longer open by naming their own file, and audio.rs's ARCH reference is a resolvable path again (N2). Only doc comments and the pointer changed; the map still holds." }
+stamp = { hash = "b3:9d1801a7befa6e2a", by = "agent:claude", note = "Review fix: Skipped is cfg(feature = cef) and the ring comment is reworded; the map, the seam and the paint path still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/job.rs"]
 stamp = { hash = "b3:67529d27e725a225", by = "agent:claude", note = "Kept #1190's note on dropping frames from an earlier device and repainting; added the Windows kill-on-close job for the helper and --no-startup-window (#1186), and the CEF start error naming a shared cache folder (#1187)" }
@@ -1539,7 +1539,7 @@ stamp = { hash = "b3:44b86dd7bd04fa94", by = "agent:mac-browser", note = "Module
 stamp = { hash = "b3:a95ac156ce3945fb", by = "agent:mac-browser", note = "Every cfg that was any(windows, linux) is now any(windows, linux, macos), the CPU-frame modules are linux|macos, and the crate docs say so with ADR-0157. That is what the README's platform columns now say. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/link.rs"]
-stamp = { hash = "b3:c4c4ba091ff00be6", by = "agent:readme-scrub", note = "#1369 review: the cargo doc pointer passes --document-private-items (N1); the moved Behaviour paragraphs no longer open by naming their own file, and audio.rs's ARCH reference is a resolvable path again (N2). Only doc comments and the pointer changed; the map still holds." }
+stamp = { hash = "b3:4a48721de6119919", by = "agent:claude", note = "Review fix: Skipped is cfg(feature = cef) and the ring comment is reworded; the map, the seam and the paint path still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/page.rs"]
 stamp = { hash = "b3:bd476ac006b820f7", by = "agent:readme-scrub", note = "#1369 review: the cargo doc pointer passes --document-private-items (N1); the moved Behaviour paragraphs no longer open by naming their own file, and audio.rs's ARCH reference is a resolvable path again (N2). Only doc comments and the pointer changed; the map still holds." }
