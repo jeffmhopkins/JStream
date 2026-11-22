@@ -101,6 +101,7 @@ test('Add filter… opens the dialog over the panel and the Properties dialog', 
   await page.locator('.sources-panel li.row').first().click({ button: 'right' });
   await page.getByRole('menu', { name: 'Context menu' }).getByRole('menuitem', { name: 'Properties…' }).click();
   const props = page.getByRole('dialog', { name: 'Properties' });
+  await props.getByRole('tab', { name: /^Filters/ }).click();
   await props.getByRole('button', { name: '+ Add filter…' }).click();
   await expect(add).toBeVisible();
   await page.keyboard.press('Escape');

@@ -1465,11 +1465,6 @@ fn asset_input(
     let p = param.clone();
     let send = send.clone();
     view! {
-        <select class="asset-root" prop:value=move || root_name(root.get()) on:change=on_root>
-            <option value="collection">"Collection folder"</option>
-            <option value="app">"App assets"</option>
-            <option value="absolute">"Absolute path"</option>
-        </select>
         <input type="text" placeholder=hint.unwrap_or_else(|| "path".into()) prop:value=path.clone() on:change=on_path />
         // App assets are the app's own files, not something a person picks on disk.
         {crate::browse::browse_button(
@@ -1502,6 +1497,12 @@ fn asset_input(
                 send(value);
             },
         )}
+        // Where the path starts, after the path and its Browse… (DL-02).
+        <select class="asset-root" aria-label="Path is relative to" title="Where the path starts" prop:value=move || root_name(root.get()) on:change=on_root>
+            <option value="collection">"Collection"</option>
+            <option value="app">"App assets"</option>
+            <option value="absolute">"Absolute"</option>
+        </select>
     }
     .into_any()
 }

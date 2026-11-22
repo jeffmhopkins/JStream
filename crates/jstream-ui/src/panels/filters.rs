@@ -2687,13 +2687,14 @@ fn WindowBody(
     }
 }
 
-/// The body of a Properties dialog (DL-02, DL-03, #1219): on the left a "Properties"
-/// entry, then the owner's chains, whose rows pick a filter, and Add filter; on the right
-/// `properties` (the dialog's own settings, kept mounted, so a draft keeps what is typed)
-/// while that entry is selected, or the picked filter's settings, as the Filters window
-/// shows them. Filter changes apply at once; the dialog's [`FilterUndo`] puts them back
-/// on Cancel. A filter added from here, or one picked and then removed, moves the
-/// selection, as in the window.
+/// The body of a Properties dialog (DL-02, DL-03, #1219): an optional `preview` on top,
+/// then a Settings | Filters segmented control with the chains' filter count. Settings
+/// shows `properties` (the dialog's own settings, kept mounted, so a draft keeps what is
+/// typed); Filters shows the owner's chains, whose rows pick a filter, and Add filter on
+/// the left, and the picked filter's settings on the right, as the Filters window shows
+/// them. Filter changes apply at once; the dialog's [`FilterUndo`] puts them back on
+/// Cancel. A filter added from here shows on Filters, picked; one picked and then
+/// removed gives the pane back to the next, as in the window.
 #[component]
 pub fn PropertiesAndFilters(
     /// The chains' owner: the source, or the scene.
@@ -2702,12 +2703,17 @@ pub fn PropertiesAndFilters(
     video: bool,
     /// Whether it has an audio chain.
     audio: bool,
-    /// The picked filter; `None` is the Properties entry.
+    /// The picked filter, shown while `filters` is on.
     selected: RwSignal<Option<FilterId>>,
+    /// Whether the Filters segment is on, rather than Settings.
+    filters: RwSignal<bool>,
     /// The note beside the filters' heading.
     #[prop(into)]
     note: String,
-    /// The Properties entry's pane.
+    /// The picture above both segments.
+    #[prop(default = None)]
+    preview: Option<ViewFn>,
+    /// The Settings segment's pane.
     children: Children,
 ) -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -2719,6 +2725,7 @@ pub fn PropertiesAndFilters(
             dialogs.landed.set(None);
             added_at.set(Some(rev));
             selected.set(Some(filter_id));
+            filters.set(true);
         }
     });
     let chain_ids = {
@@ -2738,15 +2745,19 @@ pub fn PropertiesAndFilters(
             })
         })
     };
-    // A picked filter that is removed (here, or by another client) gives the pane back
-    // to Properties; one just added is waited for.
+    // On Filters, a filter is always picked while the chains hold one: the first, or
+    // the next one once the picked one is removed (here, or by another client). One
+    // just added is waited for.
     Effect::new(move |_| {
         let ids = chain_ids.get();
         let rev = studio.collection.with(|c| c.as_ref().map(|c| c.rev));
         let waiting = added_at.get().is_some_and(|at| rev < Some(at));
-        let gone = selected.with(|s| s.as_ref().is_some_and(|id| !ids.contains(id)));
-        if gone && !waiting {
-            selected.set(None);
+        let gone = selected.with(|s| s.as_ref().is_none_or(|id| !ids.contains(id)));
+        let next = ids.first().cloned();
+        // Set only on a change: the effect reads `selected`, so setting it to what it
+        // holds would run it again, forever.
+        if gone && !waiting && filters.get() && selected.with_untracked(|s| *s != next) {
+            selected.set(next);
         }
     });
     let shown = Memo::new(move |_| {
@@ -2754,7 +2765,7 @@ pub fn PropertiesAndFilters(
             .get()
             .filter(|id| chain_ids.with(|ids| ids.contains(id)))
     });
-    let on_props = move || selected.with(Option::is_none);
+    let count = move || chain_ids.with(Vec::len);
     let add = {
         let owner = owner.clone();
         move |_| dialogs.add(owner.clone())
@@ -2767,35 +2778,52 @@ pub fn PropertiesAndFilters(
             })
         }
     };
+    // An empty chain says so in the list, beside Add filter.
     let waiting = move || selected.with(Option::is_some) && shown.with(Option::is_none);
+    let segment = move |on_filters: bool, label: &'static str| {
+        let on = move || filters.get() == on_filters;
+        view! {
+            <button
+                type="button"
+                role="tab"
+                aria-selected=move || on().to_string()
+                class:on=on
+                on:click=move |_| filters.set(on_filters)
+            >
+                {label}
+                {on_filters.then(|| view! { <span class="count">{count}</span> })}
+            </button>
+        }
+    };
     view! {
-        <div class="props-body filters-window-body">
-            <div class="filters-window-list props-list">
-                <button
-                    type="button"
-                    class="props-entry"
-                    class:on=on_props
-                    aria-pressed=move || on_props().to_string()
-                    on:click=move |_| selected.set(None)
-                >
-                    <Icon name="sliders" size=14 />
-                    "Properties"
-                </button>
-                <div class="props-side-head">
-                    <span class="props-side-title">"Filters"</span>
-                    <span class="props-side-note">{note}</span>
+        <div class="props-body">
+            {preview.map(|preview| view! { <div class="props-top">{preview.run()}</div> })}
+            <div class="props-segments">
+                <div class="segmented" role="tablist" aria-label="Properties or filters">
+                    {segment(false, "Settings")}
+                    {segment(true, "Filters")}
                 </div>
-                <Chains owner=owner video=video audio=audio pick=selected />
-                {(video || audio).then(|| view! {
-                    <button type="button" class="filters-add props-add-filter" on:click=add>
-                        "+ Add filter…"
-                    </button>
-                })}
             </div>
-            <div class="filters-window-pane props-pane">
-                <div class="props-settings" hidden=move || !on_props()>{children()}</div>
-                {pane}
-                {move || waiting().then(|| view! { <p class="placeholder">"Loading…"</p> })}
+            <div class="props-settings" role="tabpanel" aria-label="Settings" hidden=move || filters.get()>
+                {children()}
+            </div>
+            <div class="props-filters filters-window-body" role="tabpanel" aria-label="Filters" hidden=move || !filters.get()>
+                <div class="filters-window-list props-list">
+                    <div class="props-side-head">
+                        <span class="props-side-title">"Filters"</span>
+                        <span class="props-side-note">{note}</span>
+                    </div>
+                    <Chains owner=owner video=video audio=audio pick=selected />
+                    {(video || audio).then(|| view! {
+                        <button type="button" class="filters-add props-add-filter" on:click=add>
+                            "+ Add filter…"
+                        </button>
+                    })}
+                </div>
+                <div class="filters-window-pane props-pane">
+                    {pane}
+                    {move || waiting().then(|| view! { <p class="placeholder">"Loading…"</p> })}
+                </div>
             </div>
         </div>
     }
