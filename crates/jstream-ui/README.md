@@ -213,10 +213,10 @@ Contents ([Design](#design) explains the choices):
   custom shader editor (`custom_shader.rs`: `ShaderEditor`, with the template, the
   `// @name` and `// @param` lines, the `effect.toml` they make (a source's too), the pack it opens,
   the line an error names and the WGSL colouring (`highlight`) tested natively), the number
-  field the panels share (`number.rs`: `NumberField`, which can sit inline with a short
-  caption and without steppers, and `AxisRow`, a row of such fields under one label, as
-  the Inspector's Position, Size and Scale and the scene camera's rows are, #1219,
-  #1214), the custom curve editor the Inspector and the
+  field the panels share (`number.rs`: `NumberField`, with no steppers unless asked for
+  (the mixer's gain fields), which can sit inline with a short caption inside its box,
+  and `AxisRow`, a row of such fields under one label, as the Inspector's Position, Size
+  and Scale are, #1219), the custom curve editor the Inspector and the
   preset form share (`curve.rs`, a point's range, the drawing's path and its frame, which grows to take in
   an overshoot, tested natively),
   the keyframe timing fields (`keyframe_timing.rs`, the edit each change sends tested
@@ -245,8 +245,8 @@ Contents ([Design](#design) explains the choices):
   preview and program, and `StageLabel`, the label over each side ([Design](#design)),
   and the scene's Transition in and out submenus the menus share
   (`override_submenu`); and
-  `transform.rs`: `Transform`, the Transform panel (align, distribute and arrange the
-  selected items); and `stats.rs`: `StreamStats`, the Stream stats panel (one output's
+  `transform.rs`: `Transform`, the Arrange panel (align, distribute and arrange the
+  selected items; `PanelId::Transform`, titled Arrange); and `stats.rs`: `StreamStats`, the Stream stats panel (one output's
   pill, uptime, bitrate, dropped frames, health, two-minute bitrate chart with its
   hover readout, and details, from `stats.tick`'s `outputs`), whose figures, chart,
   hover and choice of output are tested natively.
@@ -410,7 +410,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   Clear crop, which `crop::clear` finds through `keyframe_child`) write the override and
   what is off below is off for it too, with Crop, since the canvas draws no box for it
   (#846, protocol 0.55); a plain nested scene's items still open their own scene. Every
-  Transform panel button but Clear crop works on the canvas's boxes, so it leaves such
+  Arrange panel button but Clear crop works on the canvas's boxes, so it leaves such
   a child as it is. What would change the parent's items (Del, dragging rows, Add source,
   New group, layer order, the duplicates, Remove, the blend mode, the reference or clone
   switch) is off there. The
@@ -586,16 +586,17 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   is placed in another scene too, and its header has a Properties & filters… button,
   which opens its source's Properties dialog (a nested scene's: the scene's), where the
   source's settings and filters are; the Inspector doesn't show them. Under an item's
-  header, a tab strip (Transform, Motion with the modifier count, Behaviour; Left,
-  Right, Home and End move along it) shows one tab's sections at a time, and the tab
+  header, a segmented control (Transform, Motion with the modifier count, Behaviour;
+  Left, Right, Home and End move along it) shows one tab's sections at a time, and the tab
   last picked is kept in the browser's storage as `jstream.inspector.tab` (#1219). The
   header and the strip stay pinned while the tab scrolls, and every tab stays mounted
   while hidden, so a field keeps what is typed in it. Its sections fold, and each stays as it was last left,
   by title, across items and reloads (`Folds`, kept in the browser's storage as
-  `jstream.folds`). Transform holds Parameters (X and Y of the
-  unrotated box's top-left corner, W, H, W % and H % of the source's own size (blank
-  while the engine knows none) and Rotation, sent as `item.set_geometry`; the W/H link,
-  on by default, keeps the aspect ratio when either side changes), 3D (folded
+  `jstream.folds`). Every row has its label in one 88 px column. Transform holds
+  Position and size (X and Y of the unrotated box's top-left corner, W, H, W % and H %
+  of the source's own size (blank while the engine knows none) and Rotation, sent as
+  `item.set_geometry`; the link between W and H, on by default, keeps the aspect ratio
+  when either side changes), 3D (folded
   at first: Tilt, Turn, Depth and Perspective, also `item.set_geometry`; Perspective
   shows the prototype's 1200 px while the item has none, and the first change that puts
   the item in 3D sets it, since without one the engine draws 3D orthographically, where
@@ -633,8 +634,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   once per selected item or scene and each field follows the collection, so an edit
   doesn't rebuild it or take the focus. The fields show committed values: a canvas drag
   shows in them once it is dropped.
-- **Number fields** (`NumberField`, spec-panels.md G10) have − and + steppers and a
-  unit. Typed text is sent on Enter or blur, Escape puts the value back, and `−`
+- **Number fields** (`NumberField`, spec-panels.md G10) show the number with its unit
+  in one box, with no − and + steppers but on the mixer's gain fields; an inline field's
+  short caption (X, W, L) sits inside the box before the number, and a drag on it
+  scrubs as a drag on the number does. Typed text is sent on Enter or blur, Escape puts the value back, and `−`
   (U+2212) and `,` are read as a minus and a decimal point; ArrowUp and ArrowDown step
   (Shift a tenth for steps under 1, Ctrl, Meta or Alt ten times). A drag across an
   unfocused field steps once per 3 px (Shift a tenth, Ctrl four times, per move so a
@@ -643,7 +646,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   move with no button held. Values are kept to the field's range and rounded, and
   negatives are written with `−`. A value its panel doesn't send, because the edit
   would change nothing, puts the committed value back in the field.
-- **The Transform panel** ([UI features › transform](../../docs/UI-FEATURES.md#transform))
+- **The Arrange panel** ([UI features › transform](../../docs/UI-FEATURES.md#transform))
   aligns, distributes and arranges the selected items with the prototype's rules,
   on their unrotated boxes: alignment is to the selection's bounds with two or more
   selected and Align to on Selection, else to the canvas; distributing (three or more)
@@ -804,7 +807,7 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   its settings come from the kind's descriptor, read once per kind and kept; a kind the
   engine doesn't describe shows its name alone. A filter with three settings or fewer
   opens the properties form under its row, any other opens the Filters window (the
-  scope tabs from `window_scopes`, the chain on the left and the selected filter's
+  segmented scope switcher from `window_scopes`, each scope with its filter count, the chain on the left and the selected filter's
   settings on the right, over an undimmed canvas, Cancel putting back what it did),
   as the panel's head button does, and a double-click always does: in the
   Filters panel, the panel opens the window on
@@ -939,7 +942,9 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   widths, a 56 px header, a body that fades out above one footer), and their forms one
   property grid: a setting descriptor's field (`.field.prop`) lays itself out, other forms
   use `.prop-grid`, and the details that don't fit a setting's one helper line go behind
-  `dialog::Info`'s (i). The fonts are IBM Plex Sans and
+  `dialog::Info`'s (i). Tabs come in two levels: a panel strip's, and inside a panel or
+  dialog a segmented control (`.segmented`, the Inspector's tabs and the Filters
+  window's scopes); a dialog's pages are a rail of 32 px items. The fonts are IBM Plex Sans and
   Mono, bundled in `fonts/` under the SIL OFL 1.1 and served from the page's own origin,
   since its policy loads fonts from nowhere else
   ([ADR-0077](../../docs/adr/0077-bundle-ibm-plex-fonts.md)). They show with
@@ -949,8 +954,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   the canvas, outer columns, full-width top and bottom, sidebars, and above and below
   the canvas. A zone stacks groups (columns top to bottom, rows side by side); a group
   shows one panel with its title, or tabs. Panels are the prototype's eleven: Scenes,
-  Sources (`Sources`), the Inspector (`Inspector`), the
-  Transform, Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
+  Sources (`Sources`), the Inspector (`Inspector`), Arrange (the prototype's
+  Transform), Filters, Live chat, Stream stats, Audio mixer, Outputs, Agent activity and
   Transitions (`StudioMode`); `panel_view` maps each to its component, and a new panel
   adds a `PanelId` and a line there. Live chat waits on the engine (YouTube sign-in),
   so it says what it waits on and is in no built-in layout. Stream stats
@@ -1386,7 +1391,7 @@ beside it ([Design › Studio mode](#design)).
 - **Locked items** (`Layout::is_locked`, ADR-0096). A click selects a locked item as
   any other, but no drag, handle or arrow key moves it: a selection holding one shows
   its outline and readout, which ends “· locked”, with no handles or knob, and a drag
-  of several moves only the unlocked ones. The Inspector, the menus and the Transform
+  of several moves only the unlocked ones. The Inspector, the menus and the Arrange
   panel still change it, as the engine applies every edit.
 - **The preview.** Under the boxes is the shown scene's picture, live: the program
   mix while the canvas shows the scene on program, so its transitions show, else that

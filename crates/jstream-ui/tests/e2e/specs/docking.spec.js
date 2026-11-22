@@ -37,7 +37,7 @@ async function centre(locator) {
 test('the Editing layout docks every panel, and the View menu hides and adds them', async ({ page, daemon }) => {
   await connect(page, daemon);
   await expect(zone(page, 'Left sidebar').getByRole('tab')).toHaveText(['Scenes', 'Sources']);
-  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector', 'Filters', 'Transform']);
+  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Inspector', 'Filters', 'Arrange']);
   await expect(zone(page, 'Bottom dock').getByRole('tab')).toHaveText(['Audio mixer', 'Outputs', 'Transitions']);
   // Empty zones are hidden until a panel is dragged.
   await expect(zone(page, 'Top dock')).toBeHidden();
@@ -52,7 +52,7 @@ test('the Editing layout docks every panel, and the View menu hides and adds the
   await expect(inspector).toHaveAttribute('aria-checked', 'false');
   // The menu stays open; adding puts the panel back at the end of its home zone.
   await inspector.click();
-  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Filters', 'Transform', 'Inspector']);
+  await expect(zone(page, 'Right sidebar').getByRole('tab')).toHaveText(['Filters', 'Arrange', 'Inspector']);
   await page.keyboard.press('Escape');
   await expect(page.locator('header.app-header')).toContainText('Layout: Editing (modified)');
 });
@@ -93,12 +93,12 @@ test('a lone panel collapses by its title, and closes on a second click of its Ã
   await tab(page, 'Scenes').click();
   await expect(scenes).toBeVisible();
 
-  const close = page.getByRole('button', { name: 'Close Transform' });
-  await tab(page, 'Transform').hover();
+  const close = page.getByRole('button', { name: 'Close Arrange' });
+  await tab(page, 'Arrange').hover();
   await close.click();
-  await expect(close).toHaveAttribute('title', 'Click again to close Transform');
+  await expect(close).toHaveAttribute('title', 'Click again to close Arrange');
   await close.click();
-  await expect(tab(page, 'Transform')).toHaveCount(0);
+  await expect(tab(page, 'Arrange')).toHaveCount(0);
   const closeFilters = page.getByRole('button', { name: 'Close Filters' });
   await tab(page, 'Filters').hover();
   await closeFilters.click();

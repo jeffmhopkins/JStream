@@ -647,7 +647,7 @@ pub fn Canvas() -> impl IntoView {
                               alt: bool|
           -> Option<(Handle, Option<Picture>)> {
         // A 3D scene's boxes have no handles: their size, angles and depth are edited in
-        // the Transform panel.
+        // the Inspector.
         if current.camera.is_some() {
             return None;
         }

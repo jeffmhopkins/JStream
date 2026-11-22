@@ -206,7 +206,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   one before "1 s ago", gone when the pointer leaves; a stop puts it back to READY and
   Waiting.
 - **Docking** (`docking.spec.js`): the Editing layout's zones (the Inspector, Filters and
-  Transform as tabs of one group on the right, Transitions as a tab beside Outputs), with empty zones hidden; the View
+  Arrange as tabs of one group on the right, Transitions as a tab beside Outputs), with empty zones hidden; the View
   menu hiding and adding a panel at the end of its home zone, and the layout marked
   "(modified)"; dragging a tab onto a tab strip groups it, and onto an empty zone,
   which shows while dragging, docks it there; a lone panel collapses by its title,
@@ -325,8 +325,8 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   after None, and not its display; picking it and pressing OK is one edit, and the
   dialog opened again shows that window.
 - **Inspector** (`inspector.spec.js`): the selected Backdrop's X, Y, W, H and Rotation;
-  a new width with the W/H link on scales the height and the canvas readout follows,
-  and with it off the other side stays; a stepper is one edit Ctrl+Z on the canvas
+  a new width with the width and height link on scales the height and the canvas readout follows,
+  and with it off the other side stays; the fields have no steppers, and an arrow key is one edit Ctrl+Z on the canvas
   undoes; arrow keys step (Ctrl by 10), Escape drops typed text, a drag across the
   field is sent once on release, and text that isn't a number sends nothing while `−`
   and `,` are read; crop (with the folded "cropped" hint), opacity, the Fit select and
@@ -335,14 +335,14 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   the Transform, Motion and Behaviour tabs, each hiding the others', with no Properties
   section, the arrow keys moving along the strip with the focus, the tab kept across a
   reload, and the header's Properties & filters… opening the Properties dialog; X and
-  Y, W and H, and W % and H % each on one row of its group, the crop's four sides on
-  one row, and no sideways scroll in the Transform tab. The mock
+  Y, W and H, and W % and H % each on one row of its group, the crop's four sides two by
+  two, and no sideways scroll in the Transform tab. The mock
   engine doesn't implement `scene.set_transitions`, so choosing one isn't run.
 - **Filters** (`filters.spec.js`): with no item selected the panel shows the scene's
   chain; with the Backdrop selected, its title, note, one video chain of its source
   (above the item's effects) with its count and the two rows, Blur struck through; the eye turning Blur on as one edit, a
   drag putting it above Sharpen as one more, and × removing Sharpen; Edit filters… in
-  an item's menu selecting the item and showing the panel behind the Transform tab; the
+  an item's menu selecting the item and showing the panel behind the Arrange tab; the
   Add filter dialog from the panel and over the Properties dialog, which Escape leaves
   open; and the Filters window on a double-click, with the prototype's hint for
   Blur, whose switch applies at once, Cancel puts back and OK keeps; from the panel's
@@ -367,7 +367,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   Main's empty video chain with the scene note; with Sharpen and Gain described, Add
   filter offering only Sharpen, with the scene's foot, as one edit on the scene, while
   the Backdrop keeps its own two; another scene selected showing its own chain; a scene
-  row's Edit filters… showing that scene's chain from behind the Transform tab while
+  row's Edit filters… showing that scene's chain from behind the Arrange tab while
   the item stays selected, selecting a scene going back to its chain, and the canvas
   margin's Edit scene filters… showing the shown scene's in place of the selected item's; and the scene Properties
   dialog listing the scene's chain and adding to it at once, the new filter's settings
@@ -414,7 +414,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
 - **Program and output chains** (`output-chains.spec.js`): the Outputs panel's Program
   output row ("master", "FX 0", the program filters' note as its tooltip), a recording's
   row under it with its state and FX button, its ID listed only once; the program's FX showing the master chain in the Filters
-  panel from behind the Transform tab, with its note and its video and audio chains,
+  panel from behind the Arrange tab, with its note and its video and audio chains,
   the output's FX its own chain, and selecting an item going back to its source's. With
   Gain and Sharpen described: Add filter on the master offering both, with its foot,
   Gain added as one edit that the program's FX and the Mixer's count; the new filter
@@ -460,7 +460,7 @@ covers = ["crates/jstream-ui/tests/e2e/specs/**"]
   reload; the Inspector's type icon and its 3D section, folded at first, with
   Perspective at 1200 and a Tilt sent as one edit and then "in use"; and the View
   menu's eleven panels, adding Live chat, which says it waits on YouTube sign-in.
-- **Transform** (`transform.spec.js`, on the Transform tab): the summary and the disabled buttons with
+- **Arrange** (`transform.spec.js`, on the Arrange tab): the summary and the disabled buttons with
   nothing selected; with one item, Selection off and Canvas on, Stretch as one edit
   Ctrl+Z undoes, and Reset rotation and Clear crop sending nothing when nothing
   changes; with two items, Selection on, Distribute off, and Match width and height
