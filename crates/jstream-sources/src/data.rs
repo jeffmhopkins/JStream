@@ -276,6 +276,9 @@ fn depth(value: &Value) -> usize {
 #[derive(Clone, Default)]
 pub struct LiveData {
     store: Arc<Mutex<Store>>,
+    /// Counts every change to any sender's messages, so a reader that draws from many
+    /// keys (a `grid` source) can tell nothing changed with one atomic load.
+    changes: Arc<AtomicU64>,
 }
 
 impl std::fmt::Debug for LiveData {
@@ -336,6 +339,7 @@ impl LiveData {
             },
         );
         store.update(input, key);
+        self.changed();
         Ok(())
     }
 
@@ -367,6 +371,7 @@ impl LiveData {
         for key in gone.keys.keys() {
             store.update(input, key);
         }
+        self.changed();
     }
 
     /// Forgets each key not put or touched in the [`STALE_MS`] before `now_ms`.
@@ -388,9 +393,37 @@ impl LiveData {
             }
         }
         store.inputs.retain(|_, input| !input.keys.is_empty());
+        let any = !gone.is_empty();
         for (name, key) in gone {
             store.update(&name, &key);
         }
+        if any {
+            self.changed();
+        }
+    }
+
+    fn changed(&self) {
+        self.changes.fetch_add(1, Ordering::Release);
+    }
+
+    /// How many times any sender's messages changed: a message put, a key expired, a
+    /// sender forgotten. Equal readings mean nothing changed in between.
+    #[must_use]
+    pub fn changes(&self) -> u64 {
+        self.changes.load(Ordering::Acquire)
+    }
+
+    /// The message for `key` from the sender `input`, or with `None` from whichever
+    /// sender has one (the first by name), as a watch on any sender reads it once no
+    /// message has landed since.
+    #[must_use]
+    pub fn get_from(&self, input: Option<&str>, key: &str) -> Option<Arc<Value>> {
+        let store = self.lock();
+        match input {
+            Some(name) => store.inputs.get(name).and_then(|i| i.keys.get(key)),
+            None => store.inputs.values().find_map(|i| i.keys.get(key)),
+        }
+        .map(|e| Arc::clone(&e.value))
     }
 
     /// Every sender with state, by name, and its keys, in order.
