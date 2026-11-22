@@ -812,8 +812,8 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "crates/jstream-control/README.m
   on the position's x. The list is a draft field, which OK sends as
   `scene.set_camera_motion`, refused first when `check_camera_motion` would refuse it.
   A keyframe scene shows neither, since it draws its parent's. A scene's own dialog
-  that isn't a group's has a Reflections check, sent in `scene.set_options`, whose note
-  says what reflects what inside a reflection probe's box
+  that isn't a group's has a Reflections check under Output, sent in `scene.set_options`,
+  whose info tip says what reflects what inside a reflection probe's box
   ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 2). A group's dialog has a
   Share the 3D space check, sent in `scene.set_options`, and a scene's own camera, when
