@@ -80,6 +80,9 @@ source: crates/jstream-protocol/src/fixtures.rs
 {"type":"request","id":"r81","call":{"kind":"action","action":{"type":"timeline.seek","timeline_id":"tl_volley","at_ms":1500}}}
 {"type":"request","id":"r82","call":{"kind":"action","action":{"type":"timeline.stop","timeline_id":"tl_volley"}}}
 {"type":"request","id":"r83","call":{"kind":"action","action":{"type":"source.restart","source_id":"src_1"}}}
+{"type":"request","id":"r84","call":{"kind":"action","action":{"type":"clock.hold"}}}
+{"type":"request","id":"r85","call":{"kind":"action","action":{"type":"clock.step","ms":33}}}
+{"type":"request","id":"r86","call":{"kind":"action","action":{"type":"clock.release"}}}
 {"type":"request","id":"r20","call":{"kind":"query","query":{"type":"scene.list"}}}
 {"type":"request","id":"r21","call":{"kind":"query","query":{"type":"output.status","output_id":"out_yt"}}}
 {"type":"request","id":"r22","call":{"kind":"query","query":{"type":"source.list"}}}
