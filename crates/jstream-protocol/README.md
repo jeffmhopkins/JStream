@@ -76,7 +76,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
   `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
-  cap since 0.159, with `PROBE_RESOLUTIONS`),
+  cap since 0.161, with `PROBE_RESOLUTIONS`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -219,7 +219,11 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `MAX_MOTION_MATERIAL_LEN` (128)
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
   Since 0.151 `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
-  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)).
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)). Since 0.160
+  `MotionKind::Data` follows one field of a JTunnel sender's live data, within
+  `MAX_DATA_KEY_LEN` (63), `MAX_DATA_FIELD_LEN` (255), `MAX_DATA_STATES` (32) and
+  `MAX_DATA_STATE_LEN` (100)
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -363,11 +367,15 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.159 because a scene's surfaces can reflect each other through
+`PROTOCOL_VERSION` is 0.161 because a scene's surfaces can reflect each other through
 reflection probes: `SceneOptions`' `reflections`, and `RenderFeatures`'
 `reflection_probes` and `max_probe_resolution` (with `PROBE_RESOLUTIONS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decisions 2 and 3);
+0.160 because a motion modifier can follow a DAW's live data:
+`MotionKind`'s `data` reads one field of a JTunnel sender's state through a `range` or a
+`states` table, smoothed as a `midi` one is
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3);
 0.157 because a source with depth reports it: `SourceSize`'s and
 `source.size_changed`'s optional `depth`, a 3D model's front-to-back bounds
 ([ADR-0107](../../docs/adr/0107-3d-models.md) decision 8);
@@ -1500,7 +1508,7 @@ program, ranked after the Preview scene within the warm budget
 `share_space` (default `false`), which on a group placed in a 3D scene draws its children
 in that scene's space through the group item's pose instead of as one card
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), kept and ignored
-on any other scene, and since 0.159 `reflections` (default `false`), which lets the
+on any other scene, and since 0.161 `reflections` (default `false`), which lets the
 scene's `scene`-lit models and lit cards reflect each other through its
 `reflection_probe` items, each by its own roughness and metalness
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
@@ -1659,7 +1667,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
   floor_reflections?, reflection_probes?, max_probe_resolution?}` (0.147, the last two
-  since 0.159,
+  since 0.161,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
@@ -1788,7 +1796,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
-  sets, and since 0.159 the probe switch and face-size cap.
+  sets, and since 0.161 the probe switch and face-size cap.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,
@@ -2826,7 +2834,7 @@ after 1.0:
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86) and a `midi` one (0.151) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86), a `midi` one (0.151) and a `data` one (0.160) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2902,6 +2910,18 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   ±100 000. Before the controller sends anything it reads 0 (a pitch bend one half). A
   preview reads the control as it is, unsmoothed. Its `clock` is ignored, and a scene
   camera's motion refuses it.
+- **`data`** (since 0.160,
+  [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3)
+  follows one field of a JTunnel sender's live data the same way: `field` (a dotted path
+  of names and list indexes, `slots.2.state`; empty for the whole message) of the latest
+  message for `key` (1 to 63 bytes) from `input`, a sender by name (omitted for whichever
+  sent the key last). A number reads 0 at `range`'s first end and 1 at its second
+  (default `[0, 1]`, ends that differ, the first larger to invert), clamped between;
+  `true` reads 1 and `false` 0; a text reads its entry in `states` (at most 32 texts of 1
+  to 100 bytes, each to a value within 0 to 1) or 0; and a missing sender, key or field,
+  or one that went stale, reads 0. That is smoothed, bent and mapped onto `from..to` as a
+  `midi` modifier's is, with the same defaults. A preview reads the field as it is,
+  unsmoothed. Its `clock` is ignored, and a scene camera's motion refuses it.
 - **How a value applies:** positions, angles, depth and crop edges add it (crop in
   source pixels, rounded, never below 0); `scale` and `opacity` multiply by `1 + value`,
   and opacity is then kept within 0 and `MAX_OPACITY` (4, since 0.83). Two modifiers on one property add up.

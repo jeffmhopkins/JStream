@@ -172,7 +172,8 @@ pub enum Kind {
     /// Follows a MIDI controller ([ADR-0168](../../../docs/adr/0168-midi-controllers-drive-motion.md)),
     /// through a [`Smoothing`](crate::Smoothing) the evaluator keeps per item and
     /// modifier. Which controller it follows is named beside the modifier, outside this
-    /// crate.
+    /// crate. A `data` modifier (ADR-0171 decision 3) is one too: what it follows is a
+    /// field of live data, read as `0..=1` outside this crate.
     Midi(Midi),
 }
 

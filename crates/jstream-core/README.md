@@ -273,7 +273,8 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   senders' state. `data.list` and `data.get` (protocol 0.140) answer from `LiveData` on
   its own lock, outside the collection lock; `profile.get`'s `network` carries the three
   counters. The live sources hold the same `LiveData` in their build `Context`
-  (`LiveSources::set_data`), so a `grid` source draws from it.
+  (`LiveSources::set_data`), so a `grid` source draws from it, and the same call hands
+  it to every plan in their `FilterAssets` for the `data` motion modifiers.
   Each sender's frames go through a `Playout` (jitter buffer, sequence tracking, clock
   estimate) held for the source's `latency_ms`, and each one due is handed to the
   source's mixer input as a device packet: the stream position as the device position,
@@ -400,6 +401,12 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): a `midi` modifier
   following a control change, pitch bend or channel pressure on its input's state, read
   from atomics and smoothed by the same follower; a preview reads it unsmoothed.
+- **Data-driven motion** (`reactive.rs`,
+  [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3): a
+  `data` modifier following one field of a sender's live data, a number through its
+  `range` or a text through its `states`, read from the engine's `LiveData` (which
+  reaches the planner with the loaded assets) by a shared watch, and smoothed by the
+  same follower; it reads 0 while the field is absent.
 - **Driven effect settings** (`driven.rs`,
   [ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)): an `effect`
   modifier adding to a number or colour setting of one of its item's effects each
@@ -884,7 +891,8 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   own layer, a group under a scene chain and item effects, whose layers no track shows
   are left out of the shot while a `scene` video mix showing the group or the new side
   still plans that scene in full, chain and boxes, and a child appearing or
-  disappearing with the group item's timing; `snapshot.rs` draws such a child where its
+  disappearing with the group item's timing, and a `data` motion modifier moving an
+  item while a sender's transport plays and back once it stops, ADR-0171; `snapshot.rs` draws such a child where its
   track is at the frame's time; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
@@ -1974,6 +1982,10 @@ sync (`FilterAssets::heard`), the source it names is fed like a scope source's
 measures it and hands the levels, bands and waveform to the
 program (`VideoFilter::set_audio`). Items' `audio` motion modifiers hear their scopes
 the same way, through the same sync (*Audio-reactive motion* in [Purpose](#purpose)).
+Items' `data` motion modifiers read the engine's `LiveData`, which the live sources'
+`FilterAssets` carry to every plan (`FilterAssets::data`, handed over once as the
+engine starts), so a snapshot records a watch on the field each one names
+(*Data-driven motion* in [Contents: motion](#contents-motion)).
 Each filter's layer key is made when the chain's shape changes, so a steady frame
 builds none. A shot with a chain counts as
 changing with time (`Shot::changes_with_time`), so the preview redraws it like a
@@ -3902,7 +3914,9 @@ receiver's thread takes it alone to put a state message and set the watches on i
 `data.list` and `data.get` take it alone, outside the collection lock, a `grid`
 source's painter takes it under its own drawing lock to read its keys (on the paint
 thread, or in a plan's one catch-up paint under the collection lock, so it is always
-last), and the render thread never takes it (a watch's cell is one atomic). The `jstream-tempo` thread reads the MIDI state without a lock and takes
+last), and a plan takes it briefly, last, to find or make the watch each `data` motion
+modifier names (ADR-0171 decision 3), taking nothing inside it; a frame then reads the
+watch's cell, one atomic. The `jstream-tempo` thread reads the MIDI state without a lock and takes
 the collection lock only to publish a tempo value that changed. The camera controls'
 changes go to the `jstream-camera-controls` thread over a channel, sent under the
 collection lock; that thread takes no engine lock while it sets them on the device. The CLAP scan's locks
