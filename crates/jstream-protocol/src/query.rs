@@ -248,14 +248,14 @@ pub enum Query {
     /// changes.
     #[serde(rename = "jtunnel.senders")]
     JtunnelSenders,
-    /// Lists the JTunnel senders with live data (0.136, ADR-0171 decision 2), by name,
+    /// Lists the JTunnel senders with live data (0.140, ADR-0171 decision 2), by name,
     /// each with its keys that hold a current message: only senders whose "Use this
     /// sender's state" is on send any. A key the sender stops resending goes after 3 s,
     /// and everything a sender sent goes when it starts again or the receiver stops.
     /// Runtime state, so no `rev`; empty while the receiver is off, which is the default.
     #[serde(rename = "data.list")]
     DataList,
-    /// Reads one sender's newest message for one key (0.136, ADR-0171 decision 2): the
+    /// Reads one sender's newest message for one key (0.140, ADR-0171 decision 2): the
     /// JSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left
     /// out when that sender has no current message for that key.
     #[serde(rename = "data.get")]
@@ -845,13 +845,13 @@ pub enum QueryResult {
         /// The senders heard, ordered by name, then address.
         senders: Vec<crate::JtunnelSenderInfo>,
     },
-    /// The result of `data.list` (0.136).
+    /// The result of `data.list` (0.140).
     #[serde(rename = "data.list")]
     DataList {
         /// The senders with live data, ordered by name.
         inputs: Vec<crate::DataInputInfo>,
     },
-    /// The result of `data.get` (0.136).
+    /// The result of `data.get` (0.140).
     #[serde(rename = "data.get")]
     DataGet {
         /// The message: any JSON value the sender sent, at most 76,800 bytes of it, so

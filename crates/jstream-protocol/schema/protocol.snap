@@ -9658,21 +9658,21 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "state": {
           "default": 0,
-          "description": "Whole state messages it put in the live data (0.136, ADR-0171).",
+          "description": "Whole state messages it put in the live data (0.140, ADR-0171).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "state_dropped": {
           "default": 0,
-          "description": "State messages it refused (0.136): not one JSON value, over a bound, or\nforgotten part-way while too many others waited.",
+          "description": "State messages it refused (0.140): not one JSON value, over a bound, or\nforgotten part-way while too many others waited.",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
         },
         "state_off": {
           "default": 0,
-          "description": "State packets from a sender whose \"Use this sender's state\" is off (0.136).",
+          "description": "State packets from a sender whose \"Use this sender's state\" is off (0.140).",
           "format": "uint64",
           "minimum": 0,
           "type": "integer"
@@ -12279,7 +12279,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Lists the JTunnel senders with live data (0.136, ADR-0171 decision 2), by name,\neach with its keys that hold a current message: only senders whose \"Use this\nsender's state\" is on send any. A key the sender stops resending goes after 3 s,\nand everything a sender sent goes when it starts again or the receiver stops.\nRuntime state, so no `rev`; empty while the receiver is off, which is the default.",
+          "description": "Lists the JTunnel senders with live data (0.140, ADR-0171 decision 2), by name,\neach with its keys that hold a current message: only senders whose \"Use this\nsender's state\" is on send any. A key the sender stops resending goes after 3 s,\nand everything a sender sent goes when it starts again or the receiver stops.\nRuntime state, so no `rev`; empty while the receiver is off, which is the default.",
           "properties": {
             "type": {
               "const": "data.list",
@@ -12292,7 +12292,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Reads one sender's newest message for one key (0.136, ADR-0171 decision 2): the\nJSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left\nout when that sender has no current message for that key.",
+          "description": "Reads one sender's newest message for one key (0.140, ADR-0171 decision 2): the\nJSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left\nout when that sender has no current message for that key.",
           "properties": {
             "input": {
               "description": "The sender's name, as `data.list` gives it.",
@@ -13528,7 +13528,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `data.list` (0.136).",
+          "description": "The result of `data.list` (0.140).",
           "properties": {
             "inputs": {
               "description": "The senders with live data, ordered by name.",
@@ -13549,7 +13549,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "The result of `data.get` (0.136).",
+          "description": "The result of `data.get` (0.140).",
           "properties": {
             "remote_value": {
               "description": "The message: any JSON value the sender sent, at most 76,800 bytes of it, so\n`remote_` (ADR-0059). Left out when there is none."
@@ -16358,5 +16358,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.136"
+  "title": "JStream protocol 0.140"
 }

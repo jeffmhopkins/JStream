@@ -1,4 +1,4 @@
-//! Live data (0.136,
+//! Live data (0.140,
 //! [ADR-0171](../../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2):
 //! each JTunnel sender's newest state message per key, for a sender whose "Use this
 //! sender's state" is on. A DAW's JTunnel sends what it is doing as JSON messages under

@@ -162,7 +162,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.136, with `DataInputInfo` in `data.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
@@ -351,7 +351,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.136 because a DAW's JTunnel state is live data: the queries
+`PROTOCOL_VERSION` is 0.140 because a DAW's JTunnel state is live data: the queries
 `data.list` (`DataInputInfo`) and `data.get`, and `NetworkProfile`'s `state`,
 `state_off` and `state_dropped`
 ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2);
@@ -1744,7 +1744,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   address). Listing a sender trusts it with nothing. `on` false and no senders while
   the receiver is off, the default. Runtime state, so no `rev`. A plugin can't read it
   (the person's LAN addresses).
-- `data.list` and `data.get {input, key}` (0.136,
+- `data.list` and `data.get {input, key}` (0.140,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2):
   live data, each JTunnel sender's newest state message per key (a DAW's transport,
   tracks, clips and so on, as JSON under keys such as `transport` or `track/3`), from a
@@ -1809,7 +1809,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   the buffer's fill), `lead_ms` (the recording source's `latency_ms`), `drift_ppm` once
   enough stream has arrived, and its frames `played`, `concealed`, `late`, `repeats` and
   `restarts`; and the receiver's drops, `outside_lan`, `unaccepted`, `malformed` and
-  `unsupported`, with the `midi` messages it handed on and, since 0.136, the `state`
+  `unsupported`, with the `midi` messages it handed on and, since 0.140, the `state`
   messages it put in the live data, the state packets it dropped as `state_off` (from
   a sender whose state isn't used) and the messages it refused as `state_dropped`
   (ADR-0171). Unlike the rest of the profile,

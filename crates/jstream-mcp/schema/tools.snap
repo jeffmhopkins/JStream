@@ -14407,7 +14407,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `data` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Lists the JTunnel senders with live data (0.136, ADR-0171 decision 2), by name,\neach with its keys that hold a current message: only senders whose \"Use this\nsender's state\" is on send any. A key the sender stops resending goes after 3 s,\nand everything a sender sent goes when it starts again or the receiver stops.\nRuntime state, so no `rev`; empty while the receiver is off, which is the default.",
+                "description": "Lists the JTunnel senders with live data (0.140, ADR-0171 decision 2), by name,\neach with its keys that hold a current message: only senders whose \"Use this\nsender's state\" is on send any. A key the sender stops resending goes after 3 s,\nand everything a sender sent goes when it starts again or the receiver stops.\nRuntime state, so no `rev`; empty while the receiver is off, which is the default.",
                 "properties": {
                   "type": {
                     "const": "data.list",
@@ -14420,7 +14420,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Reads one sender's newest message for one key (0.136, ADR-0171 decision 2): the\nJSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left\nout when that sender has no current message for that key.",
+                "description": "Reads one sender's newest message for one key (0.140, ADR-0171 decision 2): the\nJSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left\nout when that sender has no current message for that key.",
                 "properties": {
                   "input": {
                     "description": "The sender's name, as `data.list` gives it.",

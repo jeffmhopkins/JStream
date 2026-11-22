@@ -270,7 +270,7 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio_
   message keeps its key current, and is taken again whole when its key expired or its
   message was refused for room (`StateAssembler::forget`), a new stream ID forgets the sender's keys, every
   second keys not kept current for 3 s go, and a receiver that stops forgets its
-  senders' state. `data.list` and `data.get` (protocol 0.136) answer from `LiveData` on
+  senders' state. `data.list` and `data.get` (protocol 0.140) answer from `LiveData` on
   its own lock, outside the collection lock; `profile.get`'s `network` carries the three
   counters.
   Each sender's frames go through a `Playout` (jitter buffer, sequence tracking, clock
@@ -1076,7 +1076,7 @@ outside it: a rescan runs plugin host processes for seconds and takes the collec
 lock only to add the kinds it found (see *CLAP plugins* under Purpose).
 `jtunnel.senders` (0.114) and `profile.get`'s `network` read the JTunnel receiver
 outside it, taking only the audio sources' wanted-set mutex to clone the receiver.
-`data.list` and `data.get` (0.136, ADR-0171) read the live data outside it, taking only
+`data.list` and `data.get` (0.140, ADR-0171) read the live data outside it, taking only
 the live data's own lock.
 `quality.probe` (0.110) checks the output under the collection lock and finds its
 session under the pipeline gate, one after the other, then measures on a thread of its
