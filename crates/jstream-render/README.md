@@ -1165,6 +1165,25 @@ premultiplied linear light on the way out.
   draw for the step, so two machines draw the same frame at the same time. All
   default to off but the lines. Coverage is kept. The UI offers it with presets
   (Monitor, CRT, Film grain).
+- `hologram`: any picture (a camera, a screen capture, a page) as a projected hologram,
+  for a card floating in a 3D scene or a flat overlay. The picture's luminance takes
+  `color` (default `#5ad2ff`) by `tint` (0..1, default 0.85), keeping its luminance;
+  `see_through` (0..1, default 0.5) fades its dark parts out by their straight luminance,
+  and `brightness` (0..4, default 1.3) is a gain on its light. Over it: dark scanlines
+  (`lines` 0..1, default 0.35, every `spacing` px, rolling at `speed` px/s, default 30,
+  as `scanlines` rolls them), a band that sweeps down every `sweep_period` s (`sweep`),
+  a glow `edge_width` px in from the edges (`edge`), `grain`, a red and blue `fringe`
+  (px), a `flicker` (a low shimmer every step of 30 a second and, on about one step in
+  sixteen, a deeper dip) and a `glitch` (on up to 30% of the steps of 12 a second, a
+  band of rows shifts sideways). `reveal` (0..1, default 1) materialises it from
+  `reveal_from` (`bottom`, `top` or `middle`): rows past the edge are empty, the rows
+  just behind it fill in at random as it passes, and a bright line marks it, fading out
+  at either end so a finished reveal shows none. A Move between a keyframe at `reveal`
+  0 and one at 1 (ADR-0127) projects it in and out. Every time-driven value is worked
+  out on the CPU in `f64` from the clock, so two machines draw the same frame at the
+  same time. Coverage is kept, and the light it adds stays inside it. One draw of the
+  input's size, at most four texture reads a pixel. The UI offers it with presets
+  (Transmission, Steady, Broken signal, Amber).
 - `vignette`: `strength` (0..1, default 0.5), `radius` (0..1, default 0.5), `softness`
   (0..1, default 0.5), `color` (with alpha, default opaque black), `shape` (`frame`, the
   default, an ellipse that follows the frame's aspect, or `round`, a circle), `blend`

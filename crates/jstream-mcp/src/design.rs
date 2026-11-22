@@ -1,25 +1,25 @@
 //! Design guidance for agents that build what goes on screen, appended to the server
 //! instructions (`server.rs`), so every client reads it before its first edit.
 //!
-//! A live test (#1018-#1021's thread) found agents could build any graphic the tools
-//! allow and still make poor ones: flat full-saturation colours, thin type, boxes that
-//! didn't fit their text, nothing aligned. The tools can't fix taste, so this says what
-//! a broadcast designer would: where things go, which sizes, which faces and colours,
-//! and to look at the result before calling it done. It names the `backdrop` and `text`
-//! settings that make graphics look finished, the `shape` and `timer` kinds, how to
-//! group, scroll and animate, how to use 3D placement and blend modes, how to layer
-//! light by role, use the light and framing filters (bloom, glow, vignette, scanlines) and
-//! borders, mask, and build reflections on glossy surfaces (#1062), how to build a 3D
-//! set with a scene camera (ADR-0094), its depth of field (ADR-0108), a sky backdrop
-//! (ADR-0167), 3D groups and a camera that rides with one (ADR-0164), how to use 3D
-//! models with live textures and reflections (ADR-0107 decision 9), and its paths
-//! through keyframes and orbits (ADR-0166), which
-//! transition to use (including a `stinger`), when to build a graphic as HTML in a
-//! `browser` source, animated on one clock, or an audio visualiser on
+//! A live test (#1018-#1021's thread) found agents could build any graphic the tools allow
+//! and still make poor ones: flat full-saturation colours, thin type, boxes that didn't fit
+//! their text, nothing aligned. The tools can't fix taste, so this says what a broadcast
+//! designer would: where things go, which sizes, which faces and colours, and to look at
+//! the result before calling it done. It names the `backdrop` and `text` settings that make
+//! graphics look finished, the `shape` and `timer` kinds, how to group, scroll and animate,
+//! how to use 3D placement and blend modes, how to layer light by role, use the light and
+//! framing filters (bloom, glow, vignette, scanlines), the hologram effect and borders,
+//! mask, and build reflections on glossy surfaces (#1062), how to build a 3D set with a
+//! scene camera (ADR-0094), its depth of field (ADR-0108), a sky backdrop (ADR-0167), 3D
+//! groups and a camera that rides with one (ADR-0164), how to use 3D models with live
+//! textures and reflections (ADR-0107 decision 9), and its paths through keyframes and
+//! orbits (ADR-0166), which transition to use (including a `stinger`), when to build a
+//! graphic as HTML in a `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
 //! `tempo.*` values (ADR-0147), how a `midi` motion modifier poses an item from a
-//! controller (ADR-0168), how a `data` one follows a sender's live data (ADR-0171), and how to write a custom shader the Filters window's
-//! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
+//! controller (ADR-0168), how a `data` one follows a sender's live data (ADR-0171), and how
+//! to write a custom shader the Filters window's shader editor opens (#1232). Numbers are
+//! for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
 pub(crate) const DESIGN: &str = "\
@@ -143,6 +143,15 @@ adds `grain` and `flicker` that change every frame on the engine's clock. Its lo
 monitor (`strength` 0.25, `spacing` 3), CRT (0.45, 4, `speed` 12, `rgb_offset` 1.5, \
 `grain` 0.08, `flicker` 0.15) and film grain (`strength` 0, `grain` 0.3, `flicker` \
 0.1); use it on a monitor's screen item or a whole overlay instead of a page. \
+Holograms: a `hologram` effect turns any picture (a camera, a screen capture, a page) \
+into a projection: its light takes `color` by `tint`, its dark parts turn see-through \
+(`see_through`), with rolling `lines`, a `sweep` band, an `edge` glow, `flicker`, \
+`glitch`, `fringe` and `grain`. For a hologram that pops up in a 3D scene, put the card \
+in a group scene placed with `share_space` on, give the card the effect and blend mode \
+`additive`, and give the group two keyframes: one with `reveal` 0 (and the card smaller \
+or lower), one with `reveal` 1. `scene.set_keyframe` with a `move` preset then projects it \
+in from `reveal_from` behind a bright edge and takes it away again, and `item.set_source` \
+on the card changes what it shows. \
 Borders: one `border` item effect frames an item: `radius` (or `corners` `each` with \
 `radius_top_left` and the rest) rounds it and, with `clip` on, the picture with it; \
 `width` and `color` stroke inside the edge, `outer_width`, `outer_gap` and \
