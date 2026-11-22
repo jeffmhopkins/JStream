@@ -67,7 +67,10 @@ while the GPU capture tests run (they need screen activity). The virtual-camera 
 also needs the `jstream-vcam-windows` DLL registered
 ([its Hardware check](../jstream-vcam-windows/README.md#hardware-check)), the media-file
 tests play the file `JSTREAM_TEST_MEDIA` names, and the unplug test runs only when
-`JSTREAM_UNPLUG_TEST` is set. HEVC and AV1 run only on a GPU that encodes them (AV1
+`JSTREAM_UNPLUG_TEST` is set. The two `keeps_up_with_1080p30` tests feed the hardware
+H.264 encoder a live 1080p30 stream for ten seconds, from encode targets and from CPU
+frames, as the engine's render thread and encode thread do; one that falls behind says
+in its failure where the time went. HEVC and AV1 run only on a GPU that encodes them (AV1
 needs an NVIDIA RTX 40, AMD RX 7000, Intel Arc or newer).
 
 <a id="open-questions"></a>
