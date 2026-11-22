@@ -5,7 +5,8 @@
 //! Planning keeps each item's such modifiers ([`of`]); each frame the render thread
 //! evaluates them on the item's clocks, as it evaluates the ones that move the box, and
 //! changes how that item draws its source: a light's colour, intensity, range, cone and
-//! softness as it lights the scene ([`light`]), and a model's materials as it draws them
+//! softness as it lights the scene ([`light`]), an environment light's sky
+//! ([`environment`]), and a model's materials as it draws them
 //! ([`materials`]). Nothing is stored, and another item placing the same source draws it
 //! as it is.
 //!
@@ -22,7 +23,11 @@
 //! `emissive` (the glow's colour, lightened at its own brightness) and
 //! `emissive_strength` (a multiplier of the glow, 1 at rest, within 0 and 64). A setting
 //! the source's kind doesn't drive, an `emissive` one with no material, and a material
-//! the model doesn't have add nothing. An environment light's `intensity` follows too.
+//! the model doesn't have add nothing. An environment light's `intensity` follows too,
+//! and so does its sky ([`environment`]): `stars`, `nebula` and `galaxy` within 0 to 1,
+//! `star_brightness` within 0 to 8 and `warp` within 0 to 1, which its backdrop's ramp
+//! then eases toward; its `sky_color`, `horizon_color`, `ground_color`, `nebula_color` and
+//! `nebula_color_2` take theirs as `color` does. Its `sky_seed` and `warp_ramp_s` don't.
 //! A `data` modifier that paints (ADR-0171 decision 5) sets a light's `color`, or a
 //! model's `color` or a material's `emissive`, to its field's colour while it has one,
 //! before the others on it add theirs; it adds nothing to any setting.
@@ -35,7 +40,7 @@ use jstream_anim::Modifier;
 use jstream_graph::Item as GraphItem;
 use jstream_protocol::{MAX_MOTION_MODIFIERS, MotionSetting};
 use jstream_render::MaterialDrive;
-use jstream_sources::ShownLight;
+use jstream_sources::{ShownEnvironment, ShownLight};
 
 /// An item's modifiers on its source's settings, each with the setting it drives.
 pub(crate) type SourceDrives = Arc<[(MotionSetting, Modifier)]>;
@@ -128,21 +133,104 @@ pub(crate) fn light(
     look
 }
 
-/// An environment light's intensity as `drives` change it; a painting modifier adds
-/// nothing.
-pub(crate) fn environment_intensity(
+/// How an environment light lights and draws its sky this frame (ADR-0151 decision 9,
+/// ADR-0167): the settings of its source's sky as its item's modifiers change them.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(crate) struct SkyLook {
+    /// How bright the light is, 0 to 64.
+    pub(crate) intensity: f32,
+    /// The sky straight up, at the horizon and below it, straight sRGB, 0 to 1.
+    pub(crate) sky: [f32; 3],
+    pub(crate) horizon: [f32; 3],
+    pub(crate) ground: [f32; 3],
+    /// How many stars the backdrop scatters, 0 to 1, and how bright they are, 0 to 8.
+    pub(crate) stars: f32,
+    pub(crate) star_brightness: f32,
+    /// How much nebula the backdrop draws, 0 to 1, in its two colours.
+    pub(crate) nebula: f32,
+    pub(crate) nebula_colors: [[f32; 3]; 2],
+    /// How bright the galaxy band is, 0 to 1.
+    pub(crate) galaxy: f32,
+    /// How fast the backdrop streams past, 0 to 1, before its ramp.
+    pub(crate) warp: f32,
+}
+
+/// The highest star brightness a sky takes, as its source's setting does.
+const MAX_STAR_BRIGHTNESS: f32 = 8.0;
+
+/// An environment light's sky as `drives` change it: its `intensity`, its `stars`,
+/// `star_brightness`, `nebula`, `galaxy` and `warp` take the sum of their modifiers within
+/// their ranges, and its `sky_color`, `horizon_color`, `ground_color`, `nebula_color` and
+/// `nebula_color_2` take theirs as a fraction of full on each channel. A painting
+/// modifier sets a colour while it has one, before the others add, and adds nothing.
+pub(crate) fn environment(
     intensity: f32,
+    sky: &ShownEnvironment,
     drives: &[(MotionSetting, Modifier)],
     value: impl Fn(&Modifier) -> f64,
     tint: impl Fn(&Modifier) -> Tint,
-) -> f32 {
-    let add: f32 = drives
-        .iter()
-        .filter(|(s, m)| s.material.is_none() && s.param == "intensity" && tint(m).is_none())
-        .map(|(_, m)| value(m) as f32)
-        .filter(|v| v.is_finite())
-        .sum();
-    (intensity + add).clamp(0.0, MAX_INTENSITY)
+) -> SkyLook {
+    let mut colors = [
+        sky.sky,
+        sky.horizon,
+        sky.ground,
+        sky.nebula_colors[0],
+        sky.nebula_colors[1],
+    ];
+    let mut lighten = [0.0f32; 5];
+    let mut add = [0.0f32; 6];
+    for (setting, modifier) in drives {
+        if setting.material.is_some() {
+            continue;
+        }
+        let slot = match setting.param.as_str() {
+            "sky_color" => Err(0),
+            "horizon_color" => Err(1),
+            "ground_color" => Err(2),
+            "nebula_color" => Err(3),
+            "nebula_color_2" => Err(4),
+            "intensity" => Ok(0),
+            "stars" => Ok(1),
+            "star_brightness" => Ok(2),
+            "nebula" => Ok(3),
+            "galaxy" => Ok(4),
+            "warp" => Ok(5),
+            _ => continue,
+        };
+        if let Some(color) = tint(modifier) {
+            if let (Err(i), Some(color)) = (slot, color) {
+                colors[i] = color.map(|c| c.clamp(0.0, 1.0));
+            }
+            continue;
+        }
+        let v = value(modifier) as f32;
+        if !v.is_finite() {
+            continue;
+        }
+        match slot {
+            Err(i) => lighten[i] += v,
+            Ok(i) => add[i] += v,
+        }
+    }
+    let [sky_color, horizon, ground, nebula_a, nebula_b] = std::array::from_fn(|i| {
+        if lighten[i] == 0.0 {
+            colors[i]
+        } else {
+            colors[i].map(|c| (c + lighten[i]).clamp(0.0, 1.0))
+        }
+    });
+    SkyLook {
+        intensity: (intensity + add[0]).clamp(0.0, MAX_INTENSITY),
+        sky: sky_color,
+        horizon,
+        ground,
+        stars: (sky.stars + add[1]).clamp(0.0, 1.0),
+        star_brightness: (sky.star_brightness + add[2]).clamp(0.0, MAX_STAR_BRIGHTNESS),
+        nebula: (sky.nebula + add[3]).clamp(0.0, 1.0),
+        nebula_colors: [nebula_a, nebula_b],
+        galaxy: (sky.galaxy + add[4]).clamp(0.0, 1.0),
+        warp: (sky.warp + add[5]).clamp(0.0, 1.0),
+    }
 }
 
 /// How `drives` change a model's materials as its item draws it, at most one drive a
@@ -274,14 +362,71 @@ mod tests {
         assert_eq!(still.color, lamp().color);
         assert_eq!(still.intensity, lamp().intensity);
         assert_eq!(
-            environment_intensity(
+            environment(
                 1.0,
+                &sky(),
                 &[(setting("intensity", None), modifier("-5"))],
                 by_id,
                 |_| None
-            ),
+            )
+            .intensity,
             0.0
         );
+    }
+
+    fn sky() -> ShownEnvironment {
+        ShownEnvironment {
+            sky: [0.2, 0.3, 0.6],
+            horizon: [0.5; 3],
+            ground: [0.1; 3],
+            image: None,
+            backdrop: true,
+            stars: 0.5,
+            star_brightness: 1.0,
+            nebula: 0.0,
+            nebula_colors: [[0.4, 0.1, 0.5], [0.1, 0.3, 0.6]],
+            galaxy: 0.2,
+            sky_seed: 7,
+            warp: 0.0,
+            warp_ramp_s: 1.0,
+        }
+    }
+
+    /// An environment light's sky settings follow its item's modifiers, within their
+    /// ranges, as its intensity does.
+    #[test]
+    fn an_environment_lights_sky_takes_its_settings_added_within_their_ranges() {
+        let drives = [
+            (setting("warp", None), modifier("0.5")),
+            (setting("warp", None), modifier("0.25")),
+            (setting("stars", None), modifier("3")),
+            (setting("star_brightness", None), modifier("100")),
+            (setting("nebula", None), modifier("-1")),
+            (setting("galaxy", None), modifier("0.3")),
+            (setting("intensity", None), modifier("2")),
+            (setting("sky_color", None), modifier("0.5")),
+            (setting("ground_color", None), modifier("-1")),
+            // Not a sky's, or not a number: nothing.
+            (setting("sky_seed", None), modifier("3")),
+            (setting("warp_ramp_s", None), modifier("3")),
+            (setting("cone_deg", None), modifier("3")),
+            (setting("warp", Some("glass")), modifier("1")),
+        ];
+        let look = environment(1.0, &sky(), &drives, by_id, |_| None);
+        assert_eq!(look.warp, 0.75);
+        assert_eq!(look.stars, 1.0);
+        assert_eq!(look.star_brightness, 8.0);
+        assert_eq!(look.nebula, 0.0);
+        assert!((look.galaxy - 0.5).abs() < 1e-6);
+        assert_eq!(look.intensity, 3.0);
+        assert_eq!(look.sky, [0.7, 0.8, 1.0]);
+        assert_eq!(look.ground, [0.0; 3]);
+        assert_eq!(look.horizon, sky().horizon);
+        assert_eq!(look.nebula_colors, sky().nebula_colors);
+        let still = environment(1.0, &sky(), &[], by_id, |_| None);
+        assert_eq!(still.warp, 0.0);
+        assert_eq!(still.stars, 0.5);
+        assert_eq!(still.sky, sky().sky);
     }
 
     #[test]
@@ -349,15 +494,25 @@ mod tests {
         assert_eq!(look.intensity, 1.0, "it adds nothing to a number");
         let unset = [(setting("color", None), none.clone())];
         assert_eq!(light(&lamp(), &unset, by_id, tint).color, lamp().color);
-        assert_eq!(
-            environment_intensity(
-                1.0,
-                &[(setting("intensity", None), red.clone())],
-                by_id,
-                tint
-            ),
-            1.0
+        let painted = environment(
+            1.0,
+            &sky(),
+            &[
+                (setting("intensity", None), red.clone()),
+                (setting("horizon_color", None), red.clone()),
+                (setting("horizon_color", None), modifier("0.25")),
+                (setting("nebula_color_2", None), none.clone()),
+            ],
+            by_id,
+            tint,
         );
+        assert_eq!(painted.intensity, 1.0, "it adds nothing to a number");
+        assert_eq!(
+            painted.horizon,
+            [1.0, 0.25, 0.25],
+            "set red, then lightened"
+        );
+        assert_eq!(painted.nebula_colors, sky().nebula_colors, "no colour yet");
         let drives = [
             (setting("color", None), red.clone()),
             (setting("emissive", Some("led")), red.clone()),

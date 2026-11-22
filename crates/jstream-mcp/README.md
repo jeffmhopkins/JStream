@@ -233,7 +233,8 @@ several shots as one switch with `via`, an orbiting `move` preset (`camera_path`
 (`focus_px` and `blur_px`, a soft backdrop and a focus pull between keyframe scenes,
 [ADR-0108](../../docs/adr/0108-camera-depth-of-field.md)), a sky all around a 3D set as an
 environment light with `backdrop` on, with `stars`, `nebula`, a `galaxy` band or a
-panorama `image`, and a `warp` that ramps itself over `warp_ramp_s`
+panorama `image`, and a `warp` that ramps itself over `warp_ramp_s` (motion modifiers on
+the light's item may drive its numbers and colours)
 ([ADR-0167](../../docs/adr/0167-a-sky-backdrop-for-3d-scenes.md)), a rig moved as one by a group
 that shares the set's space (`share_space`), and a camera riding with it
 (`scene.set_camera_anchor`, ignored under a follow camera,

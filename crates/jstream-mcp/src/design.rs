@@ -299,7 +299,11 @@ back out from straight ahead as it drops. \
 One `source.set_settings` of `warp` jumps: the sky accelerates to it over \
 `warp_ramp_s` (default 1.5 s) by itself, and setting 0 slows back out; 0.6-1 is a \
 jump, about 0.05-0.15 a slow cruise. Add a brief white flash card or `bloom` at the \
-jump for punch. A flat photo stretched as a panorama smears toward \
+jump for punch. The sky's numbers and colours also follow motion modifiers on the \
+light's item (property `source`, `source` naming `warp`, `stars`, `star_brightness`, \
+`nebula`, `galaxy`, `intensity` or a `*_color`): an `audio` modifier on `warp` surges \
+the sky with the music, and a DAW `data` modifier on `warp` from the transport jumps \
+to warp while it plays. A driven `warp` still ramps. A flat photo stretched as a panorama smears toward \
 the top and bottom, so prefer a real panorama or the procedural sky. \
 A group placed in a 3D scene is one flat card unless it shares the space: \
 `scene.set_options` with `share_space` on the group draws each of its children in the \

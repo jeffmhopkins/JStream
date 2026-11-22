@@ -7730,7 +7730,8 @@ fn scene_environment<'c>(
 ) -> (Option<jstream_render::Environment<'c>>, usize) {
     let (first, count) = first_environment(shot, id);
     let found = first.map(|(placed, light, sky)| {
-        let (environment, opacity) = environment_at((shot, cache), (placed, light, sky), at, live);
+        let (environment, _, opacity) =
+            environment_at((shot, cache), (placed, light, sky), at, live);
         jstream_render::Environment {
             intensity: environment.intensity * opacity,
             ..environment
@@ -7772,13 +7773,18 @@ fn first_environment<'s>(
 
 /// An environment light's sky at `at`, at the light's own intensity, spun by its item's
 /// turn, with its picture when that source's frame was uploaded this frame, and its
-/// item's opacity.
+/// item's opacity; also the sky's settings as its item's modifiers change them
+/// ([`crate::sourced::environment`]), which a backdrop draws with.
 fn environment_at<'c>(
     (shot, cache): (&Shot, &'c ResourceCache<GpuKey>),
     (placed, light, sky): (&Lit, &ShownLight, &ShownEnvironment),
     at: MediaTime,
     live: &LiveParams,
-) -> (jstream_render::Environment<'c>, f32) {
+) -> (
+    jstream_render::Environment<'c>,
+    crate::sourced::SkyLook,
+    f32,
+) {
     let (placement, crop) = live.apply_to(
         &placed.item,
         placed.through.as_ref(),
@@ -7798,23 +7804,25 @@ fn environment_at<'c>(
         _ => 0.0,
     };
     let colour = |[r, g, b]: [f32; 3]| Color { r, g, b, a: 1.0 };
+    let look = crate::sourced::environment(
+        light.intensity,
+        sky,
+        shot.source_drives(&placed.item),
+        |m| shot.source_value(&placed.item, m, at),
+        |m| shot.tint(&placed.item, m),
+    );
     let environment = jstream_render::Environment {
-        sky: colour(sky.sky),
-        horizon: colour(sky.horizon),
-        ground: colour(sky.ground),
-        intensity: crate::sourced::environment_intensity(
-            light.intensity,
-            shot.source_drives(&placed.item),
-            |m| shot.source_value(&placed.item, m, at),
-            |m| shot.tint(&placed.item, m),
-        ),
+        sky: colour(look.sky),
+        horizon: colour(look.horizon),
+        ground: colour(look.ground),
+        intensity: look.intensity,
         turn_deg,
         image: sky
             .image
             .as_ref()
             .and_then(|image| cache.get(&GpuKey::Frame(image.clone()))),
     };
-    (environment, opacity)
+    (environment, look, opacity)
 }
 
 /// Draws the sky backdrop of `pass` at `at` into its [`GpuKey::Sky`] layer (ADR-0167),
@@ -7882,11 +7890,16 @@ fn draw_sky_of(
     let Some(target) = cache.get(&key) else {
         return Ok(());
     };
-    let (environment, opacity) = environment_at((shot, cache), (placed, light, sky), at, live);
+    let (environment, look, opacity) =
+        environment_at((shot, cache), (placed, light, sky), at, live);
     let travel = {
         let mut skies = chains.skies.borrow_mut();
         let state = skies.entry(scene.clone()).or_default();
-        state.step(cache.frame(), at.as_secs_f64(), (sky.warp, sky.warp_ramp_s));
+        state.step(
+            cache.frame(),
+            at.as_secs_f64(),
+            (look.warp, sky.warp_ramp_s),
+        );
         (state.warp, state.travel, state.dropping)
     };
     let (warp, travel, dropping) = travel;
@@ -7895,13 +7908,13 @@ fn draw_sky_of(
         &jstream_render::SkyDraw {
             environment,
             camera,
-            stars: sky.stars,
-            star_brightness: sky.star_brightness,
+            stars: look.stars,
+            star_brightness: look.star_brightness,
             opacity: opacity * fade,
             deep: jstream_render::DeepSky {
-                nebula: sky.nebula,
-                nebula_colors: sky.nebula_colors.map(colour),
-                galaxy: sky.galaxy,
+                nebula: look.nebula,
+                nebula_colors: look.nebula_colors.map(colour),
+                galaxy: look.galaxy,
                 seed: sky.sky_seed,
             },
             warp,
