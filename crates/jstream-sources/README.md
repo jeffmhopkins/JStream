@@ -64,8 +64,9 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   the engine looks again then.
   `model()` (default `None`) is a `ShownModel` for a source that is a 3D model: the
   `Model` the engine draws in 3D where an item places it, with its `Lighting`
-  ([ADR-0107](../../docs/adr/0107-3d-models.md)) and whether it casts and receives
-  shadows. Only the `model` kind has one.
+  ([ADR-0107](../../docs/adr/0107-3d-models.md)), whether it casts and receives
+  shadows, and the sources its `texture` (with `texture_material`) and `reflection`
+  name (decision 5). Only the `model` kind has one.
   `light()` (default `None`) is a `ShownLight` for the `light` kind: its `LightType`,
   colour, intensity, range, cone and softness, and whether it casts shadows and how
   softly, which the engine places where an item

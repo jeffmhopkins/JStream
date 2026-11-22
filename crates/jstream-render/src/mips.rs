@@ -226,6 +226,9 @@ const REGION_BYTES: u64 = 32;
 pub(crate) struct Mips {
     /// What the composite pass binds: the whole chain and the anisotropic sampler.
     pub(crate) bind_group: wgpu::BindGroup,
+    /// The whole chain, for a pass that binds it with a sampler of its own (a model's
+    /// live texture, ADR-0107 decision 5), and its texture, which tells chains apart.
+    pub(crate) whole: (wgpu::Texture, wgpu::TextureView),
     /// The source texels the chain is built from.
     region: Region,
     /// How many levels below the region's own size level 0 is, at most [`MAX_SKIP`].
@@ -333,6 +336,7 @@ impl Mips {
         let whole = texture.create_view(&wgpu::TextureViewDescriptor::default());
         Self {
             bind_group: bind(&whole, &pipelines.anisotropic),
+            whole: (texture.clone(), whole),
             region,
             skip,
             region_group,
