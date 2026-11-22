@@ -85,7 +85,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
-  `collection.save_as`), with
+  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104),
   which every implementation uses to check and follow a hotkey's action, and
@@ -162,7 +162,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.133, with `DataInputInfo` in `data.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.136, with `DataInputInfo` in `data.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
@@ -351,10 +351,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.133 because a DAW's JTunnel state is live data: the queries
+`PROTOCOL_VERSION` is 0.136 because a DAW's JTunnel state is live data: the queries
 `data.list` (`DataInputInfo`) and `data.get`, and `NetworkProfile`'s `state`,
 `state_off` and `state_dropped`
 ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2);
+0.134 because a client can hold and step the engine's media clock
+to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
 0.127 because a group can share its 3D scene's space and a camera
 can ride with one: `SceneOptions`' `share_space`, `SceneInfo`'s `camera_anchor` and
 `scene.set_camera_anchor`
@@ -1741,7 +1744,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   address). Listing a sender trusts it with nothing. `on` false and no senders while
   the receiver is off, the default. Runtime state, so no `rev`. A plugin can't read it
   (the person's LAN addresses).
-- `data.list` and `data.get {input, key}` (0.133,
+- `data.list` and `data.get {input, key}` (0.136,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2):
   live data, each JTunnel sender's newest state message per key (a DAW's transport,
   tracks, clips and so on, as JSON under keys such as `transport` or `track/3`), from a
@@ -1806,7 +1809,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   the buffer's fill), `lead_ms` (the recording source's `latency_ms`), `drift_ppm` once
   enough stream has arrived, and its frames `played`, `concealed`, `late`, `repeats` and
   `restarts`; and the receiver's drops, `outside_lan`, `unaccepted`, `malformed` and
-  `unsupported`, with the `midi` messages it handed on and, since 0.133, the `state`
+  `unsupported`, with the `midi` messages it handed on and, since 0.136, the `state`
   messages it put in the live data, the state packets it dropped as `state_off` (from
   a sender whose state isn't used) and the messages it refused as `state_dropped`
   (ADR-0171). Unlike the rest of the profile,
@@ -2408,7 +2411,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
   `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
-  physical camera), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), creating, deleting and retargeting outputs, their encoders and stream
+  physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
+  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` (an application setting), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2896,6 +2900,29 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+
+<a id="media-clock"></a>
+## Holding the media clock
+<!-- @section
+depends_on = ["docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md"]
+-->
+
+Since 0.134 a client can hold the engine's media clock and step it by hand, to render a
+scene frame by frame on a machine that can't draw it in real time
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)). The clock
+is what transitions, Moves, motion, timelines, keyframe tracks, a sky's warp, animated
+sources, `video.snapshot` and `video.frames` read. None of the three actions changes
+`rev`, is undone or is saved, and none can be bound or granted to a plugin.
+- **`clock.hold`** stops the clock where it is; holding it again keeps the held time.
+  It fails with `action_failed` while an output runs.
+- **`clock.step {ms}`** moves the held time on by `ms`, 1 to 10000
+  (`invalid_argument` on `ms` otherwise, or when the held time can't move that far). It
+  fails with `action_failed` when the clock isn't held. A timeline cue the step passes
+  has fired by the time it returns.
+- **`clock.release`** lets the clock run again, never backward: it waits at the held
+  time until real time passes it. Releasing a clock that runs does nothing.
+- While the clock is held, or released but still ahead of real time, `output.start`
+  fails with `action_failed`, saying how far ahead it is.
 
 <a id="keyframe-tracks"></a>
 ## Keyframe tracks

@@ -1164,6 +1164,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
@@ -7968,6 +8014,52 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
                 "properties": {
                   "source_id": {
@@ -14143,6 +14235,76 @@ source: crates/jstream-mcp/src/tests.rs
     },
     {
       "annotations": {
+        "destructiveHint": false,
+        "idempotentHint": false,
+        "openWorldHint": false,
+        "readOnlyHint": false
+      },
+      "description": "Runs one `clock` operation: set `op.type` to one of `clock.hold` (action), `clock.step` (action), `clock.release` (action). An action has side effects and is never undone; the answer only says it was accepted. Failures come back as a tool error whose `error.code` is stable.",
+      "inputSchema": {
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "description": "The `clock` operation, tagged by `type`.",
+            "oneOf": [
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              }
+            ]
+          }
+        },
+        "required": [
+          "op"
+        ],
+        "type": "object"
+      },
+      "name": "clock"
+    },
+    {
+      "annotations": {
         "destructiveHint": true,
         "idempotentHint": false,
         "openWorldHint": false,
@@ -14245,7 +14407,7 @@ source: crates/jstream-mcp/src/tests.rs
             "description": "The `data` operation, tagged by `type`.",
             "oneOf": [
               {
-                "description": "Lists the JTunnel senders with live data (0.133, ADR-0171 decision 2), by name,\neach with its keys that hold a current message: only senders whose \"Use this\nsender's state\" is on send any. A key the sender stops resending goes after 3 s,\nand everything a sender sent goes when it starts again or the receiver stops.\nRuntime state, so no `rev`; empty while the receiver is off, which is the default.",
+                "description": "Lists the JTunnel senders with live data (0.136, ADR-0171 decision 2), by name,\neach with its keys that hold a current message: only senders whose \"Use this\nsender's state\" is on send any. A key the sender stops resending goes after 3 s,\nand everything a sender sent goes when it starts again or the receiver stops.\nRuntime state, so no `rev`; empty while the receiver is off, which is the default.",
                 "properties": {
                   "type": {
                     "const": "data.list",
@@ -14258,7 +14420,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Reads one sender's newest message for one key (0.133, ADR-0171 decision 2): the\nJSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left\nout when that sender has no current message for that key.",
+                "description": "Reads one sender's newest message for one key (0.136, ADR-0171 decision 2): the\nJSON value the sender sent, whole. Runtime state, so no `rev`; `remote_value` is left\nout when that sender has no current message for that key.",
                 "properties": {
                   "input": {
                     "description": "The sender's name, as `data.list` gives it.",
@@ -16608,6 +16770,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "timeline_id",
                   "at_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -25564,6 +25772,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "timeline_id",
                   "at_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },
@@ -35782,6 +36036,52 @@ source: crates/jstream-mcp/src/tests.rs
                   "type",
                   "timeline_id",
                   "at_ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+                "properties": {
+                  "type": {
+                    "const": "clock.hold",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+                "properties": {
+                  "ms": {
+                    "description": "How far to move it, in milliseconds, 1 to 10000.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "type": {
+                    "const": "clock.step",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type",
+                  "ms"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+                "properties": {
+                  "type": {
+                    "const": "clock.release",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "type"
                 ],
                 "type": "object"
               },

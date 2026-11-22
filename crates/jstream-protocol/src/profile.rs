@@ -188,11 +188,11 @@ pub struct NetworkProfile {
     pub unsupported: u64,
     /// MIDI messages it handed to the MIDI inputs.
     pub midi: u64,
-    /// Whole state messages it put in the live data (0.133, ADR-0171).
+    /// Whole state messages it put in the live data (0.136, ADR-0171).
     pub state: u64,
-    /// State packets from a sender whose "Use this sender's state" is off (0.133).
+    /// State packets from a sender whose "Use this sender's state" is off (0.136).
     pub state_off: u64,
-    /// State messages it refused (0.133): not one JSON value, over a bound, or
+    /// State messages it refused (0.136): not one JSON value, over a bound, or
     /// forgotten part-way while too many others waited.
     pub state_dropped: u64,
 }
