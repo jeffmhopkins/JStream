@@ -356,6 +356,7 @@ fn golden_view_depth_takes_a_models_own_depth() {
         materials: &[],
         texture: None,
         reflection: None,
+        probe: None,
     };
     let layer = opened.compositor.layer(W, H).expect("a layer");
     let image = solid(&opened.compositor, 4, 4, WHITE);

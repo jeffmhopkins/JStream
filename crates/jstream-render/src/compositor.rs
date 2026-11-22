@@ -140,6 +140,9 @@ pub struct Compositor {
     model_focus: ModelFocusRun,
     /// The sky backdrop's pipeline (ADR-0167), built the first time one draws.
     sky: Option<crate::sky::SkyRuntime>,
+    /// The reflection probes' resampling pipeline (ADR-0170 decision 3), built the first
+    /// time a probe resamples.
+    probe: Option<crate::probe::ProbeRuntime>,
     /// How long the last [`Self::render`] waited for its readback (ADR-0103).
     readback_wait: std::time::Duration,
     /// Times effect-pack passes once [`Self::time_passes`] asked, on a device that can
@@ -874,6 +877,27 @@ impl Compositor {
         errors.close(runtime.draw(&self.gpu, &self.owner, sky, target))
     }
 
+    /// Resamples a reflection probe's six `faces` into `target`, the panorama a surface
+    /// inside its box reads (ADR-0170 decision 3), replacing every texel: an
+    /// equirectangular panorama in the scene's axes, its centre along -z and up at its
+    /// top, premultiplied linear light with alpha where a face saw something. `target`
+    /// is a [`Self::layer`] four faces wide and two high.
+    ///
+    /// # Errors
+    /// [`RenderError::Invalid`] when a face or `target` is not a layer this compositor
+    /// made, the faces aren't squares of one size, or `target` isn't four by two of them.
+    pub fn resample_probe(
+        &mut self,
+        faces: &[crate::ProbeFace<'_>; 6],
+        target: &Image,
+    ) -> Result<(), RenderError> {
+        let errors = self.errors();
+        let runtime = self
+            .probe
+            .get_or_insert_with(|| crate::probe::ProbeRuntime::new(&self.gpu));
+        errors.close(runtime.resample(&self.gpu, &self.owner, faces, target))
+    }
+
     /// Lights a card's picture by its 3D scene (ADR-0151 decision 10): `card.image`, the
     /// picture flat in its box layer, shaded texel by texel where that layer sits in the
     /// scene (its lights, their shadows and its environment, seen from its camera's side)
@@ -1336,6 +1360,7 @@ impl Compositor {
             models,
             model_focus: ModelFocusRun::default(),
             sky: None,
+            probe: None,
             readback_wait: std::time::Duration::ZERO,
             timer: None,
             ingest: Mutex::new(None),

@@ -6341,6 +6341,7 @@ fn light_card(
                     lights: &lights,
                     shadows: &maps,
                     environment,
+                    probe: None,
                 },
                 layer,
             ))
@@ -6485,6 +6486,7 @@ fn draw_model(
                 materials: &drives[..driving],
                 texture,
                 reflection,
+                probe: None,
             },
             layer,
         )),
@@ -6869,6 +6871,7 @@ fn draw_reflection(
                 materials: &drives[..driving],
                 texture,
                 reflection,
+                probe: None,
             },
             target,
         )?;
@@ -7630,6 +7633,7 @@ fn draw_view_depth(
                 materials: &[],
                 texture: None,
                 reflection: None,
+                probe: None,
             },
             target,
         )?;

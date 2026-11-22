@@ -46,9 +46,15 @@ const FRAME_BYTES: u64 = 64
     + MAX_SCENE_LIGHTS as u64 * LIGHT_BYTES
     + MAX_SHADOW_MAPS as u64 * SHADOW_BYTES
     + ENVIRONMENT_BYTES
-    + 16;
-/// The frame's textures: the shadow maps, then the environment's picture.
-const FRAME_TEXTURES: usize = MAX_SHADOW_MAPS + 1;
+    + 16
+    + PROBE_BYTES;
+/// Bytes of the reflection probe in the frame uniform: five `vec4`.
+const PROBE_BYTES: u64 = 80;
+/// The frame's textures: the shadow maps, then the environment's picture, then the
+/// reflection probe's (ADR-0170 decision 3).
+const FRAME_TEXTURES: usize = MAX_SHADOW_MAPS + 2;
+/// The slot of [`FRAME_TEXTURES`] the reflection probe's picture is bound in.
+const PROBE_SLOT: usize = MAX_SHADOW_MAPS + 1;
 /// Bytes of a material's uniform: five `vec4`.
 const MATERIAL_BYTES: u64 = 80;
 
@@ -274,6 +280,26 @@ pub struct ModelDraw<'a> {
     /// environment, or for a model lit by its scene that scene's sky, for its
     /// reflections and ambient light. An unlit model ignores it.
     pub reflection: Option<&'a Image>,
+    /// The reflection probe the model reads (ADR-0170 decision 3): inside its box the
+    /// model reflects the probe's capture in place of the environment. Only a model lit
+    /// by its scene reads one; `None` for none.
+    pub probe: Option<ProbeLookup<'a>>,
+}
+
+/// A reflection probe's capture, as a surface reads it (ADR-0170 decision 3).
+#[derive(Clone, Copy, Debug)]
+pub struct ProbeLookup<'a> {
+    /// The capture: an equirectangular panorama of the scene around `centre`, in the
+    /// scene's axes, its centre along -z and up at its top, premultiplied with alpha
+    /// where something was seen, as [`crate::Compositor::resample_probe`] draws it.
+    pub image: &'a Image,
+    /// The box's centre, in the scene's space, where the capture was taken.
+    pub centre: [f32; 3],
+    /// Half the box's size along the scene's x, y and z axes, in scene pixels.
+    pub half: [f32; 3],
+    /// How far inside its faces a surface fades from the environment to the probe, in
+    /// scene pixels.
+    pub fade: f32,
 }
 
 /// A source's picture on a model's surfaces (ADR-0107 decision 5).
@@ -317,6 +343,8 @@ pub struct CardDraw<'a> {
     pub shadows: &'a [ShadowMap<'a>],
     /// The scene's environment light.
     pub environment: Option<Environment<'a>>,
+    /// The reflection probe it reads (ADR-0170 decision 3), as a model does.
+    pub probe: Option<ProbeLookup<'a>>,
 }
 
 /// The sky around a 3D scene (ADR-0151 decision 9), from its first environment light.
@@ -465,6 +493,7 @@ impl ModelRuntime {
                     ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
                     count: None,
                 },
+                texture_entry(5),
             ],
         });
         let material_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
@@ -686,7 +715,7 @@ impl ModelRuntime {
             device,
             &frame_layout,
             (&frame, &sampler),
-            [&white, &white, &white],
+            [&white, &white, &white, &white],
         );
         Self {
             material_layout,
@@ -940,7 +969,7 @@ impl ModelRuntime {
             &gpu.device,
             &self.frame_layout,
             (&self.frame, &self.sampler),
-            [view(0), view(1), view(2)],
+            [view(0), view(1), view(2), view(3)],
         );
         self.shadow_bind = Some((textures, bind.clone()));
         bind
@@ -1165,6 +1194,7 @@ impl ModelRuntime {
             materials: &[],
             texture: None,
             reflection: None,
+            probe: card.probe,
         };
         self.draw_as(gpu, owner, &draw, target, None, true)
     }
@@ -1331,6 +1361,16 @@ impl ModelRuntime {
             }
             _ => None,
         };
+        // The reflection probe a model lit by its scene reads (ADR-0170 decision 3).
+        let probe = match (draw.probe, lights.as_ref(), camera.as_ref()) {
+            (Some(probe), Some(_), Some(view))
+                if probe.image.owner().is(owner) && draw.lighting == Lighting::Scene =>
+            {
+                maps[PROBE_SLOT] = Some(probe.image);
+                Some(probe_values(&probe, view))
+            }
+            _ => None,
+        };
         let frame = frame_bytes(
             (&solid, mirrored),
             &clip,
@@ -1340,6 +1380,7 @@ impl ModelRuntime {
                 &views[..count],
                 sky.as_ref(),
                 floor_cut(draw.floor, camera.as_ref()),
+                probe.as_ref(),
             ),
         );
         let frame_bind = self.frame_bind_for(gpu, maps);
@@ -1501,7 +1542,7 @@ impl ModelRuntime {
             &clip,
             Lighting::Unlit,
             None,
-            (&[], None, floor_cut(draw.floor, Some(&camera))),
+            (&[], None, floor_cut(draw.floor, Some(&camera)), None),
         );
         let lock = gpu.submit.clone();
         let submitting = lock.lock();
@@ -1693,7 +1734,7 @@ impl SceneLighting {
 }
 
 /// The frame bind group over `frame`, the two shadow maps' views, the environment
-/// picture's and `sampler`.
+/// picture's, `sampler` and the reflection probe's picture's.
 fn frame_bind_group(
     device: &wgpu::Device,
     layout: &wgpu::BindGroupLayout,
@@ -1723,6 +1764,10 @@ fn frame_bind_group(
             wgpu::BindGroupEntry {
                 binding: 4,
                 resource: wgpu::BindingResource::Sampler(sampler),
+            },
+            wgpu::BindGroupEntry {
+                binding: 5,
+                resource: wgpu::BindingResource::TextureView(textures[3]),
             },
         ],
     })
@@ -1876,7 +1921,12 @@ fn frame_bytes(
     clip: &[[f32; 4]; 4],
     lighting: Lighting,
     lights: Option<&SceneLighting>,
-    (shadows, environment, cut): (&[[f32; 16]], Option<&[f32; 24]>, [f32; 4]),
+    (shadows, environment, cut, probe): (
+        &[[f32; 16]],
+        Option<&[f32; 24]>,
+        [f32; 4],
+        Option<&[f32; 20]>,
+    ),
 ) -> Vec<u8> {
     let mut values = Vec::with_capacity((FRAME_BYTES / 4) as usize);
     values.extend(clip.iter().flatten());
@@ -1919,8 +1969,9 @@ fn frame_bytes(
     }
     // The environment follows the shadow maps; none leaves the studio gradient.
     values.extend(environment.copied().unwrap_or([0.0; 24]));
-    // The floor's cutting plane follows the environment.
+    // The floor's cutting plane follows the environment, and the probe follows it.
     values.extend(cut);
+    values.extend(probe.copied().unwrap_or([0.0; 20]));
     values.resize((FRAME_BYTES / 4) as usize, 0.0);
     f32_bytes(&values)
 }
@@ -1944,6 +1995,52 @@ fn sees_front(solid: &Solid) -> bool {
 /// `s = (rel · right, rel · down, focal − rel · forward)` of `rel` from its position, so
 /// the scene's `y` of `s` is `position.y + right.y s.x + down.y s.y + forward.y (focal −
 /// s.z)`. No floor, or no camera, never cuts.
+/// `probe` in the shader's terms (`model.wgsl`'s `Probe`) as `view` sees it: its box's
+/// centre in the viewing frame and the scene's axes there, each with the box's half size
+/// along it, then its fade and how its picture stores alpha.
+fn probe_values(probe: &ProbeLookup<'_>, view: &jstream_protocol::CameraView) -> [f32; 20] {
+    let [right, down, forward] = view.axes();
+    let focal = f64::from(view.focal_px());
+    let position = view.position();
+    // The viewing frame's origin: on the camera's axis, its focal length ahead.
+    let origin = [0, 1, 2].map(|i| position[i] + forward[i] * focal);
+    let off = [0, 1, 2].map(|i| f64::from(probe.centre[i]) - origin[i]);
+    let dot = |a: [f64; 3], b: [f64; 3]| a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+    let centre = [dot(off, right), dot(off, down), -dot(off, forward)];
+    let finite = |value: f32| {
+        if value.is_finite() {
+            value.max(0.0)
+        } else {
+            0.0
+        }
+    };
+    let axis = |i: usize| [right[i] as f32, down[i] as f32, -forward[i] as f32];
+    let [x, y, z] = [axis(0), axis(1), axis(2)];
+    let [hx, hy, hz] = probe.half.map(finite);
+    [
+        centre[0] as f32,
+        centre[1] as f32,
+        centre[2] as f32,
+        1.0,
+        x[0],
+        x[1],
+        x[2],
+        hx,
+        y[0],
+        y[1],
+        y[2],
+        hy,
+        z[0],
+        z[1],
+        z[2],
+        hz,
+        finite(probe.fade),
+        probe.image.alpha().shader_mode(),
+        0.0,
+        0.0,
+    ]
+}
+
 fn floor_cut(floor: Option<f32>, view: Option<&jstream_protocol::CameraView>) -> [f32; 4] {
     let (Some(floor), Some(view)) = (floor.filter(|floor| floor.is_finite()), view) else {
         return [0.0, 0.0, 0.0, -1.0];
