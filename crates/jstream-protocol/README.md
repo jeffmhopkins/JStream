@@ -212,7 +212,10 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and `MotionCurve`, follows a bus or a source
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
   `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
-  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)).
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.145
+  `MotionProperty::Source` and `MotionSetting`, the source setting one drives, and
+  `MAX_MOTION_MATERIAL_LEN` (128)
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
   [ADR-0113](../../docs/adr/0113-camera-motion-and-follow-pointer.md)):
   `CameraMotionModifier` (an item's modifier with a `CameraProperty`: the position's and
@@ -255,7 +258,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `OutputStatsInfo` and `OutputHealth`), `meters.tick`,
   `youtube.status_changed`, `youtube.health_changed`,
   `youtube.stats`, `live.changed`, `live.ended`, `plugin.state_changed`,
-  `plugin.uninstalled` (0.143),
+  `plugin.uninstalled` (0.149),
   `gpu.device_lost`, `gpu.effect_slow` (0.102), `values.changed`, and `timeline.changed` (with `TimelineChange`)
   and `timeline.cue_fired` (0.87), `scene.keyframe_changed` (0.88), and
   `collection.file_changed` (with `CollectionCause`, 0.94), `kinds.changed` (with
@@ -353,8 +356,12 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.143 because a person can remove a WASM plugin: `plugin.uninstall`
+`PROTOCOL_VERSION` is 0.149 because a person can remove a WASM plugin: `plugin.uninstall`
 and the `plugin.uninstalled` event ([Plugins](#plugins));
+0.145 because a motion modifier can drive a live setting of its
+item's source: `MotionProperty::Source` with its `MotionSetting`, a light's colour and
+intensity or a model material's colour and glow by name
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4);
 0.140 because a DAW's JTunnel state is live data: the queries
 `data.list` (`DataInputInfo`) and `data.get`, and `NetworkProfile`'s `state`,
 `state_off` and `state_dropped`
@@ -2333,7 +2340,7 @@ After `welcome`, the server pushes every event to every client.
   broadcast_id, concurrent_viewers?, likes?, views?}` (0.38), are described under
   [YouTube](#youtube).
 - `plugin.state_changed {plugin_id, state, reason?, remote_name?}` (0.35) and
-  `plugin.uninstalled {plugin_id}` (0.143) are described under [Plugins](#plugins).
+  `plugin.uninstalled {plugin_id}` (0.149) are described under [Plugins](#plugins).
 - `gpu.device_lost {cause, blamed, quarantined, recovering}` (0.61) and
   `gpu.effect_slow {kind_id, took_us, limit_us, quarantined}` (0.102) are described under
   [Effect quarantine](#quarantine).
@@ -2485,7 +2492,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `plugin`; an engine that can't run plugins
   answers `plugin.install` with `unsupported`, as the mock and an engine built without
   its `wasm-plugins` feature do.
-- **`plugin.uninstall {plugin_id}`** (0.143) removes an installed plugin, for a person
+- **`plugin.uninstall {plugin_id}`** (0.149) removes an installed plugin, for a person
   like the other plugin actions. A running plugin stops once the invocation it is in
   returns, holding only `read` from the moment it is removed, and the engine forgets it
   and its grant: `plugin.list` no longer
@@ -2511,7 +2518,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   ([ADR-0059](../../docs/adr/0059-mcp-annotations-and-remote-text.md)), made plain text
   by the engine (control and bidirectional formatting characters as spaces, trimmed, at
   most 128 characters), and absent when nothing is left.
-- **`plugin.uninstalled {plugin_id}`** (0.143) reports a plugin a person removed with
+- **`plugin.uninstalled {plugin_id}`** (0.149) reports a plugin a person removed with
   `plugin.uninstall`. Like `plugin.state_changed`, it is a person's: the MCP feed drops it.
 
 CLAP audio plugins ([ADR-0035](../../docs/adr/0035-clap-plugins-out-of-process.md)) are
@@ -2805,7 +2812,8 @@ evaluates as each frame is drawn. A modifier never writes the item's values: `st
 reports the same geometry, crop and opacity whatever it adds. Each modifier has a
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
 the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
-`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`), its
+`opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`, or since
+0.145 `source` with its `source`), its
 `kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
@@ -2849,6 +2857,21 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   parameter the item doesn't draw, or one of another type, adds nothing. It never moves the box.
   `effect` is omitted for every other property, and a client before 0.109 reads the
   property as `Unknown`.
+- **Source settings** (since 0.145,
+  [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4):
+  `property` `source` drives a live setting of the item's own source instead, which
+  `source: {param, material}` (`MotionSetting`) names: `param` 1 to 64 bytes of ASCII
+  letters, digits and `_`, and `material`, omitted or 1 to 128 bytes. Only property
+  `source` takes a `source`, and it needs one (`motion.<n>.source`). It changes how this
+  item draws its source, and nothing is stored. A `light` takes `color`, `intensity`
+  (0 to 64), `range_px`, `cone_deg` (1 to 170), `softness` and `shadow_softness` (0 to
+  1). A `model` takes `color` (its base colour), `metallic` and `roughness` (0 to 1) on
+  every material, or with `material` on the file's materials of that name, which also
+  take `emissive` (the glow's colour) and `emissive_strength` (a multiplier of the
+  glow, 1 at rest, kept within 0 to 64). Numbers and colours change as an `effect`
+  setting's do. One naming a setting the source doesn't have, or a material its model
+  doesn't have, adds nothing; it never moves the box. `source` is omitted for every other
+  property, and a client before 0.145 reads the property as `Unknown`.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source

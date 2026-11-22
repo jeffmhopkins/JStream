@@ -1309,7 +1309,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Removes an installed plugin (0.143): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
+          "description": "Removes an installed plugin (0.149): a running one stops once the invocation it is\nin returns, holding only `read` from the moment it is removed, and the engine\nforgets it and its grant, so it is no longer listed or started again with the\nsaved plugins. Its package is left on\ndisk: it is the person's folder. `plugin.uninstalled` reports it. For a person\nonly, like `plugin.install`. Fails with `not_found` (entity `plugin`) for a plugin\nthat isn't installed, and `action_failed` for one that an install or a\n`plugin.enable` is still loading, which can be removed once that answers.",
           "properties": {
             "plugin_id": {
               "$ref": "#/$defs/PluginId",
@@ -7355,7 +7355,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "A person removed a plugin with `plugin.uninstall` (0.143): it no longer runs and\nis no longer listed. A client that shows the plugins drops it, or reads\n`plugin.list` again.",
+          "description": "A person removed a plugin with `plugin.uninstall` (0.149): it no longer runs and\nis no longer listed. A client that shows the plugins drops it, or reads\n`plugin.list` again.",
           "properties": {
             "plugin_id": {
               "$ref": "#/$defs/PluginId",
@@ -9471,6 +9471,17 @@ source: crates/jstream-protocol/src/fixtures.rs
         "property": {
           "$ref": "#/$defs/MotionProperty",
           "description": "What it changes."
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/MotionSetting"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "description": "The source setting it changes, with `property` `source` and only then (since\n0.145, ADR-0171). Omitted otherwise."
         }
       },
       "required": [
@@ -9546,8 +9557,33 @@ source: crates/jstream-protocol/src/fixtures.rs
           "const": "effect",
           "description": "A number or colour setting of one of the item's own effects, which the\nmodifier's `effect` names, since 0.109 (ADR-0138): a number has the value added,\nkept within the range the effect's kind gives it and rounded for a whole-number\none; a colour has it added to each of its red, green and blue as a fraction of\nfull. Not in\n[`MotionProperty::ALL`], which lists the placement properties.",
           "type": "string"
+        },
+        {
+          "const": "source",
+          "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.145 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
+          "type": "string"
         }
       ]
+    },
+    "MotionSetting": {
+      "description": "The source setting a `source` modifier drives (since 0.145, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
+      "properties": {
+        "material": {
+          "description": "A model's materials it drives, by their name in the file: 1 to\n[`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source\nthat isn't a model.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "param": {
+          "description": "The setting, by its ID in the source kind's descriptor (or `emissive` and\n`emissive_strength` with `material`): 1 to [`MAX_MOTION_PARAM_LEN`] bytes of ASCII\nletters, digits and `_`.",
+          "type": "string"
+        }
+      },
+      "required": [
+        "param"
+      ],
+      "type": "object"
     },
     "MotionShape": {
       "description": "The waveform of an `oscillate` modifier.",
@@ -16408,5 +16444,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.143"
+  "title": "JStream protocol 0.149"
 }
