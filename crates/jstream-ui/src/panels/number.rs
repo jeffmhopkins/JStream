@@ -1,12 +1,14 @@
-//! The number field the panels share (spec-panels.md G10): a value with − and + steppers
-//! and a unit, which takes typed text, arrow keys and a pointer drag across it. It sends
-//! one value per change: on Enter or blur for typed text, per press for a stepper or an
-//! arrow key, and once on release for a drag, so each is one edit and one undo step.
+//! The number field the panels share (spec-panels.md G10): a value with a unit, which
+//! takes typed text, arrow keys and a pointer drag across it or its caption; the mixer's
+//! gain fields add − and + steppers. It sends one value per change: on Enter or blur for
+//! typed text, per press for a stepper or an arrow key, and once on release for a drag,
+//! so each is one edit and one undo step.
 //!
 //! Docs: docs/UI-FEATURES.md#theme, crates/jstream-ui/README.md#design
 
 use leptos::ev;
 use leptos::prelude::*;
+use leptos::wasm_bindgen::JsCast;
 
 /// How far the pointer travels for one step of a drag, in CSS pixels.
 pub const SCRUB_PX: f64 = 3.0;
@@ -95,8 +97,7 @@ struct Scrub {
     value: f64,
 }
 
-/// A number field with − and + steppers, a unit, and a label above it, or `named` in
-/// place of the label. `value` is the committed value, `None` to disable the field;
+/// A number field with a unit, and a label above it, or `named` in place of the label. `value` is the committed value, `None` to disable the field;
 /// `send` gets each new value, kept to `[min, max]` and rounded to `decimals` places.
 #[component]
 pub fn NumberField(
@@ -111,18 +112,19 @@ pub fn NumberField(
     /// scrubs up and down, up for larger values.
     #[prop(optional)]
     vertical: bool,
-    /// Shows the label as a short caption before the field, on its row, for a row of
-    /// small fields under one row label (an [`AxisRow`]).
+    /// Shows the label as a short caption inside the field's box, before the number, for
+    /// a row of small fields under one row label (an [`AxisRow`]). A drag on the caption
+    /// changes the value as a drag on the number does.
     #[prop(optional)]
     inline: bool,
     /// The caption shown in place of `label`, which stays the accessible name: "L" for
     /// Left.
     #[prop(optional)]
     caption: &'static str,
-    /// Leaves out the − and + steppers, for a field too narrow for them; dragging,
-    /// the arrow keys and typing still change it.
+    /// Adds − and + steppers on either side of the number. A field has none by default
+    /// (docs/UI-DESIGN.md#forms): dragging it, the arrow keys and typing change it.
     #[prop(optional)]
-    bare: bool,
+    steppers: bool,
     /// The unit after the number, such as `px`.
     #[prop(optional)]
     unit: &'static str,
@@ -156,6 +158,8 @@ pub fn NumberField(
     // Bumped to show the committed value again after cancelled or refused text.
     let again = RwSignal::new(0_u32);
     let scrub = StoredValue::new(None::<Scrub>);
+    // Whether a drag just ended, until the click that follows it.
+    let dropped = StoredValue::new(false);
     let input = NodeRef::<leptos::html::Input>::new();
 
     let shown = move || {
@@ -273,8 +277,15 @@ pub fn NumberField(
             }
             s.started = true;
             event.prevent_default();
-            if let Some(el) = input.get_untracked() {
+            // The field the drag started on keeps the pointer: the input, or the caption
+            // in front of it.
+            if let Some(el) = event
+                .current_target()
+                .and_then(|t| t.dyn_into::<web_sys::Element>().ok())
+            {
                 _ = el.set_pointer_capture(s.pointer);
+            }
+            if let Some(el) = input.get_untracked() {
                 _ = el.blur();
             }
         }
@@ -295,7 +306,15 @@ pub fn NumberField(
         if s.started {
             event.prevent_default();
             dragged.set(None);
+            dropped.set_value(true);
             put(s.value);
+        }
+    };
+    // The click a drag ends with would focus the input through its label: drop it.
+    let on_click = move |event: ev::MouseEvent| {
+        if dropped.get_value() {
+            dropped.set_value(false);
+            event.prevent_default();
         }
     };
     let on_cancel = move |_: ev::PointerEvent| {
@@ -350,17 +369,28 @@ pub fn NumberField(
         }
         .into_any();
     }
+    let shown = if caption.is_empty() { label } else { caption };
+    // An inline field's caption sits inside its box, before the number, and a drag on it
+    // changes the value as a drag on the number does.
+    let prefix = (inline && named.is_none()).then(|| {
+        view! {
+            <span class="field-label prefix" aria-hidden=caption_hidden
+                on:pointerdown=on_down on:pointermove=on_move on:pointerup=on_up
+                on:pointercancel=on_cancel>{shown}</span>
+        }
+    });
+    let above = (!inline && named.is_none()).then(|| {
+        view! { <span class="field-label" aria-hidden=caption_hidden>{shown}</span> }
+    });
     view! {
-        <label class="number-field" class:inline=inline class:bare=bare>
-            {named.is_none().then(|| {
-                let shown = if caption.is_empty() { label } else { caption };
-                view! { <span class="field-label" aria-hidden=caption_hidden>{shown}</span> }
-            })}
+        <label class="number-field" class:inline=inline class:bare=!steppers on:click=on_click>
+            {above}
             <span class="stepper">
-                {(!bare).then(decrease)}
+                {steppers.then(decrease)}
+                {prefix}
                 {field()}
                 <span class="unit">{unit}</span>
-                {(!bare).then(increase)}
+                {steppers.then(increase)}
             </span>
         </label>
     }

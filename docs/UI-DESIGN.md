@@ -53,6 +53,10 @@ covers = ["crates/jstream-ui/style.css"]
   deletes. **Danger confirm** (`.danger`): solid red, only on the button that confirms a
   delete.
 - **Ghost and link**: no fill, for light actions such as "Clear" or "+ Add filter".
+- **Small** (`button.sm`): 24 px tall with 12 px text, for a row of actions inside a
+  panel (the Arrange panel's Fit, Match, Rotate and Crop rows, Set key). Its label can be
+  short when a heading above says the rest ("Width" under Match); its tooltip and
+  accessible name stay whole ("Match width").
 - A dialog that only informs (About, Settings) ends with a secondary "Close", not a
   primary one.
 - Focus is a 2 px accent ring outside the button.
@@ -107,6 +111,26 @@ covers = ["crates/jstream-ui/style.css"]
   never look the same.
 - A row's summary or meta text gives way before its name: the name truncates last.
 
+<a id="tabs"></a>
+## Tabs
+<!-- @section
+covers = ["crates/jstream-ui/style.css"]
+-->
+
+Two levels, and never two rows of underlined tabs one under the other:
+
+- **A panel strip** (the dock's tabs): uppercase, with the accent underline on the
+  panel shown.
+- **Inside a panel or dialog**: a segmented control (`.segmented`): a 2 px inset track
+  with a border, 24 px segments in sentence case, the chosen one filled with
+  `--selected`. `.full` spreads it over its row, as the Inspector's Transform, Motion and
+  Behaviour do; a segment may end with a count ("Source 3"). The same control picks
+  between a few values, as Align to's Selection and Canvas.
+- **A dialog's pages** (Settings): a rail on the left of 32 px items in sentence case,
+  the page shown filled with `--hover`, with no border.
+- Two things don't share a name across the levels: the panel the prototype calls
+  Transform is Arrange, so Transform is only the Inspector's tab.
+
 <a id="dialogs"></a>
 ## Dialogs
 <!-- @section
@@ -145,6 +169,14 @@ The property grid, as OBS's Properties lay a source's settings out:
   one that waits for OK. Both sit in the control column. A toggle's label is a `<label for>`, so a click on it
   flips the toggle.
 - Related rows are grouped under [eyebrow](#type) headings.
+- A panel's rows follow the same rule in less room: the Inspector's labels sit in an
+  88 px column, its controls 28 px tall.
+- A number field has no − and + steppers: the number and its unit share one box, and a
+  drag across it, the arrow keys or typing change it. In a row of fields under one label
+  (Position's X and Y), each field's short caption sits inside its box before the
+  number, and a drag on the caption scrubs too. A pair leaves a 20 px gap between its
+  fields, where Size's link sits, so every pair lines up. Only the mixer's gain fields
+  keep steppers, for a single step without the keyboard.
 
 <a id="copy"></a>
 ## Copy

@@ -1,4 +1,4 @@
-//! The Transform panel: aligns, distributes and arranges the selected items
+//! The Arrange panel (`PanelId::Transform`): aligns, distributes and arranges the selected items
 //! (spec-panels.md §4, spec-workspace.md 9.11). Each button works on the items' unrotated
 //! boxes, as the prototype does, and sends every changed item's new box as one batch of
 //! `item.set_geometry` edits (Clear crop: `item.set_crop`, and the uncropped box while the source's size is known), so each press is one
@@ -24,7 +24,7 @@ pub enum AlignTo {
     Canvas,
 }
 
-/// A Transform panel button.
+/// An Arrange panel button.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Action {
     /// Left edges to the target's left edge.
@@ -75,17 +75,19 @@ impl Action {
     ];
     /// The distribution buttons.
     pub const DISTRIBUTE: [Action; 2] = [Action::DistributeH, Action::DistributeV];
-    /// The arrange buttons, in the panel's order.
-    pub const ARRANGE: [Action; 9] = [
-        Action::Center,
-        Action::Fit,
-        Action::Stretch,
-        Action::MatchWidth,
-        Action::MatchHeight,
-        Action::RotateLeft,
-        Action::RotateRight,
-        Action::ResetRotation,
-        Action::ClearCrop,
+    /// The arrange buttons, in groups under their headings, in the panel's order.
+    pub const ARRANGE: [(&'static str, &'static [Action]); 4] = [
+        ("Fit", &[Action::Center, Action::Fit, Action::Stretch]),
+        ("Match", &[Action::MatchWidth, Action::MatchHeight]),
+        (
+            "Rotate",
+            &[
+                Action::RotateLeft,
+                Action::RotateRight,
+                Action::ResetRotation,
+            ],
+        ),
+        ("Crop", &[Action::ClearCrop]),
     ];
 
     /// Its label, as the button's tooltip or text.
@@ -108,6 +110,23 @@ impl Action {
             Action::RotateRight => "Rotate 90° right",
             Action::ResetRotation => "Reset rotation",
             Action::ClearCrop => "Clear crop",
+        }
+    }
+
+    /// Its text on a button under its group's heading, which says the rest: "Width"
+    /// under Match.
+    pub fn short(self) -> &'static str {
+        match self {
+            Action::Center => "Center",
+            Action::Fit => "Fit to canvas",
+            Action::Stretch => "Stretch",
+            Action::MatchWidth => "Width",
+            Action::MatchHeight => "Height",
+            Action::RotateLeft => "90° left",
+            Action::RotateRight => "90° right",
+            Action::ResetRotation => "Reset",
+            Action::ClearCrop => "Clear",
+            other => other.label(),
         }
     }
 
@@ -387,7 +406,7 @@ pub fn summary(count: usize) -> String {
     }
 }
 
-/// The Transform panel.
+/// The Arrange panel.
 #[component]
 pub fn Transform() -> impl IntoView {
     let studio = expect_context::<Studio>();
@@ -464,14 +483,29 @@ pub fn Transform() -> impl IntoView {
         }
     };
 
+    let text_button = move |action: Action| {
+        view! {
+            <button
+                type="button"
+                class="sm"
+                title=action.label()
+                aria-label=action.label()
+                disabled=move || !action.enabled(count())
+                on:click=move |_| press(action)
+            >
+                {action.short()}
+            </button>
+        }
+    };
+
     view! {
-        <h2>"Transform"</h2>
+        <h2>"Arrange"</h2>
         <div class="transform">
-            <p class="summary">{move || summary(count())}</p>
             <div class="align-to">
-                <span class="key">"Align to"</span>
+                <p class="summary">{move || summary(count())}</p>
                 <span class="segmented" role="group" aria-label="Align to">
                     <button
+                        type="button"
                         aria-pressed=move || (!to_canvas()).to_string()
                         disabled=move || count() < 2
                         on:click=move |_| align_to.set(AlignTo::Selection)
@@ -479,6 +513,7 @@ pub fn Transform() -> impl IntoView {
                         "Selection"
                     </button>
                     <button
+                        type="button"
                         aria-pressed=move || to_canvas().to_string()
                         on:click=move |_| align_to.set(AlignTo::Canvas)
                     >
@@ -488,23 +523,23 @@ pub fn Transform() -> impl IntoView {
             </div>
             <h3>"Align"</h3>
             <div class="tool-grid">{Action::ALIGN.map(icon_button).to_vec()}</div>
-            <h3>"Distribute · 3 or more"</h3>
-            <div class="tool-grid">{Action::DISTRIBUTE.map(icon_button).to_vec()}</div>
-            <h3>"Arrange"</h3>
-            <div class="arrange-grid">
-                {Action::ARRANGE
-                    .map(|action| {
-                        view! {
-                            <button
-                                disabled=move || !action.enabled(count())
-                                on:click=move |_| press(action)
-                            >
-                                {action.label()}
-                            </button>
-                        }
-                    })
-                    .to_vec()}
+            <h3>"Distribute"</h3>
+            <div class="tool-row">
+                <div class="tool-grid">{Action::DISTRIBUTE.map(icon_button).to_vec()}</div>
+                <Show when=move || { count() < 3 }>
+                    <span class="tool-note">"Select 3 or more"</span>
+                </Show>
             </div>
+            {Action::ARRANGE
+                .map(|(heading, actions)| {
+                    view! {
+                        <h3>{heading}</h3>
+                        <div class="arrange-row">
+                            {actions.iter().copied().map(text_button).collect_view()}
+                        </div>
+                    }
+                })
+                .to_vec()}
         </div>
     }
 }
@@ -682,7 +717,10 @@ mod tests {
 
     #[test]
     fn nothing_selected_does_nothing() {
-        for action in Action::ALIGN.into_iter().chain(Action::ARRANGE) {
+        let arrange = Action::ARRANGE
+            .iter()
+            .flat_map(|(_, actions)| actions.iter().copied());
+        for action in Action::ALIGN.into_iter().chain(arrange) {
             assert!(!action.enabled(0));
             assert!(plan(action, &[], CANVAS, AlignTo::Selection).is_empty());
         }
