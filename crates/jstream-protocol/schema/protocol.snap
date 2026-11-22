@@ -539,6 +539,22 @@ source: crates/jstream-protocol/src/fixtures.rs
                 "null"
               ]
             },
+            "max_probe_resolution": {
+              "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.150). `studio.set_rendering` refuses any other size.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": [
+                "integer",
+                "null"
+              ]
+            },
+            "reflection_probes": {
+              "description": "Whether reflection probes capture, or left out to keep it (since 0.150).",
+              "type": [
+                "boolean",
+                "null"
+              ]
+            },
             "shadows": {
               "description": "Whether lights set to cast shadows draw them, or left out to keep it.",
               "type": [
@@ -5551,7 +5567,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm`, which its parent decides. `invalid` for a background\nthat isn't a colour, or a background or `keep_warm` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.150 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
           "properties": {
             "background": {
               "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -5566,6 +5582,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             },
             "keep_warm": {
               "description": "Whether the studio keeps it warm while it is off program (ADR-0117 §7, since\n0.116): its sources keep running, so showing it starts nothing. A kept-warm scene\nranks after the Preview scene and before the scenes shown most recently, within\nthe warm budget (`studio.set_warm`). A keyframe scene is shown through its parent,\nso `scene.set_options` refuses it there. Omitted for `false`, the default.",
+              "type": "boolean"
+            },
+            "reflections": {
+              "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.150): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
               "type": "boolean"
             },
             "scene_id": {
@@ -14256,6 +14276,18 @@ source: crates/jstream-protocol/src/fixtures.rs
           "description": "The `floor_reflection` filter (ADR-0151 decision 4), which draws its scene a\nsecond time. Off, it passes its input through and the scene isn't redrawn.",
           "type": "boolean"
         },
+        "max_probe_resolution": {
+          "default": 512,
+          "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.150). A probe set larger captures at this.",
+          "format": "uint32",
+          "minimum": 0,
+          "type": "integer"
+        },
+        "reflection_probes": {
+          "default": true,
+          "description": "Reflection probes (ADR-0170 decision 3, since 0.150), which draw their scene six\ntimes a capture. Off, no probe captures and every surface reflects its\nenvironment as without one.",
+          "type": "boolean"
+        },
         "shadows": {
           "default": true,
           "description": "Shadow maps (ADR-0151 decision 3). Off, no light casts a shadow, whatever its\n`shadows` setting.",
@@ -14529,6 +14561,10 @@ source: crates/jstream-protocol/src/fixtures.rs
             "$ref": "#/$defs/PtzShot"
           },
           "type": "array"
+        },
+        "reflections": {
+          "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.150): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+          "type": "boolean"
         },
         "role": {
           "$ref": "#/$defs/SceneRole",
@@ -16486,5 +16522,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.147"
+  "title": "JStream protocol 0.150"
 }

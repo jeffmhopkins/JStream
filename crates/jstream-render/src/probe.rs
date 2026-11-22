@@ -12,9 +12,6 @@ use crate::gpu::Gpu;
 use crate::image::{Image, LAYER_FORMAT, Owner};
 use wgpu::util::DeviceExt;
 
-/// The sizes a probe's faces may be, in pixels a side (ADR-0170 decision 3).
-pub const PROBE_RESOLUTIONS: [u32; 3] = [128, 256, 512];
-
 /// One face a probe drew: the layer, and the camera axes it was drawn through.
 #[derive(Clone, Copy, Debug)]
 pub struct ProbeFace<'a> {

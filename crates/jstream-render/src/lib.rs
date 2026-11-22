@@ -51,7 +51,7 @@ pub use model::{
     MAX_SCENE_LIGHTS, MAX_SHADOW_MAPS, MaterialDrive, ModelDraw, ProbeLookup, SHADOW_MAP_PX,
     SceneLight, ShadowMap,
 };
-pub use probe::{PROBE_RESOLUTIONS, ProbeFace};
+pub use probe::ProbeFace;
 pub use readback::{Copier, READBACK_DEPTH, ReadbackFormat, ReadbackRing};
 pub use scene::{Color, Crop, Item, LegacyTransform, Output, Placement, Scene, Snapshot};
 pub use sky::{DeepSky, MAX_STAR_BRIGHTNESS, SkyDraw};

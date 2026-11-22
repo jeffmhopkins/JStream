@@ -47,7 +47,7 @@ pub(crate) fn save(path: &Path, features: RenderFeatures) {
         version: 1,
         features,
     })
-    .expect("invariant: a few booleans always serialize");
+    .expect("invariant: a few booleans and a size always serialize");
     json.push('\n');
     if let Err(err) = crate::collection::write_atomically(path, json.as_bytes()) {
         tracing::error!(path = %path.display(), error = %err, "rendering switches not saved");

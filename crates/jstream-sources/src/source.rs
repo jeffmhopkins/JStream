@@ -168,6 +168,13 @@ pub trait Source: Send {
         None
     }
 
+    /// The reflection probe this source puts where an item places it (ADR-0170
+    /// decision 3), for the `reflection_probe` kind, whose [`frame`](Self::frame) is a
+    /// transparent pixel. `None` (the default) for every other kind.
+    fn probe(&self) -> Option<crate::ShownProbe> {
+        None
+    }
+
     /// The source's own audio, for kinds that produce sound as well as frames
     /// (`browser`), which the engine records into a mixer input as it records a device.
     /// `None` (the default) means the source has none. The same source returns the same
@@ -215,6 +222,9 @@ pub struct ShownModel {
     pub casts_shadows: bool,
     /// Whether a `scene`-lit model is shadowed by its scene's lights that cast them.
     pub receives_shadows: bool,
+    /// Whether a `scene`-lit model reflects the rest of its scene through its reflection
+    /// probes (ADR-0170 decision 2), in a scene whose `reflections` is on.
+    pub reflections: bool,
     /// Its rig's palette now (ADR-0151 decision 7), one matrix a slot of
     /// [`Model::rig`](jstream_media::model::Model::rig): its rest pose until a clip
     /// plays. `None` for a model without a rig.

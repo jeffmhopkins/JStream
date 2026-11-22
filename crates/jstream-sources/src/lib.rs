@@ -46,6 +46,7 @@ mod media;
 mod midi;
 mod model;
 mod page_api;
+mod probe;
 mod registry;
 mod scope;
 mod shape;
@@ -78,6 +79,7 @@ pub use midi::{
 };
 pub use model::ModelKind;
 pub use page_api::{BusLevels, PageView};
+pub use probe::{MAX_REFRESH_FRAMES, ShownProbe};
 pub use registry::Registry;
 pub use scope::{
     AudioMeter, AudioScope, AudioScopes, METER_BANDS, Metered, RawMeasure, drawn_source,

@@ -12,6 +12,7 @@ use crate::light::LightKind;
 use crate::media::MediaKind;
 use crate::midi::{BeatKind, CcKind, KeyboardKind, PadsKind, ParticlesKind, PianoRollKind};
 use crate::model::ModelKind;
+use crate::probe::ProbeKind;
 use crate::scope::{SpectrumKind, WaveformKind};
 use crate::shape::ShapeKind;
 use crate::text::TextKind;
@@ -57,6 +58,7 @@ impl Registry {
         add(Box::new(BeatKind::new()));
         add(Box::new(CcKind::new()));
         add(Box::<ModelKind>::default());
+        add(Box::new(ProbeKind::new()));
         add(Box::new(ShapeKind::new()));
         add(Box::new(TextKind::new()));
         add(Box::new(TimerKind::new()));

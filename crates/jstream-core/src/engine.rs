@@ -381,6 +381,17 @@ impl Engine {
         else {
             return None;
         };
+        if let Some(size) = change.max_probe_resolution
+            && !jstream_protocol::PROBE_RESOLUTIONS.contains(&size)
+        {
+            return Some(Err(ProtocolError::invalid_argument(
+                "max_probe_resolution",
+                format!(
+                    "a probe's faces are {:?} pixels a side, not {size}",
+                    jstream_protocol::PROBE_RESOLUTIONS
+                ),
+            )));
+        }
         let file = lock(&self.shared.rendering_file);
         let saved = {
             let mut state = lock(&self.shared.state);

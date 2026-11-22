@@ -34,7 +34,7 @@ mod tests;
 /// The collection file's current `schema_version`. Bumping it ships a migration in the
 /// crate's private `MIGRATIONS` table and a fixture of the previous version that a test
 /// loads (R-API-003).
-pub const SCHEMA_VERSION: u32 = 17;
+pub const SCHEMA_VERSION: u32 = 18;
 
 fn is_srgb(blending: &Blending) -> bool {
     *blending == Blending::Srgb
@@ -65,6 +65,7 @@ type Migration = fn(&mut Value) -> Result<(), String>;
 const MIGRATIONS: [Migration; SCHEMA_VERSION as usize - 1] = [
     v1_to_v2, v2_to_v3, v3_to_v4, v4_to_v5, v5_to_v6, v6_to_v7, v7_to_v8, v8_to_v9, v9_to_v10,
     v10_to_v11, v11_to_v12, v12_to_v13, v13_to_v14, v14_to_v15, v15_to_v16, v16_to_v17,
+    v17_to_v18,
 ];
 
 /// Version 2 adds scene filters (`scenes[].filters`) and item effects (a non-empty
@@ -427,6 +428,21 @@ fn v15_to_v16(value: &mut Value) -> Result<(), String> {
     Ok(())
 }
 
+/// Version 18 adds whether a scene's surfaces reflect each other (`scenes[].reflections`,
+/// ADR-0170 decision 2). A version 17 file has none on, so it upgrades unchanged, and
+/// the field there is refused.
+fn v17_to_v18(value: &mut Value) -> Result<(), String> {
+    let scenes = value.get("scenes").and_then(Value::as_array);
+    if scenes
+        .into_iter()
+        .flatten()
+        .any(|s| s.get("reflections").is_some())
+    {
+        return Err("a version 17 scene has no `reflections`".into());
+    }
+    Ok(())
+}
+
 /// Version 17 adds motion modifiers that drive a setting of their item's source
 /// (ADR-0171 decision 4): property `source` with its `source` target, on an item's motion
 /// or a keyframe override's. A version 16 file has none, so it upgrades unchanged; one
@@ -657,6 +673,10 @@ struct FileScene {
     /// omitted for `false`.
     #[serde(default, skip_serializing_if = "is_false")]
     share_space: bool,
+    /// Whether its surfaces reflect each other (ADR-0170 decision 2, schema_version 18);
+    /// omitted for `false`.
+    #[serde(default, skip_serializing_if = "is_false")]
+    reflections: bool,
     /// Its camera (ADR-0094), or a keyframe scene's override of its parent's; omitted
     /// for none, so a file without cameras is unchanged.
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -998,6 +1018,7 @@ impl Graph {
                     background: scene.options.background.clone(),
                     keep_warm: scene.options.keep_warm,
                     share_space: scene.options.share_space,
+                    reflections: scene.options.reflections,
                     camera: scene.camera,
                     camera_motion: scene.camera_motion.clone(),
                     camera_anchor: scene.camera_anchor.clone(),
@@ -1482,6 +1503,7 @@ fn rebuild(graph: &Graph, file: &File) -> Result<Vec<(String, Edit)>, LoadError>
             background: scene.background.clone(),
             keep_warm: scene.keep_warm,
             share_space: scene.share_space,
+            reflections: scene.reflections,
         };
         if !options.is_default() {
             edits.push((
