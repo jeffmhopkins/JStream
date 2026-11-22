@@ -1654,7 +1654,7 @@ pub enum Action {
     /// reads back. Switching to the scene already on program succeeds and emits nothing.
     /// Fails with `not_found` for a scene or a preset not in the collection.
     ///
-    /// `via` (since 0.136, ADR-0166 decision 2) names keyframes a Move between members
+    /// `via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members
     /// of one family passes through on its way, in order: each value follows one smooth
     /// curve through every stop, so it neither stops nor kinks at a middle keyframe, and
     /// the preset's timing covers the whole path. Each entry is a member of `scene_id`'s
