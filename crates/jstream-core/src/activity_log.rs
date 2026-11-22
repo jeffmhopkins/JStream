@@ -803,6 +803,7 @@ mod tests {
         let action = Action::SceneSwitch {
             scene_id: SceneId::new("intro"),
             preset_id: None,
+            via: Vec::new(),
         };
         let set = Edit::BindingSet {
             trigger: trigger.clone(),

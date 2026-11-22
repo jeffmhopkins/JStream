@@ -509,6 +509,7 @@ pub fn scene_click(studio_mode: bool, scene_id: &SceneId) -> Action {
         Action::SceneSwitch {
             scene_id: scene_id.clone(),
             preset_id: None,
+            via: Vec::new(),
         }
     }
 }
@@ -1885,7 +1886,8 @@ mod tests {
             scene_click(false, &b),
             Action::SceneSwitch {
                 scene_id: b.clone(),
-                preset_id: None
+                preset_id: None,
+                via: Vec::new()
             }
         );
         assert_eq!(
@@ -1903,6 +1905,7 @@ mod tests {
         let named = Action::SceneSwitch {
             scene_id: b.clone(),
             preset_id: Some("fade".into()),
+            via: Vec::new(),
         };
         assert_eq!(optimistic_program(&named), Some(b.clone()));
         assert_eq!(optimistic_program(&scene_click(true, &b)), None);
@@ -1960,6 +1963,7 @@ mod tests {
         let switch = |id: &str| Action::SceneSwitch {
             scene_id: SceneId::new(id),
             preset_id: None,
+            via: Vec::new(),
         };
         let c = Collection {
             hotkeys: vec![
