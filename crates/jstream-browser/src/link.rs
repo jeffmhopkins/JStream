@@ -112,8 +112,10 @@ pub(crate) trait Import: Send {
 }
 
 /// An import with nothing to show: a paint that couldn't be taken.
+#[cfg(feature = "cef")]
 pub(crate) struct Skipped;
 
+#[cfg(feature = "cef")]
 impl Import for Skipped {
     fn wait(&mut self) -> bool {
         false

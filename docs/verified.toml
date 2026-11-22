@@ -1500,7 +1500,7 @@ stamp = { hash = "b3:c9a4448f881da60a", by = "agent:readme-scrub", note = "#1369
 stamp = { hash = "b3:c4cbd04558678324", by = "agent:claude", note = "Re-read against the import split (PageFrames::import + Import wait/publish on a release thread): the seam, use_device and paints_on_cpu text still holds; threads are documented in link.rs rustdoc as it says" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/gpu.rs"]
-stamp = { hash = "b3:8eb2ccd0931f8625", by = "agent:claude", note = "Re-read against the import split (PageFrames::import + Import wait/publish on a release thread): the seam, use_device and paints_on_cpu text still holds; threads are documented in link.rs rustdoc as it says" }
+stamp = { hash = "b3:9d1801a7befa6e2a", by = "agent:claude", note = "Review fix: Skipped is cfg(feature = cef) and the ring comment is reworded; the map, the seam and the paint path still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/cef/job.rs"]
 stamp = { hash = "b3:67529d27e725a225", by = "agent:claude", note = "Kept #1190's note on dropping frames from an earlier device and repainting; added the Windows kill-on-close job for the helper and --no-startup-window (#1186), and the CEF start error naming a shared cache folder (#1187)" }
@@ -1539,7 +1539,7 @@ stamp = { hash = "b3:44b86dd7bd04fa94", by = "agent:mac-browser", note = "Module
 stamp = { hash = "b3:a95ac156ce3945fb", by = "agent:mac-browser", note = "Every cfg that was any(windows, linux) is now any(windows, linux, macos), the CPU-frame modules are linux|macos, and the crate docs say so with ADR-0157. That is what the README's platform columns now say. The ADR was renumbered 0156 to 0157 in this PR (number clash with #1521); every reference here says 0157." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/link.rs"]
-stamp = { hash = "b3:e827f072cd9110f0", by = "agent:claude", note = "Re-read against the import split (PageFrames::import + Import wait/publish on a release thread): the seam, use_device and paints_on_cpu text still holds; threads are documented in link.rs rustdoc as it says" }
+stamp = { hash = "b3:4a48721de6119919", by = "agent:claude", note = "Review fix: Skipped is cfg(feature = cef) and the ring comment is reworded; the map, the seam and the paint path still hold" }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/page.rs"]
 stamp = { hash = "b3:bd476ac006b820f7", by = "agent:readme-scrub", note = "#1369 review: the cargo doc pointer passes --document-private-items (N1); the moved Behaviour paragraphs no longer open by naming their own file, and audio.rs's ARCH reference is a resolvable path again (N2). Only doc comments and the pointer changed; the map still holds." }

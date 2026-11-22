@@ -39,8 +39,8 @@ use crate::link::{Frames, Import, PageFrames, Paint, Skipped};
 const HELPER_SLOTS: usize = 3;
 
 /// Textures each page writes its paints into in turn: one per copy that can be on its
-/// way (one per helper slot) and the latest frame, so a copy never writes the frame the
-/// compositor holds.
+/// way (one per helper slot) and the latest frame, so while every copy publishes, a copy
+/// never writes the frame the compositor holds.
 const RING: usize = HELPER_SLOTS + 1;
 
 /// The longest the engine waits for a copy before giving up on the frame.
