@@ -399,7 +399,12 @@ Each module's rustdoc has its behaviour in full (`cargo doc -p jstream-core
 - **MIDI-driven motion** (`reactive.rs`,
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)): a `midi` modifier
   following a control change, pitch bend or channel pressure on its input's state, read
-  from atomics and smoothed by the same follower; a preview reads it unsmoothed.
+  from atomics and smoothed by the same follower; a scene or source preview reads it
+  unsmoothed. While no render thread runs (no output), `video.snapshot` and the preview
+  hub follow the program's controls themselves before each picture, with one follower
+  on the engine's shared state stepped to the clock's time
+  ([ADR-0173](../../docs/adr/0173-pictures-with-no-output-follow-motion-controls.md)),
+  so a held clock's render smooths them as a stream would.
 - **Data-driven motion** (`reactive.rs`,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 3): a
   `data` modifier following one field of a sender's live data, a number through its
@@ -893,7 +898,9 @@ covers = ["crates/jstream-core/src/aim/tests.rs", "crates/jstream-core/src/ptz/c
   are left out of the shot while a `scene` video mix showing the group or the new side
   still plans that scene in full, chain and boxes, and a child appearing or
   disappearing with the group item's timing, and a `data` motion modifier moving an
-  item while a sender's transport plays and back once it stops, ADR-0171; `snapshot.rs` draws such a child where its
+  item while a sender's transport plays and back once it stops, ADR-0171, and a preview
+  with no output running smoothing a `midi` modifier over a held clock's steps,
+  ADR-0173; `snapshot.rs` draws such a child where its
   track is at the frame's time; `activity.rs` silences what a keyframe hides in a group; `transition.rs` pairs a source placed twice by item), YouTube on `jstream-youtube`'s `FakeTransport` and fixtures
   (`src/tests/youtube.rs`: sign-in through a real loopback redirect, sign-out, the
   broadcast actions and lists, quota and refused tokens, a `youtube` output
@@ -3925,7 +3932,7 @@ lock is held, as its final `stats.tick` already requires. The master's meters ar
 atomics the mixer thread writes and the sampler reads, with no lock. The media clock's
 hold (`HeldClock`, ADR-0172) is a leaf mutex, with nothing taken under it: a reader
 holds it only for the moment it reads (the sources' thread under its queue lock), and
-`clock.hold`, `clock.step` and `clock.release` take it under the collection lock. The `jstream-sources`
+`clock.hold`, `clock.step` and `clock.release` take it under the collection lock. The control side's follower of the program (`Shared::hearing`, ADR-0173) is a leaf mutex that `video.snapshot` and the preview source take under the collection lock, reading only atomics under it. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
 each live source for a frame it already has, apart from one catch-up paint of a painter
@@ -4223,7 +4230,7 @@ and `window` source that has no stored frame showing its capture. With no scene 
 draws the primary display's capture scaled to fill the canvas, fitted to the frame. A
 capture whose mailbox is empty repeats its last frame. Before the tick's mixes are
 drawn, the loop's `reactive::Follower` measures what the shot's audio motion
-modifiers hear and advances their envelopes once (ADR-0100).
+modifiers hear and advances their envelopes once (ADR-0100). `RenderHub::following` says whether a render thread adopts snapshots, so follows them; while none does, the control side's pictures follow the program themselves (ADR-0173).
 
 **Encode path** (ARCH › GPU pipeline, steps 4 to 6). A video session opens on the
 platform's context when there is one and the render thread hasn't left it (`VideoSession::open_on`,
