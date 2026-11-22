@@ -22,6 +22,12 @@ function entry(page, name) {
     .filter({ has: page.locator('.ctx-label').getByText(name, { exact: true }) });
 }
 
+/** The open submenu's item `name`, after hovering its opener `parent` in the menu. */
+async function sub(page, parent, name) {
+  await entry(page, parent).hover();
+  return page.locator('.context-menu.submenu').getByRole('menuitem', { name: new RegExp(`^${name}`) });
+}
+
 /** Where canvas point (`x`, `y`) is on the screen. */
 async function onScreen(page, x, y) {
   const m = await page.locator('svg.stage-overlay').evaluate((svg) => {
@@ -36,7 +42,7 @@ test('the canvas has a menu on the frame and another on the margin', async ({ pa
   const inside = await onScreen(page, 200, 200);
   await page.mouse.click(inside.x, inside.y, { button: 'right' });
   await expect(menu(page)).toBeVisible();
-  expect(await labels(page)).toEqual(['Select all', 'Turn snapping off', 'Add source…', 'Paste']);
+  expect(await labels(page)).toEqual(['Select all', 'Turn snapping off', 'Add source…', 'New group', 'Paste']);
   await expect(menu(page).getByRole('menuitem', { name: 'Paste' })).toBeDisabled();
 
   // Turning snapping off from the menu presses the toolbar's toggle off.
@@ -77,9 +83,13 @@ test('the arrow keys move through a menu, and a press outside closes it', async 
   await expect(item('Turn snapping off')).toBeFocused();
   await page.keyboard.press('ArrowDown');
   await expect(item('Add source…')).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(item('New group')).toBeFocused();
   // Paste is disabled, so Down wraps to the first item.
   await page.keyboard.press('ArrowDown');
   await expect(item('Select all')).toBeFocused();
+  await page.keyboard.press('ArrowUp');
+  await expect(item('New group')).toBeFocused();
   await page.keyboard.press('ArrowUp');
   await expect(item('Add source…')).toBeFocused();
   await page.keyboard.press('Enter');
@@ -157,40 +167,36 @@ test('an item row has the item menu, which restacks and arranges', async ({ page
   await connect(page, daemon);
   await placeBackdropAgain(page);
   await rows(page).first().click({ button: 'right' });
+  // Grouped as OBS's is: open it, its state, the clipboard, its arrangement (the layer
+  // order in one Order submenu), other views, then removal. Add source and New group
+  // are in the menus of an empty spot instead.
   expect(await labels(page)).toEqual([
     'Rename',
-    'Visible',
-    'Lock',
     'Properties…',
     'Edit filters…',
-    'Copy/paste filters',
+    'Visible',
+    'Lock',
     'Labels',
-    'Pop out',
-    'Screenshot (source)',
-    'Reference to original',
-    'Independent clone',
     'Copy',
     'Paste',
-    'Bring to front',
-    'Bring forward',
-    'Send backward',
-    'Send to back',
+    'Copy/paste filters',
+    'Duplicate',
+    'Reference or clone',
+    'Order',
     'Transform',
     'Blending',
-    'Clear crop',
     'Crop',
-    'Duplicate as reference',
-    'Duplicate as clone',
+    'Clear crop',
+    'Pop out',
+    'Screenshot (source)',
     'Remove from scene',
-    'Add source…',
-    'New group',
     'Delete source everywhere…',
   ]);
   await expect(menu(page).getByRole('menuitem', { name: 'Clear crop' })).toBeDisabled();
 
   // Send to back: the right-clicked reference goes under the original, still selected.
   const startRev = await rev(page);
-  await menu(page).getByRole('menuitem', { name: 'Send to back' }).click();
+  await (await sub(page, 'Order', 'Send to back')).click();
   await expect.poll(() => rev(page)).toBe(startRev + 1);
   await expect(rows(page).last()).toHaveClass(/selected/);
 
@@ -207,9 +213,12 @@ test('the canvas item menu duplicates, and selects several', async ({ page, daem
   const middle = await onScreen(page, 960, 540);
   await page.mouse.click(middle.x, middle.y, { button: 'right' });
   await expect(rows(page).first()).toHaveClass(/selected/);
-  // On the canvas, the menu ends with Select all.
-  expect((await labels(page)).slice(-2)).toEqual(['Remove from scene', 'Select all']);
-  await menu(page).getByRole('menuitem', { name: 'Duplicate as clone' }).click();
+  // On the canvas, the clipboard group adds Select all, and the menu ends with Remove.
+  const canvasLabels = await labels(page);
+  expect(canvasLabels.slice(canvasLabels.indexOf('Copy'), canvasLabels.indexOf('Copy') + 3))
+    .toEqual(['Copy', 'Paste', 'Select all']);
+  expect(canvasLabels.at(-1)).toBe('Remove from scene');
+  await (await sub(page, 'Duplicate', 'Duplicate as clone')).click();
   await expect(rows(page)).toHaveCount(2);
   await expect(rows(page).first()).toContainText('Backdrop copy');
   await expect(rows(page).first()).toHaveClass(/selected/);
@@ -220,7 +229,7 @@ test('the canvas item menu duplicates, and selects several', async ({ page, daem
   await expect(page.locator('.sources-panel li.row.selected')).toHaveCount(2);
   await rows(page).first().click({ button: 'right' });
   await expect(menu(page).locator('.ctx-head')).toHaveText('2 items selected');
-  await expect(menu(page).getByRole('menuitem', { name: 'Duplicate as reference' })).toBeDisabled();
+  await expect(await sub(page, 'Duplicate', 'Duplicate as reference')).toBeDisabled();
   await menu(page).getByRole('menuitem', { name: 'Remove from scene' }).click();
   await expect(rows(page)).toHaveCount(0);
 });
@@ -228,9 +237,16 @@ test('the canvas item menu duplicates, and selects several', async ({ page, daem
 test('a placement switches between a reference and a clone, keeping its item', async ({ page, daemon }) => {
   await connect(page, daemon);
   await placeBackdropAgain(page);
-  const check = (name) => menu(page).getByRole('menuitemcheckbox', { name });
-  await rows(page).first().click({ button: 'right' });
-  await expect(menu(page).locator('.ctx-head')).toHaveText('Source');
+  // The choice is the Reference or clone submenu, which shows the current one.
+  const submenu = page.locator('.context-menu.submenu');
+  // In a submenu the two are a choice of one, so they read as radio items.
+  const check = (name) => submenu.getByRole('menuitemradio', { name });
+  const open = async () => {
+    await rows(page).first().click({ button: 'right' });
+    await entry(page, 'Reference or clone').hover();
+  };
+  await open();
+  await expect(submenu.locator('.ctx-head')).toHaveText('Source');
   await expect(check('Reference to original')).toHaveAttribute('aria-checked', 'true');
   await expect(check('Independent clone')).toHaveAttribute('aria-checked', 'false');
 
@@ -240,21 +256,21 @@ test('a placement switches between a reference and a clone, keeping its item', a
   await expect.poll(() => rev(page)).toBe(start + 1);
   await expect(rows(page)).toHaveCount(2);
   await expect(rows(page).first()).toHaveClass(/selected/);
-  await rows(page).first().click({ button: 'right' });
-  await expect(menu(page).locator('.ctx-head')).toHaveText('Duplicate of Backdrop');
+  await open();
+  await expect(submenu.locator('.ctx-head')).toHaveText('Duplicate of Backdrop');
   await expect(check('Independent clone')).toHaveAttribute('aria-checked', 'true');
   // The original, now placed once, is a source of its own: no switch.
   await page.keyboard.press('Escape');
   await rows(page).last().click({ button: 'right' });
-  await expect(check('Independent clone')).toHaveCount(0);
+  await expect(entry(page, 'Reference or clone')).toHaveCount(0);
   await page.keyboard.press('Escape');
 
   // Back to the reference: the copy, placed nowhere else, goes with it.
-  await rows(page).first().click({ button: 'right' });
+  await open();
   await check('Reference to original').click();
   await expect.poll(() => rev(page)).toBe(start + 2);
-  await rows(page).first().click({ button: 'right' });
-  await expect(menu(page).locator('.ctx-head')).toHaveText('Source');
+  await open();
+  await expect(submenu.locator('.ctx-head')).toHaveText('Source');
   await expect(check('Reference to original')).toHaveAttribute('aria-checked', 'true');
 });
 
