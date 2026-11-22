@@ -1119,8 +1119,18 @@ impl Compositor {
         // What each image drawn into can hold now (#1070, #1449): a filter can draw
         // anywhere in its output, unless what it reads is bounded and its kind says how
         // far past that it draws, and every draw is then cut to that.
+        // Each is marked changed first, as every write of an image's texels is: what
+        // remembers an image by its change count (a mip chain, [`Image::seen`]) must
+        // see a filter's output move on.
+        let marked = written
+            .iter()
+            .any(|(image, _)| image.texture() == output.texture());
         for (image, content) in written {
+            image.mark_changed();
             image.set_content(content);
+        }
+        if !marked {
+            output.mark_changed();
         }
         drop(submitting);
         if let (Some(timer), Some(timing)) = (&self.timer, timing) {

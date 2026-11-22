@@ -397,7 +397,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    measured a mean error of 17 against 2.7 for a 512² one; it is now 2.7 too. Each `Image` counts its changes (its clones share
    the count and the chains, as they share the texture), and a chain is
    rebuilt when the count moved since its last build: `rewrite_rgba8` marks an upload,
-   `render_into` the layer it drew into, and `ResourceCache::import` an import it hands
+   `render_into` the layer it drew into, a filter every layer it drew into (its output,
+   which is one layer for as long as its chain lives, included), and
+   `ResourceCache::import` an import it hands
    a new frame (one whose hold or info, its presentation time included, differs from
    the last one's, since a platform may reuse a hold for every frame it writes into a
    texture), not the same frame shown again. `Image::mark_changed` marks an import the
@@ -495,9 +497,9 @@ requires. The output the caller can sample or read back is `Rgba8UnormSrgb`.
    A layer drawn over a transparent background also keeps what its scene could have
    drawn into: the bounding box of every drawn polygon, a texel of margin, clipped
    (the backdrop copy's box), unioned (#1070). The bounds hold for the layer's current
-   change count only, so any later write forgets them. `apply_filter_into` sets its
-   output's, which it does not count: a bounded filter's reach past its input's, or
-   unknown ([Filters](#filters)). A scene placing the layer as a 2D item
+   change count only, so any later write forgets them. `apply_filter_into` counts its
+   write of each layer it drew into, then sets that layer's bounds: for its output, a
+   bounded filter's reach past its input's, or unknown ([Filters](#filters)). A scene placing the layer as a 2D item
    in `normal`, `additive` or `screen`, at a size that needs no chain, draws only the
    part of its quad whose UVs are inside those bounds (`Shape::trim_to`, the same
    affine map cut down). Outside them every bilinear tap reads only transparent

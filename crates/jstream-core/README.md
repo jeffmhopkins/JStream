@@ -2181,7 +2181,12 @@ layer held after the draw. A map whose casters, light view and layer all match i
 as it is, so a scene whose lights and casters hold still pays for its shadow maps once,
 not once a frame; a card showing a new frame, a moved item, a clip's next pose, a moved
 light or a layer the cache made again draws it
-(`a_shadow_map_is_drawn_again_only_when_what_casts_changes`).
+(`a_shadow_map_is_drawn_again_only_when_what_casts_changes`). A card whose picture is a
+filter chain's output changes every time the filter runs, since the compositor counts each
+run as a change of that layer, so its map is drawn every frame, of the picture the filter
+drew the frame before, as it was before maps were kept: the maps are drawn before that
+card's chain runs (`a_filtered_cards_shadow_follows_its_picture`). `Chains::begin` drops
+what is kept for a scene whose shadows the last run didn't draw.
 `Chains` uploads each source's model once per version and lets go of one no frame drew.
 A rigged model ([ADR-0151](../../docs/adr/0151-the-rest-of-richer-3d-scenes.md)
 decision 7) is posed before it is drawn: `pose` writes its source's `ShownModel::pose`

@@ -207,7 +207,7 @@ stamp = { hash = "b3:64dbb25a25fcaabd", by = "agent:alpha5-security", note = "Re
 stamp = { hash = "b3:aa614e3467e533fe", by = "agent:claude", note = "render gains only a test-only kind snapshot (insta dev-dependency, tests/kinds.rs, schema/kinds.snap) and its README Testing paragraph; the GPU pipeline steps are unchanged" }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/README.md"]
-stamp = { hash = "b3:458431355b571b14", by = "agent:claude", note = "Corrected 'drawn from the light once a frame': a shadow map is now drawn again only when its light or casters change. Rest of the model and sky text re-read against the diff, unchanged." }
+stamp = { hash = "b3:fcbd2f09712e3273", by = "agent:claude", note = "Review B1 (filter outputs count as changed): searched the section for change-count and rebuild text, none; the shadow-map sentence (again only when the light or what casts changed) still holds and now covers filtered cards." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/benches/composite.rs"]
 stamp = { hash = "b3:e2670362b7185b45", by = "agent:builder-3d3", note = "This branch: decision 7's model depth target (Item::depth, depth pipelines, fs_write_depth, draw_model_depth) and its goldens. The merge brought #1595's driven materials (ModelDraw::materials); this branch's model depth golden test draw now passes materials: &[] to compile. Re-read: the depth text and main's driven-materials text both hold; render tests pass after the merge. | kept from the merged side: Re-read: model draws now write material uniforms per draw before encoding; the pipeline outline still holds, details in render README. | merge: Main's #1578 adds live textures and reflections to model draws; with our per-draw material writes the pipeline outline holds. | kept from the merged side: Added how a model's texture (whole-image mip chain, rebuilt on change) and reflection (panorama in place of studio gradient or sky) are planned and scheduled; rest of the model paragraph holds" }
@@ -228,7 +228,7 @@ stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:116056ffa6c1d19c", by = "agent:claude", note = "Replaced 'still no depth buffer' with decision 7: a pass placing a model gets a reversed Depth32Float target, the model writes NEAR_W/w before filters, later items test it, models order by centre, no model means no target; checked against compositor.rs and snapshot.rs, and it sits consistently beside the sky backdrop, which has no view depth." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:89fd3af895add6ab", by = "agent:claude", note = "the sky backdrop is skipped when its layer still holds the same sky (Kept in sky.rs: values, layer and picture change counts); re-read the sky paragraphs against the change, nothing else in the section is touched" }
+stamp = { hash = "b3:e6d5dcda694261d8", by = "agent:claude", note = "Review B1 (filter outputs count as changed): searched the section for change-count and rebuild text, none; the shadow-map sentence (again only when the light or what casts changed) still holds and now covers filtered cards." }
 
 ["ARCH#gpu-pipeline"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:f5e5c9e0a5d49b34", by = "agent:claude", note = "readback now NV12 when only NV12 encoder sessions take a mix, RGBA8 otherwise; the target model note no longer says NV12 readback is #1433" }
@@ -2385,7 +2385,7 @@ stamp = { hash = "b3:5701f7cb5f0a502c", by = "agent:claude", note = "added that 
 stamp = { hash = "b3:3e27fbbc25b3f895", by = "agent:claude", note = "This PR adds SharedValues::map for the page feed; the section now says the page feed reads every value through it, linking Page API in Snapshots." }
 
 ["CRATE-jstream-core#snapshots"."body"]
-stamp = { hash = "b3:84822af05ba8b26b", by = "agent:claude", note = "Added the paragraph on Chains::shadow_maps/KeptShadows after the Shadows paragraph and re-read the other shadow-map passages (fog's reads_shadows, pose, sky): draw_shadows still returns every map each run, only the redraw is skipped; the model loop moved to depth_models unchanged." }
+stamp = { hash = "b3:f8ac6ffa4f497cbd", by = "agent:claude", note = "Review B1 and N1: added that a filtered card's map is drawn every frame from the picture the filter drew the frame before (maps are drawn before the card's chain runs, as before maps were kept), with the new test, and that Chains::begin drops kept maps of scenes whose shadows the last run didn't draw." }
 
 ["CRATE-jstream-core#snapshots"."dep:crates/jstream-protocol/README.md#filters"]
 stamp = { hash = "b3:e29de3cf1d63fcb3", by = "agent:claude-settings", note = "This branch: one set of blend modes and a project blending space (ADR-0126, protocol 0.101, schema 12). r2 N1: the _srgb modes' range now reads 0.75 to 0.100, the last version before 0.101, in the BlendMode doc and the protocol README (schema snapshot regenerated)." }
@@ -2397,7 +2397,7 @@ stamp = { hash = "b3:c802a93fc0f13af0", by = "agent:3d-groups", note = "Dependen
 stamp = { hash = "b3:25f2f3b47ccb9f93", by = "agent:claude", note = "Re-read for ADR-0140's acceptance: ADR-0061 is superseded, so this section's links to it (and depends_on) now cite ADR-0140, which carries ADR-0061's decision unchanged apart from Cisco's OpenH264 also decoding the engine's own H.264 streams and Linux's media files being ADR-0072's; nothing here says OpenH264 never decodes, so the text holds | merge: #1375 brought in JTunnel senders received into network_audio sources; it touches this section's inputs alongside this branch's change without contradicting it, and wave/alpha5 verified its text for #1375 | kept from the merged side: audio_sources.rs gains the Network want and the receiver slot in Wanted; nothing about snapshots or kinds' building changed." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/chain.rs"]
-stamp = { hash = "b3:3129e878d5cf8b3f", by = "agent:claude", note = "Added the paragraph on Chains::shadow_maps/KeptShadows after the Shadows paragraph and re-read the other shadow-map passages (fog's reads_shadows, pose, sky): draw_shadows still returns every map each run, only the redraw is skipped; the model loop moved to depth_models unchanged." }
+stamp = { hash = "b3:dfde931431654176", by = "agent:claude", note = "Review B1 and N1: added that a filtered card's map is drawn every frame from the picture the filter drew the frame before (maps are drawn before the card's chain runs, as before maps were kept), with the new test, and that Chains::begin drops kept maps of scenes whose shadows the last run didn't draw." }
 
 ["CRATE-jstream-core#snapshots"."file:crates/jstream-core/src/effect_packs.rs"]
 stamp = { hash = "b3:2dea51e38948ab0c", by = "agent:lane-d", note = "Main→wave sync. This branch only merged; the merge brought #1264 (one shared engine GPU context, snapshots draw pages and captures), #1411, #1414 and #1438 (pack and shader-source kinds follow renames; undo conflicts), #1395 and #1401 (shader source from Add source), #1416 (browser pages follow the program fps), #1408, #1409 and #1425 (render bounds and mips), #1391 (still's decoded copy released), #1397, #1400 (ADR-0143), #1434 (readback thread) and #1443 (TCP_NODELAY). Re-read against the merged inputs: the wave's text and main's auto-merged edits both still hold | kept from the merged side: Extended the upgrade paragraph to shader sources (Migration, ShaderSource::migrate, live sync after) and said a shader source loads before its pack verbatim; checked against effect_packs.rs, engine.rs and the new test; dropped the not-yet line for sources. | merge: Merged main after #1411 squash-landed: main now holds #1411's filter-only version of this section; this branch's #1414 text (builtin sources of a missing kind load verbatim and follow renames through upgrade_kinds, with #1411's r1 fixes carried to sources) replaces it. Re-read against the merged code | kept from the merged side: Replaced 'not migrated yet' with the upgrade: older-version settings through Effect::migrate, fitted to the kind, newer ones kept, one revision with state.changed from client engine, saved, logged in undo history; checked against install_effects and Graph::upgrade_filters." }
@@ -2511,7 +2511,7 @@ stamp = { hash = "b3:01ad296c6270687e", by = "agent:jtunnel-discovery", note = "
 stamp = { hash = "b3:048747410023f472", by = "agent:claude", note = "core outputs now says the program readback can be NV12; the daemon's design text doesn't describe the readback, still holds" }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#snapshots"]
-stamp = { hash = "b3:84822af05ba8b26b", by = "agent:claude", note = "Stale through core#snapshots only (shadow maps kept between frames); the daemon section says nothing on shadow maps or view depth and no daemon code changed." }
+stamp = { hash = "b3:f8ac6ffa4f497cbd", by = "agent:claude", note = "Stale through core#snapshots only (shadow-map text for filtered cards and pruning); the daemon section says nothing on shadow maps." }
 
 ["CRATE-jstream-daemon#design"."dep:crates/jstream-core/README.md#wasm-plugins"]
 stamp = { hash = "b3:10c130fe918d94d6", by = "agent:plugin-uninstall", note = "re-read after review round 1: plugin.uninstall's doc now says a running plugin holds only read from removal and stops once its invocation returns (N2); nothing else in this section changed" }
@@ -4986,7 +4986,7 @@ stamp = { hash = "b3:83fd3bbd406c7796", by = "agent:narrow-hot-sections", note =
 stamp = { hash = "b3:99c05876cff4107b", by = "agent:narrow-hot-sections", note = "Split out of #design (fresh on main): text moved unchanged as its own section (heading promoted from ###). Its text and files are those it was verified against there; covers narrowed to youtube.rs, the modules its text names; #purpose still covers all of src/**; self-links to #design now name this anchor" }
 
 ["CRATE-jstream-render#design"."body"]
-stamp = { hash = "b3:bd8c02ceb37fccf8", by = "agent:claude", note = "Added Image::seen (Seen) and GpuModel::seen (SeenModel) to the passage on an image's change count; no drawing code changed in the crate." }
+stamp = { hash = "b3:9643b2312a9a4e34", by = "agent:claude", note = "Review B1: filter_into now marks every layer it drew into as changed before setting its bounds. Updated the change-count passage (a filter marks its layers) and the bounds passage that said apply_filter_into does not count its output; the mip-chain rebuild rule now covers a filtered 3D card." }
 
 ["CRATE-jstream-render#design"."dep:docs/RULES.md#R-RT-002"]
 stamp = { hash = "b3:24c0e2f735f7e770" }
@@ -5007,7 +5007,7 @@ stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:116056ffa6c1d19c", by = "agent:claude", note = "Rewrote the No depth buffer step: Item::depth turns on depth_on, a Depth32Float scene target per canvas size and DepthPipelines (tested GreaterEqual / Always, depth_writer), cleared to 0, the model's layer untested then fs_write_depth, others test NEAR_W/w; checked against compositor.rs, blend.rs and composite.wgsl." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:89fd3af895add6ab", by = "agent:claude", note = "the sky backdrop is skipped when its layer still holds the same sky (Kept in sky.rs: values, layer and picture change counts); re-read the sky paragraphs against the change, nothing else in the section is touched" }
+stamp = { hash = "b3:e6d5dcda694261d8", by = "agent:claude", note = "Review B1: filter_into now marks every layer it drew into as changed before setting its bounds. Updated the change-count passage (a filter marks its layers) and the bounds passage that said apply_filter_into does not count its output; the mip-chain rebuild rule now covers a filtered 3D card." }
 
 ["CRATE-jstream-render#design"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:f5e5c9e0a5d49b34", by = "agent:claude", note = "ring entry describes record_nv12 after the lost-device sentence from #1456: both planes into one buffer, tight NV12 out, format(), a format change waits like a resize" }
@@ -5673,7 +5673,7 @@ stamp = { hash = "b3:a2ad2cd7510d1959", by = "agent:claude", note = "re-applied 
 stamp = { hash = "b3:116056ffa6c1d19c", by = "agent:claude", note = "Item gains depth, blend.rs depth pipelines, composite.wgsl clip z min(NEAR_W, w) and fs_write_depth (decision 7); the purpose bullets still hold beside depth of field and the sky backdrop." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/compositor.rs"]
-stamp = { hash = "b3:89fd3af895add6ab", by = "agent:claude", note = "the sky backdrop is skipped when its layer still holds the same sky (Kept in sky.rs: values, layer and picture change counts); re-read the sky paragraphs against the change, nothing else in the section is touched" }
+stamp = { hash = "b3:e6d5dcda694261d8", by = "agent:claude", note = "Review B1 (filter outputs count as changed): the purpose's sky bullet on the layer's change count still holds, a filter writing a sky layer would now also redraw it; nothing else there speaks of change counts." }
 
 ["CRATE-jstream-render#purpose"."file:crates/jstream-render/src/convert/mod.rs"]
 stamp = { hash = "b3:f5e5c9e0a5d49b34", by = "agent:claude", note = "lib.rs re-exports ReadbackFormat, readback.rs gains record_nv12 and the planar unpack under the lost-device read lock; the purpose (one scene drawn, snapshot readback here) still holds" }

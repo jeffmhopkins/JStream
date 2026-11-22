@@ -790,6 +790,14 @@ impl Chains {
             }
             keep
         });
+        // So are the shadow maps kept for a scene whose shadows the last run didn't
+        // draw: a scene that is gone, or shown no more.
+        let shadows = &self.shadows;
+        self.shadow_maps.retain(|scene, _| {
+            shadows
+                .get(scene)
+                .is_some_and(|(drawn, _)| Some(*drawn) == last)
+        });
         self.ran = Some(frame);
         #[cfg(test)]
         {
@@ -4785,6 +4793,66 @@ mod tests {
         let (moved, draws) = frame(&shadow_wall(20.0), &card(5), &mut chains);
         assert_eq!(draws, 3, "the card moved");
         assert_ne!(moved, first, "and its shadow with it");
+    }
+
+    /// A card whose picture comes out of a filter chain casts the shadow of what the
+    /// filter drew this frame: the chain's output layer is one image for as long as it
+    /// lives, and each run of the filter counts as a change of it, so the kept map is
+    /// drawn again. Here the card's shadow comes once the filter has drawn it, and goes
+    /// once its picture has turned transparent.
+    #[test]
+    fn a_filtered_cards_shadow_follows_its_picture() {
+        let _gpu = crate::tests::one_gpu_test_at_a_time();
+        let Some(mut compositor) = gpu() else { return };
+        let mut cache = ResourceCache::new();
+        let mut chains = Chains::default();
+        let sides = [(22, 18), (42, 18)];
+        let mut graph = shadow_wall(0.0);
+        apply(
+            &mut graph,
+            vec![Edit::FilterAdd {
+                owner: FilterOwner::Source {
+                    source_id: SourceId::new("card"),
+                },
+                chain: FilterChain::Video,
+                filter_id: FilterId::new("grade"),
+                kind: "color_correction".into(),
+                settings: [("multiply".to_owned(), serde_json::json!("#ffffff"))]
+                    .into_iter()
+                    .collect(),
+                enabled: None,
+                index: None,
+            }],
+        );
+        let model = shadow_wall_model(true);
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let mut frame = |card: &Frame, chains: &mut Chains| {
+            let shot = shadow_wall_shot(&graph, model.clone(), shadow_wall_light(true), card);
+            let pixels = draw_points(
+                &mut compositor,
+                (&mut cache, &mut *chains),
+                (&shot, &LiveParams::default()),
+                &sides,
+            );
+            (pixels, chains.shadow_draws.get())
+        };
+        let solid = Frame::new(1, 1, &[255; 4], 4).expect("1x1 RGBA8");
+        let clear = Frame::new(1, 1, &[0; 4], 5).expect("1x1 RGBA8");
+        let darkest = |pixels: &[[u8; 4]]| pixels.iter().map(|&p| luma(p)).min().unwrap_or(0);
+        // The maps are drawn before the card's chain runs, so they show the picture
+        // the filter drew the frame before: nothing yet in the first frame.
+        let (unshadowed, draws) = frame(&solid, &mut chains);
+        assert_eq!(draws, 1);
+        let (shadowed, draws) = frame(&solid, &mut chains);
+        assert_eq!(draws, 2, "the filter has drawn the card since");
+        assert!(
+            darkest(&shadowed) + 100 < darkest(&unshadowed),
+            "the card casts a shadow: {shadowed:?} after {unshadowed:?}"
+        );
+        frame(&clear, &mut chains);
+        let (lit, draws) = frame(&clear, &mut chains);
+        assert_eq!(draws, 4, "the filter drew a new picture");
+        assert_eq!(lit, unshadowed, "a card that shows nothing casts none");
     }
 
     /// ADR-0143: a scene-lit model is lit by its scene's lights while a transition
