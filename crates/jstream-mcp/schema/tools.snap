@@ -484,7 +484,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -504,6 +504,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -551,6 +558,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -2097,7 +2111,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -5532,7 +5546,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.137, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.144, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -5758,7 +5772,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -7488,7 +7502,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -7508,6 +7522,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -7555,6 +7576,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -9101,7 +9129,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -12536,7 +12564,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.137, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.144, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -12762,7 +12790,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -16344,7 +16372,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -16364,6 +16392,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -16411,6 +16446,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -17957,7 +17999,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -21392,7 +21434,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.137, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.144, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -21618,7 +21660,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -23557,7 +23599,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.137, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.144, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -23783,7 +23825,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -25587,7 +25629,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -25607,6 +25649,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -25654,6 +25703,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -27200,7 +27256,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -30631,7 +30687,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.137, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.144, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -30857,7 +30913,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -33813,7 +33869,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -34087,7 +34143,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.137, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.144, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -34765,7 +34821,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -34785,6 +34841,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -34832,6 +34895,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -36092,7 +36162,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.",
+                "description": "Puts a scene on program, with a transition (ADR-0029): the preset `preset_id`\nnames, else the scene's `transition_in`, else the current program scene's\n`transition_out`, else the default preset. A `cut`, a zero duration, or a preset\nwhose kind the engine doesn't have shows the scene from the next frame. A switch\nduring a transition starts from what is on screen. The program scene is runtime\nstate, not collection state (ADR-0030): the switch changes no `rev`, is never\nundone, and emits `studio.changed` naming the preset it used, which `studio.get`\nreads back. Switching to the scene already on program succeeds and emits nothing.\nFails with `not_found` for a scene or a preset not in the collection.\n\n`via` (since 0.138, ADR-0166 decision 2) names keyframes a Move between members\nof one family passes through on its way, in order: each value follows one smooth\ncurve through every stop, so it neither stops nor kinks at a middle keyframe, and\nthe preset's timing covers the whole path. Each entry is a member of `scene_id`'s\nfamily other than `scene_id`, at most eight of them, none repeating the one\nbefore it (`invalid_argument` on `via` or `via.<index>`, `not_found` for a missing\nscene). A Fade, a cut, a stinger or a switch from outside the family ignores it.",
                 "properties": {
                   "preset_id": {
                     "anyOf": [
@@ -36112,6 +36182,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes of the same family the Move passes through first, in order.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -36159,6 +36236,13 @@ source: crates/jstream-mcp/src/tests.rs
                   "type": {
                     "const": "scene.switch_and_watch",
                     "type": "string"
+                  },
+                  "via": {
+                    "description": "Keyframes the Move passes through first, as `scene.switch` takes them.",
+                    "items": {
+                      "$ref": "#/$defs/SceneId"
+                    },
+                    "type": "array"
                   }
                 },
                 "required": [
@@ -37705,7 +37789,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
@@ -41140,7 +41224,7 @@ source: crates/jstream-mcp/src/tests.rs
             ]
           },
           "MotionMidiControl": {
-            "description": "What a `midi` modifier follows (since 0.137, ADR-0168).",
+            "description": "What a `midi` modifier follows (since 0.144, ADR-0168).",
             "oneOf": [
               {
                 "const": "cc",
@@ -41366,7 +41450,7 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
-                "description": "Follows a MIDI controller (ADR-0168, since 0.137): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "description": "Follows a MIDI controller (ADR-0168, since 0.144): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
                 "properties": {
                   "channel": {
                     "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",

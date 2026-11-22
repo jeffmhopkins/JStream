@@ -71,7 +71,8 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `timeline.delete`), with
   `ItemTransform` (deprecated), `Crop`, `SourceKind`, `SceneRole`, `BlendMode` and `Blending`;
   `Action` (`output.start`, `output.stop`, `output.set_key`, `output.clear_key`,
-  `scene.switch` with its optional `preset_id`, `scene.switch_and_watch`, `studio.set_preview`,
+  `scene.switch` with its optional `preset_id` and `via` (0.138, with `MAX_VIA`),
+  `scene.switch_and_watch`, `studio.set_preview`,
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
@@ -211,7 +212,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and `MotionCurve`, follows a bus or a source
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
   `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
-  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.137
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.144
   `MotionKind::Midi`, with its `MotionMidiControl`, follows a MIDI controller
   ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)).
 - **Camera motion and follow** (`camera_motion.rs`, since 0.85,
@@ -353,10 +354,14 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.137 because a motion modifier can follow MIDI: `MotionKind`'s
+`PROTOCOL_VERSION` is 0.144 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
 ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md));
+0.138 because a Move may pass through keyframes and orbit its
+camera: `scene.switch`'s and `scene.switch_and_watch`'s `via` and the `move` kind's
+`camera_path` setting
+([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md));
 0.134 because a client can hold and step the engine's media clock
 to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
 ([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
@@ -1307,8 +1312,8 @@ shortcuts) and the web UI (in-page ones) dispatch them, and the headless daemon 
 - **Deleting what a binding names removes the binding**, in the same edit:
   `scene.delete`, `source.delete`, `output.delete`, `encoder.delete` and
   `transition.delete` drop every binding whose action names their target
-  (`Action::named_objects`; today scenes, outputs, the preset a `scene.switch`
-  names, the scene, keyframe scene and preset a `scene.set_keyframe` names, and the
+  (`Action::named_objects`; today scenes, outputs, the preset and `via` scenes a
+  `scene.switch` names, the scene, keyframe scene and preset a `scene.set_keyframe` names, and the
   item an `item.*` action names), and any edit that takes an item away
   (`item.remove`, or a delete that takes its scene or source) drops the bindings naming
   the item (ADR-0101). A binding goes with its labels. Their inverses restore the
@@ -1544,6 +1549,11 @@ kind `kind.list` reports (category `transition`: `cut`, `fade`, `move` and `stin
 far) and `settings` are checked against its descriptor as a source's are (`unmatched`,
 the effect for items nothing pairs, and `stagger_ms`, an extra delay per incoming item by
 stacking order, for `fade` and `move`; [ADR-0052](../../docs/adr/0052-transition-mechanics-and-studio-preview.md)).
+A `move` also takes `camera_path` (0.138, `line` by default, or `orbit`,
+`CAMERA_ORBIT`): an orbit circles a 3D scene's camera around its target, keeping its
+distance on a curve, where a line moves it straight
+([ADR-0166](../../docs/adr/0166-moves-curve-through-keyframes-turn-as-one-and-may-orbit.md)
+decision 3).
 A `stinger` takes the `scene` it plays over the switch (a scene reference, or `null` to
 cut), `cut_ms`, when the picture under it cuts (default 500, at most the duration), and
 `stagger_ms`, which staggers the stinger scene's items by stacking order.
@@ -1579,7 +1589,13 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
 - `scene.switch {scene_id, preset_id?}` resolves the preset in order: the one it names
   (`not_found` when there is no such preset), else the new scene's `transition_in`,
   else the current scene's `transition_out`, else the default. A switch while a
-  transition runs starts the new one from what is on screen.
+  transition runs starts the new one from what is on screen. Its `via` (0.138, up to
+  `MAX_VIA`, 8) names keyframes of the destination's family that a Move within the
+  family passes through on its way, in order: each value follows one smooth curve
+  through every stop, at equal shares of the preset's timing (ADR-0166 decision 2). A
+  stop outside the family, the destination itself, a repeat of the stop before it or a
+  ninth is `invalid_argument` on `via` or `via.<index>`; a missing one is `not_found`.
+  A Fade, a cut, a stinger or a switch from outside the family ignores it.
 - `studio.set_preview {scene_id}` puts a scene on preview, studio mode's next scene.
   Like a switch it changes no `rev` and is never undone; a switch leaves preview where
   it is.
@@ -1933,7 +1949,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   takes at least `delay_ms + (count - 1) × interval_ms`, at most 10 s; each is what that
   mix or scene shows then, as `video.snapshot` draws it (a capture draws nothing). A
   scene off program shows what its preview stream would.
-  `scene.switch_and_watch {scene_id, preset_id?, count, interval_ms, delay_ms?}` is
+  `scene.switch_and_watch {scene_id, preset_id?, via?, count, interval_ms, delay_ms?}` is
   `scene.switch` followed by a sheet of the program mix counted from the switch, in one
   call, so an agent sees a transition play: a stinger's cover at its `cut_ms`, or a
   600 ms move. It is an action (it switches), answering with an `ActionResult`
@@ -2722,11 +2738,11 @@ after 1.0:
   `RateControl`, `HardwarePreference`, `AudioCodec`) parse an unknown value as
   `Unknown` from the start, and so do the motion enums (`MotionProperty`,
   `MotionShape`, `MotionKind`'s `kind` and `MotionClock`, 0.81, `MotionMeasure` and
-  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.137): a later kind or property won't break a 0.81 client's
+  `MotionCurve`, 0.86, and `MotionMidiControl`, 0.144): a later kind or property won't break a 0.81 client's
   `state.get`. `check_motion` refuses an `Unknown`
   in an edit, and the engine draws one as still. 0.84's `impulse` kind and `triggered`
   clock are such values: a 0.81 client reads them as `Unknown`, and an `audio` modifier
-  (0.86) and a `midi` one (0.137) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
+  (0.86) and a `midi` one (0.144) as an unknown kind. `CameraProperty` (ADR-0113, 0.85) has the
   same `Unknown` fallback, which `check_camera_motion` refuses in an edit. 0.75 added the `BlendMode` values `normal_srgb` and
   `additive_srgb` (ADR-0105), which a client older than 0.75 couldn't parse. 0.101
   ([ADR-0126](../../docs/adr/0126-one-set-of-blend-modes-and-a-blending-space.md)) folds them back into `normal` and `additive`: the engine never
@@ -2787,7 +2803,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   and so is everything the engine doesn't hear: while no output runs the program mix
   is silent, and a preview reads every audio modifier as silence. Its `clock` is
   ignored.
-- **`midi`** (since 0.137,
+- **`midi`** (since 0.144,
   [ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)) follows a MIDI
   controller instead of a clock, the value binding of ADR-0122: `control` is `cc` (the
   default, with its `controller` 0 to 127, which only `cc` takes), `pitch_bend` or

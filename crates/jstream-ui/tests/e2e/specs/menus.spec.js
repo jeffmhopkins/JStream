@@ -96,7 +96,7 @@ test('the arrow keys move through a menu, and a press outside closes it', async 
 test('the Sources panel adds a source as a reference', async ({ page, daemon }) => {
   await connect(page, daemon);
   const dialog = await openAddSource(page);
-  await expect(dialog.getByText('Into “Main”')).toBeVisible();
+  await expect(dialog.getByText('Into scene “Main”')).toBeVisible();
   // The seed's audio inputs come first.
   await expect(dialog.locator('.add-cat')).toHaveText(['AUDIO', 'GENERATED', 'SCENES']);
   await dialog.getByRole('option', { name: 'Color' }).click();

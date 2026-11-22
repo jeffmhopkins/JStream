@@ -635,6 +635,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             action: Action::SceneSwitch {
                 scene_id: SceneId::new("scn_1"),
                 preset_id: None,
+                via: Vec::new(),
             },
         },
         Edit::HotkeySetLabels {
@@ -649,6 +650,7 @@ pub(crate) fn edits() -> Vec<Edit> {
             action: Action::SceneSwitch {
                 scene_id: SceneId::new("scn_1"),
                 preset_id: None,
+                via: Vec::new(),
             },
         },
         Edit::BindingClear {
@@ -1336,6 +1338,7 @@ fn hotkey_bindings() -> Vec<HotkeyBinding> {
             &Action::SceneSwitch {
                 scene_id: SceneId::new("scn_1"),
                 preset_id: None,
+                via: Vec::new(),
             },
         )
         .with_labels(vec![LabelId::new("lbl_sponsor")]),
@@ -1357,6 +1360,7 @@ fn controller_bindings() -> Vec<Binding> {
             &Action::SceneSwitch {
                 scene_id: SceneId::new("scn_1"),
                 preset_id: None,
+                via: Vec::new(),
             },
         ),
         Binding::new(
@@ -1561,10 +1565,18 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_2"),
             preset_id: None,
+            via: Vec::new(),
         },
         Action::SceneSwitch {
             scene_id: SceneId::new("scn_1"),
             preset_id: Some(TransitionPresetId::new("tr_move")),
+            via: Vec::new(),
+        },
+        // A Move through two keyframes on its way (ADR-0166 decision 2).
+        Action::SceneSwitch {
+            scene_id: SceneId::new("scn_1_close"),
+            preset_id: Some(TransitionPresetId::new("tr_move")),
+            via: vec![SceneId::new("scn_1_wide"), SceneId::new("scn_1_side")],
         },
         Action::StudioSetPreview {
             scene_id: SceneId::new("scn_1"),
@@ -1792,6 +1804,7 @@ pub(crate) fn actions() -> Vec<Action> {
             scene_id: SceneId::new("scn_1"),
             preset_id: None,
             strip: FrameStrip::new(7, 100),
+            via: Vec::new(),
         },
         Action::ItemShow {
             item_id: ItemId::new("itm_1"),
@@ -1861,6 +1874,7 @@ fn volley() -> TimelineInfo {
                 &Action::SceneSwitch {
                     scene_id: SceneId::new("scn_2"),
                     preset_id: None,
+                    via: Vec::new(),
                 },
             ),
             show(1500, "itm_1"),
@@ -3266,6 +3280,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 &Action::SceneSwitch {
                     scene_id: SceneId::new("scn_mask"),
                     preset_id: None,
+                    via: Vec::new(),
                 },
             )],
             bindings: vec![Binding::new(
@@ -3277,6 +3292,7 @@ pub(crate) fn query_results() -> Vec<QueryResult> {
                 &Action::SceneSwitch {
                     scene_id: SceneId::new("scn_mask"),
                     preset_id: None,
+                    via: Vec::new(),
                 },
             )],
         },

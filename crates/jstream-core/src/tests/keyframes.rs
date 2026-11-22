@@ -77,6 +77,7 @@ fn switch(control: &dyn Control, scene: &str, preset: Option<&str>) {
     let action = Action::SceneSwitch {
         scene_id: SceneId::new(scene),
         preset_id: preset.map(TransitionPresetId::new),
+        via: Vec::new(),
     };
     block_on(control.call(Call::Action { action })).expect("switch");
 }
@@ -2192,4 +2193,307 @@ fn an_edit_to_an_effect_modifier_alone_is_drawn() {
         }],
     );
     assert_eq!(color(&engine), white, "the pulse stops with its modifier");
+}
+
+/// `scene.switch` to `scene` through the keyframes `via` (ADR-0166 decision 2).
+fn switch_via(
+    control: &dyn Control,
+    scene: &str,
+    via: &[&str],
+    preset: Option<&str>,
+) -> Result<(), jstream_protocol::ProtocolError> {
+    let action = Action::SceneSwitch {
+        scene_id: SceneId::new(scene),
+        preset_id: preset.map(TransitionPresetId::new),
+        via: via.iter().map(|id| SceneId::new(*id)).collect(),
+    };
+    block_on(control.call(Call::Action { action }))
+        .map(|_| ())
+        .map_err(|error| match error {
+            jstream_control::ControlError::Protocol(wire) => wire.error,
+            other => panic!("{other:?}"),
+        })
+}
+
+/// The family of [`family`] with a second keyframe `k2`: `a1` is at x 100 in `a`, 500
+/// in `k` and 1300 in `k2`, with a linear 400 ms Move preset, `a` on program.
+fn three_stops() -> Engine {
+    let engine = family();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![
+            move_preset(),
+            variant("k2", "a"),
+            geometry("a1", Some("k"), 500.0),
+            geometry("a1", Some("k2"), 1300.0),
+        ],
+    );
+    switch(&control, "a", None);
+    engine
+}
+
+/// The x of the pair that starts at `from_x`, `ms` into the running transition.
+fn pair_x(engine: &Engine, from_x: f32, ms: f32) -> f32 {
+    let hub = engine.render_hub().load();
+    let tracks = hub.shot().tracks().expect("a transition runs");
+    let track = tracks
+        .iter()
+        .find(|track| {
+            matches!(track, Track::Pair { from, .. } if from.geometry.center.x.get() == from_x)
+        })
+        .expect("the pair");
+    track
+        .sample(ms, [1920.0, 1080.0])
+        .expect("drawn")
+        .geometry
+        .center
+        .x
+        .get()
+}
+
+/// ADR-0166 decision 2: a Move through a middle keyframe passes exactly through it at
+/// its share of the path, and keeps its speed there instead of stopping or turning a
+/// corner. Without `via` it goes straight.
+#[test]
+fn a_move_via_a_keyframe_passes_through_it_without_stopping() {
+    let engine = three_stops();
+    let control = connected(&engine);
+    switch_via(&control, "k2", &["k"], Some("move")).expect("switch");
+    // Linear over 400 ms, two legs: the middle stop at 200 ms.
+    assert!((pair_x(&engine, 100.0, 200.0) - 500.0).abs() < 1e-3);
+    assert!((pair_x(&engine, 100.0, 400.0) - 1300.0).abs() < 1e-3);
+    // The speed either side of the stop is the same: (1300 - 100) / 2 per leg of
+    // 200 ms, 3 px/ms.
+    let before = (pair_x(&engine, 100.0, 200.0) - pair_x(&engine, 100.0, 199.0)) / 1.0;
+    let after = (pair_x(&engine, 100.0, 201.0) - pair_x(&engine, 100.0, 200.0)) / 1.0;
+    assert!((before - 3.0).abs() < 0.05, "{before}");
+    assert!((after - 3.0).abs() < 0.05, "{after}");
+    // The other item, at x 500 everywhere, stays still.
+    assert!((pair_x(&engine, 500.0, 100.0) - 500.0).abs() < 1e-3);
+
+    // The same switch without `via` goes straight through x 700 at halfway.
+    switch(&control, "a", None);
+    switch(&control, "k2", Some("move"));
+    assert!((pair_x(&engine, 100.0, 200.0) - 700.0).abs() < 1e-3);
+}
+
+/// ADR-0166 decision 2: an item a stop hides passes that stop by, and a stop that isn't
+/// a member of the family, the destination itself, a repeat or too many stops are
+/// refused before anything switches.
+#[test]
+fn a_via_stop_that_hides_an_item_is_passed_by_and_bad_stops_are_refused() {
+    use jstream_protocol::ProtocolError;
+    let engine = three_stops();
+    let control = connected(&engine);
+    apply(
+        &control,
+        vec![Edit::ItemSetVisible {
+            item_id: ItemId::new("a1"),
+            scene_id: Some(SceneId::new("k")),
+            visible: false,
+        }],
+    );
+    switch_via(&control, "k2", &["k"], Some("move")).expect("switch");
+    assert!((pair_x(&engine, 100.0, 200.0) - 700.0).abs() < 1e-3);
+
+    switch(&control, "a", None);
+    apply(&control, vec![create("other")]);
+    let field = |result: Result<(), ProtocolError>| match result {
+        Err(ProtocolError::InvalidArgument { field, .. }) => field,
+        other => panic!("not invalid_argument: {other:?}"),
+    };
+    assert_eq!(field(switch_via(&control, "k2", &["other"], None)), "via.0");
+    assert_eq!(
+        field(switch_via(&control, "k2", &["k", "k2"], None)),
+        "via.1"
+    );
+    assert_eq!(
+        field(switch_via(&control, "k2", &["k", "k"], None)),
+        "via.1"
+    );
+    let nine = ["k", "a"].repeat(5);
+    assert_eq!(field(switch_via(&control, "k2", &nine[..9], None)), "via");
+    assert!(matches!(
+        switch_via(&control, "k2", &["missing"], None),
+        Err(ProtocolError::NotFound { .. })
+    ));
+    assert_eq!(
+        engine.render_hub().load().shot().program(),
+        Some(&SceneId::new("a")),
+        "a refused switch changes nothing"
+    );
+}
+
+/// The sources the program plan of a Move from `a` to `k2` looks up, through `via`, 100
+/// ms in: `blue`'s item is hidden in `a` and `k2` and shown only in `k`.
+fn looked_up(via: &[&str]) -> Vec<String> {
+    use crate::snapshot::{self, Frame, Look};
+    use crate::transition::{self, From, Running};
+    let hidden = |scene: Option<&str>, visible: bool| Edit::ItemSetVisible {
+        item_id: ItemId::new("b1"),
+        scene_id: scene.map(SceneId::new),
+        visible,
+    };
+    let mut graph = jstream_graph::Graph::new().with_kinds(crate::kinds::builtin());
+    let mut blue = colour("blue");
+    if let Edit::SourceCreate { source_id, .. } = &mut blue {
+        *source_id = SourceId::new("blue");
+    }
+    graph
+        .apply(
+            &[
+                create("a"),
+                colour("red"),
+                blue,
+                add("a", "a1", "red"),
+                add("a", "b1", "blue"),
+                hidden(None, false),
+                move_preset(),
+                variant("k", "a"),
+                variant("k2", "a"),
+                hidden(Some("k"), true),
+            ],
+            None,
+        )
+        .expect("edits");
+    let (_, run) = transition::resolve(
+        &graph,
+        Some(&SceneId::new("a")),
+        &SceneId::new("k2"),
+        Some(&TransitionPresetId::new("move")),
+    )
+    .expect("resolves");
+    let running = Running {
+        from: From::Scene(SceneId::new("a")),
+        to: SceneId::new("k2"),
+        start: secs(0.0),
+        run: run.expect("a move runs"),
+        by_item: true,
+        from_camera: None,
+        via: via.iter().map(|id| SceneId::new(*id)).collect(),
+    };
+    let white: Vec<u8> = std::iter::repeat_n([255u8; 4], 4).flatten().collect();
+    let frame = Frame::new(2, 2, &white, 1).expect("2x2 RGBA8");
+    let mut asked = Vec::new();
+    snapshot::plan_with(
+        &graph,
+        Some(&SceneId::new("k2")),
+        Some((&running, secs(0.1))),
+        &mut |source: &SourceId| {
+            asked.push(source.as_str().to_owned());
+            Some(Look::frame(frame.clone(), None))
+        },
+        &crate::filter_assets::FilterAssets::default(),
+    );
+    asked.sort();
+    asked.dedup();
+    asked
+}
+
+/// ADR-0166 decision 2: a Move's stops are read only for their values, so a source only
+/// a stop shows isn't looked up: it isn't shown, heard, restarted or woken for the Move.
+#[test]
+fn a_via_stop_reaches_no_source_that_only_it_shows() {
+    assert_eq!(looked_up(&[]), ["red"]);
+    assert_eq!(looked_up(&["k"]), ["red"]);
+}
+
+/// A camera `degrees` around the framing camera's target, about the vertical axis, at
+/// the framing camera's distance.
+fn around(degrees: f32) -> jstream_protocol::SceneCamera {
+    let framing = jstream_protocol::SceneCamera::framing(jstream_protocol::Canvas::DEFAULT);
+    let target = framing.target;
+    let distance = framing.position.z.get() - target.z.get();
+    let (sin, cos) = degrees.to_radians().sin_cos();
+    jstream_protocol::SceneCamera {
+        position: jstream_protocol::Vec3 {
+            x: Finite32::new(target.x.get() + distance * sin).expect("finite"),
+            y: target.y,
+            z: Finite32::new(target.z.get() + distance * cos).expect("finite"),
+        },
+        ..framing
+    }
+}
+
+fn distance(camera: &jstream_protocol::SceneCamera) -> f32 {
+    let d = |a: Finite32, b: Finite32| a.get() - b.get();
+    let (x, y, z) = (
+        d(camera.position.x, camera.target.x),
+        d(camera.position.y, camera.target.y),
+        d(camera.position.z, camera.target.z),
+    );
+    (x * x + y * y + z * z).sqrt()
+}
+
+/// ADR-0166 decisions 2 and 3: the camera passes through a middle keyframe's camera,
+/// and an `orbit` Move keeps its distance from the target where a straight one cuts
+/// across toward it.
+#[test]
+fn the_camera_passes_through_a_stop_and_an_orbit_keeps_its_distance() {
+    let engine = three_stops();
+    let control = connected(&engine);
+    let orbit = Edit::TransitionCreate {
+        preset_id: TransitionPresetId::new("orbit"),
+        name: "Orbit".into(),
+        kind: "move".into(),
+        duration_ms: 400,
+        easing: Easing::Linear,
+        settings: Settings(
+            [("camera_path".to_owned(), json!("orbit"))]
+                .into_iter()
+                .collect(),
+        ),
+    };
+    let camera = |scene: &str, degrees: f32| Edit::SceneSetCamera {
+        scene_id: SceneId::new(scene),
+        camera: Some(around(degrees)),
+    };
+    apply(
+        &control,
+        vec![
+            orbit,
+            camera("a", 0.0),
+            camera("k", 45.0),
+            camera("k2", 90.0),
+        ],
+    );
+    let cameras = |ms: f32| {
+        let hub = engine.render_hub().load();
+        let all = hub.shot().track_cameras(ms).expect("a transition runs");
+        all[0].expect("3D")
+    };
+    let full = distance(&around(0.0));
+
+    // Straight, through `k`: at the stop it is `k`'s camera.
+    switch_via(&control, "k2", &["k"], Some("move")).expect("switch");
+    let mid = cameras(200.0);
+    let want = around(45.0);
+    for (got, want) in [
+        (mid.position.x, want.position.x),
+        (mid.position.z, want.position.z),
+    ] {
+        assert!((got.get() - want.get()).abs() < 1e-2, "{mid:?}");
+    }
+
+    // Straight, with no stop: halfway on the chord, nearer the target.
+    switch(&control, "a", None);
+    switch(&control, "k2", Some("move"));
+    assert!(distance(&cameras(200.0)) < full * 0.75);
+
+    // Orbiting: the same distance all the way, and halfway is 45° round.
+    switch(&control, "a", None);
+    switch(&control, "k2", Some("orbit"));
+    for ms in [100.0, 200.0, 300.0] {
+        assert!((distance(&cameras(ms)) - full).abs() < 0.5, "{ms}");
+    }
+    let half = cameras(200.0);
+    assert!(
+        (half.position.x.get() - want.position.x.get()).abs() < 0.5,
+        "{half:?}"
+    );
+    assert!(
+        (half.position.z.get() - want.position.z.get()).abs() < 0.5,
+        "{half:?}"
+    );
 }

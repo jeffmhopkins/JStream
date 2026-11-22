@@ -6,7 +6,7 @@
 //! built as. It never chooses the address: a browser that isn't the desktop app has
 //! nothing to ask, and says so. Nothing is downloaded.
 //!
-//! "Check for updates at launch" is kept in the browser's storage and is off until the
+//! The General page's "Check for updates" (at launch) is kept in the browser's storage and is off until the
 //! user turns it on. When it is on, the desktop app's main window checks once each time
 //! it opens and shows a notice only when a newer release exists. A failure stays quiet
 //! there; the menu item is what reports it.
@@ -14,7 +14,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
 use crate::about::{REPOSITORY, VERSION};
-use crate::dialog::Modal;
+use crate::dialog::{Info, Modal};
 use crate::host;
 use crate::ui_settings::{self, GLOBAL_HOTKEYS_KEY, Kept, global_hotkeys_on};
 use leptos::prelude::*;
@@ -27,7 +27,7 @@ use std::fmt;
 /// `apps/jstream-desktop`'s `updates.rs`.
 pub const CHECK_PATH: &str = "/jstream-update-check";
 
-/// Where the browser keeps "Check for updates at launch". Absent means off.
+/// Where the browser keeps the launch check ("Check for updates"). Absent means off.
 const LAUNCH_KEY: &str = "jstream.check-updates-at-launch";
 
 /// Set once a launch check has started, so opening the workspace again in the same
@@ -442,7 +442,7 @@ pub fn UpdateDialog(
     }
 }
 
-/// The Settings dialog's General page (`settings.rs`): "Check for updates at launch" and,
+/// The Settings dialog's General page (`settings.rs`): "Check for updates" (at launch) and,
 /// in the desktop app, whether hotkeys are heard while another application has the focus.
 #[component]
 pub fn LaunchCheckSetting() -> impl IntoView {
@@ -478,39 +478,50 @@ pub fn LaunchCheckSetting() -> impl IntoView {
         });
     };
     view! {
-        <label class="settings-check">
-            <input
-                type="checkbox"
-                aria-label="Check for updates at launch"
-                prop:checked=move || on.get()
-                on:change=move |event| {
-                    let checked = event_target_checked(&event);
-                    on.set(checked);
-                    keep_launch_check(checked);
-                }
-            />
-            <span>
-                <span class="settings-check-label">"Check for updates at launch"</span>
-                <span class="settings-check-note">
-                    "When on, the desktop app looks once at start and shows a notice only when a newer release exists. Nothing is downloaded. Off until you turn it on."
-                </span>
-            </span>
-        </label>
+        <section class="prop-section">
+            <h4 class="eyebrow">"Updates"</h4>
+            <div class="prop-grid">
+                <div class="prop-row">
+                    <label class="prop-label check" for="setting-update-check">"Check for updates"</label>
+                    <div class="prop-control">
+                        <input
+                            type="checkbox"
+                            class="toggle"
+                            id="setting-update-check"
+                            aria-label="Check for updates at launch"
+                            prop:checked=move || on.get()
+                            on:change=move |event| {
+                                let checked = event_target_checked(&event);
+                                on.set(checked);
+                                keep_launch_check(checked);
+                            }
+                        />
+                        <p class="help">"At launch. Only notifies; never downloads."</p>
+                    </div>
+                </div>
+            </div>
+        </section>
         <Show when=move || global.get().is_some()>
-            <label class="settings-check">
-                <input
-                    type="checkbox"
-                    aria-label="Hear hotkeys while another app has the focus"
-                    prop:checked=move || global.get().unwrap_or(true)
-                    on:change=move |event| keep_global(event_target_checked(&event))
-                />
-                <span>
-                    <span class="settings-check-label">"Hear hotkeys while another app has the focus"</span>
-                    <span class="settings-check-note">
-                        "When on, the desktop app listens for the keys you've bound, and only those, while you work in another app. A key another app already holds is heard only while JStream has the focus. On until you turn it off."
-                    </span>
-                </span>
-            </label>
+            <section class="prop-section">
+                <h4 class="eyebrow">"Hotkeys"</h4>
+                <div class="prop-grid">
+                    <div class="prop-row">
+                        <label class="prop-label check" for="setting-global-hotkeys">"Global hotkeys"</label>
+                        <div class="prop-control">
+                            <input
+                                type="checkbox"
+                                class="toggle"
+                                id="setting-global-hotkeys"
+                                aria-label="Global hotkeys"
+                                prop:checked=move || global.get().unwrap_or(true)
+                                on:change=move |event| keep_global(event_target_checked(&event))
+                            />
+                            <Info text="The desktop app listens for the keys you've bound, and only those, while you work in another app. A key another app already holds is heard only while JStream has the focus." />
+                            <p class="help">"Bound keys work while another app has the focus."</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </Show>
     }
 }
