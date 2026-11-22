@@ -302,6 +302,12 @@ impl Bindings {
                         .pop()
                         .map(|(_, modifier)| modifier)
                 })
+                // So does one that drives a source setting (ADR-0171 decision 4).
+                .or_else(|| {
+                    jstream_graph::source_anim_modifiers(std::slice::from_ref(modifier))
+                        .pop()
+                        .map(|(_, modifier)| modifier)
+                })
                 .map(|modifier| modifier.kind)
             else {
                 continue;
@@ -594,6 +600,7 @@ mod tests {
             modifier_id: id.into(),
             property: MotionProperty::Opacity,
             effect: None,
+            source: None,
             kind: MotionKind::Audio {
                 audio: audio.map(BusId::new),
                 audio_source: None,
@@ -812,6 +819,7 @@ mod tests {
             modifier_id: id.into(),
             property: MotionProperty::Tilt,
             effect: None,
+            source: None,
             kind: MotionKind::Midi {
                 control: MotionMidiControl::Cc,
                 controller: Some(7),

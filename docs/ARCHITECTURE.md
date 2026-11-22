@@ -706,7 +706,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   Since 0.86 a modifier can follow a bus or a source's audio
   ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)), and since 0.109 drive a
   number or colour setting of one of its item's effects, `property` `effect`
-  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.144 a `midi`
+  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.146 a `midi`
   modifier follows a MIDI control change, pitch bend or channel pressure, smoothed, the
   value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
@@ -1640,7 +1640,9 @@ depends_on = ["docs/RULES.md#R-API-003", "docs/RULES.md#R-SEC-001", "docs/adr/00
   effect's setting (`property` `effect` with its `effect` target), with a migration that
   refuses one in an older file. Version 14 (ADR-0146) adds a scene's PTZ `ptz_shots`,
   with a migration that refuses them in an older file. Version 16 (ADR-0164) adds a
-  group's `share_space` and a scene's `camera_anchor`, refused the same way. `jstream-core`
+  group's `share_space` and a scene's `camera_anchor`, refused the same way. Version 17
+  (ADR-0171) adds motion modifiers that drive a setting of their item's source
+  (`property` `source` with its `source` target), refused the same way. `jstream-core`
   loads the file the host names and replaces it atomically after every change. A
   project is one such file: `collection.open`, `collection.new` and
   `collection.save_as` switch the file it saves to

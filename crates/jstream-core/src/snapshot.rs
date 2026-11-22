@@ -739,6 +739,9 @@ pub(crate) struct Shot {
     shown: BTreeMap<ItemId, MediaTime>,
     /// The effect settings each item chain's motion drives (ADR-0138).
     driven: BTreeMap<ChainOwner, crate::driven::Driven>,
+    /// The source settings each light or model item's motion drives (ADR-0171
+    /// decision 4).
+    sourced: BTreeMap<ItemId, crate::sourced::SourceDrives>,
     /// The engine's MIDI inputs, whose clock gives the song's position each frame
     /// ([`FilterClock::beat`](jstream_render::FilterClock), ADR-0148); `None` in a
     /// shot planned without them, which is always at the start of the song.
@@ -1033,6 +1036,7 @@ impl Default for Shot {
             moves: false,
             shown: BTreeMap::new(),
             driven: BTreeMap::new(),
+            sourced: BTreeMap::new(),
             tempo: None,
             audio: crate::reactive::Bindings::default(),
             fired: motion::Fired::default(),
@@ -1184,6 +1188,8 @@ impl Shot {
             .flat_map(|pass| &pass.layers)
             .any(|layer| !layer.motion.is_still())
             || self.boxes.values().any(|boxed| !boxed.motion.is_empty())
+            // A light or model whose source settings its motion drives (ADR-0171).
+            || !self.sourced.is_empty()
             || self
                 .transition
                 .iter()
@@ -1277,6 +1283,21 @@ impl Shot {
         motion::offsets(motion, at, self.shown_at(item), self.fired.of(item), |id| {
             self.heard(item, id)
         })
+    }
+
+    /// The value `item`'s modifier `modifier` adds at `at`, alone, as a source setting's
+    /// drive reads it (ADR-0171 decision 4).
+    fn source_value(&self, item: &ItemId, modifier: &jstream_anim::Modifier, at: MediaTime) -> f64 {
+        f64::from(self.motion_at(item, std::slice::from_ref(modifier), at).x)
+    }
+
+    /// The modifiers `item` drives its source's settings with (ADR-0171 decision 4);
+    /// empty for none.
+    fn source_drives(
+        &self,
+        item: &ItemId,
+    ) -> &[(jstream_protocol::MotionSetting, jstream_anim::Modifier)] {
+        self.sourced.get(item).map_or(&[], |d| d)
     }
 
     /// `blended`, each chain a Move blends with its settings this frame (ADR-0127), with
@@ -1609,6 +1630,8 @@ impl PartialEq for Shot {
             && self.fired == other.fired
             // An edit to an effect modifier alone changes only this (ADR-0138).
             && self.driven == other.driven
+            // And an edit to a source modifier alone this (ADR-0171).
+            && self.sourced == other.sourced
             && self.tempo == other.tempo
             && self.maps == other.maps
     }
@@ -2992,6 +3015,9 @@ impl<'a> Planner<'a, '_> {
         }
         if let Some(driven) = driven {
             out.driven.insert(owner.clone(), driven);
+        }
+        if model && let Some(drives) = crate::sourced::of(item) {
+            out.sourced.insert(item.id().clone(), drives);
         }
         out.boxes.insert(
             owner.clone(),
@@ -6450,6 +6476,10 @@ fn draw_model(
     } else {
         None
     };
+    // Its materials as its item's modifiers drive them (ADR-0171 decision 4).
+    let (drives, driving) = crate::sourced::materials(shot.source_drives(&boxed.item), |m| {
+        shot.source_value(&boxed.item, m, at)
+    });
     let (texture, reflection) = model_maps(shot, &*cache, source, shown);
     let drawn = match (chains.model(source), cache.get(key)) {
         (Some(model), Some(layer)) => Some(compositor.draw_model(
@@ -6462,6 +6492,7 @@ fn draw_model(
                 shadows: &maps,
                 environment,
                 floor: None,
+                materials: &drives[..driving],
                 texture,
                 reflection,
             },
@@ -6630,10 +6661,17 @@ fn note_light(
     {
         return;
     }
-    let lights = out.lights.entry(id.clone()).or_default();
-    if lights.iter().any(|lit| &lit.item == item.id()) {
+    if out
+        .lights
+        .get(id)
+        .is_some_and(|lights| lights.iter().any(|lit| &lit.item == item.id()))
+    {
         return;
     }
+    if let Some(drives) = crate::sourced::of(item) {
+        out.sourced.insert(item.id().clone(), drives);
+    }
+    let lights = out.lights.entry(id.clone()).or_default();
     lights.push(Lit {
         item: item.id().clone(),
         through: through.cloned(),
@@ -6805,6 +6843,9 @@ fn draw_reflection(
             continue;
         };
         pose(compositor, model, shown);
+        let (drives, driving) = crate::sourced::materials(shot.source_drives(item_id), |m| {
+            shot.source_value(item_id, m, at)
+        });
         let source = shot
             .boxes
             .iter()
@@ -6835,6 +6876,7 @@ fn draw_reflection(
                 environment: scene_environment((shot, &*cache), &pass.scene, at, live).0,
                 // Only what stands above the floor is reflected in it.
                 floor: Some(floor),
+                materials: &drives[..driving],
                 texture,
                 reflection,
             },
@@ -7071,7 +7113,11 @@ fn scene_lights(
             continue;
         };
         let (position, aim) = geometry.light_pose_seen(view);
-        let [r, g, b] = light.color;
+        // Its settings as its item's modifiers drive them (ADR-0171 decision 4).
+        let look = crate::sourced::light(light, shot.source_drives(&placed.item), |m| {
+            shot.source_value(&placed.item, m, at)
+        });
+        let [r, g, b] = look.color;
         lights.push(jstream_render::SceneLight {
             kind: match light.kind {
                 LightType::Point => jstream_render::LightKind::Point,
@@ -7082,14 +7128,14 @@ fn scene_lights(
             position,
             aim,
             color: Color { r, g, b, a: 1.0 },
-            intensity: light.intensity * opacity,
-            range_px: light.range_px,
-            cone_deg: light.cone_deg,
-            softness: light.softness,
+            intensity: look.intensity * opacity,
+            range_px: look.range_px,
+            cone_deg: look.cone_deg,
+            softness: look.softness,
         });
         // A spot or directional light may cast shadows (ADR-0151 decision 3).
         if light.shadows && matches!(light.kind, LightType::Spot | LightType::Directional) {
-            shadowed.push((lights.len() - 1, light.shadow_softness));
+            shadowed.push((lights.len() - 1, look.shadow_softness));
         }
     }
 }
@@ -7178,7 +7224,11 @@ fn environment_at<'c>(
         sky: colour(sky.sky),
         horizon: colour(sky.horizon),
         ground: colour(sky.ground),
-        intensity: light.intensity,
+        intensity: crate::sourced::environment_intensity(
+            light.intensity,
+            shot.source_drives(&placed.item),
+            |m| shot.source_value(&placed.item, m, at),
+        ),
         turn_deg,
         image: sky
             .image
@@ -7583,6 +7633,7 @@ fn draw_view_depth(
                 shadows: &[],
                 environment: None,
                 floor: from.and_then(|(_, _, floor)| floor),
+                materials: &[],
                 texture: None,
                 reflection: None,
             },

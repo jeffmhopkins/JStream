@@ -353,6 +353,7 @@ fn golden_view_depth_takes_a_models_own_depth() {
         shadows: &[],
         environment: None,
         floor: None,
+        materials: &[],
         texture: None,
         reflection: None,
     };
