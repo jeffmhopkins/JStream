@@ -405,7 +405,8 @@ page's own visibility, and, per further checkbox, the program and preview scenes
 shared values, one bus's levels and bands (never its samples), the engine's tempo, and
 one MIDI input's held notes, controllers and recent note-ons (never raw bytes or SysEx,
 [ADR-0147](../adr/0147-midi-tempo-and-state-for-pages.md)), and one accepted JTunnel
-sender's live DAW state (its transport, mixer, clips and notes, as JSON messages by key,
+sender's live DAW state, or with no sender named every accepted sender's (its transport,
+mixer, clips and notes, as JSON messages by key,
 [ADR-0171](../adr/0171-live-data-from-a-daw-drives-scenes.md) decision 10): what that
 sender could already drive in scenes, given to a page only on its own checkbox, off by
 default. The tempo has a checkbox

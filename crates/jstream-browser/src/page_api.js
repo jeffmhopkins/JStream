@@ -116,9 +116,10 @@
   }
   if (grant.data) {
     // The granted sender's live data, every key's newest message, as a fresh object
-    // each time: `{}` before the engine has sent any.
+    // each time: `{}` before the engine has sent any. It has no prototype, so a key named
+    // `__proto__` is a key like any other.
     api.data = function () {
-      var out = {};
+      var out = Object.create(null);
       data.forEach(function (text, key) {
         out[key] = JSON.parse(text);
       });

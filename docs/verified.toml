@@ -1545,7 +1545,7 @@ stamp = { hash = "b3:c4c4ba091ff00be6", by = "agent:readme-scrub", note = "#1369
 stamp = { hash = "b3:bd476ac006b820f7", by = "agent:readme-scrub", note = "#1369 review: the cargo doc pointer passes --document-private-items (N1); the moved Behaviour paragraphs no longer open by naming their own file, and audio.rs's ARCH reference is a resolvable path again (N2). Only doc comments and the pointer changed; the map still holds." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/page_api.js"]
-stamp = { hash = "b3:73b51142f26ebc55", by = "agent:claude-daw", note = "Re-read against page data: the helper now carries the data grant and the data keys in its page messages; the seam's 'page API data the engine sends it' still holds." }
+stamp = { hash = "b3:f2b81c4d1d5120e5", by = "agent:claude-daw", note = "Re-read after the shim's data() now builds a prototype-less object (review N2); the Purpose map still holds." }
 
 ["CRATE-jstream-browser#purpose"."file:crates/jstream-browser/src/page_api.rs"]
 stamp = { hash = "b3:21aec2bb249e679a", by = "agent:claude-daw", note = "Re-read against page data: the helper now carries the data grant and the data keys in its page messages; the seam's 'page API data the engine sends it' still holds." }
@@ -6666,7 +6666,7 @@ stamp = { hash = "b3:3121258b7d89c1e4", by = "agent:smooth-paths", note = "Only 
 stamp = { hash = "b3:e67ab2ae67f77a6e", by = "agent:claude", note = "Re-read against #1497: Studio::source_descriptor and the Properties dialog fetching a model's own descriptor; still holds." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:768da9094cf6872d", by = "agent:3d-groups", note = "Re-read the scene Properties dialog and Duplicate scene paragraphs; added the Share the 3D space check and the Moves with picker (anchor_choices, scene.set_camera_anchor after the camera) and that a scene copy keeps its camera anchor as the copy of its item, as clipboard.rs does. Other covered files changed only test SceneInfo initialisers. | merge: Main's #1585 adds the design-language sentence to this section and restyles scenes.rs and sources.rs; re-read the scene Properties and Duplicate scene text this branch added, which still holds beside it. | kept from the merged side: Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The design-language paragraph still holds: Entry::danger is the builder, now used by an output's Delete…." }
+stamp = { hash = "b3:372b1ab4238c8b43", by = "agent:claude-daw", note = "The Sources badge text (page_api_grant names what a page is granted) still holds with the DAW data entry added." }
 
 ["CRATE-jstream-ui#design"."file:crates/jstream-ui/src/panels/stats.rs"]
 stamp = { hash = "b3:54357d1364a498b3", by = "agent:claude", note = "same changes; the design section names no default rate or preview state, still holds" }
@@ -6897,7 +6897,7 @@ stamp = { hash = "b3:3121258b7d89c1e4", by = "agent:smooth-paths", note = "Only 
 stamp = { hash = "b3:e67ab2ae67f77a6e", by = "agent:claude", note = "Re-read against #1497: Studio::source_descriptor and the Properties dialog fetching a model's own descriptor; still holds." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:768da9094cf6872d", by = "agent:3d-groups", note = "Re-read the store and scene Properties bullets: Collection still carries SceneInfo as reported, now with camera_anchor, and the dialog's edits stay tested natively (a new test covers the share switch and anchor). The covered files' other changes are test initialisers. | merge: Main's #1585 restyles scenes.rs and sources.rs to the shared design language; the bullets here, scene Properties included, still hold. | kept from the merged side: Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The contents list holds." }
+stamp = { hash = "b3:372b1ab4238c8b43", by = "agent:claude-daw", note = "page_api_grant now names the DAW data grant; the Purpose map of panels is unchanged." }
 
 ["CRATE-jstream-ui#purpose"."file:crates/jstream-ui/src/panels/stats.rs"]
 stamp = { hash = "b3:54357d1364a498b3", by = "agent:claude", note = "8000/12000 kbps form fallback, stats test numbers, and the canvas keeping a live picture across a re-subscribe (#1205); none named in purpose, still holds" }
@@ -7686,7 +7686,7 @@ stamp = { hash = "b3:8e92042914ec07d2", by = "agent:claude", note = "Edited: Fil
 stamp = { hash = "b3:15f728c24aa44db0", by = "agent:claude", note = "depends_on narrowed from all of UI-FEATURES to the areas this walk-through uses (header, docking, canvas, menus, dialogs, scenes, objects, inspector, transform, mixer, transitions); re-read each step against them and it holds. Summary, theme, filters, keyboard, live panels, outputs, beyond and plan no longer stale it. | merge: Main's #1261 and #1275 changed the UI-FEATURES areas this section depends on (header gained the Settings dialog pages, dialogs and beyond were reworded); re-read, the steps still hold. | merge: main's #1289 added FL-12 Custom shader and the merge regenerated the ui-summary block; this walkthrough's narrowed UI-FEATURES deps still match its steps | merge: main's UI-FEATURES rows moved the generated summary to 139 rows; this branch makes the summary @generated; the getting-started steps name no counts and still match the areas they depend on" }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#objects"]
-stamp = { hash = "b3:6551816373d1f02c", by = "agent:claude", note = "The inspector row gained the lit and hidden-back checkboxes; the getting-started scene walkthrough doesn't need them" }
+stamp = { hash = "b3:dafbc926c88dc4ba", by = "agent:claude-daw", note = "Re-read: the section says nothing of the Page API badge; OB-11's tooltip wording change doesn't affect it." }
 
 ["GETTING-STARTED#scene"."dep:docs/UI-FEATURES.md#scenes"]
 stamp = { hash = "b3:366910dd6694f84d", by = "agent:claude", note = "Re-read step 5 after SC-10's edit: 'click its row' still holds with modifiers left to the click." }
@@ -8100,7 +8100,7 @@ stamp = { hash = "b3:a71c0833188b98b6", by = "agent:wave-owner", note = "Re-read
 stamp = { hash = "b3:f3e3a293b719fe8d" }
 
 ["THREAT-MODEL#browser"."body"]
-stamp = { hash = "b3:f0f385a0ca72516d", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }
+stamp = { hash = "b3:164673289c0689de", by = "agent:claude-daw", note = "Now says an empty sender name grants every accepted sender's DAW state (review N1), matching entries(None); the shim's prototype-less data object changes nothing here." }
 
 ["THREAT-MODEL#browser"."dep:docs/adr/0021-browser-source.md"]
 stamp = { hash = "b3:64d21faa19974bc3" }
@@ -8133,7 +8133,7 @@ stamp = { hash = "b3:4efbc7344b9fa207", by = "agent:mac-browser", note = "run_he
 stamp = { hash = "b3:83c6f18f8fe6e658", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/page_api.js"]
-stamp = { hash = "b3:73b51142f26ebc55", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }
+stamp = { hash = "b3:f2b81c4d1d5120e5", by = "agent:claude-daw", note = "Now says an empty sender name grants every accepted sender's DAW state (review N1), matching entries(None); the shim's prototype-less data object changes nothing here." }
 
 ["THREAT-MODEL#browser"."file:crates/jstream-browser/src/page_api.rs"]
 stamp = { hash = "b3:21aec2bb249e679a", by = "agent:claude-daw", note = "Re-read: the live DAW state grant is described (own checkbox, off by default, one accepted sender, filtered in page_api.rs before it leaves, one-way through the helper); the helper's carrying of the data keys matches." }
@@ -8544,13 +8544,13 @@ stamp = { hash = "b3:15f728c24aa44db0", by = "agent:claude", note = "Re-read Mix
 stamp = { hash = "b3:ae2513305d4071d8", by = "agent:ui-design", note = "mixer.rs only asks its channel row's gain field for steppers, which it keeps; the mixer rows still hold." }
 
 ["UI-FEATURES#objects"."body"]
-stamp = { hash = "b3:6551816373d1f02c", by = "agent:claude", note = "Ungroup's disabled reasons now list facing the camera and a surface, matching Carry's Kept::Look check in item_menu.rs" }
+stamp = { hash = "b3:dafbc926c88dc4ba", by = "agent:claude-daw", note = "OB-11's example tooltip now includes DAW data (Bitwig) and the every-sender wording, matching page_api_grant and its test." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/labels.rs"]
 stamp = { hash = "b3:f227b22d17e3bfd4", by = "agent:smooth-paths", note = "Only mechanical changes reach this section: the UI's scene.switch constructors gain via: Vec::new() and patterns gain ..; re-read it and it still holds (labels.rs, store.rs)" }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/sources.rs"]
-stamp = { hash = "b3:768da9094cf6872d", by = "agent:3d-groups", note = "Re-read this section's rows for the covered file: its only change is camera_anchor: None in test SceneInfo initialisers (protocol 0.125), so no feature it describes changed. | merge: Main's #1585 restyles sources.rs's menus and controls to the design language; the Sources rows describe the same features. | kept from the merged side: Reverted the .danger() marks in panels/scenes.rs and panels/sources.rs so those panels keep their own menus; both files now match main. The object rows hold." }
+stamp = { hash = "b3:372b1ab4238c8b43", by = "agent:claude-daw", note = "OB-11's example tooltip now includes DAW data (Bitwig) and the every-sender wording, matching page_api_grant and its test." }
 
 ["UI-FEATURES#objects"."file:crates/jstream-ui/src/panels/tree.rs"]
 stamp = { hash = "b3:c8528921f39d7446", by = "agent:obs-ui-thread", note = "Re-read: heading is Sources panel with the rename's reason; OB-09 adds the tool bar route; OB-10 describes the bar as built, matching sources.rs." }
