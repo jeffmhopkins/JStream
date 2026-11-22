@@ -18,7 +18,7 @@
 //! `browser` source, animated on one clock, or an audio visualiser on
 //! `jstream.levels()` (ADR-0124) or one that follows MIDI on `jstream.midi()` and the
 //! `tempo.*` values (ADR-0147), how a `midi` motion modifier poses an item from a
-//! controller (ADR-0168), and how to write a custom shader the Filters window's
+//! controller (ADR-0168), how a `data` one follows a sender's live data (ADR-0171), and how to write a custom shader the Filters window's
 //! shader editor opens (#1232). Numbers are for a 1920×1080 canvas and scale with it.
 
 /// The guidance, as one paragraph of the server instructions.
@@ -353,6 +353,15 @@ setting, rests at `from` until the controller sends, and shows in previews too. 
 moves a whole item, never a node inside a model, so a part that moves on its own (a \
 lever, a door) is a model file of its own, placed as its own item; a model turns about \
 its bounds' centre. \
+To make an item follow live data a sender sends (a light lit while the transport plays, \
+a panel that shows while a clip records), use a `data` modifier: find the sender's \
+`input`, the message's `key` and a `field` (a dotted path such as `slots.0.state`, empty \
+for the whole message) with `data.list` and `data.get`. A number maps from `range` \
+(default 0..1, so `true` and `false` read 1 and 0) onto `from`..`to`; a text reads its \
+level 0 to 1 from `states`, such as `{\"recording\": 1, \"playing\": 0.5}`, and any other \
+text 0. It glides over `smoothing_ms` (default 50; 0 jumps, which suits a switch), and \
+rests at `from` while the field is absent. On `opacity`, `from` -1 and `to` 0 shows an \
+item only while the field reads 1. A camera takes no `data` modifier. \
 To make an effect itself pulse (a border's `width`, a glow's `radius` or `strength`, a \
 blur's `radius`), give the item a modifier with `property` `effect` and \
 `effect: {filter_id, param}` naming one of its own effects and a number or colour \

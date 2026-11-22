@@ -59,7 +59,10 @@ use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use jstream_anim::{Audio, Envelope, Measure, Midi, Smoothing};
 use jstream_media::MediaTime;
 use jstream_protocol::{BusId, ItemId, MotionKind, MotionMidiControl, MotionModifier, SourceId};
-use jstream_sources::{AudioMeter, AudioScope, AudioScopes, MidiInputs, MidiState};
+use jstream_sources::{
+    AudioMeter, AudioScope, AudioScopes, DataCell, DataReading, DataWatch, LiveData, MidiInputs,
+    MidiState,
+};
 
 /// What an audio modifier hears.
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -167,6 +170,73 @@ impl Control {
     }
 }
 
+/// How a `data` modifier reads its field's reading as `0..=1` (ADR-0171 decision 3).
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct DataMap {
+    /// A number at `low` reads 0 and at `high` 1, clamped between.
+    low: f64,
+    high: f64,
+    /// Each text's value, by the text's hash, as a reading holds it.
+    states: Vec<(u64, f32)>,
+}
+
+impl DataMap {
+    /// What `modifier` reads, and how, when it is a data one.
+    pub(crate) fn of(modifier: &MotionModifier) -> Option<(DataWatch, Self)> {
+        let MotionKind::Data {
+            input,
+            key,
+            field,
+            range,
+            states,
+            ..
+        } = &modifier.kind
+        else {
+            return None;
+        };
+        let watch = DataWatch {
+            input: input.clone(),
+            key: key.clone(),
+            field: field.clone(),
+            color: false,
+        };
+        let map = DataMap {
+            low: f64::from(range[0].get()),
+            high: f64::from(range[1].get()),
+            states: states
+                .iter()
+                .map(|(text, value)| (jstream_sources::text_hash(text), value.get()))
+                .collect(),
+        };
+        Some((watch, map))
+    }
+
+    /// `reading` as `0..=1`: a number through the range, a text through the table (0
+    /// when it isn't listed), and anything else 0. Allocates nothing.
+    pub(crate) fn read(&self, reading: DataReading) -> f32 {
+        let v = match reading {
+            DataReading::Number(n) => {
+                let span = self.high - self.low;
+                if span == 0.0 {
+                    return 0.0;
+                }
+                ((n - self.low) / span).clamp(0.0, 1.0) as f32
+            }
+            DataReading::Text(hash) => self
+                .states
+                .iter()
+                .find(|(h, _)| *h == hash)
+                .map_or(0.0, |(_, v)| *v),
+            DataReading::Absent | DataReading::Color(_) => 0.0,
+        };
+        if v.is_finite() {
+            v.clamp(0.0, 1.0)
+        } else {
+            0.0
+        }
+    }
+}
+
 /// What a binding follows.
 #[derive(Debug)]
 enum Input {
@@ -181,6 +251,31 @@ enum Input {
         state: Arc<MidiState>,
         control: Control,
     },
+    /// A data modifier's watched field and how it reads (ADR-0171 decision 3).
+    Data {
+        midi: Midi,
+        cell: Arc<DataCell>,
+        map: DataMap,
+    },
+}
+
+impl Input {
+    /// What a MIDI or data input reads now, as `0..=1`: atomics only.
+    fn read(&self) -> Option<f32> {
+        match self {
+            Input::Scope { .. } => None,
+            Input::Midi { state, control, .. } => Some(control.read(state)),
+            Input::Data { cell, map, .. } => Some(map.read(cell.read())),
+        }
+    }
+
+    /// The smoothing parameters of a MIDI or data input.
+    fn smoothed(&self) -> Option<&Midi> {
+        match self {
+            Input::Scope { .. } => None,
+            Input::Midi { midi, .. } | Input::Data { midi, .. } => Some(midi),
+        }
+    }
 }
 
 impl PartialEq for Input {
@@ -203,6 +298,14 @@ impl PartialEq for Input {
                     control: c,
                 },
             ) => midi == m && control == c && Arc::ptr_eq(state, s),
+            (
+                Input::Data { midi, cell, map },
+                Input::Data {
+                    midi: m,
+                    cell: c,
+                    map: p,
+                },
+            ) => midi == m && map == p && Arc::ptr_eq(cell, c),
             _ => false,
         }
     }
@@ -244,17 +347,17 @@ impl Binding {
     fn scope(&self) -> Option<&Arc<AudioScope>> {
         match &self.input {
             Input::Scope { scope, .. } => Some(scope),
-            Input::Midi { .. } => None,
+            Input::Midi { .. } | Input::Data { .. } => None,
         }
     }
 
     /// Its level this tick: what a follower stored, or a MIDI control as it is now
     /// when none has.
     fn level(&self) -> f32 {
-        if let Input::Midi { state, control, .. } = &self.input
-            && !self.followed.load(Ordering::Relaxed)
+        if !self.followed.load(Ordering::Relaxed)
+            && let Some(now) = self.input.read()
         {
-            return control.read(state);
+            return now;
         }
         f32::from_bits(self.level.load(Ordering::Relaxed))
     }
@@ -277,7 +380,9 @@ impl Bindings {
     /// its MIDI modifiers (ADR-0168), each on its input's state in `midi`. A modifier
     /// whose scope isn't found (the collection changed since the scopes were found) is
     /// left out, so it reads as silence until the next plan, and so is a MIDI one when
-    /// the engine has no MIDI inputs, which rests at its `from`.
+    /// the engine has no MIDI inputs, which rests at its `from`. Its data modifiers
+    /// (ADR-0171 decision 3) each watch their field in `data`, the live data's lock
+    /// taken briefly as a leaf; one is left out when there is no live data.
     ///
     /// One shot can draw an item through two motion lists with the same modifier ID: a
     /// keyframe Move's two sides, or a keyframe in one mix and its parent in another.
@@ -291,6 +396,7 @@ impl Bindings {
         motion: &[MotionModifier],
         heard: &HeardScopes,
         midi: Option<&MidiInputs>,
+        data: Option<&LiveData>,
     ) {
         for modifier in motion {
             let Some(kind) = jstream_graph::anim_modifiers(std::slice::from_ref(modifier))
@@ -320,6 +426,19 @@ impl Bindings {
                     Input::Scope {
                         audio,
                         scope: Arc::clone(scope),
+                    }
+                }
+                // A data modifier follows as a MIDI one, on its watched field.
+                jstream_anim::Kind::Midi(params)
+                    if matches!(modifier.kind, MotionKind::Data { .. }) =>
+                {
+                    let (Some((watch, map)), Some(data)) = (DataMap::of(modifier), data) else {
+                        continue;
+                    };
+                    Input::Data {
+                        midi: params,
+                        cell: data.watch(&watch),
+                        map,
                     }
                 }
                 jstream_anim::Kind::Midi(params) => {
@@ -420,7 +539,7 @@ impl Follow {
     fn new(binding: &Binding) -> Self {
         match binding.input {
             Input::Scope { .. } => Follow::Envelope(Envelope::default()),
-            Input::Midi { .. } => Follow::Smoothing(Smoothing::default()),
+            Input::Midi { .. } | Input::Data { .. } => Follow::Smoothing(Smoothing::default()),
         }
     }
 
@@ -428,7 +547,11 @@ impl Follow {
     fn fits(&self, binding: &Binding) -> bool {
         matches!(
             (self, &binding.input),
-            (Follow::Envelope(_), Input::Scope { .. }) | (Follow::Smoothing(_), Input::Midi { .. })
+            (Follow::Envelope(_), Input::Scope { .. })
+                | (
+                    Follow::Smoothing(_),
+                    Input::Midi { .. } | Input::Data { .. }
+                )
         )
     }
 }
@@ -515,13 +638,14 @@ impl Follower {
                     envelope.advance(audio, measured, dt_s)
                 }
                 (
-                    Input::Midi {
-                        midi,
-                        state,
-                        control,
-                    },
+                    input @ (Input::Midi { .. } | Input::Data { .. }),
                     Follow::Smoothing(smoothing),
-                ) => smoothing.advance(midi, control.read(state), dt_s),
+                ) => {
+                    let (Some(midi), Some(now)) = (input.smoothed(), input.read()) else {
+                        continue;
+                    };
+                    smoothing.advance(midi, now, dt_s)
+                }
                 // `keep` gave every binding the state of its kind.
                 _ => continue,
             };
@@ -557,7 +681,7 @@ impl Follower {
                 Input::Scope { audio, scope } => {
                     matches!(audio.measure, Measure::Band { .. }) && address(scope) == meter.scope
                 }
-                Input::Midi { .. } => false,
+                Input::Midi { .. } | Input::Data { .. } => false,
             });
         }
         let stale = self
@@ -678,6 +802,7 @@ mod tests {
             ],
             &heard,
             None,
+            None,
         );
         assert!(bindings.level(&item, "unheard").is_none(), "no scope found");
         let mut follower = Follower::default();
@@ -719,7 +844,7 @@ mod tests {
         let item = ItemId::new("itm_light");
         let plan = |measure| {
             let mut bindings = Bindings::default();
-            bindings.record(&item, &[light("pulse", None, measure)], &heard, None);
+            bindings.record(&item, &[light("pulse", None, measure)], &heard, None, None);
             bindings
         };
         let levels = plan(MotionMeasure::Level);
@@ -758,11 +883,13 @@ mod tests {
             &[light("pulse", None, MotionMeasure::Level)],
             &heard,
             None,
+            None,
         );
         bindings.record(
             &item,
             &[light("pulse", Some("music"), MotionMeasure::Peak)],
             &heard,
+            None,
             None,
         );
         let mut follower = Follower::default();
@@ -787,6 +914,7 @@ mod tests {
                 &item,
                 &[light("level", None, MotionMeasure::Level)],
                 &heard,
+                None,
                 None,
             );
             bindings
@@ -856,6 +984,7 @@ mod tests {
             ],
             &heard,
             Some(&midi),
+            None,
         );
         assert_eq!(
             bindings.level(&item, "smooth"),
@@ -898,7 +1027,7 @@ mod tests {
 
         // A plan without MIDI inputs records none: it rests at `from`.
         let mut none = Bindings::default();
-        none.record(&item, &[fader("smooth", 0, None, None)], &heard, None);
+        none.record(&item, &[fader("smooth", 0, None, None)], &heard, None, None);
         assert!(none.is_empty());
     }
 
@@ -916,11 +1045,18 @@ mod tests {
             &[light("m", None, MotionMeasure::Level)],
             &heard,
             Some(&midi),
+            None,
         );
         let mut follower = Follower::default();
         follower.follow(&audio, at_ms(0));
         let mut fader_plan = Bindings::default();
-        fader_plan.record(&item, &[fader("m", 1000, None, None)], &heard, Some(&midi));
+        fader_plan.record(
+            &item,
+            &[fader("m", 1000, None, None)],
+            &heard,
+            Some(&midi),
+            None,
+        );
         midi.push("Faders", 0, &cc(0, 7, 127));
         follower.follow(&fader_plan, at_ms(16));
         assert_eq!(
@@ -929,5 +1065,142 @@ mod tests {
             "a fresh smoothing lands on its first step"
         );
         assert!(follower.meters.is_empty(), "the scope's meter went");
+    }
+
+    fn daw(
+        id: &str,
+        input: Option<&str>,
+        (key, field): (&str, &str),
+        range: [f32; 2],
+        states: &[(&str, f32)],
+        smoothing_ms: u32,
+    ) -> MotionModifier {
+        let f = |v: f32| Finite32::new(v).expect("finite");
+        MotionModifier {
+            modifier_id: id.into(),
+            property: MotionProperty::Opacity,
+            effect: None,
+            source: None,
+            kind: MotionKind::Data {
+                input: input.map(str::to_owned),
+                key: key.into(),
+                field: field.into(),
+                range: [f(range[0]), f(range[1])],
+                states: states
+                    .iter()
+                    .map(|(text, v)| ((*text).to_owned(), f(*v)))
+                    .collect(),
+                smoothing_ms,
+                curve: MotionCurve::Linear,
+                from: f(-1.0),
+                to: Finite32::ZERO,
+            },
+            clock: MotionClock::Engine,
+            enabled: true,
+        }
+    }
+
+    /// ADR-0171 decision 3: a data binding reads its field as 0 to 1 (a boolean, a
+    /// number through its range, a text through its table), reads 0 while it is absent,
+    /// and is smoothed as a MIDI one is.
+    #[test]
+    fn a_data_binding_reads_its_field_through_its_range_or_states() {
+        let data = LiveData::new();
+        let item = ItemId::new("itm_lamp");
+        let heard: HeardScopes = Arc::default();
+        let mut bindings = Bindings::default();
+        bindings.record(
+            &item,
+            &[
+                daw("play", None, ("transport", "playing"), [0.0, 1.0], &[], 0),
+                daw("meter", Some("DAW"), ("meters", "0"), [-60.0, 0.0], &[], 0),
+                daw(
+                    "clip",
+                    Some("DAW"),
+                    ("track/1", "slots.0.state"),
+                    [0.0, 1.0],
+                    &[("recording", 1.0), ("playing", 0.5)],
+                    0,
+                ),
+                daw(
+                    "glide",
+                    None,
+                    ("transport", "playing"),
+                    [0.0, 1.0],
+                    &[],
+                    100,
+                ),
+                daw(
+                    "other",
+                    Some("Elsewhere"),
+                    ("transport", "playing"),
+                    [0.0, 1.0],
+                    &[],
+                    0,
+                ),
+            ],
+            &heard,
+            None,
+            Some(&data),
+        );
+        for id in ["play", "meter", "clip", "glide", "other"] {
+            assert_eq!(bindings.level(&item, id), Some(0.0), "{id} rests at 0");
+        }
+        let put = |key: &str, json: &str, ms: u64| {
+            data.put("DAW", key, json.as_bytes(), ms).expect("taken");
+        };
+        put("transport", r#"{"playing": true}"#, 0);
+        put("meters", "[-15, -60]", 0);
+        put("track/1", r#"{"slots": [{"state": "playing"}]}"#, 0);
+        // A preview reads it as it is.
+        assert_eq!(bindings.level(&item, "play"), Some(1.0));
+        let mut follower = Follower::default();
+        follower.follow(&bindings, at_ms(0));
+        assert_eq!(bindings.level(&item, "play"), Some(1.0));
+        assert_eq!(
+            bindings.level(&item, "meter"),
+            Some(0.75),
+            "-15 dB of -60..0"
+        );
+        assert_eq!(
+            bindings.level(&item, "clip"),
+            Some(0.5),
+            "its table's playing"
+        );
+        assert_eq!(
+            bindings.level(&item, "glide"),
+            Some(1.0),
+            "the first tick lands"
+        );
+        assert_eq!(bindings.level(&item, "other"), Some(0.0), "another sender");
+
+        put("transport", r#"{"playing": false}"#, 50);
+        put("track/1", r#"{"slots": [{"state": "stopped"}]}"#, 50);
+        put("meters", "[20]", 50);
+        follower.follow(&bindings, at_ms(100));
+        assert_eq!(bindings.level(&item, "play"), Some(0.0), "0 ms jumps");
+        assert_eq!(
+            bindings.level(&item, "clip"),
+            Some(0.0),
+            "a text not listed"
+        );
+        assert_eq!(
+            bindings.level(&item, "meter"),
+            Some(1.0),
+            "clamped at the top"
+        );
+        let glide = bindings.level(&item, "glide").expect("level");
+        assert!((glide - (-1f32).exp()).abs() < 1e-3, "{glide}");
+
+        // A plan without live data records none: it rests at `from`.
+        let mut none = Bindings::default();
+        none.record(
+            &item,
+            &[daw("play", None, ("t", ""), [0.0, 1.0], &[], 0)],
+            &heard,
+            None,
+            None,
+        );
+        assert!(none.is_empty());
     }
 }

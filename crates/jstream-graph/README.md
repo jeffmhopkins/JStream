@@ -356,8 +356,10 @@ that does not want to change the graph it has.
   modifier into `Kind::Audio` with its measure, range, envelope times and curve
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)), and a `midi`
   one into `Kind::Midi` with its smoothing, range and curve
-  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)); what it hears or
-  which controller it reads stays the engine's. `effect_anim_modifiers` and `source_anim_modifiers` turn the
+  ([ADR-0168](../../docs/adr/0168-midi-controllers-drive-motion.md)), and a `data` one
+  into `Kind::Midi` too, a level 0 to 1 the engine maps from the field it reads
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)); what it hears or
+  which controller or field it reads stays the engine's. `effect_anim_modifiers` and `source_anim_modifiers` turn the
   modifiers that drive an effect's setting (ADR-0138) or the item's source's
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)) into the same
   modifiers, each with the setting it drives. The graph never evaluates motion: an item's values are what was
