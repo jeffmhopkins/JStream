@@ -119,7 +119,8 @@ covers = ["crates/jstream-ui/style.css"]
   a select with its own chevron, a 14 px checkbox with a 4 px radius that fills with
   the accent when checked.
 - Toggles (`.switch`) are for settings that apply at once. Checkboxes are for options
-  that a dialog commits with OK.
+  that a dialog commits with OK. A toggle outside a form is a toggle row
+  (`.toggle-row`): its label, then the switch on the right.
 - A hovered row is neutral (`--menu-hover`), and a selected row is `--selected`. The two
   never look the same.
 - A row's summary or meta text gives way before its name: the name truncates last.
@@ -218,3 +219,5 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
   the info icon; `.warn` when it stops something), not a paragraph.
 - An empty list says so in a few words ("No motion yet.") next to the action that fills
   it.
+- Everything in a chain is a filter: a source's, a scene's, an output's or one item's.
+  An item's own are "item filters", never "effects".
