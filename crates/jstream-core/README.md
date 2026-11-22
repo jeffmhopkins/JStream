@@ -1042,8 +1042,9 @@ Batches and the collection queries run under the collection lock, so those calls
 are serialized across sessions and their events are queued in the order the changes
 happened. Placeholder output actions do too: they only step the state machine.
 `clock.hold`, `clock.step` and `clock.release` (ADR-0172) do too: they hold or step the
-media clock and wake the sources' thread, and an `output.start` while it is held, or a
-hold while an output runs, is `action_failed`.
+media clock, wake the sources' thread and run the timelines' tick, so a cue a step
+passed fires before it returns; an `output.start` while the clock is held or still
+ahead of real time, or a hold while an output runs, is `action_failed`.
 `video.snapshot` reads `rev`, the published render snapshot, the live values and the
 media clock's time under that lock and hands them to the snapshot thread after
 releasing it (see *Snapshots*). A frame sheet's thread reads the same once per picture
@@ -1499,7 +1500,9 @@ preset changed in one batch that one undo takes back.
   itself, at 0), the next tick waits at least `CAPPED_WAIT_NS` (a frame at 60 fps), so
   such a cycle fires at most 16 cues a frame instead of spinning the ticker.
   `timeline.play` and `timeline.seek` from a client run a tick before they return and
-  start the ticker while a timeline plays (`start_ticker`).
+  start the ticker while a timeline plays (`start_ticker`). So do `clock.hold`,
+  `clock.step` and `clock.release` (ADR-0172): the ticker sleeps in real time, so on a
+  held clock a cue a step passed fires in that step's call, before the next snapshot.
 - **A cue** runs through `State::action`, as the call would (with no audit or activity
   entry of its own, and nothing logged), credited to the client and request that
   started the timeline, with `cue_at` set to its exact time:
@@ -3804,9 +3807,9 @@ the drop ledger, under it. A stopping program stage detaches its mixer from the
 audio routing under the collection lock, which is why it is never dropped while that
 lock is held, as its final `stats.tick` already requires. The master's meters are
 atomics the mixer thread writes and the sampler reads, with no lock. The media clock's
-hold (`HeldClock`, ADR-0172) is a leaf mutex: every reader of the clock takes it alone
-for the moment it reads, and `clock.hold`, `clock.step` and `clock.release` take it
-under the collection lock, with nothing taken under it. The `jstream-sources`
+hold (`HeldClock`, ADR-0172) is a leaf mutex, with nothing taken under it: a reader
+holds it only for the moment it reads (the sources' thread under its queue lock), and
+`clock.hold`, `clock.step` and `clock.release` take it under the collection lock. The `jstream-sources`
 thread builds sources and paints the painted ones (*Live sources*) holding no engine
 lock, then takes the collection lock only to install a build or re-plan, which asks
 each live source for a frame it already has, apart from one catch-up paint of a painter

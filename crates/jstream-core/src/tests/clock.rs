@@ -102,3 +102,23 @@ fn outputs_and_a_held_clock_exclude_each_other() {
     block_on(control.call(output_call("rec", false))).expect("stop");
     act(&control, Action::ClockHold).expect("hold once it stopped");
 }
+
+/// Released ahead of real time, the clock still stands still until real time catches
+/// up, so an output waits for that too (ADR-0172 decision 4).
+#[test]
+fn an_output_waits_for_a_released_clock_to_catch_up() {
+    let (engine, clock) = clocked();
+    let control = connected(&engine);
+    act(&control, Action::ClockHold).expect("hold");
+    act(&control, Action::ClockStep { ms: 10_000 }).expect("step");
+    act(&control, Action::ClockRelease).expect("release");
+    let started = block_on(control.call(output_call("rec", true)));
+    assert_eq!(
+        started.as_ref().err().and_then(code),
+        Some("action_failed"),
+        "10 s ahead: {started:?}"
+    );
+    clock.advance(10_000);
+    block_on(control.call(output_call("rec", true))).expect("caught up, it starts");
+    block_on(control.call(output_call("rec", false))).expect("stop");
+}

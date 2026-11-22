@@ -1064,7 +1064,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.128): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+          "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
           "properties": {
             "type": {
               "const": "clock.hold",
@@ -1077,7 +1077,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.128), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, and with `action_failed`\nwhen the clock isn't held.",
+          "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
           "properties": {
             "ms": {
               "description": "How far to move it, in milliseconds, 1 to 10000.",
@@ -1097,7 +1097,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Lets the media clock run again (ADR-0172, since 0.128). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held.",
+          "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
           "properties": {
             "type": {
               "const": "clock.release",
@@ -16243,5 +16243,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.128"
+  "title": "JStream protocol 0.134"
 }

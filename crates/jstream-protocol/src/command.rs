@@ -1977,7 +1977,7 @@ pub enum Action {
         /// Where to play it from, in milliseconds from its start.
         at_ms: u32,
     },
-    /// Holds the engine's media clock where it is now (ADR-0172, since 0.128): every
+    /// Holds the engine's media clock where it is now (ADR-0172, since 0.134): every
     /// animation it draws (transitions and Moves, motion modifiers, timelines, a sky's
     /// warp, animated sources) and what `video.snapshot` and `video.frames` draw stand
     /// still at that moment until `clock.step` moves them on. It is for rendering a
@@ -1988,18 +1988,20 @@ pub enum Action {
     /// running, since an output's pictures and sound follow real time.
     #[serde(rename = "clock.hold")]
     ClockHold,
-    /// Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.128), one
+    /// Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one
     /// frame's worth at a time for a render: 33 for 30 fps. Fails with
-    /// `invalid_argument` on `ms` for 0 or more than 10000, and with `action_failed`
-    /// when the clock isn't held.
+    /// `invalid_argument` on `ms` for 0 or more than 10000, or a step the held time
+    /// can't take, and with `action_failed` when the clock isn't held. A timeline cue
+    /// the step passes has fired by the time it returns.
     #[serde(rename = "clock.step")]
     ClockStep {
         /// How far to move it, in milliseconds, 1 to 10000.
         ms: u32,
     },
-    /// Lets the media clock run again (ADR-0172, since 0.128). It never runs backward:
+    /// Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:
     /// it waits at the held time until real time passes it, then runs with real time.
-    /// Succeeds and does nothing when it isn't held.
+    /// Succeeds and does nothing when it isn't held. Until real time catches up,
+    /// `output.start` still fails, as while held.
     #[serde(rename = "clock.release")]
     ClockRelease,
     /// Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page

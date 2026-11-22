@@ -17,6 +17,15 @@ use std::sync::{Arc, Mutex, PoisonError};
 use jstream_media::{MediaTime, Rounding, Timebase};
 use jstream_platform::MediaClock;
 
+/// Why [`HeldClock::step`] moved nothing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum StepError {
+    /// The clock runs: it is stepped only while held.
+    NotHeld,
+    /// The step would take the held time past what a media time can hold.
+    Overflow,
+}
+
 /// The engine's clock: the platform's, held and stepped by hand when a client asks.
 pub(crate) struct HeldClock {
     state: Mutex<State>,
@@ -52,9 +61,27 @@ impl HeldClock {
         state.floor = None;
     }
 
-    /// Whether it is held.
-    pub(crate) fn is_held(&self) -> bool {
-        self.lock().held.is_some()
+    /// How far it is ahead of the platform's clock: `None` while it runs with it, and
+    /// the held time's lead (zero or more) while held, or the floor's while it waits
+    /// after a release for real time to catch up (ADR-0172 decision 4). An output
+    /// follows real time, so it starts only while this is `None`.
+    pub(crate) fn lead(&self) -> Option<std::time::Duration> {
+        let state = self.lock();
+        let ahead = match (state.held, state.floor) {
+            (Some(held), _) => held,
+            (None, Some(floor)) => floor,
+            (None, None) => return None,
+        };
+        let real = state.inner.now();
+        if state.held.is_none() && ahead <= real {
+            return None;
+        }
+        let lead = ahead
+            .checked_sub(real)
+            .ok()
+            .and_then(|lead| lead.rescale(Timebase::NANOS, Rounding::Up).ok())
+            .map_or(0, |lead| u64::try_from(lead.ticks()).unwrap_or(0));
+        Some(std::time::Duration::from_nanos(lead))
     }
 
     /// Holds it at its time now. Holding it again keeps the time it is held at.
@@ -64,17 +91,21 @@ impl HeldClock {
         *state.held.get_or_insert(now)
     }
 
-    /// Moves the held time on by `ms` milliseconds and returns it, or `None` when it
-    /// isn't held.
-    pub(crate) fn step(&self, ms: u32) -> Option<MediaTime> {
+    /// Moves the held time on by `ms` milliseconds and returns it.
+    ///
+    /// # Errors
+    /// [`StepError::NotHeld`] when it runs, and [`StepError::Overflow`] when the held
+    /// time can't move that far.
+    pub(crate) fn step(&self, ms: u32) -> Result<MediaTime, StepError> {
         let mut state = self.lock();
-        let held = state.held?;
-        let by = MediaTime::new(i64::from(ms), Timebase::MILLIS)
+        let held = state.held.ok_or(StepError::NotHeld)?;
+        let next = MediaTime::new(i64::from(ms), Timebase::MILLIS)
             .rescale(held.timebase(), Rounding::Nearest)
-            .ok()?;
-        let next = held.checked_add(by).ok()?;
+            .ok()
+            .and_then(|by| held.checked_add(by).ok())
+            .ok_or(StepError::Overflow)?;
         state.held = Some(next);
-        Some(next)
+        Ok(next)
     }
 
     /// Runs it again from the held time, never below it. Returns whether it was held.
@@ -155,8 +186,12 @@ mod tests {
         let clock = HeldClock::new(Arc::clone(&hand) as Arc<dyn MediaClock>);
         hand.set(1_500);
         assert_eq!(ms(&clock), 1_500);
-        assert!(!clock.is_held());
-        assert_eq!(clock.step(33), None, "a clock that runs isn't stepped");
+        assert_eq!(
+            clock.step(33),
+            Err(super::StepError::NotHeld),
+            "a clock that runs isn't stepped"
+        );
+        assert_eq!(clock.lead(), None);
         assert!(!clock.release(), "nor released");
     }
 
@@ -168,8 +203,8 @@ mod tests {
         assert_eq!(clock.hold().ticks(), 1_000);
         hand.set(9_000);
         assert_eq!(ms(&clock), 1_000, "real time passing doesn't move it");
-        assert_eq!(clock.step(40).map(MediaTime::ticks), Some(1_040));
-        assert_eq!(clock.step(40).map(MediaTime::ticks), Some(1_080));
+        assert_eq!(clock.step(40).map(MediaTime::ticks), Ok(1_040));
+        assert_eq!(clock.step(40).map(MediaTime::ticks), Ok(1_080));
         assert_eq!(ms(&clock), 1_080);
         assert_eq!(
             clock.hold().ticks(),
@@ -185,15 +220,22 @@ mod tests {
         hand.set(1_000);
         clock.hold();
         for _ in 0..100 {
-            clock.step(100);
+            clock.step(100).expect("held");
         }
         // Stepped to 11 s while real time reached 2 s: it waits at 11 s for real time.
         hand.set(2_000);
+        assert_eq!(clock.lead(), Some(std::time::Duration::from_secs(9)));
         assert!(clock.release());
         assert_eq!(ms(&clock), 11_000);
         hand.set(10_000);
         assert_eq!(ms(&clock), 11_000);
+        assert_eq!(
+            clock.lead(),
+            Some(std::time::Duration::from_secs(1)),
+            "released, it is still ahead until real time catches up"
+        );
         hand.set(12_000);
+        assert_eq!(clock.lead(), None, "caught up");
         assert_eq!(
             ms(&clock),
             12_000,
@@ -201,8 +243,13 @@ mod tests {
         );
         // Stepped less than real time passed: it jumps forward to now.
         clock.hold();
-        clock.step(10);
+        clock.step(10).expect("held");
         hand.set(20_000);
+        assert_eq!(
+            clock.lead(),
+            Some(std::time::Duration::ZERO),
+            "held behind real time, it still doesn't follow it"
+        );
         clock.release();
         assert_eq!(ms(&clock), 20_000);
     }
@@ -226,7 +273,6 @@ mod tests {
         let other = Arc::new(Hand::default());
         other.set(7);
         clock.set_inner(Arc::clone(&other) as Arc<dyn MediaClock>);
-        assert!(!clock.is_held());
         assert_eq!(ms(&clock), 7);
     }
 }

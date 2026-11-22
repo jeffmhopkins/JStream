@@ -351,7 +351,7 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.128 because a client can hold and step the engine's media clock
+`PROTOCOL_VERSION` is 0.134 because a client can hold and step the engine's media clock
 to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
 ([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
 0.127 because a group can share its 3D scene's space and a camera
@@ -2885,7 +2885,7 @@ Since 0.87 a scene holds timelines
 depends_on = ["docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md"]
 -->
 
-Since 0.128 a client can hold the engine's media clock and step it by hand, to render a
+Since 0.134 a client can hold the engine's media clock and step it by hand, to render a
 scene frame by frame on a machine that can't draw it in real time
 ([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)). The clock
 is what transitions, Moves, motion, timelines, keyframe tracks, a sky's warp, animated
@@ -2894,11 +2894,13 @@ sources, `video.snapshot` and `video.frames` read. None of the three actions cha
 - **`clock.hold`** stops the clock where it is; holding it again keeps the held time.
   It fails with `action_failed` while an output runs.
 - **`clock.step {ms}`** moves the held time on by `ms`, 1 to 10000
-  (`invalid_argument` on `ms` otherwise). It fails with `action_failed` when the clock
-  isn't held.
+  (`invalid_argument` on `ms` otherwise, or when the held time can't move that far). It
+  fails with `action_failed` when the clock isn't held. A timeline cue the step passes
+  has fired by the time it returns.
 - **`clock.release`** lets the clock run again, never backward: it waits at the held
   time until real time passes it. Releasing a clock that runs does nothing.
-- While the clock is held, `output.start` fails with `action_failed`.
+- While the clock is held, or released but still ahead of real time, `output.start`
+  fails with `action_failed`, saying how far ahead it is.
 
 <a id="keyframe-tracks"></a>
 ## Keyframe tracks

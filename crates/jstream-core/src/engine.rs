@@ -3041,8 +3041,8 @@ impl Engine {
                 continue;
             }
             let current = state.outputs.state(&output_id)?;
-            if state.live.clock().is_held() {
-                return Err(clock_held("output.start"));
+            if let Some(lead) = state.live.clock().lead() {
+                return Err(clock_held("output.start", lead));
             }
             let idle = matches!(current, OutputState::Stopped | OutputState::Failed);
             if !idle {
@@ -5223,6 +5223,17 @@ impl State {
         Ok(())
     }
 
+    /// After `clock.hold`, `clock.step` or `clock.release` (ADR-0172): wakes the sources'
+    /// thread, and runs the timeline tick now, so a cue the clock passed fires before the
+    /// call returns and the next snapshot shows it, then sets the ticker for the next cue.
+    fn clock_moved(&mut self, wake: &mut Vec<Waker>) {
+        self.live.clock_moved();
+        if self.cue_at.is_none() {
+            self.timeline_tick(wake);
+            self.start_ticker();
+        }
+    }
+
     /// `timeline.stop` (ADR-0115): stops `timeline_id` where it is, emitting
     /// `timeline.changed` if it was playing.
     fn timeline_stop(
@@ -5677,8 +5688,9 @@ impl State {
             return Ok(CallResult::action());
         }
         let (output_id, start) = match action {
-            Action::OutputStart { .. } if self.live.clock().is_held() => {
-                return Err(clock_held("output.start"));
+            Action::OutputStart { .. } if self.live.clock().lead().is_some() => {
+                let lead = self.live.clock().lead().unwrap_or_default();
+                return Err(clock_held("output.start", lead));
             }
             Action::OutputStart { output_id } => (output_id, true),
             Action::OutputStop { output_id } => (output_id, false),
@@ -5793,7 +5805,7 @@ impl State {
                     });
                 }
                 self.live.clock().hold();
-                self.live.clock_moved();
+                self.clock_moved(wake);
                 return Ok(CallResult::action());
             }
             Action::ClockStep { ms } => {
@@ -5803,17 +5815,26 @@ impl State {
                         format!("a step is 1 to {MAX_CLOCK_STEP_MS} ms"),
                     ));
                 }
-                if self.live.clock().step(ms).is_none() {
-                    return Err(ProtocolError::ActionFailed {
-                        reason: "the clock isn't held: send `clock.hold` first".into(),
-                    });
+                match self.live.clock().step(ms) {
+                    Ok(_) => {}
+                    Err(crate::clock::StepError::NotHeld) => {
+                        return Err(ProtocolError::ActionFailed {
+                            reason: "the clock isn't held: send `clock.hold` first".into(),
+                        });
+                    }
+                    Err(crate::clock::StepError::Overflow) => {
+                        return Err(ProtocolError::invalid_argument(
+                            "ms",
+                            "the held time can't move that far",
+                        ));
+                    }
                 }
-                self.live.clock_moved();
+                self.clock_moved(wake);
                 return Ok(CallResult::action());
             }
             Action::ClockRelease => {
                 if self.live.clock().release() {
-                    self.live.clock_moved();
+                    self.clock_moved(wake);
                 }
                 return Ok(CallResult::action());
             }
@@ -7559,18 +7580,15 @@ fn action_field(error: ProtocolError) -> ProtocolError {
     }
 }
 
-/// A protocol variant added after this engine was written.
-/// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
-/// `device.list`, `device.revoke`) and the UI settings it keeps (`ui_settings.get`,
-/// `ui_settings.set`): the server in front of the engine answers them (ADR-0044,
-/// ADR-0084), so one that reaches the engine came from a client with no server between.
-/// Why `call` fails while the media clock is held (ADR-0172): an output follows real
-/// time.
-fn clock_held(call: &str) -> ProtocolError {
+/// Why `call` fails while the media clock is held or, released, still `lead` ahead of
+/// real time (ADR-0172 decision 4): an output follows real time.
+fn clock_held(call: &str, lead: std::time::Duration) -> ProtocolError {
     ProtocolError::ActionFailed {
         reason: format!(
-            "the clock is held for a frame-by-frame render, and an output follows real \
-             time: send `clock.release` before `{call}`"
+            "the clock is held or still ahead of real time after a frame-by-frame render \
+             ({} ms ahead), and an output follows real time: send `clock.release` and \
+             wait for real time to catch up before `{call}`",
+            lead.as_millis()
         ),
     }
 }
@@ -7578,6 +7596,11 @@ fn clock_held(call: &str) -> ProtocolError {
 /// The longest `clock.step`, in milliseconds (ADR-0172).
 const MAX_CLOCK_STEP_MS: u32 = 10_000;
 
+/// A protocol variant added after this engine was written.
+/// `unsupported`, for the calls that concern the listener's credentials (`pairing.start`,
+/// `device.list`, `device.revoke`) and the UI settings it keeps (`ui_settings.get`,
+/// `ui_settings.set`): the server in front of the engine answers them (ADR-0044,
+/// ADR-0084), so one that reaches the engine came from a client with no server between.
 fn served_by_the_server(call: &str) -> ProtocolError {
     ProtocolError::Unsupported { call: call.into() }
 }

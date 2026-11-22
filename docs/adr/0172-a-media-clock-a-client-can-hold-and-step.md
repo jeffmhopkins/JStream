@@ -71,7 +71,9 @@ the engine's time until real time catches up. One stepped slower jumps forward t
 as a long frame would.
 
 **4. Outputs and a held clock exclude each other.** `clock.hold` fails with
-`action_failed` while an output runs, and `output.start` fails while the clock is held.
+`action_failed` while an output runs, and `output.start` fails while the clock is held
+or, released, still stands ahead of real time waiting for it to catch up: the error says
+how far ahead it is.
 An output's pictures, encoder and sound follow real time, and the pipeline keeps the
 platform's clock. Previews may show a held scene at real time meanwhile; snapshots and
 frame sheets are what a render reads.
@@ -84,7 +86,8 @@ granted them, since holding stops every client's animation.
 - **Easier:**
   - Any scene, however slow to draw, renders exactly, frame by frame: Moves, keyframe
     tracks, motion, timelines, a sky's warp ramp and travel, and animated sources all
-    see the stepped time. Nothing in a scene has to be stretched or copied by the client.
+    see the stepped time. A hold, a step or a release runs the timelines' tick before
+    it returns, so a cue the step passed has fired by the next snapshot. Nothing in a scene has to be stretched or copied by the client.
   - Tests and agents can look at a moment of an animation precisely.
 - **Harder:**
   - While held, every client sees the scene stand still, and preview streams may not
@@ -93,10 +96,14 @@ granted them, since holding stops every client's animation.
     own JavaScript timers, and a media file's decoder pacing run in real time. A render
     of such a source shows whatever frame it has.
   - After a render stepped faster than real time, the engine's time stands still until
-    real time catches up.
+    real time catches up, and no output starts until it has.
+  - Live inputs stamped on the platform's clock aren't moved: a gesture's live value
+    and notes that JTunnel brings in keep real time, so while the clock is held, or
+    ahead after a release, a MIDI note can read as early or late against the engine's
+    time.
   - Steps are whole milliseconds. 30 fps is steps of 33, 33 and 34 ms.
 - **Follow-up implementation:**
   - `jstream-core`: `clock.rs` (`HeldClock`), with the live sources and MIDI on it.
-  - The three actions in `jstream-protocol` (0.128).
+  - The three actions in `jstream-protocol` (0.134).
   - The `clock` MCP tool, not destructive.
   - Tests of hold, step, release, the floor, and the exclusion with outputs.
