@@ -355,7 +355,10 @@ that does not want to change the graph it has.
   engine to evaluate, `impulse` and the `triggered` clock included (#1107), and an `audio`
   modifier into `Kind::Audio` with its measure, range, envelope times and curve
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)); what it hears
-  stays the engine's. The graph never evaluates motion: an item's values are what was
+  stays the engine's. `effect_anim_modifiers` and `source_anim_modifiers` turn the
+  modifiers that drive an effect's setting (ADR-0138) or the item's source's
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)) into the same
+  modifiers, each with the setting it drives. The graph never evaluates motion: an item's values are what was
   set.
 - **Keyframe scenes** (`keyframe.rs`, [ADR-0024](../../docs/adr/0024-scene-structure.md)
   §2, [ADR-0049](../../docs/adr/0049-keyframe-scene-model-and-evaluation.md)):
@@ -590,7 +593,9 @@ timeline's `labels`. Version 13 (ADR-0138) adds motion modifiers with `property`
 while empty, are `schema_version` 14, and a scene's `keep_warm` (ADR-0149), omitted
 while `false`, is `schema_version` 15. A group's `share_space` and a scene's
 `camera_anchor` (ADR-0164), each omitted while absent, are `schema_version` 16, the
-anchor set after the scene's items exist. Loading creates the folders top level first, then
+anchor set after the scene's items exist. Version 17 (ADR-0171) adds motion modifiers
+with `property` `source` and their `source` target, which drive a setting of the item's
+own source. Loading creates the folders top level first, then
 sets each nested one's parent, so a folder may come before its parent in the file;
 labels come before the scenes and sources that carry them. Kinds, undo history and runtime state are not in it, and
 neither is any secret: stream keys are in the OS credential store and output URLs can't
@@ -617,7 +622,8 @@ the engine's; this crate does no I/O.
   default `normal` included, so only a file of `_srgb` items, or of none, loads as
   `srgb`, and 12 to 13 refuses a version 12 modifier that drives an effect setting,
   and 13 to 14 refuses a scene's `ptz_shots` in a version 13 file, 14 to 15 its
-  `keep_warm`, and 15 to 16 a group's `share_space` and a scene's `camera_anchor`),
+  `keep_warm`, 15 to 16 a group's `share_space` and a scene's `camera_anchor`, and 16 to
+  17 a version 16 modifier that drives a source setting),
   and refuses unknown fields in the file's own objects, so a newer field is never
   silently dropped by the next save. Scene filters and item effects are added after
   every scene, item and source, so their references find what they name.

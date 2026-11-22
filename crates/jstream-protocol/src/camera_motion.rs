@@ -142,6 +142,7 @@ pub fn check_camera_motion(motion: &[CameraMotionModifier]) -> Result<(), Motion
             modifier_id: m.modifier_id.clone(),
             property: MotionProperty::X,
             effect: None,
+            source: None,
             kind: m.kind.clone(),
             clock: m.clock,
             enabled: m.enabled,

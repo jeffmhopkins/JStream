@@ -11,7 +11,8 @@ use crate::apply::invalid;
 use jstream_anim::{Audio, Clock, Curve, Kind, Measure, Modifier, Property, Shape};
 use jstream_protocol::{
     CameraMotionModifier, CameraProperty, MotionClock, MotionCurve, MotionEffect, MotionKind,
-    MotionMeasure, MotionModifier, MotionProperty, MotionShape, ProtocolError, check_motion,
+    MotionMeasure, MotionModifier, MotionProperty, MotionSetting, MotionShape, ProtocolError,
+    check_motion,
 };
 
 /// Refuses `motion` unless it passes the wire's check ([`check_motion`]): at most 8
@@ -40,6 +41,7 @@ pub fn camera_anim_modifiers(motion: &[CameraMotionModifier]) -> Vec<(CameraProp
                 modifier_id: m.modifier_id.clone(),
                 property: MotionProperty::X,
                 effect: None,
+                source: None,
                 kind: m.kind.clone(),
                 clock: m.clock,
                 enabled: m.enabled,
@@ -63,6 +65,28 @@ pub fn effect_anim_modifiers(motion: &[MotionModifier]) -> Vec<(MotionEffect, Mo
             let as_item = MotionModifier {
                 property: MotionProperty::X,
                 effect: None,
+                source: None,
+                ..m.clone()
+            };
+            Some((target, modifier(&as_item)?))
+        })
+        .collect()
+}
+
+/// An item's `source` modifiers (ADR-0171 decision 4) as `jstream-anim` evaluates them:
+/// each with the source setting it drives, the modifier itself adding to `x`, so
+/// evaluating it alone gives its value, as for an effect's. [`anim_modifiers`] leaves
+/// them out, so they never move the item's box. One with a value this version doesn't
+/// know is left out.
+pub fn source_anim_modifiers(motion: &[MotionModifier]) -> Vec<(MotionSetting, Modifier)> {
+    motion
+        .iter()
+        .filter(|m| m.property == MotionProperty::Source)
+        .filter_map(|m| {
+            let target = m.source.clone()?;
+            let as_item = MotionModifier {
+                property: MotionProperty::X,
+                source: None,
                 ..m.clone()
             };
             Some((target, modifier(&as_item)?))
@@ -282,6 +306,7 @@ mod tests {
                     modifier_id: format!("m-{half}{n}_{}", "x".repeat(50)),
                     property: MotionProperty::ALL[n],
                     effect: None,
+                    source: None,
                     kind: kind.clone(),
                     clock: [MotionClock::Shown, MotionClock::Triggered][(half + n) % 2],
                     enabled: n % 3 == 0,

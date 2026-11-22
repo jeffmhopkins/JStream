@@ -3676,6 +3676,103 @@ mod tests {
         assert!(luma(ambient) > 30, "ambient light: {ambient:?}");
     }
 
+    /// ADR-0171 decision 4: a light item's `source` modifiers change how it lights the
+    /// scene, and a model item's change how it draws its materials, each frame, with
+    /// nothing stored.
+    #[test]
+    fn source_modifiers_drive_a_lights_and_a_models_settings() {
+        let mut graph = placed(&[("cam", (32.0, 18.0), (32.0, 36.0), 0.0)]);
+        let mut geometry = jstream_protocol::ItemGeometry::try_new(
+            jstream_protocol::Vec2::new(32.0, 18.0).expect("finite"),
+            jstream_protocol::Size::try_new(8.0, 8.0).expect("positive"),
+        )
+        .expect("valid");
+        geometry.depth_px = jstream_protocol::Finite32::new(200.0).expect("finite");
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetGeometry {
+                    scene_id: None,
+                    item_id: ItemId::new("logo"),
+                    geometry,
+                },
+                Edit::SceneSetCamera {
+                    scene_id: SceneId::new("main"),
+                    camera: Some(jstream_protocol::SceneCamera::framing(
+                        jstream_protocol::Canvas {
+                            width: CANVAS.0,
+                            height: CANVAS.1,
+                        },
+                    )),
+                },
+            ],
+        );
+        let point = jstream_sources::ShownLight {
+            kind: jstream_sources::LightType::Point,
+            color: [1.0; 3],
+            intensity: 2.0,
+            range_px: 0.0,
+            cone_deg: 45.0,
+            softness: 0.2,
+            shadows: false,
+            shadow_softness: 0.3,
+            environment: None,
+        };
+        let luma = |pixel: [u8; 4]| pixel[..3].iter().map(|&c| u32::from(c)).sum::<u32>();
+        let Some(lit) = lit_centre(&graph, point.clone()) else {
+            return;
+        };
+        assert!(luma(lit) > 150, "lit from the front: {lit:?}");
+        // A square wave starts at its amplitude: these hold their value at the start.
+        let held = |item: &str, param: &str, value: f32| Edit::ItemSetMotion {
+            item_id: ItemId::new(item),
+            scene_id: None,
+            motion: vec![jstream_protocol::MotionModifier {
+                modifier_id: "drive".into(),
+                property: jstream_protocol::MotionProperty::Source,
+                effect: None,
+                source: Some(jstream_protocol::MotionSetting {
+                    param: param.into(),
+                    material: None,
+                }),
+                kind: jstream_protocol::MotionKind::Oscillate {
+                    shape: jstream_protocol::MotionShape::Square,
+                    amplitude: jstream_protocol::Finite32::new(value.abs()).expect("finite"),
+                    period_ms: 3_600_000,
+                    phase: jstream_protocol::Finite32::new(if value < 0.0 { 0.5 } else { 0.0 })
+                        .expect("finite"),
+                },
+                clock: jstream_protocol::MotionClock::Engine,
+                enabled: true,
+            }],
+        };
+        // The light's intensity driven to 0 puts it out; its colour to black, too.
+        apply(&mut graph, vec![held("logo", "intensity", -2.0)]);
+        let out = lit_centre(&graph, point.clone()).expect("an adapter");
+        assert!(luma(out) < 6, "intensity driven to 0: {out:?}");
+        apply(&mut graph, vec![held("logo", "color", -1.0)]);
+        let black = lit_centre(&graph, point.clone()).expect("an adapter");
+        assert!(luma(black) < 6, "colour driven to black: {black:?}");
+        // The model's base colour driven to black darkens it under the same light.
+        apply(
+            &mut graph,
+            vec![
+                Edit::ItemSetMotion {
+                    item_id: ItemId::new("logo"),
+                    scene_id: None,
+                    motion: Vec::new(),
+                },
+                held("cam", "color", -1.0),
+            ],
+        );
+        let dark = lit_centre(&graph, point).expect("an adapter");
+        // Black base colour leaves only the specular highlight.
+        assert!(
+            luma(dark) < luma(lit) / 2,
+            "model driven dark: {dark:?} from {lit:?}"
+        );
+    }
+
     /// Points of `graph`'s program drawn once: `cam` shows a plane model when `model`
     /// is set, and every other source a white frame. `None` where the machine has no
     /// adapter.
