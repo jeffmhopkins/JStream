@@ -1,16 +1,17 @@
 //! The Properties dialog (spec-workspace.md 6.2), one dialog for a source and its
-//! filters (#1219): on the left a Properties entry and the source's filter chains, on
-//! the right the entry picked, the source's name and settings or a filter's settings
-//! ([`PropertiesAndFilters`]). The settings form is the one filters use (`properties.rs`),
+//! filters (#1219): the source's picture on top, then Settings, the source's name and
+//! settings, or Filters, its filter chains and the picked filter's settings
+//! ([`PropertiesAndFilters`]), picked by a segmented control as OBS's dialog puts its
+//! preview above the settings. The settings form is the one filters use (`properties.rs`),
 //! here editing a draft: each setting the kind marks `live` shows on output as it is
 //! edited, as a live value of the dialog's gesture (ADR-0091). OK sends what the user
 //! changed since it opened as one batch, ending the gesture, so one undo step; Cancel,
 //! Escape and the backdrop drop the draft and cancel the gesture, leaving nothing. Defaults
 //! empties the draft, so OK resets each value the dialog opened with. Filter changes
 //! apply at once, and Cancel puts back each one the dialog sent ([`FilterUndo`]); the
-//! filter rows, pane and dialogs are the Filters panel's (`filters.rs`). A display, window
-//! or webcam source shows a live picture of what its edited settings capture above the
-//! form (`device_preview.rs`).
+//! filter rows, pane and dialogs are the Filters panel's (`filters.rs`). The picture
+//! (`device_preview.rs`) is, for a display, window or webcam, of what its edited
+//! settings capture, and for any other source with a picture, of the source itself.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -19,7 +20,7 @@ use crate::dialog::Modal;
 use crate::icons::Icon;
 use crate::panels::add_source::type_label;
 use crate::panels::custom_shader::{self, ShaderEditor};
-use crate::panels::device_preview::{self, DevicePreview};
+use crate::panels::device_preview::SourcePreview;
 use crate::panels::filters::{FilterUndo, PropertiesAndFilters, chains_of};
 use crate::panels::properties::{Form, draft_patch};
 use crate::store::{Studio, apply, query};
@@ -168,6 +169,7 @@ fn PropertiesBody(
     };
     let undo = FilterUndo::begin(std::slice::from_ref(&owner));
     let selected = RwSignal::new(None::<FilterId>);
+    let on_filters = RwSignal::new(false);
 
     // What the dialog opened on: OK sends only what the user changed from it, so an
     // edit another client made meanwhile stays (ADR-0032, last writer wins per field).
@@ -383,12 +385,17 @@ fn PropertiesBody(
         })
     };
 
-    // A display, window or webcam shows what the settings being edited capture, so
-    // the user sees the device they pick before OK (DL-02).
-    let preview = device_preview::shows(&kind_id)
-        .then(|| view! { <DevicePreview kind_id=kind_id.clone() draft=draft /> });
-    let title = format!("{type_name} properties");
-    let subtitle = source.name.clone();
+    // The source's picture: a display, window or webcam shows what the settings being
+    // edited capture, so the user sees the device they pick before OK (DL-02).
+    let preview = picture.then(|| {
+        let kind_id = kind_id.clone();
+        let source_id = source_id.clone();
+        ViewFn::from(move || {
+            view! { <SourcePreview kind_id=kind_id.clone() source_id=source_id.clone() draft=draft /> }
+        })
+    });
+    let title = source.name.clone();
+    let subtitle = format!("{type_name} source");
     let form = {
         let source_id = source_id.clone();
         move || match descriptor() {
@@ -443,9 +450,10 @@ fn PropertiesBody(
                 video=picture
                 audio=audio
                 selected=selected
+                filters=on_filters
                 note="everywhere this source appears"
+                preview=preview
             >
-                {preview}
                 <label class="field props-name">
                     <span class="label">"Name"</span>
                     <input type="text" bind:value=name />
@@ -458,7 +466,7 @@ fn PropertiesBody(
                 <button
                     type="button"
                     class="secondary props-defaults"
-                    hidden=move || selected.with(Option::is_some)
+                    hidden=move || on_filters.get()
                     on:click=defaults
                 >
                     "Defaults"

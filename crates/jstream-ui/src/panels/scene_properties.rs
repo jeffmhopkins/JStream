@@ -11,9 +11,9 @@
 //! its override of its parent's, starting from the framing camera when the parent is
 //! 2D (ADR-0128). A keyframe scene shows its parent's background, which its dialog
 //! shows and doesn't edit. The scene's video chain (FL-06; a keyframe's is its parent's,
-//! ADR-0065 §3) is listed under the Properties entry on the left, as in the source
-//! Properties dialog ([`PropertiesAndFilters`]): a picked filter's settings show on the
-//! right, each change sent at once, and Cancel puts back every filter edit the dialog sent.
+//! ADR-0065 §3) is on the Filters segment beside Settings, as in the source Properties
+//! dialog ([`PropertiesAndFilters`]): a picked filter's settings show beside the list,
+//! each change sent at once, and Cancel puts back every filter edit the dialog sent.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -359,6 +359,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
     // Filter edits apply at once; Cancel puts back each one the dialog sent.
     let undo = FilterUndo::begin(std::slice::from_ref(&owner));
     let selected = RwSignal::new(None::<FilterId>);
+    let on_filters = RwSignal::new(false);
     let note = match parent {
         Some(parent) => format!("those of “{parent}”, which this keyframe follows"),
         None => "the whole scene".to_owned(),
@@ -786,7 +787,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     "×"
                 </button>
             </div>
-            <PropertiesAndFilters owner=owner video=true audio=false selected=selected note=note>
+            <PropertiesAndFilters owner=owner video=true audio=false selected=selected filters=on_filters note=note>
                 // The property grid, in sections (UI-DESIGN › Forms): a note only where
                 // the row needs one to be read right.
                 <section class="prop-section">
@@ -981,7 +982,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                 <button
                     type="button"
                     class="secondary props-defaults"
-                    hidden=move || selected.with(Option::is_some)
+                    hidden=move || on_filters.get()
                     on:click=defaults
                 >
                     "Defaults"

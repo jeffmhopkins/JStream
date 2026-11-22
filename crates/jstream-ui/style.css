@@ -1663,6 +1663,8 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 /* The Properties dialog (spec-workspace.md 6.2): name and settings on the left, filters
    on the right; Defaults sits apart from Cancel and OK. */
 .modal.props-dialog { width: var(--dialog-l); height: min(640px, 100%); }
+/* With a picture on top, the settings keep the room they had. */
+.modal.props-dialog:has(.props-top) { height: min(660px, 100%); }
 .scene-props-dialog .props-settings { display: grid; align-content: start; gap: 12px; }
 /* Scene properties (C13): the property grid in General, Transitions, Output and Camera
    sections. */
@@ -1798,25 +1800,24 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .hotkey-field { font-family: "IBM Plex Mono", ui-monospace, monospace; cursor: pointer; }
 .props-head { display: flex; align-items: center; gap: 10px; }
 .props-head .icon { color: var(--muted); }
-.props-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 1.15fr 1fr; }
-.props-settings { min-height: 0; overflow: auto; padding: 14px 16px; }
+.props-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+/* The source's picture on top (OBS's preview), 160 px tall over a checkerboard, so a
+   picture with transparency reads as such. */
+.props-top { flex: none; padding: 14px 16px 0; }
+.props-segments { flex: none; display: flex; justify-content: center; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.props-segments .segmented > button { min-width: 128px; }
+.props-settings { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 14px 16px; }
+.props-filters { flex: 1 1 auto; grid-template-columns: 260px 1fr; }
 .props-name { grid-template-columns: 1fr; gap: 0.25rem; }
 .props-name input { width: 100%; }
-.props-side { min-height: 0; overflow: auto; padding: 14px 16px; background: var(--panel); border-left: 1px solid var(--line); display: flex; flex-direction: column; gap: 10px; }
 .props-side-head { display: flex; align-items: baseline; gap: 8px; }
 .props-side-title { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
 .props-side-note { font-size: 11px; color: var(--dim); }
-.props-side-foot { margin: auto 0 0; font-size: 11px; color: var(--dim); }
 .props-add-filter { align-self: flex-start; }
-.props-settings[hidden], .props-defaults[hidden] { display: none; }
+.props-settings[hidden], .props-filters[hidden], .props-defaults[hidden] { display: none; }
 .filter-pick { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; cursor: pointer; }
 .filter-pick:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
-.props-entry { display: flex; align-items: center; gap: 8px; padding: 6px 8px; border: 1px solid transparent; border-radius: 4px; background: none; color: var(--text); font: inherit; font-weight: 600; text-align: left; cursor: pointer; }
-.props-entry:hover { background: var(--hover); }
-.props-entry.on { background: var(--selected); border-color: var(--accent); }
-.props-entry .icon { color: var(--muted); }
-/* The live picture of the display, window or webcam being picked, above the name. */
-.props-preview { position: relative; aspect-ratio: 16 / 9; margin-bottom: 12px; background: #000; border: 1px solid var(--line); border-radius: 4px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+.props-preview { position: relative; height: 160px; background-color: var(--app); background-image: conic-gradient(rgba(255, 255, 255, 0.04) 25%, transparent 0 50%, rgba(255, 255, 255, 0.04) 0 75%, transparent 0); background-size: 16px 16px; border: 1px solid var(--line); border-radius: 6px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .props-preview canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
 .props-preview-note { position: absolute; margin: 0; padding: 0 12px; text-align: center; font-size: 12px; color: var(--muted); }
 .modal-footer .props-defaults { margin-right: auto; }

@@ -1,12 +1,12 @@
-// The Properties dialog: opened from an item's menu, it edits a draft of the source's
-// name and settings that OK sends as one edit, showing each setting the kind marks live
-// as a live value meanwhile (ADR-0091), and lists the source's filters (seeded: Sharpen,
-// then Blur turned off). Dragging its title moves the dialog, which reopens where it
+// The Properties dialog: opened from an item's menu, it shows the source's picture on
+// top and edits a draft of the source's name and settings that OK sends as one edit,
+// showing each setting the kind marks live as a live value meanwhile (ADR-0091); its
+// Filters segment lists the source's filters (seeded: Sharpen, then Blur turned off). Dragging its title moves the dialog, which reopens where it
 // was left; a double-click on the title centres it, and the header's × still closes
 // it. The mock engine
 // describes no kinds, so the settings form itself is covered natively; the webcam's
 // live picture gets its descriptor from the page's socket (`describeKinds`).
-import { test, expect, connect, describeKinds, openAddSource, rev } from '../fixtures.js';
+import { test, expect, connect, describeKinds, openAddSource, recordCalls, rev } from '../fixtures.js';
 
 /** The rows of the Sources panel. */
 function rows(page) {
@@ -25,11 +25,19 @@ async function openProperties(page) {
 test('the dialog shows the source, and Cancel drops the draft', async ({ page, daemon }) => {
   await connect(page, daemon);
   const dialog = await openProperties(page);
-  await expect(dialog.locator('.modal-title')).toHaveText('Color properties');
-  await expect(dialog.locator('.modal-sub')).toHaveText('Backdrop');
-  // The source's filters, as the Filters panel shows them (filters.spec.js).
+  await expect(dialog.locator('.modal-title')).toHaveText('Backdrop');
+  await expect(dialog.locator('.modal-sub')).toHaveText('Color source');
+  // Settings, then Filters with its count: the source's filters, as the Filters panel
+  // shows them (filters.spec.js).
+  const segments = dialog.getByRole('tablist', { name: 'Properties or filters' }).getByRole('tab');
+  await expect(segments).toHaveText(['Settings', 'Filters2']);
+  await expect(segments.first()).toHaveAttribute('aria-selected', 'true');
+  await expect(dialog.getByRole('list', { name: 'Video filters' })).toBeHidden();
+  await segments.nth(1).click();
   await expect(dialog.getByRole('list', { name: 'Video filters' }).getByRole('listitem')).toHaveCount(2);
   await expect(dialog.getByRole('button', { name: '+ Add filter…' })).toBeEnabled();
+  await expect(dialog.getByRole('textbox', { name: 'Name' })).toBeHidden();
+  await segments.first().click();
 
   const startRev = await rev(page);
   await dialog.getByRole('textbox', { name: 'Name' }).fill('Sky');
@@ -78,7 +86,7 @@ test('a webcam shows a live picture of the device being picked, before OK', asyn
   await add.getByRole('option', { name: 'Video capture device' }).click();
   await add.getByRole('button', { name: 'Create', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: 'Properties' });
-  await expect(dialog.locator('.modal-title')).toHaveText('Video capture device properties');
+  await expect(dialog.locator('.modal-sub')).toHaveText('Video capture device source');
   await expect(dialog.getByLabel('Preview')).toBeVisible();
 
   // The draft's device, streamed on a channel of its own, apart from the canvas's.
@@ -106,11 +114,19 @@ test('a webcam shows a live picture of the device being picked, before OK', asyn
   await expect.poll(() => sent('preview.unsubscribe').map((a) => a.channel)).toContain(second.channel);
 });
 
-test('a source that captures nothing shows no picture', async ({ page, daemon }) => {
+test('a source that captures nothing shows its saved self', async ({ page, daemon }) => {
+  const calls = await recordCalls(page);
   await connect(page, daemon);
   const dialog = await openProperties(page);
-  await expect(dialog.locator('.modal-title')).toHaveText('Color properties');
-  await expect(dialog.getByLabel('Preview')).toHaveCount(0);
+  await expect(dialog.locator('.modal-sub')).toHaveText('Color source');
+  await expect(dialog.getByLabel('Preview')).toBeVisible();
+  // The source itself, by its ID, on a channel of its own: no draft to capture.
+  await expect.poll(() => calls.sent('preview.subscribe').filter((a) => a.source_id).length).toBe(1);
+  const [stream] = calls.sent('preview.subscribe').filter((a) => a.source_id);
+  expect(stream.source_id).toBe('color');
+  expect(stream.source).toBeUndefined();
+  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await expect.poll(() => calls.sent('preview.unsubscribe').map((a) => a.channel)).toContain(stream.channel);
 });
 
 const COLOR = {
@@ -177,7 +193,7 @@ test('a text source picks an installed font from the list, or another file', asy
   await add.getByRole('option', { name: 'Text' }).click();
   await add.getByRole('button', { name: 'Create', exact: true }).click();
   let dialog = page.getByRole('dialog', { name: 'Properties' });
-  await expect(dialog.locator('.modal-title')).toHaveText('Text properties');
+  await expect(dialog.locator('.modal-sub')).toHaveText('Text source');
 
   // The mock's two fonts, between the bundled font and any other file.
   const fonts = dialog.locator('select.font-pick');
@@ -280,8 +296,9 @@ test('dragging the header moves the dialog, and it reopens there', async ({ page
   await expect(again).toBeHidden();
 });
 
-// One dialog for the source (#1219): a filter row's click shows its settings on the right,
-// where they apply at once, and Cancel puts back what the dialog changed.
+// One dialog for the source (#1219): on Filters, the first filter's settings show beside
+// the list and a row's click shows another's, where they apply at once, and Cancel puts
+// back what the dialog changed.
 test('a filter picked in the dialog shows its settings there, and Cancel puts them back', async ({ page, daemon }) => {
   await describeKinds(page, [
     {
@@ -291,11 +308,14 @@ test('a filter picked in the dialog shows its settings there, and Cancel puts th
   ]);
   await connect(page, daemon);
   const dialog = await openProperties(page);
-  const entry = dialog.getByRole('button', { name: 'Properties', exact: true });
-  await expect(entry).toHaveAttribute('aria-pressed', 'true');
+  const settingsTab = dialog.getByRole('tab', { name: 'Settings' });
+  const filtersTab = dialog.getByRole('tab', { name: /^Filters/ });
+  await expect(settingsTab).toHaveAttribute('aria-selected', 'true');
   const rows = dialog.getByRole('list', { name: 'Video filters' }).getByRole('listitem');
-  await rows.first().locator('.filter-name').click();
-  await expect(entry).toHaveAttribute('aria-pressed', 'false');
+  await filtersTab.click();
+  await expect(filtersTab).toHaveAttribute('aria-selected', 'true');
+  // The first filter is picked.
+  await expect(rows.first().getByRole('button', { name: 'Sharpen', exact: true })).toHaveAttribute('aria-pressed', 'true');
   const pane = dialog.getByRole('group', { name: 'Sharpen settings' });
   await expect(pane).toBeVisible();
   // The source's own settings stay where they were, out of sight.
@@ -315,12 +335,13 @@ test('a filter picked in the dialog shows its settings there, and Cancel puts th
   await page.keyboard.press('Enter');
   await expect(dialog.getByRole('group', { name: 'Blur settings' })).toBeVisible();
   await expect(rows.nth(1).getByRole('button', { name: 'Blur', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await entry.click();
+  await settingsTab.click();
   await expect(dialog.locator('.props-name input')).toHaveValue('Backdrop');
 
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toBeHidden();
   await expect.poll(() => rev(page)).toBe(before + 2);
   const again = await openProperties(page);
+  await again.getByRole('tab', { name: /^Filters/ }).click();
   await expect(again.getByRole('list', { name: 'Video filters' }).getByRole('listitem').first().locator('.filter-summary')).toHaveText('0.20');
 });
