@@ -47,6 +47,7 @@ use std::sync::{Arc, Condvar, Mutex, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::clock::HeldClock;
 use jstream_media::{FrameSize, MediaTime, Rounding, Timebase, VideoFrame};
 use jstream_platform::{ContextKey, GpuContext, GpuFrame, MediaClock, MediaDecoders};
 use jstream_protocol::{AssetRoot, BusId, FilterChain, SceneId, Settings, SourceId, SourceKind};
@@ -80,6 +81,9 @@ pub(crate) trait LiveHost: Send + Sync {
 /// The live sources of one engine. Lives in the engine state, under the collection lock.
 pub(crate) struct LiveSources {
     registry: Arc<Registry>,
+    /// The engine's media clock (ADR-0172): the platform's, or the engine's own before
+    /// the host injects one, and held and stepped by hand when a client asks.
+    clock: Arc<HeldClock>,
     /// Declared before `ctx`, so the running sources drop first: a `browser` page closes
     /// while the backend in `ctx` is still there.
     entries: BTreeMap<SourceId, Entry>,
@@ -281,6 +285,7 @@ impl LiveSources {
     /// The built-in kinds, with no asset folders yet and `host` to call back.
     pub(crate) fn new(host: Weak<dyn LiveHost>) -> Self {
         let meters = Arc::new(SourceMeters::default());
+        let clock = Arc::new(HeldClock::new(Arc::new(SystemClock::new())));
         Self {
             registry: Arc::new(Registry::builtin()),
             ctx: Context::default(),
@@ -291,9 +296,10 @@ impl LiveSources {
             installs: 0,
             warm: BTreeSet::new(),
             worker: Arc::new(Worker::new(
-                Arc::new(SystemClock::new()),
+                Arc::clone(&clock) as Arc<dyn MediaClock>,
                 Arc::clone(&meters),
             )),
+            clock,
             host,
             started: false,
             plan: 0,
@@ -319,7 +325,9 @@ impl LiveSources {
     /// restarts its timing now, and the re-plan the thread was waiting for, timed on the
     /// old clock, is dropped: the thread re-plans at once on the new clock, which times
     /// the next frame change afresh.
-    pub(crate) fn set_clock(&mut self, clock: Arc<dyn MediaClock>) {
+    pub(crate) fn set_clock(&mut self, platform: Arc<dyn MediaClock>) {
+        self.clock.set_inner(platform);
+        let clock = Arc::clone(&self.clock) as Arc<dyn MediaClock>;
         let now = clock.now();
         let mut running = false;
         for entry in self.entries.values_mut() {
@@ -799,6 +807,23 @@ impl LiveSources {
     /// The current time on the clock sources run on.
     pub(crate) fn now(&self) -> MediaTime {
         self.worker.now()
+    }
+
+    /// The engine's media clock, which `clock.hold`, `clock.step` and `clock.release`
+    /// hold and step (ADR-0172).
+    pub(crate) fn clock(&self) -> &Arc<HeldClock> {
+        &self.clock
+    }
+
+    /// Wakes the thread after the clock was held, stepped or released, so a source due
+    /// at the new time paints, and the re-plan comes at once.
+    pub(crate) fn clock_moved(&self) {
+        let mut queue = lock(&self.worker.queue);
+        let now = queue.clock.now();
+        queue.wake = Some(now);
+        queue.paint_wake = crate::snapshot::earliest(queue.paint_wake, Some(now));
+        drop(queue);
+        self.worker.wake.notify_all();
     }
 
     /// Starts source `source_id` again from its beginning (`source.restart`, ADR-0115):

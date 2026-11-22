@@ -121,13 +121,18 @@ pub(crate) const OPEN_WORLD: [&str; 3] = ["output", "ptz", "source"];
 /// and nothing stores it), a preview stream (which MCP can't receive anyway), and a
 /// view's report (ADR-0132: it only replaces the session's own counts), and the warm
 /// budget (ADR-0117 §7: it changes how many scenes stay ready, never what is shown, and
-/// another `studio.set_warm` puts it back), and the 3D rendering switches (ADR-0170: they
-/// change the collection in no way, and another `studio.set_rendering` puts them back). A tool whose actions are all here
-/// is not `destructiveHint`. Every other action is: going live or stopping, setting or
-/// clearing a stream key, revoking a device, starting a pairing and replacing the UI's
+/// another `studio.set_warm` puts it back), the 3D rendering switches (ADR-0170: they
+/// change the collection in no way, and another `studio.set_rendering` puts them back),
+/// and the media clock held for a frame-by-frame render (ADR-0172: `clock.release` lets
+/// it run again, and it never holds while an output runs). A tool whose actions are all
+/// here is not `destructiveHint`. Every other action is: going live or stopping, setting
+/// or clearing a stream key, revoking a device, starting a pairing and replacing the UI's
 /// settings. A new action is destructive until it is added here.
-pub(crate) const REVERSIBLE_ACTIONS: [&str; 20] = [
+pub(crate) const REVERSIBLE_ACTIONS: [&str; 23] = [
     "audio.reset_loudness",
+    "clock.hold",
+    "clock.release",
+    "clock.step",
     "item.hide",
     "item.show",
     "item.toggle",

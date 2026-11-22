@@ -44,7 +44,7 @@ that is too heavy for a machine can still be shown.
 ## Decision
 **1. App-wide 3D rendering switches.** An application setting, like the warm budget
 (ADR-0117 §7): `studio.set_rendering` sets it, `studio.get`'s `rendering` reports it
-(`RenderFeatures`, protocol 0.129), and the engine keeps it across restarts in
+(`RenderFeatures`, protocol 0.136), and the engine keeps it across restarts in
 `rendering.json` in the data folder when its host names the file. It changes no `rev`,
 is never undone, emits no event and holds whatever collection is open. Each switch caps
 what every scene may draw:

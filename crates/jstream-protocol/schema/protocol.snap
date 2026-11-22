@@ -509,7 +509,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Sets the 3D rendering switches (0.129, ADR-0170 decision 1): which of the costly\n3D effects the engine draws, for every scene at once. Each switch `change` names\ntakes its value and the rest keep theirs. A switch that is off draws its effect\nnowhere, whatever a scene, light or filter asks for; turning it back on restores\nwhat each scene asks for. An application setting, not collection state, as\n`studio.set_warm` is: it changes no `rev`, is never undone, emits no event, holds\nwhatever collection is open, and is kept across restarts when the engine's host\nnames a file for it. `studio.get` reports it.",
+          "description": "Sets the 3D rendering switches (0.136, ADR-0170 decision 1): which of the costly\n3D effects the engine draws, for every scene at once. Each switch `change` names\ntakes its value and the rest keep theirs. A switch that is off draws its effect\nnowhere, whatever a scene, light or filter asks for; turning it back on restores\nwhat each scene asks for. An application setting, not collection state, as\n`studio.set_warm` is: it changes no `rev`, is never undone, emits no event, holds\nwhatever collection is open, and is kept across restarts when the engine's host\nnames a file for it. `studio.get` reports it.",
           "properties": {
             "ambient_occlusion": {
               "description": "Whether the `ambient_occlusion` filter draws, or left out to keep it.",
@@ -1101,6 +1101,52 @@ source: crates/jstream-protocol/src/fixtures.rs
             "type",
             "timeline_id",
             "at_ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+          "properties": {
+            "type": {
+              "const": "clock.hold",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+          "properties": {
+            "ms": {
+              "description": "How far to move it, in milliseconds, 1 to 10000.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "clock.step",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+          "properties": {
+            "type": {
+              "const": "clock.release",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
           ],
           "type": "object"
         },
@@ -13008,7 +13054,7 @@ source: crates/jstream-protocol/src/fixtures.rs
                   "type": "null"
                 }
               ],
-              "description": "The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170\ndecision 1, since 0.129). Omitted by an older server, which draws every effect."
+              "description": "The 3D rendering switches, which `studio.set_rendering` sets (ADR-0170\ndecision 1, since 0.136). Omitted by an older server, which draws every effect."
             },
             "timelines": {
               "description": "The timelines playing (ADR-0115, since 0.87), ordered by ID, each with where\nit is now. Omitted when none is.",
@@ -14033,7 +14079,7 @@ source: crates/jstream-protocol/src/fixtures.rs
       ]
     },
     "RenderFeatures": {
-      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.129).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch is on until `studio.set_rendering` turns it off.",
+      "description": "Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.136).\n\nA switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a\nscene, light or filter asks for; on, each scene gets what it asks for. No switch\nchanges the collection, so turning one back on restores every scene as it was. Every\nswitch is on until `studio.set_rendering` turns it off.",
       "properties": {
         "ambient_occlusion": {
           "default": true,
@@ -16275,5 +16321,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.129"
+  "title": "JStream protocol 0.136"
 }

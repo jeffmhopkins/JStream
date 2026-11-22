@@ -5,7 +5,7 @@
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 
-/// Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.129).
+/// Which of the costly 3D effects the engine draws (ADR-0170 decision 1, since 0.136).
 ///
 /// A switch caps what every scene may use. Off, the effect is drawn nowhere, whatever a
 /// scene, light or filter asks for; on, each scene gets what it asks for. No switch

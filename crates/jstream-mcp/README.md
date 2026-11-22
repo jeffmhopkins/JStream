@@ -99,7 +99,7 @@ target stays open to agents), and the `events` feed drops `youtube.*` and `plugi
 
 | Tool | Takes | Becomes |
 |---|---|---|
-| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
+| one per noun (`activity`, `audio`, `binding`, `bus`, `canvas`, `capture`, `clock`, `collection`, `delete`, `device`, `encoder`, `filter`, `folder`, `font`, `history`, `hotkey`, `item`, `kind`, `label`, `live`, `output`, `pack`, `pairing`, `preview`, `profile`, `quality`, `scene`, `send`, `source`, `state`, `studio`, `timeline`, `transition`, `ui_settings`, `values`, `video`, `video_mix` today; `preview` only fails over MCP, which has no binary channel) | `op`: one edit, action, query or history op of that noun | an edit: a batch of one; an action: an action; a query: a query; `history.undo` or `history.redo`: a `history` call |
 | `batch` | `edits`, `expected_rev`, `idempotency_key`, `ends_gesture`: the protocol's `Batch` | one atomic batch |
 | `describe_api` | nothing | the whole protocol schema, without calling the engine |
 | `events` | `after`: a cursor, optional | the buffered engine events after it ([Events](#design)), without calling the engine |
@@ -149,9 +149,11 @@ that restarts on show does too), `scene.set_keyframe`
 and nothing stores), `item.show`, `item.hide`
 and `item.toggle` ([ADR-0101](../../docs/adr/0101-item-show-hide-actions.md), which the
 opposite action takes back), `studio.set_warm` (ADR-0117 §7: how many scenes stay
-ready, which another call puts back) and `studio.set_rendering`
+ready, which another call puts back), `studio.set_rendering`
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md): which
-costly 3D effects draw, which another call puts back) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
+costly 3D effects draw, which another call puts back) and `clock.hold`, `clock.step` and `clock.release`
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md), which a
+release takes back and nothing stores) only change what JStream shows, so the tools a scene build uses ask nothing. `batch` refuses `output.delete` and
 `output.set_target` (`OUTPUT_ONLY_EDITS`), which can remove a stream key undo can't put
 back, with `invalid_argument` naming the `output` tool, so `batch` is not destructive
 either. `openWorldHint` is true for the

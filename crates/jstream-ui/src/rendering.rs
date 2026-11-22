@@ -2,7 +2,7 @@
 //! switch per costly 3D effect, capping what every scene may draw. It reads the switches
 //! from `studio.get` each time the page opens and sets each one with
 //! `studio.set_rendering`; the engine keeps them on its machine, whatever collection is
-//! open. An engine older than 0.129 reports none, and the page says it has none.
+//! open. An engine older than 0.136 reports none, and the page says it has none.
 //!
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 

@@ -270,7 +270,7 @@ Contents ([Design](#design) explains the choices):
   (Shadows, Ambient occlusion, Volumetric fog, Floor reflections). It reads the switches
   with `studio.get` each time the page opens and sends `studio.set_rendering` naming only
   the switch changed, putting the old value back with an error if the engine refuses; an
-  engine that reports no `rendering` (older than 0.129) gets a line saying it has none.
+  engine that reports no `rendering` (older than 0.136) gets a line saying it has none.
   `read`, `set` and each `Switch`'s change are tested natively.
 - **Audio plugins** (`clap_plugins.rs`): `ClapPlugins`, the Settings dialog's Audio
   plugins page: the CLAP scan's folders, the effects found and the files that failed
