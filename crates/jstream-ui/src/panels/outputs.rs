@@ -1487,7 +1487,6 @@ pub fn Outputs() -> impl IntoView {
                     <div class="modal-header">
                         <div class="modal-titles">
                             <h2 class="modal-title">"Encoders & mixes"</h2>
-                            <span class="modal-sub">"What an output can encode with and show"</span>
                         </div>
                         <button
                             type="button"
@@ -1870,10 +1869,11 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
     };
     let can_send = move || !busy.get() && !gone() && draft.with(OutputDraft::ready);
 
+    // The title names the dialog, and the subtitle the output (UI-DESIGN › Dialogs).
     let title = if is_new {
-        "Add output".to_owned()
+        "Add output"
     } else {
-        format!("{output_id} settings")
+        "Output settings"
     };
     let sub = move || {
         if let Some(made) = created.get() {
@@ -1889,7 +1889,7 @@ fn OutputDialog(panel: Panel, editing: Editing) -> impl IntoView {
                     || "This output was deleted.".to_owned(),
                     |row| {
                         format!(
-                            "{} · {}",
+                            "{output_id} · {} · {}",
                             describe_kind(&row.info.kind),
                             state_label(row.state)
                         )

@@ -14,6 +14,7 @@
 use crate::app::SessionContext;
 use crate::browse::{BrowseKind, browse_button, file_name};
 use crate::dialog::Modal;
+use crate::icons::Icon;
 use crate::store::Studio;
 use jstream_control::protocol::{Action, Call, CallResult, Query, QueryResult};
 use jstream_control::{Control, ControlError};
@@ -160,14 +161,18 @@ impl ProjectAsk {
         if self == ProjectAsk::SaveAs {
             return None;
         }
+        let lead = if self == ProjectAsk::New {
+            "A new project"
+        } else {
+            "Opening a project"
+        };
         let stops = match running {
             0 => String::new(),
-            1 => "It stops the output that is running, and it ".into(),
-            n => format!("It stops the {n} outputs that are running, and it "),
+            1 => "stops the running output and ".into(),
+            n => format!("stops the {n} running outputs and "),
         };
-        let lead = if stops.is_empty() { "It " } else { "" };
         Some(format!(
-            "{stops}{lead}clears undo history for everyone connected. The open project keeps every change made so far."
+            "{lead} {stops}clears undo history for everyone connected."
         ))
     }
 }
@@ -327,7 +332,12 @@ pub fn ProjectDialog(
                 {(ask != ProjectAsk::Open).then(|| view! {
                     <p class="project-note">"A project is saved only to a new file, never over one."</p>
                 })}
-                {warning.map(|text| view! { <p class="project-note project-warning">{text}</p> })}
+                {warning.map(|text| view! {
+                    <p class="callout" class:warn={running > 0}>
+                        <Icon name="info" size=16 />
+                        <span>{text}</span>
+                    </p>
+                })}
                 {move || problem.get().map(|text| view! { <p class="project-problem" role="alert">{text}</p> })}
             </div>
             <div class="modal-footer">
@@ -401,12 +411,12 @@ mod tests {
         assert!(
             ProjectAsk::Open
                 .warning(2)
-                .is_some_and(|w| w.starts_with("It stops the 2 outputs"))
+                .is_some_and(|w| w.starts_with("Opening a project stops the 2 running outputs"))
         );
         assert!(
             ProjectAsk::New
                 .warning(0)
-                .is_some_and(|w| w.starts_with("It clears undo history"))
+                .is_some_and(|w| w == "A new project clears undo history for everyone connected.")
         );
     }
 }

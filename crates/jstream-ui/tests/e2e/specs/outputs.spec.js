@@ -48,7 +48,8 @@ test('the panel is a compact list: health in the header, then the program and ea
   // A double-click opens its settings, as Settings… does.
   await stream.locator('.output-row-name').dblclick();
   const dialog = page.getByRole('dialog', { name: 'Output settings' });
-  await expect(dialog.locator('.modal-title')).toHaveText('output-1 settings');
+  await expect(dialog.locator('.modal-title')).toHaveText('Output settings');
+  await expect(dialog.locator('.modal-sub')).toContainText('output-1 · ');
   await expect(dialog.getByRole('note')).toContainText('plain rtmp://');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
   await expect(dialog).toHaveCount(0);
@@ -347,7 +348,8 @@ test('Duplicate adds a copy without the stream key, a recording\'s under a free 
   await outputRow(page, 'output-1').getByRole('button', { name: 'More for output-1' }).click();
   await page.getByRole('menuitem', { name: 'Duplicate' }).click();
   dialog = page.getByRole('dialog', { name: 'Output settings' });
-  await expect(dialog.locator('.modal-title')).toHaveText('output-2 settings');
+  await expect(dialog.locator('.modal-title')).toHaveText('Output settings');
+  await expect(dialog.locator('.modal-sub')).toContainText('output-2 · ');
   await expect(dialog.getByLabel('Server URL')).toHaveValue('rtmps://live.example.com/app');
   // The key never reaches the page, so the copy has none.
   await expect(dialog.getByRole('textbox', { name: 'Stream key' })).toHaveAttribute('placeholder', 'Paste the stream key');
@@ -358,7 +360,8 @@ test('Duplicate adds a copy without the stream key, a recording\'s under a free 
   await addOutput(page, 'record', '/tmp/a.mp4');
   await outputRow(page, 'output-3').getByRole('button', { name: 'More for output-3' }).click();
   await page.getByRole('menuitem', { name: 'Duplicate' }).click();
-  await expect(dialog.locator('.modal-title')).toHaveText('output-4 settings');
+  await expect(dialog.locator('.modal-title')).toHaveText('Output settings');
+  await expect(dialog.locator('.modal-sub')).toContainText('output-4 · ');
   await expect(dialog.getByLabel('File path')).toHaveValue('/tmp/a (2).mp4');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
 });

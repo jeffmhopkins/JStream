@@ -19,7 +19,7 @@
 //! Docs: crates/jstream-ui/README.md#design
 
 use crate::app::SessionContext;
-use crate::dialog::Modal;
+use crate::dialog::{Info, Modal};
 use crate::ui_settings::{self, Kept};
 use futures_util::StreamExt;
 use jstream_control::protocol::{
@@ -257,7 +257,7 @@ pub fn AgentPrompt() -> impl IntoView {
     .into_any()
 }
 
-/// "Ask before a new agent connects", on the General page.
+/// "Ask before connecting" (a new agent), on the General page under Agents.
 #[component]
 pub fn AskAgentsSetting() -> impl IntoView {
     let Some(control) = control() else {
@@ -289,20 +289,26 @@ pub fn AskAgentsSetting() -> impl IntoView {
     };
     view! {
         <Show when=move || on.get().is_some()>
-            <label class="settings-check">
-                <input
-                    type="checkbox"
-                    aria-label="Ask before a new agent connects"
-                    prop:checked=move || on.get().unwrap_or(true)
-                    on:change=move |event| keep(event_target_checked(&event))
-                />
-                <span>
-                    <span class="settings-check-label">"Ask before a new agent connects"</span>
-                    <span class="settings-check-note">
-                        "When JStream lets agents in (--mcp), it asks before a client it hasn't seen connects. A notice, not a lock: any program you run can read the token file."
-                    </span>
-                </span>
-            </label>
+            <section class="prop-section">
+                <h4 class="eyebrow">"Agents"</h4>
+                <div class="prop-grid">
+                    <div class="prop-row">
+                        <label class="prop-label check" for="setting-ask-agents">"Ask before connecting"</label>
+                        <div class="prop-control">
+                            <input
+                                type="checkbox"
+                                class="toggle"
+                                id="setting-ask-agents"
+                                aria-label="Ask before connecting"
+                                prop:checked=move || on.get().unwrap_or(true)
+                                on:change=move |event| keep(event_target_checked(&event))
+                            />
+                            <Info text="A notice, not a lock: any program you run can read the token file." />
+                            <p class="help">"When agents are let in (--mcp), a client not seen before waits for you."</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
         </Show>
     }
     .into_any()
