@@ -2,14 +2,14 @@
 id = "ADR-0175"
 title = "Ship Microsoft's DirectX Shader Compiler in the Windows zip"
 kind = "adr"
-status = "proposed"
+status = "accepted"
 tier = "maintainer"
 -->
 
 # ADR-0175: Ship Microsoft's DirectX Shader Compiler in the Windows zip
 
 <!-- @generated begin adr-status -->
-> **Status:** proposed
+> **Status:** accepted
 <!-- @generated end adr-status -->
 
 <a id="context"></a>
