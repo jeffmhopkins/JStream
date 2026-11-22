@@ -530,7 +530,7 @@ not remove them; they move into the prototype's look.
   off and what it asks for that isn't granted, installs one from its package folder
   (a folder dialog in the desktop app), and
   turns a disabled one back on, and removes one after its remove dialog is confirmed
-  (`plugin.uninstall`, protocol 0.142; its folder stays on disk). Its grant dialog offers only what the plugin's manifest
+  (`plugin.uninstall`, protocol 0.143; its folder stays on disk). Its grant dialog offers only what the plugin's manifest
   asks for: `read`, always on, the other classes with what each lets it do, the hosts,
   and folders when it asks for them. It opens after an install that asks for more than
   `read`, and grants and turns on, in one step, a plugin whose update needs a grant.

@@ -889,7 +889,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
 - **Plugins** (protocol 0.35, [ADR-0069](adr/0069-wasm-plugin-limits-and-capabilities.md)): the actions
   `plugin.install`, `plugin.grant` and `plugin.enable` install a WASM automation plugin
   with what a person grants it, change the grant and re-enable it, `plugin.uninstall`
-  (0.142) removes it, leaving its package on disk, and the query
+  (0.143) removes it, leaving its package on disk, and the query
   `plugin.list` (0.58) lists the installed plugins with what each manifest asks for and
   what was granted; they are for a person, so no MCP tool, plugin or hotkey carries
   them. The event `plugin.state_changed` reports
