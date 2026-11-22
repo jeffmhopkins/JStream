@@ -7,6 +7,7 @@
 //! Docs: crates/jstream-ui/README.md#design, docs/UI-FEATURES.md#header
 
 use crate::app::SessionContext;
+use crate::dialog::Info;
 use jstream_control::Control;
 use jstream_protocol::{
     Action, Call, CallResult, Query, QueryResult, RenderFeatures, RenderFeaturesChange,
@@ -46,21 +47,37 @@ impl Switch {
         }
     }
 
-    /// The line under it.
-    pub fn note(self) -> &'static str {
+    /// The one line under it.
+    pub fn help(self) -> &'static str {
+        match self {
+            Switch::Shadows => "Lights set to cast shadows draw them.",
+            Switch::AmbientOcclusion => "The Ambient occlusion filter darkens creases.",
+            Switch::VolumetricFog => "The Volumetric fog filter draws light shafts.",
+            Switch::FloorReflections => "The Floor reflection filter mirrors its scene.",
+        }
+    }
+
+    /// What its (i) says: what turning it off saves.
+    pub fn info(self) -> &'static str {
         match self {
             Switch::Shadows => {
-                "Lights set to cast shadows draw a shadow map each. Off, no light casts a shadow in any scene."
+                "Each light that casts shadows draws a shadow map. Off, no light casts a shadow in any scene."
             }
-            Switch::AmbientOcclusion => {
-                "The Ambient occlusion filter darkens creases and corners. Off, it changes nothing in any scene."
-            }
-            Switch::VolumetricFog => {
-                "The Volumetric fog filter draws light shafts through fog. Off, it changes nothing in any scene."
-            }
+            Switch::AmbientOcclusion => "Off, the filter changes nothing in any scene.",
+            Switch::VolumetricFog => "Off, the filter changes nothing in any scene.",
             Switch::FloorReflections => {
-                "The Floor reflection filter draws its scene a second time, mirrored. Off, it changes nothing in any scene."
+                "It draws its scene a second time. Off, it changes nothing in any scene, and the scene is drawn once."
             }
+        }
+    }
+
+    /// The id of its toggle, for its label.
+    pub fn id(self) -> &'static str {
+        match self {
+            Switch::Shadows => "setting-rendering-shadows",
+            Switch::AmbientOcclusion => "setting-rendering-ambient-occlusion",
+            Switch::VolumetricFog => "setting-rendering-volumetric-fog",
+            Switch::FloorReflections => "setting-rendering-floor-reflections",
         }
     }
 
@@ -145,41 +162,49 @@ pub fn RenderingSettings() -> impl IntoView {
     }
     let control = StoredValue::new_local(session.map(|session| session.control));
     let toggle = move |switch: Switch, on: bool| {
-        let Some(before) = features.get_untracked() else {
+        if features.get_untracked().is_none() {
             return;
-        };
+        }
         let change = switch.change(on);
-        features.set(Some(before.with(&change)));
+        features.update(|now| *now = now.map(|now| now.with(&change)));
         error.set(None);
         let Some(control) = control.get_value() else {
             return;
         };
         spawn_local(async move {
             if let Err(message) = set(&*control, change).await {
-                features.try_set(Some(before));
+                // Put back only this switch, so a failure doesn't undo another one
+                // changed while this call was out.
+                let back = switch.change(!on);
+                features.try_update(|now| *now = now.map(|now| now.with(&back)));
                 error.try_set(Some(message));
             }
         });
     };
     view! {
-        <p class="settings-intro">
-            "These switches apply to every scene at once, so a heavy scene can be lightened without editing it. Off, an effect is drawn nowhere, whatever a scene asks for; on again, each scene gets back what it asked for. All on until you change them."
-        </p>
         <Show when=move || features.get().is_some()>
-            {Switch::ALL.into_iter().map(|switch| view! {
-                <label class="settings-check rendering-switch" data-switch=switch.label()>
-                    <input
-                        type="checkbox"
-                        aria-label=switch.label()
-                        prop:checked=move || features.get().is_some_and(|now| switch.get(&now))
-                        on:change=move |event| toggle(switch, event_target_checked(&event))
-                    />
-                    <span>
-                        <span class="settings-check-label">{switch.label()}</span>
-                        <span class="settings-check-note">{switch.note()}</span>
-                    </span>
-                </label>
-            }).collect_view()}
+            <section class="prop-section">
+                <h4 class="eyebrow">"Effects"</h4>
+                <div class="prop-grid">
+                    {Switch::ALL.into_iter().map(|switch| view! {
+                        <div class="prop-row rendering-switch" data-switch=switch.label()>
+                            <label class="prop-label check" for=switch.id()>{switch.label()}</label>
+                            <div class="prop-control">
+                                <input
+                                    type="checkbox"
+                                    class="toggle"
+                                    id=switch.id()
+                                    aria-label=switch.label()
+                                    prop:checked=move || features.get().is_some_and(|now| switch.get(&now))
+                                    on:change=move |event| toggle(switch, event_target_checked(&event))
+                                />
+                                <Info text=switch.info() />
+                                <p class="help">{switch.help()}</p>
+                            </div>
+                        </div>
+                    }).collect_view()}
+                </div>
+            </section>
         </Show>
         <Show when=move || loaded.get() && features.get().is_none() && error.get().is_none()>
             <p class="placeholder">"This engine has no 3D rendering switches."</p>
