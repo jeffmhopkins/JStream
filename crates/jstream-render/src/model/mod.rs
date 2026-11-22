@@ -1553,7 +1553,7 @@ impl ModelRuntime {
                 }
             }
         }
-        gpu.queue.submit([encoder.finish()]);
+        gpu.submit_work(encoder.finish());
         target.mark_changed();
         drop(submitting);
         Ok(())
@@ -1644,7 +1644,7 @@ impl ModelRuntime {
                 pass.draw_indexed(0..p.index_count, 0, 0..1);
             }
         }
-        gpu.queue.submit([encoder.finish()]);
+        gpu.submit_work(encoder.finish());
         target.mark_changed();
         drop(submitting);
         Ok(())

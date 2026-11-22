@@ -1491,6 +1491,10 @@ drawing isn't guarded; a shader that hangs the GPU there is caught by the progra
 stage's guard or a device loss once it goes to program. A GPU without timestamp
 queries has only the device-loss guard. Not checked yet: a forced TDR on Windows
 hardware, which only a hardware run can do.
+The same queries time the program's units of work for `profile.get`'s `gpu_ms`
+([ADR-0103](adr/0103-per-item-performance-profile.md)): one frame in four, each submit
+of a unit's work is bracketed by timestamps in command buffers of its own (`spans.rs`),
+so the time is the GPU's running it and not the render thread's recording it.
 
 **Transitions** ([ADR-0029](adr/0029-transitions.md), with
 [ADR-0052](adr/0052-transition-mechanics-and-studio-preview.md)'s mechanics). A Move is not a texture blend:

@@ -672,6 +672,189 @@ mod device_tests {
         encode_from_targets(Codec::Av1);
     }
 
+    /// The live case the engine runs (#1617's follow-up): 1080p at 30 fps for ten
+    /// seconds, a frame drawn every period into a ring of ten encode targets and queued
+    /// eight deep, as the render thread and an encoder session do, with the encoder fed
+    /// whenever it asks. The hardware MFT must take nearly every frame. A run that falls
+    /// short says where, in its failure message: the
+    /// encoder's acceptance rate, how long a frame waited for it, how long a draw's
+    /// submit took while the encoder ran, and how long making the ring took right after
+    /// the encoder opened.
+    #[test]
+    #[ignore = "needs a DX12 GPU with NV12 textures and a D3D11-aware hardware H.264 encoder"]
+    fn keeps_up_with_1080p30_from_encode_targets() {
+        live_1080p30(true);
+    }
+
+    /// As [`keeps_up_with_1080p30_from_encode_targets`], with CPU NV12 frames into the
+    /// same hardware MFT, which separates the encoder's own pace from the D3D11 interop.
+    #[test]
+    #[ignore = "needs a GPU with a hardware H.264 encoder"]
+    fn keeps_up_with_1080p30_from_cpu_frames_in_hardware() {
+        live_1080p30(false);
+    }
+
+    fn live_1080p30(gpu_path: bool) {
+        use std::collections::VecDeque;
+        use std::sync::Arc;
+        use std::time::{Duration, Instant};
+
+        use jstream_platform::media::{
+            ColorInfo, FrameSize, MediaTime, PixelFormat, Timebase, VideoFrame, VideoFrameInfo,
+        };
+        use jstream_platform::{
+            GpuInterop, HardwarePreference, PlatformError, RateControl, VideoEncoderConfig,
+            VideoSurface,
+        };
+
+        use crate::WindowsGpu;
+
+        const FRAMES: u32 = 300;
+        const QUEUE: usize = 8;
+        let period = Duration::from_secs(1) / 30;
+        let size = FrameSize::new(1920, 1080).expect("size");
+        let config = VideoEncoderConfig {
+            codec: Codec::H264,
+            size,
+            input_format: PixelFormat::Nv12,
+            frame_period: Timebase::new(1, 30).expect("30 fps"),
+            rate_control: RateControl::Cbr { kbps: 12_000 },
+            keyframe_interval: 60,
+            hardware: HardwarePreference::Require,
+        };
+        let gpu = WindowsGpu::new();
+        let context = gpu.open_device().expect("open the media adapter's device");
+        let opening = Instant::now();
+        let mut enc = if gpu_path {
+            MfCodecs::new()
+                .on_context(&context)
+                .expect("our context")
+                .expect("MF has a GPU path")
+                .video_encoder(&config)
+        } else {
+            MfCodecs::new().video_encoder(&config)
+        }
+        .unwrap_or_else(|e| panic!("a hardware H.264 encoder: {e}"));
+        let opened = opening.elapsed();
+        assert!(enc.info().hardware);
+        let making = Instant::now();
+        let ring: Vec<_> = if gpu_path {
+            (0..QUEUE + 2)
+                .map(|_| gpu.encode_target(&context, size).expect("encode target"))
+                .collect()
+        } else {
+            Vec::new()
+        };
+        let made = making.elapsed();
+        let tb = Timebase::MPEG_90K;
+        let mut out = Vec::new();
+        let mut queue: VecDeque<(VideoSurface, Instant)> = VecDeque::new();
+        let (mut accepted, mut dropped, mut busy, mut starved) = (0u32, 0u32, 0u32, 0u32);
+        let (mut waited, mut longest_wait, mut late) = (Duration::ZERO, Duration::ZERO, 0u32);
+        let (mut encoding, mut drawing, mut longest_draw) =
+            (Duration::ZERO, Duration::ZERO, Duration::ZERO);
+        let mut last_accept: Option<Instant> = None;
+        let mut longest_gap = Duration::ZERO;
+        let start = Instant::now();
+        for i in 0..FRAMES {
+            let due = start + period * i;
+            // Feed the encoder until this frame is due, as an encode thread polls.
+            loop {
+                enc.poll(&mut out).expect("poll");
+                while enc.can_accept() {
+                    let Some((frame, queued)) = queue.pop_front() else {
+                        break;
+                    };
+                    let began = Instant::now();
+                    match enc.encode(frame) {
+                        Ok(()) => {
+                            accepted += 1;
+                            let wait = began - queued;
+                            waited += wait;
+                            longest_wait = longest_wait.max(wait);
+                            if began.elapsed() + wait > period {
+                                late += 1;
+                            }
+                            if let Some(last) = last_accept {
+                                longest_gap = longest_gap.max(began - last);
+                            }
+                            last_accept = Some(began);
+                        }
+                        Err(PlatformError::Busy { .. }) => busy += 1,
+                        Err(e) => panic!("encode: {e}"),
+                    }
+                    encoding += began.elapsed();
+                    enc.poll(&mut out).expect("poll");
+                }
+                if Instant::now() >= due {
+                    break;
+                }
+                std::thread::sleep(Duration::from_millis(1));
+            }
+            let pts = MediaTime::new(i64::from(i) * 3000, tb);
+            let drawn = Instant::now();
+            let frame = if gpu_path {
+                // A target only the ring holds: the encoder let go of it once copied.
+                let Some(target) = ring.iter().find(|t| Arc::strong_count(t.sync()) == 1) else {
+                    starved += 1;
+                    continue;
+                };
+                draw_target(&context, target, f64::from(i % 30) / 30.0);
+                VideoSurface::Gpu(target.clone().with_pts(pts))
+            } else {
+                let info = VideoFrameInfo {
+                    size,
+                    format: PixelFormat::Nv12,
+                    color: ColorInfo::default(),
+                    pts,
+                };
+                VideoSurface::Cpu(VideoFrame::zeroed(info).expect("frame"))
+            };
+            let draw = drawn.elapsed();
+            drawing += draw;
+            longest_draw = longest_draw.max(draw);
+            if queue.len() == QUEUE {
+                queue.pop_front();
+                dropped += 1;
+            }
+            queue.push_back((frame, Instant::now()));
+        }
+        let ran = start.elapsed();
+        let ms = |d: Duration| d.as_secs_f64() * 1000.0;
+        let per = |d: Duration, n: u32| ms(d) / f64::from(n.max(1));
+        let report = format!(
+            "{} path, {}: opened in {:.0} ms, ring made in {:.0} ms; over {:.1} s: {accepted} of \
+             {FRAMES} frames encoded ({:.1} fps), {dropped} dropped at the full queue, {busy} \
+             refused busy, {starved} with no free target, {late} late; a frame waited {:.1} ms \
+             on average for the encoder ({:.0} ms at most), the longest gap between two frames \
+             it took was {:.0} ms; encode calls {:.2} ms each; draws {:.2} ms each ({:.1} ms at \
+             most); {} packets",
+            if gpu_path { "GPU" } else { "CPU" },
+            enc.info().name,
+            ms(opened),
+            ms(made),
+            ran.as_secs_f64(),
+            f64::from(accepted) / ran.as_secs_f64(),
+            per(waited, accepted),
+            ms(longest_wait),
+            ms(longest_gap),
+            per(encoding, accepted + busy),
+            per(drawing, FRAMES - starved),
+            ms(longest_draw),
+            out.len(),
+        );
+        enc.finish(&mut out).expect("finish");
+        assert!(
+            accepted >= FRAMES * 95 / 100,
+            "the hardware encoder fell behind at 1080p30: {report}"
+        );
+        // Release the encoder's textures before the context's device.
+        drop(enc);
+        drop(queue);
+        drop(ring);
+        drop(context);
+    }
+
     fn encode_from_targets(codec: Codec) {
         use std::sync::Arc;
 

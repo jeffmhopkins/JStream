@@ -612,6 +612,13 @@ covers = ["crates/jstream-core/src/activity.rs", "crates/jstream-core/src/audio.
   finish phase. A meter keeps its units in maps from frame to frame, so a steady frame
   allocates nothing, and publishes running totals once a second through `arc-swap`
   (`DrawerSlot`); the render thread's collector frees the totals it replaces. The
+  render thread also times one frame in four (`GPU_EVERY`) on the GPU, where the device
+  has timestamp queries: `DrawMeter::begin_gpu` opens it on the compositor
+  (`Compositor::begin_gpu_frame`), `compose_metered` names each unit as its work starts
+  (`Compositor::gpu_unit`, by an id the meter gives the unit on its first timed frame),
+  and the times that come back a frame or two later go into the unit's `gpu_frames` and
+  `gpu_nanos`, so each unit's `gpu_ms` is its average over the timed frames it ran in and
+  `gpu_timing` is on once any unit carries one. The preview hub's thread times none. The
   `jstream-sources` thread counts each source's paints and builds, and the planner each
   source's look and each plan, in the live sources' `SourceMeters`. The `Profiler`
   reads all of them, the threads from the host's `ThreadCpu`
@@ -4313,11 +4320,12 @@ frame read back goes out a few ticks after it was drawn, with the time it was dr
 for, so it stays on the audio's clock; a tick whose frame is still on its way pushes
 nothing, a tick that drew nothing (a failed draw, a fallback opening, a broken stage)
 repeats the last frame at the tick, and no push goes back in time
-(`MixFrame::push_time`). When all three buffers are still on their way the GPU is
+(`MixFrame::push_time`). A readback's latency varies, so two can land on one tick: an
+encoder session gets both, the older first (`MixFrame::earlier`), and a picture stream
+or virtual camera only the newest. When all three buffers are still on their way the GPU is
 behind: a mix that only feeds readbacks skips that tick's composite (its layers kept,
 as a mix not due keeps them) and pushes nothing, so the queue doesn't grow. Those
-ticks, frames collected in the same tick as a newer one, and frames that land behind
-a repeat are all counted in `render_ticks`, and so is a monitored scene a preview stream
+ticks and frames that land behind a repeat are counted in `render_ticks`, and so is a monitored scene a preview stream
 shows (*Preview*), drawn after every mix, when the tick's period ran out before it
 began. The first tick is drawn at once; later ones fall
 on the frame grid, multiples of the base frame period on the media clock
@@ -4424,6 +4432,9 @@ no time back for it leaves it) goes to `jstream-device-losses` as `GpuEvent::Slo
 beside the losses (`GpuEvent::Lost`). The engine quarantines it there, as above, and
 sends `gpu.effect_slow`; its passes draw until the new snapshot is adopted. A GPU
 without timestamp queries times nothing, and only a device loss guards it.
+Each tick then takes the units' GPU times that came back and, one tick in four, times
+its own (`DrawMeter::begin_gpu`, closed with `end_gpu` once the tick has drawn), for
+`profile.get`'s `gpu_ms` (the Profile paragraph in [Contents](#contents-media)).
 
 A session on the GPU encode path rules the fallback out: its encode targets are the
 context's, which a compositor on its own device can't write. If one runs when the
