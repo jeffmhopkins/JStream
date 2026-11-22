@@ -1,11 +1,13 @@
-//! The Properties dialog's live picture of a display, window, webcam or capture card
-//! (DL-02): what the settings being edited capture, before OK saves them, so the user
-//! sees the device they pick. It is a `preview.subscribe` stream of the draft source
-//! (`source`, protocol 0.49) on a channel tapped from the canvas's binary channel
-//! ([`taps`](crate::canvas::taps)), and it follows the draft: a change of what is
-//! captured closes the stream and opens the next on a new channel. The engine opens
+//! The Properties dialog's live picture of its source (DL-02), on a channel tapped from
+//! the canvas's binary channel ([`taps`](crate::canvas::taps)). A display, window,
+//! webcam or capture card shows what the settings being edited capture, before OK saves
+//! them, so the user sees the device they pick: a `preview.subscribe` stream of the
+//! draft source (`source`, protocol 0.49) that follows the draft, a change of what is
+//! captured closing the stream and opening the next on a new channel. The engine opens
 //! the capture for the stream alone, sharing a webcam already open; the picture never
-//! reaches program.
+//! reaches program. Any other source with a picture shows the source itself
+//! (`source_id`, 0.56), with its filters, so a live setting's live value shows as it is
+//! edited and the rest once OK saves it.
 //!
 //! Docs: docs/UI-FEATURES.md#dialogs
 
@@ -13,7 +15,7 @@ use crate::app::SessionContext;
 use crate::canvas::screen::Screen;
 use crate::canvas::taps::{Handler, PreviewTaps};
 use jstream_control::Control;
-use jstream_control::protocol::{Action, Call, PreviewCodec, PreviewDraft, Settings};
+use jstream_control::protocol::{Action, Call, PreviewCodec, PreviewDraft, Settings, SourceId};
 use leptos::html::Canvas;
 use leptos::prelude::*;
 use leptos::task::spawn_local;
@@ -26,7 +28,8 @@ const MAX: (u32, u32) = (640, 360);
 /// Pictures per second: enough to judge a camera's framing and motion.
 const FPS: u32 = 15;
 
-/// Whether the dialog shows a picture for sources of `kind_id`: the capture kinds.
+/// Whether the dialog shows a picture of the draft for sources of `kind_id`: the
+/// capture kinds. Any other source with a picture shows its saved self.
 pub fn shows(kind_id: &str) -> bool {
     matches!(kind_id, "display" | "window" | "webcam")
 }
@@ -60,12 +63,36 @@ pub fn hint(kind_id: &str, settings: &Settings) -> Option<&'static str> {
     (kind_id == "window" && empty("target")).then_some("Pick a window to see it here.")
 }
 
-/// The `preview.subscribe` for the draft `settings` of a `kind_id` source on `channel`.
-pub fn subscribe(channel: u32, kind_id: &str, settings: Settings, h264: bool) -> Action {
+/// What a picture shows.
+#[derive(Clone, Debug, PartialEq)]
+pub enum Shows {
+    /// A source the draft describes, which isn't saved.
+    Draft {
+        /// Its kind.
+        kind: String,
+        /// The settings its capture reads.
+        settings: Settings,
+    },
+    /// The saved source, with its filters.
+    Source(SourceId),
+}
+
+/// The `preview.subscribe` for `shows` on `channel`.
+pub fn subscribe(channel: u32, shows: &Shows, h264: bool) -> Action {
     let codecs = if h264 {
         vec![PreviewCodec::H264, PreviewCodec::Jpeg]
     } else {
         vec![PreviewCodec::Jpeg]
+    };
+    let (source, source_id) = match shows {
+        Shows::Draft { kind, settings } => (
+            Some(PreviewDraft {
+                kind: kind.clone(),
+                settings: settings.clone(),
+            }),
+            None,
+        ),
+        Shows::Source(id) => (None, Some(id.clone())),
     };
     Action::PreviewSubscribe {
         channel,
@@ -74,11 +101,8 @@ pub fn subscribe(channel: u32, kind_id: &str, settings: Settings, h264: bool) ->
         fps: Some(FPS),
         codecs,
         scene_id: None,
-        source: Some(PreviewDraft {
-            kind: kind_id.to_owned(),
-            settings,
-        }),
-        source_id: None,
+        source,
+        source_id,
     }
 }
 
@@ -118,11 +142,14 @@ async fn act(control: &Weak<dyn Control>, action: Action) -> Option<Result<(), S
     )
 }
 
-/// The picture of what `draft` captures, for a `kind_id` source.
+/// The picture of the source: of what `draft` captures for a capture kind
+/// ([`shows`]), else of the saved `source_id`.
 #[component]
-pub fn DevicePreview(
-    /// The source's kind: `display`, `window` or `webcam`.
+pub fn SourcePreview(
+    /// The source's kind.
     kind_id: String,
+    /// The source.
+    source_id: SourceId,
     /// The settings the dialog is editing.
     draft: RwSignal<Settings>,
 ) -> impl IntoView {
@@ -134,11 +161,26 @@ pub fn DevicePreview(
     let shown = RwSignal::new(Shown::Starting);
     let wanted = {
         let kind_id = kind_id.clone();
-        Memo::new(move |_| draft.with(|d| captured(&kind_id, d)))
+        let draft_kind = shows(&kind_id);
+        Memo::new(move |_| {
+            if draft_kind {
+                Shows::Draft {
+                    kind: kind_id.clone(),
+                    settings: draft.with(|d| captured(&kind_id, d)),
+                }
+            } else {
+                Shows::Source(source_id.clone())
+            }
+        })
     };
     let hint = {
         let kind_id = kind_id.clone();
-        move || wanted.with(|w| hint(&kind_id, w))
+        move || {
+            wanted.with(|w| match w {
+                Shows::Draft { settings, .. } => hint(&kind_id, settings),
+                Shows::Source(_) => None,
+            })
+        }
     };
     // The open stream's channel, and whether H.264 is still asked for.
     let open = StoredValue::new_local(None::<u32>);
@@ -172,8 +214,7 @@ pub fn DevicePreview(
         let screen = Rc::clone(&screen);
         let taps = taps.clone();
         let control = control.clone();
-        let kind_id = kind_id.clone();
-        Rc::new(move |settings: Settings| {
+        Rc::new(move |wanted: Shows| {
             let (Some(taps), Some(control)) = (taps.clone(), control.clone()) else {
                 shown.set(Shown::Ended("the preview isn't available here".into()));
                 return;
@@ -189,8 +230,7 @@ pub fn DevicePreview(
                 let screen = Rc::clone(&screen);
                 let h264 = Rc::clone(&h264);
                 let control = control.clone();
-                let kind_id = kind_id.clone();
-                let settings = settings.clone();
+                let wanted = wanted.clone();
                 Box::new(move |frame| {
                     let header = frame.header;
                     if header.end {
@@ -216,15 +256,14 @@ pub fn DevicePreview(
                         // reused.
                         h264.set(false);
                         let control = control.clone();
-                        let kind_id = kind_id.clone();
-                        let settings = settings.clone();
+                        let wanted = wanted.clone();
                         spawn_local(async move {
                             let close = Action::PreviewUnsubscribe { channel };
                             let _closed = act(&control, close).await;
                             if !still_open(open.try_get_value().flatten(), channel) {
                                 return;
                             }
-                            let again = subscribe(channel, &kind_id, settings, false);
+                            let again = subscribe(channel, &wanted, false);
                             if let Some(Err(error)) = act(&control, again).await {
                                 shown.try_set(Shown::Ended(error));
                             }
@@ -233,7 +272,7 @@ pub fn DevicePreview(
                 })
             };
             taps.insert(channel, handler);
-            let open_now = subscribe(channel, &kind_id, settings, h264.get());
+            let open_now = subscribe(channel, &wanted, h264.get());
             spawn_local(async move {
                 if let Some(before) = before {
                     let _closed =
@@ -252,8 +291,7 @@ pub fn DevicePreview(
     {
         let reopen = Rc::clone(&reopen);
         Effect::new(move |_| {
-            let settings = wanted.get();
-            reopen(settings);
+            reopen(wanted.get());
         });
     }
     // Handles only: the cleanup runs where any other may.
@@ -289,8 +327,10 @@ pub fn DevicePreview(
 
 #[cfg(test)]
 mod tests {
-    use super::{FPS, MAX, Shown, after_picture, captured, hint, shows, still_open, subscribe};
-    use jstream_control::protocol::{Action, PreviewCodec, PreviewDraft, Settings};
+    use super::{
+        FPS, MAX, Shown, Shows, after_picture, captured, hint, shows, still_open, subscribe,
+    };
+    use jstream_control::protocol::{Action, PreviewCodec, PreviewDraft, Settings, SourceId};
     use serde_json::json;
 
     fn settings(value: serde_json::Value) -> Settings {
@@ -362,7 +402,14 @@ mod tests {
             scene_id,
             source,
             source_id: None,
-        } = subscribe(7, "webcam", draft.clone(), true)
+        } = subscribe(
+            7,
+            &Shows::Draft {
+                kind: "webcam".into(),
+                settings: draft.clone(),
+            },
+            true,
+        )
         else {
             panic!("a subscribe");
         };
@@ -380,7 +427,11 @@ mod tests {
                 settings: draft.clone(),
             })
         );
-        let Action::PreviewSubscribe { codecs, .. } = subscribe(8, "webcam", draft, false) else {
+        let shows = Shows::Draft {
+            kind: "webcam".into(),
+            settings: draft,
+        };
+        let Action::PreviewSubscribe { codecs, .. } = subscribe(8, &shows, false) else {
             panic!("a subscribe");
         };
         assert_eq!(
@@ -388,5 +439,21 @@ mod tests {
             vec![PreviewCodec::Jpeg],
             "JPEG only once H.264 failed"
         );
+    }
+
+    #[test]
+    fn a_saved_source_is_asked_for_by_its_id() {
+        let Action::PreviewSubscribe {
+            source,
+            source_id,
+            scene_id,
+            ..
+        } = subscribe(3, &Shows::Source(SourceId::new("logo")), true)
+        else {
+            panic!("a subscribe");
+        };
+        assert_eq!(source, None);
+        assert_eq!(scene_id, None);
+        assert_eq!(source_id, Some(SourceId::new("logo")));
     }
 }

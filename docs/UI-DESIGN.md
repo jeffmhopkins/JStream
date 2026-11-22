@@ -137,7 +137,8 @@ Two levels, and never two rows of underlined tabs one under the other:
 - **Inside a panel or dialog**: a segmented control (`.segmented`): a 2 px inset track
   with a border, 24 px segments in sentence case, the chosen one filled with
   `--selected`. `.full` spreads it over its row, as the Inspector's Transform, Motion and
-  Behaviour do; a segment may end with a count ("Source 3"). The same control picks
+  Behaviour do; a segment may end with a count ("Source 3", the Properties dialogs'
+  "Filters 2"). The same control picks
   between a few values, as Align to's Selection and Canvas.
 - **A dialog's pages** (Settings): a rail on the left of 32 px items in sentence case,
   the page shown filled with `--hover`, with no border.
@@ -188,6 +189,8 @@ The property grid, as OBS's Properties lay a source's settings out:
 - Booleans: a toggle (`input.toggle`) for a setting that applies at once, a checkbox for
   one that waits for OK. Both sit in the control column. A toggle's label is a `<label for>`, so a click on it
   flips the toggle.
+- A file reads its path, then Browse… where the app can open a file dialog, then a
+  short select of where the path starts.
 - Related rows are grouped under [eyebrow](#type) headings.
 - A panel's rows follow the same rule in less room: the Inspector's labels sit in an
   88 px column, its controls 28 px tall.
