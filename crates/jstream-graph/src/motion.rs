@@ -8,7 +8,9 @@
 //! Docs: docs/adr/0099-native-motion-modifiers-and-timelines.md
 
 use crate::apply::invalid;
-use jstream_anim::{Audio, Clock, Curve, Kind, Measure, Modifier, Property, Shape};
+use jstream_anim::{Audio, Clock, Curve, Kind, Measure, Midi, Modifier, Property, Shape};
+#[cfg(test)]
+use jstream_protocol::MotionMidiControl;
 use jstream_protocol::{
     CameraMotionModifier, CameraProperty, MotionClock, MotionCurve, MotionEffect, MotionKind,
     MotionMeasure, MotionModifier, MotionProperty, MotionSetting, MotionShape, ProtocolError,
@@ -188,13 +190,19 @@ fn kind(k: &MotionKind) -> Option<Kind> {
             ceiling_db: ceiling_db.get(),
             attack_ms: attack_ms as f32,
             release_ms: release_ms as f32,
-            curve: match curve {
-                MotionCurve::Linear => Curve::Linear,
-                MotionCurve::EaseIn => Curve::EaseIn,
-                MotionCurve::EaseOut => Curve::EaseOut,
-                MotionCurve::EaseInOut => Curve::EaseInOut,
-                _ => return None,
-            },
+            curve: anim_curve(curve)?,
+            from: f64::from(from.get()),
+            to: f64::from(to.get()),
+        }),
+        MotionKind::Midi {
+            smoothing_ms,
+            curve,
+            from,
+            to,
+            ..
+        } => Kind::Midi(Midi {
+            smoothing_ms: smoothing_ms as f32,
+            curve: anim_curve(curve)?,
             from: f64::from(from.get()),
             to: f64::from(to.get()),
         }),
@@ -209,6 +217,17 @@ fn kind(k: &MotionKind) -> Option<Kind> {
             decay_per_s: f64::from(decay_per_s.get()),
             duration_ms: f64::from(duration_ms),
         },
+        _ => return None,
+    })
+}
+
+/// `curve` as `jstream-anim` bends with it, or `None` for one this version doesn't know.
+fn anim_curve(curve: MotionCurve) -> Option<Curve> {
+    Some(match curve {
+        MotionCurve::Linear => Curve::Linear,
+        MotionCurve::EaseIn => Curve::EaseIn,
+        MotionCurve::EaseOut => Curve::EaseOut,
+        MotionCurve::EaseInOut => Curve::EaseInOut,
         _ => return None,
     })
 }
@@ -280,6 +299,26 @@ mod tests {
                 ceiling_db: f(0.0),
                 attack_ms: 10_000,
                 release_ms: 0,
+                curve: MotionCurve::Linear,
+                from: f(100_000.0),
+                to: f(-100_000.0),
+            },
+            MotionKind::Midi {
+                control: MotionMidiControl::Cc,
+                controller: Some(127),
+                channel: Some(16),
+                input: Some("x".repeat(64)),
+                smoothing_ms: 10_000,
+                curve: MotionCurve::EaseInOut,
+                from: f(-100_000.0),
+                to: f(100_000.0),
+            },
+            MotionKind::Midi {
+                control: MotionMidiControl::PitchBend,
+                controller: None,
+                channel: None,
+                input: None,
+                smoothing_ms: 0,
                 curve: MotionCurve::Linear,
                 from: f(100_000.0),
                 to: f(-100_000.0),

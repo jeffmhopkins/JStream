@@ -2152,6 +2152,73 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -5519,6 +5586,26 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionMidiControl": {
+            "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
+            "oneOf": [
+              {
+                "const": "cc",
+                "description": "A control change: `controller`'s value, 0 to 127, as 0 to 1.",
+                "type": "string"
+              },
+              {
+                "const": "pitch_bend",
+                "description": "The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.",
+                "type": "string"
+              },
+              {
+                "const": "pressure",
+                "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -5718,6 +5805,73 @@ source: crates/jstream-mcp/src/tests.rs
                     "$ref": "#/$defs/Finite32",
                     "default": 1.0,
                     "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
                   }
                 },
                 "required": [
@@ -9093,6 +9247,73 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -12460,6 +12681,26 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionMidiControl": {
+            "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
+            "oneOf": [
+              {
+                "const": "cc",
+                "description": "A control change: `controller`'s value, 0 to 127, as 0 to 1.",
+                "type": "string"
+              },
+              {
+                "const": "pitch_bend",
+                "description": "The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.",
+                "type": "string"
+              },
+              {
+                "const": "pressure",
+                "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -12659,6 +12900,73 @@ source: crates/jstream-mcp/src/tests.rs
                     "$ref": "#/$defs/Finite32",
                     "default": 1.0,
                     "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
                   }
                 },
                 "required": [
@@ -17944,6 +18252,73 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -21311,6 +21686,26 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionMidiControl": {
+            "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
+            "oneOf": [
+              {
+                "const": "cc",
+                "description": "A control change: `controller`'s value, 0 to 127, as 0 to 1.",
+                "type": "string"
+              },
+              {
+                "const": "pitch_bend",
+                "description": "The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.",
+                "type": "string"
+              },
+              {
+                "const": "pressure",
+                "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -21510,6 +21905,73 @@ source: crates/jstream-mcp/src/tests.rs
                     "$ref": "#/$defs/Finite32",
                     "default": 1.0,
                     "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
                   }
                 },
                 "required": [
@@ -23425,6 +23887,26 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionMidiControl": {
+            "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
+            "oneOf": [
+              {
+                "const": "cc",
+                "description": "A control change: `controller`'s value, 0 to 127, as 0 to 1.",
+                "type": "string"
+              },
+              {
+                "const": "pitch_bend",
+                "description": "The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.",
+                "type": "string"
+              },
+              {
+                "const": "pressure",
+                "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -23624,6 +24106,73 @@ source: crates/jstream-mcp/src/tests.rs
                     "$ref": "#/$defs/Finite32",
                     "default": 1.0,
                     "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
                   }
                 },
                 "required": [
@@ -27073,6 +27622,73 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -30436,6 +31052,26 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionMidiControl": {
+            "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
+            "oneOf": [
+              {
+                "const": "cc",
+                "description": "A control change: `controller`'s value, 0 to 127, as 0 to 1.",
+                "type": "string"
+              },
+              {
+                "const": "pitch_bend",
+                "description": "The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.",
+                "type": "string"
+              },
+              {
+                "const": "pressure",
+                "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -30635,6 +31271,73 @@ source: crates/jstream-mcp/src/tests.rs
                     "$ref": "#/$defs/Finite32",
                     "default": 1.0,
                     "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
                   }
                 },
                 "required": [
@@ -33568,6 +34271,73 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -33770,6 +34540,26 @@ source: crates/jstream-mcp/src/tests.rs
               {
                 "const": "band",
                 "description": "The spectrum between `low_hz` and `high_hz`, as an amplitude: a full-scale sine\ninside the band reads 0 dBFS.",
+                "type": "string"
+              }
+            ]
+          },
+          "MotionMidiControl": {
+            "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
+            "oneOf": [
+              {
+                "const": "cc",
+                "description": "A control change: `controller`'s value, 0 to 127, as 0 to 1.",
+                "type": "string"
+              },
+              {
+                "const": "pitch_bend",
+                "description": "The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.",
+                "type": "string"
+              },
+              {
+                "const": "pressure",
+                "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
                 "type": "string"
               }
             ]
@@ -37483,6 +38273,73 @@ source: crates/jstream-mcp/src/tests.rs
                 "type": "object"
               },
               {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
                 "description": "A one-shot decaying shake, since 0.84 (#1107):\n`amplitude · e^(−decay_per_s·t) · sin(2π·frequency_hz·t)` for `t` seconds from\nthe start of its clock, until `duration_ms`, and 0 after. Usually on the\n`triggered` clock, so `item.trigger_motion` (a hotkey, say) fires it.",
                 "properties": {
                   "amplitude": {
@@ -40850,6 +41707,26 @@ source: crates/jstream-mcp/src/tests.rs
               }
             ]
           },
+          "MotionMidiControl": {
+            "description": "What a `midi` modifier follows (since 0.151, ADR-0168).",
+            "oneOf": [
+              {
+                "const": "cc",
+                "description": "A control change: `controller`'s value, 0 to 127, as 0 to 1.",
+                "type": "string"
+              },
+              {
+                "const": "pitch_bend",
+                "description": "The pitch bend, -8192 to 8191, as 0 to 1: the wheel at rest is one half.",
+                "type": "string"
+              },
+              {
+                "const": "pressure",
+                "description": "The channel pressure (aftertouch), 0 to 127, as 0 to 1.",
+                "type": "string"
+              }
+            ]
+          },
           "MotionModifier": {
             "description": "One motion modifier on an item (ADR-0099 decision 3).",
             "oneOf": [
@@ -41049,6 +41926,73 @@ source: crates/jstream-mcp/src/tests.rs
                     "$ref": "#/$defs/Finite32",
                     "default": 1.0,
                     "description": "Its value at the ceiling, within `-100000..=100000`; below `from` to invert.\nDefault 1."
+                  }
+                },
+                "required": [
+                  "kind"
+                ],
+                "type": "object"
+              },
+              {
+                "description": "Follows a MIDI controller (ADR-0168, since 0.151): `control`'s latest value on\n`channel` from `input`, as 0 to 1, followed over `smoothing_ms`, bent by `curve`\nand mapped onto `from..to`. Before the controller has sent anything it reads 0\n(a pitch bend one half), so the item rests at `from`.",
+                "properties": {
+                  "channel": {
+                    "description": "The channel, 1 to 16, as a MIDI device's panel shows it, or omitted for any:\nthen the latest value sent on any channel.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "control": {
+                    "$ref": "#/$defs/MotionMidiControl",
+                    "default": "cc",
+                    "description": "What it follows. Default `cc`."
+                  },
+                  "controller": {
+                    "description": "The controller number, 0 to 127, with `control` `cc` and only then.",
+                    "format": "uint8",
+                    "maximum": 255,
+                    "minimum": 0,
+                    "type": [
+                      "integer",
+                      "null"
+                    ]
+                  },
+                  "curve": {
+                    "$ref": "#/$defs/MotionCurve",
+                    "default": "linear",
+                    "description": "How the 0 to 1 value is bent. Default `linear`."
+                  },
+                  "from": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 0.0,
+                    "description": "Its value at the controller's lowest, in the property's unit, within\n`-100000..=100000`. Default 0."
+                  },
+                  "input": {
+                    "description": "The input, a MIDI port or a JTunnel sender by name, as a binding's trigger\nnames it, or omitted for any.",
+                    "type": [
+                      "string",
+                      "null"
+                    ]
+                  },
+                  "kind": {
+                    "const": "midi",
+                    "type": "string"
+                  },
+                  "smoothing_ms": {
+                    "default": 50,
+                    "description": "How long it takes to follow a new value, in milliseconds, `0..=10000`: about\ntwo thirds of the way in that time, a one-pole smoothing. 0 jumps at once.\nDefault 50, which hides a controller's 128 steps.",
+                    "format": "uint32",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "to": {
+                    "$ref": "#/$defs/Finite32",
+                    "default": 1.0,
+                    "description": "Its value at the controller's highest, within `-100000..=100000`; below\n`from` to invert. Default 1."
                   }
                 },
                 "required": [

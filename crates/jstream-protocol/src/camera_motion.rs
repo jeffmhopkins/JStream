@@ -4,7 +4,7 @@
 //! A scene with a camera may also hold `camera_motion`, at most [`MAX_MOTION_MODIFIERS`]
 //! [`CameraMotionModifier`]s, which change the camera continuously as it is drawn with the
 //! same kinds and clocks as an item's ([`MotionKind`], [`MotionClock`]), less `audio`,
-//! since a camera hears nothing. It may also hold
+//! since a camera hears nothing, and `midi` (ADR-0168), since it follows no controller. It may also hold
 //! `camera_follow`, a [`CameraFollow`], whose camera glides after the pointer over a
 //! display or window capture in the scene. Both belong to the scene family, beside the
 //! camera. Camera motion is set with `scene.set_camera_motion`. Since 0.91 the follow
@@ -133,6 +133,15 @@ pub fn check_camera_motion(motion: &[CameraMotionModifier]) -> Result<(), Motion
         return Err(MotionProblem {
             field: format!("motion.{n}.kind"),
             reason: "audio motion is for items: a camera hears nothing".into(),
+        });
+    }
+    if let Some(n) = motion
+        .iter()
+        .position(|m| matches!(m.kind, MotionKind::Midi { .. }))
+    {
+        return Err(MotionProblem {
+            field: format!("motion.{n}.kind"),
+            reason: "MIDI motion is for items: a camera follows no controller".into(),
         });
     }
     // The rest is what an item's list checks: the property is the camera's own.
@@ -487,6 +496,12 @@ mod tests {
             field_of(&[drift("a", CameraProperty::Fov), heard]).as_deref(),
             Some("motion.1.kind")
         );
+        // Nor does a MIDI one follow a controller there (ADR-0168).
+        let fader: CameraMotionModifier = serde_json::from_value(serde_json::json!({
+            "modifier_id": "fader", "property": "fov", "kind": "midi", "controller": 1
+        }))
+        .expect("parses");
+        assert_eq!(field_of(&[fader]).as_deref(), Some("motion.0.kind"));
     }
 
     #[test]
