@@ -31,7 +31,7 @@ use jstream_platform::GpuFrame;
 
 use crate::BrowserError;
 use crate::cpu_frames::{SLOTS, frame_bytes, slot_file};
-use crate::link::{Frames, PageFrames, Paint};
+use crate::link::{Frames, Import, PageFrames, Paint, Skipped};
 
 /// The private folder one helper writes its paints into; removed when dropped.
 pub(super) struct FramesDir(PathBuf);
@@ -113,7 +113,8 @@ impl Frames for CpuFrames {
         Box::new(CpuPageFrames {
             dir: Arc::clone(&self.dir),
             size,
-            state: Mutex::new(PageState::default()),
+            files: Mutex::new(Files::default()),
+            latest: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -126,33 +127,56 @@ struct CpuPageFrames {
     dir: Arc<Path>,
     /// The page's size: no paint is read that is larger.
     size: FrameSize,
-    state: Mutex<PageState>,
+    /// Taken by the reader thread alone, while it reads a paint.
+    files: Mutex<Files>,
+    /// The latest frame, apart from `files`, so reading it never waits for a read.
+    latest: Arc<Mutex<Option<Arc<VideoFrame>>>>,
 }
 
 #[derive(Default)]
-struct PageState {
+struct Files {
     /// The slot files opened so far, by the helper's handle.
-    files: HashMap<u64, File>,
-    latest: Option<Arc<VideoFrame>>,
+    open: HashMap<u64, File>,
     /// Whether a failed paint was logged since the last good one.
     warned: bool,
 }
 
+/// A paint read into its frame, made the latest when published.
+struct Read {
+    frame: Arc<VideoFrame>,
+    latest: Arc<Mutex<Option<Arc<VideoFrame>>>>,
+}
+
+impl Import for Read {
+    fn wait(&mut self) -> bool {
+        true
+    }
+
+    fn publish(self: Box<Self>) {
+        *self.latest.lock().unwrap_or_else(PoisonError::into_inner) = Some(self.frame);
+    }
+}
+
 impl PageFrames for CpuPageFrames {
-    /// Reads the paint's slot file into the page's latest frame. A paint that can't be
-    /// read is skipped, keeping the last frame, and logged once until one is read again.
-    fn paint(&self, paint: &Paint, pts: MediaTime) {
-        let mut state = self.state.lock().unwrap_or_else(PoisonError::into_inner);
-        match read(&self.dir, self.size, &mut state.files, paint, pts) {
+    /// Reads the paint's slot file into a new frame, which the release thread makes the
+    /// page's latest before freeing the slot. A paint that can't be read is skipped,
+    /// keeping the last frame, and logged once until one is read again.
+    fn import(&self, paint: &Paint, pts: MediaTime) -> Box<dyn Import> {
+        let mut files = self.files.lock().unwrap_or_else(PoisonError::into_inner);
+        match read(&self.dir, self.size, &mut files.open, paint, pts) {
             Ok(frame) => {
-                state.latest = Some(Arc::new(frame));
-                state.warned = false;
+                files.warned = false;
+                Box::new(Read {
+                    frame: Arc::new(frame),
+                    latest: Arc::clone(&self.latest),
+                })
             }
             Err(reason) => {
-                if !state.warned {
+                if !files.warned {
                     tracing::warn!(%reason, "a browser page's paint could not be read");
-                    state.warned = true;
+                    files.warned = true;
                 }
+                Box::new(Skipped)
             }
         }
     }
@@ -162,10 +186,9 @@ impl PageFrames for CpuPageFrames {
     }
 
     fn latest_cpu(&self) -> Option<Arc<VideoFrame>> {
-        self.state
+        self.latest
             .lock()
             .unwrap_or_else(PoisonError::into_inner)
-            .latest
             .clone()
     }
 }
@@ -261,24 +284,31 @@ mod tests {
             width: 2,
             height: 1,
         };
+        let take = |paint: &Paint| {
+            let mut import = page.import(paint, pts);
+            if import.wait() {
+                import.publish();
+            }
+        };
         // A file that isn't there yet: the paint is skipped.
-        page.paint(&paint, pts);
+        take(&paint);
         assert!(page.latest_cpu().is_none());
         let rgba = [1, 2, 3, 4, 5, 6, 7, 8];
         std::fs::write(slot_file(dir.path(), paint.handle), rgba).expect("a slot file");
-        page.paint(&paint, pts);
+        // Read, it is the latest only once published.
+        let mut import = page.import(&paint, pts);
+        assert!(import.wait());
+        assert!(page.latest_cpu().is_none());
+        import.publish();
         let frame = page.latest_cpu().expect("a frame");
         assert_eq!(frame.planes()[0].data(), &rgba);
         assert_eq!(frame.info().format, PixelFormat::Rgba8);
         // A paint larger than its page, or than any page, keeps the last frame.
-        page.paint(&Paint { width: 4, ..paint }, pts);
-        page.paint(
-            &Paint {
-                width: 100_000,
-                ..paint
-            },
-            pts,
-        );
+        take(&Paint { width: 4, ..paint });
+        take(&Paint {
+            width: 100_000,
+            ..paint
+        });
         assert_eq!(
             page.latest_cpu().expect("a frame").planes()[0].data(),
             &rgba

@@ -2,7 +2,8 @@
 //! package, a plugin's calls held to its grant, events handed to `on_event`, a plugin
 //! that traps or runs past its limit disabled with `plugin.state_changed`, and re-enabled
 //! only by `plugin.enable`; grants held to what the manifest asks for, and the installed
-//! plugins saved in the plugin folder and loaded again (ADR-0076).
+//! plugins saved in the plugin folder and loaded again (ADR-0076); and a plugin a person
+//! removes with `plugin.uninstall` stopped and forgotten.
 
 use super::{block_on, connected, create, edits};
 use crate::Engine;
@@ -144,6 +145,14 @@ fn install(plugin: &str, path: &Path, grant: PluginGrant) -> Call {
 fn enable(plugin: &str) -> Call {
     Call::Action {
         action: Action::PluginEnable {
+            plugin_id: PluginId::new(plugin),
+        },
+    }
+}
+
+fn uninstall(plugin: &str) -> Call {
+    Call::Action {
+        action: Action::PluginUninstall {
             plugin_id: PluginId::new(plugin),
         },
     }
@@ -325,6 +334,8 @@ fn the_plugin_session_answers_forbidden_outside_the_grant() {
         .is_ok()
     );
     let error = call(&control, enable("plg_s")).expect_err("never granted");
+    assert_eq!(error.code(), "forbidden");
+    let error = call(&control, uninstall("plg_s")).expect_err("never granted");
     assert_eq!(error.code(), "forbidden");
 }
 
@@ -1164,4 +1175,133 @@ fn a_saved_name_is_made_plain_when_loaded() {
     let engine = opened(&dir);
     let person = connected(&engine);
     assert_eq!(listed(&person)[0].remote_name.as_deref(), Some("Evil"));
+}
+
+/// The next `plugin.uninstalled` on `events`, waiting up to [`PATIENCE`]: the plugin it
+/// names.
+fn next_uninstalled(events: &mut EventStream) -> PluginId {
+    let deadline = Instant::now() + PATIENCE;
+    loop {
+        match events
+            .as_mut()
+            .poll_next(&mut Context::from_waker(Waker::noop()))
+        {
+            Poll::Ready(Some(Event::PluginUninstalled { plugin_id })) => return plugin_id,
+            Poll::Ready(Some(_)) => {}
+            Poll::Ready(None) => panic!("the event stream ended"),
+            Poll::Pending => {
+                assert!(
+                    Instant::now() < deadline,
+                    "timed out waiting for plugin.uninstalled"
+                );
+                std::thread::sleep(Duration::from_millis(10));
+            }
+        }
+    }
+}
+
+#[test]
+fn an_uninstalled_plugin_stops_and_is_forgotten() {
+    let dir = plugin_dir("uninstall");
+    let package_dir = package(
+        "uninstall_edits",
+        &calling_on_event(&create_scene("from_plugin")),
+        Some(ASKS_EDIT),
+    );
+    let engine = opened(&dir);
+    let person = connected(&engine);
+    let mut events = person.events();
+    call(
+        &person,
+        install("plg_u", &package_dir, grant(&[PluginClass::Edit])),
+    )
+    .expect("installs");
+    assert_eq!(next_state(&mut events).1, PluginState::Enabled);
+    // Its own `plugin.state_changed` is an event it handles too.
+    eventually("the plugin's scene", || {
+        scenes(&person).contains(&SceneId::new("from_plugin"))
+    });
+    // Let it settle: each later event's create fails as the scene exists.
+    std::thread::sleep(Duration::from_millis(200));
+
+    assert_eq!(call(&person, uninstall("plg_u")), Ok(CallResult::action()));
+    assert_eq!(next_uninstalled(&mut events), PluginId::new("plg_u"));
+    assert!(listed(&person).is_empty(), "it is no longer listed");
+    assert_eq!(
+        saved(&dir)["plugins"],
+        serde_json::json!([]),
+        "it is no longer saved"
+    );
+    assert!(
+        package_dir.join(MODULE_FILE).exists(),
+        "its package stays on disk"
+    );
+
+    // It gets no more events: the scene it made, once deleted, stays deleted.
+    call(
+        &person,
+        Call::Batch(edits(vec![jstream_protocol::Edit::SceneDelete {
+            scene_id: SceneId::new("from_plugin"),
+        }])),
+    )
+    .expect("the person's delete applies");
+    std::thread::sleep(Duration::from_millis(300));
+    assert!(!scenes(&person).contains(&SceneId::new("from_plugin")));
+
+    // Gone, it is `not_found`, and its ID is free to install again.
+    assert_eq!(
+        call(&person, uninstall("plg_u")),
+        Err(ProtocolError::NotFound {
+            entity: EntityKind::Plugin,
+            id: "plg_u".into(),
+        })
+    );
+    assert_eq!(
+        call(&person, enable("plg_u")).map_err(|e| e.code()),
+        Err("not_found")
+    );
+    call(
+        &person,
+        install("plg_u", &package_dir, PluginGrant::default()),
+    )
+    .expect("installs again");
+    assert_eq!(listed(&person).len(), 1);
+    assert_eq!(
+        listed(&person)[0].grant,
+        PluginGrant::default(),
+        "with a new grant"
+    );
+}
+
+#[test]
+fn an_uninstalled_plugin_isnt_loaded_again() {
+    let dir = plugin_dir("uninstall_saved");
+    let traps = package("uninstall_traps", TRAPS, None);
+    let idle = package("uninstall_idle", IDLE, None);
+    {
+        let engine = opened(&dir);
+        let person = connected(&engine);
+        let mut events = person.events();
+        call(&person, install("plg_t", &traps, PluginGrant::default())).expect("installs");
+        call(&person, install("plg_i", &idle, PluginGrant::default())).expect("installs");
+        // The trapping one faults on an event and is disabled; a disabled plugin can be
+        // removed too.
+        call(&person, create_scene("trigger")).expect("applies");
+        eventually("the trapping plugin to be disabled", || {
+            listed(&person)
+                .iter()
+                .any(|p| p.plugin_id == PluginId::new("plg_t") && p.state == PluginState::Disabled)
+        });
+        assert_eq!(call(&person, uninstall("plg_t")), Ok(CallResult::action()));
+        assert_eq!(next_uninstalled(&mut events), PluginId::new("plg_t"));
+    }
+    let file = saved(&dir);
+    let plugins = file["plugins"].as_array().expect("plugins");
+    assert_eq!(plugins.len(), 1, "{file}");
+    assert_eq!(plugins[0]["plugin_id"], "plg_i");
+
+    let engine = opened(&dir);
+    let person = connected(&engine);
+    let ids: Vec<PluginId> = listed(&person).into_iter().map(|p| p.plugin_id).collect();
+    assert_eq!(ids, [PluginId::new("plg_i")]);
 }

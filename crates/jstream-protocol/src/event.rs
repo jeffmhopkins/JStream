@@ -271,6 +271,14 @@ pub enum Event {
         #[serde(default, skip_serializing_if = "Option::is_none")]
         remote_name: Option<String>,
     },
+    /// A person removed a plugin with `plugin.uninstall` (0.163): it no longer runs and
+    /// is no longer listed. A client that shows the plugins drops it, or reads
+    /// `plugin.list` again.
+    #[serde(rename = "plugin.uninstalled")]
+    PluginUninstalled {
+        /// The plugin.
+        plugin_id: PluginId,
+    },
     /// The program stage's GPU device was lost (0.61, #349): a GPU hang that the OS
     /// reset (Windows' TDR), a driver reset or a removed GPU. The engine opens a new
     /// device and the outputs repeat their last frame meanwhile, unless `recovering` is
@@ -422,6 +430,7 @@ impl Event {
             Event::YoutubeStats { .. } => Some("youtube.stats"),
             Event::MetersTick { .. } => Some("meters.tick"),
             Event::PluginStateChanged { .. } => Some("plugin.state_changed"),
+            Event::PluginUninstalled { .. } => Some("plugin.uninstalled"),
             Event::GpuDeviceLost { .. } => Some("gpu.device_lost"),
             Event::GpuEffectSlow { .. } => Some("gpu.effect_slow"),
             Event::StudioChanged { .. } => Some("studio.changed"),

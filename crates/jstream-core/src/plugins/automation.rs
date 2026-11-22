@@ -2,7 +2,8 @@
 //! host.
 //!
 //! `plugin.install` loads a package's module and `plugin.enable` loads it again after
-//! the engine disabled it; `plugin.grant` replaces what it may do. Each running plugin has
+//! the engine disabled it; `plugin.grant` replaces what it may do, and
+//! `plugin.uninstall` stops it and forgets it. Each running plugin has
 //! a thread of its own (`jstream-plugin`), which loads the module and then hands it the
 //! engine's events one at a time, and, when the plugin exports [`EVENT_ENTRY`], a second
 //! thread (`jstream-plugin-events`) that moves the events of its subscription into the
@@ -295,6 +296,7 @@ pub(crate) fn action(
             set_grant(engine, client_id, plugin_id, grant.clone())
         }
         Action::PluginEnable { plugin_id } => enable(engine, plugin_id),
+        Action::PluginUninstall { plugin_id } => uninstall(engine, plugin_id),
         _ => return None,
     };
     Some(result.map(|()| CallResult::action()))
@@ -385,6 +387,47 @@ fn enable(engine: &Engine, plugin_id: &PluginId) -> Result<(), ProtocolError> {
     let loaded = load(engine, plugin_id, was);
     save(engine);
     loaded
+}
+
+/// Removes `plugin_id`: the engine forgets it and its grant, saves the plugins file
+/// without it, and then reports it with `plugin.uninstalled`, as [`Instance::disable`]
+/// saves before it reports (#1123). A running plugin's events stop, its grant is cut to
+/// `read` at once so a call it is still making can't edit, and its handles drop, so its
+/// threads end once the invocation it is in returns; a fault after that finds no entry
+/// to disable, and a later run under the same ID has another run number. One that is
+/// still `Starting` is refused, since the install or enable loading it would otherwise
+/// find its entry gone, or a new one under the same ID. Its package is left on disk.
+fn uninstall(engine: &Engine, plugin_id: &PluginId) -> Result<(), ProtocolError> {
+    let registry = engine.automation();
+    let events = {
+        let mut plugins = lock(&registry.plugins);
+        let starting = match plugins.get(plugin_id) {
+            None => return Err(not_found(plugin_id)),
+            Some(entry) => matches!(entry.state, Run::Starting(_)),
+        };
+        if starting {
+            return Err(ProtocolError::ActionFailed {
+                reason: "it is still loading: remove it once its install or enable answers".into(),
+            });
+        }
+        let Some(entry) = plugins.remove(plugin_id) else {
+            return Err(not_found(plugin_id));
+        };
+        // A call in flight keeps only `read` from here, as its session shares this grant
+        // (#1574 review N2).
+        *lock(&entry.grant) = PluginGrant::default();
+        match entry.state {
+            Run::Running(running) => running.events,
+            _ => None,
+        }
+    };
+    events::close(events);
+    save(engine);
+    tracing::info!(plugin_id = %plugin_id, "plugin uninstalled");
+    engine.emit(&Event::PluginUninstalled {
+        plugin_id: plugin_id.clone(),
+    });
+    Ok(())
 }
 
 /// Loads `plugin_id`'s package again, for an enable or a start of the saved plugins: its

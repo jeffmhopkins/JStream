@@ -120,8 +120,8 @@ names none.
 **Not here:** installing plugins, the package and its manifest, the person's grant and
 the scoped session that holds a plugin to it, pumping a plugin's events into its queue
 and the entry that handles them (`on_event`), and disabling a failed plugin with
-`plugin.state_changed`, saving the installed plugins and holding a grant to what the
-manifest asks for. `jstream-core` does all of these
+`plugin.state_changed`, saving the installed plugins, holding a grant to what the
+manifest asks for, and removing a plugin (`plugin.uninstall`). `jstream-core` does all of these
 ([ADR-0075](../../docs/adr/0075-wasm-plugin-host-in-the-engine.md),
 [ADR-0076](../../docs/adr/0076-saved-wasm-plugins-and-manifest-requests.md)). Not
 anywhere yet: a private data folder per plugin and the file imports it would need, and

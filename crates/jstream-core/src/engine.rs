@@ -5997,7 +5997,9 @@ impl State {
                     call: other.name().into(),
                 });
             }
-            Action::PluginGrant { plugin_id, .. } | Action::PluginEnable { plugin_id } => {
+            Action::PluginGrant { plugin_id, .. }
+            | Action::PluginEnable { plugin_id }
+            | Action::PluginUninstall { plugin_id } => {
                 return Err(ProtocolError::NotFound {
                     entity: EntityKind::Plugin,
                     id: plugin_id.to_string(),

@@ -192,6 +192,9 @@ fn describe_action(action: &Action, state: &State) -> String {
         Action::PluginEnable { plugin_id } => {
             format!("Enabled plugin {}", quote(plugin_id.as_str()))
         }
+        Action::PluginUninstall { plugin_id } => {
+            format!("Removed plugin {}", quote(plugin_id.as_str()))
+        }
         Action::CodecDownload { download_id } => {
             format!("Downloaded codec {}", quote(download_id))
         }
