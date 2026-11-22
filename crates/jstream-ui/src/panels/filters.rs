@@ -339,7 +339,7 @@ fn chain_of(category: KindCategory) -> Option<FilterChain> {
 const PLUGINS_GROUP: &str = "Plugins";
 
 /// The Plugins group when an audio chain has no CLAP plugin to offer: where to look, and
-/// a link to the Settings dialog's Audio plugins page (#1212).
+/// a link to the Settings dialog's Audio page, whose Audio plugins section says (#1212).
 fn no_clap_plugins(settings: Option<SettingsDialog>) -> AnyView {
     view! {
         <div class="add-filter-group">{PLUGINS_GROUP}</div>
@@ -349,7 +349,7 @@ fn no_clap_plugins(settings: Option<SettingsDialog>) -> AnyView {
                 <button
                     type="button"
                     class="link"
-                    on:click=move |_| settings.open(SettingsPage::AudioPlugins)
+                    on:click=move |_| settings.open(SettingsPage::Audio)
                 >
                     "Where to install them…"
                 </button>
