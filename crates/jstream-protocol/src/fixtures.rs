@@ -1813,6 +1813,10 @@ pub(crate) fn actions() -> Vec<Action> {
         Action::SourceRestart {
             source_id: SourceId::new("src_1"),
         },
+        // The media clock, held and stepped to render frame by frame (ADR-0172).
+        Action::ClockHold,
+        Action::ClockStep { ms: 33 },
+        Action::ClockRelease,
     ]
 }
 

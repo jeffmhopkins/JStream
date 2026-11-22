@@ -1064,6 +1064,52 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
+          "description": "Holds the engine's media clock where it is now (ADR-0172, since 0.134): every\nanimation it draws (transitions and Moves, motion modifiers, timelines, a sky's\nwarp, animated sources) and what `video.snapshot` and `video.frames` draw stand\nstill at that moment until `clock.step` moves them on. It is for rendering a\nmove frame by frame on a machine too slow to draw it in real time: hold, then\n`clock.step` and `video.snapshot` once per frame, then `clock.release`. Holding\nit again keeps the time it is held at. Runtime state: it changes no `rev`, is\nnever undone and is not saved. Fails with `action_failed` while an output is\nrunning, since an output's pictures and sound follow real time.",
+          "properties": {
+            "type": {
+              "const": "clock.hold",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Moves the held media clock on by `ms` milliseconds (ADR-0172, since 0.134), one\nframe's worth at a time for a render: 33 for 30 fps. Fails with\n`invalid_argument` on `ms` for 0 or more than 10000, or a step the held time\ncan't take, and with `action_failed` when the clock isn't held. A timeline cue\nthe step passes has fired by the time it returns.",
+          "properties": {
+            "ms": {
+              "description": "How far to move it, in milliseconds, 1 to 10000.",
+              "format": "uint32",
+              "minimum": 0,
+              "type": "integer"
+            },
+            "type": {
+              "const": "clock.step",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type",
+            "ms"
+          ],
+          "type": "object"
+        },
+        {
+          "description": "Lets the media clock run again (ADR-0172, since 0.134). It never runs backward:\nit waits at the held time until real time passes it, then runs with real time.\nSucceeds and does nothing when it isn't held. Until real time catches up,\n`output.start` still fails, as while held.",
+          "properties": {
+            "type": {
+              "const": "clock.release",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
+        },
+        {
           "description": "Restarts a source from its beginning (ADR-0115, since 0.87): a `browser` page\nloads again, and a `media` file plays from its start. Other kinds have nothing to\nrestart, so for them it succeeds and does nothing, as it does for a source no mix\nshows yet. Runtime state like a scene switch's restart: it changes no `rev` and is\nnever undone. Fails with `not_found` for a source the collection doesn't hold.",
           "properties": {
             "source_id": {
@@ -9364,7 +9410,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "null"
             }
           ],
-          "description": "The source setting it changes, with `property` `source` and only then (since\n0.130, ADR-0171). Omitted otherwise."
+          "description": "The source setting it changes, with `property` `source` and only then (since\n0.135, ADR-0171). Omitted otherwise."
         }
       },
       "required": [
@@ -9443,13 +9489,13 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         {
           "const": "source",
-          "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.130 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
+          "description": "A live number or colour setting of the item's own source, which the modifier's\n`source` names, since 0.135 (ADR-0171 decision 4): changed as an `effect`\nsetting is, for how this item draws its source only. Not in\n[`MotionProperty::ALL`].",
           "type": "string"
         }
       ]
     },
     "MotionSetting": {
-      "description": "The source setting a `source` modifier drives (since 0.130, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
+      "description": "The source setting a `source` modifier drives (since 0.135, ADR-0171 decision 4): a\nlive number or colour setting of the item's own source kind, as this item draws its\nsource; nothing is stored. A `light` takes `color`, `intensity`, `range_px`,\n`cone_deg`, `softness` and `shadow_softness`. A `model` takes `color`, `metallic`\nand `roughness` on every material, or, with `material`, on the file's materials of\nthat name, which also take `emissive` (the glow's colour) and `emissive_strength`\n(a multiplier of it, 1 at rest, kept within 0 to 64). One that names no such\nsetting, or a material the model doesn't have, adds nothing.",
       "properties": {
         "material": {
           "description": "A model's materials it drives, by their name in the file: 1 to\n[`MAX_MOTION_MATERIAL_LEN`] bytes. Omitted for every material, or for a source\nthat isn't a model.",
@@ -16233,5 +16279,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.130"
+  "title": "JStream protocol 0.135"
 }

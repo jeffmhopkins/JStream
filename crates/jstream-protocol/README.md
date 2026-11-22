@@ -85,7 +85,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `plugin.clap_rescan`, `effect.enable`, `codec.download`, `codec.delete`, `pack.write`, `pack.delete`, `values.set`,
   `item.trigger_motion`, `timeline.play`, `timeline.stop`, `timeline.seek`,
   `source.restart`, `scene.set_keyframe`, `collection.open`, `collection.new`,
-  `collection.save_as`), with
+  `collection.save_as`, `clock.hold`, `clock.step`, `clock.release`), with
   `Action::named_objects`, `Action::bind_problem` and `Action::takes_steps` (whether a
   wheel chord may run it, 0.104),
   which every implementation uses to check and follow a hotkey's action, and
@@ -211,7 +211,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   and `MotionCurve`, follows a bus or a source
   ([ADR-0100](../../docs/adr/0100-audio-reactive-motion-modifiers.md)). Since 0.109
   `MotionProperty::Effect` and `MotionEffect`, the effect setting such a modifier drives
-  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.130
+  ([ADR-0138](../../docs/adr/0138-motion-drives-effect-settings.md)). Since 0.135
   `MotionProperty::Source` and `MotionSetting`, the source setting one drives, and
   `MAX_MOTION_MATERIAL_LEN` (128)
   ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)).
@@ -354,10 +354,13 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.130 because a motion modifier can drive a live setting of its
+`PROTOCOL_VERSION` is 0.135 because a motion modifier can drive a live setting of its
 item's source: `MotionProperty::Source` with its `MotionSetting`, a light's colour and
 intensity or a model material's colour and glow by name
 ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4);
+0.134 because a client can hold and step the engine's media clock
+to render frame by frame: `clock.hold`, `clock.step` and `clock.release`
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md));
 0.127 because a group can share its 3D scene's space and a camera
 can ride with one: `SceneOptions`' `share_space`, `SceneInfo`'s `camera_anchor` and
 `scene.set_camera_anchor`
@@ -2393,7 +2396,8 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   changes what is on air with no undo step, ADR-0113, `scene.drive_camera` and
   `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
-  physical camera), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
+  physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
+  client's animation), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` (an application setting), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated
@@ -2758,7 +2762,7 @@ reports the same geometry, crop and opacity whatever it adds. Each modifier has 
 `modifier_id` (1 to 64 bytes of ASCII letters, digits, `_` or `-`, unique in the list),
 the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
 `opacity` and the four `crop_*` edges, or since 0.109 `effect` with its `effect`, or since
-0.130 `source` with its `source`), its
+0.135 `source` with its `source`), its
 `kind`, its `clock` and `enabled`.
 - **Kinds:** `wiggle` (smooth noise: `amplitude`, `frequency_hz` in `(0, 60]`, `seed`,
   `octaves` 1 to 4), `oscillate` (`shape` `sine`, `triangle`, `square` or `saw`,
@@ -2802,7 +2806,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   parameter the item doesn't draw, or one of another type, adds nothing. It never moves the box.
   `effect` is omitted for every other property, and a client before 0.109 reads the
   property as `Unknown`.
-- **Source settings** (since 0.130,
+- **Source settings** (since 0.135,
   [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 4):
   `property` `source` drives a live setting of the item's own source instead, which
   `source: {param, material}` (`MotionSetting`) names: `param` 1 to 64 bytes of ASCII
@@ -2816,7 +2820,7 @@ the `property` it moves (`x`, `y`, `scale`, `rotation`, `tilt`, `turn`, `depth`,
   glow, 1 at rest, kept within 0 to 64). Numbers and colours change as an `effect`
   setting's do. One naming a setting the source doesn't have, or a material its model
   doesn't have, adds nothing; it never moves the box. `source` is omitted for every other
-  property, and a client before 0.130 reads the property as `Unknown`.
+  property, and a client before 0.135 reads the property as `Unknown`.
 - **Clocks:** `engine` (the default) is the engine's animation time, so items with the
   same settings move in step; `shown` starts at 0 each time the engine starts drawing
   the item for program or a video mix (in any of their passes). A scene or source
@@ -2897,6 +2901,29 @@ Since 0.87 a scene holds timelines
 - **`source.restart {source_id}`** restarts a `browser` page, a `media` file or an
   effect pack's shader source from its beginning, whatever its `restart_on_show`; other
   kinds have nothing to restart. Plugins need the `live` class for it.
+
+<a id="media-clock"></a>
+## Holding the media clock
+<!-- @section
+depends_on = ["docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md"]
+-->
+
+Since 0.134 a client can hold the engine's media clock and step it by hand, to render a
+scene frame by frame on a machine that can't draw it in real time
+([ADR-0172](../../docs/adr/0172-a-media-clock-a-client-can-hold-and-step.md)). The clock
+is what transitions, Moves, motion, timelines, keyframe tracks, a sky's warp, animated
+sources, `video.snapshot` and `video.frames` read. None of the three actions changes
+`rev`, is undone or is saved, and none can be bound or granted to a plugin.
+- **`clock.hold`** stops the clock where it is; holding it again keeps the held time.
+  It fails with `action_failed` while an output runs.
+- **`clock.step {ms}`** moves the held time on by `ms`, 1 to 10000
+  (`invalid_argument` on `ms` otherwise, or when the held time can't move that far). It
+  fails with `action_failed` when the clock isn't held. A timeline cue the step passes
+  has fired by the time it returns.
+- **`clock.release`** lets the clock run again, never backward: it waits at the held
+  time until real time passes it. Releasing a clock that runs does nothing.
+- While the clock is held, or released but still ahead of real time, `output.start`
+  fails with `action_failed`, saying how far ahead it is.
 
 <a id="keyframe-tracks"></a>
 ## Keyframe tracks
