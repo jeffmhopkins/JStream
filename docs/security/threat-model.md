@@ -42,7 +42,7 @@ The desktop app may `GET`
 to compare the running version with the latest release, pre-releases included. The
 request sends no body, no token and no version: its user agent is the fixed word
 `JStream`, and GitHub sees the machine's address. It runs when the user chooses Help ›
-Check for updates, and once at launch only when Settings › Check for updates at launch
+Check for updates, and once at launch only when Settings › General › Check for updates
 is on, which stays off until the user turns it on. A failure is silent at launch and
 shown by the menu item. Nothing is downloaded or installed. That read is not telemetry.
 

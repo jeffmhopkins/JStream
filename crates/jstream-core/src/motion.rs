@@ -617,6 +617,7 @@ mod tests {
             to: end,
             timing,
             source: None,
+            via: jstream_render::transition::Stops::NONE,
         };
         let motion = TrackMotion {
             from: (

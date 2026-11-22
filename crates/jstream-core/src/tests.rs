@@ -186,6 +186,7 @@ fn switch_call(scene: &str) -> Call {
         action: Action::SceneSwitch {
             scene_id: SceneId::new(scene),
             preset_id: None,
+            via: Vec::new(),
         },
     }
 }

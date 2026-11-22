@@ -197,6 +197,7 @@ pub fn switch_action(snapshot: &Snapshot, preset: Option<TransitionPresetId>) ->
     Some(Action::SceneSwitch {
         scene_id: snapshot.preview.clone()?,
         preset_id: preset,
+        via: Vec::new(),
     })
 }
 
@@ -2031,6 +2032,7 @@ mod tests {
             Some(Action::SceneSwitch {
                 scene_id: SceneId::new("b"),
                 preset_id: None,
+                via: Vec::new()
             })
         );
         snapshot.preview = snapshot.program.clone();
