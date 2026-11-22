@@ -117,7 +117,7 @@ test('the Scene properties dialog shows the scene\'s chain and adds to it', asyn
   await expect(dialog.locator('.modal-footer').getByRole('button', { name: 'Defaults' })).toBeHidden();
   await dialog.getByRole('button', { name: 'Properties', exact: true }).click();
   await expect(dialog.getByRole('group', { name: 'Sharpen settings' })).toBeHidden();
-  await expect(dialog.locator('.props-name input')).toHaveValue('Intro');
+  await expect(dialog.getByLabel('Name', { exact: true })).toHaveValue('Intro');
 
   // It applied at once, but Cancel puts it back.
   await dialog.getByRole('button', { name: 'Cancel' }).click();

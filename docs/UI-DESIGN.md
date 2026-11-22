@@ -207,7 +207,8 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
 - A setting has at most one helper line: 12 px `--dim`, under its control, saying what
   the person needs to decide. The rest goes behind an (i) beside the label or control
   (the `Info` component), which shows on hover or focus, opens on the side with room
-  inside the body that would clip it, and is the mark's accessible name.
+  inside the body that would clip it, takes no room while hidden, and is the mark's
+  accessible name.
 - Say what it does for the person, not how the engine does it.
 - A warning or a consequence that needs reading is a one-line callout (`.callout`, with
   the info icon; `.warn` when it stops something), not a paragraph.

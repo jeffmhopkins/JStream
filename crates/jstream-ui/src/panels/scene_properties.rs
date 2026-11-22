@@ -18,7 +18,7 @@
 //! Docs: docs/UI-FEATURES.md#dialogs
 
 use crate::app::SessionContext;
-use crate::dialog::Modal;
+use crate::dialog::{Info, Modal};
 use crate::hotkeys;
 use crate::icons::Icon;
 use crate::panels::camera_moves::CameraMoves;
@@ -515,7 +515,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
         draft.with(|d| d.camera.is_some()).then(|| {
             view! {
                 <div class="camera-fields">
-                    <h3 class="camera-head">"Camera"</h3>
+                    <h3 class="camera-head">"View"</h3>
                     <div class="axis-row camera-row">
                         <span class="label">"Position"</span>
                         <div class="camera-axes">
@@ -684,9 +684,10 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
             });
         };
         view! {
-            <label class="field">
-                <span class="label">{label}</span>
-                <select aria-label=label on:change=move |event| set(event_target_value(&event))>
+            <div class="prop-row">
+                <span class="prop-label">{if into { "In" } else { "Out" }}</span>
+                <div class="prop-control">
+                <select class="grow" aria-label=label on:change=move |event| set(event_target_value(&event))>
                     {move || {
                         let now = current();
                         options()
@@ -698,10 +699,12 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                             .collect_view()
                     }}
                 </select>
-                <span class="field-note">{note}</span>
-            </label>
+                {(!note.is_empty()).then(|| view! { <p class="help">{note}</p> })}
+                </div>
+            </div>
         }
     };
+    let hotkey_field = NodeRef::<leptos::html::Input>::new();
     let hotkey_text =
         move || draft.with(|d| d.hotkey.as_ref().map(hotkeys::label).unwrap_or_default());
     let on_hotkey = move |event: leptos::ev::KeyboardEvent| {
@@ -791,140 +794,197 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                 </button>
             </div>
             <PropertiesAndFilters owner=owner video=true audio=false selected=selected note=note>
-                <label class="field props-name">
-                    <span class="label">"Name"</span>
-                    <input
-                        type="text"
-                        prop:value=move || draft.with(|d| d.name.clone())
-                        on:input=move |event| {
-                            let value = event_target_value(&event);
-                            draft.update(|d| d.name = value);
-                        }
-                    />
-                </label>
-                {select(true, "Transition in", "Used when switching into this scene.")}
-                {select(false, "Transition out", "Used when leaving it, unless the next scene has its own “in”.")}
-                <label class="field">
-                    <span class="label">"Hotkey"</span>
-                    <input
-                        type="text"
-                        class="hotkey-field"
-                        readonly=true
-                        placeholder="None"
-                        prop:value=hotkey_text
-                        on:keydown=on_hotkey
-                    />
-                    <span class="field-note">"Press the keys that switch to this scene. Backspace clears it."</span>
-                </label>
-                <label class="field">
-                    <span class="label">"Show in multiview"</span>
-                    <input
-                        type="checkbox"
-                        aria-label="Show in multiview"
-                        prop:checked=move || draft.with(|d| d.show_in_multiview)
-                        on:change=move |event| {
-                            let shown = event_target_checked(&event);
-                            draft.update(|d| d.show_in_multiview = shown);
-                        }
-                    />
-                    <span class="field-note">"A multiview window shows it as one of its tiles."</span>
-                </label>
-                <div class="field">
-                    <span class="label">"Background color"</span>
-                    <div class="control">
-                        <input
-                            type="color"
-                            aria-label="Background color swatch"
-                            disabled=keyframe
-                            prop:value=swatch
-                            on:change=move |event| {
-                                let picked = event_target_value(&event);
-                                draft.update(|d| {
-                                    d.background = Some(with_swatch(d.background.as_deref(), &picked));
-                                });
-                            }
-                        />
-                        <input
-                            type="text"
-                            class="color-text"
-                            aria-label="Background color"
-                            placeholder="None"
-                            disabled=keyframe
-                            prop:value=shown_background
-                            on:change=move |event| {
-                                let typed = event_target_value(&event);
-                                let typed = typed.trim();
-                                draft.update(|d| {
-                                    d.background = (!typed.is_empty()).then(|| typed.to_owned());
-                                });
-                            }
-                        />
+                // The property grid, in sections (UI-DESIGN › Forms): a note only where
+                // the row needs one to be read right.
+                <section class="prop-section">
+                    <h4 class="eyebrow">"General"</h4>
+                    <div class="prop-grid">
+                        <div class="prop-row">
+                            <label class="prop-label" for="scene-props-name">"Name"</label>
+                            <div class="prop-control">
+                                <input
+                                    id="scene-props-name"
+                                    type="text"
+                                    class="grow"
+                                    prop:value=move || draft.with(|d| d.name.clone())
+                                    on:input=move |event| {
+                                        let value = event_target_value(&event);
+                                        draft.update(|d| d.name = value);
+                                    }
+                                />
+                            </div>
+                        </div>
+                        <div class="prop-row">
+                            <span class="prop-label">"Hotkey"</span>
+                            <div class="prop-control">
+                                <input
+                                    type="text"
+                                    class="hotkey-field"
+                                    aria-label="Hotkey"
+                                    readonly=true
+                                    placeholder="None"
+                                    node_ref=hotkey_field
+                                    prop:value=hotkey_text
+                                    on:keydown=on_hotkey
+                                />
+                                <button
+                                    type="button"
+                                    class="sm"
+                                    on:click=move |_| {
+                                        if let Some(field) = hotkey_field.get_untracked() {
+                                            let _ = field.focus();
+                                        }
+                                    }
+                                >
+                                    "Record"
+                                </button>
+                                <Info text="Press the keys that switch to this scene while the field has the focus. Backspace clears it." />
+                            </div>
+                        </div>
+                        <div class="prop-row">
+                            <span class="prop-label">"Background"</span>
+                            <div class="prop-control">
+                                <input
+                                    type="color"
+                                    class="swatch"
+                                    aria-label="Background color swatch"
+                                    disabled=keyframe
+                                    prop:value=swatch
+                                    on:change=move |event| {
+                                        let picked = event_target_value(&event);
+                                        draft.update(|d| {
+                                            d.background = Some(with_swatch(d.background.as_deref(), &picked));
+                                        });
+                                    }
+                                />
+                                <input
+                                    type="text"
+                                    class="color-text"
+                                    aria-label="Background color"
+                                    placeholder="Transparent"
+                                    disabled=keyframe
+                                    prop:value=shown_background
+                                    on:change=move |event| {
+                                        let typed = event_target_value(&event);
+                                        let typed = typed.trim();
+                                        draft.update(|d| {
+                                            d.background = (!typed.is_empty()).then(|| typed.to_owned());
+                                        });
+                                    }
+                                />
+                                {keyframe.then(|| view! { <p class="help">{background_note.clone()}</p> })}
+                            </div>
+                        </div>
                     </div>
-                    <span class="field-note">{background_note}</span>
-                </div>
-                <label class="field">
-                    <span class="label">"Include its audio when nested"</span>
-                    <input
-                        type="checkbox"
-                        aria-label="Include its audio when nested"
-                        prop:checked=move || draft.with(|d| d.include_audio)
-                        on:change=move |event| {
-                            let included = event_target_checked(&event);
-                            draft.update(|d| d.include_audio = included);
-                        }
-                    />
-                    <span class="field-note">"When off, its sources don't reach the Mixer through this scene."</span>
-                </label>
-                <Show when=move || !keyframe>
-                    <label class="field">
-                        <span class="label">"Keep warm"</span>
-                        <input
-                            type="checkbox"
-                            aria-label="Keep warm"
-                            prop:checked=move || draft.with(|d| d.keep_warm)
-                            on:change=move |event| {
-                                let on = event_target_checked(&event);
-                                draft.update(|d| d.keep_warm = on);
-                            }
-                        />
-                        <span class="field-note">"Its videos, pages and cameras keep running while it's off program, so showing it starts nothing. It counts toward Settings › General › Keep ready."</span>
-                    </label>
-                </Show>
-                <Show when=move || !keyframe && !is_group>
-                    <label class="field">
-                        <span class="label">"Reflections"</span>
-                        <input
-                            type="checkbox"
-                            aria-label="Reflections"
-                            prop:checked=move || draft.with(|d| d.reflections)
-                            on:change=move |event| {
-                                let on = event_target_checked(&event);
-                                draft.update(|d| d.reflections = on);
-                            }
-                        />
-                        <span class="field-note">"In a 3D scene, models lit by the scene and lit cards inside a reflection probe's box reflect what the probe sees, each by its own roughness and metalness. Settings › 3D rendering can turn probes off everywhere."</span>
-                    </label>
-                </Show>
-                <Show when=move || is_group>
-                    <label class="field">
-                        <span class="label">"Share the 3D space"</span>
-                        <input
-                            type="checkbox"
-                            aria-label="Share the 3D space"
-                            prop:checked=move || draft.with(|d| d.share_space)
-                            on:change=move |event| {
-                                let on = event_target_checked(&event);
-                                draft.update(|d| d.share_space = on);
-                            }
-                        />
-                        <span class="field-note">{move || if draft.with(|d| d.share_space) {
-                            "In a 3D scene its items are drawn in that scene's space, each sorted, focused and lit on its own, and move with this group's item. Its own filters, effects, crop and blend don't apply, and a stretched group keeps its proportions."
-                        } else {
-                            "Drawn as one flat card, in a 3D scene too."
-                        }}</span>
-                    </label>
-                </Show>
-                <div class="camera-field">
+                </section>
+                <section class="prop-section">
+                    <h4 class="eyebrow">"Transitions"</h4>
+                    <div class="prop-grid">
+                        {select(true, "Transition in", "")}
+                        {select(false, "Transition out", "If both scenes set one, the next scene's In wins.")}
+                    </div>
+                </section>
+                <section class="prop-section">
+                    <h4 class="eyebrow">"Output"</h4>
+                    <div class="prop-grid">
+                        <div class="prop-row">
+                            <span class="prop-label check"></span>
+                            <div class="prop-control">
+                                <label class="inline-check">
+                                    <input
+                                        type="checkbox"
+                                        prop:checked=move || draft.with(|d| d.show_in_multiview)
+                                        on:change=move |event| {
+                                            let shown = event_target_checked(&event);
+                                            draft.update(|d| d.show_in_multiview = shown);
+                                        }
+                                    />
+                                    <span>"Show in multiview"</span>
+                                </label>
+                            </div>
+                        </div>
+                        <div class="prop-row">
+                            <span class="prop-label check"></span>
+                            <div class="prop-control">
+                                <label class="inline-check">
+                                    <input
+                                        type="checkbox"
+                                        prop:checked=move || draft.with(|d| d.include_audio)
+                                        on:change=move |event| {
+                                            let included = event_target_checked(&event);
+                                            draft.update(|d| d.include_audio = included);
+                                        }
+                                    />
+                                    <span>"Include audio when nested"</span>
+                                </label>
+                                <Info text="Off, its sources don't reach the Mixer through this scene where it is nested." />
+                            </div>
+                        </div>
+                        <Show when=move || !keyframe>
+                            <div class="prop-row">
+                                <span class="prop-label check"></span>
+                                <div class="prop-control">
+                                    <label class="inline-check">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=move || draft.with(|d| d.keep_warm)
+                                            on:change=move |event| {
+                                                let on = event_target_checked(&event);
+                                                draft.update(|d| d.keep_warm = on);
+                                            }
+                                        />
+                                        <span>"Keep warm"</span>
+                                    </label>
+                                    <Info text="Its videos, pages and cameras keep running while it's off program, so showing it starts nothing. It counts toward Settings › General › Keep ready." />
+                                </div>
+                            </div>
+                        </Show>
+                        <Show when=move || !keyframe && !is_group>
+                            <div class="prop-row">
+                                <span class="prop-label check"></span>
+                                <div class="prop-control">
+                                    <label class="inline-check">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=move || draft.with(|d| d.reflections)
+                                            on:change=move |event| {
+                                                let on = event_target_checked(&event);
+                                                draft.update(|d| d.reflections = on);
+                                            }
+                                        />
+                                        <span>"Reflections"</span>
+                                    </label>
+                                    <Info text="In a 3D scene, models lit by the scene and lit cards inside a reflection probe's box reflect what the probe sees, each by its own roughness and metalness. Settings › 3D rendering can turn probes off everywhere." />
+                                </div>
+                            </div>
+                        </Show>
+                        <Show when=move || is_group>
+                            <div class="prop-row">
+                                <span class="prop-label check"></span>
+                                <div class="prop-control">
+                                    <label class="inline-check">
+                                        <input
+                                            type="checkbox"
+                                            prop:checked=move || draft.with(|d| d.share_space)
+                                            on:change=move |event| {
+                                                let on = event_target_checked(&event);
+                                                draft.update(|d| d.share_space = on);
+                                            }
+                                        />
+                                        <span>"Share the 3D space"</span>
+                                    </label>
+                                    <p class="help">{move || if draft.with(|d| d.share_space) {
+                                        "In a 3D scene its items are drawn in that scene's space, each sorted, focused and lit on its own, and move with this group's item. Its own filters, effects, crop and blend don't apply, and a stretched group keeps its proportions."
+                                    } else {
+                                        "Drawn as one flat card, in a 3D scene too."
+                                    }}</p>
+                                </div>
+                            </div>
+                        </Show>
+                    </div>
+                </section>
+                <section class="prop-section camera-field">
+                    <h4 class="eyebrow">"Camera"</h4>
                     <label class="camera-check">
                         <input
                             type="checkbox"
@@ -940,7 +1000,7 @@ fn SceneBody(scene_id: SceneId, close: impl Fn() + Copy + Send + Sync + 'static)
                     {move || (!keyframe && draft.with(|d| d.camera.is_some())).then(|| view! {
                         <CameraMoves scene_id=id.get_value() draft=draft />
                     })}
-                </div>
+                </section>
                 {move || problem.get().map(|e| view! { <p class="problem" role="alert">{e}</p> })}
             </PropertiesAndFilters>
             <div class="modal-footer">
