@@ -1214,6 +1214,92 @@ fn golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload() {
     }
 }
 
+/// ADR-0170 decision 3: a rough surface blurs a panorama's bright points into soft
+/// light, not one sharp copy per tap of its blur. A half-rough metal sphere under a
+/// black sky scattered with single bright texels shows the stars as a smooth glow: no
+/// two neighbouring pixels across its middle differ much, though the stars light it.
+#[test]
+fn golden_model_a_rough_surface_blurs_a_starry_sky_smoothly() {
+    let Some(mut opened) = open() else {
+        return;
+    };
+    let (width, height) = (256u32, 128u32);
+    let mut rgba = vec![0u8; (width * height * 4) as usize];
+    for y in (5..height).step_by(16) {
+        for x in (3..width).step_by(16) {
+            let at = ((y * width + x) * 4) as usize;
+            rgba[at..at + 4].copy_from_slice(&[255, 255, 255, 255]);
+        }
+    }
+    for at in (3..rgba.len()).step_by(4) {
+        rgba[at] = 255;
+    }
+    let stars = opened
+        .compositor
+        .upload_rgba8(width, height, &rgba)
+        .expect("the panorama uploads");
+    let sphere = Shape::Sphere
+        .model(Material {
+            base_color: [1.0, 1.0, 1.0, 1.0],
+            metallic: 1.0,
+            roughness: 0.5,
+            ..Material::default()
+        })
+        .expect("the sphere builds");
+    let uploaded = opened
+        .compositor
+        .upload_model(&sphere)
+        .expect("the model uploads");
+    let layer = opened.compositor.layer(WIDTH, HEIGHT).expect("a layer");
+    let geometry = boxed(80.0, 50.0, 80.0);
+    let camera = Some(SceneCamera::framing(canvas()));
+    let environment = super::Environment {
+        sky: Color::WHITE,
+        horizon: Color::WHITE,
+        ground: Color::WHITE,
+        intensity: 16.0,
+        turn_deg: 0.0,
+        image: Some(&stars),
+    };
+    opened
+        .compositor
+        .draw_model(
+            &ModelDraw {
+                model: &uploaded,
+                geometry,
+                camera,
+                lighting: Lighting::Scene,
+                lights: Some(&[]),
+                shadows: &[],
+                environment: Some(environment),
+                floor: None,
+                materials: &[],
+                texture: None,
+                reflection: None,
+                probe: None,
+            },
+            &layer,
+        )
+        .expect("the model draws");
+    let items = [Item {
+        camera,
+        ..crate::tests::item(&layer, Placement::Layer(geometry), Crop::NONE, 1.0)
+    }];
+    let shot = render(&mut opened.compositor, &items);
+    let row: Vec<u32> = (56..104).map(|x| luma(rgb(&shot, x, 50))).collect();
+    let jump = row
+        .windows(2)
+        .map(|pair| pair[0].abs_diff(pair[1]))
+        .max()
+        .unwrap_or(0);
+    let lit = row.iter().sum::<u32>() / row.len() as u32;
+    assert!(lit > 6, "the stars light the sphere: {row:?}");
+    assert!(
+        jump < 24,
+        "the stars blur smoothly: a jump of {jump} in {row:?}"
+    );
+}
+
 /// ADR-0151 decision 4: a model cut at a floor draws nothing at or below it, in its
 /// picture or its view depth, so a scene drawn mirrored in its floor shows only what
 /// stands above it. The cube spans y 30 to 70; a floor at 50 keeps its upper half.

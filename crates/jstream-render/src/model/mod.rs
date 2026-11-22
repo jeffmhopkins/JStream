@@ -15,6 +15,7 @@ use wgpu::util::DeviceExt;
 use crate::error::RenderError;
 use crate::gpu::Gpu;
 use crate::image::{Image, LAYER_FORMAT, Owner};
+use crate::mips::Mips;
 use crate::scene::Color;
 
 /// The depth format: reversed, so `f32`'s precision near 0 is spent far away.
@@ -53,8 +54,40 @@ const PROBE_BYTES: u64 = 80;
 /// The frame's textures: the shadow maps, then the environment's picture, then the
 /// reflection probe's (ADR-0170 decision 3).
 const FRAME_TEXTURES: usize = MAX_SHADOW_MAPS + 2;
+/// Where the sky uniform ([`environment_values`], [`reflection_values`]) holds how its
+/// picture is encoded.
+const SKY_MODE: usize = 11;
+/// Where the probe uniform ([`probe_values`]) holds how its capture is encoded.
+const PROBE_MODE: usize = 17;
 /// The slot of [`FRAME_TEXTURES`] the reflection probe's picture is bound in.
 const PROBE_SLOT: usize = MAX_SHADOW_MAPS + 1;
+
+/// The mip chains a draw's blurred reflections read (ADR-0170 decision 3): of the sky
+/// picture it reflects and of its reflection probe's capture, each with the image it
+/// was built from. A rough surface reads the level whose texels are about as wide as
+/// its blur's taps are apart, so a bright point spreads into a soft patch rather than
+/// one sharp copy per tap. A draw without a chain reads the picture itself, unblurred
+/// between its taps.
+#[derive(Clone, Copy, Default)]
+pub(crate) struct Panoramas<'a> {
+    /// The sky picture's chain: the model's `reflection`, else its environment's
+    /// picture.
+    pub sky: Option<(&'a Image, &'a Mips)>,
+    /// The probe's capture's chain.
+    pub probe: Option<(&'a Image, &'a Mips)>,
+}
+
+impl<'a> Panoramas<'a> {
+    /// `chain`'s whole view when it was built from `image`.
+    fn of(
+        chain: Option<(&'a Image, &'a Mips)>,
+        image: &Image,
+    ) -> Option<&'a (wgpu::Texture, wgpu::TextureView)> {
+        chain
+            .filter(|(built, _)| built.texture() == image.texture())
+            .map(|(_, mips)| &mips.whole)
+    }
+}
 /// Bytes of a material's uniform: five `vec4`.
 const MATERIAL_BYTES: u64 = 80;
 
@@ -943,27 +976,35 @@ impl ModelRuntime {
 
     /// The frame bind group for a draw with shadow maps `maps`: the plain one with none,
     /// else the one kept for the same maps, made again when they change.
+    /// A slot of `chains` binds that mip chain in place of its map.
     fn frame_bind_for(
         &mut self,
         gpu: &Gpu,
         maps: [Option<&Image>; FRAME_TEXTURES],
+        chains: [Option<&(wgpu::Texture, wgpu::TextureView)>; FRAME_TEXTURES],
     ) -> wgpu::BindGroup {
         if maps.iter().all(Option::is_none) {
             return self.frame_bind.clone();
         }
-        let textures = maps.map(|map| map.map(|image| image.texture().clone()));
+        let textures: [Option<wgpu::Texture>; FRAME_TEXTURES] =
+            std::array::from_fn(|n| match chains[n] {
+                Some((texture, _)) => Some(texture.clone()),
+                None => maps[n].map(|image| image.texture().clone()),
+            });
         if let Some((kept, bind)) = &self.shadow_bind
             && *kept == textures
         {
             return bind.clone();
         }
-        let views = maps.map(|map| {
-            map.map(|image| {
-                image
-                    .texture()
-                    .create_view(&wgpu::TextureViewDescriptor::default())
-            })
-        });
+        let views: [Option<wgpu::TextureView>; FRAME_TEXTURES] =
+            std::array::from_fn(|n| match chains[n] {
+                Some((_, view)) => Some(view.clone()),
+                None => maps[n].map(|image| {
+                    image
+                        .texture()
+                        .create_view(&wgpu::TextureViewDescriptor::default())
+                }),
+            });
         let view = |n: usize| views[n].as_ref().unwrap_or(&self.white);
         let bind = frame_bind_group(
             &gpu.device,
@@ -978,16 +1019,16 @@ impl ModelRuntime {
     /// Draws `draw` into `target`, replacing what it held: transparent wherever the
     /// model isn't.
     /// `live` is `draw.texture`'s mip chain, its texture and its whole view, when its
-    /// picture is drawing.
+    /// picture is drawing, and `panoramas` the chains its blurred reflections read.
     pub(crate) fn draw(
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
         draw: &ModelDraw<'_>,
         target: &Image,
-        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+        (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
     ) -> Result<(), RenderError> {
-        self.draw_as(gpu, owner, draw, target, live, false)
+        self.draw_as(gpu, owner, draw, target, (live, panoramas), false)
     }
 
     /// The material bind groups `draw` binds with its live texture `live` (the clear
@@ -1065,12 +1106,14 @@ impl ModelRuntime {
     /// Lights `card.image`, a card's picture flat in its box layer, into `target`, a
     /// layer of the same size (ADR-0151 decision 10): each texel shaded where it sits
     /// in the scene, as a flat glTF quad there would be, and laid back where it was.
+    /// `panoramas` are the chains its blurred reflections read.
     pub(crate) fn light_card(
         &mut self,
         gpu: &Gpu,
         owner: &Owner,
         card: &CardDraw<'_>,
         target: &Image,
+        panoramas: Panoramas<'_>,
     ) -> Result<(), RenderError> {
         if !card.image.owner().is(owner) {
             return Err(RenderError::Invalid {
@@ -1196,7 +1239,7 @@ impl ModelRuntime {
             reflection: None,
             probe: card.probe,
         };
-        self.draw_as(gpu, owner, &draw, target, None, true)
+        self.draw_as(gpu, owner, &draw, target, (None, panoramas), true)
     }
 
     /// The quad a card is lit on: a unit square in its own plane, facing the viewer,
@@ -1263,7 +1306,7 @@ impl ModelRuntime {
         owner: &Owner,
         draw: &ModelDraw<'_>,
         target: &Image,
-        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+        (live, panoramas): (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
         in_texture: bool,
     ) -> Result<(), RenderError> {
         let model = &draw.model.inner;
@@ -1344,7 +1387,7 @@ impl ModelRuntime {
             .reflection
             .filter(|image| image.owner().is(owner) && draw.lighting != Lighting::Unlit);
         // The scene's sky, for a model lit by its scene (ADR-0151 decision 9).
-        let sky = match (
+        let mut sky = match (
             reflection,
             draw.environment,
             lights.as_ref(),
@@ -1362,7 +1405,7 @@ impl ModelRuntime {
             _ => None,
         };
         // The reflection probe a model lit by its scene reads (ADR-0170 decision 3).
-        let probe = match (draw.probe, lights.as_ref(), camera.as_ref()) {
+        let mut probe = match (draw.probe, lights.as_ref(), camera.as_ref()) {
             (Some(probe), Some(_), Some(view))
                 if probe.image.owner().is(owner) && draw.lighting == Lighting::Scene =>
             {
@@ -1371,6 +1414,21 @@ impl ModelRuntime {
             }
             _ => None,
         };
+        // A picture read through its mip chain reads premultiplied linear light.
+        let mut chains = [None; FRAME_TEXTURES];
+        for (slot, chain) in [
+            (MAX_SHADOW_MAPS, panoramas.sky),
+            (PROBE_SLOT, panoramas.probe),
+        ] {
+            chains[slot] = maps[slot].and_then(|image| Panoramas::of(chain, image));
+        }
+        let premultiplied = crate::image::Alpha::Premultiplied.shader_mode();
+        if let (Some(values), Some(_)) = (sky.as_mut(), chains[MAX_SHADOW_MAPS]) {
+            values[SKY_MODE] = premultiplied;
+        }
+        if let (Some(values), Some(_)) = (probe.as_mut(), chains[PROBE_SLOT]) {
+            values[PROBE_MODE] = premultiplied;
+        }
         let frame = frame_bytes(
             (&solid, mirrored),
             &clip,
@@ -1383,7 +1441,7 @@ impl ModelRuntime {
                 probe.as_ref(),
             ),
         );
-        let frame_bind = self.frame_bind_for(gpu, maps);
+        let frame_bind = self.frame_bind_for(gpu, maps, chains);
         let live_binds = draw
             .texture
             .map(|texture| self.live_binds(gpu, model, texture.material, live));

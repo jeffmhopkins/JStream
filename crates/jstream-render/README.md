@@ -857,13 +857,19 @@ direction back to the scene's space), and the picture is bound beside the maps (
 the studio gradient for the ambient and reflected terms: `sky` turns the direction into
 the scene's space and spins it by the turn, then reads the gradient (horizon to sky by
 the square root of the height up, horizon to ground over a quarter of the way down) or
-the panorama (`panorama`: its centre ahead along -z, up at its top, read bilinear at
-level 0 and decoded by the filters' `to_premul_linear` from `filter/colour.wgsl`, which
-the model shader is built with, so a page painted as premultiplied sRGB code values reads
-as an upload of the same colour does,
-`golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`), over a ring of 8
-taps around the direction for a spread: the reflection at the square of the roughness,
-the diffuse light at 1. An ambient light scales it; with none it lights the model on its
+the panorama (`panorama`: its centre ahead along -z, up at its top, decoded by the
+filters' `to_premul_linear` from `filter/colour.wgsl`, which the model shader is built
+with, so a page painted as premultiplied sRGB code values reads as an upload of the same
+colour does, `golden_model_a_premultiplied_srgb_panorama_decodes_as_an_upload`), over a
+ring of 8 taps around the direction for a spread: the reflection at the square of the
+roughness, the diffuse light at 1. `draw_model` and `light_card` read a sky picture of
+this compositor through a mip chain of its whole picture (`Panoramas`, built as a live
+texture's is and rebuilt only when the picture changed, premultiplied linear, so the
+uniform's mode then says so), and a spread reads the level whose texels are about as
+wide as the ring's taps are apart (`blur_level`: `log2` of the panorama's width times
+`sin(atan(spread)) / 8`), each read kept half a texel of that level inside the top and
+bottom rows (`panorama_uv`). A bright point then spreads into a soft glow rather than
+one sharp copy per tap (`golden_model_a_rough_surface_blurs_a_starry_sky_smoothly`). An ambient light scales it; with none it lights the model on its
 own (`golden_model_an_environment_lights_a_model_from_its_sky`).
 A reflection probe's capture (`ModelDraw::probe` and `CardDraw::probe`, a
 `ProbeLookup`: the panorama `resample_probe` drew, the box's centre and half size in the
@@ -875,7 +881,7 @@ alpha) and bound at binding 5 (a stand-in without, never read). `probed` replace
 environment's reflected light for a fragment inside the box: its reflected direction is
 corrected to the box (`probe_dir`, where the ray from the fragment leaves the box, seen
 from the centre, so nearby walls line up), read with the sky's ring of taps at the same
-spread (`probe_light`), and where the capture saw nothing (its alpha) the environment
+spread, from a mip chain of the capture as the sky's is (`probe_light`), and where the capture saw nothing (its alpha) the environment
 shows through. The box's weight rises from 0 at a face to 1 `fade` inside
 (`probe_weight`) and mixes with the environment, which alone lights anything outside;
 the diffuse light still comes from the environment, and the capture is not scaled by

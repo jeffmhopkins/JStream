@@ -13,7 +13,7 @@ use crate::gpu::{Faults, Gpu, OpenOptions};
 use crate::image::{self, Alpha, Image, Maker, Owner};
 use crate::ingest::Ingest;
 use crate::mips::{MAX_SKIP, MipPipelines, Mips, Region};
-use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime};
+use crate::model::{CardDraw, GpuModel, ModelDraw, ModelRuntime, Panoramas};
 use crate::place::{self, MAX_VERTICES, Shape};
 use crate::scene::{Output, Placement, Scene, Snapshot};
 use crate::wipe::Wipe;
@@ -775,43 +775,74 @@ impl Compositor {
     /// A live `texture` (ADR-0107 decision 5) is sampled through a mip chain of its
     /// whole picture, kept on its image and rebuilt here only when the image changed
     /// since, as a 3D item's is; a `reflection` is read as a scene's sky picture is.
+    /// The sky picture and the probe's capture it reflects are read through mip chains
+    /// of their own, made the same way, so a rough surface blurs them smoothly
+    /// (ADR-0170 decision 3).
     pub fn draw_model(&mut self, draw: &ModelDraw<'_>, target: &Image) -> Result<(), RenderError> {
         let errors = self.errors();
         let chain = draw
             .texture
             .and_then(|texture| texture.image)
             .filter(|image| image.owner().is(&self.owner))
-            .map(|image| {
-                let chain = self.chain_of(image, Region::whole(image.width(), image.height()), 0);
-                if chain.claim(image) {
-                    let lock = self.gpu.submit.clone();
-                    let submitting = lock.lock();
-                    let mut encoder =
-                        self.gpu
-                            .device
-                            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                                label: Some("jstream-render-model-texture"),
-                            });
-                    chain.record(&mut encoder, &self.mip_pipelines, image);
-                    self.gpu.queue.submit([encoder.finish()]);
-                    drop(submitting);
-                }
-                chain
-            });
+            .map(|image| self.built_chain(image, "jstream-render-model-texture"));
         let live = chain.as_ref().map(|chain| (&chain.whole.0, &chain.whole.1));
-        let drawn = self.draw_model_focused(draw, target, live);
+        // As the model reads them: nothing unlit, and a probe only lit by its scene.
+        let lit = draw.lighting != jstream_media::model::Lighting::Unlit;
+        let sky = draw
+            .reflection
+            .or(draw.environment.and_then(|environment| environment.image))
+            .filter(|_| lit);
+        let probe = draw
+            .probe
+            .map(|probe| probe.image)
+            .filter(|_| draw.lighting == jstream_media::model::Lighting::Scene);
+        let (sky, probe) = (self.panorama_chain(sky), self.panorama_chain(probe));
+        let panoramas = Panoramas {
+            sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
+            probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
+        };
+        let drawn = self.draw_model_focused(draw, target, (live, panoramas));
         errors.close(drawn)
+    }
+
+    /// `image`'s mip chain of its whole picture, rebuilt first when the image changed
+    /// since its last build.
+    fn built_chain(&self, image: &Image, label: &'static str) -> Arc<Mips> {
+        let chain = self.chain_of(image, Region::whole(image.width(), image.height()), 0);
+        if chain.claim(image) {
+            let lock = self.gpu.submit.clone();
+            let submitting = lock.lock();
+            let mut encoder = self
+                .gpu
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor { label: Some(label) });
+            chain.record(&mut encoder, &self.mip_pipelines, image);
+            self.gpu.queue.submit([encoder.finish()]);
+            drop(submitting);
+        }
+        chain
+    }
+
+    /// The mip chain a blurred reflection reads of `image`, a sky picture or a probe's
+    /// capture this compositor made, with the image.
+    fn panorama_chain<'a>(&self, image: Option<&'a Image>) -> Option<(&'a Image, Arc<Mips>)> {
+        let image = image.filter(|image| image.owner().is(&self.owner))?;
+        Some((
+            image,
+            self.built_chain(image, "jstream-render-panorama-mips"),
+        ))
     }
 
     /// [`Self::draw_model`], its errors not yet collected. When the model's camera has
     /// depth of field (ADR-0165), the model and its view depth are drawn into layers of
     /// their own first, and the model's focus passes blur them into `target`. `live` is
-    /// the live texture's mip chain, as [`Self::draw_model`] made it.
+    /// the live texture's mip chain and the panoramas' chains, as [`Self::draw_model`]
+    /// made them.
     fn draw_model_focused(
         &mut self,
         draw: &ModelDraw<'_>,
         target: &Image,
-        live: Option<(&wgpu::Texture, &wgpu::TextureView)>,
+        live: (Option<(&wgpu::Texture, &wgpu::TextureView)>, Panoramas<'_>),
     ) -> Result<(), RenderError> {
         let canvas = jstream_protocol::Canvas {
             width: target.width(),
@@ -940,7 +971,17 @@ impl Compositor {
                 detail: "a lit card's picture and its target differ in size".into(),
             }));
         }
-        errors.close(self.models.light_card(&self.gpu, &self.owner, card, target))
+        let sky = card.environment.and_then(|environment| environment.image);
+        let probe = card.probe.map(|probe| probe.image);
+        let (sky, probe) = (self.panorama_chain(sky), self.panorama_chain(probe));
+        let panoramas = Panoramas {
+            sky: sky.as_ref().map(|(image, mips)| (*image, &**mips)),
+            probe: probe.as_ref().map(|(image, mips)| (*image, &**mips)),
+        };
+        errors.close(
+            self.models
+                .light_card(&self.gpu, &self.owner, card, target, panoramas),
+        )
     }
 
     /// Refills `image`, an upload this compositor made, with new tightly packed

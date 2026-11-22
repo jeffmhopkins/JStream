@@ -1339,7 +1339,9 @@ and scenes they read. In a scene with `reflections` on
 card inside a reflection probe's box reads the probe's panorama, box-projected, in place
 of the environment where the probe saw something: six 90° faces of the scene drawn
 from the box's centre after the chains, at most one probe a frame, resampled into an
-equirectangular panorama that the next frame reads. The layer is then placed flat
+equirectangular panorama that the next frame reads. A rough surface reads the sky's
+panorama and a probe's through mip chains of them, at the level its blur spans, so a
+bright point blurs into a soft glow. The layer is then placed flat
 (`Placement::Layer`) and sorts with the scene's cards at the model's centre. The
 environment light can also be the scene's backdrop
 ([ADR-0167](adr/0167-a-sky-backdrop-for-3d-scenes.md)): one full-canvas pass looks along

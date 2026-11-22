@@ -209,12 +209,33 @@ fn sky_dir(dir: vec3<f32>) -> vec3<f32> {
     return vec3<f32>(c * d.x - s * d.z, d.y, s * d.x + c * d.z);
 }
 
-// The panorama's light along `d`, a scene direction: its centre ahead along -z.
-fn panorama(d: vec3<f32>) -> vec3<f32> {
+// The mip level a ring blur over `spread` (as `sky` takes it) reads of a panorama
+// `width` texels around with `levels` levels (ADR-0170 decision 3): the one whose texels
+// are about as wide as the ring's 8 taps are apart, `atan(spread)` out, so the taps
+// together cover the ring rather than land as 9 sharp points. 0 for a single sample.
+fn blur_level(spread: f32, width: f32, levels: u32) -> f32 {
+    if spread <= 0.01 {
+        return 0.0;
+    }
+    let gap = width * sin(atan(spread)) / 8.0;
+    return clamp(log2(max(gap, 1.0)), 0.0, f32(levels - 1u));
+}
+
+// A panorama's texture coordinates along `d`, a scene direction, its centre ahead along
+// -z, kept half a texel of a `height`-texel level inside its top and bottom rows, so a
+// filtered read never wraps to the other pole.
+fn panorama_uv(d: vec3<f32>, height: f32) -> vec2<f32> {
     let u = 0.5 + atan2(d.x, -d.z) / (2.0 * PI);
-    let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, 0.001, 0.999);
+    let edge = max(0.001, 0.5 / max(height, 1.0));
+    let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, edge, 1.0 - edge);
+    return vec2<f32>(u, v);
+}
+
+// The panorama's light along `d`, a scene direction, at mip level `level`.
+fn panorama(d: vec3<f32>, level: f32) -> vec3<f32> {
+    let height = f32(textureDimensions(sky_tex, u32(ceil(level))).y);
     let c = to_premul_linear(
-        textureSampleLevel(sky_tex, sky_sampler, vec2<f32>(u, v), 0.0),
+        textureSampleLevel(sky_tex, sky_sampler, panorama_uv(d, height), level),
         frame.environment.ground.w,
     );
     return c.rgb * frame.environment.down.w;
@@ -232,8 +253,13 @@ fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
         }
         return mix(e.horizon.rgb, e.ground.rgb, min(-up * 4.0, 1.0));
     }
+    let level = blur_level(
+        spread,
+        f32(textureDimensions(sky_tex).x),
+        textureNumLevels(sky_tex),
+    );
     if spread <= 0.01 {
-        return panorama(d);
+        return panorama(d, level);
     }
     var side = vec3<f32>(0.0, 1.0, 0.0);
     if abs(d.y) > 0.99 {
@@ -241,29 +267,33 @@ fn sky(dir: vec3<f32>, spread: f32) -> vec3<f32> {
     }
     let t = normalize(cross(d, side));
     let b = cross(d, t);
-    var sum = panorama(d);
+    var sum = panorama(d, level);
     for (var k = 0u; k < 8u; k++) {
         let a = f32(k) * PI * 0.25;
-        sum += panorama(normalize(d + spread * (t * cos(a) + b * sin(a))));
+        sum += panorama(normalize(d + spread * (t * cos(a) + b * sin(a))), level);
     }
     return sum / 9.0;
 }
 
-// The probe's capture along `d`, a direction in the scene's axes: premultiplied, its
-// alpha where the capture saw something.
-fn probe_panorama(d: vec3<f32>) -> vec4<f32> {
-    let u = 0.5 + atan2(d.x, -d.z) / (2.0 * PI);
-    let v = clamp(0.5 - asin(clamp(-d.y, -1.0, 1.0)) / PI, 0.001, 0.999);
+// The probe's capture along `d`, a direction in the scene's axes, at mip level
+// `level`: premultiplied, its alpha where the capture saw something.
+fn probe_panorama(d: vec3<f32>, level: f32) -> vec4<f32> {
+    let height = f32(textureDimensions(probe_tex, u32(ceil(level))).y);
     return to_premul_linear(
-        textureSampleLevel(probe_tex, sky_sampler, vec2<f32>(u, v), 0.0),
+        textureSampleLevel(probe_tex, sky_sampler, panorama_uv(d, height), level),
         frame.probe.fade.y,
     );
 }
 
 // The probe's capture along `d`, blurred over `spread` as `sky` blurs the sky.
 fn probe_light(d: vec3<f32>, spread: f32) -> vec4<f32> {
+    let level = blur_level(
+        spread,
+        f32(textureDimensions(probe_tex).x),
+        textureNumLevels(probe_tex),
+    );
     if spread <= 0.01 {
-        return probe_panorama(d);
+        return probe_panorama(d, level);
     }
     var side = vec3<f32>(0.0, 1.0, 0.0);
     if abs(d.y) > 0.99 {
@@ -271,10 +301,10 @@ fn probe_light(d: vec3<f32>, spread: f32) -> vec4<f32> {
     }
     let t = normalize(cross(d, side));
     let b = cross(d, t);
-    var sum = probe_panorama(d);
+    var sum = probe_panorama(d, level);
     for (var k = 0u; k < 8u; k++) {
         let a = f32(k) * PI * 0.25;
-        sum += probe_panorama(normalize(d + spread * (t * cos(a) + b * sin(a))));
+        sum += probe_panorama(normalize(d + spread * (t * cos(a) + b * sin(a))), level);
     }
     return sum / 9.0;
 }
