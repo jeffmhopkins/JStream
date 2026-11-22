@@ -148,12 +148,13 @@ test('filters added to the program output and to an output count on their FX but
   await program.click();
   await audioRows(page).first().locator('.filter-row').dblclick();
   const dialog = page.getByRole('dialog', { name: 'Filters', exact: true });
-  await expect(dialog.locator('.filter-pane-sub')).toHaveText('Audio filter on “Program output”');
-  // The program output's chain stands alone: no scope tabs.
+  await expect(dialog.locator('.filter-pane-title')).toHaveAttribute('title', 'Audio filter on “Program output”');
+  // The program output's chain stands alone: no scope tabs, and no picture.
   await expect(dialog.getByRole('tab')).toHaveCount(0);
-  await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
-  await expect(dialog.locator('.filters-window-pane')).toHaveText('No filter selected. Add one on the left.');
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  await expect(dialog.getByLabel('Preview')).toHaveCount(0);
+  await dialog.getByRole('toolbar', { name: 'Filter tools' }).getByRole('button', { name: 'Remove filter' }).click();
+  await expect(dialog.locator('.filters-window-pane')).toHaveText('No filter selected. Add one with + below the list.');
+  await dialog.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
   await expect(program).toHaveText('FX 0');
 });

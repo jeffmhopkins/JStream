@@ -1,7 +1,7 @@
 // The Filters panel and its dialogs: the selected item's source's chains, whose rows turn
 // a filter off or on, drag to reorder and remove it; Edit filters… from an item's menu;
-// the Add filter dialog; and the Filters window, whose changes apply at once and
-// which Cancel puts back. The seed's Backdrop has Sharpen, then Blur turned off. The mock
+// the Add filter dialog; and the Filters window, whose changes apply at once as
+// undoable steps, which Ctrl+Z undoes from the window, and which Close keeps. The seed's Backdrop has Sharpen, then Blur turned off. The mock
 // engine lists and describes no kinds, so the last two tests have the page's socket
 // answer for three (`describeKinds`); the last also has it refuse one setting.
 import { test, expect, connect, describeKinds, rev, showPanel } from '../fixtures.js';
@@ -109,7 +109,7 @@ test('Add filter… opens the dialog over the panel and the Properties dialog', 
   await expect(props).toBeVisible();
 });
 
-test('the Filters window applies at once, Cancel puts the filter back, and its chain picks the filter it shows', async ({ page, daemon }) => {
+test('the Filters window applies at once, Ctrl+Z undoes from it, and its bar and ⋯ menu move and remove the filter shown', async ({ page, daemon }) => {
   await connect(page, daemon);
   await showPanel(page, 'Filters');
   await selectBackdrop(page);
@@ -117,26 +117,30 @@ test('the Filters window applies at once, Cancel puts the filter back, and its c
   await videoRows(panel(page)).nth(1).locator('.filter-row').dblclick();
   const dialog = page.getByRole('dialog', { name: 'Filters', exact: true });
   await expect(dialog).toBeVisible();
+  await expect(dialog.locator('.modal-sub')).toHaveText('Backdrop');
   await expect(dialog.locator('.filter-pane-title')).toHaveText('Blur');
-  await expect(dialog.locator('.filter-pane-sub')).toHaveText('Video filter on “Backdrop”');
+  await expect(dialog.locator('.filter-pane-title')).toHaveAttribute('title', 'Video filter on “Backdrop”');
   await expect(dialog.locator('.filter-hint')).toHaveText('Gaussian, whole image or an area');
+  // One footer: a note and Close.
+  await expect(dialog.locator('.modal-footer')).toContainText('Changes apply live · Ctrl+Z undoes');
+  await expect(dialog.locator('.modal-footer').getByRole('button')).toHaveText(['Close']);
+  // The source's picture over the settings.
+  await expect(dialog.getByLabel('Preview')).toBeVisible();
 
-  // The switch turns it on at once; Cancel turns it back off.
+  // The switch turns it on at once; Ctrl+Z from the window turns it back off.
   const on = dialog.getByRole('switch', { name: 'Filter on' });
   await expect(on).toHaveAttribute('aria-checked', 'false');
   await on.click();
   await expect(on).toHaveAttribute('aria-checked', 'true');
   await expect(videoRows(panel(page)).nth(1)).not.toHaveClass(/\boff\b/);
   expect(await rev(page)).toBe(start + 1);
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
-  await expect(dialog).toBeHidden();
+  await page.keyboard.press('Control+z');
+  await expect(on).toHaveAttribute('aria-checked', 'false');
   await expect(videoRows(panel(page)).nth(1)).toHaveClass(/\boff\b/);
-  await expect.poll(() => rev(page)).toBe(start + 2);
-
-  // OK keeps a change.
-  await videoRows(panel(page)).nth(1).locator('.filter-row').dblclick();
-  await on.click();
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  // Ctrl+Shift+Z redoes it, and Close keeps it.
+  await page.keyboard.press('Control+Shift+z');
+  await expect(on).toHaveAttribute('aria-checked', 'true');
+  await dialog.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
   await expect(videoRows(panel(page)).nth(1)).not.toHaveClass(/\boff\b/);
 
@@ -152,20 +156,40 @@ test('the Filters window applies at once, Cancel puts the filter back, and its c
   await expect(rows.nth(1)).toHaveClass(/\bselected\b/);
   await expect(dialog.locator('.filter-pane-title')).toHaveText('Blur');
   await dialog.getByRole('tab', { name: 'Scene' }).click();
-  await expect(dialog.locator('.filters-window-pane')).toHaveText('No filter selected. Add one on the left.');
+  await expect(dialog.locator('.filters-window-pane > .placeholder')).toHaveText('No filter selected. Add one with + below the list.');
+  const tools = dialog.getByRole('toolbar', { name: 'Filter tools' });
+  await expect(tools.getByRole('button', { name: 'Remove filter' })).toBeDisabled();
   await dialog.getByRole('tab', { name: 'Source' }).click();
 
-  // Remove deletes the filter shown and shows the next; the window stays open.
-  await rows.nth(1).locator('.filter-row').click();
-  await dialog.getByRole('button', { name: 'Remove', exact: true }).click();
-  await expect(rows.locator('.filter-name')).toHaveText(['Sharpen']);
-  await expect(dialog.locator('.filter-pane-title')).toHaveText('Sharpen');
-  await dialog.getByRole('button', { name: 'OK' }).click();
+  // The bar moves the filter shown: Sharpen down below Blur, where Move down is off.
+  await rows.first().locator('.filter-row').click();
+  await expect(tools.getByRole('button', { name: 'Move up' })).toBeDisabled();
+  await tools.getByRole('button', { name: 'Move down' }).click();
+  await expect(rows.locator('.filter-name')).toHaveText(['Blur', 'Sharpen']);
+  await expect(tools.getByRole('button', { name: 'Move down' })).toBeDisabled();
+  await expect(tools.getByRole('button', { name: 'Move up' })).toBeEnabled();
+
+  // ⋯ › Remove deletes the filter shown and shows the next; the window stays open.
+  await dialog.getByRole('button', { name: 'More for this filter' }).click();
+  const more = dialog.getByRole('menu', { name: 'Filter' });
+  await expect(more.getByRole('menuitem')).toHaveText(['Defaults', 'Remove']);
+  // Escape closes the menu, not the window.
+  await page.keyboard.press('Escape');
+  await expect(more).toBeHidden();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole('button', { name: 'More for this filter' }).click();
+  await more.getByRole('menuitem', { name: 'Remove' }).click();
+  await expect(rows.locator('.filter-name')).toHaveText(['Blur']);
+  await expect(dialog.locator('.filter-pane-title')).toHaveText('Blur');
+  // The bar's Remove takes the last one.
+  await tools.getByRole('button', { name: 'Remove filter' }).click();
+  await expect(rows).toHaveCount(0);
+  await dialog.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
-  await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen']);
+  await expect(videoRows(panel(page))).toHaveCount(0);
 });
 
-test('Cancel in the Filters window puts back what its rows did too, and adding a filter there keeps the earlier changes', async ({ page, daemon }) => {
+test('the Filters window keeps what its rows did, and its bar adds a filter it then shows', async ({ page, daemon }) => {
   await describeKinds(page, KINDS);
   await connect(page, daemon);
   await showPanel(page, 'Filters');
@@ -183,9 +207,8 @@ test('Cancel in the Filters window puts back what its rows did too, and adding a
   await list.getByRole('button', { name: 'Remove Sharpen' }).click();
   await expect(rows.locator('.filter-name')).toHaveText(['Blur']);
 
-  // A filter with four settings added from the window: the window shows it, keeping
-  // what it changed before.
-  await dialog.getByRole('button', { name: '+ Add filter…' }).click();
+  // A filter with four settings added from the bar: the window shows it.
+  await dialog.getByRole('toolbar', { name: 'Filter tools' }).getByRole('button', { name: 'Add filter…' }).click();
   const add = page.getByRole('dialog', { name: 'Add filter' });
   await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option', { name: 'Blur' }).click();
   await add.getByRole('button', { name: 'Add filter' }).click();
@@ -194,29 +217,25 @@ test('Cancel in the Filters window puts back what its rows did too, and adding a
   await expect(rows.nth(1)).toHaveClass(/\bselected\b/);
   await expect(dialog.locator('.filter-pane-title')).toHaveText('Blur');
 
-  // Cancel: Sharpen back first, Blur off again, the new Blur gone.
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  // Close keeps all of it.
+  await dialog.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
-  await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen', 'Blur']);
-  await expect(videoRows(panel(page)).nth(1)).toHaveClass(/\boff\b/);
+  await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Blur', 'Blur']);
   await expect(videoRows(panel(page)).first()).not.toHaveClass(/\boff\b/);
 
   // Blur added from the panel opens the window on it, perhaps before the store holds
-  // it: Cancel still puts back its switch and a changed setting, and keeps the filter.
+  // it; a change there is kept.
   await panel(page).getByRole('button', { name: '+ Add filter…' }).click();
   await add.getByRole('listbox', { name: 'Filter type' }).getByRole('option', { name: 'Blur' }).click();
   await add.getByRole('button', { name: 'Add filter' }).click();
   await expect(dialog.locator('.filter-pane-title')).toHaveText('Blur');
   await expect(rows.nth(2)).toHaveClass(/\bselected\b/);
-  await dialog.getByRole('spinbutton').first().fill('50');
-  await dialog.getByRole('spinbutton').first().press('Tab');
   await dialog.getByRole('switch', { name: 'Filter on' }).click();
   await expect(rows.nth(2)).toHaveClass(/\boff\b/);
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await page.keyboard.press('Escape');
   await expect(dialog).toBeHidden();
-  await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Sharpen', 'Blur', 'Blur']);
-  await expect(videoRows(panel(page)).nth(2)).not.toHaveClass(/\boff\b/);
-  await expect(videoRows(panel(page)).nth(2).locator('.filter-summary')).toHaveText('defaults');
+  await expect(videoRows(panel(page)).locator('.filter-name')).toHaveText(['Blur', 'Blur', 'Blur']);
+  await expect(videoRows(panel(page)).nth(2)).toHaveClass(/\boff\b/);
 });
 
 /** A float setting as `kind.describe` reports it. */
@@ -244,7 +263,7 @@ const KINDS = [
   },
 ];
 
-test('with described kinds, rows summarise, Cancel restores an unconfirmed change, Add filter adds one that opens in place, and its settings apply', async ({ page, daemon }) => {
+test('with described kinds, rows summarise, the window keeps a change on Escape, Add filter adds one that opens in place, and its settings apply', async ({ page, daemon }) => {
   await describeKinds(page, KINDS);
   await connect(page, daemon);
   await showPanel(page, 'Filters');
@@ -259,16 +278,17 @@ test('with described kinds, rows summarise, Cancel restores an unconfirmed chang
   await page.keyboard.press('Escape');
   await expect(settings).toBeHidden();
 
-  // Cancel straight after a change, before the engine reports it back, still puts the
-  // filter back: the change and its restore both reach the engine.
+  // A change is one edit at once, which closing the window keeps.
   const before = await rev(page);
   await rows.nth(1).locator('.filter-name').click();
   const size = settings.getByRole('spinbutton').first();
   await size.fill('50');
-  await settings.getByRole('button', { name: 'Cancel' }).click();
+  await size.press('Tab');
+  await expect.poll(() => rev(page)).toBe(before + 1);
+  await page.keyboard.press('Escape');
   await expect(settings).toBeHidden();
-  await expect.poll(() => rev(page)).toBe(before + 2);
-  await expect(rows.nth(1).locator('.filter-summary')).toHaveText('defaults');
+  await expect(rows.nth(1).locator('.filter-summary')).not.toHaveText('defaults');
+  expect(await rev(page)).toBe(before + 1);
 
   await panel(page).getByRole('button', { name: '+ Add filter…' }).click();
   const add = page.getByRole('dialog', { name: 'Add filter' });
@@ -325,12 +345,12 @@ test('a setting the engine refuses after its row or dialog has closed shows in t
   await page.locator('.problem-bar').getByRole('button', { name: 'Dismiss' }).click();
   await expect(page.locator('.problem-bar')).toHaveCount(0);
 
-  // The same from the Filters window, closed by Cancel before the answer.
+  // The same from the Filters window, closed before the answer.
   await rows.nth(0).locator('.filter-row').dblclick();
   const dialog = page.getByRole('dialog', { name: 'Filters', exact: true });
   const field = dialog.getByRole('spinbutton');
   await field.fill('0.9');
-  await dialog.getByRole('button', { name: 'Cancel' }).click();
+  await dialog.locator('.modal-footer').getByRole('button', { name: 'Close' }).click();
   await expect(dialog).toBeHidden();
   release();
   await expect(page.locator('.problem-bar')).toContainText('Amount is too sharp');
