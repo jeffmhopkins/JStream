@@ -7950,7 +7950,7 @@ stamp = { hash = "b3:633b20ae9ca5334b", by = "agent:claude", note = "release.yml
 stamp = { hash = "b3:f5d182fb0a2e00cd", by = "agent:mac-desktop", note = "Re-read after merging #1419's head 652f92d (the link opener reaped on a thread, deny's M2 backstop, docs fixes) and adding macOS's opener (/usr/bin/open in shell.rs, review r2). The bundle-version note still matches bundle-app.sh; root Cargo.toml only has dependency features." }
 
 ["RUNBOOK-RELEASE#version"."file:Cargo.toml"]
-stamp = { hash = "b3:3d9bf69525176726", by = "agent:linux-decoders", note = "root Cargo.toml only changes the symphonia feature comment for aac; the workspace version and its rules are unchanged" }
+stamp = { hash = "b3:5b65f4b70d01c834", by = "agent:release-alpha7", note = "Workspace version bumped to 0.1.0-alpha.7 in its own PR with Cargo.lock from cargo update -w; the section's description of where the version lives and which apps take it still holds" }
 
 ["RUNBOOK-WAVES#churn"."body"]
 stamp = { hash = "b3:2859ff67ef7dfef4", by = "agent:claude", note = "Added that a stacked PR's pass carries once its base squash-merges and it merges the wave in, when the review named its base (ADR-0154), matching review-gate.yml's carry" }
