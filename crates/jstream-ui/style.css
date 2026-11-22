@@ -1640,7 +1640,19 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 /* The Add source dialog (spec-workspace.md 6.5). A fixed height, as Add filter's, so a
    search that narrows the types leaves the dialog where it was; the list scrolls. */
 .modal.add-source { width: var(--dialog-l); height: min(620px, 100%); }
-.add-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr); }
+/* The picker (C15): Add source and Add filter share it. A 320 px list on the left, its
+   search on top and its groups under eyebrows, an icon on each row; on the right the
+   pick's 40 px icon tile, name and one line, then what it needs. */
+.add-body { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: 320px minmax(0, 1fr); }
+.picker-head { display: flex; align-items: center; gap: 12px; }
+.picker-tile { flex: none; display: flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 8px; background: var(--menu); color: var(--text-soft); }
+.picker-titles { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.picker-title { font-size: 15px; font-weight: 600; color: var(--text); }
+.picker-meta { font-size: 12px; color: var(--muted); }
+.picker-desc { margin: 0; color: var(--text-soft); }
+.picker-none { font-size: 12px; color: var(--dim); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.chip { padding: 2px 8px; border-radius: 4px; background: var(--menu); font-size: 12px; line-height: 18px; color: var(--text-soft); }
 .add-types { display: flex; flex-direction: column; gap: 2px; overflow: auto; padding: 8px; border-right: 1px solid var(--line); }
 .add-cat { padding: 8px 8px 4px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
 .menuitem.add-type { justify-content: flex-start; gap: 10px; height: auto; padding: 6px 8px; color: var(--text); }
@@ -1648,16 +1660,15 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .menuitem.add-type.on, .menuitem.add-type.on:hover:not(:disabled) { background: var(--selected); color: var(--text); }
 .add-type-name { flex: 1 1 auto; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
 .add-detail { display: flex; flex-direction: column; gap: 12px; overflow: auto; padding: 14px 16px; }
-.add-head { display: flex; align-items: center; gap: 10px; color: var(--text-soft); }
-.add-head-text { display: flex; flex-direction: column; }
-.add-type-title { font-weight: 600; color: var(--text); }
-.add-desc { font-size: 12px; color: var(--muted); }
-.add-new, .add-existing { display: flex; align-items: center; gap: 8px; color: var(--text); }
+.add-modes { align-self: flex-start; width: 240px; }
+.add-existing-title { font-size: 12px; color: var(--muted); }
+.add-new { display: flex; flex-direction: column; gap: 6px; }
+.add-new-label { font-size: 12px; color: var(--muted); }
+.add-existing { display: flex; align-items: center; gap: 8px; color: var(--text); }
 .add-existing { padding: 4px 0; }
 .add-existing span { font-style: italic; }
-.modal input.add-name { width: auto; height: 32px; margin-left: 22px; padding: 0 9px; background: var(--app); border: 1px solid var(--border); border-radius: 5px; }
+.modal input.add-name { width: 100%; height: 32px; padding: 0 9px; background: var(--app); border: 1px solid var(--border); border-radius: 5px; }
 .add-existing-list { display: flex; flex-direction: column; gap: 4px; }
-.add-existing-title { font-size: 12px; color: var(--muted); }
 .add-note { font-size: 11px; color: var(--dim); }
 
 /* The Properties dialog (spec-workspace.md 6.2): name and settings on the left, filters
@@ -1936,15 +1947,16 @@ button.sm, .panel button.sm { height: 24px; padding: 0 8px; border-radius: 5px; 
 .add-filter-search { flex: 0 0 auto; margin: 8px 8px 0; }
 .add-filter-left .add-types { flex: 1 1 auto; border-right: 0; }
 .add-filter-chain { display: flex; align-items: center; gap: 6px; padding: 8px 8px 2px; color: var(--dim); font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; }
-.add-filter-group { padding: 6px 8px 2px; font-size: 11px; color: var(--dim); }
-.menuitem.add-filter-type { justify-content: flex-start; height: auto; padding: 6px 8px; color: var(--text); }
+.add-filter-group { padding: 8px 8px 4px; font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--dim); }
+.menuitem.add-filter-type { justify-content: flex-start; gap: 10px; height: auto; padding: 6px 8px; color: var(--text); }
+.menuitem.add-filter-type .icon, .menuitem.add-type .icon { flex: none; color: var(--muted); }
 .menuitem.add-filter-type.on, .menuitem.add-filter-type.on:hover:not(:disabled) { background: var(--selected); color: var(--text); }
 .add-filter-none { margin: 0; padding: 8px; color: var(--dim); }
 .add-filter-title { font-size: 15px; font-weight: 600; color: var(--text); }
 .add-filter-kind { font-size: 12px; color: var(--muted); }
 .add-filter-hint { margin: 0; color: var(--text-soft); }
-.add-filter-settings { display: flex; flex-direction: column; gap: 4px; font-size: 12px; color: var(--muted); }
-.add-filter-foot { margin-top: auto; }
+.add-filter-settings { display: flex; flex-direction: column; gap: 8px; }
+.add-filter-foot { margin: auto 0 0; }
 
 /* The Arrange panel (`.panel-transform`, spec-panels.md#transform-arrange-panel): the
    summary with the Align to switch, then headed rows: icon buttons for Align and
