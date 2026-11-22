@@ -91,10 +91,11 @@ depends_on = ["docs/UI-FEATURES.md#header", "docs/UI-FEATURES.md#docking", "docs
 A new JStream starts empty, but for four sample labels (Intro / outro, Gameplay, Overlay
 and Sponsor) to rename, use or delete. What the program shows (and every output sends) is the scene
 on **program**, drawn on the canvas in the middle.
-The canvas starts at 1920×1080 and 30 fps. **File › Video settings…** changes its
+The canvas starts at 1920×1080 and 30 fps. **File › Video settings…** opens Settings on **Video**, which changes its
 resolution (a preset such as 1280×720 or 3840×2160, a vertical 1080×1920, or any size
 you type) and its frame rate, 30 or 60 fps. A new resolution scales every scene with it,
-so they look as they did, unless you uncheck **Scale existing scenes to fit**.
+so they look as they did, unless you uncheck **Scale existing scenes to fit**. **Save**
+applies it, as one step that undo takes back.
 Each output scales from that picture.
 **Blending** there sets how semi-transparent items and blend modes mix: Browser-style,
 the default, matches a web page or a design tool, and Linear light mixes light as it
@@ -141,7 +142,7 @@ which shows wherever no item covers it.
 
 Panels can be moved, hidden and brought back from the **View** menu; **Layout** saves
 and resets arrangements. **Help** links to these docs, the release notes and the issue
-tracker. **Check for updates** there compares this build with the latest release,
+tracker. In the desktop app, **Check for updates** there compares this build with the latest release,
 including pre-releases, and links a newer one; nothing is downloaded. **About JStream**
 shows the version you run, which an issue report should name. **File › Settings…** can
 look once at start and show a notice only when a newer release exists; that check stays

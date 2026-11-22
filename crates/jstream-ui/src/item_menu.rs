@@ -1489,13 +1489,17 @@ pub fn entries(cx: Context, scene_id: &SceneId, items: &[ItemId], scope: Scope) 
         Entry::item(label, move || cx.duplicate(scene.clone(), &facts, clone))
             .disabled_if(many || keyframe)
     };
-    list.push(Entry::submenu(
-        "Duplicate",
-        vec![
-            duplicate("Duplicate as reference", false).hint("Ctrl+D"),
-            duplicate("Duplicate as clone", true).hint("Ctrl+Shift+D"),
-        ],
-    ));
+    list.push(
+        Entry::submenu(
+            "Duplicate",
+            vec![
+                duplicate("Duplicate as reference", false).hint("Ctrl+D"),
+                duplicate("Duplicate as clone", true).hint("Ctrl+Shift+D"),
+            ],
+        )
+        // Off as a whole when both duplicates are, rather than open on two off lines.
+        .disabled_if(many || keyframe),
+    );
     if !many {
         list.extend(sharing_entries(cx, &facts));
     }

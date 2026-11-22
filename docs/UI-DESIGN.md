@@ -85,7 +85,13 @@ The header's menus and the right-click menus are one family:
   its state (Visible, Lock, Labels); the clipboard (Copy, Paste, Duplicate); its
   arrangement (an Order submenu for the layer order, Transform, Blending, Crop);
   other views (Pop out, Screenshot); then removal. A command that adds something new
-  (Add source, New group) is in the menu of an empty spot, not an item's.
+  (Add source, New group) is in the menu of an empty spot, not an item's, with two
+  exceptions that act on the item itself: a nested scene's Add source… adds into that
+  scene, and the menu for several items has Group selection.
+- A submenu opener is off when every line in it is, rather than open on lines that are
+  all off. A command this build can't run is off with a tooltip that says where it
+  works (Check for updates, in a browser: "Available in the desktop app"), rather than
+  opening a dialog that says so.
 
 <a id="type"></a>
 ## Type
@@ -155,6 +161,13 @@ covers = ["crates/jstream-ui/style.css", "crates/jstream-ui/src/dialog.rs"]
   under it.
 - **Footer**, 56 px with 32 px buttons, one per dialog: Defaults, Delete… and similar on
   the left (`.footer-left`), Cancel and the primary on the right.
+- **Commit model.** A setting that applies at once leaves a Close footer. One that is
+  heavy to change waits in a draft for Save, with Cancel beside it; Save closes the
+  dialog, and no dialog has Apply. In Settings only the Video page is a draft: the
+  footer reads Cancel and Save while it is shown or holds a change, and Close otherwise.
+- **A code to read out** (Pair a device): 28 px mono, letter-spaced, on an inset card
+  (`--app` with a `--line` border) with the time it has left under it, then the steps
+  as a numbered list.
 
 <a id="forms"></a>
 ## Forms
