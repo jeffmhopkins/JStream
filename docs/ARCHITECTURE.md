@@ -1550,7 +1550,10 @@ and no fence. CEF takes the texture back into its pool when the callback returns
 helper copies it, inside the callback, into one of three textures it shares with the
 engine and waits for that copy. The engine opens that texture on its wgpu D3D12 device,
 imports it through hal as in the GPU pipeline's step 2, copies it into a texture the
-source owns, waits for that copy, and hands the shared texture back. The source's audio
+source owns, waits for that copy, and hands the shared texture back. The wait is on a
+release thread of its own, holding no lock that reading the page's frame takes, since the
+copy runs behind every frame already queued: a plan reading the page never waits for the
+GPU, and neither does the next message on the pipe. The source's audio
 comes from CEF's audio handler as planar float PCM, which crosses the pipe interleaved;
 the engine stamps frames and audio as they arrive.
 
