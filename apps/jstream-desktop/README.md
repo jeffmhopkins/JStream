@@ -295,7 +295,9 @@ folder, and its log `logs\cef.log`.
   port it sends from (`192.168.1.5:9000`, a private IPv4 address), save `jtunnel.json`
   in the data folder; they apply at the next start. On, the app receives each accepted
   sender's audio and MIDI as the daemon's `--jtunnel-accept` does
-  ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and lists the
+  ([ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)), and the DAW state of
+  each, unless its "Use this sender's state" is unticked, as `--jtunnel-no-state` does
+  ([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)), and lists the
   senders that answer on the network, each not yet accepted with Accept…, which asks
   before adding it (so turning it on with no sender, then restarting, is how to find
   the first one). The page shows why a sender was refused, and the log names the
@@ -422,7 +424,10 @@ depends_on = ["docs/adr/0045-leptos-web-ui.md", "docs/adr/0066-portable-windows-
   setting is on but devices can't connect.
 - **JTunnel** (`jtunnel.rs`, [ADR-0123](../../docs/adr/0123-lan-inputs-jtunnel-and-visca.md)
   decisions 1 and 3). The setting is `{"on": true, "accepted": [{"name": "Bitwig",
-  "address": "192.168.1.5:9000"}]}` in the data folder's `jtunnel.json`, per machine
+  "address": "192.168.1.5:9000", "state": true}]}` in the data folder's `jtunnel.json`
+  (`state` is "Use this sender's state",
+  [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 1, on
+  when left out, as for a newly accepted sender, so a file from before it reads as on), per machine
   and never in the collection, so opening a collection never turns it on. It is written
   user-only (a leftover temporary file is removed first, so it never keeps another
   mode) and replaced whole, and only once the engine would take it

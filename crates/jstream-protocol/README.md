@@ -164,7 +164,7 @@ covers = ["crates/jstream-protocol/src/query.rs", "crates/jstream-protocol/src/k
   `kind.describe`, `delete.plan` (with its `DeleteTarget`: a scene, a source, a bus, a
   folder or a label),
   `studio.get`, `privacy.get` (deprecated), `device.list`, `agent.approved`, `live.list`, `capture.targets`,
-  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
+  `ptz.list`, `scene.camera_aim` (since 0.118, with `CameraAimInfo`), `jtunnel.senders` (since 0.114, with `JtunnelSenderInfo` in `profile.rs`), `data.list` and `data.get` (since 0.140, with `DataInputInfo` in `data.rs`), `font.list`, `source.sizes`, `activity.list`, `plugin.list`, `plugin.clap_scan`, `codec.downloads`, `pack.list`,
   `pack.read`, `values.list`, `label.members` (since 0.100,
   [ADR-0133](../../docs/adr/0133-labels-on-hotkeys-and-timelines.md)) and `profile.get` (`profile.rs`, with `ProfileInfo` and the shapes it
   holds, `StreamProfile`, `ProfileStream`, `MixerProfile`, `ViewProfile` and, since
@@ -357,6 +357,10 @@ covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src
 the action `studio.set_rendering` and `studio.get`'s `rendering` (`RenderFeatures`,
 `RenderFeaturesChange` in `rendering.rs`,
 [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md) decision 1);
+0.140 because a DAW's JTunnel state is live data: the queries
+`data.list` (`DataInputInfo`) and `data.get`, and `NetworkProfile`'s `state`,
+`state_off` and `state_dropped`
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decisions 1 and 2);
 0.138 because a Move may pass through keyframes and orbit its
 camera: `scene.switch`'s and `scene.switch_and_watch`'s `via` and the `move` kind's
 `camera_path` setting
@@ -1774,6 +1778,21 @@ Queries read and never change `rev`. Those that read the collection state carry 
   address). Listing a sender trusts it with nothing. `on` false and no senders while
   the receiver is off, the default. Runtime state, so no `rev`. A plugin can't read it
   (the person's LAN addresses).
+- `data.list` and `data.get {input, key}` (0.140,
+  [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 2):
+  live data, each JTunnel sender's newest state message per key (a DAW's transport,
+  tracks, clips and so on, as JSON under keys such as `transport` or `track/3`), from a
+  sender whose "Use this sender's state" is on in the host's accepted list.
+  `data.list` answers `DataInputInfo`s ordered by `input`, the sender's name on the
+  list, each with its `remote_keys` in order (the sender chooses them, so `remote_`:
+  1 to 63 of ASCII letters, digits, `/`, `_`, `.` and `-`). `data.get` answers the
+  key's message as the sender sent it, `remote_value` (ADR-0059: track and clip names
+  are the DAW's text), any JSON value of at most 76,800 bytes nested no deeper than 32,
+  or no `remote_value` when that sender has no current message for that key.
+  A key the sender stops resending goes after 3 s; a sender that starts again, or a
+  receiver that stops, takes its keys with it. Runtime state, so no `rev`; empty while
+  the receiver is off, the default. A client only reads live data: nothing over the
+  protocol sets it. A plugin can't read it (the person's DAW, ADR-0171 decision 11).
 - `font.list`: the fonts installed on the engine's machine ([ADR-0092](../../docs/adr/0092-installed-fonts-query.md)), ordered by
   family, then style, then path, each a `FontInfo`: `remote_family` and
   `remote_style` from the font's name table (the font maker's text, so `remote_`), and
@@ -1824,7 +1843,10 @@ Queries read and never change `rev`. Those that read the collection state carry 
   the buffer's fill), `lead_ms` (the recording source's `latency_ms`), `drift_ppm` once
   enough stream has arrived, and its frames `played`, `concealed`, `late`, `repeats` and
   `restarts`; and the receiver's drops, `outside_lan`, `unaccepted`, `malformed` and
-  `unsupported`, with the `midi` messages it handed on. Unlike the rest of the profile,
+  `unsupported`, with the `midi` messages it handed on and, since 0.140, the `state`
+  messages it put in the live data, the state packets it dropped as `state_off` (from
+  a sender whose state isn't used) and the messages it refused as `state_dropped`
+  (ADR-0171). Unlike the rest of the profile,
   these count from when the receiver started, not over the window. Since 0.117, `warm`
   (omitted while no scene besides the program is warm, ADR-0150) lists the scenes the
   warm count picked, in the warm order, each a `WarmSceneProfile`: its `scene_id`, the
@@ -2424,7 +2446,7 @@ the engine. This crate holds the wire half; the host is `jstream-plugin-wasm`.
   `scene.aim_camera`, ADR-0152, and `source.restart`, ADR-0115) and `outputs` (`output.start`, `output.stop`). Everything else is
   never granted: the `ptz.*` actions and `ptz.list` (ADR-0146: a plugin moves no
   physical camera), the `clock.*` actions (ADR-0172: holding the clock stops every
-  client's animation), `jtunnel.senders` (the LAN's addresses), creating, deleting and retargeting outputs, their encoders and stream
+  client's animation), `jtunnel.senders` (the LAN's addresses), `data.list` and `data.get` (a DAW's state from the person's network), creating, deleting and retargeting outputs, their encoders and stream
   keys, video mixes, `video.snapshot`, `video.frames`, `scene.switch_and_watch` and
   previews (a capture's pixels could leave through a granted host), `audio.reset_loudness`, `studio.set_warm` and `studio.set_rendering` (application settings), folders and labels themselves
   (`folder.*`, `label.*`), which ADR-0069 names in no class, the deprecated

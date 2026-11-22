@@ -114,6 +114,10 @@ struct Shared {
     /// Whether the `jstream-tempo` thread has started: once per engine, however often
     /// JTunnel starts again (ADR-0147 §1).
     tempo: AtomicBool,
+    /// Every JTunnel sender's live data (ADR-0171 decision 2), which the receiver puts
+    /// state messages in and `data.list` and `data.get` read. Its lock is its own, a
+    /// leaf: never taken under the collection lock by its writer, the receive thread.
+    data: jstream_sources::LiveData,
     /// Where `output.set_key` stores stream keys (R-SEC-001). On its own lock, taken
     /// only to clone the handle: the store is never called under the collection lock.
     keys: Mutex<Option<Arc<dyn StreamKeyStore>>>,
@@ -229,6 +233,7 @@ impl Default for Engine {
                     gpu,
                     sheets: AtomicUsize::new(0),
                     tempo: AtomicBool::new(false),
+                    data: jstream_sources::LiveData::new(),
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),
@@ -1531,6 +1536,7 @@ impl Engine {
             setup,
             clock,
             midi.clone(),
+            self.shared.data.clone(),
             Some(changed),
         )?);
         spawn_jtunnel_events(Arc::downgrade(&self.shared), heard);
@@ -1566,6 +1572,40 @@ impl Engine {
                 senders: Vec::new(),
             },
         }
+    }
+
+    /// `data.list` and `data.get` (ADR-0171 decision 2), from the live data; `None` for
+    /// any other query.
+    fn data_query(&self, query: &Query) -> Option<QueryResult> {
+        match query {
+            Query::DataList => Some(QueryResult::DataList {
+                inputs: self
+                    .shared
+                    .data
+                    .list()
+                    .into_iter()
+                    .map(|(input, remote_keys)| jstream_protocol::DataInputInfo {
+                        input,
+                        remote_keys,
+                    })
+                    .collect(),
+            }),
+            Query::DataGet { input, key } => Some(QueryResult::DataGet {
+                remote_value: self
+                    .shared
+                    .data
+                    .get(input, key)
+                    .map(|value| (*value).clone()),
+            }),
+            _ => None,
+        }
+    }
+
+    /// The live data JTunnel senders' state fills (ADR-0171 decision 2), which a watch
+    /// reads without a lock.
+    #[must_use]
+    pub fn live_data(&self) -> &jstream_sources::LiveData {
+        &self.shared.data
     }
 
     /// `profile.get`'s `network`: the JTunnel receiver's senders, while it is on.
@@ -2309,6 +2349,11 @@ impl Engine {
             Ok(CallResult::Query {
                 result: self.jtunnel_senders(),
             })
+        } else if let Call::Query { query } = &call
+            && let Some(result) = self.data_query(query)
+        {
+            // Outside the collection lock: live data has its own (ADR-0171).
+            Ok(CallResult::Query { result })
         } else if let Call::Query {
             query: Query::ProfileGet { seconds, top },
         } = &call
