@@ -706,7 +706,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   Since 0.86 a modifier can follow a bus or a source's audio
   ([ADR-0100](adr/0100-audio-reactive-motion-modifiers.md)), and since 0.109 drive a
   number or colour setting of one of its item's effects, `property` `effect`
-  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.135 a `midi`
+  ([ADR-0138](adr/0138-motion-drives-effect-settings.md)). Since 0.137 a `midi`
   modifier follows a MIDI control change, pitch bend or channel pressure, smoothed, the
   value binding of ADR-0122 ([ADR-0168](adr/0168-midi-controllers-drive-motion.md)).
   `output.create`, `output.set_target` and `output.delete` configure the collection's
