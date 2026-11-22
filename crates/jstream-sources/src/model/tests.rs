@@ -119,6 +119,42 @@ impl Drop for Temp {
     }
 }
 
+/// ADR-0107 decision 5: `texture`, `texture_material` and `reflection` name what the
+/// model shows and reflects, live; a texture or reflection that isn't a source
+/// reference is refused.
+#[test]
+fn texture_and_reflection_name_sources_live() {
+    let source_ref = |id: &str| {
+        Reference::Source {
+            source_id: id.into(),
+        }
+        .to_value()
+    };
+    let mut source = create(json!({ "shape": "cube" }), &Context::default()).expect("a cube");
+    let shown = source.model().expect("a model");
+    assert_eq!((shown.texture, shown.reflection), (None, None));
+    let named = settings(json!({
+        "shape": "cube",
+        "texture": source_ref("cam"),
+        "texture_material": "screen",
+        "reflection": source_ref("sky"),
+    }));
+    source.update(&named).expect("the maps are live");
+    let shown = source.model().expect("a model");
+    assert_eq!(shown.texture.as_ref().map(|id| id.as_str()), Some("cam"));
+    assert_eq!(shown.texture_material.as_deref(), Some("screen"));
+    assert_eq!(shown.reflection.as_ref().map(|id| id.as_str()), Some("sky"));
+    for (id, value) in [("texture", json!("cam")), ("reflection", json!(3))] {
+        let err = create(json!({ "shape": "cube", id: value }), &Context::default())
+            .err()
+            .expect("refused");
+        assert!(
+            matches!(&err, SourceError::Setting { param, .. } if param == id),
+            "{err:?}"
+        );
+    }
+}
+
 fn folder(name: &str) -> Temp {
     let dir = std::env::temp_dir().join(format!("jstream-model-{name}-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
