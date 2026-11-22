@@ -67,7 +67,7 @@ test('a double click opens the scene properties, which set its name, hotkey, bac
   const multiview = dialog.getByRole('checkbox', { name: 'Show in multiview' });
   await expect(multiview).toBeChecked();
   await multiview.uncheck();
-  const audio = dialog.getByRole('checkbox', { name: 'Include its audio when nested' });
+  const audio = dialog.getByRole('checkbox', { name: 'Include audio when nested' });
   await expect(audio).toBeChecked();
   await audio.uncheck();
   const background = dialog.getByLabel('Background color', { exact: true });
@@ -84,7 +84,7 @@ test('a double click opens the scene properties, which set its name, hotkey, bac
   await menu(page).getByRole('menuitem', { name: 'Properties…' }).click();
   await expect(dialog.getByLabel('Hotkey')).toHaveValue('F3');
   await expect(dialog.getByRole('checkbox', { name: 'Show in multiview' })).not.toBeChecked();
-  await expect(dialog.getByRole('checkbox', { name: 'Include its audio when nested' })).not.toBeChecked();
+  await expect(dialog.getByRole('checkbox', { name: 'Include audio when nested' })).not.toBeChecked();
   await expect(dialog.getByLabel('Background color', { exact: true })).toHaveValue('#0f111580');
   await expect(dialog.getByLabel('Background color swatch')).toHaveValue('#0f1115');
   await dialog.getByRole('button', { name: 'Cancel' }).click();
