@@ -786,7 +786,7 @@ The wire format, versioning, error codes and compatibility policy are designed i
   keyframes move them all. `scene.set_camera_anchor` names such a group item for the
   family's camera to ride with: its position and target are then in the group's space.
 - **Reflections** ([ADR-0170](adr/0170-generic-reflections-and-3d-rendering-switches.md),
-  protocol 0.154): a scene with `reflections` in its `scene.set_options` has its lit
+  protocol 0.159): a scene with `reflections` in its `scene.set_options` has its lit
   models and cards reflect the scene around them, through the `reflection_probe` source
   kind's boxes; `studio.set_rendering` turns probes off app-wide and caps their face size.
 - **PTZ cameras** ([ADR-0146](adr/0146-ptz-cameras-shots-and-actions.md), protocol

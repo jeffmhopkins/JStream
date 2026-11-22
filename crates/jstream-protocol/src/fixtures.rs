@@ -2621,6 +2621,15 @@ fn color_kind() -> KindDescriptor {
                 },
                 json!({"exposure": -6, "white_balance": "auto"}),
             ),
+            param(
+                "looks",
+                ParamType::Looks,
+                json!({
+                    "absent": {"color": "#141414"},
+                    "playing": {"color": "cell", "brightness": 1.0},
+                    "play": {"color": "cell", "blink_hz": 4.0},
+                }),
+            ),
         ],
     }
 }

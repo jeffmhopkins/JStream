@@ -1360,7 +1360,7 @@ pub struct SceneOptions {
     /// with the `scene` role keeps and ignores it. Omitted for `false`, the default.
     #[serde(skip_serializing_if = "is_false")]
     pub share_space: bool,
-    /// Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.154): a
+    /// Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.159): a
     /// `scene`-lit model or lit card inside a `reflection_probe`'s box reflects the
     /// probe's capture of the scene, by its own roughness and metalness, in place of
     /// the environment. Off, the scene's probes capture nothing and its surfaces reflect

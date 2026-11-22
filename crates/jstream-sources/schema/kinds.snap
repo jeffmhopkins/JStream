@@ -608,6 +608,336 @@ source: crates/jstream-sources/tests/kinds.rs
     ]
   },
   {
+    "kind_id": "grid",
+    "category": "source",
+    "name": "Data grid",
+    "version": 1,
+    "video": true,
+    "audio": false,
+    "params": [
+      {
+        "id": "input",
+        "type": "string",
+        "multiline": false,
+        "max_len": 63,
+        "default": "",
+        "label": "Sender",
+        "description": "The JTunnel sender whose data it draws, by name. Empty draws, for each key, the first sender by name that has it.",
+        "live": true
+      },
+      {
+        "id": "mode",
+        "type": "enum",
+        "options": [
+          {
+            "value": "cells",
+            "label": "Cells (a column per key, a row per list entry)"
+          },
+          {
+            "value": "bars",
+            "label": "Bars (one list of levels)"
+          }
+        ],
+        "default": "cells",
+        "label": "Draws",
+        "description": "Cells draw a pad per list entry, coloured by its state, such as a clip launcher. Bars draw a level per list entry, such as meters.",
+        "live": true
+      },
+      {
+        "id": "width",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 960,
+        "label": "Width",
+        "live": false
+      },
+      {
+        "id": "height",
+        "type": "int",
+        "min": 1,
+        "max": 16384,
+        "step": 1,
+        "unit": "px",
+        "default": 360,
+        "label": "Height",
+        "live": false
+      },
+      {
+        "id": "columns",
+        "type": "int",
+        "min": 1,
+        "max": 64,
+        "step": 1,
+        "default": 8,
+        "label": "Columns",
+        "live": true
+      },
+      {
+        "id": "rows",
+        "type": "int",
+        "min": 1,
+        "max": 64,
+        "step": 1,
+        "default": 8,
+        "label": "Rows",
+        "visible_if": {
+          "param": "mode",
+          "equals": "cells"
+        },
+        "live": true
+      },
+      {
+        "id": "column_offset",
+        "type": "int",
+        "min": 0,
+        "max": 4096,
+        "step": 1,
+        "default": 0,
+        "label": "First column",
+        "description": "The data's column drawn at the left, from 0.",
+        "live": true
+      },
+      {
+        "id": "row_offset",
+        "type": "int",
+        "min": 0,
+        "max": 4096,
+        "step": 1,
+        "default": 0,
+        "label": "First row",
+        "description": "The list entry drawn at the top, from 0.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "cells"
+        },
+        "live": true
+      },
+      {
+        "id": "columns_key",
+        "type": "string",
+        "multiline": false,
+        "max_len": 72,
+        "default": "track/{column}",
+        "label": "Column key",
+        "description": "The key of each column's message; `{column}` is the column's number.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "cells"
+        },
+        "live": true
+      },
+      {
+        "id": "cells_field",
+        "type": "string",
+        "multiline": false,
+        "max_len": 255,
+        "default": "slots",
+        "label": "Cells field",
+        "description": "The list in each column's message, one entry a row: a dotted path.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "cells"
+        },
+        "live": true
+      },
+      {
+        "id": "state_field",
+        "type": "string",
+        "multiline": false,
+        "max_len": 255,
+        "default": "state",
+        "label": "State field",
+        "description": "The field in each entry whose text picks the cell's look. Several, separated by commas, are tried in order, and the first whose text has a look decides.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "cells"
+        },
+        "live": true
+      },
+      {
+        "id": "color_field",
+        "type": "string",
+        "multiline": false,
+        "max_len": 255,
+        "default": "color",
+        "label": "Colour field",
+        "description": "The field in each entry holding the cell's own `#rrggbb` colour.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "cells"
+        },
+        "live": true
+      },
+      {
+        "id": "looks",
+        "type": "looks",
+        "default": {
+          "absent": {
+            "brightness": 1.0,
+            "color": "#1a1a1a"
+          }
+        },
+        "label": "Looks",
+        "description": "How a cell in each state looks: a colour or the cell's own, a brightness, and a blink rate. `absent` is a cell the data doesn't have.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "cells"
+        },
+        "live": true
+      },
+      {
+        "id": "dim",
+        "type": "float",
+        "min": 0.0,
+        "max": 1.0,
+        "step": 0.01,
+        "default": 0.2,
+        "label": "Unlisted brightness",
+        "description": "The brightness of a cell whose state has no look.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "cells"
+        },
+        "live": true
+      },
+      {
+        "id": "key",
+        "type": "string",
+        "multiline": false,
+        "max_len": 63,
+        "default": "meters",
+        "label": "Key",
+        "description": "The key of the message holding the levels.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "bars"
+        },
+        "live": true
+      },
+      {
+        "id": "field",
+        "type": "string",
+        "multiline": false,
+        "max_len": 255,
+        "default": "tracks",
+        "label": "Levels field",
+        "description": "The list of levels in it, one entry a column: a number, or a list of numbers drawn side by side.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "bars"
+        },
+        "live": true
+      },
+      {
+        "id": "low",
+        "type": "float",
+        "min": -1000000.0,
+        "max": 1000000.0,
+        "default": 0.0,
+        "label": "Lowest level",
+        "visible_if": {
+          "param": "mode",
+          "equals": "bars"
+        },
+        "live": true
+      },
+      {
+        "id": "high",
+        "type": "float",
+        "min": -1000000.0,
+        "max": 1000000.0,
+        "default": 1.0,
+        "label": "Highest level",
+        "visible_if": {
+          "param": "mode",
+          "equals": "bars"
+        },
+        "live": true
+      },
+      {
+        "id": "color_low",
+        "type": "color",
+        "alpha": true,
+        "default": "#2fd46bff",
+        "label": "Foot colour",
+        "visible_if": {
+          "param": "mode",
+          "equals": "bars"
+        },
+        "live": true
+      },
+      {
+        "id": "color_high",
+        "type": "color",
+        "alpha": true,
+        "default": "#ff4a3dff",
+        "label": "Top colour",
+        "visible_if": {
+          "param": "mode",
+          "equals": "bars"
+        },
+        "live": true
+      },
+      {
+        "id": "segments",
+        "type": "int",
+        "min": 0,
+        "max": 64,
+        "step": 1,
+        "default": 0,
+        "label": "Segments",
+        "description": "Cuts each bar into this many lit steps, as an LED meter; 0 draws it smooth.",
+        "visible_if": {
+          "param": "mode",
+          "equals": "bars"
+        },
+        "live": true
+      },
+      {
+        "id": "pad",
+        "type": "color",
+        "alpha": true,
+        "default": "#2a2a2aff",
+        "label": "Pad",
+        "description": "A cell with no colour of its own, and a bar's unlit part.",
+        "live": true
+      },
+      {
+        "id": "gap",
+        "type": "int",
+        "min": 0,
+        "max": 64,
+        "step": 1,
+        "unit": "px",
+        "default": 4,
+        "label": "Gap",
+        "live": true
+      },
+      {
+        "id": "radius",
+        "type": "int",
+        "min": 0,
+        "max": 128,
+        "step": 1,
+        "unit": "px",
+        "default": 4,
+        "label": "Corner radius",
+        "live": true
+      },
+      {
+        "id": "background",
+        "type": "color",
+        "alpha": true,
+        "default": "#00000000",
+        "label": "Background",
+        "live": true
+      }
+    ]
+  },
+  {
     "kind_id": "image",
     "category": "source",
     "name": "Image",

@@ -332,6 +332,9 @@ pub struct Context {
     /// The MIDI the `midi_*` kinds draw (ADR-0137): every input's state, by name.
     /// `None` draws no notes.
     pub midi: Option<Arc<crate::MidiInputs>>,
+    /// The live data the `grid` kind draws (ADR-0171 decision 9): each JTunnel sender's
+    /// newest message per key. `None` draws every cell as absent.
+    pub data: Option<crate::LiveData>,
     /// The program's base frame rate (`canvas.set_frame_rate`), which a `browser` page
     /// with an `fps` of 0 paints at (#1405). 0 until the host sets it, read as
     /// [`jstream_protocol::DEFAULT_BASE_FPS`].
@@ -359,6 +362,7 @@ impl std::fmt::Debug for Context {
             .field("browser", &self.browser.as_ref().map(|_| "BrowserBackend"))
             .field("chat", &self.chat)
             .field("midi", &self.midi)
+            .field("data", &self.data)
             .field("frame_rate", &self.frame_rate)
             .finish()
     }

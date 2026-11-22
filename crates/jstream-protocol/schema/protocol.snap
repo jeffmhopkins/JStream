@@ -540,7 +540,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               ]
             },
             "max_probe_resolution": {
-              "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.154). `studio.set_rendering` refuses any other size.",
+              "description": "The largest face a probe captures at, one of [`PROBE_RESOLUTIONS`], or left out\nto keep it (since 0.159). `studio.set_rendering` refuses any other size.",
               "format": "uint32",
               "minimum": 0,
               "type": [
@@ -549,7 +549,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               ]
             },
             "reflection_probes": {
-              "description": "Whether reflection probes capture, or left out to keep it (since 0.154).",
+              "description": "Whether reflection probes capture, or left out to keep it (since 0.159).",
               "type": [
                 "boolean",
                 "null"
@@ -5634,7 +5634,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "object"
         },
         {
-          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.154 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
+          "description": "Replaces a scene's options (ADR-0089, since 0.65): whether its audio reaches the\nMixer when it is nested, its background colour, and since 0.116 whether the\nstudio keeps it warm (ADR-0117 §7), and since 0.159 whether its surfaces reflect\neach other (ADR-0170 decision 2). Every field left out takes its default. A\nkeyframe scene has options of its own, except a background, which it shows from\nits parent, and `keep_warm` and `reflections`, which its parent decides. `invalid`\nfor a background that isn't a colour, or a background, `keep_warm` or\n`reflections` on a keyframe scene. Inverse: `scene.set_options` with the previous options.",
           "properties": {
             "background": {
               "description": "Its background colour (ADR-0024 §4, ADR-0089 §4, since 0.65): sRGB `#rrggbb`, or\n`#rrggbbaa` with straight alpha, drawn under its items wherever the scene is\ndrawn, nested or not. Omitted for none, the default, which is transparent: where\na video mix shows a transparent pixel, the output is black. A keyframe scene\nshows its parent's, so `scene.set_options` refuses one of its own, and a group\ndraws none: it is part of the scene that holds it.",
@@ -5652,7 +5652,7 @@ source: crates/jstream-protocol/src/fixtures.rs
               "type": "boolean"
             },
             "reflections": {
-              "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.154): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+              "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.159): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
               "type": "boolean"
             },
             "scene_id": {
@@ -10658,6 +10658,19 @@ source: crates/jstream-protocol/src/fixtures.rs
             "target"
           ],
           "type": "object"
+        },
+        {
+          "description": "How a `grid` source draws a cell in each state it reads (ADR-0171 decision 9), so a\nUI can offer a table of them. Since 0.156. Its value is an object from a state's\ntext (1 to [`MAX_LOOK_NAME`] bytes, no control characters) to a look:\n`{\"color\": \"#rrggbb\" | \"cell\", \"brightness\": 0..1, \"blink_hz\": 0..16}`, where\n`\"cell\"` is the cell's own colour from the data, `brightness` defaults to 1 and\n`blink_hz` to 0 (steady). At most [`MAX_LOOKS`] entries; [`LOOK_ABSENT`] names the\nlook of a cell the data doesn't have. Its default names only that one.",
+          "properties": {
+            "type": {
+              "const": "looks",
+              "type": "string"
+            }
+          },
+          "required": [
+            "type"
+          ],
+          "type": "object"
         }
       ],
       "properties": {
@@ -14432,14 +14445,14 @@ source: crates/jstream-protocol/src/fixtures.rs
         },
         "max_probe_resolution": {
           "default": 512,
-          "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.154). A probe set larger captures at this.",
+          "description": "The largest face a probe captures at, in pixels a side: one of\n[`PROBE_RESOLUTIONS`] (since 0.159). A probe set larger captures at this.",
           "format": "uint32",
           "minimum": 0,
           "type": "integer"
         },
         "reflection_probes": {
           "default": true,
-          "description": "Reflection probes (ADR-0170 decision 3, since 0.154), which draw their scene six\ntimes a capture. Off, no probe captures and every surface reflects its\nenvironment as without one.",
+          "description": "Reflection probes (ADR-0170 decision 3, since 0.159), which draw their scene six\ntimes a capture. Off, no probe captures and every surface reflects its\nenvironment as without one.",
           "type": "boolean"
         },
         "shadows": {
@@ -14717,7 +14730,7 @@ source: crates/jstream-protocol/src/fixtures.rs
           "type": "array"
         },
         "reflections": {
-          "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.154): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
+          "description": "Whether its surfaces reflect each other (ADR-0170 decision 2, since 0.159): a\n`scene`-lit model or lit card inside a `reflection_probe`'s box reflects the\nprobe's capture of the scene, by its own roughness and metalness, in place of\nthe environment. Off, the scene's probes capture nothing and its surfaces reflect\nonly the environment, as before. A keyframe scene is drawn as its parent, which\ndecides it, so `scene.set_options` refuses it there. Omitted for `false`, the default.",
           "type": "boolean"
         },
         "role": {
@@ -16676,5 +16689,5 @@ source: crates/jstream-protocol/src/fixtures.rs
     }
   ],
   "description": "Any message on a JStream control connection: client to server, or server to client.",
-  "title": "JStream protocol 0.154"
+  "title": "JStream protocol 0.159"
 }

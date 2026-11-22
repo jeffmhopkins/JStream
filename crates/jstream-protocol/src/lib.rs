@@ -112,9 +112,9 @@ pub use id::{
 pub use keyframe::{DroppedOverride, ItemOverride, OverrideField, PlacedKeyframe};
 pub use kind::{
     CAMERA_CONTROL_AUTO, CaptureFormatPart, EnumOption, KindCategory, KindDescriptor, KindSummary,
-    MAX_CAMERA_CONTROL_NAME, MAX_CAMERA_CONTROLS, MAX_CAPTURE_FPS, MAX_CAPTURE_SIDE, Media,
-    PIXEL_FORMATS, ParamDescriptor, ParamType, VisibleIf, check_asset_path, not_a_reference,
-    parse_resolution,
+    LOOK_ABSENT, LOOK_CELL_COLOR, MAX_BLINK_HZ, MAX_CAMERA_CONTROL_NAME, MAX_CAMERA_CONTROLS,
+    MAX_CAPTURE_FPS, MAX_CAPTURE_SIDE, MAX_LOOK_NAME, MAX_LOOKS, Media, PIXEL_FORMATS,
+    ParamDescriptor, ParamType, VisibleIf, check_asset_path, not_a_reference, parse_resolution,
 };
 pub use live::{
     GestureInfo, LiveOutcome, MAX_GESTURES_PER_CLIENT, MAX_LIVE_VALUES, is_live_adjustable,

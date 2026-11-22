@@ -40,6 +40,7 @@ pub mod data;
 mod describe;
 mod error;
 mod fonts;
+mod grid;
 mod image;
 mod light;
 mod media;

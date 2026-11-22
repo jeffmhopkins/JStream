@@ -215,6 +215,7 @@ impl Default for Engine {
     fn default() -> Self {
         let audio_scopes = Arc::new(AudioScopes::new());
         let gpu = Arc::new(SharedGpu::default());
+        let data = jstream_sources::LiveData::new();
         Self {
             shared: Arc::new_cyclic(|shared: &Weak<Shared>| {
                 let mut state = State::default();
@@ -226,6 +227,7 @@ impl Default for Engine {
                 state
                     .live
                     .set_midi(Arc::new(jstream_sources::MidiInputs::new()));
+                state.live.set_data(data.clone());
                 let profile = Profiler::new(frame_budget(), state.live.meters());
                 Shared {
                     state: Mutex::new(state),
@@ -233,7 +235,7 @@ impl Default for Engine {
                     gpu,
                     sheets: AtomicUsize::new(0),
                     tempo: AtomicBool::new(false),
-                    data: jstream_sources::LiveData::new(),
+                    data,
                     keys: Mutex::new(None),
                     audit: Audit::default(),
                     collection_file: Mutex::new(None),

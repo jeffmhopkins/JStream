@@ -76,7 +76,7 @@ covers = ["crates/jstream-protocol/src/command.rs"]
   `studio.set_warm` (0.115, with `MAX_WARM_SCENES` and `DEFAULT_WARM_SCENES`; its
   `gpu_mib` since 0.117, with `MAX_WARM_GPU_MIB`), `studio.set_rendering` (0.147, with
   `RenderFeatures` and `RenderFeaturesChange` in `rendering.rs`; its probe switch and
-  cap since 0.154, with `PROBE_RESOLUTIONS`),
+  cap since 0.159, with `PROBE_RESOLUTIONS`),
   `scene.zoom_camera`, `scene.drive_camera` and `scene.aim_camera` (0.118, with
   `CameraAim` in `camera_aim.rs`), `ptz.drive`, `ptz.aim`, `ptz.home`, `ptz.recall`,
   `ptz.store`, `ptz.focus`, `item.show`,
@@ -359,11 +359,15 @@ covers = ["crates/jstream-protocol/src/geometry.rs", "crates/jstream-protocol/sr
 covers = ["crates/jstream-protocol/src/version.rs", "crates/jstream-protocol/src/pack.rs"]
 -->
 
-`PROTOCOL_VERSION` is 0.154 because a scene's surfaces can reflect each other through
+`PROTOCOL_VERSION` is 0.159 because a scene's surfaces can reflect each other through
 reflection probes: `SceneOptions`' `reflections`, and `RenderFeatures`'
 `reflection_probes` and `max_probe_resolution` (with `PROBE_RESOLUTIONS`)
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
 decisions 2 and 3);
+0.156 because a kind's parameter can be a table of looks:
+`ParamType::Looks`, with `MAX_LOOKS`, `MAX_LOOK_NAME`, `MAX_BLINK_HZ`, `LOOK_ABSENT` and
+`LOOK_CELL_COLOR`, which the `grid` source kind's `looks` uses
+([ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md) decision 9);
 0.151 because a motion modifier can follow MIDI: `MotionKind`'s
 `midi`, with `MotionMidiControl`, maps a control change, pitch bend or channel pressure
 onto an item's property, smoothed over `smoothing_ms`
@@ -1043,7 +1047,12 @@ never a type per kind.
   letters, digits and `_`, at most `MAX_CAMERA_CONTROL_NAME` bytes) set to a 32-bit
   integer or `CAMERA_CONTROL_AUTO` (`"auto"`), a UI offering the controls
   `capture.targets` lists for that device; a control the object doesn't name keeps what
-  the device has), a
+  the device has; `looks`, since 0.156: an object of at most `MAX_LOOKS` entries, each a
+  state's text (1 to `MAX_LOOK_NAME` bytes, no control characters) set to a look,
+  `{"color", "brightness", "blink_hz"}`, each optional: `color` a `#rrggbb` or
+  `LOOK_CELL_COLOR` (`"cell"`, the cell's own colour), `brightness` 0 to 1 and `blink_hz`
+  0 to `MAX_BLINK_HZ`, any other field refused; `LOOK_ABSENT` (`"absent"`) names the look
+  of a cell the data doesn't have, for the `grid` kind's cells), a
   `default`, a `label`, an
   optional `description`, an optional `warning` (since 0.93: one line a client shows
   beside the control, not only in a tooltip, saying what the setting gives away), the UI
@@ -1484,7 +1493,7 @@ program, ranked after the Preview scene within the warm budget
 `share_space` (default `false`), which on a group placed in a 3D scene draws its children
 in that scene's space through the group item's pose instead of as one card
 ([ADR-0164](../../docs/adr/0164-3d-groups-share-their-scenes-space.md)), kept and ignored
-on any other scene, and since 0.154 `reflections` (default `false`), which lets the
+on any other scene, and since 0.159 `reflections` (default `false`), which lets the
 scene's `scene`-lit models and lit cards reflect each other through its
 `reflection_probe` items, each by its own roughness and metalness
 ([ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
@@ -1643,7 +1652,7 @@ cut), `cut_ms`, when the picture under it cuts (default 500, at most the duratio
   the Preview scene never is.
 - `studio.set_rendering {shadows?, ambient_occlusion?, volumetric_fog?,
   floor_reflections?, reflection_probes?, max_probe_resolution?}` (0.147, the last two
-  since 0.154,
+  since 0.159,
   [ADR-0170](../../docs/adr/0170-generic-reflections-and-3d-rendering-switches.md)
   decision 1) sets the 3D rendering switches (`RenderFeatures`): each one it names takes
   its value, and the rest keep theirs (`RenderFeaturesChange`). A switch that is off
@@ -1772,7 +1781,7 @@ Queries read and never change `rev`. Those that read the collection state carry 
   omitted while none is. Since 0.115 `warm_scenes` is the warm budget
   `studio.set_warm` sets, and since 0.117 `warm_gpu_mib` its GPU-memory limit (0 for
   none). Since 0.147 `rendering` holds the 3D rendering switches `studio.set_rendering`
-  sets, and since 0.154 the probe switch and face-size cap.
+  sets, and since 0.159 the probe switch and face-size cap.
 - `capture.targets`: the displays, windows and (since 0.90) video capture devices the
   engine can capture now, displays first, then windows, then devices, each with its
   `kind` (`display`, `window` or `device`, the source kind that captures it: `display`,

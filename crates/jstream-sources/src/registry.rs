@@ -48,6 +48,7 @@ impl Registry {
         add(Box::new(CaptureKind::display()));
         add(Box::new(CaptureKind::window()));
         add(Box::new(CaptureKind::webcam()));
+        add(Box::new(crate::grid::GridKind::new()));
         add(Box::new(ImageKind::new()));
         add(Box::new(LightKind::new()));
         add(Box::new(MediaKind::new()));

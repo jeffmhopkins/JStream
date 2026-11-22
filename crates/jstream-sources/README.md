@@ -12,7 +12,7 @@ review_every = "90d"
 ## Purpose
 <!-- @section
 covers = ["crates/jstream-sources/src/**", "crates/jstream-sources/tests/**"]
-depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md", "docs/adr/0142-feeding-the-midi-sources-and-their-beat.md"]
+depends_on = ["docs/ARCHITECTURE.md#crate-map/jstream-sources", "docs/adr/0140-source-types-and-decoding-scope-v3.md", "docs/adr/0025-typed-settings-kind-descriptors.md", "docs/adr/0073-sources-drawn-at-their-shown-size.md", "docs/adr/0079-text-density-bounded-by-pixels.md", "docs/adr/0137-midi-visualization-sources.md", "docs/adr/0142-feeding-the-midi-sources-and-their-beat.md", "docs/adr/0171-live-data-from-a-daw-drives-scenes.md"]
 -->
 
 Layer-4 source kinds ([ARCH › Crate map](../../docs/ARCHITECTURE.md#crate-map)). Every
@@ -37,7 +37,7 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   allocates (apart from a still image's once nothing holds its frame, below), and a
   frame handed out stays valid after an update. Most make their frames
   when created or updated; a `media` file decodes them ahead on a thread of its own;
-  the `waveform`, `spectrum`, `chat_message`, `timer` and `midi_*` kinds draw theirs in a
+  the `waveform`, `spectrum`, `chat_message`, `timer`, `grid` and `midi_*` kinds draw theirs in a
   `Painter` instead, and `frame`
   hands out the one painted last. `next_change(at)` says when that frame is next
   replaced (`None`: never), so a renderer can skip re-uploading a still. `show(at)`
@@ -213,6 +213,10 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   render thread reads it without a lock or an allocation. `true` reads 1 and `false` 0;
   an object, a list, `null` or a missing field read absent. One watch asked for twice
   shares a cell, a watch nobody holds is forgotten, and past 4,096 a cell reads absent.
+  `changes()` counts every change to any sender's messages (a put, an expired key, a
+  forgotten sender), so a reader of many keys tells that nothing changed with one atomic
+  load, and `get_from(input, key)` reads one message from a sender or from the first
+  sender by name that has the key.
 - `MidiState` and `MidiInputs` (`midi/`, [ADR-0137](../../docs/adr/0137-midi-visualization-sources.md)):
   what the `midi_*` kinds draw. A `MidiState` holds one input's held velocity per
   channel and key, its controllers, pitch bend and channel pressure, and a log of the
@@ -312,6 +316,27 @@ produces its frames. `jstream-core` takes its kinds from `Registry::builtin()`.
   pixels: velocity, channel and input filtering, the fade, the scroll, the lost note-on,
   a burst at its key that fades after its note-off,
   settling, live and restarting changes, and every setting refused.
+- `grid` (`grid.rs`, [ADR-0171](../../docs/adr/0171-live-data-from-a-daw-drives-scenes.md)
+  decision 9): cells drawn from `Context::data`, the engine's `LiveData`, `width` by
+  `height`, `columns` across (1 to 64) from `column_offset`. In `cells` mode each column
+  is the message of `columns_key` with `{column}` replaced by its number, and each of
+  `rows` (1 to 64, from `row_offset`) one entry of its `cells_field` list. A cell's
+  look is the first of its `state_field` fields (comma-separated) whose text `looks`
+  names (`ParamType::Looks`: a colour or the cell's own `color_field` colour, a
+  brightness, a blink rate); a cell the data lacks takes the `absent` look, and a state
+  with no look shows its colour (or `pad`) at `dim`. In `bars` mode one message's
+  (`key`) list (`field`) gives a level per column, from `low` to `high`, a list of
+  numbers drawing side by side, from `color_low` at the foot to `color_high` at the
+  top, smooth or in `segments` steps. `input` names the sender, empty for the first sender
+  by name that has the key; everything but the size is live. The cells share the picture evenly with
+  `gap` around and between them, rounded by `radius` and anti-aliased. It paints at
+  30 fps through a `Painter` from the MIDI kinds' pool of four frames, reading its keys
+  under the store's lock on the paint thread, and draws only when `changes()` moved or a
+  look blinks (on the media clock, so while the clock is held new data waits for the next
+  step; any change, to any key, redraws every grid); with no `LiveData` it draws once and is never due.
+  Tests put messages and read the pixels: each look, the queued blink and its off half,
+  absent cells, offsets, a named sender, redrawing only on new data, smooth, side by side
+  and segmented bars, and a bad look or level range refused.
 - `midi_beat` ([ADR-0142](../../docs/adr/0142-feeding-the-midi-sources-and-their-beat.md) §4): a row
   of `beats_per_bar` cells (1 to 16, default 4) for the bar its `input`'s MIDI clock is
   in, the beat it is on lit: the bar's first in `downbeat`, the others in `color`,
